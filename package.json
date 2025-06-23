@@ -1,0 +1,24 @@
+{
+  "name": "fantasy-reel",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/frontend",
+    "dev:backend": "npm run start:dev --workspace=apps/backend",
+    "dev:frontend": "npm run dev --workspace=apps/frontend",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces",
+    "test": "npm run test --workspaces"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "description": "Fantasy league for movies - draft upcoming releases and score based on review data",
+  "keywords": ["fantasy", "movies", "league", "draft"],
+  "author": "",
+  "license": "ISC"
+}
