@@ -1,4 +1,5 @@
-import { login, signup } from './actions'
+import { login } from './actions'
+import Link from 'next/link'
 
 export default function LoginPage() {
   return (
@@ -9,7 +10,7 @@ export default function LoginPage() {
             Fantasy Reel
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sign in to your account or create a new one
+            Sign in to your account
           </p>
         </div>
         <form className="mt-8 space-y-6">
@@ -44,19 +45,22 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="flex space-x-4">
+          <div>
             <button
               formAction={login}
-              className="group relative flex-1 flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
-              Log in
+              Sign in
             </button>
-            <button
-              formAction={signup}
-              className="group relative flex-1 flex justify-center py-2 px-4 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-            >
-              Sign up
-            </button>
+          </div>
+
+          <div className="text-center">
+            <p className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link href="/signup" className="font-semibold text-indigo-600 hover:text-indigo-800 underline decoration-2 underline-offset-2 hover:decoration-indigo-800 transition-colors">
+                Sign up
+              </Link>
+            </p>
           </div>
         </form>
       </div>
