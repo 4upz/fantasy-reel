@@ -9,12 +9,10 @@ export async function GET(request: NextRequest) {
   const next = searchParams.get('next') ?? '/'
 
   if (token_hash && type) {
-    const supabase = createClient()
+    const supabase = await createClient()
 
-    const { error } = await supabase.auth.verifyOtp({
-      type: type as VerifyOtpParams,
-      token_hash,
-    })
+    const { error } = await supabase.auth.verifyOtp({type, token: token_hash} as VerifyOtpParams);
+    
     if (!error) {
       // redirect user to specified redirect URL or root of app
       return NextResponse.redirect(new URL(next, request.url))
