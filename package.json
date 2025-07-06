@@ -8,11 +8,10 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=apps/frontend",
-    "dev:backend": "npm run start:dev --workspace=apps/backend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
-    "build": "npm run build --workspaces",
-    "lint": "npm run lint --workspaces",
-    "test": "npm run test --workspaces"
+    "build": "npm run build --workspace=apps/frontend",
+    "lint": "npm run lint --workspace=apps/frontend",
+    "test": "npm run test --workspace=apps/frontend"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
