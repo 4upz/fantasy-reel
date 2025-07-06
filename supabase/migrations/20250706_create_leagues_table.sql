@@ -31,14 +31,10 @@ CREATE TRIGGER update_leagues_updated_at
 ALTER TABLE leagues ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies
-CREATE POLICY "Users can view leagues they own or participate in" ON leagues
-    FOR SELECT USING (
-        owner_id = auth.uid() OR 
-        id IN (
-            SELECT league_id FROM league_participants 
-            WHERE user_id = auth.uid() AND status = 'active'
-        )
-    );
+-- Note: For now, users can only view leagues they own
+-- This will be updated when league_participants table is created
+CREATE POLICY "Users can view leagues they own" ON leagues
+    FOR SELECT USING (owner_id = auth.uid());
 
 CREATE POLICY "Users can create leagues" ON leagues
     FOR INSERT WITH CHECK (owner_id = auth.uid());
