@@ -14,12 +14,26 @@ export async function login(formData: FormData) {
     password: formData.get('password') as string,
   }
 
-  const { error } = await supabase.auth.signInWithPassword(data)
+  console.log('Attempting login with:', { email: data.email, hasPassword: !!data.password })
+
+  const { data: authData, error } = await supabase.auth.signInWithPassword(data)
+
+  console.log('Login result:', { 
+    success: !error, 
+    error: error ? {
+      message: error.message,
+      status: error.status,
+      name: error.name
+    } : null,
+    user: authData?.user?.id || null
+  })
 
   if (error) {
+    console.error('Login failed:', error)
     redirect('/error')
   }
 
+  console.log('Login successful, redirecting to dashboard')
   revalidatePath('/', 'layout')
   redirect('/dashboard')
 }

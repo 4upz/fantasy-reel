@@ -35,12 +35,19 @@ export default function LeagueManager() {
       setLoading(true)
       
       // Get the current user's session
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
-      if (!session) {
-        console.error('No session found')
+      if (sessionError) {
+        console.error('Error getting session:', sessionError)
         return
       }
+      
+      if (!session) {
+        console.error('No session found when fetching leagues')
+        return
+      }
+
+      console.log('Fetching leagues with session:', { userId: session.user?.id, hasToken: !!session.access_token })
 
       // For now, let's use direct Supabase call instead of Edge Function
       const { data: leagues, error } = await supabase
@@ -49,12 +56,22 @@ export default function LeagueManager() {
         .order('created_at', { ascending: false })
 
       if (error) {
-        console.error('Error fetching leagues:', error)
+        console.error('Supabase error fetching leagues:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
       } else {
+        console.log('Successfully fetched leagues:', leagues)
         setLeagues(leagues || [])
       }
     } catch (error) {
-      console.error('Error fetching leagues:', error)
+      console.error('Unexpected error fetching leagues:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      })
     } finally {
       setLoading(false)
     }
@@ -71,12 +88,19 @@ export default function LeagueManager() {
     try {
       setCreating(true)
       
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
       
-      if (!user) {
-        console.error('No user found')
+      if (userError) {
+        console.error('Error getting user:', userError)
         return
       }
+      
+      if (!user) {
+        console.error('No user found when creating league')
+        return
+      }
+
+      console.log('Creating league with user:', { userId: user.id, formData })
 
       const { data: league, error } = await supabase
         .from('leagues')
@@ -91,16 +115,26 @@ export default function LeagueManager() {
         .single()
 
       if (error) {
-        console.error('Error creating league:', error)
-        alert('Failed to create league')
+        console.error('Supabase error creating league:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+        alert(`Failed to create league: ${error.message}`)
       } else {
+        console.log('Successfully created league:', league)
         setLeagues([league, ...leagues])
         setFormData({ name: '', invite_only: false, max_participants: 8 })
         setShowCreateForm(false)
       }
     } catch (error) {
-      console.error('Error creating league:', error)
-      alert('Failed to create league')
+      console.error('Unexpected error creating league:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      alert(`Failed to create league: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setCreating(false)
     }
