@@ -6,6 +6,7 @@ import LeagueHeader from './components/LeagueHeader'
 import ParticipantsList from './components/ParticipantsList'
 import DraftBoard from './components/DraftBoard'
 import InviteModal from './components/InviteModal'
+import InvitationsList from './components/InvitationsList'
 import type { League, ParticipantWithTeam, DraftPickWithDetails, Movie } from '@/types'
 
 interface Props {
@@ -140,6 +141,11 @@ export default function LeagueDetailClient({
 
           <div>
             <ParticipantsList participants={participants} ownerId={league.owner_id} />
+            <InvitationsList
+              leagueId={league.id}
+              isOwner={isOwner}
+              leagueStatus={league.status}
+            />
           </div>
         </div>
 
