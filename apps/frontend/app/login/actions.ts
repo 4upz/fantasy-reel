@@ -4,6 +4,40 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
+export async function resendConfirmationEmail(
+  email: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  // Basic email validation
+  if (!email || !email.includes('@')) {
+    return { success: false, error: 'Please enter a valid email address' }
+  }
+
+  const { error } = await supabase.auth.resend({
+    type: 'signup',
+    email: email.trim().toLowerCase(),
+  })
+
+  // Always return success to avoid revealing if email exists (privacy)
+  // Supabase's built-in rate limiting handles abuse prevention
+  if (error) {
+    // Log error server-side for debugging but don't expose details
+    console.error('Resend confirmation error:', error.message)
+
+    // Only show rate limit errors to users (these don't reveal account existence)
+    if (error.message.includes('rate limit') || error.message.includes('60 seconds') || error.message.includes('For security purposes')) {
+      return {
+        success: false,
+        error: 'Please wait a minute before requesting another email',
+      }
+    }
+  }
+
+  // Generic success message regardless of whether email was actually sent
+  return { success: true }
+}
+
 export async function login(formData: FormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 

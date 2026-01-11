@@ -1,24 +1,38 @@
 'use client'
 
 import { useState } from 'react'
-import { login } from './actions'
+import { login, resendConfirmationEmail } from './actions'
 import Link from 'next/link'
-import { FormError } from '../components/FormError'
+import { FormError, FormSuccess } from '../components/FormError'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isResending, setIsResending] = useState(false)
+  const [showResendOption, setShowResendOption] = useState(false)
+  const [lastEmail, setLastEmail] = useState('')
+  const [resendSuccess, setResendSuccess] = useState(false)
 
   async function handleSubmit(formData: FormData) {
     setError(null)
     setIsLoading(true)
+    setShowResendOption(false)
+    setResendSuccess(false)
+
+    const email = formData.get('email') as string
+    setLastEmail(email)
 
     try {
       const result = await login(formData)
       if (result?.error) {
         setError(result.error)
         toast.error(result.error)
+
+        // Check if error is about unconfirmed email
+        if (result.error.toLowerCase().includes('confirm')) {
+          setShowResendOption(true)
+        }
       }
     } catch {
       // If redirect happens, this won't execute
@@ -26,6 +40,27 @@ export default function LoginPage() {
       setError('An unexpected error occurred')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function handleResend() {
+    if (!lastEmail) return
+
+    setIsResending(true)
+    setError(null)
+
+    try {
+      const result = await resendConfirmationEmail(lastEmail)
+      if (result.success) {
+        setResendSuccess(true)
+        setShowResendOption(false)
+      } else if (result.error) {
+        setError(result.error)
+      }
+    } catch {
+      setError('Failed to resend email')
+    } finally {
+      setIsResending(false)
     }
   }
 
@@ -42,6 +77,26 @@ export default function LoginPage() {
         </div>
         <form action={handleSubmit} className="mt-8 space-y-6">
           <FormError message={error} />
+          {resendSuccess && (
+            <FormSuccess message="Confirmation email sent! Check your inbox." />
+          )}
+
+          {/* Show resend option when email not confirmed */}
+          {showResendOption && !resendSuccess && (
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-md">
+              <p className="text-sm text-amber-800 mb-3">
+                Your email address hasn&apos;t been confirmed yet.
+              </p>
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={isResending}
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isResending ? 'Sending...' : 'Resend confirmation email'}
+              </button>
+            </div>
+          )}
 
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
@@ -86,11 +141,19 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <div className="text-center">
+          <div className="text-center space-y-2">
             <p className="text-sm text-gray-600">
               Don&apos;t have an account?{' '}
               <Link href="/signup" className="font-semibold text-indigo-600 hover:text-indigo-800 underline decoration-2 underline-offset-2 hover:decoration-indigo-800 transition-colors">
                 Sign up
+              </Link>
+            </p>
+            <p className="text-sm">
+              <Link
+                href="/auth/auth-code-error"
+                className="text-gray-500 hover:text-indigo-600 transition-colors"
+              >
+                Didn&apos;t receive confirmation email?
               </Link>
             </p>
           </div>

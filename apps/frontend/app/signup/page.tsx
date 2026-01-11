@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { signup } from './actions'
 import Link from 'next/link'
-import { FormError, FormSuccess } from '../components/FormError'
+import { FormError } from '../components/FormError'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
