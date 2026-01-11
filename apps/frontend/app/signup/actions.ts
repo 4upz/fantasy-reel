@@ -1,10 +1,8 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
-import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 
-export async function signup(formData: FormData) {
+export async function signup(formData: FormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
   const password = formData.get('password') as string
@@ -12,7 +10,12 @@ export async function signup(formData: FormData) {
 
   // Validate password confirmation
   if (password !== confirmPassword) {
-    redirect('/signup?error=passwords_dont_match')
+    return { success: false, error: 'Passwords do not match' }
+  }
+
+  // Validate password length
+  if (password.length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters' }
   }
 
   const data = {
@@ -28,9 +31,13 @@ export async function signup(formData: FormData) {
   const { error } = await supabase.auth.signUp(data)
 
   if (error) {
-    redirect('/error')
+    // Return user-friendly error messages
+    if (error.message.includes('already registered')) {
+      return { success: false, error: 'An account with this email already exists' }
+    }
+    return { success: false, error: error.message }
   }
 
-  revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  // Don't redirect - let the client show the "check your email" message
+  return { success: true }
 }

@@ -4,37 +4,27 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
-export async function login(formData: FormData) {
+export async function login(formData: FormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  // type-casting here for convenience
-  // in practice, you should validate your inputs
   const data = {
     email: formData.get('email') as string,
     password: formData.get('password') as string,
   }
 
-  console.log('Attempting login with:', { email: data.email, hasPassword: !!data.password })
-
-  const { data: authData, error } = await supabase.auth.signInWithPassword(data)
-
-  console.log('Login result:', { 
-    success: !error, 
-    error: error ? {
-      message: error.message,
-      status: error.status,
-      name: error.name
-    } : null,
-    user: authData?.user?.id || null
-  })
+  const { error } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
-    console.error('Login failed:', error)
-    redirect('/error')
+    // Return user-friendly error messages
+    if (error.message.includes('Invalid login credentials')) {
+      return { success: false, error: 'Invalid email or password' }
+    }
+    if (error.message.includes('Email not confirmed')) {
+      return { success: false, error: 'Please confirm your email address before signing in' }
+    }
+    return { success: false, error: error.message }
   }
 
-  console.log('Login successful, redirecting to dashboard')
   revalidatePath('/', 'layout')
   redirect('/dashboard')
 }
-
