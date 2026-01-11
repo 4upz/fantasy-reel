@@ -111,6 +111,15 @@ export interface DraftPickWithDetails extends DraftPick {
   teams: Team
 }
 
+export interface InvitationWithLeague extends Invitation {
+  leagues: {
+    id: string
+    name: string
+    status: 'setup' | 'drafting' | 'active' | 'completed'
+    owner_id: string
+  }
+}
+
 export interface NextPickInfo {
   round: number
   pick_number: number
