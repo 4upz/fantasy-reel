@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import LeagueManager from '../components/LeagueManager'
+import PendingInvitations from '../components/PendingInvitations'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -37,7 +38,8 @@ export default async function DashboardPage() {
               </form>
             </div>
           </div>
-          
+
+          <PendingInvitations />
           <LeagueManager />
         </div>
       </div>
