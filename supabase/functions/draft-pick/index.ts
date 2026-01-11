@@ -166,17 +166,22 @@ Deno.serve(async (req) => {
         .eq('id', league_id)
 
       // Create team_scores for all teams in the league
-      const { data: teams } = await serviceClient
-        .from('teams')
-        .select('id, participant_id')
-        .in('participant_id',
-          serviceClient
-            .from('league_participants')
-            .select('id')
-            .eq('league_id', league_id)
-        )
+      // First, get participant IDs for this league
+      const { data: participants } = await serviceClient
+        .from('league_participants')
+        .select('id')
+        .eq('league_id', league_id)
 
-      if (teams) {
+      const participantIds = participants?.map(p => p.id) || []
+
+      const { data: teams } = participantIds.length > 0
+        ? await serviceClient
+            .from('teams')
+            .select('id, participant_id')
+            .in('participant_id', participantIds)
+        : { data: [] }
+
+      if (teams && teams.length > 0) {
         for (const team of teams) {
           await serviceClient
             .from('team_scores')

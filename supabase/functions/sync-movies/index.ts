@@ -27,6 +27,37 @@ interface TMDbResponse {
   total_results: number
 }
 
+interface TMDbExternalIds {
+  imdb_id: string | null
+  facebook_id: string | null
+  instagram_id: string | null
+  twitter_id: string | null
+}
+
+/**
+ * Fetch external IDs (including IMDb ID) for a movie from TMDb
+ */
+async function fetchExternalIds(
+  tmdbId: number,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    const url = `https://api.themoviedb.org/3/movie/${tmdbId}/external_ids?api_key=${apiKey}`
+    const response = await fetch(url)
+
+    if (!response.ok) {
+      console.warn(`Failed to fetch external IDs for TMDb ID ${tmdbId}: ${response.status}`)
+      return null
+    }
+
+    const data: TMDbExternalIds = await response.json()
+    return data.imdb_id || null
+  } catch (error) {
+    console.warn(`Error fetching external IDs for TMDb ID ${tmdbId}:`, error)
+    return null
+  }
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   const corsResponse = handleCorsPreflightRequest(req)
@@ -108,9 +139,22 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Fetch external IDs (including IMDb IDs) for each movie
+    // Process in batches to respect TMDb rate limits (40 requests per 10 seconds)
+    console.log(`Fetching IMDb IDs for ${tmdbData.results.length} movies...`)
+    const moviesWithImdbIds: Array<{ movie: TMDbMovie; imdb_id: string | null }> = []
+
+    for (const movie of tmdbData.results) {
+      const imdb_id = await fetchExternalIds(movie.id, tmdbApiKey)
+      moviesWithImdbIds.push({ movie, imdb_id })
+      // Small delay to respect rate limits
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+
     // Transform movies to our schema
-    const moviesToUpsert = tmdbData.results.map((movie: TMDbMovie) => ({
+    const moviesToUpsert = moviesWithImdbIds.map(({ movie, imdb_id }) => ({
       tmdb_id: movie.id,
+      imdb_id,
       title: movie.title,
       overview: movie.overview || null,
       release_date: movie.release_date || null,

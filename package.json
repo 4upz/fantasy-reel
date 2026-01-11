@@ -11,7 +11,9 @@
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "build": "npm run build --workspace=apps/frontend",
     "lint": "npm run lint --workspace=apps/frontend",
-    "test": "npm run test --workspace=apps/frontend"
+    "test": "npm run test --workspace=apps/frontend",
+    "test:functions": "cd supabase/functions && deno task test",
+    "test:functions:watch": "cd supabase/functions && deno task test:watch"
   },
   "devDependencies": {
     "typescript": "^5.0.0"
