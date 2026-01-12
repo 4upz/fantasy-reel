@@ -1,27 +1,15 @@
 'use client'
 
 import { useEffect } from 'react'
+import { Clapperboard, X, Clock, User, ExternalLink } from 'lucide-react'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
+import { getReleaseYear, formatRuntime } from '@/utils/date'
 
 interface Props {
   movie: TMDbSearchResult
   details: TMDbMovieDetails | null
   loading: boolean
   onClose: () => void
-}
-
-function getReleaseYear(releaseDate: string | null): number | null {
-  if (!releaseDate) return null
-  return new Date(releaseDate).getFullYear()
-}
-
-function formatRuntime(minutes: number): string {
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  if (hours > 0) {
-    return `${hours}h ${mins}m`
-  }
-  return `${mins}m`
 }
 
 export default function MovieDetailModal({ movie, details, loading, onClose }: Props) {
@@ -74,14 +62,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
             className="absolute top-4 right-4 p-2 rounded-full bg-background/50 backdrop-blur-sm border border-border text-foreground-muted hover:text-foreground hover:border-border-hover transition-all z-10"
             aria-label="Close modal"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
+            <X className="w-5 h-5" />
           </button>
 
           {/* Content */}
@@ -98,7 +79,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
                     />
                   ) : (
                     <div className="w-full aspect-[2/3] bg-elevated flex items-center justify-center">
-                      <span className="text-6xl">🎬</span>
+                      <Clapperboard className="w-16 h-16 text-foreground-muted" />
                     </div>
                   )}
                 </div>
@@ -139,14 +120,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
                   {/* Runtime */}
                   {details?.runtime && (
                     <div className="flex items-center gap-1.5 text-foreground-secondary">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                        />
-                      </svg>
+                      <Clock className="w-4 h-4" />
                       <span>{formatRuntime(details.runtime)}</span>
                     </div>
                   )}
@@ -218,19 +192,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-foreground-muted">
-                            <svg
-                              className="w-8 h-8"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={1.5}
-                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                              />
-                            </svg>
+                            <User className="w-8 h-8" />
                           </div>
                         )}
                       </div>
@@ -252,14 +214,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
                   className="inline-flex items-center gap-2 text-sm text-gold hover:text-gold-hover transition-colors"
                 >
                   View on IMDb
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                    />
-                  </svg>
+                  <ExternalLink className="w-4 h-4" />
                 </a>
               </div>
             )}

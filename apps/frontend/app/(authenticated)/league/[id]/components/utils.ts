@@ -1,3 +1,6 @@
+// Re-export shared utilities for convenience
+export { formatRuntime, getReleaseYear } from '@/utils/date'
+
 /**
  * Format a release date for short display (e.g., "Jan 15")
  */
@@ -16,16 +19,6 @@ export function formatReleaseDateFull(date: string | null): string {
     day: 'numeric',
     year: 'numeric',
   })
-}
-
-/**
- * Format runtime in hours and minutes
- */
-export function formatRuntime(minutes: number): string {
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  if (hours > 0) return `${hours}h ${mins}m`
-  return `${mins}m`
 }
 
 /**

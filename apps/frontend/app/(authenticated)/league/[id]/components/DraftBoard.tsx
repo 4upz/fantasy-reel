@@ -5,6 +5,7 @@ import { callEdgeFunction } from '@/utils/supabase/functions'
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
+import { ClapperboardIcon, ArrowUpIcon, ClockIcon } from './Icons'
 import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult } from '@/types'
 
 interface Props {
@@ -125,7 +126,9 @@ export default function DraftBoard({
       <div className="card p-6">
         <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
         <div className="text-center py-8">
-          <div className="text-6xl mb-4">🎬</div>
+          <div className="flex justify-center mb-4">
+            <ClapperboardIcon className="w-16 h-16 text-foreground-muted" />
+          </div>
           <p className="text-foreground-secondary mb-2">The draft hasn&apos;t started yet.</p>
           <p className="text-sm text-foreground-muted">
             Waiting for the league owner to start the draft.
@@ -173,11 +176,15 @@ export default function DraftBoard({
               >
                 <div className="flex items-center gap-3">
                   <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${
+                    className={`w-12 h-12 rounded-full flex items-center justify-center ${
                       isMyTurn ? 'bg-success text-background' : 'bg-gold text-background'
                     }`}
                   >
-                    {isMyTurn ? '👆' : '⏳'}
+                    {isMyTurn ? (
+                      <ArrowUpIcon className="w-6 h-6" />
+                    ) : (
+                      <ClockIcon className="w-6 h-6" />
+                    )}
                   </div>
                   <div>
                     <p className="text-sm text-foreground-muted">
@@ -281,7 +288,7 @@ function PickHistory({ draftPicks }: { draftPicks: DraftPickWithDetails[] }) {
             />
           ) : (
             <div className="w-10 h-15 bg-surface rounded-lg border border-border flex items-center justify-center flex-shrink-0">
-              <span className="text-lg">🎬</span>
+              <ClapperboardIcon className="w-5 h-5 text-foreground-muted" />
             </div>
           )}
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
-import { CloseIcon, StarIcon, HeartIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon } from './Icons'
+import { CloseIcon, StarIcon, HeartIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
 
 interface Props {
@@ -108,7 +108,7 @@ export default function MovieQuickPreview({
                     />
                   ) : (
                     <div className="w-full aspect-[2/3] bg-elevated flex items-center justify-center">
-                      <span className="text-5xl">🎬</span>
+                      <ClapperboardIcon className="w-12 h-12 text-foreground-muted" />
                     </div>
                   )}
 

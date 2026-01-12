@@ -1,16 +1,13 @@
 'use client'
 
+import { Clapperboard } from 'lucide-react'
 import type { TMDbSearchResult } from '@/types'
+import { getReleaseYear } from '@/utils/date'
 
 interface Props {
   movie: TMDbSearchResult
   onClick: () => void
   index: number
-}
-
-function getReleaseYear(releaseDate: string | null): number | null {
-  if (!releaseDate) return null
-  return new Date(releaseDate).getFullYear()
 }
 
 export default function MovieCard({ movie, onClick, index }: Props) {
@@ -33,7 +30,7 @@ export default function MovieCard({ movie, onClick, index }: Props) {
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted">
-            <span className="text-5xl mb-2">🎬</span>
+            <Clapperboard className="w-12 h-12 mb-2" />
             <span className="text-xs">No poster</span>
           </div>
         )}

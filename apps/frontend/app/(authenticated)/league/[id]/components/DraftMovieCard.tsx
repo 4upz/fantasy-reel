@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { TMDbSearchResult } from '@/types'
-import { StarIcon, HeartIcon, CheckIcon } from './Icons'
+import { StarIcon, HeartIcon, CheckIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
@@ -71,7 +71,7 @@ export default function DraftMovieCard({
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-elevated">
-            <span className="text-5xl mb-2">🎬</span>
+            <ClapperboardIcon className="w-12 h-12 text-foreground-muted mb-2" />
             <span className="text-xs text-foreground-muted">No poster</span>
           </div>
         )}

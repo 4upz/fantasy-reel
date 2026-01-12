@@ -6,7 +6,7 @@ import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
 import DraftFilters from './DraftFilters'
 import DraftMovieCard from './DraftMovieCard'
 import MovieQuickPreview from './MovieQuickPreview'
-import { SpinnerIcon } from './Icons'
+import { SpinnerIcon, ClapperboardIcon, TrendingUpIcon, CalendarIcon, HeartIcon, SearchIcon } from './Icons'
 
 interface Props {
   draftedTmdbIds: Set<number>
@@ -19,12 +19,25 @@ interface Props {
 
 type TabType = 'all' | 'trending' | 'releasing-soon' | 'favorites'
 
-const TABS: { id: TabType; label: string; icon: string }[] = [
-  { id: 'all', label: 'All Movies', icon: '🎬' },
-  { id: 'trending', label: 'Trending', icon: '🔥' },
-  { id: 'releasing-soon', label: 'Releasing Soon', icon: '📅' },
-  { id: 'favorites', label: 'Favorites', icon: '❤️' },
+const TAB_CONFIG: { id: TabType; label: string }[] = [
+  { id: 'all', label: 'All Movies' },
+  { id: 'trending', label: 'Trending' },
+  { id: 'releasing-soon', label: 'Releasing Soon' },
+  { id: 'favorites', label: 'Favorites' },
 ]
+
+function getTabIcon(tabId: TabType, className: string = 'w-4 h-4') {
+  switch (tabId) {
+    case 'all':
+      return <ClapperboardIcon className={className} />
+    case 'trending':
+      return <TrendingUpIcon className={className} />
+    case 'releasing-soon':
+      return <CalendarIcon className={className} />
+    case 'favorites':
+      return <HeartIcon className={className} />
+  }
+}
 
 export default function MoviePicker({
   draftedTmdbIds,
@@ -164,7 +177,7 @@ export default function MoviePicker({
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 bg-elevated rounded-xl overflow-x-auto">
-        {TABS.map((tab) => (
+        {TAB_CONFIG.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -174,7 +187,7 @@ export default function MoviePicker({
                 : 'text-foreground-secondary hover:text-foreground hover:bg-surface'
             }`}
           >
-            <span>{tab.icon}</span>
+            {getTabIcon(tab.id)}
             <span>{tab.label}</span>
             {tab.id === 'favorites' && favoriteMovieIds.size > 0 && (
               <span
@@ -214,8 +227,14 @@ export default function MoviePicker({
       {/* Movie Grid */}
       {!loading && filteredMovies.length === 0 ? (
         <div className="text-center py-12 bg-elevated rounded-xl border border-border">
-          <div className="text-4xl mb-3">
-            {activeTab === 'favorites' ? '❤️' : mode === 'search' ? '🔍' : '🎬'}
+          <div className="flex justify-center mb-3">
+            {activeTab === 'favorites' ? (
+              <HeartIcon className="w-10 h-10 text-foreground-muted" />
+            ) : mode === 'search' ? (
+              <SearchIcon className="w-10 h-10 text-foreground-muted" />
+            ) : (
+              <ClapperboardIcon className="w-10 h-10 text-foreground-muted" />
+            )}
           </div>
           <p className="text-foreground-secondary">
             {activeTab === 'favorites'

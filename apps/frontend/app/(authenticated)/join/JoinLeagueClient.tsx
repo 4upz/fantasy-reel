@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { Clapperboard } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 
 interface Props {
@@ -59,7 +60,9 @@ export default function JoinLeagueClient({ token, userDisplayName }: Props) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center p-8">
-          <div className="text-6xl mb-4">🎬</div>
+          <div className="flex justify-center mb-4">
+            <Clapperboard className="w-16 h-16 text-gold" />
+          </div>
           <h1 className="text-2xl font-bold font-display text-foreground mb-2">Invalid Invitation</h1>
           <p className="text-foreground-secondary mb-6">
             This invitation link is invalid or missing a token.
@@ -79,7 +82,9 @@ export default function JoinLeagueClient({ token, userDisplayName }: Props) {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="card p-8 max-w-md w-full animate-fade-in">
         <div className="text-center mb-6">
-          <div className="text-5xl mb-3">🎬</div>
+          <div className="flex justify-center mb-3">
+            <Clapperboard className="w-12 h-12 text-gold" />
+          </div>
           <h1 className="text-2xl font-bold font-display text-foreground">Join League</h1>
           <p className="text-foreground-secondary mt-2">You&apos;ve been invited to join a fantasy movie league!</p>
           {userDisplayName && <p className="text-sm text-foreground-muted mt-1">Joining as {userDisplayName}</p>}
