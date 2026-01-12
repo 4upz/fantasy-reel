@@ -27,12 +27,70 @@ import {
 let mockSupabaseConfig: MockSupabaseConfig = {}
 let mockClient: ReturnType<typeof createMockSupabaseClient>
 
-// Mock movie data for creating new movies
+// Helper to get date strings for testing
+function getDateString(daysFromNow: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + daysFromNow)
+  return date.toISOString().split('T')[0]
+}
+
+// Get dates for test scenarios
+const today = getDateString(0)
+const tomorrow = getDateString(1)
+const nextMonth = getDateString(30)
+const yesterday = getDateString(-1)
+const lastYear = `${new Date().getFullYear() - 1}-06-15`
+
+// Get a past date that's definitely in the current year (for "already released this year" tests)
+function getPastDateThisYear(): string {
+  const now = new Date()
+  // Go back to Jan 1 of this year or yesterday, whichever is later
+  const jan1 = new Date(now.getFullYear(), 0, 1)
+  const yesterdayDate = new Date(now)
+  yesterdayDate.setDate(now.getDate() - 1)
+
+  // If yesterday is before Jan 1 (shouldn't happen), just use Jan 1
+  const targetDate = yesterdayDate >= jan1 ? yesterdayDate : jan1
+  return targetDate.toISOString().split('T')[0]
+}
+const pastDateThisYear = getPastDateThisYear()
+
+/**
+ * Validates that a movie is eligible for drafting.
+ */
+function isValidDraftableMovie(releaseDate: string | null): { valid: boolean; reason?: string } {
+  if (!releaseDate) {
+    return { valid: false, reason: 'Movie has no release date' }
+  }
+
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const todayStr = now.toISOString().split('T')[0]
+
+  const releaseYear = parseInt(releaseDate.split('-')[0], 10)
+  if (isNaN(releaseYear) || releaseYear < currentYear) {
+    return { valid: false, reason: 'Movie was released in a previous year' }
+  }
+
+  if (releaseDate < todayStr) {
+    return { valid: false, reason: 'Movie has already been released' }
+  }
+
+  return { valid: true }
+}
+
+// Mock movie with upcoming release date (dynamic)
+const mockUpcomingMovie = {
+  ...mockMovie,
+  release_date: nextMonth,
+}
+
+// Mock movie data for creating new movies (with dynamic date)
 const mockMovieData = {
   title: 'New Test Movie',
   overview: 'A new movie to draft',
   poster_url: 'https://image.tmdb.org/t/p/w500/new.jpg',
-  release_date: '2024-12-20',
+  release_date: nextMonth,
   vote_average: 8.0,
   popularity: 150.0,
   genre_ids: [28, 12],
@@ -148,7 +206,16 @@ async function handleDraftPick(req: Request): Promise<Response> {
       movie = newMovie
     }
 
-    // Check movie status
+    // Validate movie is eligible for drafting (upcoming, current year or later)
+    const draftValidation = isValidDraftableMovie(movie.release_date)
+    if (!draftValidation.valid) {
+      return errorResponse(
+        `This movie cannot be drafted: ${draftValidation.reason}`,
+        400
+      )
+    }
+
+    // Check movie status (belt and suspenders with the date check above)
     if (movie.status !== 'upcoming') {
       return errorResponse('This movie is not available for drafting', 400)
     }
@@ -437,7 +504,8 @@ Deno.test('draft-pick: movie validation', async (t) => {
   })
 
   await t.step('returns 400 when movie not upcoming', async () => {
-    const releasedMovie = { ...mockMovie, status: 'released' }
+    // Movie has future release date but status is already 'released' (edge case)
+    const releasedMovie = { ...mockUpcomingMovie, status: 'released' }
     mockSupabaseConfig = {
       user: mockUser,
       tables: {
@@ -454,7 +522,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: mockMovie.tmdb_id })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: mockUpcomingMovie.tmdb_id })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -470,7 +538,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
           select: { data: mockLeagueDrafting, error: null },
         },
         movies: {
-          select: { data: mockMovie, error: null },
+          select: { data: mockUpcomingMovie, error: null },
         },
         draft_picks: {
           select: { data: mockDraftPick, error: null },
@@ -482,7 +550,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: mockMovie.tmdb_id })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: mockUpcomingMovie.tmdb_id })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -504,7 +572,7 @@ Deno.test('draft-pick: success', async (t) => {
           select: { data: mockLeagueDrafting, error: null },
         },
         movies: {
-          select: { data: mockMovie, error: null },
+          select: { data: mockUpcomingMovie, error: null },
         },
         draft_picks: {
           select: { data: null, error: null },
@@ -519,7 +587,7 @@ Deno.test('draft-pick: success', async (t) => {
 
     const req = createMockAuthRequest({
       league_id: mockLeagueDrafting.id,
-      tmdb_id: mockMovie.tmdb_id,
+      tmdb_id: mockUpcomingMovie.tmdb_id,
     })
     const response = await handleDraftPick(req)
 
@@ -527,8 +595,8 @@ Deno.test('draft-pick: success', async (t) => {
     const body = await response.json()
     assertExists(body.pick)
     assertExists(body.movie)
-    assertEquals(body.movie.title, mockMovie.title)
-    assertEquals(body.movie.tmdb_id, mockMovie.tmdb_id)
+    assertEquals(body.movie.title, mockUpcomingMovie.title)
+    assertEquals(body.movie.tmdb_id, mockUpcomingMovie.tmdb_id)
   })
 
   await t.step('creates movie and draft pick when movie does not exist', async () => {
@@ -581,6 +649,223 @@ Deno.test('draft-pick: success', async (t) => {
     assertEquals(body.movie.title, mockMovieData.title)
     assertEquals(body.movie.tmdb_id, newTmdbId)
   })
+
+  await t.step('accepts movie releasing today', async () => {
+    const todayMovie = {
+      ...mockUpcomingMovie,
+      id: 'e8f9a0b1-c2d3-4567-89ab-cdef01234567',
+      release_date: today,
+    }
+
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeagueDrafting, error: null },
+        },
+        movies: {
+          select: { data: todayMovie, error: null },
+        },
+        draft_picks: {
+          select: { data: null, error: null },
+          insert: { data: { ...mockDraftPick, movie_id: todayMovie.id }, error: null },
+        },
+      },
+      rpc: {
+        get_next_draft_pick: { data: [mockNextPickInfo], error: null },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeagueDrafting.id,
+      tmdb_id: mockUpcomingMovie.tmdb_id,
+    })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 201)
+  })
+})
+
+// ============================================================================
+// Release Date Validation Tests
+// ============================================================================
+
+Deno.test('draft-pick: release date validation', async (t) => {
+  await t.step('rejects existing movie from previous year', async () => {
+    const oldMovie = {
+      ...mockUpcomingMovie,
+      release_date: lastYear,
+    }
+
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeagueDrafting, error: null },
+        },
+        movies: {
+          select: { data: oldMovie, error: null },
+        },
+      },
+      rpc: {
+        get_next_draft_pick: { data: [mockNextPickInfo], error: null },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeagueDrafting.id,
+      tmdb_id: mockUpcomingMovie.tmdb_id,
+    })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'This movie cannot be drafted: Movie was released in a previous year')
+  })
+
+  await t.step('rejects movie already released this year', async () => {
+    const releasedMovie = {
+      ...mockUpcomingMovie,
+      release_date: pastDateThisYear,
+    }
+
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeagueDrafting, error: null },
+        },
+        movies: {
+          select: { data: releasedMovie, error: null },
+        },
+      },
+      rpc: {
+        get_next_draft_pick: { data: [mockNextPickInfo], error: null },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeagueDrafting.id,
+      tmdb_id: mockUpcomingMovie.tmdb_id,
+    })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'This movie cannot be drafted: Movie has already been released')
+  })
+
+  await t.step('rejects movie with null release_date', async () => {
+    const noDateMovie = {
+      ...mockUpcomingMovie,
+      release_date: null,
+    }
+
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeagueDrafting, error: null },
+        },
+        movies: {
+          select: { data: noDateMovie, error: null },
+        },
+      },
+      rpc: {
+        get_next_draft_pick: { data: [mockNextPickInfo], error: null },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeagueDrafting.id,
+      tmdb_id: mockUpcomingMovie.tmdb_id,
+    })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'This movie cannot be drafted: Movie has no release date')
+  })
+
+  await t.step('rejects movie_data with past release date', async () => {
+    const newMovieId = 'f1e2d3c4-b5a6-7890-1234-567890abcdef'
+    const pastMovieData = {
+      ...mockMovieData,
+      release_date: lastYear,
+    }
+    const createdMovie = {
+      id: newMovieId,
+      title: pastMovieData.title,
+      poster_url: pastMovieData.poster_url,
+      release_date: pastMovieData.release_date,
+      status: 'upcoming',
+    }
+
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeagueDrafting, error: null },
+        },
+        movies: {
+          select: { data: null, error: { message: 'Not found' } },
+          insert: { data: createdMovie, error: null },
+        },
+      },
+      rpc: {
+        get_next_draft_pick: { data: [mockNextPickInfo], error: null },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeagueDrafting.id,
+      tmdb_id: 99999,
+      movie_data: pastMovieData,
+    })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'This movie cannot be drafted: Movie was released in a previous year')
+  })
+
+  await t.step('rejects movie released yesterday', async () => {
+    const yesterdayMovie = {
+      ...mockUpcomingMovie,
+      release_date: yesterday,
+    }
+
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeagueDrafting, error: null },
+        },
+        movies: {
+          select: { data: yesterdayMovie, error: null },
+        },
+      },
+      rpc: {
+        get_next_draft_pick: { data: [mockNextPickInfo], error: null },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeagueDrafting.id,
+      tmdb_id: mockUpcomingMovie.tmdb_id,
+    })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'This movie cannot be drafted: Movie has already been released')
+  })
 })
 
 // ============================================================================
@@ -596,7 +881,7 @@ Deno.test('draft-pick: race condition', async (t) => {
           select: { data: mockLeagueDrafting, error: null },
         },
         movies: {
-          select: { data: mockMovie, error: null },
+          select: { data: mockUpcomingMovie, error: null },
         },
         draft_picks: {
           select: { data: null, error: null },
@@ -611,7 +896,7 @@ Deno.test('draft-pick: race condition', async (t) => {
 
     const req = createMockAuthRequest({
       league_id: mockLeagueDrafting.id,
-      tmdb_id: mockMovie.tmdb_id,
+      tmdb_id: mockUpcomingMovie.tmdb_id,
     })
     const response = await handleDraftPick(req)
 

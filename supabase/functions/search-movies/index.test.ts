@@ -13,6 +13,51 @@ import { mockTMDbSearchResponse } from '../_test_utils/fixtures.ts'
 
 let cleanupFetch: (() => void) | null = null
 
+// Helper to get date strings for testing
+function getDateString(daysFromNow: number): string {
+  const date = new Date()
+  date.setDate(date.getDate() + daysFromNow)
+  return date.toISOString().split('T')[0]
+}
+
+// Get dates for test scenarios
+const today = getDateString(0)
+const tomorrow = getDateString(1)
+const nextMonth = getDateString(30)
+const yesterday = getDateString(-1)
+const lastMonth = getDateString(-30)
+const lastYear = `${new Date().getFullYear() - 1}-06-15`
+const nextYear = `${new Date().getFullYear() + 1}-06-15`
+
+interface SearchResult {
+  tmdb_id: number
+  title: string
+  overview: string | null
+  release_date: string | null
+  poster_url: string | null
+  vote_average: number
+  popularity: number
+  genre_ids: number[]
+}
+
+/**
+ * Filters search results to only include upcoming movies from the current year or later.
+ */
+function filterUpcomingCurrentYear(results: SearchResult[]): SearchResult[] {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const todayStr = now.toISOString().split('T')[0]
+
+  return results.filter((movie) => {
+    if (!movie.release_date) return false
+
+    const releaseYear = parseInt(movie.release_date.split('-')[0], 10)
+    if (isNaN(releaseYear) || releaseYear < currentYear) return false
+
+    return movie.release_date >= todayStr
+  })
+}
+
 // Recreate handler logic for testing
 async function handleSearchMovies(req: Request): Promise<Response> {
   const { jsonResponse, errorResponse, handleCorsPreflightRequest } = await import(
@@ -70,7 +115,7 @@ async function handleSearchMovies(req: Request): Promise<Response> {
 
     const tmdbData = await tmdbResponse.json()
 
-    const results = tmdbData.results.map((movie: any) => ({
+    const mappedResults: SearchResult[] = tmdbData.results.map((movie: any) => ({
       tmdb_id: movie.id,
       title: movie.title,
       overview: movie.overview,
@@ -83,10 +128,13 @@ async function handleSearchMovies(req: Request): Promise<Response> {
       genre_ids: movie.genre_ids,
     }))
 
+    // Filter to only include upcoming movies from current year or later
+    const results = filterUpcomingCurrentYear(mappedResults)
+
     return jsonResponse({
       page: tmdbData.page,
       total_pages: tmdbData.total_pages,
-      total_results: tmdbData.total_results,
+      total_results: results.length,
       results,
     })
   } catch (error) {
@@ -230,35 +278,50 @@ Deno.test('search-movies: TMDb API', async (t) => {
 
 Deno.test('search-movies: success', async (t) => {
   await t.step('returns search results with transformed data', async () => {
+    // Create response with upcoming movie only
+    const upcomingMovieResponse = {
+      page: 1,
+      results: [
+        {
+          id: 551,
+          title: 'Upcoming Movie',
+          overview: 'A movie releasing next month.',
+          release_date: nextMonth,
+          poster_path: '/upcoming.jpg',
+          vote_average: 8.0,
+          vote_count: 100,
+          popularity: 50.0,
+          genre_ids: [28, 12],
+        },
+      ],
+      total_pages: 1,
+      total_results: 1,
+    }
+
     cleanupFetch = mockFetch([
       {
         url: 'api.themoviedb.org/3/search',
-        response: mockJsonResponse(mockTMDbSearchResponse),
+        response: mockJsonResponse(upcomingMovieResponse),
       },
     ])
 
-    const req = createMockRequest({ body: { query: 'fight club' } })
+    const req = createMockRequest({ body: { query: 'upcoming' } })
     const response = await handleSearchMovies(req)
 
     assertEquals(response.status, 200)
     const body = await response.json()
 
     assertEquals(body.page, 1)
-    assertEquals(body.total_pages, 1)
-    assertEquals(body.total_results, 2)
-    assertEquals(body.results.length, 2)
+    assertEquals(body.total_results, 1)
+    assertEquals(body.results.length, 1)
 
-    // Check first result transformation
+    // Check result transformation
     const first = body.results[0]
-    assertEquals(first.tmdb_id, 550)
-    assertEquals(first.title, 'Fight Club')
-    assertEquals(first.poster_url, 'https://image.tmdb.org/t/p/w500/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg')
-    assertEquals(first.vote_average, 8.4)
-    assertEquals(first.genre_ids, [18, 53, 35])
-
-    // Check null poster handling
-    const second = body.results[1]
-    assertEquals(second.poster_url, null)
+    assertEquals(first.tmdb_id, 551)
+    assertEquals(first.title, 'Upcoming Movie')
+    assertEquals(first.poster_url, 'https://image.tmdb.org/t/p/w500/upcoming.jpg')
+    assertEquals(first.vote_average, 8.0)
+    assertEquals(first.release_date, nextMonth)
 
     cleanupFetch()
   })
@@ -295,7 +358,7 @@ Deno.test('search-movies: success', async (t) => {
           page: 2,
           results: [],
           total_pages: 3,
-          total_results: 50,
+          total_results: 0,
         }),
       },
     ])
@@ -306,6 +369,294 @@ Deno.test('search-movies: success', async (t) => {
     assertEquals(response.status, 200)
     const body = await response.json()
     assertEquals(body.page, 2)
+
+    cleanupFetch()
+  })
+})
+
+// ============================================================================
+// Year/Date Filtering Tests
+// ============================================================================
+
+Deno.test('search-movies: year filtering', async (t) => {
+  await t.step('filters out movies from previous years', async () => {
+    const mixedYearResponse = {
+      page: 1,
+      results: [
+        {
+          id: 550,
+          title: 'Old Classic',
+          overview: 'A movie from the past.',
+          release_date: lastYear,
+          poster_path: '/old.jpg',
+          vote_average: 9.0,
+          vote_count: 50000,
+          popularity: 100.0,
+          genre_ids: [18],
+        },
+        {
+          id: 551,
+          title: 'Upcoming Movie',
+          overview: 'A movie releasing soon.',
+          release_date: nextMonth,
+          poster_path: '/upcoming.jpg',
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 50.0,
+          genre_ids: [28],
+        },
+      ],
+      total_pages: 1,
+      total_results: 2,
+    }
+
+    cleanupFetch = mockFetch([
+      {
+        url: 'api.themoviedb.org/3/search',
+        response: mockJsonResponse(mixedYearResponse),
+      },
+    ])
+
+    const req = createMockRequest({ body: { query: 'movie' } })
+    const response = await handleSearchMovies(req)
+
+    assertEquals(response.status, 200)
+    const body = await response.json()
+
+    // Only the upcoming movie should be returned
+    assertEquals(body.total_results, 1)
+    assertEquals(body.results.length, 1)
+    assertEquals(body.results[0].title, 'Upcoming Movie')
+
+    cleanupFetch()
+  })
+
+  await t.step('filters out already-released movies from current year', async () => {
+    const currentYearResponse = {
+      page: 1,
+      results: [
+        {
+          id: 552,
+          title: 'Released This Year',
+          overview: 'Already released.',
+          release_date: lastMonth,
+          poster_path: '/released.jpg',
+          vote_average: 7.5,
+          vote_count: 1000,
+          popularity: 80.0,
+          genre_ids: [35],
+        },
+        {
+          id: 553,
+          title: 'Coming Next Month',
+          overview: 'Not yet released.',
+          release_date: nextMonth,
+          poster_path: '/coming.jpg',
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 60.0,
+          genre_ids: [12],
+        },
+      ],
+      total_pages: 1,
+      total_results: 2,
+    }
+
+    cleanupFetch = mockFetch([
+      {
+        url: 'api.themoviedb.org/3/search',
+        response: mockJsonResponse(currentYearResponse),
+      },
+    ])
+
+    const req = createMockRequest({ body: { query: 'movie' } })
+    const response = await handleSearchMovies(req)
+
+    assertEquals(response.status, 200)
+    const body = await response.json()
+
+    // Only the upcoming movie should be returned
+    assertEquals(body.total_results, 1)
+    assertEquals(body.results[0].title, 'Coming Next Month')
+
+    cleanupFetch()
+  })
+
+  await t.step('includes movies releasing today', async () => {
+    const todayReleaseResponse = {
+      page: 1,
+      results: [
+        {
+          id: 554,
+          title: 'Releasing Today',
+          overview: 'Out today!',
+          release_date: today,
+          poster_path: '/today.jpg',
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 90.0,
+          genre_ids: [28],
+        },
+      ],
+      total_pages: 1,
+      total_results: 1,
+    }
+
+    cleanupFetch = mockFetch([
+      {
+        url: 'api.themoviedb.org/3/search',
+        response: mockJsonResponse(todayReleaseResponse),
+      },
+    ])
+
+    const req = createMockRequest({ body: { query: 'today' } })
+    const response = await handleSearchMovies(req)
+
+    assertEquals(response.status, 200)
+    const body = await response.json()
+
+    assertEquals(body.total_results, 1)
+    assertEquals(body.results[0].title, 'Releasing Today')
+
+    cleanupFetch()
+  })
+
+  await t.step('includes movies from next year', async () => {
+    const nextYearResponse = {
+      page: 1,
+      results: [
+        {
+          id: 555,
+          title: 'Next Year Release',
+          overview: 'Coming next year.',
+          release_date: nextYear,
+          poster_path: '/nextyear.jpg',
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 70.0,
+          genre_ids: [14],
+        },
+      ],
+      total_pages: 1,
+      total_results: 1,
+    }
+
+    cleanupFetch = mockFetch([
+      {
+        url: 'api.themoviedb.org/3/search',
+        response: mockJsonResponse(nextYearResponse),
+      },
+    ])
+
+    const req = createMockRequest({ body: { query: 'next year' } })
+    const response = await handleSearchMovies(req)
+
+    assertEquals(response.status, 200)
+    const body = await response.json()
+
+    assertEquals(body.total_results, 1)
+    assertEquals(body.results[0].title, 'Next Year Release')
+
+    cleanupFetch()
+  })
+
+  await t.step('excludes movies with null release_date', async () => {
+    const nullDateResponse = {
+      page: 1,
+      results: [
+        {
+          id: 556,
+          title: 'No Release Date',
+          overview: 'Unknown release.',
+          release_date: null,
+          poster_path: '/unknown.jpg',
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 40.0,
+          genre_ids: [27],
+        },
+        {
+          id: 557,
+          title: 'Has Release Date',
+          overview: 'Known release.',
+          release_date: nextMonth,
+          poster_path: '/known.jpg',
+          vote_average: 0,
+          vote_count: 0,
+          popularity: 50.0,
+          genre_ids: [28],
+        },
+      ],
+      total_pages: 1,
+      total_results: 2,
+    }
+
+    cleanupFetch = mockFetch([
+      {
+        url: 'api.themoviedb.org/3/search',
+        response: mockJsonResponse(nullDateResponse),
+      },
+    ])
+
+    const req = createMockRequest({ body: { query: 'movie' } })
+    const response = await handleSearchMovies(req)
+
+    assertEquals(response.status, 200)
+    const body = await response.json()
+
+    assertEquals(body.total_results, 1)
+    assertEquals(body.results[0].title, 'Has Release Date')
+
+    cleanupFetch()
+  })
+
+  await t.step('returns empty when all results are filtered out', async () => {
+    const allOldResponse = {
+      page: 1,
+      results: [
+        {
+          id: 550,
+          title: 'Fight Club',
+          overview: 'Classic movie.',
+          release_date: '1999-10-15',
+          poster_path: '/fightclub.jpg',
+          vote_average: 8.4,
+          vote_count: 25000,
+          popularity: 45.5,
+          genre_ids: [18, 53],
+        },
+        {
+          id: 558,
+          title: 'Another Old Movie',
+          overview: 'From last year.',
+          release_date: lastYear,
+          poster_path: '/old2.jpg',
+          vote_average: 7.0,
+          vote_count: 5000,
+          popularity: 30.0,
+          genre_ids: [18],
+        },
+      ],
+      total_pages: 1,
+      total_results: 2,
+    }
+
+    cleanupFetch = mockFetch([
+      {
+        url: 'api.themoviedb.org/3/search',
+        response: mockJsonResponse(allOldResponse),
+      },
+    ])
+
+    const req = createMockRequest({ body: { query: 'fight club' } })
+    const response = await handleSearchMovies(req)
+
+    assertEquals(response.status, 200)
+    const body = await response.json()
+
+    // All results should be filtered out
+    assertEquals(body.total_results, 0)
+    assertEquals(body.results.length, 0)
 
     cleanupFetch()
   })

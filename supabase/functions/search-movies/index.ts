@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie } from '../_shared/utils.ts'
 
 interface SearchMoviesRequest {
   query: string
@@ -34,6 +34,13 @@ interface SearchResult {
   vote_average: number
   popularity: number
   genre_ids: number[]
+}
+
+/**
+ * Filters search results to only include upcoming movies from the current year or later.
+ */
+function filterUpcomingMovies(results: SearchResult[]): SearchResult[] {
+  return results.filter((movie) => isUpcomingMovie(movie.release_date).valid)
 }
 
 Deno.serve(async (req) => {
@@ -92,7 +99,7 @@ Deno.serve(async (req) => {
 
     const tmdbData: TMDbSearchResponse = await tmdbResponse.json()
 
-    const results: SearchResult[] = tmdbData.results.map((movie) => ({
+    const mappedResults: SearchResult[] = tmdbData.results.map((movie) => ({
       tmdb_id: movie.id,
       title: movie.title,
       overview: movie.overview,
@@ -105,10 +112,13 @@ Deno.serve(async (req) => {
       genre_ids: movie.genre_ids,
     }))
 
+    // Filter to only include upcoming movies from current year or later
+    const results = filterUpcomingMovies(mappedResults)
+
     return jsonResponse({
       page: tmdbData.page,
       total_pages: tmdbData.total_pages,
-      total_results: tmdbData.total_results,
+      total_results: results.length,
       results,
     })
   } catch (error) {

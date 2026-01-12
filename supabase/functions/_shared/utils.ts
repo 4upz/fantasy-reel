@@ -92,3 +92,39 @@ export function handleCorsPreflightRequest(req: Request): Response | null {
   }
   return null
 }
+
+/**
+ * Result of validating a movie's eligibility for drafting
+ */
+export interface DraftEligibilityResult {
+  valid: boolean
+  reason?: string
+}
+
+/**
+ * Validates that a movie is eligible for drafting based on its release date.
+ * Movies must:
+ * - Have a release date
+ * - Be from the current year or later
+ * - Not have been released yet (release_date >= today)
+ */
+export function isUpcomingMovie(releaseDate: string | null | undefined): DraftEligibilityResult {
+  if (!releaseDate) {
+    return { valid: false, reason: 'Movie has no release date' }
+  }
+
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  const today = now.toISOString().split('T')[0]
+
+  const releaseYear = parseInt(releaseDate.split('-')[0], 10)
+  if (isNaN(releaseYear) || releaseYear < currentYear) {
+    return { valid: false, reason: 'Movie was released in a previous year' }
+  }
+
+  if (releaseDate < today) {
+    return { valid: false, reason: 'Movie has already been released' }
+  }
+
+  return { valid: true }
+}

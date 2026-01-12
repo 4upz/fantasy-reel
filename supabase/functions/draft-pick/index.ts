@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isUpcomingMovie } from '../_shared/utils.ts'
 
 interface MovieData {
   title: string
@@ -165,7 +165,13 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check movie status
+    // Validate movie is eligible for drafting (upcoming, current year or later)
+    const eligibility = isUpcomingMovie(movie.release_date)
+    if (!eligibility.valid) {
+      return errorResponse(`This movie cannot be drafted: ${eligibility.reason}`, 400)
+    }
+
+    // Check movie status (belt and suspenders with the date check above)
     if (movie.status !== 'upcoming') {
       return errorResponse('This movie is not available for drafting', 400)
     }
