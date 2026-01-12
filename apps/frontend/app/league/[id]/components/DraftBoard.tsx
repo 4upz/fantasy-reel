@@ -90,15 +90,15 @@ export default function DraftBoard({
   // Render different views based on league status
   if (league.status === 'setup') {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-semibold mb-4">Draft Board</h2>
+      <div className="card p-6">
+        <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
         <div className="text-center py-8">
           <div className="text-6xl mb-4">🎬</div>
-          <p className="text-gray-600 mb-2">The draft hasn&apos;t started yet.</p>
-          <p className="text-sm text-gray-400">
+          <p className="text-foreground-secondary mb-2">The draft hasn&apos;t started yet.</p>
+          <p className="text-sm text-foreground-muted">
             Waiting for the league owner to start the draft.
           </p>
-          <p className="text-sm text-gray-400 mt-2">
+          <p className="text-sm text-foreground-muted mt-2">
             {participants.length} / {league.max_participants} participants joined
           </p>
         </div>
@@ -108,41 +108,47 @@ export default function DraftBoard({
 
   if (league.status === 'active' || league.status === 'completed') {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-semibold mb-4">Draft Results</h2>
-        <p className="text-gray-600 mb-4">The draft is complete!</p>
+      <div className="card p-6">
+        <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Results</h2>
+        <p className="text-foreground-secondary mb-4">The draft is complete!</p>
         <PickHistory draftPicks={draftPicks} />
       </div>
     )
   }
 
   return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <h2 className="text-xl font-semibold mb-4">Draft Board</h2>
+    <div className="card p-6">
+      <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
 
       {/* Current Turn Indicator */}
       {nextPick && (
-        <div className={`mb-4 p-4 rounded-lg ${isMyTurn ? 'bg-green-100' : 'bg-gray-100'}`}>
-          <p className="font-medium">
+        <div
+          className={`mb-4 p-4 rounded-lg border ${
+            isMyTurn
+              ? 'bg-success-bg border-success animate-glow-pulse'
+              : 'bg-elevated border-border'
+          }`}
+        >
+          <p className="font-medium text-foreground">
             Round {nextPick.round}, Pick {nextPick.pick_number}
           </p>
-          <p className={isMyTurn ? 'text-green-700 font-bold' : 'text-gray-600'}>
+          <p className={isMyTurn ? 'text-success font-bold' : 'text-foreground-secondary'}>
             {isMyTurn ? "It's your turn to pick!" : `Waiting for ${getTeamName(nextPick.user_id)}`}
           </p>
         </div>
       )}
 
       {isDraftComplete && (
-        <div className="mb-4 p-4 rounded-lg bg-blue-100">
-          <p className="text-blue-700 font-medium">Draft complete! Finalizing results...</p>
+        <div className="mb-4 p-4 rounded-lg bg-info-bg border border-info">
+          <p className="text-info font-medium">Draft complete! Finalizing results...</p>
         </div>
       )}
 
-      {error && <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>}
+      {error && <div className="alert alert-error mb-4">{error}</div>}
 
       {/* Draft Pick History */}
       <div className="mb-6">
-        <h3 className="text-lg font-medium mb-3">Pick History</h3>
+        <h3 className="text-lg font-medium text-foreground mb-3">Pick History</h3>
         <PickHistory draftPicks={draftPicks} />
       </div>
 
@@ -156,18 +162,21 @@ export default function DraftBoard({
 
 function PickHistory({ draftPicks }: { draftPicks: DraftPickWithDetails[] }) {
   if (draftPicks.length === 0) {
-    return <p className="text-gray-500">No picks yet</p>
+    return <p className="text-foreground-muted">No picks yet</p>
   }
 
   return (
     <div className="space-y-2 max-h-60 overflow-y-auto">
       {draftPicks.map((pick) => (
-        <div key={pick.id} className="flex items-center p-2 bg-gray-50 rounded">
-          <span className="text-sm text-gray-500 w-20">
+        <div
+          key={pick.id}
+          className="flex items-center p-2 bg-elevated rounded-lg border border-border"
+        >
+          <span className="text-sm text-foreground-muted w-20">
             R{pick.round} P{pick.pick_number}
           </span>
-          <span className="font-medium flex-1 truncate">{pick.teams?.name}</span>
-          <span className="text-gray-700 truncate max-w-48">{pick.movies?.title}</span>
+          <span className="font-medium text-foreground flex-1 truncate">{pick.teams?.name}</span>
+          <span className="text-foreground-secondary truncate max-w-48">{pick.movies?.title}</span>
         </div>
       ))}
     </div>

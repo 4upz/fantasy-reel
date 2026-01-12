@@ -15,33 +15,28 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-8">
-            <div className="flex justify-between items-center">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">
-                  Welcome to Fantasy Reel!
-                </h1>
-                <p className="text-gray-600 mt-2">
-                  Hello, {user.email}! Manage your movie leagues below.
-                </p>
-              </div>
-              <form action="/auth/signout" method="post">
-                <button
-                  type="submit"
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
-                >
-                  Sign out
-                </button>
-              </form>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold font-display text-foreground">
+                Welcome to Fantasy Reel!
+              </h1>
+              <p className="text-foreground-secondary mt-2">
+                Hello, {user.email}! Manage your movie leagues below.
+              </p>
             </div>
+            <form action="/auth/signout" method="post">
+              <button type="submit" className="btn btn-danger">
+                Sign out
+              </button>
+            </form>
           </div>
-
-          <PendingInvitations />
-          <LeagueManager />
         </div>
+
+        <PendingInvitations />
+        <LeagueManager />
       </div>
     </div>
   )

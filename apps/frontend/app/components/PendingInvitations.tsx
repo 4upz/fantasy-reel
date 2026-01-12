@@ -82,9 +82,9 @@ export default function PendingInvitations(): React.ReactElement | null {
   }
 
   return (
-    <div className="bg-white shadow rounded-lg mb-6">
+    <div className="card mb-6">
       <div className="px-4 py-5 sm:p-6">
-        <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
+        <h3 className="text-lg leading-6 font-medium font-display text-foreground mb-4">
           Pending Invitations
         </h3>
 
@@ -128,15 +128,15 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
   }
 
   return (
-    <div className="border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+    <div className="border border-border rounded-lg p-4 bg-elevated hover:bg-surface-hover transition-colors">
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <h4 className="text-lg font-medium text-gray-900">
+          <h4 className="text-lg font-medium text-foreground">
             {invitation.leagues.name}
           </h4>
-          <div className="mt-1 space-y-1 text-sm text-gray-500">
+          <div className="mt-1 space-y-1 text-sm text-foreground-muted">
             <p>Sent on {formatDate(invitation.sent_at)}</p>
-            <p className={isExpiringSoon ? 'text-orange-600 font-medium' : ''}>
+            <p className={isExpiringSoon ? 'text-warning font-medium' : ''}>
               {daysLeft > 0
                 ? `Expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
                 : 'Expires today'}
@@ -147,14 +147,14 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
         <div className="flex space-x-2">
           <button
             onClick={() => onAccept(invitation.token)}
-            className="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded text-sm transition-colors"
+            className="btn btn-primary text-sm"
           >
             Accept
           </button>
           <button
             onClick={() => onDecline(invitation.id)}
             disabled={isDeclining}
-            className="bg-gray-300 hover:bg-gray-400 disabled:opacity-50 text-gray-800 font-medium py-2 px-4 rounded text-sm transition-colors"
+            className="btn btn-ghost text-sm"
           >
             {isDeclining ? 'Declining...' : 'Decline'}
           </button>
@@ -163,4 +163,3 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
     </div>
   )
 }
-

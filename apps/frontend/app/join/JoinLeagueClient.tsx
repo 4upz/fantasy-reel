@@ -57,16 +57,16 @@ export default function JoinLeagueClient({ token, userEmail }: Props) {
 
   if (!token) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center p-8">
           <div className="text-6xl mb-4">🎬</div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Invalid Invitation</h1>
-          <p className="text-gray-600 mb-6">
+          <h1 className="text-2xl font-bold font-display text-foreground mb-2">Invalid Invitation</h1>
+          <p className="text-foreground-secondary mb-6">
             This invitation link is invalid or missing a token.
           </p>
           <Link
             href="/dashboard"
-            className="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded font-medium"
+            className="btn btn-primary"
           >
             Go to Dashboard
           </Link>
@@ -76,18 +76,18 @@ export default function JoinLeagueClient({ token, userEmail }: Props) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="bg-white p-8 rounded-lg shadow max-w-md w-full">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <div className="card p-8 max-w-md w-full animate-fade-in">
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">🎬</div>
-          <h1 className="text-2xl font-bold text-gray-900">Join League</h1>
-          <p className="text-gray-600 mt-2">You&apos;ve been invited to join a fantasy movie league!</p>
-          {userEmail && <p className="text-sm text-gray-500 mt-1">Joining as {userEmail}</p>}
+          <h1 className="text-2xl font-bold font-display text-foreground">Join League</h1>
+          <p className="text-foreground-secondary mt-2">You&apos;ve been invited to join a fantasy movie league!</p>
+          {userEmail && <p className="text-sm text-foreground-muted mt-1">Joining as {userEmail}</p>}
         </div>
 
         <div className="mb-6">
-          <label htmlFor="teamName" className="block text-sm font-medium text-gray-700 mb-1">
-            Team Name <span className="text-gray-400">(optional)</span>
+          <label htmlFor="teamName" className="block text-sm font-medium text-foreground-secondary mb-1">
+            Team Name <span className="text-foreground-muted">(optional)</span>
           </label>
           <input
             type="text"
@@ -95,30 +95,30 @@ export default function JoinLeagueClient({ token, userEmail }: Props) {
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
             placeholder="My Production Company"
-            className="w-full p-3 border rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+            className="input"
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-foreground-muted mt-1">
             Leave blank to use a default name based on your email
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-lg">
+          <div className="alert alert-error mb-4">
             <p className="font-medium">Unable to join</p>
-            <p className="text-sm">{error}</p>
+            <p className="text-sm opacity-90">{error}</p>
           </div>
         )}
 
         <button
           onClick={handleJoin}
           disabled={loading}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-3 rounded-lg font-medium text-lg"
+          className="btn btn-primary w-full py-3 text-lg"
         >
           {loading ? 'Joining...' : 'Join League'}
         </button>
 
-        <p className="text-center text-sm text-gray-500 mt-4">
-          <Link href="/dashboard" className="text-indigo-600 hover:underline">
+        <p className="text-center text-sm text-foreground-muted mt-4">
+          <Link href="/dashboard" className="text-gold hover:text-gold-hover transition-colors">
             Cancel and go to dashboard
           </Link>
         </p>

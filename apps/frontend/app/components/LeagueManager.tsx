@@ -12,6 +12,13 @@ interface CreateLeagueResponse {
   team: { id: string; name: string }
 }
 
+const statusBadgeClass: Record<string, string> = {
+  setup: 'badge-setup',
+  drafting: 'badge-drafting',
+  active: 'badge-active',
+  completed: 'badge-completed',
+}
+
 export default function LeagueManager() {
   const router = useRouter()
   const [leagues, setLeagues] = useState<League[]>([])
@@ -109,40 +116,25 @@ export default function LeagueManager() {
     router.push(`/league/${leagueId}`)
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'setup':
-        return 'bg-blue-100 text-blue-800'
-      case 'drafting':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'active':
-        return 'bg-green-100 text-green-800'
-      case 'completed':
-        return 'bg-gray-100 text-gray-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
-  }
-
   return (
     <div className="space-y-6">
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">Your Leagues</h3>
+      <div className="card">
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold font-display text-foreground">Your Leagues</h3>
             <button
               onClick={() => setShowCreateForm(!showCreateForm)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded"
+              className="btn btn-primary"
             >
               Create League
             </button>
           </div>
 
           {showCreateForm && (
-            <form onSubmit={createLeague} className="mb-6 p-4 border rounded-lg bg-gray-50">
+            <form onSubmit={createLeague} className="mb-6 p-5 rounded-lg bg-elevated border border-border">
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                  <label htmlFor="name" className="block text-sm font-medium text-foreground-secondary mb-1">
                     League Name
                   </label>
                   <input
@@ -150,22 +142,22 @@ export default function LeagueManager() {
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 border"
+                    className="input"
                     placeholder="Enter league name"
                     required
                   />
                 </div>
 
                 <div>
-                  <label htmlFor="team_name" className="block text-sm font-medium text-gray-700">
-                    Your Team Name <span className="text-gray-400">(optional)</span>
+                  <label htmlFor="team_name" className="block text-sm font-medium text-foreground-secondary mb-1">
+                    Your Team Name <span className="text-foreground-muted">(optional)</span>
                   </label>
                   <input
                     type="text"
                     id="team_name"
                     value={formData.team_name}
                     onChange={(e) => setFormData({ ...formData, team_name: e.target.value })}
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 border"
+                    className="input"
                     placeholder="My Production Company"
                   />
                 </div>
@@ -173,7 +165,7 @@ export default function LeagueManager() {
                 <div>
                   <label
                     htmlFor="max_participants"
-                    className="block text-sm font-medium text-gray-700"
+                    className="block text-sm font-medium text-foreground-secondary mb-1"
                   >
                     Max Participants
                   </label>
@@ -184,7 +176,7 @@ export default function LeagueManager() {
                     onChange={(e) =>
                       setFormData({ ...formData, max_participants: parseInt(e.target.value) })
                     }
-                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2 border"
+                    className="input"
                     min="2"
                     max="20"
                   />
@@ -196,20 +188,20 @@ export default function LeagueManager() {
                     id="invite_only"
                     checked={formData.invite_only}
                     onChange={(e) => setFormData({ ...formData, invite_only: e.target.checked })}
-                    className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                    className="h-4 w-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-background"
                   />
-                  <label htmlFor="invite_only" className="ml-2 block text-sm text-gray-900">
+                  <label htmlFor="invite_only" className="ml-2 block text-sm text-foreground">
                     Invite Only
                   </label>
                 </div>
 
-                {error && <p className="text-sm text-red-600">{error}</p>}
+                {error && <p className="text-sm text-error">{error}</p>}
 
-                <div className="flex space-x-2">
+                <div className="flex gap-3">
                   <button
                     type="submit"
                     disabled={creating}
-                    className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold py-2 px-4 rounded"
+                    className="btn btn-primary"
                   >
                     {creating ? 'Creating...' : 'Create League'}
                   </button>
@@ -219,7 +211,7 @@ export default function LeagueManager() {
                       setShowCreateForm(false)
                       setError(null)
                     }}
-                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                    className="btn btn-ghost"
                   >
                     Cancel
                   </button>
@@ -229,14 +221,14 @@ export default function LeagueManager() {
           )}
 
           {loading ? (
-            <div className="text-center py-4">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-              <p className="mt-2 text-sm text-gray-600">Loading leagues...</p>
+            <div className="text-center py-8">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-gold"></div>
+              <p className="mt-3 text-sm text-foreground-secondary">Loading leagues...</p>
             </div>
           ) : leagues.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="text-5xl mb-3">🎬</div>
-              <p className="text-gray-500">No leagues yet. Create your first league to get started!</p>
+            <div className="text-center py-12">
+              <div className="text-5xl mb-4">🎬</div>
+              <p className="text-foreground-muted">No leagues yet. Create your first league to get started!</p>
             </div>
           ) : (
             <div className="grid gap-4">
@@ -244,20 +236,18 @@ export default function LeagueManager() {
                 <div
                   key={league.id}
                   onClick={() => handleLeagueClick(league.id)}
-                  className="border rounded-lg p-4 hover:bg-gray-50 hover:border-indigo-300 transition-colors cursor-pointer"
+                  className="card card-interactive p-4 cursor-pointer"
                 >
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
-                      <h4 className="text-lg font-medium text-gray-900">{league.name}</h4>
-                      <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
+                      <h4 className="text-lg font-medium text-foreground">{league.name}</h4>
+                      <div className="mt-2 flex items-center gap-4 text-sm text-foreground-muted">
                         <span>Max: {league.max_participants} participants</span>
                         <span>{league.invite_only ? 'Invite Only' : 'Open'}</span>
                         <span>Created: {new Date(league.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <span
-                      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(league.status)}`}
-                    >
+                    <span className={`badge ${statusBadgeClass[league.status] || 'badge-completed'}`}>
                       {league.status.charAt(0).toUpperCase() + league.status.slice(1)}
                     </span>
                   </div>

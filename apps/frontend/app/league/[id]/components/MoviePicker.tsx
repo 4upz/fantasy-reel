@@ -25,33 +25,33 @@ export default function MoviePicker({ movies, picking, onPick }: Props) {
   }
 
   return (
-    <div className="border-t pt-6">
-      <h3 className="text-lg font-medium mb-3">Select a Movie</h3>
+    <div className="border-t border-border pt-6">
+      <h3 className="text-lg font-medium text-foreground mb-3">Select a Movie</h3>
 
       <input
         type="text"
         placeholder="Search movies..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="w-full p-2 border rounded mb-4 focus:ring-indigo-500 focus:border-indigo-500"
+        className="input mb-4"
       />
 
       {movies.length === 0 ? (
-        <p className="text-gray-500 text-center py-4">
+        <p className="text-foreground-muted text-center py-4">
           No movies available. Movies need to be synced first.
         </p>
       ) : filteredMovies.length === 0 ? (
-        <p className="text-gray-500 text-center py-4">No movies match your search.</p>
+        <p className="text-foreground-muted text-center py-4">No movies match your search.</p>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-96 overflow-y-auto">
           {filteredMovies.map((movie) => (
             <div
               key={movie.id}
               onClick={() => setSelectedMovie(movie)}
-              className={`cursor-pointer border rounded-lg overflow-hidden transition-all ${
+              className={`cursor-pointer rounded-lg overflow-hidden transition-all border ${
                 selectedMovie?.id === movie.id
-                  ? 'border-indigo-500 ring-2 ring-indigo-200'
-                  : 'border-gray-200 hover:border-gray-300'
+                  ? 'border-gold ring-2 ring-gold-muted shadow-glow-gold'
+                  : 'border-border hover:border-border-hover'
               }`}
             >
               {movie.poster_url ? (
@@ -61,15 +61,15 @@ export default function MoviePicker({ movies, picking, onPick }: Props) {
                   className="w-full h-40 object-cover"
                 />
               ) : (
-                <div className="w-full h-40 bg-gray-200 flex items-center justify-center">
+                <div className="w-full h-40 bg-elevated flex items-center justify-center">
                   <span className="text-4xl">🎬</span>
                 </div>
               )}
-              <div className="p-2">
-                <p className="text-sm font-medium truncate" title={movie.title}>
+              <div className="p-2 bg-surface">
+                <p className="text-sm font-medium text-foreground truncate" title={movie.title}>
                   {movie.title}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-foreground-muted">
                   {movie.release_date
                     ? new Date(movie.release_date).toLocaleDateString()
                     : 'TBA'}
@@ -81,8 +81,8 @@ export default function MoviePicker({ movies, picking, onPick }: Props) {
       )}
 
       {selectedMovie && (
-        <div className="mt-4 p-4 bg-indigo-50 rounded-lg">
-          <div className="flex items-start space-x-4">
+        <div className="mt-4 p-4 bg-gold-muted rounded-lg border border-gold">
+          <div className="flex items-start gap-4">
             {selectedMovie.poster_url && (
               <img
                 src={selectedMovie.poster_url}
@@ -91,29 +91,29 @@ export default function MoviePicker({ movies, picking, onPick }: Props) {
               />
             )}
             <div className="flex-1">
-              <p className="font-semibold text-lg">{selectedMovie.title}</p>
-              <p className="text-sm text-gray-600">
+              <p className="font-semibold text-lg text-foreground">{selectedMovie.title}</p>
+              <p className="text-sm text-foreground-secondary">
                 Release: {selectedMovie.release_date || 'TBA'}
               </p>
               {selectedMovie.overview && (
-                <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                <p className="text-sm text-foreground-muted mt-1 line-clamp-2">
                   {selectedMovie.overview}
                 </p>
               )}
             </div>
           </div>
-          <div className="mt-4 flex space-x-2">
+          <div className="mt-4 flex gap-3">
             <button
               onClick={handleConfirmPick}
               disabled={picking}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded font-medium"
+              className="btn btn-primary flex-1"
             >
               {picking ? 'Making Pick...' : 'Confirm Pick'}
             </button>
             <button
               onClick={() => setSelectedMovie(null)}
               disabled={picking}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+              className="btn btn-ghost px-4"
             >
               Cancel
             </button>

@@ -62,13 +62,13 @@ export default function InviteModal({ leagueId, onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+    <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4">
+      <div className="glass card p-6 w-full max-w-md animate-slide-up">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Invite Players</h2>
+          <h2 className="text-xl font-semibold font-display text-foreground">Invite Players</h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-foreground-muted hover:text-foreground transition-colors"
             aria-label="Close"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -84,7 +84,7 @@ export default function InviteModal({ leagueId, onClose }: Props) {
 
         <form onSubmit={handleInvite}>
           <div className="mb-4">
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-foreground-secondary mb-1">
               Email Address
             </label>
             <input
@@ -93,32 +93,28 @@ export default function InviteModal({ leagueId, onClose }: Props) {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="player@example.com"
-              className="w-full p-2 border rounded focus:ring-indigo-500 focus:border-indigo-500"
+              className="input"
               required
             />
           </div>
 
           {result && (
-            <div
-              className={`mb-4 p-3 rounded ${
-                result.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}
-            >
+            <div className={`mb-4 ${result.success ? 'alert alert-success' : 'alert alert-error'}`}>
               <p>{result.message}</p>
               {result.url && (
                 <div className="mt-2">
                   <p className="text-xs font-medium mb-1">Invite Link:</p>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     <input
                       type="text"
                       value={result.url}
                       readOnly
-                      className="flex-1 text-xs p-2 bg-white border rounded"
+                      className="flex-1 text-xs p-2 bg-surface border border-border rounded text-foreground"
                     />
                     <button
                       type="button"
                       onClick={() => copyToClipboard(result.url!)}
-                      className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                      className="btn btn-primary text-xs px-2 py-1"
                     >
                       Copy
                     </button>
@@ -128,19 +124,15 @@ export default function InviteModal({ leagueId, onClose }: Props) {
             </div>
           )}
 
-          <div className="flex space-x-2">
+          <div className="flex gap-3">
             <button
               type="submit"
               disabled={loading || !email.trim()}
-              className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white py-2 rounded font-medium"
+              className="btn btn-primary flex-1"
             >
               {loading ? 'Sending...' : 'Send Invite'}
             </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
-            >
+            <button type="button" onClick={onClose} className="btn btn-ghost px-4">
               Close
             </button>
           </div>

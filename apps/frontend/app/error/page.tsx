@@ -1,19 +1,20 @@
 export default function ErrorPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md space-y-8">
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="w-full max-w-md space-y-8 text-center">
         <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+          <div className="text-6xl mb-4">🎬</div>
+          <h2 className="text-3xl font-extrabold font-display text-foreground">
             Something went wrong
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <p className="mt-2 text-foreground-secondary">
             An error occurred during authentication. Please try again.
           </p>
         </div>
-        <div className="text-center">
+        <div>
           <a
             href="/login"
-            className="font-medium text-indigo-600 hover:text-indigo-500"
+            className="font-medium text-gold hover:text-gold-hover transition-colors"
           >
             Back to login
           </a>

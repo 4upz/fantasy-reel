@@ -38,22 +38,18 @@ export default function AuthCodeErrorPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-8">
-        <div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Authentication Error
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold font-display text-foreground">Authentication Error</h1>
+          <p className="mt-3 text-foreground-secondary">
             The confirmation link may have expired or already been used.
           </p>
         </div>
 
         {/* Resend confirmation section */}
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Resend confirmation email
-          </h3>
+        <div className="card p-6">
+          <h3 className="text-lg font-semibold text-foreground mb-4">Resend confirmation email</h3>
 
           <FormError message={error} />
           {success && (
@@ -75,30 +71,26 @@ export default function AuthCodeErrorPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
-                  className="relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="input"
                   placeholder="Email address"
                 />
               </div>
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-400 disabled:cursor-not-allowed"
-              >
+              <button type="submit" disabled={isLoading} className="btn btn-primary w-full">
                 {isLoading ? 'Sending...' : 'Resend confirmation email'}
               </button>
             </form>
           )}
 
           {/* Local development helper */}
-          <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-xs text-blue-700">
+          <div className="alert alert-info mt-4">
+            <p className="text-xs">
               <strong>Local development?</strong> Check Mailpit at{' '}
               <a
                 href="http://localhost:54324"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="underline hover:text-blue-900"
+                className="underline hover:text-info"
               >
                 http://localhost:54324
               </a>
@@ -107,10 +99,7 @@ export default function AuthCodeErrorPage() {
         </div>
 
         <div className="text-center">
-          <Link
-            href="/login"
-            className="font-medium text-indigo-600 hover:text-indigo-500"
-          >
+          <Link href="/login" className="font-medium text-gold hover:text-gold-hover transition-colors">
             Back to login
           </Link>
         </div>
