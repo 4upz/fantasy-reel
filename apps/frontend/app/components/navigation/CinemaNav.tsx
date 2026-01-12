@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
+import type { Profile } from '@/types'
 import NavLogo from './NavLogo'
 import NavBreadcrumb from './NavBreadcrumb'
 import NavUserMenu from './NavUserMenu'
@@ -9,9 +10,10 @@ import NavMobileDrawer from './NavMobileDrawer'
 
 interface Props {
   user: User
+  profile?: Pick<Profile, 'display_name' | 'avatar_url'> | null
 }
 
-export default function CinemaNav({ user }: Props): React.ReactElement {
+export default function CinemaNav({ user, profile }: Props): React.ReactElement {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
@@ -52,6 +54,7 @@ export default function CinemaNav({ user }: Props): React.ReactElement {
             <div className="flex-shrink-0">
               <NavUserMenu
                 user={user}
+                avatarUrl={profile?.avatar_url ?? null}
                 onMenuToggle={() => setIsDrawerOpen(true)}
                 showMobileDrawerTrigger
               />
@@ -70,6 +73,7 @@ export default function CinemaNav({ user }: Props): React.ReactElement {
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
         user={user}
+        avatarUrl={profile?.avatar_url ?? null}
       />
     </>
   )

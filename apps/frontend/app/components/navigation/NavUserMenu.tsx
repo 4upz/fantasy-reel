@@ -1,20 +1,23 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
+import { Settings } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
+import Avatar from '../Avatar'
 
 interface Props {
   user: User
+  avatarUrl?: string | null
   onMenuToggle?: () => void
   showMobileDrawerTrigger?: boolean
 }
 
-export default function NavUserMenu({ user, onMenuToggle, showMobileDrawerTrigger }: Props): React.ReactElement {
+export default function NavUserMenu({ user, avatarUrl, onMenuToggle, showMobileDrawerTrigger }: Props): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const displayName = user.user_metadata?.display_name || user.email || 'User'
-  const initial = displayName.charAt(0).toUpperCase()
 
   // Handle click outside and escape key to close menu
   useEffect(() => {
@@ -51,10 +54,11 @@ export default function NavUserMenu({ user, onMenuToggle, showMobileDrawerTrigge
           aria-expanded={isOpen}
           aria-haspopup="true"
         >
-          {/* Avatar */}
-          <div className="avatar">
-            {initial}
-          </div>
+          <Avatar
+            src={avatarUrl}
+            name={displayName}
+            className="transition-all duration-200 group-hover:border-gold-hover group-hover:shadow-[0_0_12px_oklch(0.65_0.15_85_/_0.25)]"
+          />
 
           {/* Chevron */}
           <svg
@@ -78,8 +82,14 @@ export default function NavUserMenu({ user, onMenuToggle, showMobileDrawerTrigge
 
             {/* Menu items */}
             <div className="py-1">
-              {/* Future: Settings link */}
-              {/* <Link href="/settings" className="nav-dropdown-item">Settings</Link> */}
+              <Link
+                href="/settings"
+                onClick={() => setIsOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-foreground-secondary hover:text-gold hover:bg-surface-hover transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+                Settings
+              </Link>
             </div>
 
             {/* Sign out */}
@@ -101,12 +111,14 @@ export default function NavUserMenu({ user, onMenuToggle, showMobileDrawerTrigge
       {showMobileDrawerTrigger && (
         <button
           onClick={onMenuToggle}
-          className="md:hidden flex items-center gap-2 p-1 rounded-lg hover:bg-surface-hover transition-colors"
+          className="md:hidden flex items-center gap-2 p-1 rounded-lg hover:bg-surface-hover transition-colors group"
           aria-label="Open navigation menu"
         >
-          <div className="avatar">
-            {initial}
-          </div>
+          <Avatar
+            src={avatarUrl}
+            name={displayName}
+            className="transition-all duration-200 group-hover:border-gold-hover"
+          />
           {/* Hamburger lines */}
           <div className="flex flex-col gap-1">
             <span className="w-4 h-0.5 bg-foreground-secondary" />

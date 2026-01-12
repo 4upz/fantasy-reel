@@ -2,18 +2,20 @@
 
 import { useEffect, useRef } from 'react'
 import Link from 'next/link'
+import { Settings } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
+import Avatar from '../Avatar'
 
 interface Props {
   isOpen: boolean
   onClose: () => void
   user: User
+  avatarUrl?: string | null
 }
 
-export default function NavMobileDrawer({ isOpen, onClose, user }: Props): React.ReactElement | null {
+export default function NavMobileDrawer({ isOpen, onClose, user, avatarUrl }: Props): React.ReactElement | null {
   const drawerRef = useRef<HTMLDivElement>(null)
   const displayName = user.user_metadata?.display_name || user.email || 'User'
-  const initial = displayName.charAt(0).toUpperCase()
 
   // Handle body scroll lock, escape key, and initial focus
   useEffect(() => {
@@ -74,9 +76,7 @@ export default function NavMobileDrawer({ isOpen, onClose, user }: Props): React
         {/* User info */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
-            <div className="avatar">
-              {initial}
-            </div>
+            <Avatar src={avatarUrl} name={displayName} />
             <div className="flex-1 min-w-0">
               <p className="text-xs text-foreground-muted">Signed in as</p>
               <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
@@ -109,6 +109,16 @@ export default function NavMobileDrawer({ isOpen, onClose, user }: Props): React
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
                 </svg>
                 <span>Movies</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/settings"
+                onClick={onClose}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-foreground-secondary hover:text-gold hover:bg-surface-hover transition-colors"
+              >
+                <Settings className="w-5 h-5" />
+                <span>Settings</span>
               </Link>
             </li>
           </ul>
