@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { resendConfirmationEmail } from '@/app/login/actions'
+import { resendConfirmationEmail } from '@/app/(public)/login/actions'
 import { FormError, FormSuccess } from '@/app/components/FormError'
 
 export default function AuthCodeErrorPage() {

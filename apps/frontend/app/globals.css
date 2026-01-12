@@ -282,4 +282,89 @@
     background: rgba(0, 0, 0, 0.75);
     backdrop-filter: blur(4px);
   }
+
+  /* ============================================
+     NAVIGATION SYSTEM
+     Cinema Marquee - Premium glass navbar
+     ============================================ */
+
+  /* Glass navbar background */
+  .nav-glass {
+    background: oklch(0.08 0 0 / 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-border);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+
+  .nav-glass-scrolled {
+    background: oklch(0.08 0 0 / 0.95);
+    box-shadow: var(--shadow-soft);
+    border-color: var(--color-border-hover);
+  }
+
+  /* Navigation links */
+  .nav-link {
+    color: var(--color-foreground-secondary);
+    transition: color 0.2s ease;
+  }
+
+  .nav-link:hover {
+    color: var(--color-gold);
+  }
+
+  .nav-link-active {
+    color: var(--color-gold);
+  }
+
+  /* Avatar circle */
+  .avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    background: var(--color-gold-muted);
+    border: 2px solid var(--color-gold);
+    color: var(--color-gold);
+    font-size: 0.875rem;
+    font-weight: 600;
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .avatar:hover {
+    border-color: var(--color-gold-hover);
+    box-shadow: 0 0 12px oklch(0.65 0.15 85 / 0.25);
+  }
+
+  /* Drawer styles */
+  .drawer-overlay {
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .drawer-panel {
+    background: var(--color-surface);
+    border-left: 1px solid var(--color-border);
+    box-shadow: var(--shadow-heavy);
+  }
+
+  /* Drawer slide-in animation */
+  .animate-slide-in-right {
+    animation: slide-in-right 0.25s ease-out;
+  }
+
+  /* Logo hover glow */
+  .nav-logo:hover {
+    filter: drop-shadow(0 0 8px oklch(0.65 0.15 85 / 0.3));
+  }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }

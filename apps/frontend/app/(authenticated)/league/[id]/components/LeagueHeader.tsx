@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useState } from 'react'
 import type { League } from '@/types'
@@ -47,13 +46,7 @@ export default function LeagueHeader({ league, isOwner, participantCount, onInvi
     <div className="card p-6">
       <div className="flex justify-between items-start">
         <div>
-          <Link
-            href="/dashboard"
-            className="text-sm text-gold hover:text-gold-hover transition-colors"
-          >
-            &larr; Back to Dashboard
-          </Link>
-          <h1 className="text-2xl font-bold font-display text-foreground mt-2">{league.name}</h1>
+          <h1 className="text-2xl font-bold font-display text-foreground">{league.name}</h1>
           <div className="mt-3 flex items-center gap-4">
             <span className={`badge ${statusBadgeClass[league.status] || 'badge-completed'}`}>
               {league.status.charAt(0).toUpperCase() + league.status.slice(1)}

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { login, resendConfirmationEmail } from './actions'
 import Link from 'next/link'
-import { FormError, FormSuccess } from '../components/FormError'
+import { FormError, FormSuccess } from '../../components/FormError'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
@@ -65,8 +65,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md space-y-8">
+    <div className="w-full max-w-md space-y-8 px-4">
         <div className="text-center">
           <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
           <p className="mt-3 text-foreground-secondary">Sign in to your account</p>
@@ -152,7 +151,6 @@ export default function LoginPage() {
             </div>
           </form>
         </div>
-      </div>
     </div>
   )
 }

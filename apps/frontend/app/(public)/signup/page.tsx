@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { signup } from './actions'
 import Link from 'next/link'
-import { FormError } from '../components/FormError'
+import { FormError } from '../../components/FormError'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
@@ -39,8 +39,7 @@ export default function SignupPage() {
   // Show success message after signup
   if (signupSuccess) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <div className="w-full max-w-md space-y-8 text-center">
+      <div className="w-full max-w-md space-y-8 text-center px-4">
           <div className="card p-8">
             <h2 className="text-2xl font-bold font-display text-foreground">Check your email</h2>
             <div className="mt-6 space-y-4">
@@ -72,14 +71,12 @@ export default function SignupPage() {
               </div>
             </div>
           </div>
-        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md space-y-8">
+    <div className="w-full max-w-md space-y-8 px-4">
         <div className="text-center">
           <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
           <p className="mt-3 text-foreground-secondary">Create your account</p>
@@ -168,7 +165,6 @@ export default function SignupPage() {
             </div>
           </form>
         </div>
-      </div>
     </div>
   )
 }
