@@ -18,13 +18,13 @@
   --color-gold: #c9a227;
   --color-gold-hover: #d4b23a;
   --color-gold-muted: oklch(0.55 0.12 85 / 0.15);
-  --color-crimson: #dc143c;
-  --color-crimson-hover: #e6264d;
+  --color-crimson: #a8505c;
+  --color-crimson-hover: #b85c68;
 
   /* Text */
   --color-foreground: #e8e8e8;
-  --color-foreground-secondary: #a3a3a3;
-  --color-foreground-muted: #64748b;
+  --color-foreground-secondary: #b8b0a4;
+  --color-foreground-muted: #8a8078;
   --color-foreground-inverse: #0f0f0f;
 
   /* Borders */
@@ -44,8 +44,8 @@
   /* Feedback */
   --color-success: #22c55e;
   --color-success-bg: oklch(0.65 0.2 145 / 0.15);
-  --color-error: #ef4444;
-  --color-error-bg: oklch(0.6 0.2 25 / 0.15);
+  --color-error: #d65c5c;
+  --color-error-bg: oklch(0.5 0.15 5 / 0.15);
   --color-warning: #f59e0b;
   --color-warning-bg: oklch(0.7 0.15 70 / 0.15);
   --color-info: #3b82f6;
@@ -61,7 +61,7 @@
   --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
   --shadow-heavy: 0 8px 24px rgba(0, 0, 0, 0.6);
   --shadow-glow-gold: 0 0 20px oklch(0.65 0.15 85 / 0.4);
-  --shadow-glow-crimson: 0 0 20px oklch(0.55 0.25 25 / 0.4);
+  --shadow-glow-crimson: 0 0 20px oklch(0.45 0.15 5 / 0.35);
 
   /* === ANIMATIONS (generates animate-* utilities) === */
   --animate-fade-in: fade-in 0.3s ease-out;
