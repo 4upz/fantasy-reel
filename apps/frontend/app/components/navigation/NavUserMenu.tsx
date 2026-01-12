@@ -13,7 +13,8 @@ export default function NavUserMenu({ user, onMenuToggle, showMobileDrawerTrigge
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const initial = user.email?.charAt(0).toUpperCase() || 'U'
+  const displayName = user.user_metadata?.display_name || user.email || 'User'
+  const initial = displayName.charAt(0).toUpperCase()
 
   // Handle click outside and escape key to close menu
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function NavUserMenu({ user, onMenuToggle, showMobileDrawerTrigge
             {/* User info */}
             <div className="px-4 py-3 border-b border-border">
               <p className="text-sm text-foreground-muted">Signed in as</p>
-              <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
+              <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
             </div>
 
             {/* Menu items */}

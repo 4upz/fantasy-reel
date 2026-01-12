@@ -20,5 +20,6 @@ export default async function JoinPage({ searchParams }: PageProps) {
     redirect(`/login?returnUrl=${encodeURIComponent(returnUrl)}`)
   }
 
-  return <JoinLeagueClient token={token} userEmail={user.email} />
+  const displayName = user.user_metadata?.display_name || user.email || 'User'
+  return <JoinLeagueClient token={token} userDisplayName={displayName} />
 }

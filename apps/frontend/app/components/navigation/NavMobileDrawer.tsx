@@ -12,7 +12,8 @@ interface Props {
 
 export default function NavMobileDrawer({ isOpen, onClose, user }: Props): React.ReactElement | null {
   const drawerRef = useRef<HTMLDivElement>(null)
-  const initial = user.email?.charAt(0).toUpperCase() || 'U'
+  const displayName = user.user_metadata?.display_name || user.email || 'User'
+  const initial = displayName.charAt(0).toUpperCase()
 
   // Handle body scroll lock, escape key, and initial focus
   useEffect(() => {
@@ -78,7 +79,7 @@ export default function NavMobileDrawer({ isOpen, onClose, user }: Props): React
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs text-foreground-muted">Signed in as</p>
-              <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
+              <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
             </div>
           </div>
         </div>

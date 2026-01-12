@@ -7,7 +7,7 @@ import { callEdgeFunction } from '@/utils/supabase/functions'
 
 interface Props {
   token?: string
-  userEmail?: string
+  userDisplayName?: string
 }
 
 interface JoinResponse {
@@ -25,7 +25,7 @@ interface JoinResponse {
   }
 }
 
-export default function JoinLeagueClient({ token, userEmail }: Props) {
+export default function JoinLeagueClient({ token, userDisplayName }: Props) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,7 +82,7 @@ export default function JoinLeagueClient({ token, userEmail }: Props) {
           <div className="text-5xl mb-3">🎬</div>
           <h1 className="text-2xl font-bold font-display text-foreground">Join League</h1>
           <p className="text-foreground-secondary mt-2">You&apos;ve been invited to join a fantasy movie league!</p>
-          {userEmail && <p className="text-sm text-foreground-muted mt-1">Joining as {userEmail}</p>}
+          {userDisplayName && <p className="text-sm text-foreground-muted mt-1">Joining as {userDisplayName}</p>}
         </div>
 
         <div className="mb-6">
@@ -98,7 +98,7 @@ export default function JoinLeagueClient({ token, userEmail }: Props) {
             className="input"
           />
           <p className="text-xs text-foreground-muted mt-1">
-            Leave blank to use a default name based on your email
+            Leave blank to use a default name based on your username
           </p>
         </div>
 
