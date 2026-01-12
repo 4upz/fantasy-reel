@@ -225,6 +225,98 @@ export const mockTMDbDiscoverResponse = {
   total_results: 100,
 }
 
+// Mock TMDb Search API response
+export const mockTMDbSearchResponse = {
+  page: 1,
+  results: [
+    {
+      id: 550,
+      title: 'Fight Club',
+      overview: 'A depressed man suffering from insomnia meets a strange soap salesman.',
+      release_date: '1999-10-15',
+      poster_path: '/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg',
+      vote_average: 8.4,
+      vote_count: 25000,
+      popularity: 45.5,
+      genre_ids: [18, 53, 35],
+    },
+    {
+      id: 551,
+      title: 'Fight Club 2',
+      overview: 'A fictional sequel.',
+      release_date: '2024-12-15',
+      poster_path: null,
+      vote_average: 0,
+      vote_count: 0,
+      popularity: 10.2,
+      genre_ids: [18],
+    },
+  ],
+  total_pages: 1,
+  total_results: 2,
+}
+
+// Mock TMDb Movie Details response
+export const mockTMDbMovieDetailsResponse = {
+  id: 550,
+  imdb_id: 'tt0137523',
+  title: 'Fight Club',
+  tagline: 'Mischief. Mayhem. Soap.',
+  overview: 'A depressed man suffering from insomnia meets a strange soap salesman.',
+  release_date: '1999-10-15',
+  runtime: 139,
+  status: 'Released',
+  poster_path: '/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg',
+  backdrop_path: '/hZkgoQYus5vegHoetLkCJzb17zJ.jpg',
+  vote_average: 8.4,
+  vote_count: 25000,
+  budget: 63000000,
+  revenue: 100853753,
+  genres: [
+    { id: 18, name: 'Drama' },
+    { id: 53, name: 'Thriller' },
+  ],
+  production_companies: [
+    { id: 508, name: 'Regency Enterprises' },
+  ],
+}
+
+// Mock TMDb Credits response
+export const mockTMDbCreditsResponse = {
+  id: 550,
+  cast: [
+    {
+      id: 819,
+      name: 'Edward Norton',
+      character: 'The Narrator',
+      profile_path: '/5XBzD5WuTyVQZeS4II6gs1nn5P6.jpg',
+      order: 0,
+    },
+    {
+      id: 287,
+      name: 'Brad Pitt',
+      character: 'Tyler Durden',
+      profile_path: '/cckcYc2v0yh1tc9QjRelptcOBko.jpg',
+      order: 1,
+    },
+    {
+      id: 1283,
+      name: 'Helena Bonham Carter',
+      character: 'Marla Singer',
+      profile_path: '/DDeITcCpnBd0CkAIRPhggy9bt5.jpg',
+      order: 2,
+    },
+  ],
+  crew: [
+    {
+      id: 7467,
+      name: 'David Fincher',
+      job: 'Director',
+      department: 'Directing',
+    },
+  ],
+}
+
 // Mock OMDb API response
 export const mockOMDbResponse = {
   Response: 'True',

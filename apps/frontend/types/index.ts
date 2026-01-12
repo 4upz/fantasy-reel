@@ -127,3 +127,70 @@ export interface NextPickInfo {
   participant_id: string
   user_id: string
 }
+
+// TMDb API types (from Edge Functions)
+export interface TMDbSearchResult {
+  tmdb_id: number
+  title: string
+  overview: string | null
+  release_date: string | null
+  poster_url: string | null
+  vote_average: number
+  popularity: number
+  genre_ids: number[]
+}
+
+export interface TMDbSearchResponse {
+  page: number
+  total_pages: number
+  total_results: number
+  results: TMDbSearchResult[]
+}
+
+export interface TMDbCastMember {
+  id: number
+  name: string
+  character: string
+  profile_url: string | null
+}
+
+export interface TMDbMovieDetails {
+  tmdb_id: number
+  imdb_id: string | null
+  title: string
+  tagline: string | null
+  overview: string | null
+  release_date: string | null
+  runtime: number | null
+  status: string
+  poster_url: string | null
+  backdrop_url: string | null
+  vote_average: number
+  vote_count: number
+  genres: Array<{ id: number; name: string }>
+  cast: TMDbCastMember[]
+  director: string | null
+}
+
+// TMDb genre IDs for filtering
+export const TMDB_GENRES = [
+  { id: 28, name: 'Action' },
+  { id: 12, name: 'Adventure' },
+  { id: 16, name: 'Animation' },
+  { id: 35, name: 'Comedy' },
+  { id: 80, name: 'Crime' },
+  { id: 99, name: 'Documentary' },
+  { id: 18, name: 'Drama' },
+  { id: 10751, name: 'Family' },
+  { id: 14, name: 'Fantasy' },
+  { id: 36, name: 'History' },
+  { id: 27, name: 'Horror' },
+  { id: 10402, name: 'Music' },
+  { id: 9648, name: 'Mystery' },
+  { id: 10749, name: 'Romance' },
+  { id: 878, name: 'Science Fiction' },
+  { id: 10770, name: 'TV Movie' },
+  { id: 53, name: 'Thriller' },
+  { id: 10752, name: 'War' },
+  { id: 37, name: 'Western' },
+] as const

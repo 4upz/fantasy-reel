@@ -39,11 +39,16 @@ interface TMDbExternalIds {
  */
 async function fetchExternalIds(
   tmdbId: number,
-  apiKey: string
+  token: string
 ): Promise<string | null> {
   try {
-    const url = `https://api.themoviedb.org/3/movie/${tmdbId}/external_ids?api_key=${apiKey}`
-    const response = await fetch(url)
+    const url = `https://api.themoviedb.org/3/movie/${tmdbId}/external_ids`
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    })
 
     if (!response.ok) {
       console.warn(`Failed to fetch external IDs for TMDb ID ${tmdbId}: ${response.status}`)
@@ -64,8 +69,8 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
-    const tmdbApiKey = Deno.env.get('TMDB_API_KEY')
-    if (!tmdbApiKey) {
+    const tmdbToken = Deno.env.get('TMDB_API_KEY')
+    if (!tmdbToken) {
       console.error('TMDB_API_KEY not configured')
       return errorResponse('Movie sync service not configured', 503)
     }
@@ -100,7 +105,6 @@ Deno.serve(async (req) => {
 
     // Fetch from TMDb discover endpoint
     const tmdbUrl = new URL('https://api.themoviedb.org/3/discover/movie')
-    tmdbUrl.searchParams.set('api_key', tmdbApiKey)
     tmdbUrl.searchParams.set('language', 'en-US')
     tmdbUrl.searchParams.set('region', region)
     tmdbUrl.searchParams.set('sort_by', 'popularity.desc')
@@ -111,9 +115,14 @@ Deno.serve(async (req) => {
     tmdbUrl.searchParams.set('primary_release_date.lte', endOfYear)
     tmdbUrl.searchParams.set('with_release_type', '2|3') // Theatrical releases
 
-    console.log(`Fetching movies from TMDb: ${tmdbUrl.toString().replace(tmdbApiKey, '[REDACTED]')}`)
+    console.log(`Fetching movies from TMDb: ${tmdbUrl.toString()}`)
 
-    const tmdbResponse = await fetch(tmdbUrl.toString())
+    const tmdbResponse = await fetch(tmdbUrl.toString(), {
+      headers: {
+        'Authorization': `Bearer ${tmdbToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
 
     if (!tmdbResponse.ok) {
       if (tmdbResponse.status === 401) {
@@ -145,7 +154,7 @@ Deno.serve(async (req) => {
     const moviesWithImdbIds: Array<{ movie: TMDbMovie; imdb_id: string | null }> = []
 
     for (const movie of tmdbData.results) {
-      const imdb_id = await fetchExternalIds(movie.id, tmdbApiKey)
+      const imdb_id = await fetchExternalIds(movie.id, tmdbToken)
       moviesWithImdbIds.push({ movie, imdb_id })
       // Small delay to respect rate limits
       await new Promise(resolve => setTimeout(resolve, 50))

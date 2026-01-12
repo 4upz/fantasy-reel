@@ -27,8 +27,8 @@ async function handleSyncMovies(req: Request): Promise<Response> {
   if (corsResponse) return corsResponse
 
   try {
-    const tmdbApiKey = Deno.env.get('TMDB_API_KEY')
-    if (!tmdbApiKey) {
+    const tmdbToken = Deno.env.get('TMDB_API_KEY')
+    if (!tmdbToken) {
       console.error('TMDB_API_KEY not configured')
       return errorResponse('Movie sync service not configured', 503)
     }
@@ -56,7 +56,6 @@ async function handleSyncMovies(req: Request): Promise<Response> {
 
     // Fetch from TMDb
     const tmdbUrl = new URL('https://api.themoviedb.org/3/discover/movie')
-    tmdbUrl.searchParams.set('api_key', tmdbApiKey)
     tmdbUrl.searchParams.set('language', 'en-US')
     tmdbUrl.searchParams.set('region', region)
     tmdbUrl.searchParams.set('sort_by', 'popularity.desc')
@@ -67,7 +66,12 @@ async function handleSyncMovies(req: Request): Promise<Response> {
     tmdbUrl.searchParams.set('primary_release_date.lte', endOfYear)
     tmdbUrl.searchParams.set('with_release_type', '2|3')
 
-    const tmdbResponse = await fetch(tmdbUrl.toString())
+    const tmdbResponse = await fetch(tmdbUrl.toString(), {
+      headers: {
+        'Authorization': `Bearer ${tmdbToken}`,
+        'Content-Type': 'application/json',
+      },
+    })
 
     if (!tmdbResponse.ok) {
       if (tmdbResponse.status === 401) {
@@ -148,7 +152,7 @@ async function handleSyncMovies(req: Request): Promise<Response> {
 const cleanupEnv = mockEnvVars({
   SUPABASE_URL: 'http://localhost:54321',
   SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
-  TMDB_API_KEY: 'mock-tmdb-key',
+  TMDB_API_KEY: 'mock-tmdb-token',
 })
 
 // ============================================================================

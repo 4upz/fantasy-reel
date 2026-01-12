@@ -51,6 +51,13 @@ export default function NavBreadcrumb(): React.ReactElement {
       ]
     }
 
+    if (pathname === '/movies') {
+      return [
+        { label: 'Dashboard', href: '/dashboard' },
+        { label: 'Movies' },
+      ]
+    }
+
     return [{ label: 'Dashboard', href: '/dashboard' }]
   }
 
