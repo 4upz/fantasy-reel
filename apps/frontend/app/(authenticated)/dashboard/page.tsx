@@ -10,11 +10,12 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser()
 
   // Fetch pending invitations server-side to avoid loading flicker
+  // Note: Invitations are stored with lowercase emails (normalized in send-invite)
   const { data: invitationsData } = await supabase
     .from('invitations')
     .select('*, leagues(id, name, status, owner_id)')
     .eq('status', 'pending')
-    .eq('email', user?.email ?? '')
+    .eq('email', user?.email?.toLowerCase() ?? '')
     .gte('expires_at', new Date().toISOString())
     .order('sent_at', { ascending: false })
 

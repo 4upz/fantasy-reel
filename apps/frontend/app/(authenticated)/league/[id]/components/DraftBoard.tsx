@@ -5,17 +5,16 @@ import { callEdgeFunction } from '@/utils/supabase/functions'
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, Movie, NextPickInfo } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult } from '@/types'
 
 interface Props {
   league: League
   participants: ParticipantWithTeam[]
   draftPicks: DraftPickWithDetails[]
-  availableMovies: Movie[]
   currentUserId: string
-  favoriteMovieIds?: Set<string>
+  favoriteMovieIds?: Set<number>
   onPickMade: () => void
-  onToggleFavorite?: (movieId: string) => void
+  onToggleFavorite?: (tmdbId: number) => void
 }
 
 const TOTAL_ROUNDS = 5
@@ -24,7 +23,6 @@ export default function DraftBoard({
   league,
   participants,
   draftPicks,
-  availableMovies,
   currentUserId,
   favoriteMovieIds = new Set(),
   onPickMade,
@@ -70,17 +68,33 @@ export default function DraftBoard({
   const isMyTurn = nextPick?.user_id === currentUserId
   const isDraftComplete = league.status === 'drafting' && !nextPick
 
-  // Get set of drafted movie IDs
-  const draftedMovieIds = useMemo(() => {
-    return new Set(draftPicks.map((pick) => pick.movie_id))
+  // Get set of drafted tmdb_ids (movies that have been picked)
+  const draftedTmdbIds = useMemo(() => {
+    return new Set(
+      draftPicks
+        .map((pick) => pick.movies?.tmdb_id)
+        .filter((id): id is number => id !== undefined && id !== null)
+    )
   }, [draftPicks])
 
-  const handleDraftPick = async (movieId: string) => {
+  const handleDraftPick = async (tmdbId: number, movieData: TMDbSearchResult) => {
     setPicking(true)
     setError(null)
 
     const { error: pickError } = await callEdgeFunction('draft-pick', {
-      body: { league_id: league.id, movie_id: movieId },
+      body: {
+        league_id: league.id,
+        tmdb_id: tmdbId,
+        movie_data: {
+          title: movieData.title,
+          overview: movieData.overview,
+          poster_url: movieData.poster_url,
+          release_date: movieData.release_date,
+          vote_average: movieData.vote_average,
+          popularity: movieData.popularity,
+          genre_ids: movieData.genre_ids,
+        },
+      },
     })
 
     if (pickError) {
@@ -205,8 +219,7 @@ export default function DraftBoard({
       {/* Movie Picker - Always visible for browsing, but only pickable on your turn */}
       <div className="card p-6">
         <MoviePicker
-          movies={availableMovies}
-          draftedMovieIds={draftedMovieIds}
+          draftedTmdbIds={draftedTmdbIds}
           favoriteMovieIds={favoriteMovieIds}
           isMyTurn={isMyTurn}
           picking={picking}

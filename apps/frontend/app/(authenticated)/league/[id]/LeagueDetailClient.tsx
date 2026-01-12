@@ -7,13 +7,12 @@ import ParticipantsList from './components/ParticipantsList'
 import DraftBoard from './components/DraftBoard'
 import InviteModal from './components/InviteModal'
 import InvitationsList from './components/InvitationsList'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, Movie } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
 
 interface Props {
   league: League
   participants: ParticipantWithTeam[]
   draftPicks: DraftPickWithDetails[]
-  availableMovies: Movie[]
   currentUserId: string
   isOwner: boolean
 }
@@ -22,18 +21,16 @@ export default function LeagueDetailClient({
   league: initialLeague,
   participants: initialParticipants,
   draftPicks: initialDraftPicks,
-  availableMovies: initialMovies,
   currentUserId,
   isOwner,
 }: Props) {
   const [league, setLeague] = useState(initialLeague)
   const [participants, setParticipants] = useState(initialParticipants)
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
-  const [availableMovies, setAvailableMovies] = useState(initialMovies)
   const [showInviteModal, setShowInviteModal] = useState(false)
 
-  // Local favorites state (will be replaced with DB-backed state in Phase 2)
-  const [favoriteMovieIds, setFavoriteMovieIds] = useState<Set<string>>(() => {
+  // Local favorites state (tracks tmdb_ids as numbers)
+  const [favoriteMovieIds, setFavoriteMovieIds] = useState<Set<number>>(() => {
     // Try to restore from localStorage
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(`draft-favorites-${initialLeague.id}`)
@@ -120,9 +117,6 @@ export default function LeagueDetailClient({
 
     if (data) {
       setDraftPicks(data as DraftPickWithDetails[])
-      // Update available movies by filtering out drafted ones
-      const draftedMovieIds = new Set(data.map((dp) => dp.movie_id))
-      setAvailableMovies((prev) => prev.filter((m) => !draftedMovieIds.has(m.id)))
     }
   }
 
@@ -143,13 +137,13 @@ export default function LeagueDetailClient({
     fetchDraftPicks()
   }
 
-  const handleToggleFavorite = useCallback((movieId: string) => {
+  const handleToggleFavorite = useCallback((tmdbId: number) => {
     setFavoriteMovieIds((prev) => {
       const next = new Set(prev)
-      if (next.has(movieId)) {
-        next.delete(movieId)
+      if (next.has(tmdbId)) {
+        next.delete(tmdbId)
       } else {
-        next.add(movieId)
+        next.add(tmdbId)
       }
       return next
     })
@@ -171,7 +165,6 @@ export default function LeagueDetailClient({
               league={league}
               participants={participants}
               draftPicks={draftPicks}
-              availableMovies={availableMovies}
               currentUserId={currentUserId}
               favoriteMovieIds={favoriteMovieIds}
               onPickMade={handlePickMade}

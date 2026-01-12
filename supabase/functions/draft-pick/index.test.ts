@@ -27,6 +27,17 @@ import {
 let mockSupabaseConfig: MockSupabaseConfig = {}
 let mockClient: ReturnType<typeof createMockSupabaseClient>
 
+// Mock movie data for creating new movies
+const mockMovieData = {
+  title: 'New Test Movie',
+  overview: 'A new movie to draft',
+  poster_url: 'https://image.tmdb.org/t/p/w500/new.jpg',
+  release_date: '2024-12-20',
+  vote_average: 8.0,
+  popularity: 150.0,
+  genre_ids: [28, 12],
+}
+
 // Recreate handler logic for testing
 async function handleDraftPick(req: Request): Promise<Response> {
   const { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } =
@@ -46,14 +57,14 @@ async function handleDraftPick(req: Request): Promise<Response> {
       return errorResponse('Unauthorized', 401)
     }
 
-    const { league_id, movie_id } = await req.json()
+    const { league_id, tmdb_id, movie_data } = await req.json()
 
     if (!league_id || !isValidUUID(league_id)) {
       return errorResponse('Valid league_id is required', 400)
     }
 
-    if (!movie_id || !isValidUUID(movie_id)) {
-      return errorResponse('Valid movie_id is required', 400)
+    if (!tmdb_id || typeof tmdb_id !== 'number' || tmdb_id <= 0) {
+      return errorResponse('Valid tmdb_id is required', 400)
     }
 
     // Fetch the league
@@ -96,27 +107,58 @@ async function handleDraftPick(req: Request): Promise<Response> {
       return errorResponse('It is not your turn to pick', 403)
     }
 
-    // Validate movie exists
-    const { data: movie, error: movieError } = await mockClient
+    // Find or create movie by tmdb_id
+    let movie: { id: string; title: string; poster_url: string | null; release_date: string | null; status: string }
+
+    const { data: existingMovie, error: movieError } = await mockClient
       .from('movies')
-      .select('*')
-      .eq('id', movie_id)
+      .select('id, title, poster_url, release_date, status')
+      .eq('tmdb_id', tmdb_id)
       .single()
 
-    if (movieError || !movie) {
-      return errorResponse('Movie not found', 404)
+    if (existingMovie) {
+      movie = existingMovie
+    } else {
+      // Movie doesn't exist, create it
+      if (!movie_data) {
+        return errorResponse('Movie not found and no movie_data provided', 400)
+      }
+
+      const { data: newMovie, error: insertError } = await mockClient
+        .from('movies')
+        .insert({
+          tmdb_id,
+          title: movie_data.title,
+          overview: movie_data.overview || null,
+          poster_url: movie_data.poster_url,
+          release_date: movie_data.release_date,
+          vote_average: movie_data.vote_average,
+          vote_count: 0,
+          popularity: movie_data.popularity,
+          status: 'upcoming',
+          last_synced_at: new Date().toISOString(),
+        })
+        .select('id, title, poster_url, release_date, status')
+        .single()
+
+      if (insertError || !newMovie) {
+        return errorResponse('Failed to create movie record', 500)
+      }
+
+      movie = newMovie
     }
 
+    // Check movie status
     if (movie.status !== 'upcoming') {
       return errorResponse('This movie is not available for drafting', 400)
     }
 
-    // Check if movie already drafted
+    // Check if movie already drafted in this league
     const { data: existingPick } = await mockClient
       .from('draft_picks')
       .select('id')
       .eq('league_id', league_id)
-      .eq('movie_id', movie_id)
+      .eq('movie_id', movie.id)
       .single()
 
     if (existingPick) {
@@ -129,7 +171,7 @@ async function handleDraftPick(req: Request): Promise<Response> {
       .insert({
         league_id,
         team_id: nextPick.team_id,
-        movie_id,
+        movie_id: movie.id,
         round: nextPick.round,
         pick_number: nextPick.pick_number,
       })
@@ -156,6 +198,7 @@ async function handleDraftPick(req: Request): Promise<Response> {
         },
         movie: {
           id: movie.id,
+          tmdb_id: tmdb_id,
           title: movie.title,
           poster_url: movie.poster_url,
           release_date: movie.release_date,
@@ -186,7 +229,7 @@ Deno.test('draft-pick: authentication', async (t) => {
     mockSupabaseConfig = { user: null }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 12345 })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 401)
@@ -202,7 +245,7 @@ Deno.test('draft-pick: validation', async (t) => {
     mockSupabaseConfig = { user: mockUser }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: 'invalid', movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: 'invalid', tmdb_id: 12345 })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -210,16 +253,40 @@ Deno.test('draft-pick: validation', async (t) => {
     assertEquals(body.error, 'Valid league_id is required')
   })
 
-  await t.step('returns 400 when movie_id invalid', async () => {
+  await t.step('returns 400 when tmdb_id invalid (not a number)', async () => {
     mockSupabaseConfig = { user: mockUser }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: 'invalid' })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 'invalid' })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
     const body = await response.json()
-    assertEquals(body.error, 'Valid movie_id is required')
+    assertEquals(body.error, 'Valid tmdb_id is required')
+  })
+
+  await t.step('returns 400 when tmdb_id is zero', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 0 })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'Valid tmdb_id is required')
+  })
+
+  await t.step('returns 400 when tmdb_id is negative', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: -1 })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'Valid tmdb_id is required')
   })
 })
 
@@ -239,7 +306,7 @@ Deno.test('draft-pick: league status', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 12345 })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 404)
@@ -258,7 +325,7 @@ Deno.test('draft-pick: league status', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 12345 })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -278,7 +345,7 @@ Deno.test('draft-pick: league status', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 12345 })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -307,7 +374,7 @@ Deno.test('draft-pick: turn validation', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 12345 })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 403)
@@ -329,7 +396,7 @@ Deno.test('draft-pick: turn validation', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 12345 })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -343,7 +410,7 @@ Deno.test('draft-pick: turn validation', async (t) => {
 // ============================================================================
 
 Deno.test('draft-pick: movie validation', async (t) => {
-  await t.step('returns 404 when movie not found', async () => {
+  await t.step('returns 400 when movie not found and no movie_data provided', async () => {
     mockSupabaseConfig = {
       user: mockUser,
       tables: {
@@ -360,15 +427,17 @@ Deno.test('draft-pick: movie validation', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    // No movie_data provided
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: 99999 })
     const response = await handleDraftPick(req)
 
-    assertEquals(response.status, 404)
+    assertEquals(response.status, 400)
     const body = await response.json()
-    assertEquals(body.error, 'Movie not found')
+    assertEquals(body.error, 'Movie not found and no movie_data provided')
   })
 
   await t.step('returns 400 when movie not upcoming', async () => {
+    const releasedMovie = { ...mockMovie, status: 'released' }
     mockSupabaseConfig = {
       user: mockUser,
       tables: {
@@ -376,7 +445,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
           select: { data: mockLeagueDrafting, error: null },
         },
         movies: {
-          select: { data: mockMovieReleased, error: null },
+          select: { data: releasedMovie, error: null },
         },
       },
       rpc: {
@@ -385,7 +454,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: mockMovie.tmdb_id })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -393,7 +462,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
     assertEquals(body.error, 'This movie is not available for drafting')
   })
 
-  await t.step('returns 400 when movie already drafted', async () => {
+  await t.step('returns 400 when movie already drafted in this league', async () => {
     mockSupabaseConfig = {
       user: mockUser,
       tables: {
@@ -413,7 +482,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
     }
     mockClient = createMockSupabaseClient(mockSupabaseConfig)
 
-    const req = createMockAuthRequest({ league_id: validUUID, movie_id: validUUID })
+    const req = createMockAuthRequest({ league_id: validUUID, tmdb_id: mockMovie.tmdb_id })
     const response = await handleDraftPick(req)
 
     assertEquals(response.status, 400)
@@ -427,7 +496,7 @@ Deno.test('draft-pick: movie validation', async (t) => {
 // ============================================================================
 
 Deno.test('draft-pick: success', async (t) => {
-  await t.step('creates draft pick on success', async () => {
+  await t.step('creates draft pick with existing movie', async () => {
     mockSupabaseConfig = {
       user: mockUser,
       tables: {
@@ -450,7 +519,7 @@ Deno.test('draft-pick: success', async (t) => {
 
     const req = createMockAuthRequest({
       league_id: mockLeagueDrafting.id,
-      movie_id: mockMovie.id,
+      tmdb_id: mockMovie.tmdb_id,
     })
     const response = await handleDraftPick(req)
 
@@ -459,6 +528,58 @@ Deno.test('draft-pick: success', async (t) => {
     assertExists(body.pick)
     assertExists(body.movie)
     assertEquals(body.movie.title, mockMovie.title)
+    assertEquals(body.movie.tmdb_id, mockMovie.tmdb_id)
+  })
+
+  await t.step('creates movie and draft pick when movie does not exist', async () => {
+    const newMovieId = 'f1e2d3c4-b5a6-7890-1234-567890abcdef'
+    const newTmdbId = 99999
+    const createdMovie = {
+      id: newMovieId,
+      title: mockMovieData.title,
+      poster_url: mockMovieData.poster_url,
+      release_date: mockMovieData.release_date,
+      status: 'upcoming',
+    }
+    const newDraftPick = {
+      ...mockDraftPick,
+      movie_id: newMovieId,
+    }
+
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeagueDrafting, error: null },
+        },
+        movies: {
+          select: { data: null, error: { message: 'Not found' } },
+          insert: { data: createdMovie, error: null },
+        },
+        draft_picks: {
+          select: { data: null, error: null },
+          insert: { data: newDraftPick, error: null },
+        },
+      },
+      rpc: {
+        get_next_draft_pick: { data: [mockNextPickInfo], error: null },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeagueDrafting.id,
+      tmdb_id: newTmdbId,
+      movie_data: mockMovieData,
+    })
+    const response = await handleDraftPick(req)
+
+    assertEquals(response.status, 201)
+    const body = await response.json()
+    assertExists(body.pick)
+    assertExists(body.movie)
+    assertEquals(body.movie.title, mockMovieData.title)
+    assertEquals(body.movie.tmdb_id, newTmdbId)
   })
 })
 
@@ -490,7 +611,7 @@ Deno.test('draft-pick: race condition', async (t) => {
 
     const req = createMockAuthRequest({
       league_id: mockLeagueDrafting.id,
-      movie_id: mockMovie.id,
+      tmdb_id: mockMovie.tmdb_id,
     })
     const response = await handleDraftPick(req)
 

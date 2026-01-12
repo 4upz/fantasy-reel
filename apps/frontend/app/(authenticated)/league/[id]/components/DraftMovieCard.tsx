@@ -1,18 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import type { Movie } from '@/types'
+import type { TMDbSearchResult } from '@/types'
 import { StarIcon, HeartIcon, CheckIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
-  movie: Movie
+  movie: TMDbSearchResult
   isSelected?: boolean
   isFavorite?: boolean
   isDrafted?: boolean
-  onSelect: (movie: Movie) => void
-  onToggleFavorite?: (movieId: string) => void
-  onPreview?: (movie: Movie) => void
+  onSelect: (movie: TMDbSearchResult) => void
+  onToggleFavorite?: (tmdbId: number) => void
+  onPreview?: (movie: TMDbSearchResult) => void
 }
 
 export default function DraftMovieCard({
@@ -31,7 +31,7 @@ export default function DraftMovieCard({
 
   function handleFavoriteClick(e: React.MouseEvent): void {
     e.stopPropagation()
-    onToggleFavorite?.(movie.id)
+    onToggleFavorite?.(movie.tmdb_id)
   }
 
   function handlePreviewClick(e: React.MouseEvent): void {

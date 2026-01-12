@@ -13,8 +13,8 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
-    // Create Supabase client with user auth
-    const supabaseClient = createClient(
+    // Create user-authenticated client for auth validation
+    const userClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
@@ -28,11 +28,19 @@ Deno.serve(async (req) => {
     const {
       data: { user },
       error: authError,
-    } = await supabaseClient.auth.getUser()
+    } = await userClient.auth.getUser()
 
     if (authError || !user) {
       return errorResponse('Unauthorized', 401)
     }
+
+    // Create service role client for database operations (bypasses RLS)
+    // This is needed because users joining via invitation aren't participants yet,
+    // so RLS would block their access to the league
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
     // Parse request body
     const { league_id, invitation_token, team_name }: JoinLeagueRequest = await req.json()
@@ -51,7 +59,7 @@ Deno.serve(async (req) => {
       }
 
       // Look up invitation
-      const { data: invitation, error: inviteError } = await supabaseClient
+      const { data: invitation, error: inviteError } = await serviceClient
         .from('invitations')
         .select('*')
         .eq('token', invitation_token)
@@ -79,7 +87,7 @@ Deno.serve(async (req) => {
       targetLeagueId = invitation.league_id
 
       // Update invitation status to accepted
-      const { error: updateInviteError } = await supabaseClient
+      const { error: updateInviteError } = await serviceClient
         .from('invitations')
         .update({
           status: 'accepted',
@@ -99,7 +107,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch the league
-    const { data: league, error: leagueError } = await supabaseClient
+    const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
       .select('*')
       .eq('id', targetLeagueId)
@@ -120,7 +128,7 @@ Deno.serve(async (req) => {
     }
 
     // Check if user is already a participant
-    const { data: existingParticipant } = await supabaseClient
+    const { data: existingParticipant } = await serviceClient
       .from('league_participants')
       .select('id')
       .eq('league_id', targetLeagueId)
@@ -132,7 +140,7 @@ Deno.serve(async (req) => {
     }
 
     // Check if league is full
-    const { count: participantCount } = await supabaseClient
+    const { count: participantCount } = await serviceClient
       .from('league_participants')
       .select('*', { count: 'exact', head: true })
       .eq('league_id', targetLeagueId)
@@ -146,7 +154,7 @@ Deno.serve(async (req) => {
     const draftOrder = (participantCount || 0) + 1
 
     // Create participant
-    const { data: participant, error: participantError } = await supabaseClient
+    const { data: participant, error: participantError } = await serviceClient
       .from('league_participants')
       .insert({
         league_id: targetLeagueId,
@@ -165,7 +173,7 @@ Deno.serve(async (req) => {
 
     // Create team
     const defaultTeamName = team_name?.trim() || `${user.email?.split('@')[0]}'s Production Company`
-    const { data: team, error: teamError } = await supabaseClient
+    const { data: team, error: teamError } = await serviceClient
       .from('teams')
       .insert({
         participant_id: participant.id,

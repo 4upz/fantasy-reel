@@ -201,6 +201,7 @@ async function handleJoinLeague(req: Request): Promise<Response> {
 const cleanupEnv = mockEnvVars({
   SUPABASE_URL: 'http://localhost:54321',
   SUPABASE_ANON_KEY: 'mock-anon-key',
+  SUPABASE_SERVICE_ROLE_KEY: 'mock-service-key',
 })
 
 // ============================================================================

@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import LeagueDetailClient from './LeagueDetailClient'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, Movie } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -64,14 +64,6 @@ export default async function LeagueDetailPage({ params }: PageProps) {
     .order('round', { ascending: true })
     .order('pick_number', { ascending: true })
 
-  // Fetch available movies for drafting
-  const { data: movies } = await supabase
-    .from('movies')
-    .select('*')
-    .eq('status', 'upcoming')
-    .order('popularity', { ascending: false })
-    .limit(100)
-
   const isOwner = league.owner_id === user.id
 
   return (
@@ -79,7 +71,6 @@ export default async function LeagueDetailPage({ params }: PageProps) {
       league={league as League}
       participants={(participants || []) as ParticipantWithTeam[]}
       draftPicks={(draftPicks || []) as DraftPickWithDetails[]}
-      availableMovies={(movies || []) as Movie[]}
       currentUserId={user.id}
       isOwner={isOwner}
     />

@@ -1,9 +1,21 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
 
+interface MovieData {
+  title: string
+  overview?: string | null
+  poster_url: string | null
+  backdrop_url?: string | null
+  release_date: string | null
+  vote_average: number
+  popularity: number
+  genre_ids: number[]
+}
+
 interface DraftPickRequest {
   league_id: string
-  movie_id: string
+  tmdb_id: number
+  movie_data?: MovieData
 }
 
 interface NextPickInfo {
@@ -48,15 +60,15 @@ Deno.serve(async (req) => {
     )
 
     // Parse request body
-    const { league_id, movie_id }: DraftPickRequest = await req.json()
+    const { league_id, tmdb_id, movie_data }: DraftPickRequest = await req.json()
 
     // Validate required fields
     if (!league_id || !isValidUUID(league_id)) {
       return errorResponse('Valid league_id is required', 400)
     }
 
-    if (!movie_id || !isValidUUID(movie_id)) {
-      return errorResponse('Valid movie_id is required', 400)
+    if (!tmdb_id || typeof tmdb_id !== 'number' || tmdb_id <= 0) {
+      return errorResponse('Valid tmdb_id is required', 400)
     }
 
     // Fetch the league
@@ -99,15 +111,58 @@ Deno.serve(async (req) => {
       return errorResponse('It is not your turn to pick', 403)
     }
 
-    // Validate movie exists
-    const { data: movie, error: movieError } = await serviceClient
+    // Find or create movie by tmdb_id
+    let movie: { id: string; title: string; poster_url: string | null; release_date: string | null; status: string }
+
+    const { data: existingMovie, error: movieError } = await serviceClient
       .from('movies')
-      .select('*')
-      .eq('id', movie_id)
+      .select('id, title, poster_url, release_date, status')
+      .eq('tmdb_id', tmdb_id)
       .single()
 
-    if (movieError || !movie) {
-      return errorResponse('Movie not found', 404)
+    if (existingMovie) {
+      movie = existingMovie
+    } else {
+      // Movie doesn't exist, create it
+      if (!movie_data) {
+        return errorResponse('Movie not found and no movie_data provided', 400)
+      }
+
+      const { data: newMovie, error: insertError } = await serviceClient
+        .from('movies')
+        .insert({
+          tmdb_id,
+          title: movie_data.title,
+          overview: movie_data.overview || null,
+          poster_url: movie_data.poster_url,
+          backdrop_url: movie_data.backdrop_url || null,
+          release_date: movie_data.release_date,
+          vote_average: movie_data.vote_average,
+          vote_count: 0,
+          popularity: movie_data.popularity,
+          status: 'upcoming',
+          last_synced_at: new Date().toISOString(),
+        })
+        .select('id, title, poster_url, release_date, status')
+        .single()
+
+      if (insertError || !newMovie) {
+        // Could be a race condition - try to fetch again
+        const { data: retryMovie } = await serviceClient
+          .from('movies')
+          .select('id, title, poster_url, release_date, status')
+          .eq('tmdb_id', tmdb_id)
+          .single()
+
+        if (retryMovie) {
+          movie = retryMovie
+        } else {
+          console.error('Error creating movie:', insertError)
+          return errorResponse('Failed to create movie record', 500)
+        }
+      } else {
+        movie = newMovie
+      }
     }
 
     // Check movie status
@@ -120,7 +175,7 @@ Deno.serve(async (req) => {
       .from('draft_picks')
       .select('id')
       .eq('league_id', league_id)
-      .eq('movie_id', movie_id)
+      .eq('movie_id', movie.id)
       .single()
 
     if (existingPick) {
@@ -133,7 +188,7 @@ Deno.serve(async (req) => {
       .insert({
         league_id,
         team_id: nextPick.team_id,
-        movie_id,
+        movie_id: movie.id,
         round: nextPick.round,
         pick_number: nextPick.pick_number
       })
@@ -209,6 +264,7 @@ Deno.serve(async (req) => {
       },
       movie: {
         id: movie.id,
+        tmdb_id: tmdb_id,
         title: movie.title,
         poster_url: movie.poster_url,
         release_date: movie.release_date

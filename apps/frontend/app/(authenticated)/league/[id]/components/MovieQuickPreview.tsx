@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
-import type { Movie, TMDbMovieDetails } from '@/types'
+import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
 import { CloseIcon, StarIcon, HeartIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
 
 interface Props {
-  movie: Movie
+  movie: TMDbSearchResult
   isMyTurn: boolean
   isFavorite?: boolean
   onClose: () => void
-  onDraft: (movieId: string) => void
-  onToggleFavorite?: (movieId: string) => void
+  onDraft: (tmdbId: number) => void
+  onToggleFavorite?: (tmdbId: number) => void
   picking?: boolean
 }
 
@@ -115,7 +115,7 @@ export default function MovieQuickPreview({
                   {/* Favorite Button */}
                   {onToggleFavorite && (
                     <button
-                      onClick={() => onToggleFavorite(movie.id)}
+                      onClick={() => onToggleFavorite(movie.tmdb_id)}
                       className={`absolute top-2 right-2 p-2 rounded-full transition-all ${
                         isFavorite
                           ? 'bg-crimson text-white'
@@ -253,7 +253,7 @@ export default function MovieQuickPreview({
             <div className="mt-6 pt-6 border-t border-border flex flex-col sm:flex-row gap-3">
               {isMyTurn ? (
                 <button
-                  onClick={() => onDraft(movie.id)}
+                  onClick={() => onDraft(movie.tmdb_id)}
                   disabled={picking}
                   className="btn btn-primary flex-1 py-3 text-base font-semibold"
                 >

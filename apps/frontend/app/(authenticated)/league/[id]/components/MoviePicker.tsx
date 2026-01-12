@@ -1,21 +1,20 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
-import type { Movie } from '@/types'
-import DraftFilters, { type DraftFilters as DraftFiltersType } from './DraftFilters'
+import { useState, useCallback, useRef } from 'react'
+import type { TMDbSearchResult } from '@/types'
+import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
+import DraftFilters from './DraftFilters'
 import DraftMovieCard from './DraftMovieCard'
 import MovieQuickPreview from './MovieQuickPreview'
 import { SpinnerIcon } from './Icons'
-import { isWithinDays, isThisYear } from './utils'
 
 interface Props {
-  movies: Movie[]
-  draftedMovieIds: Set<string>
-  favoriteMovieIds?: Set<string>
+  draftedTmdbIds: Set<number>
+  favoriteMovieIds?: Set<number>
   isMyTurn: boolean
   picking: boolean
-  onPick: (movieId: string) => void
-  onToggleFavorite?: (movieId: string) => void
+  onPick: (tmdbId: number, movieData: TMDbSearchResult) => void
+  onToggleFavorite?: (tmdbId: number) => void
 }
 
 type TabType = 'all' | 'trending' | 'releasing-soon' | 'favorites'
@@ -27,24 +26,8 @@ const TABS: { id: TabType; label: string; icon: string }[] = [
   { id: 'favorites', label: 'Favorites', icon: '❤️' },
 ]
 
-function isInReleaseWindow(date: string | null, window: DraftFiltersType['releaseWindow']): boolean {
-  if (!date || window === 'all') return true
-
-  switch (window) {
-    case 'next30':
-      return isWithinDays(date, 30)
-    case 'quarter':
-      return isWithinDays(date, 90)
-    case 'year':
-      return isThisYear(date)
-    default:
-      return true
-  }
-}
-
 export default function MoviePicker({
-  movies,
-  draftedMovieIds,
+  draftedTmdbIds,
   favoriteMovieIds = new Set(),
   isMyTurn,
   picking,
@@ -52,92 +35,118 @@ export default function MoviePicker({
   onToggleFavorite,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('all')
-  const [filters, setFilters] = useState<DraftFiltersType>({
-    releaseWindow: 'year',
-    genres: [],
-    minRating: 0,
-    search: '',
-  })
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
-  const [previewMovie, setPreviewMovie] = useState<Movie | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
+  const [previewMovie, setPreviewMovie] = useState<TMDbSearchResult | null>(null)
+  const {
+    movies,
+    loading,
+    loadingMore,
+    error,
+    totalResults,
+    mode,
+    search,
+    browse,
+    loadMore,
+  } = useDraftMovies({ draftedTmdbIds })
 
-  // Filter movies based on active tab and filters
-  const filteredMovies = useMemo(() => {
-    let result = movies.filter((m) => m.status === 'upcoming')
+  const observerRef = useRef<IntersectionObserver | null>(null)
+  const loadMoreRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (loading || loadingMore) return
+      if (observerRef.current) observerRef.current.disconnect()
 
-    // Tab-based filtering
+      observerRef.current = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore()
+        }
+      })
+
+      if (node) observerRef.current.observe(node)
+    },
+    [loading, loadingMore, loadMore]
+  )
+
+  // Apply tab-specific filtering
+  const getFilteredMovies = useCallback(() => {
+    let result = movies
+
     switch (activeTab) {
       case 'trending':
         result = result.filter((m) => (m.popularity || 0) >= 50)
         break
       case 'releasing-soon':
-        result = result.filter((m) => isWithinDays(m.release_date, 30))
+        result = result.filter((m) => {
+          if (!m.release_date) return false
+          const releaseDate = new Date(m.release_date)
+          const now = new Date()
+          const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+          return releaseDate >= now && releaseDate <= thirtyDaysFromNow
+        })
         break
       case 'favorites':
-        result = result.filter((m) => favoriteMovieIds.has(m.id))
+        result = result.filter((m) => favoriteMovieIds.has(m.tmdb_id))
         break
     }
 
-    // Search filter
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase()
-      result = result.filter((m) => m.title.toLowerCase().includes(searchLower))
-    }
-
-    // Release window filter
-    result = result.filter((m) => isInReleaseWindow(m.release_date, filters.releaseWindow))
-
-    // Min rating filter
-    if (filters.minRating > 0) {
-      result = result.filter((m) => (m.vote_average || 0) >= filters.minRating)
-    }
-
-    // Sort by release date, then popularity
-    result.sort((a, b) => {
-      // Favorites and trending: sort by popularity
-      if (activeTab === 'trending' || activeTab === 'favorites') {
-        return (b.popularity || 0) - (a.popularity || 0)
-      }
-      // Releasing soon: sort by release date
-      if (activeTab === 'releasing-soon') {
-        const dateA = a.release_date ? new Date(a.release_date).getTime() : Infinity
-        const dateB = b.release_date ? new Date(b.release_date).getTime() : Infinity
-        return dateA - dateB
-      }
-      // All: sort by popularity
-      return (b.popularity || 0) - (a.popularity || 0)
-    })
-
     return result
-  }, [movies, activeTab, filters, favoriteMovieIds])
+  }, [movies, activeTab, favoriteMovieIds])
 
-  const handleFiltersChange = useCallback((newFilters: DraftFiltersType) => {
-    setFilters(newFilters)
-  }, [])
+  const filteredMovies = getFilteredMovies()
 
-  const handleSelectMovie = (movie: Movie) => {
-    if (draftedMovieIds.has(movie.id)) return
+  // Handle filter changes (when not searching)
+  const handleFiltersChange = useCallback(
+    (newFilters: BrowseFilters & { search: string }) => {
+      const { search: searchValue, ...browseFilters } = newFilters
+
+      if (searchValue !== searchQuery) {
+        setSearchQuery(searchValue)
+        if (searchValue) {
+          search(searchValue)
+        } else {
+          browse(browseFilters)
+        }
+      } else if (!searchValue) {
+        browse(browseFilters)
+      }
+    },
+    [browse, search, searchQuery]
+  )
+
+  const handleSelectMovie = (movie: TMDbSearchResult) => {
+    if (draftedTmdbIds.has(movie.tmdb_id)) return
     setSelectedMovie(movie)
   }
 
   const handleConfirmPick = () => {
     if (selectedMovie && isMyTurn) {
-      onPick(selectedMovie.id)
+      onPick(selectedMovie.tmdb_id, selectedMovie)
       setSelectedMovie(null)
     }
   }
 
-  const handlePreview = (movie: Movie) => {
+  const handlePreview = (movie: TMDbSearchResult) => {
     setPreviewMovie(movie)
   }
 
-  const handleDraftFromPreview = (movieId: string) => {
-    onPick(movieId)
+  const handleDraftFromPreview = (tmdbId: number) => {
+    const movie = movies.find((m) => m.tmdb_id === tmdbId)
+    if (movie) {
+      onPick(tmdbId, movie)
+    }
     setPreviewMovie(null)
     setSelectedMovie(null)
   }
 
-  const availableCount = filteredMovies.filter((m) => !draftedMovieIds.has(m.id)).length
+  const handleToggleFavorite = useCallback(
+    (tmdbId: number) => {
+      onToggleFavorite?.(tmdbId)
+    },
+    [onToggleFavorite]
+  )
+
+  // Count available (non-drafted) movies
+  const availableCount = filteredMovies.filter((m) => !draftedTmdbIds.has(m.tmdb_id)).length
 
   return (
     <div className="space-y-6">
@@ -183,19 +192,36 @@ export default function MoviePicker({
       {/* Filters */}
       <DraftFilters
         onFiltersChange={handleFiltersChange}
-        totalResults={availableCount}
-        loading={false}
+        totalResults={mode === 'search' ? totalResults : availableCount}
+        loading={loading}
       />
 
+      {/* Error State */}
+      {error && (
+        <div className="alert alert-error">
+          {error}
+        </div>
+      )}
+
+      {/* Loading State */}
+      {loading && movies.length === 0 && (
+        <div className="text-center py-12">
+          <SpinnerIcon className="w-8 h-8 text-gold mx-auto animate-spin" />
+          <p className="text-foreground-secondary mt-3">Loading movies...</p>
+        </div>
+      )}
+
       {/* Movie Grid */}
-      {filteredMovies.length === 0 ? (
+      {!loading && filteredMovies.length === 0 ? (
         <div className="text-center py-12 bg-elevated rounded-xl border border-border">
           <div className="text-4xl mb-3">
-            {activeTab === 'favorites' ? '❤️' : '🎬'}
+            {activeTab === 'favorites' ? '❤️' : mode === 'search' ? '🔍' : '🎬'}
           </div>
           <p className="text-foreground-secondary">
             {activeTab === 'favorites'
               ? 'No favorites yet. Heart movies to add them here!'
+              : mode === 'search'
+              ? 'No movies found for your search'
               : 'No movies match your filters'}
           </p>
           {activeTab !== 'all' && (
@@ -208,20 +234,34 @@ export default function MoviePicker({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filteredMovies.map((movie) => (
-            <DraftMovieCard
-              key={movie.id}
-              movie={movie}
-              isSelected={selectedMovie?.id === movie.id}
-              isFavorite={favoriteMovieIds.has(movie.id)}
-              isDrafted={draftedMovieIds.has(movie.id)}
-              onSelect={handleSelectMovie}
-              onToggleFavorite={onToggleFavorite}
-              onPreview={handlePreview}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {filteredMovies.map((movie) => (
+              <DraftMovieCard
+                key={movie.tmdb_id}
+                movie={movie}
+                isSelected={selectedMovie?.tmdb_id === movie.tmdb_id}
+                isFavorite={favoriteMovieIds.has(movie.tmdb_id)}
+                isDrafted={draftedTmdbIds.has(movie.tmdb_id)}
+                onSelect={handleSelectMovie}
+                onToggleFavorite={handleToggleFavorite}
+                onPreview={handlePreview}
+              />
+            ))}
+          </div>
+
+          {/* Load More Trigger */}
+          {!loading && movies.length > 0 && (
+            <div ref={loadMoreRef} className="h-4" />
+          )}
+
+          {/* Loading More Indicator */}
+          {loadingMore && (
+            <div className="text-center py-4">
+              <SpinnerIcon className="w-6 h-6 text-gold mx-auto animate-spin" />
+            </div>
+          )}
+        </>
       )}
 
       {/* Selection Confirmation */}
@@ -244,7 +284,7 @@ export default function MoviePicker({
                     {selectedMovie.release_date
                       ? new Date(selectedMovie.release_date).toLocaleDateString()
                       : 'TBA'}
-                    {selectedMovie.vote_average && (
+                    {selectedMovie.vote_average > 0 && (
                       <span className="ml-2">
                         <span className="text-gold">★</span> {selectedMovie.vote_average.toFixed(1)}
                       </span>
@@ -287,10 +327,10 @@ export default function MoviePicker({
         <MovieQuickPreview
           movie={previewMovie}
           isMyTurn={isMyTurn}
-          isFavorite={favoriteMovieIds.has(previewMovie.id)}
+          isFavorite={favoriteMovieIds.has(previewMovie.tmdb_id)}
           onClose={() => setPreviewMovie(null)}
           onDraft={handleDraftFromPreview}
-          onToggleFavorite={onToggleFavorite}
+          onToggleFavorite={handleToggleFavorite}
           picking={picking}
         />
       )}
