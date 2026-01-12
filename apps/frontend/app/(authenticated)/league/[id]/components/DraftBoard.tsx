@@ -6,6 +6,7 @@ import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
 import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult } from '@/types'
+import type { RealtimeStatus } from '../LeagueDetailClient'
 
 interface Props {
   league: League
@@ -13,6 +14,7 @@ interface Props {
   draftPicks: DraftPickWithDetails[]
   currentUserId: string
   favoriteMovieIds?: Set<number>
+  realtimeStatus?: RealtimeStatus
   onPickMade: () => void
   onToggleFavorite?: (tmdbId: number) => void
 }
@@ -25,6 +27,7 @@ export default function DraftBoard({
   draftPicks,
   currentUserId,
   favoriteMovieIds = new Set(),
+  realtimeStatus = 'connecting',
   onPickMade,
   onToggleFavorite,
 }: Props) {
@@ -151,7 +154,10 @@ export default function DraftBoard({
         <div className="flex items-start justify-between gap-6">
           {/* Left: Title and Status */}
           <div className="flex-1">
-            <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
+            <div className="flex items-center gap-3 mb-4">
+              <h2 className="text-xl font-semibold font-display text-foreground">Draft Board</h2>
+              <ConnectionStatusIndicator status={realtimeStatus} />
+            </div>
 
             {/* Current Turn Indicator */}
             {nextPick && (
@@ -294,6 +300,47 @@ function PickHistory({ draftPicks }: { draftPicks: DraftPickWithDetails[] }) {
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+const CONNECTION_STATUS_CONFIG = {
+  connecting: {
+    dot: 'bg-warning animate-pulse',
+    text: 'Connecting...',
+    textColor: 'text-warning',
+    title: 'Connecting to real-time updates...',
+  },
+  connected: {
+    dot: 'bg-success',
+    text: 'Live',
+    textColor: 'text-success',
+    title: 'Real-time updates active',
+  },
+  reconnecting: {
+    dot: 'bg-warning animate-pulse',
+    text: 'Reconnecting...',
+    textColor: 'text-warning',
+    title: 'Reconnecting to real-time updates...',
+  },
+  error: {
+    dot: 'bg-error',
+    text: 'Disconnected',
+    textColor: 'text-error',
+    title: 'Connection lost - refresh to reconnect',
+  },
+} as const
+
+function ConnectionStatusIndicator({ status }: { status: RealtimeStatus }) {
+  const config = CONNECTION_STATUS_CONFIG[status]
+
+  return (
+    <div
+      className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface border border-border"
+      title={config.title}
+    >
+      <span className={`w-2 h-2 rounded-full ${config.dot}`} />
+      <span className={`text-xs font-medium ${config.textColor}`}>{config.text}</span>
     </div>
   )
 }

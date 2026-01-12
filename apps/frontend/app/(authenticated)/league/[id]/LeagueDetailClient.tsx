@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import LeagueHeader from './components/LeagueHeader'
 import ParticipantsList from './components/ParticipantsList'
@@ -8,6 +8,11 @@ import DraftBoard from './components/DraftBoard'
 import InviteModal from './components/InviteModal'
 import InvitationsList from './components/InvitationsList'
 import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
+
+export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'error'
+
+const MAX_RECONNECT_ATTEMPTS = 3
+const RECONNECT_DELAY_MS = 2000
 
 interface Props {
   league: League
@@ -28,6 +33,7 @@ export default function LeagueDetailClient({
   const [participants, setParticipants] = useState(initialParticipants)
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting')
 
   // Local favorites state (tracks tmdb_ids as numbers)
   const [favoriteMovieIds, setFavoriteMovieIds] = useState<Set<number>>(() => {
@@ -45,7 +51,13 @@ export default function LeagueDetailClient({
     return new Set()
   })
 
-  const supabase = createClient()
+  // Stable Supabase client reference - prevents new instance on every render
+  const supabase = useMemo(() => createClient(), [])
+
+  // Reconnection tracking
+  const reconnectAttemptsRef = useRef(0)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const channelIdRef = useRef(0) // Unique ID for each channel to avoid name conflicts
 
   // Persist favorites to localStorage
   useEffect(() => {
@@ -57,57 +69,8 @@ export default function LeagueDetailClient({
     }
   }, [favoriteMovieIds, league.id])
 
-  // Set up real-time subscriptions for draft updates
-  useEffect(() => {
-    const channel = supabase
-      .channel(`league-${league.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'draft_picks',
-          filter: `league_id=eq.${league.id}`,
-        },
-        () => {
-          // Refetch draft picks when new pick is made
-          fetchDraftPicks()
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'leagues',
-          filter: `id=eq.${league.id}`,
-        },
-        (payload) => {
-          setLeague(payload.new as League)
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'league_participants',
-          filter: `league_id=eq.${league.id}`,
-        },
-        () => {
-          // Refetch participants when someone joins
-          fetchParticipants()
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [league.id])
-
-  const fetchDraftPicks = async () => {
+  // Memoized fetch functions for stable references in subscriptions
+  const fetchDraftPicks = useCallback(async () => {
     const { data } = await supabase
       .from('draft_picks')
       .select(`*, movies (*), teams (*)`)
@@ -118,9 +81,9 @@ export default function LeagueDetailClient({
     if (data) {
       setDraftPicks(data as DraftPickWithDetails[])
     }
-  }
+  }, [supabase, league.id])
 
-  const fetchParticipants = async () => {
+  const fetchParticipants = useCallback(async () => {
     const { data } = await supabase
       .from('league_participants')
       .select(`*, teams (*)`)
@@ -131,11 +94,105 @@ export default function LeagueDetailClient({
     if (data) {
       setParticipants(data as ParticipantWithTeam[])
     }
-  }
+  }, [supabase, league.id])
 
-  const handlePickMade = () => {
+  // Set up real-time subscriptions for draft updates with auto-reconnect
+  useEffect(() => {
+    const channelsRef: ReturnType<typeof supabase.channel>[] = []
+    let isCleaningUp = false
+
+    function setupChannel(): void {
+      if (isCleaningUp) return
+
+      const isReconnect = reconnectAttemptsRef.current > 0
+      setRealtimeStatus(isReconnect ? 'reconnecting' : 'connecting')
+
+      // Increment channel ID to create unique name and track current channel
+      channelIdRef.current++
+      const thisChannelId = channelIdRef.current
+
+      const channel = supabase
+        .channel(`league-${league.id}-${thisChannelId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'draft_picks',
+            filter: `league_id=eq.${league.id}`,
+          },
+          fetchDraftPicks
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'leagues',
+            filter: `id=eq.${league.id}`,
+          },
+          (payload) => setLeague(payload.new as League)
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'league_participants',
+            filter: `league_id=eq.${league.id}`,
+          },
+          fetchParticipants
+        )
+        .subscribe((status, err) => {
+          // Ignore events from stale channels or during cleanup
+          if (isCleaningUp || thisChannelId !== channelIdRef.current) return
+
+          if (status === 'SUBSCRIBED') {
+            console.log(`Realtime: Connected to league-${league.id}`)
+            reconnectAttemptsRef.current = 0
+            setRealtimeStatus('connected')
+            return
+          }
+
+          // Handle connection errors (CHANNEL_ERROR or TIMED_OUT)
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            const errorMsg = status === 'CHANNEL_ERROR' ? 'Channel error' : 'Connection timed out'
+            console.warn(`Realtime: ${errorMsg}, will attempt reconnect`, err)
+
+            if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+              reconnectAttemptsRef.current++
+              setRealtimeStatus('reconnecting')
+              console.log(
+                `Realtime: Reconnecting (attempt ${reconnectAttemptsRef.current}/${MAX_RECONNECT_ATTEMPTS})...`
+              )
+              reconnectTimeoutRef.current = setTimeout(setupChannel, RECONNECT_DELAY_MS)
+            } else {
+              console.error('Realtime: Max reconnection attempts reached')
+              setRealtimeStatus('error')
+            }
+          }
+          // Ignore CLOSED events - they follow ERROR/TIMEOUT which already handle reconnection
+        })
+
+      channelsRef.push(channel)
+    }
+
+    setupChannel()
+
+    return () => {
+      isCleaningUp = true
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+      channelsRef.forEach((ch) => supabase.removeChannel(ch))
+      reconnectAttemptsRef.current = 0
+    }
+  }, [league.id, supabase, fetchDraftPicks, fetchParticipants])
+
+  const handlePickMade = useCallback(() => {
     fetchDraftPicks()
-  }
+  }, [fetchDraftPicks])
 
   const handleToggleFavorite = useCallback((tmdbId: number) => {
     setFavoriteMovieIds((prev) => {
@@ -167,6 +224,7 @@ export default function LeagueDetailClient({
               draftPicks={draftPicks}
               currentUserId={currentUserId}
               favoriteMovieIds={favoriteMovieIds}
+              realtimeStatus={realtimeStatus}
               onPickMade={handlePickMade}
               onToggleFavorite={handleToggleFavorite}
             />
