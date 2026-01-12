@@ -1,15 +1,14 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
+import type { RealtimeStatus } from './components/ConnectionStatusIndicator'
+import DraftBoard from './components/DraftBoard'
+import InvitationsList from './components/InvitationsList'
+import InviteModal from './components/InviteModal'
 import LeagueHeader from './components/LeagueHeader'
 import ParticipantsList from './components/ParticipantsList'
-import DraftBoard from './components/DraftBoard'
-import InviteModal from './components/InviteModal'
-import InvitationsList from './components/InvitationsList'
-import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
-
-export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'error'
 
 const MAX_RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 2000
@@ -51,7 +50,7 @@ export default function LeagueDetailClient({
     return new Set()
   })
 
-  // Stable Supabase client reference - prevents new instance on every render
+  // Stable Supabase client reference to prevent new instance on every render
   const supabase = useMemo(() => createClient(), [])
 
   // Reconnection tracking
@@ -98,11 +97,17 @@ export default function LeagueDetailClient({
 
   // Set up real-time subscriptions for draft updates with auto-reconnect
   useEffect(() => {
-    const channelsRef: ReturnType<typeof supabase.channel>[] = []
+    let currentChannel: ReturnType<typeof supabase.channel> | null = null
     let isCleaningUp = false
 
     function setupChannel(): void {
       if (isCleaningUp) return
+
+      // Clean up previous channel before creating new one
+      if (currentChannel) {
+        supabase.removeChannel(currentChannel)
+        currentChannel = null
+      }
 
       const isReconnect = reconnectAttemptsRef.current > 0
       setRealtimeStatus(isReconnect ? 'reconnecting' : 'connecting')
@@ -136,7 +141,7 @@ export default function LeagueDetailClient({
         .on(
           'postgres_changes',
           {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
             table: 'league_participants',
             filter: `league_id=eq.${league.id}`,
@@ -174,7 +179,7 @@ export default function LeagueDetailClient({
           // Ignore CLOSED events - they follow ERROR/TIMEOUT which already handle reconnection
         })
 
-      channelsRef.push(channel)
+      currentChannel = channel
     }
 
     setupChannel()
@@ -185,7 +190,9 @@ export default function LeagueDetailClient({
         clearTimeout(reconnectTimeoutRef.current)
         reconnectTimeoutRef.current = null
       }
-      channelsRef.forEach((ch) => supabase.removeChannel(ch))
+      if (currentChannel) {
+        supabase.removeChannel(currentChannel)
+      }
       reconnectAttemptsRef.current = 0
     }
   }, [league.id, supabase, fetchDraftPicks, fetchParticipants])
@@ -213,6 +220,7 @@ export default function LeagueDetailClient({
           league={league}
           isOwner={isOwner}
           participantCount={participants.length}
+          realtimeStatus={realtimeStatus}
           onInviteClick={() => setShowInviteModal(true)}
         />
 
@@ -224,7 +232,6 @@ export default function LeagueDetailClient({
               draftPicks={draftPicks}
               currentUserId={currentUserId}
               favoriteMovieIds={favoriteMovieIds}
-              realtimeStatus={realtimeStatus}
               onPickMade={handlePickMade}
               onToggleFavorite={handleToggleFavorite}
             />

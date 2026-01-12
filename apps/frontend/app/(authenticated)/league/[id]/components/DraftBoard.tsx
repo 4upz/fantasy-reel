@@ -6,7 +6,6 @@ import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
 import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult } from '@/types'
-import type { RealtimeStatus } from '../LeagueDetailClient'
 
 interface Props {
   league: League
@@ -14,7 +13,6 @@ interface Props {
   draftPicks: DraftPickWithDetails[]
   currentUserId: string
   favoriteMovieIds?: Set<number>
-  realtimeStatus?: RealtimeStatus
   onPickMade: () => void
   onToggleFavorite?: (tmdbId: number) => void
 }
@@ -27,7 +25,6 @@ export default function DraftBoard({
   draftPicks,
   currentUserId,
   favoriteMovieIds = new Set(),
-  realtimeStatus = 'connecting',
   onPickMade,
   onToggleFavorite,
 }: Props) {
@@ -71,7 +68,7 @@ export default function DraftBoard({
   const isMyTurn = nextPick?.user_id === currentUserId
   const isDraftComplete = league.status === 'drafting' && !nextPick
 
-  // Get set of drafted tmdb_ids (movies that have been picked)
+  // Set of drafted tmdb_ids (movies that have been picked)
   const draftedTmdbIds = useMemo(() => {
     return new Set(
       draftPicks
@@ -80,7 +77,16 @@ export default function DraftBoard({
     )
   }, [draftPicks])
 
-  const handleDraftPick = async (tmdbId: number, movieData: TMDbSearchResult) => {
+  // Map of user_id to team name for display
+  const teamNamesByUserId = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const participant of participants) {
+      map.set(participant.user_id, participant.teams?.name || 'Unknown Team')
+    }
+    return map
+  }, [participants])
+
+  async function handleDraftPick(tmdbId: number, movieData: TMDbSearchResult): Promise<void> {
     setPicking(true)
     setError(null)
 
@@ -109,10 +115,8 @@ export default function DraftBoard({
     setPicking(false)
   }
 
-  // Get team name for a user
-  const getTeamName = (userId: string) => {
-    const participant = participants.find((p) => p.user_id === userId)
-    return participant?.teams?.name || 'Unknown Team'
+  function getTeamName(userId: string): string {
+    return teamNamesByUserId.get(userId) || 'Unknown Team'
   }
 
   // Render different views based on league status
@@ -156,7 +160,6 @@ export default function DraftBoard({
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
               <h2 className="text-xl font-semibold font-display text-foreground">Draft Board</h2>
-              <ConnectionStatusIndicator status={realtimeStatus} />
             </div>
 
             {/* Current Turn Indicator */}
@@ -304,43 +307,3 @@ function PickHistory({ draftPicks }: { draftPicks: DraftPickWithDetails[] }) {
   )
 }
 
-const CONNECTION_STATUS_CONFIG = {
-  connecting: {
-    dot: 'bg-warning animate-pulse',
-    text: 'Connecting...',
-    textColor: 'text-warning',
-    title: 'Connecting to real-time updates...',
-  },
-  connected: {
-    dot: 'bg-success',
-    text: 'Live',
-    textColor: 'text-success',
-    title: 'Real-time updates active',
-  },
-  reconnecting: {
-    dot: 'bg-warning animate-pulse',
-    text: 'Reconnecting...',
-    textColor: 'text-warning',
-    title: 'Reconnecting to real-time updates...',
-  },
-  error: {
-    dot: 'bg-error',
-    text: 'Disconnected',
-    textColor: 'text-error',
-    title: 'Connection lost - refresh to reconnect',
-  },
-} as const
-
-function ConnectionStatusIndicator({ status }: { status: RealtimeStatus }) {
-  const config = CONNECTION_STATUS_CONFIG[status]
-
-  return (
-    <div
-      className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface border border-border"
-      title={config.title}
-    >
-      <span className={`w-2 h-2 rounded-full ${config.dot}`} />
-      <span className={`text-xs font-medium ${config.textColor}`}>{config.text}</span>
-    </div>
-  )
-}

@@ -2,12 +2,14 @@
 
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useState } from 'react'
+import ConnectionStatusIndicator, { type RealtimeStatus } from './ConnectionStatusIndicator'
 import type { League } from '@/types'
 
 interface Props {
   league: League
   isOwner: boolean
   participantCount: number
+  realtimeStatus: RealtimeStatus
   onInviteClick: () => void
 }
 
@@ -18,11 +20,11 @@ const statusBadgeClass: Record<string, string> = {
   completed: 'badge-completed',
 }
 
-export default function LeagueHeader({ league, isOwner, participantCount, onInviteClick }: Props) {
+export default function LeagueHeader({ league, isOwner, participantCount, realtimeStatus, onInviteClick }: Props) {
   const [startingDraft, setStartingDraft] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleStartDraft = async () => {
+  async function handleStartDraft(): Promise<void> {
     if (participantCount < 2) {
       setError('Need at least 2 participants to start the draft')
       return
@@ -51,6 +53,7 @@ export default function LeagueHeader({ league, isOwner, participantCount, onInvi
             <span className={`badge ${statusBadgeClass[league.status] || 'badge-completed'}`}>
               {league.status.charAt(0).toUpperCase() + league.status.slice(1)}
             </span>
+            <ConnectionStatusIndicator status={realtimeStatus} />
             <span className="text-sm text-foreground-muted">
               {league.invite_only ? 'Invite Only' : 'Open'}
             </span>

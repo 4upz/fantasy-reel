@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { formatDate, isExpired } from '@/utils/date'
-import { LoadingSpinner } from '@/app/components/LoadingSpinner'
-import { ErrorAlert } from '@/app/components/FormError'
 import type { Invitation } from '@/types'
+import { ErrorAlert } from '@/app/components/FormError'
+import { LoadingSpinner } from '@/app/components/LoadingSpinner'
 
 interface Props {
   leagueId: string
@@ -17,7 +17,7 @@ interface Props {
 type EffectiveStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled'
 
 export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Props): React.ReactElement | null {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
@@ -27,13 +27,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
   const [error, setError] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
 
-  useEffect(() => {
-    if (isOwner) {
-      fetchInvitations()
-    }
-  }, [isOwner, leagueId])
-
-  async function fetchInvitations(): Promise<void> {
+  const fetchInvitations = useCallback(async (): Promise<void> => {
     setLoading(true)
     setError(null)
 
@@ -51,9 +45,39 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
     }
 
     setLoading(false)
-  }
+  }, [supabase, leagueId])
 
-  async function handleCopyLink(invitation: Invitation): Promise<void> {
+  // Initial fetch
+  useEffect(() => {
+    if (isOwner) {
+      fetchInvitations()
+    }
+  }, [isOwner, fetchInvitations])
+
+  // Real-time subscription for invitation updates
+  useEffect(() => {
+    if (!isOwner) return
+
+    const channel = supabase
+      .channel(`invitations-${leagueId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'invitations',
+          filter: `league_id=eq.${leagueId}`,
+        },
+        fetchInvitations
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase, leagueId, isOwner, fetchInvitations])
+
+  async function handleCopy(invitation: Invitation): Promise<void> {
     const inviteUrl = `${window.location.origin}/join?token=${invitation.token}`
 
     try {
@@ -175,7 +199,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
                   <InvitationRow
                     key={invitation.id}
                     invitation={invitation}
-                    onCopy={handleCopyLink}
+                    onCopy={handleCopy}
                     onResend={handleResend}
                     onCancel={handleCancel}
                     isResending={resendingId === invitation.id}
