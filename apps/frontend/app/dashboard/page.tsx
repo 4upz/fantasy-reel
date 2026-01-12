@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import LeagueManager from '../components/LeagueManager'
 import PendingInvitations from '../components/PendingInvitations'
+import type { InvitationWithLeague } from '@/types'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -13,6 +14,20 @@ export default async function DashboardPage() {
   if (!user) {
     redirect('/login')
   }
+
+  // Fetch pending invitations server-side to avoid loading flicker
+  const { data: invitationsData } = await supabase
+    .from('invitations')
+    .select('*, leagues(id, name, status, owner_id)')
+    .eq('status', 'pending')
+    .eq('email', user.email ?? '')
+    .gte('expires_at', new Date().toISOString())
+    .order('sent_at', { ascending: false })
+
+  // Filter out invitations where the league was deleted or inaccessible
+  const pendingInvitations = (invitationsData ?? []).filter(
+    (inv): inv is InvitationWithLeague => inv.leagues !== null
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -35,7 +50,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <PendingInvitations />
+        <PendingInvitations initialInvitations={pendingInvitations} />
         <LeagueManager />
       </div>
     </div>

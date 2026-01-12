@@ -105,11 +105,33 @@ export const mockInvitationExpired = {
   expires_at: new Date(Date.now() - 1000).toISOString(),
 }
 
+// Invitation with status explicitly set to 'expired' (for resend tests)
+export const mockInvitationStatusExpired = {
+  ...mockInvitation,
+  id: 'a4b5c6d7-e8f9-0123-4567-89abcdef0124',
+  token: 'b5c6d7e8-f9a0-1234-5678-9abcdef01245',
+  status: 'expired',
+}
+
 export const mockInvitationAccepted = {
   ...mockInvitation,
   id: 'b4c5d6e7-f8a9-0123-4567-89abcdef0123',
   token: 'c5d6e7f8-a9b0-1234-5678-9abcdef01234',
   status: 'accepted',
+}
+
+export const mockInvitationCancelled = {
+  ...mockInvitation,
+  id: 'c5d6e7f8-a9b0-1234-5678-9abcdef01235',
+  token: 'd6e7f8a9-b0c1-2345-6789-abcdef012346',
+  status: 'cancelled',
+}
+
+export const mockInvitationDeclined = {
+  ...mockInvitation,
+  id: 'd6e7f8a9-b0c1-2345-6789-abcdef012347',
+  token: 'e7f8a9b0-c1d2-3456-789a-bcdef0123458',
+  status: 'declined',
 }
 
 // Mock movie data

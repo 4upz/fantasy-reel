@@ -47,6 +47,11 @@ Deno.serve(async (req) => {
 
     const normalizedEmail = email.toLowerCase().trim()
 
+    // Prevent self-invitation
+    if (normalizedEmail === user.email?.toLowerCase()) {
+      return errorResponse('You cannot invite yourself to a league', 400)
+    }
+
     // Fetch the league and verify ownership
     const { data: league, error: leagueError } = await supabaseClient
       .from('leagues')
@@ -79,7 +84,7 @@ Deno.serve(async (req) => {
       return errorResponse('League is full', 400)
     }
 
-    // Check for existing pending invitation
+    // Check for existing invitation
     const { data: existingInvite } = await supabaseClient
       .from('invitations')
       .select('id, status')
@@ -88,11 +93,21 @@ Deno.serve(async (req) => {
       .single()
 
     if (existingInvite) {
+      if (existingInvite.status === 'accepted') {
+        return errorResponse('This user has already joined the league', 400)
+      }
       if (existingInvite.status === 'pending') {
         return errorResponse('An invitation has already been sent to this email', 400)
       }
-      if (existingInvite.status === 'accepted') {
-        return errorResponse('This user has already joined the league', 400)
+      // For expired/cancelled/declined: delete old invitation to allow resend
+      const { error: deleteError } = await supabaseClient
+        .from('invitations')
+        .delete()
+        .eq('id', existingInvite.id)
+
+      if (deleteError) {
+        console.error('Error deleting old invitation:', deleteError)
+        return errorResponse('Failed to resend invitation', 500)
       }
     }
 

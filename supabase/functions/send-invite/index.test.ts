@@ -16,6 +16,9 @@ import {
   mockLeagueDrafting,
   mockInvitation,
   mockInvitationAccepted,
+  mockInvitationStatusExpired,
+  mockInvitationCancelled,
+  mockInvitationDeclined,
   validUUID,
 } from '../_test_utils/fixtures.ts'
 
@@ -55,6 +58,11 @@ async function handleSendInvite(req: Request): Promise<Response> {
     }
 
     const normalizedEmail = email.toLowerCase().trim()
+
+    // Prevent self-invitation
+    if (normalizedEmail === user.email?.toLowerCase()) {
+      return errorResponse('You cannot invite yourself to a league', 400)
+    }
 
     // Fetch the league
     const { data: league, error: leagueError } = await mockClient
@@ -97,11 +105,21 @@ async function handleSendInvite(req: Request): Promise<Response> {
       .single()
 
     if (existingInvite) {
+      if (existingInvite.status === 'accepted') {
+        return errorResponse('This user has already joined the league', 400)
+      }
       if (existingInvite.status === 'pending') {
         return errorResponse('An invitation has already been sent to this email', 400)
       }
-      if (existingInvite.status === 'accepted') {
-        return errorResponse('This user has already joined the league', 400)
+      // For expired/cancelled/declined: delete old invitation to allow resend
+      const { error: deleteError } = await mockClient
+        .from('invitations')
+        .delete()
+        .eq('id', existingInvite.id)
+
+      if (deleteError) {
+        console.error('Error deleting old invitation:', deleteError)
+        return errorResponse('Failed to resend invitation', 500)
       }
     }
 
@@ -367,6 +385,170 @@ Deno.test('send-invite: capacity', async (t) => {
     assertEquals(response.status, 400)
     const body = await response.json()
     assertEquals(body.error, 'This user has already joined the league')
+  })
+})
+
+// ============================================================================
+// Self-Invitation Tests
+// ============================================================================
+
+Deno.test('send-invite: self-invitation', async (t) => {
+  await t.step('returns 400 when inviting yourself', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: validUUID,
+      email: mockUser.email, // Same as authenticated user
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'You cannot invite yourself to a league')
+  })
+
+  await t.step('returns 400 when inviting yourself (case insensitive)', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: validUUID,
+      email: mockUser.email.toUpperCase(), // Different case
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'You cannot invite yourself to a league')
+  })
+})
+
+// ============================================================================
+// Resend Invitation Tests
+// ============================================================================
+
+Deno.test('send-invite: resend to expired/cancelled/declined', async (t) => {
+  await t.step('allows resending to expired invitation', async () => {
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeague, error: null },
+        },
+        league_participants: {
+          select: { data: [], error: null, count: 1 },
+        },
+        invitations: {
+          select: { data: mockInvitationStatusExpired, error: null },
+          delete: { data: null, error: null },
+          insert: { data: mockInvitation, error: null },
+        },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeague.id,
+      email: mockInvitationStatusExpired.email,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 201)
+    const body = await response.json()
+    assertExists(body.invitation)
+    assertExists(body.invite_url)
+  })
+
+  await t.step('allows resending to cancelled invitation', async () => {
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeague, error: null },
+        },
+        league_participants: {
+          select: { data: [], error: null, count: 1 },
+        },
+        invitations: {
+          select: { data: mockInvitationCancelled, error: null },
+          delete: { data: null, error: null },
+          insert: { data: mockInvitation, error: null },
+        },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeague.id,
+      email: mockInvitationCancelled.email,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 201)
+    const body = await response.json()
+    assertExists(body.invitation)
+    assertExists(body.invite_url)
+  })
+
+  await t.step('allows resending to declined invitation', async () => {
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeague, error: null },
+        },
+        league_participants: {
+          select: { data: [], error: null, count: 1 },
+        },
+        invitations: {
+          select: { data: mockInvitationDeclined, error: null },
+          delete: { data: null, error: null },
+          insert: { data: mockInvitation, error: null },
+        },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeague.id,
+      email: mockInvitationDeclined.email,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 201)
+    const body = await response.json()
+    assertExists(body.invitation)
+    assertExists(body.invite_url)
+  })
+
+  await t.step('returns 500 when delete fails during resend', async () => {
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeague, error: null },
+        },
+        league_participants: {
+          select: { data: [], error: null, count: 1 },
+        },
+        invitations: {
+          select: { data: mockInvitationStatusExpired, error: null },
+          delete: { data: null, error: { message: 'Delete failed' } },
+        },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: mockLeague.id,
+      email: mockInvitationStatusExpired.email,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 500)
+    const body = await response.json()
+    assertEquals(body.error, 'Failed to resend invitation')
   })
 })
 
