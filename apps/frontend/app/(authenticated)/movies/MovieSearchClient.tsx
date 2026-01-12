@@ -2,13 +2,15 @@
 
 import { useState, useCallback } from 'react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import type { TMDbSearchResult, TMDbSearchResponse, TMDbMovieDetails } from '@/types'
 import MovieSearchBar from './components/MovieSearchBar'
 import MovieFilters from './components/MovieFilters'
 import MovieGrid from './components/MovieGrid'
+import MovieGridSkeleton from './components/MovieGridSkeleton'
 import MovieDetailModal from './components/MovieDetailModal'
 
-export default function MovieSearchClient() {
+export default function MovieSearchClient(): React.ReactElement {
   const [results, setResults] = useState<TMDbSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -17,11 +19,7 @@ export default function MovieSearchClient() {
   const [totalPages, setTotalPages] = useState(0)
   const [totalResults, setTotalResults] = useState(0)
   const [loadingMore, setLoadingMore] = useState(false)
-
-  // Filters
   const [year, setYear] = useState<number | null>(null)
-
-  // Selected movie for detail modal
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [movieDetails, setMovieDetails] = useState<TMDbMovieDetails | null>(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
@@ -62,7 +60,11 @@ export default function MovieSearchClient() {
 
       if (data) {
         if (append) {
-          setResults((prev) => [...prev, ...data.results])
+          setResults((prev) => {
+            const existingIds = new Set(prev.map((m) => m.tmdb_id))
+            const newResults = data.results.filter((m) => !existingIds.has(m.tmdb_id))
+            return [...prev, ...newResults]
+          })
         } else {
           setResults(data.results)
         }
@@ -84,12 +86,6 @@ export default function MovieSearchClient() {
     },
     [searchMovies]
   )
-
-  const handleLoadMore = () => {
-    if (page < totalPages) {
-      searchMovies(query, page + 1, true)
-    }
-  }
 
   const handleYearChange = (newYear: number | null) => {
     setYear(newYear)
@@ -116,20 +112,25 @@ export default function MovieSearchClient() {
     setLoadingDetails(false)
   }
 
-  const handleCloseModal = () => {
+  function handleCloseModal(): void {
     setSelectedMovie(null)
     setMovieDetails(null)
   }
 
   const hasResults = results.length > 0
+  const hasMore = page < totalPages
   const showEmptyState = !loading && query && !hasResults && !error
   const showInitialState = !loading && !query && !hasResults
 
+  const sentinelRef = useInfiniteScroll({
+    hasMore,
+    isLoading: loading || loadingMore,
+    onLoadMore: () => searchMovies(query, page + 1, true),
+  })
+
   return (
     <div className="min-h-screen">
-      {/* Hero header with film grain texture */}
       <div className="relative overflow-hidden border-b border-border bg-gradient-to-b from-surface to-background">
-        {/* Subtle film grain overlay */}
         <div
           className="absolute inset-0 opacity-[0.015] pointer-events-none"
           style={{
@@ -147,19 +148,15 @@ export default function MovieSearchClient() {
             </p>
           </div>
 
-          {/* Search bar */}
           <div className="max-w-2xl mx-auto">
             <MovieSearchBar onSearch={handleSearch} loading={loading} />
           </div>
         </div>
 
-        {/* Decorative gold line */}
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-0.5 bg-gradient-to-r from-transparent via-gold to-transparent" />
       </div>
 
-      {/* Main content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Filters row - only show when we have results or a query */}
         {(hasResults || query) && (
           <div className="mb-8 animate-fade-in">
             <MovieFilters
@@ -170,14 +167,12 @@ export default function MovieSearchClient() {
           </div>
         )}
 
-        {/* Error state */}
         {error && (
           <div className="alert alert-error mb-6 animate-fade-in">
             <span className="font-medium">Error:</span> {error}
           </div>
         )}
 
-        {/* Initial state - show when no search yet */}
         {showInitialState && (
           <div className="text-center py-20 animate-fade-in">
             <div className="text-6xl mb-4">🎬</div>
@@ -187,7 +182,6 @@ export default function MovieSearchClient() {
           </div>
         )}
 
-        {/* Empty state */}
         {showEmptyState && (
           <div className="text-center py-20 animate-fade-in">
             <div className="text-6xl mb-4">🔍</div>
@@ -198,45 +192,25 @@ export default function MovieSearchClient() {
           </div>
         )}
 
-        {/* Loading state */}
-        {loading && (
-          <div className="flex justify-center py-20">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-10 h-10 border-2 border-gold border-t-transparent rounded-full animate-spin" />
-              <p className="text-foreground-secondary">Searching movies...</p>
-            </div>
-          </div>
-        )}
+        {loading && <MovieGridSkeleton count={12} />}
 
-        {/* Results grid */}
         {!loading && hasResults && (
           <>
             <MovieGrid movies={results} onMovieClick={handleMovieClick} />
 
-            {/* Load more button */}
-            {page < totalPages && (
-              <div className="mt-12 text-center">
-                <button
-                  onClick={handleLoadMore}
-                  disabled={loadingMore}
-                  className="btn btn-secondary px-8 py-3"
-                >
-                  {loadingMore ? (
-                    <span className="flex items-center gap-2">
-                      <span className="w-4 h-4 border-2 border-gold border-t-transparent rounded-full animate-spin" />
-                      Loading...
-                    </span>
-                  ) : (
-                    `Load More (${page} of ${totalPages})`
-                  )}
-                </button>
+            {loadingMore && (
+              <div className="mt-4 sm:mt-6">
+                <MovieGridSkeleton count={6} />
               </div>
+            )}
+
+            {hasMore && !loadingMore && (
+              <div ref={sentinelRef} className="h-4" aria-hidden="true" />
             )}
           </>
         )}
       </div>
 
-      {/* Movie detail modal */}
       {selectedMovie && (
         <MovieDetailModal
           movie={selectedMovie}

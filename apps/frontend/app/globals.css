@@ -67,6 +67,7 @@
   --animate-fade-in: fade-in 0.3s ease-out;
   --animate-slide-up: slide-up 0.3s ease-out;
   --animate-glow-pulse: glow-pulse 2s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.5s ease-in-out infinite;
 }
 
 /* === KEYFRAMES === */
@@ -83,6 +84,11 @@
 @keyframes glow-pulse {
   0%, 100% { box-shadow: 0 0 20px oklch(0.65 0.15 85 / 0.2); }
   50% { box-shadow: 0 0 30px oklch(0.65 0.15 85 / 0.4); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 /* === BASE LAYER === */
@@ -361,6 +367,18 @@
   /* Logo hover glow */
   .nav-logo:hover {
     filter: drop-shadow(0 0 8px oklch(0.65 0.15 85 / 0.3));
+  }
+
+  /* Skeleton loading */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-elevated) 25%,
+      var(--color-surface-hover) 50%,
+      var(--color-elevated) 75%
+    );
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
   }
 }
 
