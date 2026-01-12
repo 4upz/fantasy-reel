@@ -1,3 +1,4 @@
+import { createClient, SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from './cors.ts'
 
 /**
@@ -8,6 +9,52 @@ export function jsonResponse(data: unknown, status = 200): Response {
     status,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' }
   })
+}
+
+/**
+ * Result of authenticating a request
+ */
+export interface AuthResult {
+  user: User
+  supabase: SupabaseClient
+}
+
+/**
+ * Create an authenticated Supabase client and get the current user.
+ * Returns an error response if authentication fails.
+ */
+export async function authenticateRequest(req: Request): Promise<AuthResult | Response> {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    {
+      global: {
+        headers: { Authorization: req.headers.get('Authorization')! },
+      },
+    }
+  )
+
+  const { data: { user }, error } = await supabase.auth.getUser()
+
+  if (error || !user) {
+    return errorResponse('Unauthorized', 401)
+  }
+
+  return { user, supabase }
+}
+
+/**
+ * Type guard to check if auth result is an error response
+ */
+export function isAuthError(result: AuthResult | Response): result is Response {
+  return result instanceof Response
+}
+
+/**
+ * Check if an invitation is expired
+ */
+export function isInvitationExpired(expiresAt: string): boolean {
+  return new Date(expiresAt) < new Date()
 }
 
 /**
