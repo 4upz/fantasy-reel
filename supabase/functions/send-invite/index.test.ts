@@ -25,6 +25,12 @@ import {
 let mockSupabaseConfig: MockSupabaseConfig = {}
 let mockClient: ReturnType<typeof createMockSupabaseClient>
 
+// Mock user lookup by ID (for user_id path)
+let mockUserLookup: { user: { email: string } | null; error: { message: string } | null } = {
+  user: null,
+  error: null,
+}
+
 async function handleSendInvite(req: Request): Promise<Response> {
   const {
     jsonResponse,
@@ -47,17 +53,39 @@ async function handleSendInvite(req: Request): Promise<Response> {
       return errorResponse('Unauthorized', 401)
     }
 
-    const { league_id, email } = await req.json()
+    const { league_id, email, user_id } = await req.json()
 
     if (!league_id || !isValidUUID(league_id)) {
       return errorResponse('Valid league_id is required', 400)
     }
 
-    if (!email || !isValidEmail(email)) {
-      return errorResponse('Valid email is required', 400)
+    // Must provide either email or user_id
+    if (!email && !user_id) {
+      return errorResponse('Either email or user_id is required', 400)
     }
 
-    const normalizedEmail = email.toLowerCase().trim()
+    let normalizedEmail: string
+
+    if (user_id) {
+      // Look up user's email from user_id
+      if (!isValidUUID(user_id)) {
+        return errorResponse('Valid user_id is required', 400)
+      }
+
+      // Mock the admin user lookup
+      if (mockUserLookup.error || !mockUserLookup.user?.email) {
+        return errorResponse('User not found', 404)
+      }
+
+      normalizedEmail = mockUserLookup.user.email.toLowerCase().trim()
+    } else if (email) {
+      if (!isValidEmail(email)) {
+        return errorResponse('Valid email is required', 400)
+      }
+      normalizedEmail = email.toLowerCase().trim()
+    } else {
+      return errorResponse('Either email or user_id is required', 400)
+    }
 
     // Prevent self-invitation
     if (normalizedEmail === user.email?.toLowerCase()) {
@@ -224,6 +252,103 @@ Deno.test('send-invite: validation', async (t) => {
     assertEquals(response.status, 400)
     const body = await response.json()
     assertEquals(body.error, 'Valid email is required')
+  })
+})
+
+// ============================================================================
+// User ID Path Tests
+// ============================================================================
+
+Deno.test('send-invite: user_id path', async (t) => {
+  await t.step('returns 400 when neither email nor user_id provided', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: validUUID,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'Either email or user_id is required')
+  })
+
+  await t.step('returns 400 when user_id is invalid UUID', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+
+    const req = createMockAuthRequest({
+      league_id: validUUID,
+      user_id: 'not-a-uuid',
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'Valid user_id is required')
+  })
+
+  await t.step('returns 404 when user_id not found', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+    mockUserLookup = { user: null, error: { message: 'User not found' } }
+
+    const req = createMockAuthRequest({
+      league_id: validUUID,
+      user_id: mockUser2.id,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 404)
+    const body = await response.json()
+    assertEquals(body.error, 'User not found')
+  })
+
+  await t.step('creates invitation using user_id lookup', async () => {
+    mockSupabaseConfig = {
+      user: mockUser,
+      tables: {
+        leagues: {
+          select: { data: mockLeague, error: null },
+        },
+        league_participants: {
+          select: { data: [], error: null, count: 1 },
+        },
+        invitations: {
+          select: { data: null, error: null },
+          insert: { data: mockInvitation, error: null },
+        },
+      },
+    }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+    mockUserLookup = { user: { email: 'invitee@example.com' }, error: null }
+
+    const req = createMockAuthRequest({
+      league_id: mockLeague.id,
+      user_id: mockUser2.id,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 201)
+    const body = await response.json()
+    assertEquals(body.invitation.email, mockInvitation.email)
+  })
+
+  await t.step('prevents self-invitation via user_id', async () => {
+    mockSupabaseConfig = { user: mockUser }
+    mockClient = createMockSupabaseClient(mockSupabaseConfig)
+    mockUserLookup = { user: { email: mockUser.email }, error: null }
+
+    const req = createMockAuthRequest({
+      league_id: validUUID,
+      user_id: mockUser.id,
+    })
+    const response = await handleSendInvite(req)
+
+    assertEquals(response.status, 400)
+    const body = await response.json()
+    assertEquals(body.error, 'You cannot invite yourself to a league')
   })
 })
 

@@ -1,51 +1,68 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError } from '../_shared/utils.ts'
 
 interface SendInviteRequest {
   league_id: string
-  email: string
+  email?: string
+  user_id?: string
+}
+
+/**
+ * Create admin client for looking up user emails
+ */
+function createAdminClient() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  )
+}
+
+/**
+ * Resolve email from user_id lookup or validate provided email
+ */
+async function resolveEmail(user_id?: string, email?: string): Promise<string | Response> {
+  if (user_id) {
+    if (!isValidUUID(user_id)) {
+      return errorResponse('Valid user_id is required', 400)
+    }
+    const supabaseAdmin = createAdminClient()
+    const { data: targetUser, error } = await supabaseAdmin.auth.admin.getUserById(user_id)
+    if (error || !targetUser?.user?.email) {
+      return errorResponse('User not found', 404)
+    }
+    return targetUser.user.email.toLowerCase().trim()
+  }
+
+  if (email) {
+    if (!isValidEmail(email)) {
+      return errorResponse('Valid email is required', 400)
+    }
+    return email.toLowerCase().trim()
+  }
+
+  return errorResponse('Either email or user_id is required', 400)
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
   try {
-    // Create Supabase client with user auth
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    )
-
-    // Get the user from the JWT token
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseClient.auth.getUser()
-
-    if (authError || !user) {
-      return errorResponse('Unauthorized', 401)
-    }
+    const authResult = await authenticateRequest(req)
+    if (isAuthError(authResult)) return authResult
+    const { user, supabase: supabaseClient } = authResult
 
     // Parse request body
-    const { league_id, email }: SendInviteRequest = await req.json()
+    const { league_id, email, user_id }: SendInviteRequest = await req.json()
 
     // Validate required fields
     if (!league_id || !isValidUUID(league_id)) {
       return errorResponse('Valid league_id is required', 400)
     }
 
-    if (!email || !isValidEmail(email)) {
-      return errorResponse('Valid email is required', 400)
-    }
-
-    const normalizedEmail = email.toLowerCase().trim()
+    // Resolve email from user_id or validate provided email
+    const normalizedEmail = await resolveEmail(user_id, email)
+    if (normalizedEmail instanceof Response) return normalizedEmail
 
     // Prevent self-invitation
     if (normalizedEmail === user.email?.toLowerCase()) {
