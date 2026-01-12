@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { formatDate, isExpired } from '@/utils/date'
+import { LoadingSpinner } from '@/app/components/LoadingSpinner'
+import { ErrorAlert } from '@/app/components/FormError'
 import type { Invitation } from '@/types'
 
 interface Props {
@@ -12,7 +14,7 @@ interface Props {
   leagueStatus: string
 }
 
-type EffectiveStatus = 'pending' | 'accepted' | 'declined' | 'expired'
+type EffectiveStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled'
 
 export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Props): React.ReactElement | null {
   const supabase = createClient()
@@ -20,6 +22,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
   const [resendingId, setResendingId] = useState<string | null>(null)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
@@ -108,6 +111,29 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
     setResendingId(null)
   }
 
+  async function handleCancel(invitationId: string): Promise<void> {
+    setCancellingId(invitationId)
+    setError(null)
+
+    const { error: cancelError } = await callEdgeFunction('cancel-invitation', {
+      body: { invitation_id: invitationId },
+    })
+
+    if (cancelError) {
+      setError(cancelError)
+    } else {
+      setInvitations((prev) =>
+        prev.map((inv) =>
+          inv.id === invitationId
+            ? { ...inv, status: 'cancelled' as const, responded_at: new Date().toISOString() }
+            : inv
+        )
+      )
+    }
+
+    setCancellingId(null)
+  }
+
   if (!isOwner || leagueStatus !== 'setup') {
     return null
   }
@@ -135,14 +161,14 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
       {isExpanded && (
         <div className="border-t border-gray-200 px-4 py-4 sm:px-6">
           {loading ? (
-            <LoadingSpinner />
+            <LoadingSpinner message="Loading invitations..." />
           ) : invitations.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-4">
-              No invitations sent yet. Use the "Invite Players" button to invite people to your league.
+              No invitations sent yet. Use the &quot;Invite Players&quot; button to invite people to your league.
             </p>
           ) : (
             <>
-              {error && <ErrorMessage message={error} />}
+              {error && <ErrorAlert message={error} />}
 
               <div className="space-y-3">
                 {invitations.map((invitation) => (
@@ -151,7 +177,9 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
                     invitation={invitation}
                     onCopy={handleCopyLink}
                     onResend={handleResend}
+                    onCancel={handleCancel}
                     isResending={resendingId === invitation.id}
+                    isCancelling={cancellingId === invitation.id}
                     isCopied={copiedId === invitation.id}
                   />
                 ))}
@@ -171,60 +199,139 @@ function getEffectiveStatus(invitation: Invitation): EffectiveStatus {
   return invitation.status
 }
 
-const STATUS_BADGE_STYLES: Record<EffectiveStatus, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  accepted: 'bg-green-100 text-green-800',
-  declined: 'bg-red-100 text-red-800',
-  expired: 'bg-gray-100 text-gray-800',
+const STATUS_CONFIG: Record<EffectiveStatus, { bg: string; dot: string; label: string }> = {
+  pending: { bg: 'bg-amber-50', dot: 'bg-amber-400', label: 'Pending' },
+  accepted: { bg: 'bg-emerald-50', dot: 'bg-emerald-400', label: 'Accepted' },
+  declined: { bg: 'bg-rose-50', dot: 'bg-rose-400', label: 'Declined' },
+  expired: { bg: 'bg-slate-50', dot: 'bg-slate-300', label: 'Expired' },
+  cancelled: { bg: 'bg-slate-50', dot: 'bg-slate-300', label: 'Cancelled' },
 }
 
 interface InvitationRowProps {
   invitation: Invitation
   onCopy: (invitation: Invitation) => void
   onResend: (id: string) => void
+  onCancel: (id: string) => void
   isResending: boolean
+  isCancelling: boolean
   isCopied: boolean
 }
 
-function InvitationRow({ invitation, onCopy, onResend, isResending, isCopied }: InvitationRowProps): React.ReactElement {
+function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, isCancelling, isCopied }: InvitationRowProps): React.ReactElement {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const status = getEffectiveStatus(invitation)
+  const statusConfig = STATUS_CONFIG[status]
   const canCopy = status === 'pending'
+  const canCancel = status === 'pending'
   const canResend = status === 'expired'
+  const hasActions = canCopy || canCancel || canResend
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [menuOpen])
 
   return (
-    <div className="flex items-center justify-between p-3 border rounded-lg bg-gray-50">
-      <div className="flex-1">
-        <div className="flex items-center space-x-3">
-          <span className="font-medium text-gray-900">{invitation.email}</span>
-          <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full ${STATUS_BADGE_STYLES[status]}`}>
-            {status.charAt(0).toUpperCase() + status.slice(1)}
+    <div className={`group relative flex items-center justify-between p-3 rounded-lg border border-slate-200 ${statusConfig.bg} transition-all duration-150 hover:border-slate-300`}>
+      {/* Left side: Email and metadata */}
+      <div className="flex-1 min-w-0 pr-4">
+        <div className="flex items-center gap-2.5">
+          <span className="font-medium text-slate-800 truncate">{invitation.email}</span>
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-slate-600 bg-white/60 border border-slate-200/50 shrink-0">
+            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
+            {statusConfig.label}
           </span>
         </div>
-        <div className="mt-1 text-sm text-gray-500">
+        <p className="mt-0.5 text-xs text-slate-500">
           Sent {formatDate(invitation.sent_at)}
-          {invitation.responded_at && <> · Responded {formatDate(invitation.responded_at)}</>}
-        </div>
+          {invitation.responded_at && <span className="text-slate-400"> · Responded {formatDate(invitation.responded_at)}</span>}
+        </p>
       </div>
 
-      <div className="flex space-x-2">
-        {canCopy && (
+      {/* Right side: Actions menu */}
+      {hasActions && (
+        <div className="relative" ref={menuRef}>
           <button
-            onClick={() => onCopy(invitation)}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-1.5 px-3 rounded text-sm transition-colors"
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 hover:bg-white/80 transition-colors"
+            aria-label="Actions"
           >
-            {isCopied ? 'Copied!' : 'Copy Link'}
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+            </svg>
           </button>
-        )}
-        {canResend && (
-          <button
-            onClick={() => onResend(invitation.id)}
-            disabled={isResending}
-            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-medium py-1.5 px-3 rounded text-sm transition-colors"
-          >
-            {isResending ? 'Resending...' : 'Resend'}
-          </button>
-        )}
-      </div>
+
+          {/* Dropdown menu */}
+          {menuOpen && (
+            <div className="absolute right-0 mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 animate-in fade-in slide-in-from-top-1 duration-150">
+              {canCopy && (
+                <button
+                  onClick={() => {
+                    onCopy(invitation)
+                    setMenuOpen(false)
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  {isCopied ? (
+                    <>
+                      <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="text-emerald-600">Copied!</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                      </svg>
+                      Copy invite link
+                    </>
+                  )}
+                </button>
+              )}
+              {canCancel && (
+                <button
+                  onClick={() => {
+                    onCancel(invitation.id)
+                    setMenuOpen(false)
+                  }}
+                  disabled={isCancelling}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 disabled:opacity-50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  {isCancelling ? 'Cancelling...' : 'Cancel invitation'}
+                </button>
+              )}
+              {canResend && (
+                <button
+                  onClick={() => {
+                    onResend(invitation.id)
+                    setMenuOpen(false)
+                  }}
+                  disabled={isResending}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-indigo-600 hover:bg-indigo-50 disabled:opacity-50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+                  </svg>
+                  {isResending ? 'Resending...' : 'Resend invitation'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -244,19 +351,3 @@ function ChevronIcon({ isExpanded }: { isExpanded: boolean }): React.ReactElemen
   )
 }
 
-function LoadingSpinner(): React.ReactElement {
-  return (
-    <div className="text-center py-4">
-      <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-      <p className="mt-2 text-sm text-gray-600">Loading invitations...</p>
-    </div>
-  )
-}
-
-function ErrorMessage({ message }: { message: string }): React.ReactElement {
-  return (
-    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-      <p className="text-sm text-red-600">{message}</p>
-    </div>
-  )
-}

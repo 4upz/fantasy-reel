@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { formatDate, getDaysUntil } from '@/utils/date'
+import { LoadingSpinner } from '@/app/components/LoadingSpinner'
+import { ErrorAlert } from '@/app/components/FormError'
 import type { InvitationWithLeague } from '@/types'
 
 export default function PendingInvitations(): React.ReactElement | null {
@@ -24,10 +26,18 @@ export default function PendingInvitations(): React.ReactElement | null {
     setLoading(true)
     setError(null)
 
+    // Get current user's email to filter invitations sent TO them
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user?.email) {
+      setLoading(false)
+      return
+    }
+
     const { data, error: queryError } = await supabase
       .from('invitations')
       .select('*, leagues(id, name, status, owner_id)')
       .eq('status', 'pending')
+      .eq('email', user.email)
       .gte('expires_at', new Date().toISOString())
       .order('sent_at', { ascending: false })
 
@@ -35,7 +45,12 @@ export default function PendingInvitations(): React.ReactElement | null {
       console.error('Error fetching invitations:', queryError)
       setError('Failed to load invitations')
     } else {
-      setInvitations((data as InvitationWithLeague[]) || [])
+      // Filter out invitations where the league was deleted or inaccessible
+      const validInvitations = (data || []).filter(
+        (inv): inv is InvitationWithLeague & { leagues: NonNullable<InvitationWithLeague['leagues']> } =>
+          inv.leagues !== null
+      )
+      setInvitations(validInvitations)
     }
 
     setLoading(false)
@@ -77,7 +92,7 @@ export default function PendingInvitations(): React.ReactElement | null {
           <LoadingSpinner message="Loading invitations..." />
         ) : (
           <>
-            {error && <ErrorMessage message={error} />}
+            {error && <ErrorAlert message={error} />}
 
             <div className="space-y-3">
               {invitations.map((invitation) => (
@@ -104,9 +119,13 @@ interface InvitationCardProps {
   isDeclining: boolean
 }
 
-function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: InvitationCardProps): React.ReactElement {
+function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: InvitationCardProps): React.ReactElement | null {
   const daysLeft = getDaysUntil(invitation.expires_at)
   const isExpiringSoon = daysLeft <= 2
+
+  if (!invitation.leagues) {
+    return null
+  }
 
   return (
     <div className="border rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
@@ -145,19 +164,3 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
   )
 }
 
-function LoadingSpinner({ message }: { message: string }): React.ReactElement {
-  return (
-    <div className="text-center py-4">
-      <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
-      <p className="mt-2 text-sm text-gray-600">{message}</p>
-    </div>
-  )
-}
-
-function ErrorMessage({ message }: { message: string }): React.ReactElement {
-  return (
-    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-      <p className="text-sm text-red-600">{message}</p>
-    </div>
-  )
-}

@@ -93,7 +93,7 @@ export interface Invitation {
   invited_by: string
   email: string
   token: string
-  status: 'pending' | 'accepted' | 'declined' | 'expired'
+  status: 'pending' | 'accepted' | 'declined' | 'expired' | 'cancelled'
   sent_at: string
   expires_at: string
   responded_at: string | null
@@ -117,7 +117,7 @@ export interface InvitationWithLeague extends Invitation {
     name: string
     status: 'setup' | 'drafting' | 'active' | 'completed'
     owner_id: string
-  }
+  } | null
 }
 
 export interface NextPickInfo {
