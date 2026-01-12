@@ -3,6 +3,8 @@
 import { useState, useMemo } from 'react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import MoviePicker from './MoviePicker'
+import DraftProgressRing from './DraftProgressRing'
+import PickOrderQueue from './PickOrderQueue'
 import type { League, ParticipantWithTeam, DraftPickWithDetails, Movie, NextPickInfo } from '@/types'
 
 interface Props {
@@ -11,7 +13,9 @@ interface Props {
   draftPicks: DraftPickWithDetails[]
   availableMovies: Movie[]
   currentUserId: string
+  favoriteMovieIds?: Set<string>
   onPickMade: () => void
+  onToggleFavorite?: (movieId: string) => void
 }
 
 const TOTAL_ROUNDS = 5
@@ -22,18 +26,20 @@ export default function DraftBoard({
   draftPicks,
   availableMovies,
   currentUserId,
+  favoriteMovieIds = new Set(),
   onPickMade,
+  onToggleFavorite,
 }: Props) {
   const [picking, setPicking] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const totalParticipants = participants.length
+  const totalPicks = totalParticipants * TOTAL_ROUNDS
+  const picksMade = draftPicks.length
+
   // Calculate whose turn it is
   const nextPick = useMemo<NextPickInfo | null>(() => {
-    const totalParticipants = participants.length
     if (totalParticipants === 0) return null
-
-    const picksMade = draftPicks.length
-    const totalPicks = totalParticipants * TOTAL_ROUNDS
 
     // Draft is complete
     if (picksMade >= totalPicks) return null
@@ -59,10 +65,15 @@ export default function DraftBoard({
       participant_id: nextParticipant.id,
       user_id: nextParticipant.user_id,
     }
-  }, [participants, draftPicks])
+  }, [participants, picksMade, totalParticipants, totalPicks])
 
   const isMyTurn = nextPick?.user_id === currentUserId
   const isDraftComplete = league.status === 'drafting' && !nextPick
+
+  // Get set of drafted movie IDs
+  const draftedMovieIds = useMemo(() => {
+    return new Set(draftPicks.map((pick) => pick.movie_id))
+  }, [draftPicks])
 
   const handleDraftPick = async (movieId: string) => {
     setPicking(true)
@@ -109,7 +120,10 @@ export default function DraftBoard({
   if (league.status === 'active' || league.status === 'completed') {
     return (
       <div className="card p-6">
-        <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Results</h2>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold font-display text-foreground">Draft Results</h2>
+          <DraftProgressRing current={picksMade} total={totalPicks} size="sm" showLabel={false} />
+        </div>
         <p className="text-foreground-secondary mb-4">The draft is complete!</p>
         <PickHistory draftPicks={draftPicks} />
       </div>
@@ -117,44 +131,98 @@ export default function DraftBoard({
   }
 
   return (
-    <div className="card p-6">
-      <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
+    <div className="space-y-6">
+      {/* Draft Header Card */}
+      <div className="card p-6">
+        <div className="flex items-start justify-between gap-6">
+          {/* Left: Title and Status */}
+          <div className="flex-1">
+            <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
 
-      {/* Current Turn Indicator */}
-      {nextPick && (
-        <div
-          className={`mb-4 p-4 rounded-lg border ${
-            isMyTurn
-              ? 'bg-success-bg border-success animate-glow-pulse'
-              : 'bg-elevated border-border'
-          }`}
-        >
-          <p className="font-medium text-foreground">
-            Round {nextPick.round}, Pick {nextPick.pick_number}
-          </p>
-          <p className={isMyTurn ? 'text-success font-bold' : 'text-foreground-secondary'}>
-            {isMyTurn ? "It's your turn to pick!" : `Waiting for ${getTeamName(nextPick.user_id)}`}
-          </p>
+            {/* Current Turn Indicator */}
+            {nextPick && (
+              <div
+                className={`p-4 rounded-xl border-2 transition-all ${
+                  isMyTurn
+                    ? 'bg-success-bg border-success shadow-glow-gold animate-glow-pulse'
+                    : 'bg-elevated border-border'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${
+                      isMyTurn ? 'bg-success text-background' : 'bg-gold text-background'
+                    }`}
+                  >
+                    {isMyTurn ? '👆' : '⏳'}
+                  </div>
+                  <div>
+                    <p className="text-sm text-foreground-muted">
+                      Round {nextPick.round}, Pick {nextPick.pick_number}
+                    </p>
+                    <p
+                      className={`text-lg font-semibold ${
+                        isMyTurn ? 'text-success' : 'text-foreground'
+                      }`}
+                    >
+                      {isMyTurn ? "It's your turn!" : `${getTeamName(nextPick.user_id)}'s pick`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {isDraftComplete && (
+              <div className="p-4 rounded-xl bg-info-bg border-2 border-info">
+                <p className="text-info font-semibold text-lg">
+                  Draft complete! Finalizing results...
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Right: Progress Ring */}
+          <div className="flex-shrink-0">
+            <DraftProgressRing current={picksMade} total={totalPicks} size="lg" />
+          </div>
         </div>
-      )}
 
-      {isDraftComplete && (
-        <div className="mb-4 p-4 rounded-lg bg-info-bg border border-info">
-          <p className="text-info font-medium">Draft complete! Finalizing results...</p>
-        </div>
-      )}
-
-      {error && <div className="alert alert-error mb-4">{error}</div>}
-
-      {/* Draft Pick History */}
-      <div className="mb-6">
-        <h3 className="text-lg font-medium text-foreground mb-3">Pick History</h3>
-        <PickHistory draftPicks={draftPicks} />
+        {/* Pick Order Queue */}
+        {nextPick && (
+          <div className="mt-6 pt-6 border-t border-border">
+            <PickOrderQueue
+              participants={participants}
+              currentPickIndex={picksMade}
+              currentUserId={currentUserId}
+              rounds={TOTAL_ROUNDS}
+            />
+          </div>
+        )}
       </div>
 
-      {/* Movie Picker (only show if it's my turn) */}
-      {isMyTurn && (
-        <MoviePicker movies={availableMovies} picking={picking} onPick={handleDraftPick} />
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Movie Picker - Always visible for browsing, but only pickable on your turn */}
+      <div className="card p-6">
+        <MoviePicker
+          movies={availableMovies}
+          draftedMovieIds={draftedMovieIds}
+          favoriteMovieIds={favoriteMovieIds}
+          isMyTurn={isMyTurn}
+          picking={picking}
+          onPick={handleDraftPick}
+          onToggleFavorite={onToggleFavorite}
+        />
+      </div>
+
+      {/* Pick History */}
+      {draftPicks.length > 0 && (
+        <div className="card p-6">
+          <h3 className="text-lg font-display font-semibold text-foreground mb-4">
+            Pick History
+          </h3>
+          <PickHistory draftPicks={draftPicks} />
+        </div>
       )}
     </div>
   )
@@ -165,18 +233,52 @@ function PickHistory({ draftPicks }: { draftPicks: DraftPickWithDetails[] }) {
     return <p className="text-foreground-muted">No picks yet</p>
   }
 
+  // Sort by most recent first
+  const sortedPicks = [...draftPicks].sort((a, b) => {
+    if (a.round !== b.round) return b.round - a.round
+    return b.pick_number - a.pick_number
+  })
+
   return (
-    <div className="space-y-2 max-h-60 overflow-y-auto">
-      {draftPicks.map((pick) => (
+    <div className="space-y-2 max-h-80 overflow-y-auto">
+      {sortedPicks.map((pick, index) => (
         <div
           key={pick.id}
-          className="flex items-center p-2 bg-elevated rounded-lg border border-border"
+          className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+            index === 0
+              ? 'bg-gold-muted border-gold animate-fade-in'
+              : 'bg-elevated border-border'
+          }`}
         >
-          <span className="text-sm text-foreground-muted w-20">
-            R{pick.round} P{pick.pick_number}
-          </span>
-          <span className="font-medium text-foreground flex-1 truncate">{pick.teams?.name}</span>
-          <span className="text-foreground-secondary truncate max-w-48">{pick.movies?.title}</span>
+          {/* Movie Poster Thumbnail */}
+          {pick.movies?.poster_url ? (
+            <img
+              src={pick.movies.poster_url}
+              alt={pick.movies.title}
+              className="w-10 h-15 object-cover rounded-lg border border-border flex-shrink-0"
+            />
+          ) : (
+            <div className="w-10 h-15 bg-surface rounded-lg border border-border flex items-center justify-center flex-shrink-0">
+              <span className="text-lg">🎬</span>
+            </div>
+          )}
+
+          {/* Pick Info */}
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-foreground truncate">{pick.movies?.title}</p>
+            <p className="text-sm text-foreground-muted truncate">{pick.teams?.name}</p>
+          </div>
+
+          {/* Round/Pick Badge */}
+          <div className="flex-shrink-0 text-right">
+            <span
+              className={`inline-block px-2 py-1 rounded-lg text-xs font-medium ${
+                index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-muted'
+              }`}
+            >
+              R{pick.round} P{pick.pick_number}
+            </span>
+          </div>
         </div>
       ))}
     </div>
