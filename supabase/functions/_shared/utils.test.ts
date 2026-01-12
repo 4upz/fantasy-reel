@@ -1,5 +1,6 @@
 /**
  * Unit tests for shared utility functions
+ * Pure unit tests that don't require integration infrastructure
  */
 
 import { assertEquals, assertExists } from '@std/assert'
@@ -11,13 +12,55 @@ import {
   handleCorsPreflightRequest,
 } from './utils.ts'
 import { corsHeaders } from './cors.ts'
-import {
-  validUUID,
-  invalidUUIDs,
-  validEmails,
-  invalidEmails,
-} from '../_test_utils/fixtures.ts'
-import { createMockRequest, createMockOptionsRequest } from '../_test_utils/mocks.ts'
+
+// ============================================================================
+// Test Fixtures
+// ============================================================================
+
+const VALID_UUID = 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
+
+const INVALID_UUIDS = [
+  '',
+  'not-a-uuid',
+  '12345',
+  'a0eebc99-9c0b-4ef8-bb6d',
+  'g0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+]
+
+const VALID_EMAILS = [
+  'test@example.com',
+  'user.name@domain.co.uk',
+  'user+tag@example.org',
+]
+
+const INVALID_EMAILS = ['', 'not-an-email', '@example.com', 'user@', 'user@.com']
+
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
+function createMockRequest(method = 'POST'): Request {
+  return new Request('http://localhost/test', {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+function createMockOptionsRequest(): Request {
+  return new Request('http://localhost/test', {
+    method: 'OPTIONS',
+    headers: {
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'authorization, content-type',
+    },
+  })
+}
+
+function assertHasCorsHeaders(response: Response): void {
+  for (const [header, value] of Object.entries(corsHeaders)) {
+    assertEquals(response.headers.get(header), value)
+  }
+}
 
 // ============================================================================
 // isValidUUID Tests
@@ -25,14 +68,13 @@ import { createMockRequest, createMockOptionsRequest } from '../_test_utils/mock
 
 Deno.test('isValidUUID', async (t) => {
   await t.step('returns true for valid UUIDs', () => {
-    assertEquals(isValidUUID(validUUID), true)
-    assertEquals(isValidUUID('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'), true)
-    assertEquals(isValidUUID('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'), true) // uppercase
+    assertEquals(isValidUUID(VALID_UUID), true)
+    assertEquals(isValidUUID('A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'), true)
     assertEquals(isValidUUID('550e8400-e29b-41d4-a716-446655440000'), true)
   })
 
   await t.step('returns false for invalid UUIDs', () => {
-    for (const invalid of invalidUUIDs) {
+    for (const invalid of INVALID_UUIDS) {
       assertEquals(isValidUUID(invalid), false, `Expected "${invalid}" to be invalid`)
     }
   })
@@ -50,13 +92,13 @@ Deno.test('isValidUUID', async (t) => {
 
 Deno.test('isValidEmail', async (t) => {
   await t.step('returns true for valid emails', () => {
-    for (const email of validEmails) {
+    for (const email of VALID_EMAILS) {
       assertEquals(isValidEmail(email), true, `Expected "${email}" to be valid`)
     }
   })
 
   await t.step('returns false for invalid emails', () => {
-    for (const email of invalidEmails) {
+    for (const email of INVALID_EMAILS) {
       assertEquals(isValidEmail(email), false, `Expected "${email}" to be invalid`)
     }
   })
@@ -73,9 +115,7 @@ Deno.test('jsonResponse', async (t) => {
 
     assertEquals(response.status, 200)
     assertEquals(response.headers.get('Content-Type'), 'application/json')
-
-    const body = await response.json()
-    assertEquals(body, data)
+    assertEquals(await response.json(), data)
   })
 
   await t.step('creates response with custom status', async () => {
@@ -83,17 +123,12 @@ Deno.test('jsonResponse', async (t) => {
     const response = jsonResponse(data, 201)
 
     assertEquals(response.status, 201)
-
-    const body = await response.json()
-    assertEquals(body, data)
+    assertEquals(await response.json(), data)
   })
 
   await t.step('includes CORS headers', () => {
     const response = jsonResponse({ test: true })
-
-    for (const [header, value] of Object.entries(corsHeaders)) {
-      assertEquals(response.headers.get(header), value)
-    }
+    assertHasCorsHeaders(response)
   })
 
   await t.step('handles complex nested data', async () => {
@@ -103,15 +138,13 @@ Deno.test('jsonResponse', async (t) => {
       meta: { count: 2, page: 1 },
     }
     const response = jsonResponse(data)
-
-    const body = await response.json()
-    assertEquals(body, data)
+    assertEquals(await response.json(), data)
   })
 
   await t.step('handles null and empty data', async () => {
-    assertEquals((await jsonResponse(null).json()), null)
-    assertEquals((await jsonResponse({}).json()), {})
-    assertEquals((await jsonResponse([]).json()), [])
+    assertEquals(await jsonResponse(null).json(), null)
+    assertEquals(await jsonResponse({}).json(), {})
+    assertEquals(await jsonResponse([]).json(), [])
   })
 })
 
@@ -125,40 +158,33 @@ Deno.test('errorResponse', async (t) => {
 
     assertEquals(response.status, 500)
     assertEquals(response.headers.get('Content-Type'), 'application/json')
-
-    const body = await response.json()
-    assertEquals(body, { error: 'Something went wrong' })
+    assertEquals(await response.json(), { error: 'Something went wrong' })
   })
 
   await t.step('creates error response with custom status', async () => {
     const response = errorResponse('Not found', 404)
 
     assertEquals(response.status, 404)
-
-    const body = await response.json()
-    assertEquals(body, { error: 'Not found' })
+    assertEquals(await response.json(), { error: 'Not found' })
   })
 
-  await t.step('creates common error responses', async () => {
-    const unauthorized = errorResponse('Unauthorized', 401)
-    assertEquals(unauthorized.status, 401)
-    assertEquals((await unauthorized.json()), { error: 'Unauthorized' })
+  await t.step('creates common HTTP error responses', async () => {
+    const testCases = [
+      { message: 'Unauthorized', status: 401 },
+      { message: 'Invalid input', status: 400 },
+      { message: 'Access denied', status: 403 },
+    ]
 
-    const badRequest = errorResponse('Invalid input', 400)
-    assertEquals(badRequest.status, 400)
-    assertEquals((await badRequest.json()), { error: 'Invalid input' })
-
-    const forbidden = errorResponse('Access denied', 403)
-    assertEquals(forbidden.status, 403)
-    assertEquals((await forbidden.json()), { error: 'Access denied' })
+    for (const { message, status } of testCases) {
+      const response = errorResponse(message, status)
+      assertEquals(response.status, status)
+      assertEquals(await response.json(), { error: message })
+    }
   })
 
   await t.step('includes CORS headers', () => {
     const response = errorResponse('Test error', 400)
-
-    for (const [header, value] of Object.entries(corsHeaders)) {
-      assertEquals(response.headers.get(header), value)
-    }
+    assertHasCorsHeaders(response)
   })
 })
 
@@ -168,32 +194,19 @@ Deno.test('errorResponse', async (t) => {
 
 Deno.test('handleCorsPreflightRequest', async (t) => {
   await t.step('returns Response for OPTIONS request', () => {
-    const optionsRequest = createMockOptionsRequest()
-    const response = handleCorsPreflightRequest(optionsRequest)
+    const response = handleCorsPreflightRequest(createMockOptionsRequest())
 
     assertExists(response)
     assertEquals(response!.status, 200)
+    assertHasCorsHeaders(response!)
   })
 
   await t.step('returns null for non-OPTIONS requests', () => {
-    const postRequest = createMockRequest({ method: 'POST' })
-    const getRequest = createMockRequest({ method: 'GET' })
-    const putRequest = createMockRequest({ method: 'PUT' })
-    const deleteRequest = createMockRequest({ method: 'DELETE' })
+    const methods = ['POST', 'GET', 'PUT', 'DELETE']
 
-    assertEquals(handleCorsPreflightRequest(postRequest), null)
-    assertEquals(handleCorsPreflightRequest(getRequest), null)
-    assertEquals(handleCorsPreflightRequest(putRequest), null)
-    assertEquals(handleCorsPreflightRequest(deleteRequest), null)
-  })
-
-  await t.step('includes CORS headers in preflight response', () => {
-    const optionsRequest = createMockOptionsRequest()
-    const response = handleCorsPreflightRequest(optionsRequest)
-
-    assertExists(response)
-    for (const [header, value] of Object.entries(corsHeaders)) {
-      assertEquals(response!.headers.get(header), value)
+    for (const method of methods) {
+      const response = handleCorsPreflightRequest(createMockRequest(method))
+      assertEquals(response, null, `Expected null for ${method} request`)
     }
   })
 })

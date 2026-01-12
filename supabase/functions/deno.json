@@ -1,7 +1,9 @@
 {
   "tasks": {
-    "test": "deno test --allow-env --allow-net --allow-read",
-    "test:watch": "deno test --allow-env --allow-net --allow-read --watch"
+    "test": "deno test --allow-all tests/",
+    "test:watch": "deno test --allow-all tests/ --watch",
+    "test:unit": "deno test --allow-all _shared/",
+    "test:all": "deno test --allow-all tests/ _shared/"
   },
   "imports": {
     "@std/assert": "jsr:@std/assert@^1.0.0",
