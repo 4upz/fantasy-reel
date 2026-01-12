@@ -380,6 +380,31 @@
     background-size: 200% 100%;
     animation: var(--animate-shimmer);
   }
+
+  /* Floating search bar */
+  .search-bar-floating {
+    position: fixed;
+    top: 4rem;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    background: oklch(0.1 0 0 / 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--shadow-soft);
+    padding: 0.75rem 0;
+    transform: translateY(-100%);
+    opacity: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    pointer-events: none;
+  }
+
+  .search-bar-floating.visible {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 @keyframes slide-in-right {

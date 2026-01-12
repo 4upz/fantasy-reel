@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
+import { useScrollPosition } from '@/hooks/useScrollPosition'
 import type { TMDbSearchResult, TMDbSearchResponse, TMDbMovieDetails } from '@/types'
 import MovieSearchBar from './components/MovieSearchBar'
 import MovieFilters from './components/MovieFilters'
@@ -82,6 +83,7 @@ export default function MovieSearchClient(): React.ReactElement {
   const handleSearch = useCallback(
     (newQuery: string) => {
       setQuery(newQuery)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
       searchMovies(newQuery, 1)
     },
     [searchMovies]
@@ -128,8 +130,21 @@ export default function MovieSearchClient(): React.ReactElement {
     onLoadMore: () => searchMovies(query, page + 1, true),
   })
 
+  const isScrolled = useScrollPosition({ threshold: 200 })
+
   return (
     <div className="min-h-screen">
+      <div className={`search-bar-floating ${isScrolled ? 'visible' : ''}`}>
+        <div className="max-w-3xl mx-auto px-4">
+          <MovieSearchBar
+            onSearch={handleSearch}
+            loading={loading}
+            compact
+            initialValue={query}
+          />
+        </div>
+      </div>
+
       <div className="relative overflow-hidden border-b border-border bg-gradient-to-b from-surface to-background">
         <div
           className="absolute inset-0 opacity-[0.015] pointer-events-none"
@@ -149,7 +164,7 @@ export default function MovieSearchClient(): React.ReactElement {
           </div>
 
           <div className="max-w-2xl mx-auto">
-            <MovieSearchBar onSearch={handleSearch} loading={loading} />
+            <MovieSearchBar onSearch={handleSearch} loading={loading} initialValue={query} />
           </div>
         </div>
 

@@ -5,36 +5,40 @@ import { useState, useEffect, useRef } from 'react'
 interface Props {
   onSearch: (query: string) => void
   loading: boolean
+  compact?: boolean
+  initialValue?: string
 }
 
-export default function MovieSearchBar({ onSearch, loading }: Props) {
-  const [value, setValue] = useState('')
-  const debounceRef = useRef<NodeJS.Timeout | null>(null)
+export default function MovieSearchBar({
+  onSearch,
+  loading,
+  compact = false,
+  initialValue = '',
+}: Props): React.ReactElement {
+  const [value, setValue] = useState(initialValue)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current)
-    }
+    setValue(initialValue)
+  }, [initialValue])
 
-    debounceRef.current = setTimeout(() => {
-      onSearch(value)
-    }, 300)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    debounceRef.current = setTimeout(() => onSearch(value), 300)
 
     return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current)
-      }
+      if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [value, onSearch])
 
-  const handleClear = () => {
+  function handleClear(): void {
     setValue('')
     onSearch('')
   }
 
   return (
     <div className="relative group">
-      {/* Search icon */}
       <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
         <svg
           className="w-5 h-5 text-foreground-muted group-focus-within:text-gold transition-colors"
@@ -51,16 +55,16 @@ export default function MovieSearchBar({ onSearch, loading }: Props) {
         </svg>
       </div>
 
-      {/* Input field */}
       <input
         type="text"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="Search for movies..."
-        className="w-full pl-12 pr-12 py-4 text-lg bg-elevated border border-border rounded-xl text-foreground placeholder:text-foreground-muted focus:border-gold focus:ring-2 focus:ring-gold-muted focus:outline-none transition-all"
+        className={`w-full pl-12 pr-12 bg-elevated border border-border rounded-xl text-foreground placeholder:text-foreground-muted focus:border-gold focus:ring-2 focus:ring-gold-muted focus:outline-none transition-all ${
+          compact ? 'py-2.5 text-base' : 'py-4 text-lg'
+        }`}
       />
 
-      {/* Loading spinner or clear button */}
       <div className="absolute right-4 top-1/2 -translate-y-1/2">
         {loading && (
           <div className="w-5 h-5 border-2 border-gold border-t-transparent rounded-full animate-spin" />
@@ -83,8 +87,9 @@ export default function MovieSearchBar({ onSearch, loading }: Props) {
         )}
       </div>
 
-      {/* Subtle glow effect on focus */}
-      <div className="absolute inset-0 rounded-xl bg-gold/0 group-focus-within:bg-gold/5 transition-colors pointer-events-none" />
+      {!compact && (
+        <div className="absolute inset-0 rounded-xl bg-gold/0 group-focus-within:bg-gold/5 transition-colors pointer-events-none" />
+      )}
     </div>
   )
 }
