@@ -326,6 +326,160 @@ Common issues:
    ORDER BY start_time DESC;
    ```
 
+## Local Testing
+
+The scoring system can be tested locally with some manual steps since pg_cron's background scheduler has limitations in local development.
+
+### Prerequisites
+
+1. **API Keys** - You need OMDB and TMDB API keys:
+   ```bash
+   # Get a free OMDB key at: https://www.omdbapi.com/apikey.aspx
+   # Get a free TMDB key at: https://www.themoviedb.org/settings/api
+   ```
+
+2. **Set environment variables** for Edge Functions:
+   ```bash
+   # In supabase/functions/.env.local (create if not exists)
+   OMDB_API_KEY=your_omdb_key
+   TMDB_API_KEY=your_tmdb_bearer_token
+   ```
+
+### Step-by-Step Local Testing
+
+#### 1. Start Supabase and Edge Functions
+
+```bash
+# Terminal 1: Start Supabase
+npx supabase start
+
+# Terminal 2: Serve Edge Functions
+npx supabase functions serve --env-file ./supabase/functions/.env.local
+```
+
+#### 2. Reset Database with Seed Data
+
+```bash
+npx supabase db reset
+```
+
+#### 3. Test Individual Components
+
+**Test the queue function (Layer 1):**
+```sql
+-- Connect to local DB: psql postgresql://postgres:postgres@127.0.0.1:54322/postgres
+
+-- Queue all eligible movies
+SELECT queue_movies_for_scoring();
+
+-- Check queue contents
+SELECT * FROM pgmq.q_movie_scores;
+```
+
+**Test the Edge Function directly (Layer 3):**
+```bash
+# Get a released movie ID from seed data
+MOVIE_ID="f0000016-0000-0000-0000-000000000016"  # Oppenheimer
+
+# Call the Edge Function directly
+curl -X POST http://127.0.0.1:54321/functions/v1/process-movie-scores \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU" \
+  -d '{
+    "movie_ids": ["'"$MOVIE_ID"'"],
+    "msg_ids": [1]
+  }'
+```
+
+**Test the PostgreSQL calculation function:**
+```sql
+-- Calculate score for a movie (after reviews exist)
+SELECT calculate_movie_score('f0000016-0000-0000-0000-000000000016');
+
+-- View the result
+SELECT title, combined_score, scores_updated_at
+FROM movies
+WHERE id = 'f0000016-0000-0000-0000-000000000016';
+
+-- Check team scores were updated
+SELECT t.name, ts.total_points, ts.movies_scored, ts.average_score
+FROM team_scores ts
+JOIN teams t ON ts.team_id = t.id;
+```
+
+#### 4. Full Flow Test (Manual)
+
+Since pg_cron + pg_net may not work reliably locally, simulate the full flow:
+
+```sql
+-- Step 1: Queue a movie
+SELECT queue_movie_for_scoring('f0000016-0000-0000-0000-000000000016');
+
+-- Step 2: Read from queue (simulating what process_score_queue does)
+SELECT * FROM pgmq.read('movie_scores', 120, 5);
+```
+
+Then call the Edge Function with the movie IDs from step 2, and finally:
+
+```sql
+-- Step 3: Delete the message after processing
+SELECT pgmq.delete('movie_scores', 1);  -- Use actual msg_id
+```
+
+### Verify Scores
+
+After processing, verify the scores were stored correctly:
+
+```sql
+-- View all reviews for a movie
+SELECT m.title, r.source, r.score, r.raw_score
+FROM movies m
+JOIN reviews r ON m.id = r.movie_id
+WHERE m.title = 'Oppenheimer';
+
+-- View combined score
+SELECT title, combined_score, scores_updated_at
+FROM movies
+WHERE combined_score IS NOT NULL
+ORDER BY scores_updated_at DESC;
+```
+
+### Test Data Reference
+
+The seed data includes these released movies with real IMDB IDs:
+
+| Movie | IMDB ID | Status |
+|-------|---------|--------|
+| Oppenheimer | tt15398776 | released |
+| Barbie | tt1517268 | released |
+| Killers of the Flower Moon | tt6166392 | released |
+| Wonka | tt6443346 | released |
+
+These should return real scores from OMDB.
+
+### Troubleshooting Local Testing
+
+**Edge Function not receiving requests:**
+```bash
+# Check function logs
+npx supabase functions logs process-movie-scores
+```
+
+**Queue not working:**
+```sql
+-- Verify pgmq extension is enabled
+SELECT * FROM pg_extension WHERE extname = 'pgmq';
+
+-- Manually create queue if needed
+SELECT pgmq.create('movie_scores');
+```
+
+**Missing IMDB ID:**
+```sql
+-- Check which movies have IMDB IDs
+SELECT id, title, imdb_id FROM movies WHERE imdb_id IS NOT NULL;
+```
+
 ## Extending the System
 
 ### Adding a New Review Source
