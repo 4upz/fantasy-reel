@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError } from '../_shared/utils.ts'
+import { sendInvitationEmail } from '../_shared/email.ts'
 
 interface SendInviteRequest {
   league_id: string
@@ -72,7 +73,7 @@ Deno.serve(async (req) => {
     // Fetch the league and verify ownership
     const { data: league, error: leagueError } = await supabaseClient
       .from('leagues')
-      .select('*')
+      .select('id, name, owner_id, status, max_participants')
       .eq('id', league_id)
       .single()
 
@@ -128,10 +129,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Check if user is already a participant (by checking auth.users email)
-    // Note: This requires a join or separate query since we can't easily lookup by email
-    // For now, we'll let the join-league function handle this case
-
     // Create invitation
     const { data: invitation, error: inviteError } = await supabaseClient
       .from('invitations')
@@ -158,9 +155,27 @@ Deno.serve(async (req) => {
     const siteUrl = Deno.env.get('SITE_URL') || 'http://localhost:3000'
     const inviteUrl = `${siteUrl}/join?token=${invitation.token}`
 
-    // TODO: Send email with invitation link
-    // For now, just log it
-    console.log(`Invitation created for ${normalizedEmail}: ${inviteUrl}`)
+    // Fetch inviter's display name for email personalization
+    const { data: inviterProfile } = await supabaseClient
+      .from('profiles')
+      .select('display_name')
+      .eq('user_id', user.id)
+      .single()
+
+    const inviterName = inviterProfile?.display_name || 'A Fantasy Reel user'
+
+    // Send invitation email (non-blocking - don't fail if email fails)
+    const emailResult = await sendInvitationEmail({
+      recipientEmail: normalizedEmail,
+      inviterName,
+      leagueName: league.name,
+      inviteUrl,
+      expiresAt: invitation.expires_at,
+    })
+
+    if (!emailResult.success) {
+      console.warn('Failed to send invitation email:', emailResult.error)
+    }
 
     return jsonResponse({
       invitation: {
@@ -172,7 +187,10 @@ Deno.serve(async (req) => {
         expires_at: invitation.expires_at
       },
       invite_url: inviteUrl,
-      message: `Invitation created for ${normalizedEmail}`
+      email_sent: emailResult.success,
+      message: emailResult.success
+        ? `Invitation sent to ${normalizedEmail}`
+        : `Invitation created for ${normalizedEmail} (email delivery pending)`
     }, 201)
 
   } catch (error) {

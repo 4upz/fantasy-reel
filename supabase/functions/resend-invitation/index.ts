@@ -6,6 +6,7 @@ import {
   authenticateRequest,
   isAuthError,
 } from '../_shared/utils.ts'
+import { sendInvitationEmail } from '../_shared/email.ts'
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -42,7 +43,7 @@ Deno.serve(async (req) => {
     // Fetch league separately for cleaner type inference
     const { data: league, error: leagueError } = await supabase
       .from('leagues')
-      .select('id, owner_id, status')
+      .select('id, name, owner_id, status')
       .eq('id', invitation.league_id)
       .single()
 
@@ -87,13 +88,35 @@ Deno.serve(async (req) => {
     const siteUrl = Deno.env.get('SITE_URL') || 'http://localhost:3000'
     const inviteUrl = `${siteUrl}/join?token=${updated.token}`
 
-    // TODO: Send email with invitation link
-    console.log(`Invitation resent for ${updated.email}: ${inviteUrl}`)
+    // Fetch inviter's display name for email personalization
+    const { data: inviterProfile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('user_id', user.id)
+      .single()
+
+    const inviterName = inviterProfile?.display_name || 'A Fantasy Reel user'
+
+    // Send invitation email (non-blocking - don't fail if email fails)
+    const emailResult = await sendInvitationEmail({
+      recipientEmail: updated.email,
+      inviterName,
+      leagueName: league.name,
+      inviteUrl,
+      expiresAt: updated.expires_at,
+    })
+
+    if (!emailResult.success) {
+      console.warn('Failed to send invitation email:', emailResult.error)
+    }
 
     return jsonResponse({
       invitation: updated,
       invite_url: inviteUrl,
-      message: `Invitation resent to ${updated.email}`,
+      email_sent: emailResult.success,
+      message: emailResult.success
+        ? `Invitation resent to ${updated.email}`
+        : `Invitation refreshed for ${updated.email} (email delivery pending)`,
     })
   } catch (error) {
     console.error('Unexpected error:', error)
