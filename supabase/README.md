@@ -116,20 +116,40 @@ frank@fantasyreel.test  → Empty dashboard state
 | `npx supabase db reset` | Drop all, re-run migrations + seed | Yes |
 | `npx supabase db reset --no-seed` | Reset without seed data | Yes |
 
+## Movie Scoring System
+
+Fantasy Reel automatically fetches and calculates movie scores using a three-layer architecture:
+
+1. **Queue (pgmq)** - Movies needing score updates are queued daily
+2. **Scheduler (pg_cron)** - Processes queue in batches every minute
+3. **Worker (Edge Function)** - Fetches scores from OMDB, stores in database
+
+Scores are a weighted average of:
+- IMDb (35%) + Rotten Tomatoes (40%) + Metacritic (25%)
+
+See **[SCORING.md](./SCORING.md)** for complete documentation including:
+- Architecture diagrams
+- Score calculation formula
+- Configuration and troubleshooting
+- Manual operations
+
 ## Directory Structure
 
 ```
 supabase/
 ├── config.toml          # Supabase local config
 ├── seed.sql             # Test data (applied after migrations)
+├── SCORING.md           # Movie scoring system documentation
 ├── migrations/          # Database migrations
 │   ├── 20250706_*.sql   # Initial tables
 │   ├── 20250707_*.sql   # Remaining tables
+│   ├── 20260115_*.sql   # Movie scoring system
 │   └── ...
 └── functions/           # Edge Functions
     ├── _shared/         # Shared utilities
     ├── create-league/
     ├── draft-pick/
+    ├── process-movie-scores/  # Score update worker
     └── ...
 ```
 
