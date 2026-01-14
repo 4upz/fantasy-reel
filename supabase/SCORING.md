@@ -183,9 +183,8 @@ Processes batches of 5 movies from the queue.
 ```bash
 # Edge Function environment variables
 OMDB_API_KEY=your_omdb_api_key
-# TMDB_API_KEY should be the "API Read Access Token" (Bearer token),
-# NOT the v3 API Key. Get it from: https://www.themoviedb.org/settings/api
-TMDB_API_KEY=your_tmdb_read_access_token
+# Note: TMDB_API_KEY is used as a Bearer token (API Read Access Token)
+TMDB_API_KEY=your_tmdb_api_key
 ```
 
 ### Database Settings
@@ -344,7 +343,7 @@ The scoring system can be tested locally with some manual steps since pg_cron's 
    ```bash
    # In supabase/functions/.env.local (create if not exists)
    OMDB_API_KEY=your_omdb_key
-   TMDB_API_KEY=your_tmdb_bearer_token
+   TMDB_API_KEY=your_tmdb_api_key
    ```
 
 ### Step-by-Step Local Testing
