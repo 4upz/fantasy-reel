@@ -129,6 +129,33 @@ export interface InvitationWithLeague extends Invitation {
   } | null
 }
 
+// Standings page types
+export interface MovieWithScores extends Movie {
+  combined_score: number | null
+  scores_updated_at: string | null
+  reviews: Review[]
+}
+
+export interface TeamWithScore extends Team {
+  team_scores: TeamScore | null
+}
+
+export interface ParticipantWithTeamScore extends LeagueParticipant {
+  teams: TeamWithScore | null
+  profiles: Profile | null
+}
+
+export interface DraftPickWithScores extends DraftPick {
+  movies: MovieWithScores
+}
+
+export interface RankedTeam {
+  rank: number
+  participant: ParticipantWithTeamScore
+  draftPicks: DraftPickWithScores[]
+  isTied: boolean
+}
+
 export interface NextPickInfo {
   round: number
   pick_number: number

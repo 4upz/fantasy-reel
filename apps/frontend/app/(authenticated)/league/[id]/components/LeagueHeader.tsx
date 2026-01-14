@@ -1,9 +1,11 @@
 'use client'
 
-import { callEdgeFunction } from '@/utils/supabase/functions'
+import Link from 'next/link'
 import { useState } from 'react'
-import ConnectionStatusIndicator, { type RealtimeStatus } from './ConnectionStatusIndicator'
+import { callEdgeFunction } from '@/utils/supabase/functions'
+import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
 import type { League } from '@/types'
+import ConnectionStatusIndicator, { type RealtimeStatus } from './ConnectionStatusIndicator'
 
 interface Props {
   league: League
@@ -11,13 +13,6 @@ interface Props {
   participantCount: number
   realtimeStatus: RealtimeStatus
   onInviteClick: () => void
-}
-
-const statusBadgeClass: Record<string, string> = {
-  setup: 'badge-setup',
-  drafting: 'badge-drafting',
-  active: 'badge-active',
-  completed: 'badge-completed',
 }
 
 export default function LeagueHeader({ league, isOwner, participantCount, realtimeStatus, onInviteClick }: Props) {
@@ -50,8 +45,8 @@ export default function LeagueHeader({ league, isOwner, participantCount, realti
         <div>
           <h1 className="text-2xl font-bold font-display text-foreground">{league.name}</h1>
           <div className="mt-3 flex items-center gap-4">
-            <span className={`badge ${statusBadgeClass[league.status] || 'badge-completed'}`}>
-              {league.status.charAt(0).toUpperCase() + league.status.slice(1)}
+            <span className={`badge ${STATUS_BADGE_CLASS[league.status]}`}>
+              {getStatusLabel(league.status)}
             </span>
             <ConnectionStatusIndicator status={realtimeStatus} />
             <span className="text-sm text-foreground-muted">
@@ -77,6 +72,25 @@ export default function LeagueHeader({ league, isOwner, participantCount, realti
               {startingDraft ? 'Starting...' : 'Start Draft'}
             </button>
           </div>
+        )}
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="mt-6 flex gap-1 border-b border-border">
+        <span className="px-4 py-2 text-sm font-medium text-gold border-b-2 border-gold">
+          Draft
+        </span>
+        {league.status !== 'setup' ? (
+          <Link
+            href={`/league/${league.id}/standings`}
+            className="px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground transition-colors border-b-2 border-transparent"
+          >
+            Standings
+          </Link>
+        ) : (
+          <span className="px-4 py-2 text-sm font-medium text-foreground-muted/50 border-b-2 border-transparent cursor-not-allowed">
+            Standings
+          </span>
         )}
       </div>
     </div>
