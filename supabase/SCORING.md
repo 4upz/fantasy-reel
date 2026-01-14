@@ -67,7 +67,7 @@ These are combined into a single `combined_score` (0-100 scale) that determines 
 │  │  - Read IMDb, RT, Metacritic from reviews table                       │  │
 │  │  - Apply weights: IMDb=0.35, RT=0.40, Metacritic=0.25                 │  │
 │  │  - Update movies.combined_score                                       │  │
-│  │  - Trigger recalculate_affected_teams()                               │  │
+│  │  - Trigger recalculate_teams_for_movie()                               │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -183,7 +183,9 @@ Processes batches of 5 movies from the queue.
 ```bash
 # Edge Function environment variables
 OMDB_API_KEY=your_omdb_api_key
-TMDB_API_KEY=your_tmdb_api_key
+# TMDB_API_KEY should be the "API Read Access Token" (Bearer token),
+# NOT the v3 API Key. Get it from: https://www.themoviedb.org/settings/api
+TMDB_API_KEY=your_tmdb_read_access_token
 ```
 
 ### Database Settings
@@ -515,8 +517,10 @@ Then recalculate all existing scores:
 
 ```sql
 -- Queue all scored movies for recalculation
-INSERT INTO pgmq.q_movie_scores (message)
-SELECT jsonb_build_object('movie_id', id)
+SELECT pgmq.send(
+    'movie_scores',
+    jsonb_build_object('movie_id', id)
+)
 FROM movies WHERE combined_score IS NOT NULL;
 ```
 
