@@ -209,7 +209,7 @@ Deno.serve(async (req) => {
 
         // 4. Fetch scores from OMDB
         const omdbRes = await fetch(
-          `http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${imdbId}`
+          `https://www.omdbapi.com/?apikey=${omdbApiKey}&i=${imdbId}`
         )
 
         if (!omdbRes.ok) {
@@ -267,6 +267,13 @@ Deno.serve(async (req) => {
 
         // 6. Call PostgreSQL function to calculate weighted score
         // This is where the heavy lifting happens - in the database
+        if (ratingsStored === 0) {
+          // No ratings stored - movie either has no ratings or all failed
+          // Delete message since retrying won't help (OMDB returned no ratings)
+          console.warn(
+            `No ratings stored for ${typedMovie.title} - OMDB returned no recognized ratings`
+          )
+        }
         if (ratingsStored > 0) {
           const { data: combinedScore, error: calcError } = await serviceClient.rpc(
             'calculate_movie_score',

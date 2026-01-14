@@ -23,9 +23,18 @@ CREATE INDEX IF NOT EXISTS idx_movies_scores_updated_at ON movies(scores_updated
 CREATE INDEX IF NOT EXISTS idx_movies_combined_score ON movies(combined_score);
 
 -- ============================================================================
--- CREATE QUEUE FOR MOVIE SCORE UPDATES
+-- CREATE QUEUE FOR MOVIE SCORE UPDATES (idempotent)
 -- ============================================================================
-SELECT pgmq.create('movie_scores');
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_tables
+        WHERE schemaname = 'pgmq' AND tablename = 'q_movie_scores'
+    ) THEN
+        PERFORM pgmq.create('movie_scores');
+    END IF;
+END;
+$$;
 
 -- ============================================================================
 -- WEIGHTED SCORE CALCULATION FUNCTION
@@ -82,10 +91,11 @@ BEGIN
     v_combined := ROUND(v_score_sum / v_weight_sum, 2);
 
     -- Update movie record with combined score
+    -- Note: We don't update status here - the movie was already filtered by release_date
+    -- in queue_movies_for_scoring(), and we shouldn't override 'canceled' status
     UPDATE movies SET
         combined_score = v_combined,
-        scores_updated_at = NOW(),
-        status = 'released'
+        scores_updated_at = NOW()
     WHERE id = p_movie_id;
 
     -- Cascade: Recalculate scores for all teams that drafted this movie
@@ -175,12 +185,14 @@ BEGIN
     -- Criteria:
     --   1. Movie has been drafted (exists in draft_picks)
     --   2. Release date has passed
-    --   3. Either never scored OR not scored today
+    --   3. Movie is not canceled
+    --   4. Either never scored OR not scored today
     FOR v_movie IN
         SELECT DISTINCT m.id
         FROM movies m
         INNER JOIN draft_picks dp ON dp.movie_id = m.id
         WHERE m.release_date <= CURRENT_DATE
+        AND m.status != 'canceled'
         AND (
             m.scores_updated_at IS NULL
             OR m.scores_updated_at::DATE < CURRENT_DATE
@@ -232,6 +244,9 @@ BEGIN
     END LOOP;
 
     -- If we have messages, invoke the Edge Function
+    -- Note: pg_net.http_post is fire-and-forget by design. The response is handled
+    -- asynchronously. Failed requests are automatically retried via pgmq's visibility
+    -- timeout (messages become visible again after 120 seconds if not deleted).
     IF jsonb_array_length(v_movie_ids) > 0 THEN
         PERFORM net.http_post(
             url := v_supabase_url || '/functions/v1/process-movie-scores',
@@ -273,9 +288,21 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================================
--- SCHEDULE CRON JOBS
+-- SCHEDULE CRON JOBS (idempotent - unschedule first if exists)
 -- Note: pg_cron uses minute-level granularity
 -- ============================================================================
+
+-- Unschedule existing jobs first to make migration idempotent
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'queue-movies-for-scoring') THEN
+        PERFORM cron.unschedule('queue-movies-for-scoring');
+    END IF;
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'process-score-queue') THEN
+        PERFORM cron.unschedule('process-score-queue');
+    END IF;
+END;
+$$;
 
 -- Daily at midnight UTC: Queue all movies needing score updates
 SELECT cron.schedule(
