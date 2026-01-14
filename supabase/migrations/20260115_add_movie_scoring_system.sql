@@ -48,51 +48,29 @@ $$;
 CREATE OR REPLACE FUNCTION calculate_movie_score(p_movie_id UUID)
 RETURNS DECIMAL AS $$
 DECLARE
-    v_imdb DECIMAL;
-    v_rt DECIMAL;
-    v_mc DECIMAL;
-    v_weight_sum DECIMAL := 0;
-    v_score_sum DECIMAL := 0;
     v_combined DECIMAL;
-    -- Configurable weights (must sum to 1.0)
-    W_IMDB CONSTANT DECIMAL := 0.35;
-    W_RT CONSTANT DECIMAL := 0.40;
-    W_MC CONSTANT DECIMAL := 0.25;
 BEGIN
-    -- Get individual scores from reviews table
-    SELECT score INTO v_imdb FROM reviews
-        WHERE movie_id = p_movie_id AND source = 'imdb';
-    SELECT score INTO v_rt FROM reviews
-        WHERE movie_id = p_movie_id AND source = 'rotten_tomatoes';
-    SELECT score INTO v_mc FROM reviews
-        WHERE movie_id = p_movie_id AND source = 'metacritic';
-
-    -- Calculate weighted average (normalize against available weights)
-    IF v_imdb IS NOT NULL THEN
-        v_score_sum := v_score_sum + (v_imdb * W_IMDB);
-        v_weight_sum := v_weight_sum + W_IMDB;
-    END IF;
-
-    IF v_rt IS NOT NULL THEN
-        v_score_sum := v_score_sum + (v_rt * W_RT);
-        v_weight_sum := v_weight_sum + W_RT;
-    END IF;
-
-    IF v_mc IS NOT NULL THEN
-        v_score_sum := v_score_sum + (v_mc * W_MC);
-        v_weight_sum := v_weight_sum + W_MC;
-    END IF;
+    -- Calculate weighted average using a single query
+    -- Normalizes against available weights (handles missing scores gracefully)
+    SELECT ROUND(
+        SUM(r.score * w.weight) / NULLIF(SUM(w.weight), 0),
+        2
+    )
+    INTO v_combined
+    FROM reviews r
+    JOIN (VALUES
+        ('imdb', 0.35::DECIMAL),
+        ('rotten_tomatoes', 0.40::DECIMAL),
+        ('metacritic', 0.25::DECIMAL)
+    ) AS w(source, weight) ON r.source = w.source
+    WHERE r.movie_id = p_movie_id;
 
     -- Return NULL if no scores available
-    IF v_weight_sum = 0 THEN
+    IF v_combined IS NULL THEN
         RETURN NULL;
     END IF;
 
-    v_combined := ROUND(v_score_sum / v_weight_sum, 2);
-
     -- Update movie record with combined score
-    -- Note: We don't update status here - the movie was already filtered by release_date
-    -- in queue_movies_for_scoring(), and we shouldn't override 'canceled' status
     UPDATE movies SET
         combined_score = v_combined,
         scores_updated_at = NOW()

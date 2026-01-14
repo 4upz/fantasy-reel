@@ -50,55 +50,64 @@ interface MovieRecord {
   title: string
 }
 
-/**
- * Normalize rating to 0-100 scale
- */
-function normalizeRating(rating: OMDbRating): {
+interface RatingParser {
+  source: string
+  pattern: RegExp
+  normalize: (match: RegExpMatchArray) => number
+}
+
+const RATING_PARSERS: Record<string, RatingParser> = {
+  'Internet Movie Database': {
+    source: 'imdb',
+    pattern: /^([\d.]+)\/10$/,
+    normalize: (match) => Math.round(parseFloat(match[1]) * 10),
+  },
+  'Rotten Tomatoes': {
+    source: 'rotten_tomatoes',
+    pattern: /^(\d+)%$/,
+    normalize: (match) => parseInt(match[1]),
+  },
+  'Metacritic': {
+    source: 'metacritic',
+    pattern: /^(\d+)\/100$/,
+    normalize: (match) => parseInt(match[1]),
+  },
+}
+
+interface NormalizedRating {
   source: string | null
   score: number | null
   raw: string
-} {
-  const sourceMap: Record<string, string> = {
-    'Internet Movie Database': 'imdb',
-    'Rotten Tomatoes': 'rotten_tomatoes',
-    'Metacritic': 'metacritic',
-  }
+}
 
-  const source = sourceMap[rating.Source] || null
-  if (!source) {
+/**
+ * Normalize rating to 0-100 scale
+ */
+function normalizeRating(rating: OMDbRating): NormalizedRating {
+  const parser = RATING_PARSERS[rating.Source]
+  if (!parser) {
     return { source: null, score: null, raw: rating.Value }
   }
 
-  let score: number | null = null
+  const match = rating.Value.match(parser.pattern)
+  const score = match ? parser.normalize(match) : null
 
-  switch (rating.Source) {
-    case 'Internet Movie Database': {
-      // "8.5/10" -> 85
-      const match = rating.Value.match(/^([\d.]+)\/10$/)
-      if (match) {
-        score = Math.round(parseFloat(match[1]) * 10)
-      }
-      break
-    }
-    case 'Rotten Tomatoes': {
-      // "85%" -> 85
-      const match = rating.Value.match(/^(\d+)%$/)
-      if (match) {
-        score = parseInt(match[1])
-      }
-      break
-    }
-    case 'Metacritic': {
-      // "78/100" -> 78
-      const match = rating.Value.match(/^(\d+)\/100$/)
-      if (match) {
-        score = parseInt(match[1])
-      }
-      break
-    }
+  return { source: parser.source, score, raw: rating.Value }
+}
+
+// deno-lint-ignore no-explicit-any
+type AnySupabaseClient = ReturnType<typeof createClient<any>>
+
+/**
+ * Delete a message from the score queue
+ */
+async function deleteQueueMessage(
+  client: AnySupabaseClient,
+  msgId: number | undefined
+): Promise<void> {
+  if (msgId !== undefined) {
+    await client.rpc('delete_score_queue_message', { p_msg_id: msgId })
   }
-
-  return { source, score, raw: rating.Value }
 }
 
 Deno.serve(async (req) => {
@@ -153,10 +162,7 @@ Deno.serve(async (req) => {
         if (movieError || !movie) {
           console.error(`Movie not found: ${movieId}`, movieError)
           results.errors.push({ movie_id: movieId, error: 'Movie not found' })
-          // Still delete the message to avoid infinite retries
-          if (msgId) {
-            await serviceClient.rpc('delete_score_queue_message', { p_msg_id: msgId })
-          }
+          await deleteQueueMessage(serviceClient, msgId)
           continue
         }
 
@@ -196,14 +202,8 @@ Deno.serve(async (req) => {
         // 3. Skip if we still don't have an IMDB ID
         if (!imdbId) {
           console.warn(`No IMDB ID available for: ${typedMovie.title}`)
-          results.errors.push({
-            movie_id: movieId,
-            error: 'No IMDB ID available',
-          })
-          // Delete message - we can't process without IMDB ID
-          if (msgId) {
-            await serviceClient.rpc('delete_score_queue_message', { p_msg_id: msgId })
-          }
+          results.errors.push({ movie_id: movieId, error: 'No IMDB ID available' })
+          await deleteQueueMessage(serviceClient, msgId)
           continue
         }
 
@@ -230,10 +230,7 @@ Deno.serve(async (req) => {
             movie_id: movieId,
             error: omdbData.Error || 'Movie not found on OMDB',
           })
-          // Delete message - movie doesn't exist in OMDB
-          if (msgId) {
-            await serviceClient.rpc('delete_score_queue_message', { p_msg_id: msgId })
-          }
+          await deleteQueueMessage(serviceClient, msgId)
           continue
         }
 
@@ -266,14 +263,6 @@ Deno.serve(async (req) => {
         }
 
         // 6. Call PostgreSQL function to calculate weighted score
-        // This is where the heavy lifting happens - in the database
-        if (ratingsStored === 0) {
-          // No ratings stored - movie either has no ratings or all failed
-          // Delete message since retrying won't help (OMDB returned no ratings)
-          console.warn(
-            `No ratings stored for ${typedMovie.title} - OMDB returned no recognized ratings`
-          )
-        }
         if (ratingsStored > 0) {
           const { data: combinedScore, error: calcError } = await serviceClient.rpc(
             'calculate_movie_score',
@@ -282,20 +271,17 @@ Deno.serve(async (req) => {
 
           if (calcError) {
             console.error(`Error calculating score for ${typedMovie.title}:`, calcError)
-            results.errors.push({
-              movie_id: movieId,
-              error: 'Failed to calculate combined score',
-            })
+            results.errors.push({ movie_id: movieId, error: 'Failed to calculate combined score' })
           } else {
             console.log(`Calculated score for ${typedMovie.title}: ${combinedScore}`)
             results.scores_updated++
           }
+        } else {
+          console.warn(`No ratings stored for ${typedMovie.title} - OMDB returned no recognized ratings`)
         }
 
         // 7. Delete processed message from queue
-        if (msgId) {
-          await serviceClient.rpc('delete_score_queue_message', { p_msg_id: msgId })
-        }
+        await deleteQueueMessage(serviceClient, msgId)
 
         results.processed++
 
