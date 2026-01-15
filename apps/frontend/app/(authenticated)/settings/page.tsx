@@ -14,12 +14,17 @@ export default async function SettingsPage() {
     redirect('/login')
   }
 
-  // Fetch profile from database
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
+  // Fetch profile and identities in parallel
+  const [profileResult, identitiesResult] = await Promise.all([
+    supabase.from('profiles').select('*').eq('user_id', user.id).single(),
+    supabase.auth.getUserIdentities(),
+  ])
+
+  const profile = profileResult.data
+  const identities = identitiesResult.data?.identities ?? []
+
+  // Check if user has email/password identity
+  const hasPassword = identities.some((i) => i.provider === 'email')
 
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8 sm:py-12">
@@ -39,6 +44,8 @@ export default async function SettingsPage() {
           userId={user.id}
           profile={profile as Profile | null}
           email={user.email ?? ''}
+          identities={identities}
+          hasPassword={hasPassword}
         />
       </div>
     </div>

@@ -4,18 +4,28 @@ import { useState } from 'react'
 import { toast } from 'sonner'
 import { User, Mail, Shield } from 'lucide-react'
 import type { Profile } from '@/types'
+import type { UserIdentity } from '@supabase/supabase-js'
 import { updateProfile } from './actions'
 import AvatarUpload from './components/AvatarUpload'
+import ConnectedAccounts from './components/ConnectedAccounts'
 
 interface Props {
   userId: string
   profile: Profile | null
   email: string
+  identities: UserIdentity[]
+  hasPassword: boolean
 }
 
 const MAX_DISPLAY_NAME_LENGTH = 100
 
-export default function SettingsClient({ userId, profile, email }: Props): React.ReactElement {
+export default function SettingsClient({
+  userId,
+  profile,
+  email,
+  identities,
+  hasPassword,
+}: Props): React.ReactElement {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '')
 
@@ -132,9 +142,7 @@ export default function SettingsClient({ userId, profile, email }: Props): React
             <h2 className="text-lg font-display font-semibold text-foreground">
               Account
             </h2>
-            <p className="text-sm text-foreground-muted">
-              Your account details
-            </p>
+            <p className="text-sm text-foreground-muted">Your account details</p>
           </div>
         </div>
 
@@ -151,6 +159,9 @@ export default function SettingsClient({ userId, profile, email }: Props): React
           </p>
         </div>
       </section>
+
+      {/* Connected Accounts Section */}
+      <ConnectedAccounts email={email} identities={identities} hasPassword={hasPassword} />
 
       {/* Security Section */}
       <section className="card p-6">
