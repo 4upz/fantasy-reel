@@ -32,15 +32,34 @@ Currently, neither scenario is handled gracefully.
 
 **Current behavior**: Creates a NEW separate account (duplicate)
 
+**The challenge**: When a user clicks "Continue with Discord", Supabase completes the OAuth flow before we can intervene. By the time our callback is reached, Supabase has either:
+- Created a duplicate account (default behavior)
+- Auto-linked if both emails are verified (with proper config)
+
 **Desired behavior options**:
 
 | Option | Behavior | Pros | Cons |
 |--------|----------|------|------|
-| **A. Auto-link** | If email matches verified account, automatically link | Seamless UX | Could be security concern if OAuth email not verified |
-| **B. Prompt to link** | Show message asking user to log in first, then link | Clear user control | Extra steps |
-| **C. Block + redirect** | Prevent signup, redirect to login with message | Prevents duplicates | Could frustrate users |
+| **A. Auto-link** | If email matches verified account, automatically link | Seamless UX | Requires both emails verified |
+| **B. Inline password verification** | Prompt for existing account password, then merge | Keeps user in flow, immediate resolution | Requires password entry |
+| **C. Email verification link** | Send link to verify ownership, then merge | No password needed | Slower, user leaves flow |
+| **D. Redirect to login** | Tell user to sign in with email first | Simple | Poor UX, manual steps |
 
-**Recommendation**: Option B (Prompt to link) with Option A as enhancement for verified emails
+**Recommendation**: Option B (Inline password verification) as primary, with Option A enabled for verified emails
+
+**Inline Verification Flow**:
+1. User clicks "Continue with Discord"
+2. Discord OAuth completes
+3. Callback detects: new user created, but email matches existing account
+4. Redirect to `/auth/link-account` page showing:
+   - "An account with this email already exists"
+   - Password field to verify ownership of existing account
+   - "Link Accounts" button
+5. On submit: verify password against original account
+6. If valid: link Discord identity to original account, delete duplicate, sign in
+7. User lands on dashboard with Discord now linked
+
+This keeps the user in the authentication flow and resolves the conflict immediately.
 
 ---
 
@@ -100,35 +119,62 @@ Currently, neither scenario is handled gracefully.
 
 ---
 
-### Phase 3: Handle Duplicate Email Detection
+### Phase 3: Handle Duplicate Email with Inline Linking
 
-**Objective**: Gracefully handle when OAuth email matches existing account
+**Objective**: When OAuth creates a duplicate account, let user verify ownership and merge accounts inline
 
 **Tasks**:
 
-1. **Create Email Check Utility** (`apps/frontend/utils/auth/checkExistingEmail.ts`)
-   - Function to check if email exists in system
-   - Called during OAuth callback
+1. **Update OAuth Callback** (`apps/frontend/app/auth/callback/route.ts`)
+   - After OAuth, detect if this is a duplicate scenario:
+     - Check if user was just created (`created_at` is recent)
+     - Check if another user exists with same email
+   - If duplicate detected:
+     - Store duplicate user info in secure cookie/session
+     - Redirect to `/auth/link-account` with necessary params
+   - If no duplicate: proceed normally
 
-2. **Update OAuth Callback** (`apps/frontend/app/auth/callback/route.ts`)
-   - After OAuth, check if user was newly created or existing
-   - If new user but email matches existing account:
-     - This means Supabase created a duplicate (shouldn't happen with proper config)
-     - Handle edge case gracefully
+2. **Create Link Account Page** (`apps/frontend/app/auth/link-account/page.tsx`)
+   - Server component that reads duplicate context from cookie/params
+   - Displays:
+     - Clear explanation of the situation
+     - The email address in question
+     - Password input for existing account
+     - "Link Accounts" submit button
+     - "Keep Separate Accounts" option (edge case)
+   - Styled consistently with login/signup pages
 
-3. **Create Account Conflict Page** (`apps/frontend/app/auth/account-exists/page.tsx`)
-   - Shown when OAuth email matches existing account
-   - Explains the situation to user
-   - Provides options:
-     - "Sign in with email" button
-     - "Sign in with email, then link Discord in settings"
+3. **Create Link Account Client Component** (`apps/frontend/app/auth/link-account/LinkAccountClient.tsx`)
+   - Handles form submission
+   - Shows loading state during verification
+   - Displays errors (wrong password, etc.)
 
-4. **Pre-OAuth Email Check** (Optional enhancement)
-   - Before redirecting to Discord, check if we can detect the email
-   - Not always possible since we don't know Discord email until after OAuth
+4. **Create Merge Accounts Server Action** (`apps/frontend/app/auth/link-account/actions.ts`)
+   - `verifyAndMergeAccounts(password, duplicateUserId, originalEmail)`:
+     1. Verify password against original account using `signInWithPassword`
+     2. If valid:
+        - Get Discord identity from duplicate account
+        - Link Discord identity to original account (admin API or direct DB)
+        - Delete duplicate account and its profile
+        - Create session for original account
+        - Return success
+     3. If invalid: return error
+
+5. **Create Supabase Edge Function** (`supabase/functions/merge-accounts/index.ts`)
+   - Handles the account merge operation server-side
+   - Required because linking identities across users needs admin privileges
+   - Accepts: `originalUserId`, `duplicateUserId`, `identityToMove`
+   - Performs:
+     - Move identity from duplicate to original user
+     - Delete duplicate user's profile
+     - Delete duplicate user from auth.users
+   - Returns success/failure
 
 **New Files**:
-- `apps/frontend/app/auth/account-exists/page.tsx`
+- `apps/frontend/app/auth/link-account/page.tsx`
+- `apps/frontend/app/auth/link-account/LinkAccountClient.tsx`
+- `apps/frontend/app/auth/link-account/actions.ts`
+- `supabase/functions/merge-accounts/index.ts`
 
 **Modified Files**:
 - `apps/frontend/app/auth/callback/route.ts`
@@ -208,28 +254,71 @@ Currently, neither scenario is handled gracefully.
 </section>
 ```
 
-### Account Exists Page
+### Link Account Page (Inline Merge Flow)
 
 ```tsx
-// Visual structure
-<div className="max-w-md mx-auto text-center">
-  <AlertCircle className="w-12 h-12 text-warning mx-auto" />
-  <h1>Account Already Exists</h1>
-  <p>
-    An account with the email <strong>{email}</strong> already exists.
-    To use Discord sign-in, please link it to your existing account.
-  </p>
-
-  <div className="space-y-3">
-    <Link href="/login">
-      <Button className="w-full">Sign in with Email</Button>
-    </Link>
-    <p className="text-sm text-muted">
-      After signing in, go to Settings → Connected Accounts to link Discord
+// Visual structure - /auth/link-account
+<div className="max-w-md mx-auto">
+  <div className="text-center mb-8">
+    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gold-muted flex items-center justify-center">
+      <Link2 className="w-8 h-8 text-gold" />
+    </div>
+    <h1 className="text-2xl font-display font-bold">Link Your Accounts</h1>
+    <p className="text-foreground-secondary mt-2">
+      An account with <strong>{email}</strong> already exists.
+      Enter your password to link Discord to your existing account.
     </p>
+  </div>
+
+  <form onSubmit={handleMerge} className="space-y-6">
+    {/* Discord info being linked */}
+    <div className="p-4 bg-surface rounded-lg border border-border">
+      <div className="flex items-center gap-3">
+        <DiscordIcon className="w-8 h-8 text-[#5865F2]" />
+        <div>
+          <p className="font-medium">{discordUsername}</p>
+          <p className="text-sm text-foreground-muted">Discord account to link</p>
+        </div>
+      </div>
+    </div>
+
+    {/* Password verification */}
+    <div>
+      <label className="block text-sm font-medium mb-2">
+        Enter password for {email}
+      </label>
+      <input
+        type="password"
+        placeholder="Your existing account password"
+        className="input"
+        required
+      />
+    </div>
+
+    {error && <FormError message={error} />}
+
+    <button type="submit" className="btn btn-primary w-full">
+      {isLoading ? 'Linking...' : 'Link Accounts'}
+    </button>
+  </form>
+
+  {/* Alternative option */}
+  <div className="mt-6 pt-6 border-t border-border text-center">
+    <p className="text-sm text-foreground-muted mb-3">
+      Don't want to link accounts?
+    </p>
+    <button onClick={handleKeepSeparate} className="btn btn-ghost text-sm">
+      Keep as Separate Account
+    </button>
   </div>
 </div>
 ```
+
+**States to handle**:
+- Loading during password verification
+- Error: incorrect password
+- Error: merge operation failed
+- Success: redirect to dashboard with toast
 
 ---
 
@@ -297,14 +386,29 @@ User authorizes
     ↓
 Callback to /auth/callback
     ↓
-Check: Is this a new user? Does email exist?
+Check: Is this a new user? Does email match existing account?
     ↓
 If duplicate detected:
-    → Redirect to /auth/account-exists
-    → Show options to sign in with email
+    → Store duplicate context (userId, email, discordUsername)
+    → Redirect to /auth/link-account
     ↓
-If no duplicate:
-    → Create profile, redirect to dashboard
+/auth/link-account page:
+    → Show Discord account being linked
+    → Prompt for existing account password
+    → User enters password
+    ↓
+On submit:
+    → Verify password against original account
+    → If valid: Call merge-accounts edge function
+        → Link Discord identity to original account
+        → Delete duplicate account
+        → Sign in as original user
+        → Redirect to dashboard with success toast
+    → If invalid: Show error, allow retry
+    ↓
+Alternative: "Keep Separate Account"
+    → Continue with duplicate account as-is
+    → Redirect to dashboard
 ```
 
 ---
@@ -315,7 +419,10 @@ If no duplicate:
 | File | Purpose |
 |------|---------|
 | `apps/frontend/app/(authenticated)/settings/components/ConnectedAccounts.tsx` | Connected accounts management UI |
-| `apps/frontend/app/auth/account-exists/page.tsx` | Account conflict resolution page |
+| `apps/frontend/app/auth/link-account/page.tsx` | Inline account linking page |
+| `apps/frontend/app/auth/link-account/LinkAccountClient.tsx` | Client component for link form |
+| `apps/frontend/app/auth/link-account/actions.ts` | Server actions for merge flow |
+| `supabase/functions/merge-accounts/index.ts` | Edge function to merge accounts (admin operation) |
 
 ### Modified Files
 | File | Changes |
@@ -330,10 +437,11 @@ If no duplicate:
 
 ## Testing Scenarios
 
-1. **Link Discord to email account**
+1. **Link Discord to email account (from Settings)**
    - Sign up with email
    - Go to Settings → Connected Accounts
    - Click "Connect Discord"
+   - Authorize in Discord
    - Verify Discord appears as connected
    - Sign out, sign in with Discord
    - Verify same account/profile
@@ -347,24 +455,48 @@ If no duplicate:
    - OAuth-only user tries to disconnect Discord
    - Should be prevented with error message
 
-4. **Duplicate email handling**
+4. **Duplicate email - successful merge**
+   - Sign up with email, set a password
+   - Sign out
+   - Click "Continue with Discord" (same email)
+   - Should redirect to /auth/link-account
+   - Enter correct password
+   - Should merge accounts and redirect to dashboard
+   - Verify Discord is now linked in Settings
+   - Sign out, sign in with either method works
+
+5. **Duplicate email - wrong password**
    - Sign up with email
    - Sign out
-   - Try "Continue with Discord" with same email
-   - Should see account-exists page
+   - Click "Continue with Discord" (same email)
+   - Enter wrong password
+   - Should show error, allow retry
 
-5. **Fresh Discord signup**
-   - New email, sign up with Discord
+6. **Duplicate email - keep separate**
+   - Sign up with email
+   - Sign out
+   - Click "Continue with Discord" (same email)
+   - Click "Keep as Separate Account"
+   - Should continue with new account
+   - Now have two accounts with same email (edge case)
+
+7. **Fresh Discord signup**
+   - New email (no existing account)
+   - Click "Continue with Discord"
    - Should create account and profile successfully
+   - No link-account page shown
 
 ---
 
 ## Success Criteria
 
 - [ ] Users can see connected accounts in Settings
-- [ ] Users can link Discord to existing email account
+- [ ] Users can link Discord to existing email account (from Settings)
 - [ ] Users can unlink Discord (if they have email/password)
 - [ ] System prevents unlinking last login method
-- [ ] Duplicate accounts are not created when emails match
-- [ ] Clear messaging when account conflict detected
-- [ ] Linked users can sign in with either method
+- [ ] When OAuth email matches existing account, user sees inline linking flow
+- [ ] User can verify ownership with password and merge accounts
+- [ ] Merged accounts have Discord identity linked correctly
+- [ ] Duplicate account is cleaned up after successful merge
+- [ ] User can opt to keep separate accounts if desired
+- [ ] Linked users can sign in with either email or Discord
