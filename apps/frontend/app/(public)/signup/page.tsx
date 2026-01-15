@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { signup } from './actions'
 import Link from 'next/link'
 import { FormError } from '../../components/FormError'
+import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
@@ -151,6 +152,17 @@ export default function SignupPage() {
             <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3">
               {isLoading ? 'Creating account...' : 'Sign up'}
             </button>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-foreground-muted/30" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-background-elevated px-4 text-foreground-muted">or</span>
+              </div>
+            </div>
+
+            <DiscordLoginButton />
 
             <div className="text-center">
               <p className="text-sm text-foreground-secondary">
