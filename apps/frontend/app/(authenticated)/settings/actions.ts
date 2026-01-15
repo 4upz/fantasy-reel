@@ -86,3 +86,41 @@ export async function updateAvatarUrl(avatarUrl: string | null): Promise<UpdateP
   revalidateProfilePaths()
   return { success: true }
 }
+
+export async function unlinkIdentity(identityId: string): Promise<UpdateProfileResult> {
+  const supabase = await createClient()
+
+  // Get current user and their identities
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const { data: identities } = await supabase.auth.getUserIdentities()
+
+  // Safety check: ensure user has at least 2 identities or has a password
+  const emailIdentity = identities?.identities?.find((i) => i.provider === 'email')
+  const hasPassword = !!emailIdentity
+
+  if (!hasPassword && (identities?.identities?.length ?? 0) <= 1) {
+    return { success: false, error: 'Cannot disconnect - this is your only sign-in method' }
+  }
+
+  // Find the identity to unlink
+  const identityToUnlink = identities?.identities?.find((i) => i.identity_id === identityId)
+  if (!identityToUnlink) {
+    return { success: false, error: 'Identity not found' }
+  }
+
+  const { error } = await supabase.auth.unlinkIdentity(identityToUnlink)
+
+  if (error) {
+    console.error('Unlink identity error:', error)
+    return { success: false, error: 'Failed to disconnect account' }
+  }
+
+  revalidateProfilePaths()
+  return { success: true }
+}
