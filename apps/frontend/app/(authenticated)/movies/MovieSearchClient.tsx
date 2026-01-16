@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Clapperboard, Search } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { Discovering, NoResults } from '@/app/components/illustrations'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { useScrollPosition } from '@/hooks/useScrollPosition'
 import type { TMDbSearchResult, TMDbSearchResponse, TMDbMovieDetails } from '@/types'
@@ -190,9 +190,9 @@ export default function MovieSearchClient(): React.ReactElement {
         )}
 
         {showInitialState && (
-          <div className="text-center py-20 animate-fade-in">
-            <div className="flex justify-center mb-4">
-              <Clapperboard className="w-16 h-16 text-foreground-muted" />
+          <div className="text-center py-16 animate-fade-in">
+            <div className="mb-6">
+              <Discovering size="md" />
             </div>
             <p className="text-foreground-secondary text-lg">
               Start typing to search for movies
@@ -201,9 +201,9 @@ export default function MovieSearchClient(): React.ReactElement {
         )}
 
         {showEmptyState && (
-          <div className="text-center py-20 animate-fade-in">
-            <div className="flex justify-center mb-4">
-              <Search className="w-16 h-16 text-foreground-muted" />
+          <div className="text-center py-16 animate-fade-in">
+            <div className="mb-6">
+              <NoResults size="sm" />
             </div>
             <p className="text-foreground-secondary text-lg">
               No movies found for &ldquo;{query}&rdquo;

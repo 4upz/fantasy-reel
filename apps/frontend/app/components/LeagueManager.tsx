@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
 import type { League } from '@/types'
 import CreateLeagueModal from './CreateLeagueModal'
+import { EmptyTheater } from './illustrations'
 
 interface Props {
   showCreateModal: boolean
@@ -104,11 +105,9 @@ export default function LeagueManager({ showCreateModal, onModalClose, onCreateC
   if (leagues.length === 0) {
     return (
       <>
-        <div className="text-center py-16">
-          <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-surface mb-6">
-            <svg className="w-10 h-10 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-            </svg>
+        <div className="text-center py-12">
+          <div className="mb-6">
+            <EmptyTheater size="md" />
           </div>
           <h3 className="font-display text-xl text-foreground mb-2">No leagues yet</h3>
           <p className="text-foreground-muted mb-6 max-w-sm mx-auto">

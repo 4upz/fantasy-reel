@@ -5,6 +5,7 @@ import { login, resendConfirmationEmail } from './actions'
 import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
 import { toast } from 'sonner'
+import { WatchingMovies } from '@/app/components/illustrations'
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
@@ -65,10 +66,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="w-full max-w-md space-y-8 px-4">
+    <div className="w-full max-w-4xl flex flex-col lg:flex-row items-center gap-8 lg:gap-12 px-4">
+      {/* Illustration - hidden on mobile, shown on larger screens */}
+      <div className="hidden lg:flex flex-1 justify-center">
+        <WatchingMovies size="lg" />
+      </div>
+
+      {/* Form section */}
+      <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
           <p className="mt-3 text-foreground-secondary">Sign in to your account</p>
+        </div>
+
+        {/* Small illustration for mobile */}
+        <div className="flex lg:hidden justify-center">
+          <WatchingMovies size="sm" />
         </div>
 
         <div className="card p-8">
@@ -151,6 +164,7 @@ export default function LoginPage() {
             </div>
           </form>
         </div>
+      </div>
     </div>
   )
 }

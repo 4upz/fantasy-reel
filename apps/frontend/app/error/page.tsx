@@ -1,12 +1,12 @@
-import { Clapperboard } from 'lucide-react'
+import { TechnicalIssue } from '@/app/components/illustrations'
 
 export default function ErrorPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="w-full max-w-md space-y-8 text-center">
+      <div className="w-full max-w-md space-y-8 text-center px-4">
         <div>
-          <div className="flex justify-center mb-4">
-            <Clapperboard className="w-16 h-16 text-gold" />
+          <div className="mb-6">
+            <TechnicalIssue size="md" />
           </div>
           <h2 className="text-3xl font-extrabold font-display text-foreground">
             Something went wrong
