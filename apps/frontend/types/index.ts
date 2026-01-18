@@ -156,6 +156,12 @@ export interface RankedTeam {
   isTied: boolean
 }
 
+// Settings page types
+export interface ParticipantWithProfile extends LeagueParticipant {
+  teams: Team | null
+  profiles: Profile | null
+}
+
 export interface NextPickInfo {
   round: number
   pick_number: number

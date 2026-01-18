@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+import { Settings } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
 import type { League } from '@/types'
@@ -59,18 +60,29 @@ export default function LeagueHeader({ league, isOwner, participantCount, realti
           {error && <p className="mt-2 text-sm text-error">{error}</p>}
         </div>
 
-        {isOwner && league.status === 'setup' && (
-          <div className="flex gap-3">
-            <button onClick={onInviteClick} className="btn btn-secondary">
-              Invite Players
-            </button>
-            <button
-              onClick={handleStartDraft}
-              disabled={startingDraft || participantCount < 2}
-              className="btn btn-primary"
+        {isOwner && (
+          <div className="flex gap-3 items-center">
+            {league.status === 'setup' && (
+              <>
+                <button onClick={onInviteClick} className="btn btn-secondary">
+                  Invite Players
+                </button>
+                <button
+                  onClick={handleStartDraft}
+                  disabled={startingDraft || participantCount < 2}
+                  className="btn btn-primary"
+                >
+                  {startingDraft ? 'Starting...' : 'Start Draft'}
+                </button>
+              </>
+            )}
+            <Link
+              href={`/league/${league.id}/settings`}
+              className="btn btn-ghost p-2"
+              title="League Settings"
             >
-              {startingDraft ? 'Starting...' : 'Start Draft'}
-            </button>
+              <Settings className="w-5 h-5" />
+            </Link>
           </div>
         )}
       </div>

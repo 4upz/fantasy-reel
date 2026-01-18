@@ -59,3 +59,20 @@ export function SpinnerIcon({ className = 'w-5 h-5' }: IconProps) {
     />
   )
 }
+
+interface ButtonSpinnerProps {
+  variant?: 'primary' | 'danger'
+}
+
+/**
+ * Spinner for use inside buttons with appropriate color for the button variant
+ */
+export function ButtonSpinner({ variant = 'primary' }: ButtonSpinnerProps): React.ReactElement {
+  const colorClass = variant === 'danger'
+    ? 'border-white/30 border-t-white'
+    : 'border-foreground-inverse/30 border-t-foreground-inverse'
+
+  return (
+    <span className={`w-4 h-4 border-2 ${colorClass} rounded-full animate-spin mr-2`} />
+  )
+}
