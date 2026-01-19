@@ -36,23 +36,9 @@ export async function GET(request: Request) {
           .single()
 
         if (isNewUser && user.email) {
-          // Check if another account exists with this email
-          const { data: existingProfiles } = await supabase
-            .from('profiles')
-            .select('user_id, display_name')
-            .neq('user_id', user.id)
-            .limit(100)
-
-          // We need to check auth.users for email match
-          // Since we can't query auth.users directly from client, we check if profile was created
-          // If no profile exists but user exists, and user is new, this might be a duplicate
           if (!profile) {
-            // Check if there's an existing user with this email by looking for profiles
-            // associated with users that have the same email
-            // This requires checking if there are other auth users with this email
-
-            // For now, we'll use a different approach:
-            // Query using service role to check for duplicate emails
+            // Check if there's an existing user with this email
+            // Uses a SECURITY DEFINER function to query auth.users
             const { count } = await supabase.rpc('count_users_by_email', {
               email_to_check: user.email,
             })
