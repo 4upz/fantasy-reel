@@ -16,10 +16,16 @@
     "test:functions:watch": "cd supabase/functions && deno task test:watch"
   },
   "devDependencies": {
+    "supabase": "^2.72.8",
     "typescript": "^5.0.0"
   },
   "description": "Fantasy league for movies - draft upcoming releases and score based on review data",
-  "keywords": ["fantasy", "movies", "league", "draft"],
+  "keywords": [
+    "fantasy",
+    "movies",
+    "league",
+    "draft"
+  ],
   "author": "",
   "license": "ISC"
 }

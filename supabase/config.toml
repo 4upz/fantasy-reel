@@ -326,3 +326,60 @@ s3_region = "env(S3_REGION)"
 s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
+
+# ============================================================================
+# EDGE FUNCTIONS CONFIGURATION
+# Disable Edge Runtime JWT verification due to ES256 bug in Supabase CLI
+# (https://github.com/supabase/cli/issues/4453)
+# Our functions handle auth internally via supabase.auth.getUser()
+# ============================================================================
+[functions.browse-movies]
+verify_jwt = false
+
+[functions.cancel-invitation]
+verify_jwt = false
+
+[functions.create-league]
+verify_jwt = false
+
+[functions.decline-invitation]
+verify_jwt = false
+
+[functions.draft-pick]
+verify_jwt = false
+
+[functions.get-leagues]
+verify_jwt = false
+
+[functions.get-movie-details]
+verify_jwt = false
+
+[functions.join-league]
+verify_jwt = false
+
+[functions.process-movie-scores]
+verify_jwt = false
+
+[functions.resend-invitation]
+verify_jwt = false
+
+[functions.search-movies]
+verify_jwt = false
+
+[functions.search-users]
+verify_jwt = false
+
+[functions.send-invite]
+verify_jwt = false
+
+[functions.start-draft]
+verify_jwt = false
+
+[functions.sync-movies]
+verify_jwt = false
+
+[functions.update-league]
+verify_jwt = false
+
+[functions.update-scores]
+verify_jwt = false
