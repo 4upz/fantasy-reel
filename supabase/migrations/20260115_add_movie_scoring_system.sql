@@ -11,6 +11,10 @@
 -- ============================================================================
 CREATE EXTENSION IF NOT EXISTS pgmq;
 CREATE EXTENSION IF NOT EXISTS pg_net;
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+
+-- Reset search_path after pgmq extension (it clears the path)
+SET search_path TO public, extensions;
 
 -- ============================================================================
 -- SCHEMA CHANGES: Add scoring columns to movies table
