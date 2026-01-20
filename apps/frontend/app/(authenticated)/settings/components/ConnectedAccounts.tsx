@@ -100,10 +100,14 @@ export default function ConnectedAccounts({
               <p className="text-sm text-foreground-muted">{email}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-foreground-muted">
-            <Check className="w-4 h-4 text-success" />
-            <span>Primary</span>
-          </div>
+          {hasPassword ? (
+            <div className="flex items-center gap-2 text-sm text-foreground-muted">
+              <Check className="w-4 h-4 text-success" />
+              <span>Primary</span>
+            </div>
+          ) : (
+            <span className="text-sm text-foreground-muted">No password set</span>
+          )}
         </div>
 
         {/* Discord */}
