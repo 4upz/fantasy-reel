@@ -19,11 +19,12 @@ export const TEST_USER_2 = {
 }
 
 /**
- * Get Supabase URL and anon key from environment
+ * Get Supabase URL and keys from environment
  */
 function getEnvVars() {
   const url = Deno.env.get('SUPABASE_URL')
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY')
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
   if (!url || !anonKey) {
     throw new Error(
@@ -32,7 +33,7 @@ function getEnvVars() {
     )
   }
 
-  return { url, anonKey }
+  return { url, anonKey, serviceRoleKey }
 }
 
 /**
@@ -61,26 +62,54 @@ export async function getSecondAuthenticatedClient(): Promise<SupabaseClient> {
 }
 
 /**
- * Authenticate a user, creating them if necessary
+ * Authenticate a user, creating them if necessary.
+ * Uses admin API to create users with email pre-confirmed for testing.
  */
 async function authenticateUser(user: { email: string; password: string }): Promise<SupabaseClient> {
-  const { url, anonKey } = getEnvVars()
+  const { url, anonKey, serviceRoleKey } = getEnvVars()
   const client = createClient(url, anonKey)
 
   // Try to sign in first
   const { error: signInError } = await client.auth.signInWithPassword(user)
 
   if (signInError) {
-    // User doesn't exist, create them
-    const { error: signUpError } = await client.auth.signUp(user)
-    if (signUpError) {
-      throw new Error(`Failed to create test user: ${signUpError.message}`)
+    // User doesn't exist or isn't confirmed - use admin API
+    if (!serviceRoleKey) {
+      throw new Error(
+        'SUPABASE_SERVICE_ROLE_KEY is required to create test users with email confirmation enabled.\n' +
+          'Get it from: npx supabase status'
+      )
     }
 
-    // Sign in with the newly created user
+    const adminClient = createClient(url, serviceRoleKey)
+
+    // Check if user exists but needs confirmation
+    const { data: existingUsers } = await adminClient.auth.admin.listUsers()
+    const existingUser = existingUsers?.users?.find((u) => u.email === user.email)
+
+    if (existingUser) {
+      // User exists - update to confirm email and reset password
+      await adminClient.auth.admin.updateUserById(existingUser.id, {
+        email_confirm: true,
+        password: user.password,
+      })
+    } else {
+      // Create new user with pre-confirmed email
+      const { error: createError } = await adminClient.auth.admin.createUser({
+        email: user.email,
+        password: user.password,
+        email_confirm: true,
+      })
+
+      if (createError) {
+        throw new Error(`Failed to create test user: ${createError.message}`)
+      }
+    }
+
+    // Sign in with the user
     const { error: retrySignInError } = await client.auth.signInWithPassword(user)
     if (retrySignInError) {
-      throw new Error(`Failed to sign in after signup: ${retrySignInError.message}`)
+      throw new Error(`Failed to sign in after setup: ${retrySignInError.message}`)
     }
   }
 

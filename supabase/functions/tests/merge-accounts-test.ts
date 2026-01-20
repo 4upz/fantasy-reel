@@ -10,11 +10,10 @@
  */
 
 import { assertEquals } from '@std/assert'
-import { getAuthenticatedClient, getSecondAuthenticatedClient, getAnonClient, getUserId } from './_setup.ts'
+import { createTestFactory, getAnonClient, getUserId } from './_setup.ts'
 
 Deno.test('merge-accounts', async (t) => {
-  const client = await getAuthenticatedClient()
-  const secondClient = await getSecondAuthenticatedClient()
+  const { client, secondClient } = await createTestFactory()
   const userId = await getUserId(client)
   const secondUserId = await getUserId(secondClient)
 
