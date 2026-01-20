@@ -1,11 +1,36 @@
+import type { User } from '@supabase/supabase-js'
+
 import { createClient } from '@/utils/supabase/server'
-import { NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { NextResponse } from 'next/server'
+
+/**
+ * Validate redirect path to prevent open redirect attacks.
+ * Only allows relative paths starting with / but not // (protocol-relative URLs).
+ */
+function isValidRedirectPath(path: string): boolean {
+  return path.startsWith('/') && !path.startsWith('//')
+}
+
+/**
+ * Extract display name from user metadata, with fallbacks.
+ */
+function getDisplayName(user: User): string {
+  return (
+    user.user_metadata.full_name ||
+    user.user_metadata.name ||
+    user.user_metadata.global_name ||
+    user.user_metadata.custom_claims?.global_name ||
+    user.email?.split('@')[0] ||
+    'User'
+  )
+}
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const next = searchParams.get('next') ?? '/dashboard'
+  const rawNext = searchParams.get('next') ?? '/dashboard'
+  const next = isValidRedirectPath(rawNext) ? rawNext : '/dashboard'
   const isLinking = searchParams.get('linking') === 'true'
 
   if (code) {
@@ -77,13 +102,7 @@ export async function GET(request: Request) {
             // No duplicate - create profile for new OAuth user
             await supabase.from('profiles').insert({
               user_id: user.id,
-              display_name:
-                user.user_metadata.full_name ||
-                user.user_metadata.name ||
-                user.user_metadata.global_name ||
-                user.user_metadata.custom_claims?.global_name ||
-                user.email?.split('@')[0] ||
-                'User',
+              display_name: getDisplayName(user),
               avatar_url: user.user_metadata.avatar_url || null,
             })
           }
@@ -91,13 +110,7 @@ export async function GET(request: Request) {
           // Existing user without profile (edge case) - create profile
           await supabase.from('profiles').insert({
             user_id: user.id,
-            display_name:
-              user.user_metadata.full_name ||
-              user.user_metadata.name ||
-              user.user_metadata.global_name ||
-              user.user_metadata.custom_claims?.global_name ||
-              user.email?.split('@')[0] ||
-              'User',
+            display_name: getDisplayName(user),
             avatar_url: user.user_metadata.avatar_url || null,
           })
         }

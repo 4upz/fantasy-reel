@@ -366,6 +366,9 @@ verify_jwt = false
 [functions.join-league]
 verify_jwt = false
 
+[functions.merge-accounts]
+verify_jwt = false
+
 [functions.process-movie-scores]
 verify_jwt = false
 
