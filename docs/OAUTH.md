@@ -20,10 +20,10 @@ In the OAuth2 section:
 2. **Client Secret**: Click "Reset Secret" to generate one, then copy it
 
 3. **Add Redirect URIs**:
-   - For local development: `http://localhost:54321/auth/v1/callback`
+   - For local development: `http://127.0.0.1:54321/auth/v1/callback`
    - For production: `https://<your-project-ref>.supabase.co/auth/v1/callback`
 
-   > Note: The redirect URI uses Supabase's auth endpoint, not your frontend URL
+   > Note: Use `127.0.0.1` (not `localhost`) for local development. The redirect URI uses Supabase's auth endpoint, not your frontend URL.
 
 ### 3. Configure Environment Variables
 
@@ -102,7 +102,7 @@ The `handle_new_user()` trigger automatically creates profiles for new users:
 ### "Invalid redirect URI" Error
 
 Ensure your redirect URI in Discord Developer Portal exactly matches:
-- Local: `http://localhost:54321/auth/v1/callback`
+- Local: `http://127.0.0.1:54321/auth/v1/callback` (use `127.0.0.1`, not `localhost`)
 - Production: `https://<project-ref>.supabase.co/auth/v1/callback`
 
 ### User Not Redirected After Login
