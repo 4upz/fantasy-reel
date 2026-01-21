@@ -47,11 +47,13 @@ export function useNotifications(): UseNotificationsReturn {
 
   // Real-time subscription
   useEffect(() => {
+    let channel: ReturnType<typeof supabase.channel> | null = null
+
     const setupSubscription = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
 
-      const channel = supabase
+      channel = supabase
         .channel('user-notifications')
         .on('postgres_changes', {
           event: 'INSERT',
@@ -72,13 +74,15 @@ export function useNotifications(): UseNotificationsReturn {
           )
         })
         .subscribe()
-
-      return () => {
-        supabase.removeChannel(channel)
-      }
     }
 
     setupSubscription()
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
+      }
+    }
   }, [supabase])
 
   const markAsRead = useCallback(async (notificationId: string) => {
