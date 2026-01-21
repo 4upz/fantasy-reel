@@ -1,0 +1,408 @@
+/**
+ * Integration tests for place-bid Edge Function
+ *
+ * Tests the actual function via client.functions.invoke()
+ * Requires: npx supabase start && npx supabase functions serve
+ */
+
+import { assertEquals, assertExists } from '@std/assert'
+import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
+
+// Test movie data for bidding
+const currentYear = new Date().getFullYear()
+const testMovieData = {
+  title: 'Test Pickup Movie',
+  overview: 'A test movie for bidding',
+  poster_url: '/test-poster.jpg',
+  release_date: `${currentYear}-12-15`,
+  vote_average: 0,
+  popularity: 100,
+  genre_ids: [28, 12],
+}
+
+Deno.test({
+  name: 'place-bid',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
+    const { client, secondClient, factory } = await createTestFactory()
+
+    // ============================================================================
+    // Authentication Tests
+    // ============================================================================
+
+    await t.step('returns 401 when not authenticated', async () => {
+      const anonClient = getAnonClient()
+      const result = await invokeFunction(anonClient, 'place-bid', {
+        league_id: '00000000-0000-0000-0000-000000000000',
+        tmdb_id: 12345,
+        amount: 10,
+      })
+      assertEquals(result.error, 'Unauthorized')
+    })
+
+    // ============================================================================
+    // Validation Tests
+    // ============================================================================
+
+    await t.step('returns 400 for missing league_id', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        tmdb_id: 12345,
+        amount: 10,
+      })
+      assertEquals(result.error, 'Valid league_id is required')
+    })
+
+    await t.step('returns 400 for invalid league_id', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: 'not-a-uuid',
+        tmdb_id: 12345,
+        amount: 10,
+      })
+      assertEquals(result.error, 'Valid league_id is required')
+    })
+
+    await t.step('returns 400 for missing tmdb_id', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: '00000000-0000-0000-0000-000000000000',
+        amount: 10,
+      })
+      assertEquals(result.error, 'Valid tmdb_id is required')
+    })
+
+    await t.step('returns 400 for invalid tmdb_id', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: '00000000-0000-0000-0000-000000000000',
+        tmdb_id: -5,
+        amount: 10,
+      })
+      assertEquals(result.error, 'Valid tmdb_id is required')
+    })
+
+    await t.step('returns 400 for negative amount', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: '00000000-0000-0000-0000-000000000000',
+        tmdb_id: 12345,
+        amount: -1,
+      })
+      assertEquals(result.error, 'Amount must be a whole number between 0 and 100')
+    })
+
+    await t.step('returns 400 for amount over 100', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: '00000000-0000-0000-0000-000000000000',
+        tmdb_id: 12345,
+        amount: 150,
+      })
+      assertEquals(result.error, 'Amount must be a whole number between 0 and 100')
+    })
+
+    await t.step('returns 400 for non-integer amount', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: '00000000-0000-0000-0000-000000000000',
+        tmdb_id: 12345,
+        amount: 10.5,
+      })
+      assertEquals(result.error, 'Amount must be a whole number between 0 and 100')
+    })
+
+    // ============================================================================
+    // Not Found Tests
+    // ============================================================================
+
+    await t.step('returns 404 when league does not exist', async () => {
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: '00000000-0000-0000-0000-000000000000',
+        tmdb_id: 12345,
+        amount: 10,
+      })
+      assertEquals(result.error, 'League not found')
+    })
+
+    // ============================================================================
+    // Status Tests
+    // ============================================================================
+
+    await t.step('returns 400 when league is not active (setup status)', async () => {
+      const { id: leagueId } = await factory.createLeague(uniqueName('bid-setup'))
+
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: 12345,
+        amount: 10,
+      })
+      assertEquals(result.error, 'League is not active')
+    })
+
+    await t.step('returns 400 when league is in drafting status', async () => {
+      const leagueId = await factory.createDraftingLeague(uniqueName('bid-drafting'))
+
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: 12345,
+        amount: 10,
+      })
+      assertEquals(result.error, 'League is not active')
+    })
+
+    // ============================================================================
+    // Authorization Tests
+    // ============================================================================
+
+    await t.step('returns 403 when user is not a member of the league', async () => {
+      // Create active league and complete draft with first user
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-not-member'))
+
+      // Create a third user who isn't in this league
+      const thirdClient = await factory.createThirdClient()
+
+      const result = await invokeFunction(thirdClient, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: 300001,
+        amount: 10,
+        movie_data: { ...testMovieData, title: 'Non-member Bid Movie' },
+      })
+      assertEquals(result.error, 'You are not a member of this league')
+    })
+
+    // ============================================================================
+    // Budget Tests
+    // ============================================================================
+
+    await t.step('returns 400 when bid exceeds remaining budget', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-over-budget'))
+
+      // Team budget starts at 100
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: 300002,
+        amount: 101, // Over budget
+        movie_data: { ...testMovieData, title: 'Over Budget Movie' },
+      })
+      // Amount validation happens first
+      assertEquals(result.error, 'Amount must be a whole number between 0 and 100')
+    })
+
+    // ============================================================================
+    // Success Tests
+    // ============================================================================
+
+    await t.step('successfully places bid on eligible movie', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-success'))
+
+      const { data, error } = await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300003,
+          amount: 15,
+          movie_data: { ...testMovieData, title: 'Successful Bid Movie' },
+        },
+      })
+
+      assertEquals(error, null)
+      assertExists(data.bid)
+      assertEquals(data.bid.league_id, leagueId)
+      assertEquals(data.bid.tmdb_id, 300003)
+      assertEquals(data.bid.amount, 15)
+      assertEquals(data.bid.status, 'active')
+      assertEquals(data.message, 'Bid placed successfully')
+      assertEquals(data.was_update, false)
+    })
+
+    await t.step('successfully places $0 bid', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-zero'))
+
+      const { data, error } = await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300004,
+          amount: 0,
+          movie_data: { ...testMovieData, title: 'Zero Bid Movie' },
+        },
+      })
+
+      assertEquals(error, null)
+      assertExists(data.bid)
+      assertEquals(data.bid.amount, 0)
+      assertEquals(data.bid.status, 'active')
+    })
+
+    // ============================================================================
+    // Outbidding Tests
+    // ============================================================================
+
+    await t.step('successfully outbids another team', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-outbid'))
+
+      // First user places bid
+      await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300005,
+          amount: 10,
+          movie_data: { ...testMovieData, title: 'Outbid Movie' },
+        },
+      })
+
+      // Second user outbids
+      const { data, error } = await secondClient.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300005,
+          amount: 15,
+          movie_data: { ...testMovieData, title: 'Outbid Movie' },
+        },
+      })
+
+      assertEquals(error, null)
+      assertExists(data.bid)
+      assertEquals(data.bid.amount, 15)
+      assertEquals(data.bid.status, 'active')
+      assertEquals(data.message, 'You are now the highest bidder')
+    })
+
+    await t.step('returns 400 when bid is not higher than current highest', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-not-higher'))
+
+      // First user places bid of $20
+      await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300006,
+          amount: 20,
+          movie_data: { ...testMovieData, title: 'High Bid Movie' },
+        },
+      })
+
+      // Second user tries to bid $15 (not higher)
+      const result = await invokeFunction(secondClient, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: 300006,
+        amount: 15,
+        movie_data: { ...testMovieData, title: 'High Bid Movie' },
+      })
+
+      assertEquals(result.error, 'There is already a bid of $20. You must bid higher.')
+    })
+
+    await t.step('returns 400 when bid equals current highest', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-equal'))
+
+      // First user places bid of $25
+      await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300007,
+          amount: 25,
+          movie_data: { ...testMovieData, title: 'Equal Bid Movie' },
+        },
+      })
+
+      // Second user tries to bid $25 (equal, not higher)
+      const result = await invokeFunction(secondClient, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: 300007,
+        amount: 25,
+      })
+
+      assertEquals(result.error, 'There is already a bid of $25. You must bid higher.')
+    })
+
+    // ============================================================================
+    // Update Existing Bid Tests
+    // ============================================================================
+
+    await t.step('updates existing bid from same team', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-update'))
+
+      // First bid
+      await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300008,
+          amount: 10,
+          movie_data: { ...testMovieData, title: 'Update Bid Movie' },
+        },
+      })
+
+      // Update bid
+      const { data, error } = await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300008,
+          amount: 20,
+        },
+      })
+
+      assertEquals(error, null)
+      assertExists(data.bid)
+      assertEquals(data.bid.amount, 20)
+      assertEquals(data.was_update, true)
+    })
+
+    await t.step('can raise own bid after being outbid', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-counter'))
+
+      // First user bids $10
+      await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300009,
+          amount: 10,
+          movie_data: { ...testMovieData, title: 'Counter Bid Movie' },
+        },
+      })
+
+      // Second user outbids with $15
+      await secondClient.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300009,
+          amount: 15,
+        },
+      })
+
+      // First user counters with $20
+      const { data, error } = await client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 300009,
+          amount: 20,
+        },
+      })
+
+      assertEquals(error, null)
+      assertExists(data.bid)
+      assertEquals(data.bid.amount, 20)
+      assertEquals(data.bid.status, 'active')
+      assertEquals(data.was_update, true)
+    })
+
+    // ============================================================================
+    // Movie Eligibility Tests
+    // ============================================================================
+
+    await t.step('returns 400 when movie is already drafted in league', async () => {
+      // This test requires a movie that was drafted during the draft phase
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-drafted'))
+
+      // Get a tmdb_id that was drafted during the active league creation
+      // The factory.createActiveLeague drafts movies with tmdb_ids starting at 200001
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: 200001, // This was drafted during createActiveLeague
+        amount: 10,
+      })
+
+      assertEquals(result.error, 'Movie is not eligible for pickup (already owned or scored)')
+    })
+
+    // ============================================================================
+    // Cleanup
+    // ============================================================================
+
+    await t.step('cleanup test data', async () => {
+      await factory.cleanup()
+    })
+  },
+})

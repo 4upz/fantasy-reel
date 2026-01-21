@@ -395,3 +395,16 @@ verify_jwt = false
 
 [functions.update-scores]
 verify_jwt = false
+
+# Bidding system functions
+[functions.place-bid]
+verify_jwt = false
+
+[functions.cancel-bid]
+verify_jwt = false
+
+[functions.drop-movie]
+verify_jwt = false
+
+[functions.process-bids]
+verify_jwt = false
