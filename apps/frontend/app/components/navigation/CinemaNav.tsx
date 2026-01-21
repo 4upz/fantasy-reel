@@ -7,6 +7,7 @@ import NavLogo from './NavLogo'
 import NavBreadcrumb from './NavBreadcrumb'
 import NavUserMenu from './NavUserMenu'
 import NavMobileDrawer from './NavMobileDrawer'
+import NotificationBell from '@/components/NotificationBell'
 
 interface Props {
   user: User
@@ -50,8 +51,9 @@ export default function CinemaNav({ user, profile }: Props): React.ReactElement 
               <NavBreadcrumb />
             </div>
 
-            {/* Right: User menu */}
-            <div className="flex-shrink-0">
+            {/* Right: Notifications + User menu */}
+            <div className="flex-shrink-0 flex items-center gap-2">
+              <NotificationBell />
               <NavUserMenu
                 user={user}
                 avatarUrl={profile?.avatar_url ?? null}

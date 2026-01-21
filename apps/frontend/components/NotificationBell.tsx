@@ -129,6 +129,7 @@ interface NotificationItemProps {
 function NotificationItem({ notification, onClick }: NotificationItemProps) {
   const isUnread = !notification.read_at
   const leagueId = notification.league_id
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Data contains additional info like tmdb_id and bid_id for future use
   const data = notification.data as { tmdb_id?: number; bid_id?: string } | null
 
   // Determine link based on notification type

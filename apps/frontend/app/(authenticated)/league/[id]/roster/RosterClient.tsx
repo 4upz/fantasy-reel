@@ -25,6 +25,7 @@ export default function RosterClient({
   pickups: initialPickups,
   budget,
   dropCount: initialDropCount,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   userId,
 }: RosterClientProps) {
   const [pickups, setPickups] = useState(initialPickups)
