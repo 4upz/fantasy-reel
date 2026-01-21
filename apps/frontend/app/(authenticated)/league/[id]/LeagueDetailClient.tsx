@@ -4,14 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
 import type { RealtimeStatus } from './components/ConnectionStatusIndicator'
+import BiddingPanel from './components/BiddingPanel'
 import DraftBoard from './components/DraftBoard'
 import InvitationsList from './components/InvitationsList'
 import InviteModal from './components/InviteModal'
 import LeagueHeader from './components/LeagueHeader'
 import ParticipantsList from './components/ParticipantsList'
+import { useBidding } from './hooks/useBidding'
 
 const MAX_RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 2000
+
+type TabType = 'draft' | 'bidding'
 
 interface Props {
   league: League
@@ -33,6 +37,29 @@ export default function LeagueDetailClient({
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting')
+  const [activeTab, setActiveTab] = useState<TabType>('draft')
+
+  // Get team ID from participants for bidding
+  const myParticipant = participants.find(p => p.user_id === currentUserId)
+  const myTeam = myParticipant?.teams
+  const teamId = (myTeam as unknown as { id: string })?.id
+
+  // Use bidding hook (only when league is active and team exists)
+  const {
+    bids,
+    myBids,
+    budget,
+    placeBid,
+    cancelBid,
+  } = useBidding({
+    leagueId: league.id,
+    teamId: teamId || '',
+  })
+
+  // Get drafted tmdb_ids from draft picks
+  const draftedTmdbIds = draftPicks
+    .map(pick => pick.movies?.tmdb_id)
+    .filter((id): id is number => typeof id === 'number')
 
   // Local favorites state (tracks tmdb_ids as numbers)
   const [favoriteMovieIds, setFavoriteMovieIds] = useState<Set<number>>(() => {
@@ -224,17 +251,62 @@ export default function LeagueDetailClient({
           onInviteClick={() => setShowInviteModal(true)}
         />
 
+        {/* Tab Navigation - only show when league is active */}
+        {league.status === 'active' && (
+          <div className="mt-6 border-b border-border">
+            <nav className="flex gap-4">
+              <button
+                onClick={() => setActiveTab('draft')}
+                className={`px-4 py-2 font-display font-medium transition-colors border-b-2 -mb-px ${
+                  activeTab === 'draft'
+                    ? 'border-gold text-gold'
+                    : 'border-transparent text-foreground-secondary hover:text-foreground'
+                }`}
+              >
+                Draft
+              </button>
+              <button
+                onClick={() => setActiveTab('bidding')}
+                className={`px-4 py-2 font-display font-medium transition-colors border-b-2 -mb-px ${
+                  activeTab === 'bidding'
+                    ? 'border-gold text-gold'
+                    : 'border-transparent text-foreground-secondary hover:text-foreground'
+                }`}
+              >
+                Bidding
+              </button>
+            </nav>
+          </div>
+        )}
+
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <DraftBoard
-              league={league}
-              participants={participants}
-              draftPicks={draftPicks}
-              currentUserId={currentUserId}
-              favoriteMovieIds={favoriteMovieIds}
-              onPickMade={handlePickMade}
-              onToggleFavorite={handleToggleFavorite}
-            />
+            {/* Draft Tab Content */}
+            {(activeTab === 'draft' || league.status !== 'active') && (
+              <DraftBoard
+                league={league}
+                participants={participants}
+                draftPicks={draftPicks}
+                currentUserId={currentUserId}
+                favoriteMovieIds={favoriteMovieIds}
+                onPickMade={handlePickMade}
+                onToggleFavorite={handleToggleFavorite}
+              />
+            )}
+
+            {/* Bidding Tab Content */}
+            {activeTab === 'bidding' && league.status === 'active' && teamId && (
+              <BiddingPanel
+                league={league}
+                teamId={teamId}
+                bids={bids}
+                myBids={myBids}
+                budget={budget}
+                draftedTmdbIds={draftedTmdbIds}
+                onPlaceBid={placeBid}
+                onCancelBid={cancelBid}
+              />
+            )}
           </div>
 
           <div>
