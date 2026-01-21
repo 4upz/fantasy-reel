@@ -64,8 +64,8 @@ Deno.serve(async (req) => {
       return errorResponse('Valid tmdb_id is required', 400)
     }
 
-    if (typeof amount !== 'number' || amount < 0 || amount > 100) {
-      return errorResponse('Amount must be between 0 and 100', 400)
+    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 0 || amount > 100) {
+      return errorResponse('Amount must be a whole number between 0 and 100', 400)
     }
 
     // Fetch league
@@ -211,6 +211,40 @@ Deno.serve(async (req) => {
         return errorResponse('Failed to place bid', 500)
       }
       newBid = insertedBid
+    }
+
+    // Re-verify we're the highest bidder (race condition mitigation)
+    const { data: currentHighestBids } = await serviceClient
+      .from('pickup_bids')
+      .select('id, amount, team_id')
+      .eq('league_id', league_id)
+      .eq('tmdb_id', tmdb_id)
+      .eq('status', 'active')
+      .order('amount', { ascending: false })
+      .limit(1)
+
+    const currentHighest = currentHighestBids?.[0]
+
+    // If someone outbid us during the race, mark our bid accordingly
+    if (currentHighest && currentHighest.id !== newBid.id && currentHighest.amount >= amount) {
+      const raceResponseDeadline = new Date()
+      raceResponseDeadline.setHours(raceResponseDeadline.getHours() + league.counterbid_hours)
+
+      await serviceClient
+        .from('pickup_bids')
+        .update({
+          status: 'outbid',
+          countered_at: new Date().toISOString(),
+          response_deadline: raceResponseDeadline.toISOString(),
+        })
+        .eq('id', newBid.id)
+
+      return jsonResponse({
+        bid: { ...newBid, status: 'outbid' },
+        message: `Someone else bid $${currentHighest.amount} at the same time. You have ${league.counterbid_hours} hours to counter.`,
+        was_update: !!existingTeamBid,
+        race_condition: true,
+      }, 201)
     }
 
     // If there was a previous highest bid from another team, mark it as outbid
