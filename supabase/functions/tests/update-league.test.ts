@@ -249,6 +249,186 @@ Deno.test({
   })
 
   // ============================================================================
+  // update_bidding_config Tests
+  // ============================================================================
+
+  await t.step('update_bidding_config: updates total_slots', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('update-total-slots'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: { action: 'update_bidding_config', league_id: leagueId, total_slots: 10 },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.total_slots, 10)
+    assertEquals(data.message, 'Bidding configuration updated successfully')
+  })
+
+  await t.step('update_bidding_config: updates draft_slots', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('update-draft-slots'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: { action: 'update_bidding_config', league_id: leagueId, draft_slots: 3 },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.draft_slots, 3)
+  })
+
+  await t.step('update_bidding_config: updates drop_limit', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('update-drop-limit'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: { action: 'update_bidding_config', league_id: leagueId, drop_limit: 5 },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.drop_limit, 5)
+  })
+
+  await t.step('update_bidding_config: updates counterbid_hours', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('update-counterbid'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: { action: 'update_bidding_config', league_id: leagueId, counterbid_hours: 48 },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.counterbid_hours, 48)
+  })
+
+  await t.step('update_bidding_config: updates multiple fields at once', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('update-all-bidding'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: {
+        action: 'update_bidding_config',
+        league_id: leagueId,
+        total_slots: 12,
+        draft_slots: 6,
+        drop_limit: 3,
+        counterbid_hours: 36,
+      },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.total_slots, 12)
+    assertEquals(data.league.draft_slots, 6)
+    assertEquals(data.league.drop_limit, 3)
+    assertEquals(data.league.counterbid_hours, 36)
+  })
+
+  await t.step('update_bidding_config: returns 400 for total_slots < 1', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('total-slots-min'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      total_slots: 0,
+    })
+    assertEquals(result.error, 'Total slots must be between 1 and 20')
+  })
+
+  await t.step('update_bidding_config: returns 400 for total_slots > 20', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('total-slots-max'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      total_slots: 21,
+    })
+    assertEquals(result.error, 'Total slots must be between 1 and 20')
+  })
+
+  await t.step('update_bidding_config: returns 400 for draft_slots < 1', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('draft-slots-min'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      draft_slots: 0,
+    })
+    assertEquals(result.error, 'Draft slots must be at least 1')
+  })
+
+  await t.step('update_bidding_config: returns 400 when draft_slots > total_slots', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('draft-exceeds-total'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      total_slots: 5,
+      draft_slots: 6,
+    })
+    assertEquals(result.error, 'Draft slots cannot exceed total slots')
+  })
+
+  await t.step('update_bidding_config: returns 400 for drop_limit < 0', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('drop-limit-min'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      drop_limit: -1,
+    })
+    assertEquals(result.error, 'Drop limit must be between 0 and 10')
+  })
+
+  await t.step('update_bidding_config: returns 400 for drop_limit > 10', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('drop-limit-max'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      drop_limit: 11,
+    })
+    assertEquals(result.error, 'Drop limit must be between 0 and 10')
+  })
+
+  await t.step('update_bidding_config: returns 400 for counterbid_hours < 1', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('counterbid-min'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      counterbid_hours: 0,
+    })
+    assertEquals(result.error, 'Counterbid hours must be between 1 and 72')
+  })
+
+  await t.step('update_bidding_config: returns 400 for counterbid_hours > 72', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('counterbid-max'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      counterbid_hours: 73,
+    })
+    assertEquals(result.error, 'Counterbid hours must be between 1 and 72')
+  })
+
+  await t.step('update_bidding_config: returns 400 when no fields provided', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('no-bidding-fields'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+    })
+    assertEquals(result.error, 'No valid fields to update')
+  })
+
+  await t.step('update_bidding_config: returns 400 when league not in setup status', async () => {
+    const leagueId = await factory.createDraftingLeague(uniqueName('bidding-drafting'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      total_slots: 10,
+    })
+    assertEquals(result.error, 'Bidding configuration can only be changed before the draft starts')
+  })
+
+  // ============================================================================
   // kick_participant Tests
   // ============================================================================
 

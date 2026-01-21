@@ -7,6 +7,7 @@ import Link from 'next/link'
 import type { League, ParticipantWithProfile } from '@/types'
 import LeagueInfoSection from './components/LeagueInfoSection'
 import DraftConfigSection from './components/DraftConfigSection'
+import BiddingConfigSection from './components/BiddingConfigSection'
 import ParticipantsSection from './components/ParticipantsSection'
 import DangerZoneSection from './components/DangerZoneSection'
 
@@ -68,6 +69,12 @@ export default function SettingsClient({
         <DraftConfigSection
           league={league}
           participantCount={participants.length}
+          isLocked={!isSetup}
+          onUpdate={handleLeagueUpdate}
+        />
+
+        <BiddingConfigSection
+          league={league}
           isLocked={!isSetup}
           onUpdate={handleLeagueUpdate}
         />

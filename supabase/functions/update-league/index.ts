@@ -8,7 +8,7 @@ import {
   isValidUUID,
 } from '../_shared/utils.ts'
 
-type Action = 'update_info' | 'update_draft_config' | 'kick_participant' | 'delete_league'
+type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'kick_participant' | 'delete_league'
 
 interface UpdateInfoRequest {
   action: 'update_info'
@@ -21,6 +21,15 @@ interface UpdateDraftConfigRequest {
   action: 'update_draft_config'
   league_id: string
   max_participants?: number
+}
+
+interface UpdateBiddingConfigRequest {
+  action: 'update_bidding_config'
+  league_id: string
+  total_slots?: number
+  draft_slots?: number
+  drop_limit?: number
+  counterbid_hours?: number
 }
 
 interface KickParticipantRequest {
@@ -37,12 +46,22 @@ interface DeleteLeagueRequest {
 type UpdateLeagueRequest =
   | UpdateInfoRequest
   | UpdateDraftConfigRequest
+  | UpdateBiddingConfigRequest
   | KickParticipantRequest
   | DeleteLeagueRequest
 
 const MAX_NAME_LENGTH = 255
 const MIN_PARTICIPANTS = 2
 const MAX_PARTICIPANTS = 20
+
+// Bidding config constraints
+const MIN_TOTAL_SLOTS = 1
+const MAX_TOTAL_SLOTS = 20
+const MIN_DRAFT_SLOTS = 1
+const MIN_DROP_LIMIT = 0
+const MAX_DROP_LIMIT = 10
+const MIN_COUNTERBID_HOURS = 1
+const MAX_COUNTERBID_HOURS = 72
 
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
@@ -83,6 +102,9 @@ Deno.serve(async (req) => {
 
       case 'update_draft_config':
         return await handleUpdateDraftConfig(supabase, league, body as UpdateDraftConfigRequest)
+
+      case 'update_bidding_config':
+        return await handleUpdateBiddingConfig(supabase, league, body as UpdateBiddingConfigRequest)
 
       case 'kick_participant':
         return await handleKickParticipant(supabase, league, user.id, body as KickParticipantRequest)
@@ -197,6 +219,74 @@ async function handleUpdateDraftConfig(
   }
 
   return jsonResponse({ league: updatedLeague, message: 'Draft configuration updated successfully' })
+}
+
+async function handleUpdateBiddingConfig(
+  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  league: { id: string; status: string },
+  body: UpdateBiddingConfigRequest
+): Promise<Response> {
+  // Only allow in setup status
+  if (league.status !== 'setup') {
+    return errorResponse('Bidding configuration can only be changed before the draft starts', 400)
+  }
+
+  const updates: Record<string, unknown> = {}
+
+  // Validate total_slots
+  if (body.total_slots !== undefined) {
+    if (body.total_slots < MIN_TOTAL_SLOTS || body.total_slots > MAX_TOTAL_SLOTS) {
+      return errorResponse(`Total slots must be between ${MIN_TOTAL_SLOTS} and ${MAX_TOTAL_SLOTS}`, 400)
+    }
+    updates.total_slots = body.total_slots
+  }
+
+  // Validate draft_slots
+  if (body.draft_slots !== undefined) {
+    if (body.draft_slots < MIN_DRAFT_SLOTS) {
+      return errorResponse(`Draft slots must be at least ${MIN_DRAFT_SLOTS}`, 400)
+    }
+    // draft_slots must not exceed total_slots (use provided or existing value)
+    const totalSlotsValue = body.total_slots ?? (updates.total_slots as number | undefined)
+    if (totalSlotsValue !== undefined && body.draft_slots > totalSlotsValue) {
+      return errorResponse('Draft slots cannot exceed total slots', 400)
+    }
+    updates.draft_slots = body.draft_slots
+  }
+
+  // Validate drop_limit
+  if (body.drop_limit !== undefined) {
+    if (body.drop_limit < MIN_DROP_LIMIT || body.drop_limit > MAX_DROP_LIMIT) {
+      return errorResponse(`Drop limit must be between ${MIN_DROP_LIMIT} and ${MAX_DROP_LIMIT}`, 400)
+    }
+    updates.drop_limit = body.drop_limit
+  }
+
+  // Validate counterbid_hours
+  if (body.counterbid_hours !== undefined) {
+    if (body.counterbid_hours < MIN_COUNTERBID_HOURS || body.counterbid_hours > MAX_COUNTERBID_HOURS) {
+      return errorResponse(`Counterbid hours must be between ${MIN_COUNTERBID_HOURS} and ${MAX_COUNTERBID_HOURS}`, 400)
+    }
+    updates.counterbid_hours = body.counterbid_hours
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return errorResponse('No valid fields to update', 400)
+  }
+
+  const { data: updatedLeague, error } = await supabase
+    .from('leagues')
+    .update(updates)
+    .eq('id', league.id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating league:', error)
+    return errorResponse('Failed to update league', 500)
+  }
+
+  return jsonResponse({ league: updatedLeague, message: 'Bidding configuration updated successfully' })
 }
 
 async function handleKickParticipant(
