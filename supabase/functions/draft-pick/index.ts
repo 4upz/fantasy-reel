@@ -221,13 +221,22 @@ Deno.serve(async (req) => {
       draftComplete = true
 
       // Update league status to 'active'
-      await serviceClient
+      const { error: statusError } = await serviceClient
         .from('leagues')
         .update({ status: 'active' })
         .eq('id', league_id)
 
+      if (statusError) {
+        console.error('Failed to update league status:', statusError)
+        // Continue anyway - draft pick was recorded successfully
+      }
+
       // Initialize team budgets for bidding
-      await serviceClient.rpc('initialize_team_budgets', { p_league_id: league_id })
+      const { error: budgetError } = await serviceClient.rpc('initialize_team_budgets', { p_league_id: league_id })
+      if (budgetError) {
+        console.error('Failed to initialize team budgets:', budgetError)
+        // Log but don't fail - can be manually fixed if needed
+      }
 
       // Create team_scores for all teams in the league
       // First, get participant IDs for this league
@@ -246,15 +255,21 @@ Deno.serve(async (req) => {
         : { data: [] }
 
       if (teams && teams.length > 0) {
-        for (const team of teams) {
-          await serviceClient
-            .from('team_scores')
-            .upsert({
-              team_id: team.id,
-              total_points: 0,
-              movies_scored: 0,
-              movies_pending: 0
-            }, { onConflict: 'team_id' })
+        // Use bulk upsert instead of loop for better performance
+        const teamScores = teams.map(team => ({
+          team_id: team.id,
+          total_points: 0,
+          movies_scored: 0,
+          movies_pending: 0
+        }))
+
+        const { error: scoresError } = await serviceClient
+          .from('team_scores')
+          .upsert(teamScores, { onConflict: 'team_id' })
+
+        if (scoresError) {
+          console.error('Failed to initialize team scores:', scoresError)
+          // Log but don't fail - can be manually fixed if needed
         }
       }
     } else {

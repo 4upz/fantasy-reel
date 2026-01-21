@@ -84,7 +84,55 @@ Deno.serve(async (req) => {
       return errorResponse('Failed to cancel bid', 500)
     }
 
-    return jsonResponse({ message: 'Bid cancelled successfully' })
+    // Restore the next highest outbid user to active status
+    const { data: nextHighestBid } = await serviceClient
+      .from('pickup_bids')
+      .select('*')
+      .eq('league_id', bid.league_id)
+      .eq('tmdb_id', bid.tmdb_id)
+      .eq('status', 'outbid')
+      .order('amount', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (nextHighestBid) {
+      await serviceClient
+        .from('pickup_bids')
+        .update({
+          status: 'active',
+          countered_at: null,
+          response_deadline: null,
+        })
+        .eq('id', nextHighestBid.id)
+
+      // Notify the restored bidder
+      const { data: restoredTeam } = await serviceClient
+        .from('teams')
+        .select('league_participants(user_id)')
+        .eq('id', nextHighestBid.team_id)
+        .single()
+
+      const restoredUserId = (restoredTeam?.league_participants as unknown as { user_id: string })?.user_id
+      if (restoredUserId) {
+        const movieTitle = nextHighestBid.movie_data?.title || `Movie #${nextHighestBid.tmdb_id}`
+        await serviceClient.from('notifications').insert({
+          user_id: restoredUserId,
+          league_id: bid.league_id,
+          type: 'outbid', // reusing outbid type for "you're now highest"
+          title: `You're now the highest bidder on ${movieTitle}`,
+          body: `The previous highest bid was cancelled. Your bid of $${nextHighestBid.amount} is now leading.`,
+          data: {
+            bid_id: nextHighestBid.id,
+            tmdb_id: nextHighestBid.tmdb_id,
+          },
+        })
+      }
+    }
+
+    return jsonResponse({
+      message: 'Bid cancelled successfully',
+      restored_bid: nextHighestBid ? { id: nextHighestBid.id, amount: nextHighestBid.amount } : null,
+    })
   } catch (error) {
     console.error('Error cancelling bid:', error)
     return errorResponse('Internal server error', 500)

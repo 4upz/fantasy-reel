@@ -92,11 +92,11 @@ Deno.serve(async (req) => {
       release_date: string | null
     }
     if (movie.release_date) {
-      const releaseDate = new Date(movie.release_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      // Use UTC date string comparison to avoid timezone issues
+      // release_date is stored as 'YYYY-MM-DD' format
+      const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD in UTC
 
-      if (releaseDate < today) {
+      if (movie.release_date < today) {
         return errorResponse('Cannot drop a movie that has already been released', 400)
       }
     }
@@ -116,6 +116,9 @@ Deno.serve(async (req) => {
     const dropLimit = league.drop_limit ?? 2
 
     // Check drop limit using the helper function
+    // Note: There is a potential race condition between this check and the insert below.
+    // For the POC, we accept this risk. In production, consider using a database trigger
+    // or advisory lock to enforce the limit atomically.
     const { data: dropCount } = await serviceClient.rpc('get_team_drop_count', {
       p_team_id: pickup.team_id,
     })
@@ -124,19 +127,10 @@ Deno.serve(async (req) => {
       return errorResponse(`You have reached the drop limit of ${dropLimit}`, 400)
     }
 
-    // Mark pickup as dropped
     const droppedAt = new Date().toISOString()
-    const { error: updateError } = await serviceClient
-      .from('pickups')
-      .update({ dropped_at: droppedAt })
-      .eq('id', pickup_id)
 
-    if (updateError) {
-      console.error('Error updating pickup:', updateError)
-      return errorResponse('Failed to drop movie', 500)
-    }
-
-    // Record the drop in team_drops table
+    // Record the drop in team_drops table first (authoritative record)
+    // This makes the drop "real" - if this fails, the drop doesn't happen
     const { error: dropRecordError } = await serviceClient
       .from('team_drops')
       .insert({
@@ -147,8 +141,28 @@ Deno.serve(async (req) => {
       })
 
     if (dropRecordError) {
-      // Log but don't fail - the drop was successful
       console.error('Failed to record drop in team_drops:', dropRecordError)
+      // Could be a race condition - check if limit was exceeded
+      const { data: newDropCount } = await serviceClient.rpc('get_team_drop_count', {
+        p_team_id: pickup.team_id,
+      })
+      if ((newDropCount ?? 0) >= dropLimit) {
+        return errorResponse(`You have reached the drop limit of ${dropLimit}`, 400)
+      }
+      return errorResponse('Failed to drop movie', 500)
+    }
+
+    // Mark pickup as dropped
+    const { error: updateError } = await serviceClient
+      .from('pickups')
+      .update({ dropped_at: droppedAt })
+      .eq('id', pickup_id)
+
+    if (updateError) {
+      console.error('Error updating pickup:', updateError)
+      // Rollback the team_drops entry since the pickup update failed
+      await serviceClient.from('team_drops').delete().eq('pickup_id', pickup_id)
+      return errorResponse('Failed to drop movie', 500)
     }
 
     // Notify other league members that movie is available
