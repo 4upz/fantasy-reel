@@ -163,6 +163,72 @@ If you didn't expect this invitation, you can safely ignore this email.`
 }
 
 /**
+ * Generic email sending parameters
+ */
+export interface SendEmailParams {
+  to: string
+  subject: string
+  html: string
+  text: string
+}
+
+/**
+ * Send an email via Resend API
+ * Returns success status - never throws to avoid blocking the calling operation
+ */
+export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+  const apiKey = Deno.env.get('RESEND_API_KEY')
+  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'Fantasy Reel <noreply@fantasyreels.com>'
+
+  if (!apiKey) {
+    console.warn('RESEND_API_KEY not configured - skipping email send')
+    return { success: false, error: 'RESEND_API_KEY not configured' }
+  }
+
+  // Validate recipient email
+  if (!isValidEmail(params.to)) {
+    console.warn('Invalid recipient email format')
+    return { success: false, error: 'Invalid recipient email' }
+  }
+
+  // Sanitize email headers to prevent injection attacks
+  const sanitizedFrom = sanitizeEmailHeader(fromEmail)
+  const sanitizedSubject = sanitizeEmailHeader(params.subject)
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: sanitizedFrom,
+        to: [params.to],
+        subject: sanitizedSubject,
+        html: params.html,
+        text: params.text,
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('Resend API error', { status: response.status })
+      return { success: false, error: 'Email delivery failed' }
+    }
+
+    const result = await response.json()
+    console.log('Email sent successfully:', result.id)
+    return { success: true, messageId: result.id }
+
+  } catch (error) {
+    console.error('Email send error', {
+      type: error instanceof Error ? error.constructor.name : 'Unknown'
+    })
+    return { success: false, error: 'Email delivery unavailable' }
+  }
+}
+
+/**
  * Send an invitation email via Resend API
  * Returns success status - never throws to avoid blocking invitation creation
  */

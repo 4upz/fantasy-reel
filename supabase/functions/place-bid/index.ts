@@ -5,6 +5,8 @@ import {
   handleCorsPreflightRequest,
   isValidUUID,
 } from '../_shared/utils.ts'
+import { sendEmail } from '../_shared/email.ts'
+import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
 
 interface MovieData {
   title: string
@@ -287,7 +289,42 @@ Deno.serve(async (req) => {
           },
         })
 
-        // TODO: Send email notification via Resend
+        // Get user's email for email notification
+        const { data: outbidUser } = await serviceClient
+          .from('profiles')
+          .select('display_name')
+          .eq('user_id', outbidUserId)
+          .single()
+
+        const { data: userData } = await serviceClient.auth.admin.getUserById(outbidUserId)
+        const outbidEmail = userData?.user?.email
+
+        if (outbidEmail) {
+          const baseUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
+          const emailData = {
+            recipientName: outbidUser?.display_name || 'Fantasy Manager',
+            movieTitle,
+            yourBidAmount: highestBid.amount,
+            newBidAmount: amount,
+            counterDeadline: responseDeadline.toLocaleString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+              hour: 'numeric',
+              minute: '2-digit',
+              timeZoneName: 'short',
+            }),
+            leagueUrl: `${baseUrl}/league/${league_id}`,
+          }
+
+          // Send email (non-blocking)
+          sendEmail({
+            to: outbidEmail,
+            subject: `You've been outbid on ${movieTitle}`,
+            html: getOutbidEmailHtml(emailData),
+            text: getOutbidEmailText(emailData),
+          }).catch(err => console.error('Failed to send outbid email:', err))
+        }
       }
     }
 
