@@ -226,6 +226,9 @@ Deno.serve(async (req) => {
         .update({ status: 'active' })
         .eq('id', league_id)
 
+      // Initialize team budgets for bidding
+      await serviceClient.rpc('initialize_team_budgets', { p_league_id: league_id })
+
       // Create team_scores for all teams in the league
       // First, get participant IDs for this league
       const { data: participants } = await serviceClient
