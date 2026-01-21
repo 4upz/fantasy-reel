@@ -20,6 +20,9 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { sendEmail } from '../_shared/email.ts'
+import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
+import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
 
 interface ProcessBidsRequest {
   mode?: 'weekly' | 'extended'
@@ -306,6 +309,37 @@ Deno.serve(async (req) => {
               amount: winner.amount,
             },
           })
+
+          // Send email to winner
+          const [{ data: winnerProfile }, { data: winnerUserData }] = await Promise.all([
+            serviceClient
+              .from('profiles')
+              .select('display_name')
+              .eq('user_id', winnerUserId)
+              .single(),
+            serviceClient.auth.admin.getUserById(winnerUserId)
+          ])
+
+          const winnerEmail = winnerUserData?.user?.email
+          if (winnerEmail) {
+            const baseUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
+            sendEmail({
+              to: winnerEmail,
+              subject: `You won ${movieTitle}!`,
+              html: getBidWonEmailHtml({
+                recipientName: winnerProfile?.display_name || 'Fantasy Manager',
+                movieTitle,
+                winningAmount: winner.amount,
+                leagueUrl: `${baseUrl}/league/${winner.league_id}`,
+              }),
+              text: getBidWonEmailText({
+                recipientName: winnerProfile?.display_name || 'Fantasy Manager',
+                movieTitle,
+                winningAmount: winner.amount,
+                leagueUrl: `${baseUrl}/league/${winner.league_id}`,
+              }),
+            }).catch(err => console.error('Failed to send bid won email:', err))
+          }
         }
 
         // Send notifications to losers
@@ -331,6 +365,39 @@ Deno.serve(async (req) => {
                 winning_amount: winner.amount,
               },
             })
+
+            // Send email to loser
+            const [{ data: loserProfile }, { data: loserUserData }] = await Promise.all([
+              serviceClient
+                .from('profiles')
+                .select('display_name')
+                .eq('user_id', loserUserId)
+                .single(),
+              serviceClient.auth.admin.getUserById(loserUserId)
+            ])
+
+            const loserEmail = loserUserData?.user?.email
+            if (loserEmail) {
+              const baseUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
+              sendEmail({
+                to: loserEmail,
+                subject: `Bid unsuccessful for ${movieTitle}`,
+                html: getBidLostEmailHtml({
+                  recipientName: loserProfile?.display_name || 'Fantasy Manager',
+                  movieTitle,
+                  yourBidAmount: loserBid.amount,
+                  winningAmount: winner.amount,
+                  leagueUrl: `${baseUrl}/league/${loserBid.league_id}`,
+                }),
+                text: getBidLostEmailText({
+                  recipientName: loserProfile?.display_name || 'Fantasy Manager',
+                  movieTitle,
+                  yourBidAmount: loserBid.amount,
+                  winningAmount: winner.amount,
+                  leagueUrl: `${baseUrl}/league/${loserBid.league_id}`,
+                }),
+              }).catch(err => console.error('Failed to send bid lost email:', err))
+            }
           }
         }
 
