@@ -52,6 +52,8 @@ export interface Movie {
   vote_average: number | null
   vote_count: number | null
   status: 'upcoming' | 'released' | 'canceled'
+  combined_score: number | null
+  scores_updated_at: string | null
   last_synced_at: string
   created_at: string
   updated_at: string
@@ -136,8 +138,6 @@ export interface InvitationWithLeague extends Invitation {
 
 // Standings page types
 export interface MovieWithScores extends Movie {
-  combined_score: number | null
-  scores_updated_at: string | null
   reviews: Review[]
 }
 
