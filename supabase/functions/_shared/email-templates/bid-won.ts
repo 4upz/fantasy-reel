@@ -1,4 +1,6 @@
 // supabase/functions/_shared/email-templates/bid-won.ts
+import { escapeHtml, sanitizeEmailHeader } from '../email.ts'
+
 export interface BidWonEmailData {
   recipientName: string
   movieTitle: string
@@ -7,6 +9,10 @@ export interface BidWonEmailData {
 }
 
 export function getBidWonEmailHtml(data: BidWonEmailData): string {
+  // Escape user-provided content to prevent XSS
+  const safeRecipientName = escapeHtml(data.recipientName)
+  const safeMovieTitle = escapeHtml(data.movieTitle)
+
   return `
 <!DOCTYPE html>
 <html>
@@ -33,11 +39,11 @@ export function getBidWonEmailHtml(data: BidWonEmailData): string {
           <tr>
             <td style="padding: 32px;">
               <p style="margin: 0 0 16px; color: #e8e8e8; font-size: 16px; line-height: 1.5;">
-                Congratulations ${data.recipientName}!
+                Congratulations ${safeRecipientName}!
               </p>
 
               <p style="margin: 0 0 24px; color: #b8b0a4; font-size: 16px; line-height: 1.5;">
-                Your bid of <strong style="color: #c9a227;">$${data.winningAmount}</strong> won <strong style="color: #e8e8e8;">${data.movieTitle}</strong>!
+                Your bid of <strong style="color: #c9a227;">$${data.winningAmount}</strong> won <strong style="color: #e8e8e8;">${safeMovieTitle}</strong>!
               </p>
 
               <p style="margin: 0 0 24px; color: #b8b0a4; font-size: 16px; line-height: 1.5;">
@@ -69,12 +75,16 @@ export function getBidWonEmailHtml(data: BidWonEmailData): string {
 }
 
 export function getBidWonEmailText(data: BidWonEmailData): string {
+  // Sanitize user-provided content to prevent newline injection
+  const safeRecipientName = sanitizeEmailHeader(data.recipientName)
+  const safeMovieTitle = sanitizeEmailHeader(data.movieTitle)
+
   return `
 You Won!
 
-Congratulations ${data.recipientName}!
+Congratulations ${safeRecipientName}!
 
-Your bid of $${data.winningAmount} won ${data.movieTitle}!
+Your bid of $${data.winningAmount} won ${safeMovieTitle}!
 
 The movie has been added to your roster.
 

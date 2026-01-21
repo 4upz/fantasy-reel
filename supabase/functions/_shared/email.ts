@@ -38,7 +38,7 @@ function formatExpirationDate(expiresAt: string): string {
 /**
  * Escape HTML special characters to prevent XSS in email templates
  */
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   const htmlEscapes: Record<string, string> = {
     '&': '&amp;',
     '<': '&lt;',
@@ -53,7 +53,7 @@ function escapeHtml(text: string): string {
  * Sanitize text for use in email headers to prevent header injection attacks.
  * Removes newlines and control characters that could be used to inject headers.
  */
-function sanitizeEmailHeader(text: string): string {
+export function sanitizeEmailHeader(text: string): string {
   return text.replace(/[\r\n\t\x00-\x1f]/g, ' ').trim()
 }
 

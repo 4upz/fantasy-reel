@@ -1,4 +1,6 @@
 // supabase/functions/_shared/email-templates/bid-lost.ts
+import { escapeHtml, sanitizeEmailHeader } from '../email.ts'
+
 export interface BidLostEmailData {
   recipientName: string
   movieTitle: string
@@ -8,6 +10,10 @@ export interface BidLostEmailData {
 }
 
 export function getBidLostEmailHtml(data: BidLostEmailData): string {
+  // Escape user-provided content to prevent XSS
+  const safeRecipientName = escapeHtml(data.recipientName)
+  const safeMovieTitle = escapeHtml(data.movieTitle)
+
   return `
 <!DOCTYPE html>
 <html>
@@ -34,11 +40,11 @@ export function getBidLostEmailHtml(data: BidLostEmailData): string {
           <tr>
             <td style="padding: 32px;">
               <p style="margin: 0 0 16px; color: #e8e8e8; font-size: 16px; line-height: 1.5;">
-                Hi ${data.recipientName},
+                Hi ${safeRecipientName},
               </p>
 
               <p style="margin: 0 0 24px; color: #b8b0a4; font-size: 16px; line-height: 1.5;">
-                Unfortunately, your bid on <strong style="color: #e8e8e8;">${data.movieTitle}</strong> was unsuccessful.
+                Unfortunately, your bid on <strong style="color: #e8e8e8;">${safeMovieTitle}</strong> was unsuccessful.
               </p>
 
               <table role="presentation" style="width: 100%; background-color: #2a2a2a; border-radius: 8px; margin-bottom: 24px;">
@@ -87,12 +93,16 @@ export function getBidLostEmailHtml(data: BidLostEmailData): string {
 }
 
 export function getBidLostEmailText(data: BidLostEmailData): string {
+  // Sanitize user-provided content to prevent newline injection
+  const safeRecipientName = sanitizeEmailHeader(data.recipientName)
+  const safeMovieTitle = sanitizeEmailHeader(data.movieTitle)
+
   return `
 Bid Unsuccessful
 
-Hi ${data.recipientName},
+Hi ${safeRecipientName},
 
-Unfortunately, your bid on ${data.movieTitle} was unsuccessful.
+Unfortunately, your bid on ${safeMovieTitle} was unsuccessful.
 
 Your bid: $${data.yourBidAmount}
 Winning bid: $${data.winningAmount}
