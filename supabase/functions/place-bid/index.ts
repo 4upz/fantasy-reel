@@ -289,14 +289,15 @@ Deno.serve(async (req) => {
           },
         })
 
-        // Get user's email for email notification
-        const { data: outbidUser } = await serviceClient
-          .from('profiles')
-          .select('display_name')
-          .eq('user_id', outbidUserId)
-          .single()
-
-        const { data: userData } = await serviceClient.auth.admin.getUserById(outbidUserId)
+        // Get user's email for email notification (parallel queries)
+        const [{ data: outbidUser }, { data: userData }] = await Promise.all([
+          serviceClient
+            .from('profiles')
+            .select('display_name')
+            .eq('user_id', outbidUserId)
+            .single(),
+          serviceClient.auth.admin.getUserById(outbidUserId)
+        ])
         const outbidEmail = userData?.user?.email
 
         if (outbidEmail) {
