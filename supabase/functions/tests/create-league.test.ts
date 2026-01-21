@@ -6,9 +6,14 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName } from './_setup.ts'
+import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
 
-Deno.test('create-league', async (t) => {
+Deno.test({
+  name: 'create-league',
+  // Supabase client starts internal intervals for auth refresh that we don't control
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, factory } = await createTestFactory()
 
   // ============================================================================
@@ -17,10 +22,8 @@ Deno.test('create-league', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('create-league', {
-      body: { name: 'Test League' },
-    })
-    assertEquals(data?.error, 'Unauthorized')
+    const result = await invokeFunction(anonClient, 'create-league', { name: 'Test League' })
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -28,24 +31,18 @@ Deno.test('create-league', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 when name is missing', async () => {
-    const { data } = await client.functions.invoke('create-league', {
-      body: {},
-    })
-    assertEquals(data?.error, 'League name is required')
+    const result = await invokeFunction(client, 'create-league', {})
+    assertEquals(result.error, 'League name is required')
   })
 
   await t.step('returns 400 when name is empty string', async () => {
-    const { data } = await client.functions.invoke('create-league', {
-      body: { name: '' },
-    })
-    assertEquals(data?.error, 'League name is required')
+    const result = await invokeFunction(client, 'create-league', { name: '' })
+    assertEquals(result.error, 'League name is required')
   })
 
   await t.step('returns 400 when name is whitespace only', async () => {
-    const { data } = await client.functions.invoke('create-league', {
-      body: { name: '   ' },
-    })
-    assertEquals(data?.error, 'League name is required')
+    const result = await invokeFunction(client, 'create-league', { name: '   ' })
+    assertEquals(result.error, 'League name is required')
   })
 
   // ============================================================================
@@ -158,4 +155,4 @@ Deno.test('create-league', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

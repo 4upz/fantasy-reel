@@ -6,9 +6,13 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName } from './_setup.ts'
+import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
 
-Deno.test('get-leagues', async (t) => {
+Deno.test({
+  name: 'get-leagues',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient, factory } = await createTestFactory()
 
   // ============================================================================
@@ -17,10 +21,8 @@ Deno.test('get-leagues', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('get-leagues', {
-      body: {},
-    })
-    assertEquals(data?.error, 'Unauthorized')
+    const result = await invokeFunction(anonClient, 'get-leagues', {})
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -100,4 +102,4 @@ Deno.test('get-leagues', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

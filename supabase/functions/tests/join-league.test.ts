@@ -6,9 +6,13 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName, TEST_USER_2 } from './_setup.ts'
+import { createTestFactory, getAnonClient, uniqueName, invokeFunction, TEST_USER_2 } from './_setup.ts'
 
-Deno.test('join-league', async (t) => {
+Deno.test({
+  name: 'join-league',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient, factory } = await createTestFactory()
 
   // ============================================================================
@@ -17,10 +21,10 @@ Deno.test('join-league', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('join-league', {
-      body: { league_id: '00000000-0000-0000-0000-000000000000' },
+    const result = await invokeFunction(anonClient, 'join-league', {
+      league_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'Unauthorized')
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -28,24 +32,22 @@ Deno.test('join-league', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 when neither league_id nor token provided', async () => {
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: {},
-    })
-    assertEquals(data?.error, 'Either league_id or invitation_token is required')
+    const result = await invokeFunction(secondClient, 'join-league', {})
+    assertEquals(result.error, 'Either league_id or invitation_token is required')
   })
 
   await t.step('returns 400 for invalid invitation token format', async () => {
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { invitation_token: 'not-a-uuid' },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      invitation_token: 'not-a-uuid',
     })
-    assertEquals(data?.error, 'Invalid invitation token')
+    assertEquals(result.error, 'Invalid invitation token')
   })
 
   await t.step('returns 400 for invalid league_id format', async () => {
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { league_id: 'not-a-uuid' },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      league_id: 'not-a-uuid',
     })
-    assertEquals(data?.error, 'Invalid league_id')
+    assertEquals(result.error, 'Invalid league_id')
   })
 
   // ============================================================================
@@ -53,17 +55,17 @@ Deno.test('join-league', async (t) => {
   // ============================================================================
 
   await t.step('returns 404 for non-existent invitation token', async () => {
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { invitation_token: '00000000-0000-0000-0000-000000000000' },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      invitation_token: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'Invalid or expired invitation')
+    assertEquals(result.error, 'Invalid or expired invitation')
   })
 
   await t.step('returns 404 for non-existent league_id', async () => {
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { league_id: '00000000-0000-0000-0000-000000000000' },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      league_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'League not found')
+    assertEquals(result.error, 'League not found')
   })
 
   // ============================================================================
@@ -75,10 +77,10 @@ Deno.test('join-league', async (t) => {
       invite_only: true,
     })
 
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { league_id: leagueId },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'This league is invite-only')
+    assertEquals(result.error, 'This league is invite-only')
   })
 
   await t.step('returns 403 when invitation was sent to different email', async () => {
@@ -88,10 +90,10 @@ Deno.test('join-league', async (t) => {
     const { token } = await factory.createInvitation(leagueId, 'different@example.com')
 
     // Second user tries to use the invitation
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { invitation_token: token },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      invitation_token: token,
     })
-    assertEquals(data?.error, 'This invitation was sent to a different email address')
+    assertEquals(result.error, 'This invitation was sent to a different email address')
   })
 
   // ============================================================================
@@ -103,10 +105,10 @@ Deno.test('join-league', async (t) => {
     await factory.addSecondParticipant(leagueId)
 
     // Try to join again via direct join
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { league_id: leagueId },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'You are already a member of this league')
+    assertEquals(result.error, 'You are already a member of this league')
   })
 
   await t.step('returns 400 when league is full', async () => {
@@ -116,10 +118,11 @@ Deno.test('join-league', async (t) => {
     await factory.addSecondParticipant(leagueId)
 
     // Try to create invitation for third user (league is full)
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email: 'third@example.com' },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
+      email: 'third@example.com',
     })
-    assertEquals(data?.error, 'League is full')
+    assertEquals(result.error, 'League is full')
   })
 
   await t.step('returns 400 when invitation already used', async () => {
@@ -132,10 +135,10 @@ Deno.test('join-league', async (t) => {
     })
 
     // Try to use same token again
-    const { data } = await secondClient.functions.invoke('join-league', {
-      body: { invitation_token: token },
+    const result = await invokeFunction(secondClient, 'join-league', {
+      invitation_token: token,
     })
-    assertEquals(data?.error, 'Invitation has already been accepted')
+    assertEquals(result.error, 'Invitation has already been accepted')
   })
 
   // ============================================================================
@@ -209,4 +212,4 @@ Deno.test('join-league', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

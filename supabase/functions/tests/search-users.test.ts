@@ -6,9 +6,13 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName } from './_setup.ts'
+import { createTestFactory, getAnonClient, invokeFunction, uniqueName } from './_setup.ts'
 
-Deno.test('search-users', async (t) => {
+Deno.test({
+  name: 'search-users',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient, factory } = await createTestFactory()
 
   // ============================================================================
@@ -17,13 +21,11 @@ Deno.test('search-users', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('search-users', {
-      body: {
-        query: 'test',
-        league_id: '00000000-0000-0000-0000-000000000000',
-      },
+    const result = await invokeFunction(anonClient, 'search-users', {
+      query: 'test',
+      league_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'Unauthorized')
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -31,35 +33,36 @@ Deno.test('search-users', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 for missing league_id', async () => {
-    const { data } = await client.functions.invoke('search-users', {
-      body: { query: 'test' },
-    })
-    assertEquals(data?.error, 'Valid league_id is required')
+    const result = await invokeFunction(client, 'search-users', { query: 'test' })
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for invalid league_id', async () => {
-    const { data } = await client.functions.invoke('search-users', {
-      body: { query: 'test', league_id: 'not-a-uuid' },
+    const result = await invokeFunction(client, 'search-users', {
+      query: 'test',
+      league_id: 'not-a-uuid',
     })
-    assertEquals(data?.error, 'Valid league_id is required')
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for query too short', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('search-short-query'))
 
-    const { data } = await client.functions.invoke('search-users', {
-      body: { query: 'a', league_id: leagueId },
+    const result = await invokeFunction(client, 'search-users', {
+      query: 'a',
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'Search query must be at least 2 characters')
+    assertEquals(result.error, 'Search query must be at least 2 characters')
   })
 
   await t.step('returns 400 for empty query', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('search-empty-query'))
 
-    const { data } = await client.functions.invoke('search-users', {
-      body: { query: '', league_id: leagueId },
+    const result = await invokeFunction(client, 'search-users', {
+      query: '',
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'Search query must be at least 2 characters')
+    assertEquals(result.error, 'Search query must be at least 2 characters')
   })
 
   // ============================================================================
@@ -67,13 +70,11 @@ Deno.test('search-users', async (t) => {
   // ============================================================================
 
   await t.step('returns 404 when league does not exist', async () => {
-    const { data } = await client.functions.invoke('search-users', {
-      body: {
-        query: 'test',
-        league_id: '00000000-0000-0000-0000-000000000000',
-      },
+    const result = await invokeFunction(client, 'search-users', {
+      query: 'test',
+      league_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'League not found')
+    assertEquals(result.error, 'League not found')
   })
 
   // ============================================================================
@@ -82,11 +83,14 @@ Deno.test('search-users', async (t) => {
 
   await t.step('returns 403 when user is not the league owner', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('search-not-owner'))
+    // Add second user to league so they can see it via RLS
+    await factory.addSecondParticipant(leagueId)
 
-    const { data } = await secondClient.functions.invoke('search-users', {
-      body: { query: 'test', league_id: leagueId },
+    const result = await invokeFunction(secondClient, 'search-users', {
+      query: 'test',
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'Only the league owner can search for users to invite')
+    assertEquals(result.error, 'Only the league owner can search for users to invite')
   })
 
   // ============================================================================
@@ -145,10 +149,12 @@ Deno.test('search-users', async (t) => {
     const { id: leagueId } = await factory.createLeague(uniqueName('search-max-limit'))
 
     // This should return short query error before limit is processed
-    const { data } = await client.functions.invoke('search-users', {
-      body: { query: 'a', league_id: leagueId, limit: 100 },
+    const result = await invokeFunction(client, 'search-users', {
+      query: 'a',
+      league_id: leagueId,
+      limit: 100,
     })
-    assertEquals(data?.error, 'Search query must be at least 2 characters')
+    assertEquals(result.error, 'Search query must be at least 2 characters')
   })
 
   // ============================================================================
@@ -158,4 +164,4 @@ Deno.test('search-users', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

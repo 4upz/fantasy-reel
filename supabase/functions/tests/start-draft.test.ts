@@ -6,9 +6,13 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName } from './_setup.ts'
+import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
 
-Deno.test('start-draft', async (t) => {
+Deno.test({
+  name: 'start-draft',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient, factory } = await createTestFactory()
 
   // ============================================================================
@@ -17,10 +21,10 @@ Deno.test('start-draft', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('start-draft', {
-      body: { league_id: '00000000-0000-0000-0000-000000000000' },
+    const result = await invokeFunction(anonClient, 'start-draft', {
+      league_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'Unauthorized')
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -28,17 +32,15 @@ Deno.test('start-draft', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 for missing league_id', async () => {
-    const { data } = await client.functions.invoke('start-draft', {
-      body: {},
-    })
-    assertEquals(data?.error, 'Valid league_id is required')
+    const result = await invokeFunction(client, 'start-draft', {})
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for invalid UUID format', async () => {
-    const { data } = await client.functions.invoke('start-draft', {
-      body: { league_id: 'not-a-valid-uuid' },
+    const result = await invokeFunction(client, 'start-draft', {
+      league_id: 'not-a-valid-uuid',
     })
-    assertEquals(data?.error, 'Valid league_id is required')
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   // ============================================================================
@@ -46,10 +48,10 @@ Deno.test('start-draft', async (t) => {
   // ============================================================================
 
   await t.step('returns 404 when league does not exist', async () => {
-    const { data } = await client.functions.invoke('start-draft', {
-      body: { league_id: '00000000-0000-0000-0000-000000000000' },
+    const result = await invokeFunction(client, 'start-draft', {
+      league_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'League not found')
+    assertEquals(result.error, 'League not found')
   })
 
   // ============================================================================
@@ -60,10 +62,10 @@ Deno.test('start-draft', async (t) => {
     const { id: leagueId } = await factory.createLeague(uniqueName('permission-test'))
     await factory.addSecondParticipant(leagueId)
 
-    const { data } = await secondClient.functions.invoke('start-draft', {
-      body: { league_id: leagueId },
+    const result = await invokeFunction(secondClient, 'start-draft', {
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'Only the league owner can start the draft')
+    assertEquals(result.error, 'Only the league owner can start the draft')
   })
 
   // ============================================================================
@@ -73,10 +75,10 @@ Deno.test('start-draft', async (t) => {
   await t.step('returns 400 when league has less than 2 participants', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('single-participant'))
 
-    const { data } = await client.functions.invoke('start-draft', {
-      body: { league_id: leagueId },
+    const result = await invokeFunction(client, 'start-draft', {
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'Need at least 2 participants to start the draft')
+    assertEquals(result.error, 'Need at least 2 participants to start the draft')
   })
 
   await t.step('returns 400 when league is already in drafting status', async () => {
@@ -89,10 +91,10 @@ Deno.test('start-draft', async (t) => {
     })
 
     // Try to start draft again
-    const { data } = await client.functions.invoke('start-draft', {
-      body: { league_id: leagueId },
+    const result = await invokeFunction(client, 'start-draft', {
+      league_id: leagueId,
     })
-    assertEquals(data?.error, "Cannot start draft: league is already in 'drafting' status")
+    assertEquals(result.error, "Cannot start draft: league is already in 'drafting' status")
   })
 
   // ============================================================================
@@ -121,4 +123,4 @@ Deno.test('start-draft', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

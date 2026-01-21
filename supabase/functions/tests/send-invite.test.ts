@@ -11,11 +11,16 @@ import {
   getAnonClient,
   getUserId,
   uniqueName,
+  invokeFunction,
   TEST_USER,
   TEST_USER_2,
 } from './_setup.ts'
 
-Deno.test('send-invite', async (t) => {
+Deno.test({
+  name: 'send-invite',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient, factory } = await createTestFactory()
 
   // ============================================================================
@@ -24,13 +29,11 @@ Deno.test('send-invite', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('send-invite', {
-      body: {
-        league_id: '00000000-0000-0000-0000-000000000000',
-        email: 'invitee@example.com',
-      },
+    const result = await invokeFunction(anonClient, 'send-invite', {
+      league_id: '00000000-0000-0000-0000-000000000000',
+      email: 'invitee@example.com',
     })
-    assertEquals(data?.error, 'Unauthorized')
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -38,47 +41,47 @@ Deno.test('send-invite', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 for missing league_id', async () => {
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { email: 'invitee@example.com' },
+    const result = await invokeFunction(client, 'send-invite', {
+      email: 'invitee@example.com',
     })
-    assertEquals(data?.error, 'Valid league_id is required')
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for invalid league_id', async () => {
-    const { data } = await client.functions.invoke('send-invite', {
-      body: {
-        league_id: 'not-a-uuid',
-        email: 'invitee@example.com',
-      },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: 'not-a-uuid',
+      email: 'invitee@example.com',
     })
-    assertEquals(data?.error, 'Valid league_id is required')
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 when neither email nor user_id provided', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('invite-no-email'))
 
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { league_id: leagueId },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'Either email or user_id is required')
+    assertEquals(result.error, 'Either email or user_id is required')
   })
 
   await t.step('returns 400 for invalid email format', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('invite-invalid-email'))
 
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email: 'not-an-email' },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
+      email: 'not-an-email',
     })
-    assertEquals(data?.error, 'Valid email is required')
+    assertEquals(result.error, 'Valid email is required')
   })
 
   await t.step('returns 400 when trying to invite yourself', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('invite-self'))
 
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email: TEST_USER.email },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
+      email: TEST_USER.email,
     })
-    assertEquals(data?.error, 'You cannot invite yourself to a league')
+    assertEquals(result.error, 'You cannot invite yourself to a league')
   })
 
   // ============================================================================
@@ -86,25 +89,21 @@ Deno.test('send-invite', async (t) => {
   // ============================================================================
 
   await t.step('returns 404 when league does not exist', async () => {
-    const { data } = await client.functions.invoke('send-invite', {
-      body: {
-        league_id: '00000000-0000-0000-0000-000000000000',
-        email: 'invitee@example.com',
-      },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: '00000000-0000-0000-0000-000000000000',
+      email: 'invitee@example.com',
     })
-    assertEquals(data?.error, 'League not found')
+    assertEquals(result.error, 'League not found')
   })
 
   await t.step('returns 404 for invalid user_id', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('invite-invalid-userid'))
 
-    const { data } = await client.functions.invoke('send-invite', {
-      body: {
-        league_id: leagueId,
-        user_id: '00000000-0000-0000-0000-000000000000',
-      },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
+      user_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'User not found')
+    assertEquals(result.error, 'User not found')
   })
 
   // ============================================================================
@@ -113,11 +112,14 @@ Deno.test('send-invite', async (t) => {
 
   await t.step('returns 403 when user is not the league owner', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('invite-not-owner'))
+    // Add second user to league so they can see it via RLS
+    await factory.addSecondParticipant(leagueId)
 
-    const { data } = await secondClient.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email: 'some-invitee@example.com' },
+    const result = await invokeFunction(secondClient, 'send-invite', {
+      league_id: leagueId,
+      email: 'some-invitee@example.com',
     })
-    assertEquals(data?.error, 'Only the league owner can send invitations')
+    assertEquals(result.error, 'Only the league owner can send invitations')
   })
 
   // ============================================================================
@@ -134,10 +136,11 @@ Deno.test('send-invite', async (t) => {
     })
 
     // Try to send another invite
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email: 'another@example.com' },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
+      email: 'another@example.com',
     })
-    assertEquals(data?.error, 'Cannot send invitations - draft has already started')
+    assertEquals(result.error, 'Cannot send invitations - draft has already started')
   })
 
   await t.step('returns 400 when invitation already pending', async () => {
@@ -149,10 +152,11 @@ Deno.test('send-invite', async (t) => {
     })
 
     // Try to send duplicate invitation
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email: 'duplicate@example.com' },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
+      email: 'duplicate@example.com',
     })
-    assertEquals(data?.error, 'An invitation has already been sent to this email')
+    assertEquals(result.error, 'An invitation has already been sent to this email')
   })
 
   await t.step('returns 400 when user already joined', async () => {
@@ -160,10 +164,11 @@ Deno.test('send-invite', async (t) => {
     await factory.addSecondParticipant(leagueId)
 
     // Try to invite same user again
-    const { data } = await client.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email: TEST_USER_2.email },
+    const result = await invokeFunction(client, 'send-invite', {
+      league_id: leagueId,
+      email: TEST_USER_2.email,
     })
-    assertEquals(data?.error, 'This user has already joined the league')
+    assertEquals(result.error, 'This user has already joined the league')
   })
 
   // ============================================================================
@@ -218,4 +223,4 @@ Deno.test('send-invite', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

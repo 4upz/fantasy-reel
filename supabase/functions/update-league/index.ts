@@ -219,7 +219,7 @@ async function handleKickParticipant(
   // Fetch the participant
   const { data: participant, error: fetchError } = await supabase
     .from('league_participants')
-    .select('*, profiles:user_id(display_name)')
+    .select('*')
     .eq('id', participant_id)
     .eq('league_id', league.id)
     .single()
@@ -238,6 +238,18 @@ async function handleKickParticipant(
     return errorResponse('Participant is not active', 400)
   }
 
+  // Try to get display name from profile (optional)
+  let displayName = 'Participant'
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('user_id', participant.user_id)
+    .single()
+
+  if (profile?.display_name) {
+    displayName = profile.display_name
+  }
+
   // Soft delete: set status to 'kicked'
   const { error: updateError } = await supabase
     .from('league_participants')
@@ -249,7 +261,6 @@ async function handleKickParticipant(
     return errorResponse('Failed to remove participant', 500)
   }
 
-  const displayName = participant.profiles?.display_name || 'Participant'
   return jsonResponse({ message: `${displayName} has been removed from the league` })
 }
 

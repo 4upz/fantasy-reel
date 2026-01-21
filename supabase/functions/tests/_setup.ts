@@ -5,7 +5,7 @@
  * for testing Edge Functions via client.functions.invoke()
  */
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient, FunctionsHttpError } from '@supabase/supabase-js'
 
 // Test user credentials - created on first run
 export const TEST_USER = {
@@ -16,6 +16,18 @@ export const TEST_USER = {
 export const TEST_USER_2 = {
   email: 'test-integration-2@example.com',
   password: 'integration-test-password-456!',
+}
+
+/**
+ * Client options for testing - disables background timers that cause resource leaks
+ * See: https://github.com/orgs/supabase/discussions/20078
+ */
+const TEST_CLIENT_OPTIONS = {
+  auth: {
+    autoRefreshToken: false,    // Disables the refresh interval timer
+    persistSession: false,      // Don't persist to storage
+    detectSessionInUrl: false,  // Don't scan URL for tokens
+  },
 }
 
 /**
@@ -42,7 +54,7 @@ function getEnvVars() {
  */
 export function getAnonClient(): SupabaseClient {
   const { url, anonKey } = getEnvVars()
-  return createClient(url, anonKey)
+  return createClient(url, anonKey, TEST_CLIENT_OPTIONS)
 }
 
 /**
@@ -67,7 +79,7 @@ export async function getSecondAuthenticatedClient(): Promise<SupabaseClient> {
  */
 async function authenticateUser(user: { email: string; password: string }): Promise<SupabaseClient> {
   const { url, anonKey, serviceRoleKey } = getEnvVars()
-  const client = createClient(url, anonKey)
+  const client = createClient(url, anonKey, TEST_CLIENT_OPTIONS)
 
   // Try to sign in first
   const { error: signInError } = await client.auth.signInWithPassword(user)
@@ -81,7 +93,7 @@ async function authenticateUser(user: { email: string; password: string }): Prom
       )
     }
 
-    const adminClient = createClient(url, serviceRoleKey)
+    const adminClient = createClient(url, serviceRoleKey, TEST_CLIENT_OPTIONS)
 
     // Check if user exists but needs confirmation
     const { data: existingUsers } = await adminClient.auth.admin.listUsers()
@@ -231,6 +243,56 @@ export function getErrorMessage(error: unknown): string | undefined {
   return String(error)
 }
 
+/**
+ * Result type for Edge Function invocation that properly handles error responses
+ */
+export interface InvokeResult<T = unknown> {
+  data: T | null
+  error: string | null
+  status?: number
+}
+
+/**
+ * Invoke an Edge Function and properly extract error messages from non-2xx responses.
+ *
+ * The Supabase SDK's functions.invoke() returns `data: null` for non-2xx responses
+ * and puts a generic error message in `error`. To get the actual error message from
+ * the response body, you need to use `error.context.json()`.
+ *
+ * This helper normalizes the response so you can always check `result.error` for
+ * the actual error message.
+ */
+export async function invokeFunction<T = unknown>(
+  client: SupabaseClient,
+  functionName: string,
+  body?: Record<string, unknown>
+): Promise<InvokeResult<T>> {
+  const { data, error } = await client.functions.invoke(functionName, { body })
+
+  // If no error, return the data
+  if (!error) {
+    return { data: data as T, error: null }
+  }
+
+  // For FunctionsHttpError, extract the actual error message from the response body
+  if (error instanceof FunctionsHttpError) {
+    try {
+      const errorBody = await error.context.json()
+      return {
+        data: null,
+        error: errorBody?.error || 'Unknown error',
+        status: error.context.status
+      }
+    } catch {
+      // If we can't parse the error body, return the generic message
+      return { data: null, error: error.message }
+    }
+  }
+
+  // For other error types, return the message
+  return { data: null, error: error.message }
+}
+
 // =============================================================================
 // Test Data Factory
 // =============================================================================
@@ -255,12 +317,14 @@ export class TestDataFactory {
     name: string,
     options: { invite_only?: boolean; max_participants?: number } = {}
   ): Promise<{ id: string; name: string }> {
-    const { data, error } = await this.client.functions.invoke('create-league', {
-      body: { name, ...options },
-    })
-    if (error) throw new Error(`Failed to create league: ${getErrorMessage(error)}`)
-    this.leagueIds.push(data.league.id)
-    return { id: data.league.id, name: data.league.name }
+    const result = await invokeFunction<{ league: { id: string; name: string } }>(
+      this.client,
+      'create-league',
+      { name, ...options }
+    )
+    if (result.error) throw new Error(`Failed to create league: ${result.error}`)
+    this.leagueIds.push(result.data!.league.id)
+    return { id: result.data!.league.id, name: result.data!.league.name }
   }
 
   /**
@@ -270,11 +334,13 @@ export class TestDataFactory {
     leagueId: string,
     email: string
   ): Promise<{ id: string; token: string }> {
-    const { data, error } = await this.client.functions.invoke('send-invite', {
-      body: { league_id: leagueId, email },
-    })
-    if (error) throw new Error(`Failed to create invitation: ${getErrorMessage(error)}`)
-    return { id: data.invitation.id, token: data.invitation.token }
+    const result = await invokeFunction<{ invitation: { id: string; token: string } }>(
+      this.client,
+      'send-invite',
+      { league_id: leagueId, email }
+    )
+    if (result.error) throw new Error(`Failed to create invitation: ${result.error}`)
+    return { id: result.data!.invitation.id, token: result.data!.invitation.token }
   }
 
   /**
@@ -285,10 +351,8 @@ export class TestDataFactory {
       throw new Error('Second client not provided to TestDataFactory')
     }
     const { token } = await this.createInvitation(leagueId, TEST_USER_2.email)
-    const { error } = await this.secondClient.functions.invoke('join-league', {
-      body: { token },
-    })
-    if (error) throw new Error(`Failed to join league: ${getErrorMessage(error)}`)
+    const result = await invokeFunction(this.secondClient, 'join-league', { invitation_token: token })
+    if (result.error) throw new Error(`Failed to join league: ${result.error}`)
   }
 
   /**
@@ -301,10 +365,8 @@ export class TestDataFactory {
     const { id: leagueId } = await this.createLeague(name)
     await this.addSecondParticipant(leagueId)
 
-    const { error } = await this.client.functions.invoke('start-draft', {
-      body: { league_id: leagueId },
-    })
-    if (error) throw new Error(`Failed to start draft: ${getErrorMessage(error)}`)
+    const result = await invokeFunction(this.client, 'start-draft', { league_id: leagueId })
+    if (result.error) throw new Error(`Failed to start draft: ${result.error}`)
     return leagueId
   }
 

@@ -6,7 +6,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName } from './_setup.ts'
+import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
 
 // Test movie data for upcoming releases
 const currentYear = new Date().getFullYear()
@@ -21,7 +21,11 @@ const testMovieData = {
   genre_ids: [28, 12],
 }
 
-Deno.test('draft-pick', async (t) => {
+Deno.test({
+  name: 'draft-pick',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient, factory } = await createTestFactory()
 
   // ============================================================================
@@ -30,13 +34,11 @@ Deno.test('draft-pick', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('draft-pick', {
-      body: {
-        league_id: '00000000-0000-0000-0000-000000000000',
-        tmdb_id: 12345,
-      },
+    const result = await invokeFunction(anonClient, 'draft-pick', {
+      league_id: '00000000-0000-0000-0000-000000000000',
+      tmdb_id: 12345,
     })
-    assertEquals(data?.error, 'Unauthorized')
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -44,34 +46,31 @@ Deno.test('draft-pick', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 for missing league_id', async () => {
-    const { data } = await client.functions.invoke('draft-pick', {
-      body: { tmdb_id: 12345 },
-    })
-    assertEquals(data?.error, 'Valid league_id is required')
+    const result = await invokeFunction(client, 'draft-pick', { tmdb_id: 12345 })
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for invalid league_id', async () => {
-    const { data } = await client.functions.invoke('draft-pick', {
-      body: { league_id: 'not-a-uuid', tmdb_id: 12345 },
+    const result = await invokeFunction(client, 'draft-pick', {
+      league_id: 'not-a-uuid',
+      tmdb_id: 12345,
     })
-    assertEquals(data?.error, 'Valid league_id is required')
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for missing tmdb_id', async () => {
-    const { data } = await client.functions.invoke('draft-pick', {
-      body: { league_id: '00000000-0000-0000-0000-000000000000' },
+    const result = await invokeFunction(client, 'draft-pick', {
+      league_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'Valid tmdb_id is required')
+    assertEquals(result.error, 'Valid tmdb_id is required')
   })
 
   await t.step('returns 400 for invalid tmdb_id', async () => {
-    const { data } = await client.functions.invoke('draft-pick', {
-      body: {
-        league_id: '00000000-0000-0000-0000-000000000000',
-        tmdb_id: 'not-a-number',
-      },
+    const result = await invokeFunction(client, 'draft-pick', {
+      league_id: '00000000-0000-0000-0000-000000000000',
+      tmdb_id: 'not-a-number',
     })
-    assertEquals(data?.error, 'Valid tmdb_id is required')
+    assertEquals(result.error, 'Valid tmdb_id is required')
   })
 
   // ============================================================================
@@ -79,13 +78,11 @@ Deno.test('draft-pick', async (t) => {
   // ============================================================================
 
   await t.step('returns 404 when league does not exist', async () => {
-    const { data } = await client.functions.invoke('draft-pick', {
-      body: {
-        league_id: '00000000-0000-0000-0000-000000000000',
-        tmdb_id: 12345,
-      },
+    const result = await invokeFunction(client, 'draft-pick', {
+      league_id: '00000000-0000-0000-0000-000000000000',
+      tmdb_id: 12345,
     })
-    assertEquals(data?.error, 'League not found')
+    assertEquals(result.error, 'League not found')
   })
 
   // ============================================================================
@@ -95,10 +92,11 @@ Deno.test('draft-pick', async (t) => {
   await t.step('returns 400 when draft has not started', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('draft-not-started'))
 
-    const { data } = await client.functions.invoke('draft-pick', {
-      body: { league_id: leagueId, tmdb_id: 12345 },
+    const result = await invokeFunction(client, 'draft-pick', {
+      league_id: leagueId,
+      tmdb_id: 12345,
     })
-    assertEquals(data?.error, 'Draft has not started yet')
+    assertEquals(result.error, 'Draft has not started yet')
   })
 
   // ============================================================================
@@ -109,14 +107,12 @@ Deno.test('draft-pick', async (t) => {
     const leagueId = await factory.createDraftingLeague(uniqueName('draft-not-your-turn'))
 
     // Second user tries to pick first (but first user has draft_order 1)
-    const { data } = await secondClient.functions.invoke('draft-pick', {
-      body: {
-        league_id: leagueId,
-        tmdb_id: 99001,
-        movie_data: { ...testMovieData, title: 'Not Your Turn Movie' },
-      },
+    const result = await invokeFunction(secondClient, 'draft-pick', {
+      league_id: leagueId,
+      tmdb_id: 99001,
+      movie_data: { ...testMovieData, title: 'Not Your Turn Movie' },
     })
-    assertEquals(data?.error, 'It is not your turn to pick')
+    assertEquals(result.error, 'It is not your turn to pick')
   })
 
   // ============================================================================
@@ -126,10 +122,11 @@ Deno.test('draft-pick', async (t) => {
   await t.step('returns 400 when movie not found and no movie_data provided', async () => {
     const leagueId = await factory.createDraftingLeague(uniqueName('draft-no-movie-data'))
 
-    const { data } = await client.functions.invoke('draft-pick', {
-      body: { league_id: leagueId, tmdb_id: 99999999 },
+    const result = await invokeFunction(client, 'draft-pick', {
+      league_id: leagueId,
+      tmdb_id: 99999999,
     })
-    assertEquals(data?.error, 'Movie not found and no movie_data provided')
+    assertEquals(result.error, 'Movie not found and no movie_data provided')
   })
 
   // ============================================================================
@@ -199,14 +196,12 @@ Deno.test('draft-pick', async (t) => {
     })
 
     // Second user tries to pick same movie
-    const { data } = await secondClient.functions.invoke('draft-pick', {
-      body: {
-        league_id: leagueId,
-        tmdb_id: 100004,
-        movie_data: testMovieData,
-      },
+    const result = await invokeFunction(secondClient, 'draft-pick', {
+      league_id: leagueId,
+      tmdb_id: 100004,
+      movie_data: testMovieData,
     })
-    assertEquals(data?.error, 'This movie has already been drafted')
+    assertEquals(result.error, 'This movie has already been drafted')
   })
 
   await t.step('reuses existing movie record if already in database', async () => {
@@ -241,4 +236,4 @@ Deno.test('draft-pick', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

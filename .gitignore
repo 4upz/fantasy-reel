@@ -27,6 +27,7 @@ yarn-error.log*
 # Local env files
 .env
 .env*.local
+supabase/functions/.env.test
 
 # Vercel
 .vercel

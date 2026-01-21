@@ -6,9 +6,13 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName } from './_setup.ts'
+import { createTestFactory, getAnonClient, invokeFunction, uniqueName } from './_setup.ts'
 
-Deno.test('update-league', async (t) => {
+Deno.test({
+  name: 'update-league',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient, factory } = await createTestFactory()
 
   // ============================================================================
@@ -17,14 +21,12 @@ Deno.test('update-league', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('update-league', {
-      body: {
-        action: 'update_info',
-        league_id: '00000000-0000-0000-0000-000000000000',
-        name: 'New Name',
-      },
+    const result = await invokeFunction(anonClient, 'update-league', {
+      action: 'update_info',
+      league_id: '00000000-0000-0000-0000-000000000000',
+      name: 'New Name',
     })
-    assertEquals(data?.error, 'Unauthorized')
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -32,30 +34,30 @@ Deno.test('update-league', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 for missing league_id', async () => {
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'update_info', name: 'New Name' },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_info',
+      name: 'New Name',
     })
-    assertEquals(data?.error, 'Valid league_id is required')
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for invalid UUID format', async () => {
-    const { data } = await client.functions.invoke('update-league', {
-      body: {
-        action: 'update_info',
-        league_id: 'not-a-valid-uuid',
-        name: 'New Name',
-      },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_info',
+      league_id: 'not-a-valid-uuid',
+      name: 'New Name',
     })
-    assertEquals(data?.error, 'Valid league_id is required')
+    assertEquals(result.error, 'Valid league_id is required')
   })
 
   await t.step('returns 400 for invalid action', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('invalid-action'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'invalid_action', league_id: leagueId },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'invalid_action',
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'Invalid action')
+    assertEquals(result.error, 'Invalid action')
   })
 
   // ============================================================================
@@ -63,14 +65,12 @@ Deno.test('update-league', async (t) => {
   // ============================================================================
 
   await t.step('returns 404 when league does not exist', async () => {
-    const { data } = await client.functions.invoke('update-league', {
-      body: {
-        action: 'update_info',
-        league_id: '00000000-0000-0000-0000-000000000000',
-        name: 'New Name',
-      },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_info',
+      league_id: '00000000-0000-0000-0000-000000000000',
+      name: 'New Name',
     })
-    assertEquals(data?.error, 'League not found')
+    assertEquals(result.error, 'League not found')
   })
 
   // ============================================================================
@@ -81,10 +81,12 @@ Deno.test('update-league', async (t) => {
     const { id: leagueId } = await factory.createLeague(uniqueName('permission-test'))
     await factory.addSecondParticipant(leagueId)
 
-    const { data } = await secondClient.functions.invoke('update-league', {
-      body: { action: 'update_info', league_id: leagueId, name: 'Hijacked' },
+    const result = await invokeFunction(secondClient, 'update-league', {
+      action: 'update_info',
+      league_id: leagueId,
+      name: 'Hijacked',
     })
-    assertEquals(data?.error, 'Only the league owner can modify settings')
+    assertEquals(result.error, 'Only the league owner can modify settings')
   })
 
   // ============================================================================
@@ -117,19 +119,23 @@ Deno.test('update-league', async (t) => {
   await t.step('update_info: returns 400 for empty name', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('empty-name'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'update_info', league_id: leagueId, name: '   ' },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_info',
+      league_id: leagueId,
+      name: '   ',
     })
-    assertEquals(data?.error, 'League name cannot be empty')
+    assertEquals(result.error, 'League name cannot be empty')
   })
 
   await t.step('update_info: returns 400 for name over 255 chars', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('long-name'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'update_info', league_id: leagueId, name: 'x'.repeat(256) },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_info',
+      league_id: leagueId,
+      name: 'x'.repeat(256),
     })
-    assertEquals(data?.error, 'League name cannot exceed 255 characters')
+    assertEquals(result.error, 'League name cannot exceed 255 characters')
   })
 
   await t.step('update_info: toggles invite_only', async () => {
@@ -167,10 +173,11 @@ Deno.test('update-league', async (t) => {
   await t.step('update_info: returns 400 when no fields provided', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('no-fields'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'update_info', league_id: leagueId },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_info',
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'No valid fields to update')
+    assertEquals(result.error, 'No valid fields to update')
   })
 
   // ============================================================================
@@ -192,19 +199,23 @@ Deno.test('update-league', async (t) => {
   await t.step('update_draft_config: returns 400 for max_participants < 2', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('min-participants'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'update_draft_config', league_id: leagueId, max_participants: 1 },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_draft_config',
+      league_id: leagueId,
+      max_participants: 1,
     })
-    assertEquals(data?.error, 'Max participants must be between 2 and 20')
+    assertEquals(result.error, 'Max participants must be between 2 and 20')
   })
 
   await t.step('update_draft_config: returns 400 for max_participants > 20', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('max-participants'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'update_draft_config', league_id: leagueId, max_participants: 21 },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_draft_config',
+      league_id: leagueId,
+      max_participants: 21,
     })
-    assertEquals(data?.error, 'Max participants must be between 2 and 20')
+    assertEquals(result.error, 'Max participants must be between 2 and 20')
   })
 
   await t.step('update_draft_config: returns 400 if below current participant count', async () => {
@@ -218,19 +229,23 @@ Deno.test('update-league', async (t) => {
     assertEquals(data.league.max_participants, 2)
 
     // Now try to set it to 1 (below current)
-    const { data: belowData } = await client.functions.invoke('update-league', {
-      body: { action: 'update_draft_config', league_id: leagueId, max_participants: 1 },
+    const belowResult = await invokeFunction(client, 'update-league', {
+      action: 'update_draft_config',
+      league_id: leagueId,
+      max_participants: 1,
     })
-    assertEquals(belowData?.error, 'Max participants must be between 2 and 20')
+    assertEquals(belowResult.error, 'Max participants must be between 2 and 20')
   })
 
   await t.step('update_draft_config: returns 400 when league not in setup status', async () => {
     const leagueId = await factory.createDraftingLeague(uniqueName('drafting-league'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'update_draft_config', league_id: leagueId, max_participants: 10 },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_draft_config',
+      league_id: leagueId,
+      max_participants: 10,
     })
-    assertEquals(data?.error, 'Draft configuration can only be changed before the draft starts')
+    assertEquals(result.error, 'Draft configuration can only be changed before the draft starts')
   })
 
   // ============================================================================
@@ -280,32 +295,34 @@ Deno.test('update-league', async (t) => {
 
     assertExists(owner, 'Owner should exist')
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'kick_participant', league_id: leagueId, participant_id: owner.id },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'kick_participant',
+      league_id: leagueId,
+      participant_id: owner.id,
     })
-    assertEquals(data?.error, 'Cannot remove yourself from the league')
+    assertEquals(result.error, 'Cannot remove yourself from the league')
   })
 
   await t.step('kick_participant: returns 400 for invalid participant_id', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('invalid-participant'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'kick_participant', league_id: leagueId, participant_id: 'invalid' },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'kick_participant',
+      league_id: leagueId,
+      participant_id: 'invalid',
     })
-    assertEquals(data?.error, 'Valid participant_id is required')
+    assertEquals(result.error, 'Valid participant_id is required')
   })
 
   await t.step('kick_participant: returns 404 for non-existent participant', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('nonexistent-participant'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: {
-        action: 'kick_participant',
-        league_id: leagueId,
-        participant_id: '00000000-0000-0000-0000-000000000000',
-      },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'kick_participant',
+      league_id: leagueId,
+      participant_id: '00000000-0000-0000-0000-000000000000',
     })
-    assertEquals(data?.error, 'Participant not found')
+    assertEquals(result.error, 'Participant not found')
   })
 
   await t.step('kick_participant: returns 400 when league not in setup status', async () => {
@@ -321,10 +338,12 @@ Deno.test('update-league', async (t) => {
 
     assertExists(participant, 'Participant should exist')
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'kick_participant', league_id: leagueId, participant_id: participant.id },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'kick_participant',
+      league_id: leagueId,
+      participant_id: participant.id,
     })
-    assertEquals(data?.error, 'Participants can only be removed before the draft starts')
+    assertEquals(result.error, 'Participants can only be removed before the draft starts')
   })
 
   // ============================================================================
@@ -353,10 +372,11 @@ Deno.test('update-league', async (t) => {
   await t.step('delete_league: returns 400 when league not in setup status', async () => {
     const leagueId = await factory.createDraftingLeague(uniqueName('delete-drafting'))
 
-    const { data } = await client.functions.invoke('update-league', {
-      body: { action: 'delete_league', league_id: leagueId },
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'delete_league',
+      league_id: leagueId,
     })
-    assertEquals(data?.error, 'League can only be deleted before the draft starts')
+    assertEquals(result.error, 'League can only be deleted before the draft starts')
   })
 
   // ============================================================================
@@ -366,4 +386,4 @@ Deno.test('update-league', async (t) => {
   await t.step('cleanup test data', async () => {
     await factory.cleanup()
   })
-})
+}})

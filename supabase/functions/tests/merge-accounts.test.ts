@@ -10,9 +10,13 @@
  */
 
 import { assertEquals } from '@std/assert'
-import { createTestFactory, getAnonClient, getUserId } from './_setup.ts'
+import { createTestFactory, getAnonClient, getUserId, invokeFunction } from './_setup.ts'
 
-Deno.test('merge-accounts', async (t) => {
+Deno.test({
+  name: 'merge-accounts',
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async (t) => {
   const { client, secondClient } = await createTestFactory()
   const userId = await getUserId(client)
   const secondUserId = await getUserId(secondClient)
@@ -23,13 +27,11 @@ Deno.test('merge-accounts', async (t) => {
 
   await t.step('returns 401 when not authenticated', async () => {
     const anonClient = getAnonClient()
-    const { data } = await anonClient.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: '00000000-0000-0000-0000-000000000001',
-        duplicateUserId: '00000000-0000-0000-0000-000000000002',
-      },
+    const result = await invokeFunction(anonClient, 'merge-accounts', {
+      originalUserId: '00000000-0000-0000-0000-000000000001',
+      duplicateUserId: '00000000-0000-0000-0000-000000000002',
     })
-    assertEquals(data?.error, 'Unauthorized')
+    assertEquals(result.error, 'Unauthorized')
   })
 
   // ============================================================================
@@ -37,51 +39,41 @@ Deno.test('merge-accounts', async (t) => {
   // ============================================================================
 
   await t.step('returns 400 when originalUserId is missing', async () => {
-    const { data } = await client.functions.invoke('merge-accounts', {
-      body: {
-        duplicateUserId: '00000000-0000-0000-0000-000000000002',
-      },
+    const result = await invokeFunction(client, 'merge-accounts', {
+      duplicateUserId: '00000000-0000-0000-0000-000000000002',
     })
-    assertEquals(data?.error, 'Valid originalUserId is required')
+    assertEquals(result.error, 'Valid originalUserId is required')
   })
 
   await t.step('returns 400 when originalUserId is invalid UUID', async () => {
-    const { data } = await client.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: 'not-a-uuid',
-        duplicateUserId: '00000000-0000-0000-0000-000000000002',
-      },
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: 'not-a-uuid',
+      duplicateUserId: '00000000-0000-0000-0000-000000000002',
     })
-    assertEquals(data?.error, 'Valid originalUserId is required')
+    assertEquals(result.error, 'Valid originalUserId is required')
   })
 
   await t.step('returns 400 when duplicateUserId is missing', async () => {
-    const { data } = await client.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: userId,
-      },
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
     })
-    assertEquals(data?.error, 'Valid duplicateUserId is required')
+    assertEquals(result.error, 'Valid duplicateUserId is required')
   })
 
   await t.step('returns 400 when duplicateUserId is invalid UUID', async () => {
-    const { data } = await client.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: userId,
-        duplicateUserId: 'not-a-uuid',
-      },
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: 'not-a-uuid',
     })
-    assertEquals(data?.error, 'Valid duplicateUserId is required')
+    assertEquals(result.error, 'Valid duplicateUserId is required')
   })
 
   await t.step('returns 400 when trying to merge account with itself', async () => {
-    const { data } = await client.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: userId,
-        duplicateUserId: userId,
-      },
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: userId,
     })
-    assertEquals(data?.error, 'Cannot merge an account with itself')
+    assertEquals(result.error, 'Cannot merge an account with itself')
   })
 
   // ============================================================================
@@ -90,13 +82,11 @@ Deno.test('merge-accounts', async (t) => {
 
   await t.step('returns 403 when not signed in as original account', async () => {
     // Second user tries to merge first user's account
-    const { data } = await secondClient.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: userId, // First user's ID
-        duplicateUserId: '00000000-0000-0000-0000-000000000002',
-      },
+    const result = await invokeFunction(secondClient, 'merge-accounts', {
+      originalUserId: userId, // First user's ID
+      duplicateUserId: '00000000-0000-0000-0000-000000000002',
     })
-    assertEquals(data?.error, 'You must be signed in as the original account to merge')
+    assertEquals(result.error, 'You must be signed in as the original account to merge')
   })
 
   // ============================================================================
@@ -104,13 +94,11 @@ Deno.test('merge-accounts', async (t) => {
   // ============================================================================
 
   await t.step('returns 404 when duplicate account does not exist', async () => {
-    const { data } = await client.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: userId,
-        duplicateUserId: '00000000-0000-0000-0000-000000000099',
-      },
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: '00000000-0000-0000-0000-000000000099',
     })
-    assertEquals(data?.error, 'Duplicate account not found')
+    assertEquals(result.error, 'Duplicate account not found')
   })
 
   // ============================================================================
@@ -119,13 +107,11 @@ Deno.test('merge-accounts', async (t) => {
 
   await t.step('returns 400 when duplicate account has no Discord identity', async () => {
     // Second user is a regular email user without Discord identity
-    const { data } = await client.functions.invoke('merge-accounts', {
-      body: {
-        originalUserId: userId,
-        duplicateUserId: secondUserId,
-      },
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: secondUserId,
     })
-    assertEquals(data?.error, 'No Discord identity found on duplicate account')
+    assertEquals(result.error, 'No Discord identity found on duplicate account')
   })
 
   // ============================================================================
@@ -144,4 +130,4 @@ Deno.test('merge-accounts', async (t) => {
   // For CI/CD purposes, consider using:
   // - Mock testing with stubbed auth.admin functions
   // - A dedicated test environment with pre-created OAuth users
-})
+}})
