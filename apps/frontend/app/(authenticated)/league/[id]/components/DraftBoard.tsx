@@ -18,8 +18,6 @@ interface Props {
   onToggleFavorite?: (tmdbId: number) => void
 }
 
-const TOTAL_ROUNDS = 5
-
 export default function DraftBoard({
   league,
   participants,
@@ -33,7 +31,7 @@ export default function DraftBoard({
   const [error, setError] = useState<string | null>(null)
 
   const totalParticipants = participants.length
-  const totalPicks = totalParticipants * TOTAL_ROUNDS
+  const totalPicks = totalParticipants * league.draft_slots
   const picksMade = draftPicks.length
 
   // Calculate whose turn it is
@@ -224,7 +222,7 @@ export default function DraftBoard({
               participants={participants}
               currentPickIndex={picksMade}
               currentUserId={currentUserId}
-              rounds={TOTAL_ROUNDS}
+              rounds={league.draft_slots}
             />
           </div>
         )}
