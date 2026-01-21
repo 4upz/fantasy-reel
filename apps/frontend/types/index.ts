@@ -9,6 +9,11 @@ export interface League {
   max_participants: number
   draft_start_date: string | null
   draft_end_date: string | null
+  // Bidding configuration
+  total_slots: number
+  draft_slots: number
+  drop_limit: number
+  counterbid_hours: number
   created_at: string
   updated_at: string
 }
@@ -236,3 +241,90 @@ export const TMDB_GENRES = [
   { id: 10752, name: 'War' },
   { id: 37, name: 'Western' },
 ] as const
+
+// ============================================================================
+// Bidding system types
+// ============================================================================
+
+export type BidStatus = 'active' | 'outbid' | 'won' | 'lost' | 'cancelled'
+
+export interface PickupBid {
+  id: string
+  league_id: string
+  team_id: string
+  tmdb_id: number
+  movie_data: TMDbSearchResult | null
+  amount: number
+  status: BidStatus
+  created_at: string
+  countered_at: string | null
+  response_deadline: string | null
+  processing_deadline: string
+}
+
+export interface TeamBudget {
+  id: string
+  team_id: string
+  remaining_budget: number
+  total_spent: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Pickup {
+  id: string
+  league_id: string
+  team_id: string
+  movie_id: string
+  bid_id: string
+  amount_paid: number
+  picked_up_at: string
+  dropped_at: string | null
+  created_at: string
+}
+
+export interface TeamDrop {
+  id: string
+  team_id: string
+  movie_id: string
+  pickup_id: string
+  dropped_at: string
+  created_at: string
+}
+
+export type NotificationType = 'outbid' | 'bid_won' | 'bid_lost' | 'pickup_available'
+
+export interface Notification {
+  id: string
+  user_id: string
+  league_id: string | null
+  type: NotificationType
+  title: string
+  body: string
+  data: Record<string, unknown> | null
+  read_at: string | null
+  created_at: string
+}
+
+// Extended bidding types for queries with relations
+export interface PickupWithMovie extends Pickup {
+  movies: Movie
+}
+
+export interface PickupBidWithTeam extends PickupBid {
+  teams: Team
+}
+
+export interface TeamWithBudget extends Team {
+  team_budgets: TeamBudget | null
+}
+
+export interface ParticipantWithTeamBudget extends LeagueParticipant {
+  teams: TeamWithBudget | null
+  profiles: Profile | null
+}
+
+// Extended ranked team type that includes pickups
+export interface RankedTeamWithPickups extends RankedTeam {
+  pickups: PickupWithMovie[]
+}
