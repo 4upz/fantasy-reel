@@ -328,3 +328,47 @@ export interface ParticipantWithTeamBudget extends LeagueParticipant {
 export interface RankedTeamWithPickups extends RankedTeam {
   pickups: PickupWithMovie[]
 }
+
+// ============================================================================
+// Dashboard types
+// ============================================================================
+
+export interface MovieTimelineItem {
+  id: string
+  tmdb_id: number
+  title: string
+  poster_url: string | null
+  release_date: string | null
+  status: 'scored' | 'releasing_soon' | 'upcoming'
+  combined_score: number | null
+  scores: {
+    imdb: number | null
+    rotten_tomatoes: number | null
+    metacritic: number | null
+  }
+}
+
+export interface DashboardTeam {
+  id: string
+  name: string
+  avatar_url: string | null
+  total_points: number
+  rank: number
+  movies: MovieTimelineItem[]
+}
+
+export interface StandingEntry {
+  rank: number
+  isTied: boolean
+  team: {
+    id: string
+    name: string
+    avatar_url: string | null
+  }
+  total_points: number
+  topMovie: {
+    title: string
+    score: number
+  } | null
+  isCurrentUser: boolean
+}
