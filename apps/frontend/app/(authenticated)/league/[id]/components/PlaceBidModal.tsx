@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, DollarSign, Search, Film } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
@@ -34,9 +34,12 @@ export default function PlaceBidModal({
 
   const modalRef = useRef<HTMLDivElement>(null)
 
-  // Filter out movies that already have bids in this league
-  const biddedTmdbIds = existingBids.map(b => b.tmdb_id)
-  const excludedTmdbIds = new Set([...draftedTmdbIds, ...biddedTmdbIds])
+  // Memoize excluded IDs to prevent infinite re-renders
+  // The Set must be stable to avoid recreating useDraftMovies callbacks
+  const excludedTmdbIds = useMemo(() => {
+    const biddedTmdbIds = existingBids.map(b => b.tmdb_id)
+    return new Set([...draftedTmdbIds, ...biddedTmdbIds])
+  }, [draftedTmdbIds, existingBids])
 
   const {
     movies: results,
@@ -70,6 +73,10 @@ export default function PlaceBidModal({
       return () => document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [isOpen, onClose])
+
+  // Store clearSearch in a ref to avoid dependency issues
+  const clearSearchRef = useRef(clearSearch)
+  clearSearchRef.current = clearSearch
 
   // Reset state when modal opens
   useEffect(() => {
@@ -105,9 +112,9 @@ export default function PlaceBidModal({
         setBidAmount(0)
       }
       setSearchQuery('')
-      clearSearch()
+      clearSearchRef.current()
     }
-  }, [isOpen, counterBidTarget, existingBids, clearSearch])
+  }, [isOpen, counterBidTarget, existingBids])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
