@@ -12,19 +12,15 @@ interface Props {
   userTeam: DashboardTeam | null;
   standings: StandingEntry[];
   totalTeams: number;
-  currentUserId: string;
 }
 
 export default function DashboardClient({
   league: initialLeague,
-  userTeam: initialUserTeam,
-  standings: initialStandings,
+  userTeam,
+  standings,
   totalTeams,
-  currentUserId,
 }: Props) {
   const [league, setLeague] = useState(initialLeague);
-  const [userTeam, setUserTeam] = useState(initialUserTeam);
-  const [standings, setStandings] = useState(initialStandings);
 
   const supabase = useMemo(() => createClient(), []);
   const channelIdRef = useRef(0);
@@ -44,9 +40,7 @@ export default function DashboardClient({
           table: "team_scores",
         },
         () => {
-          // Refresh data when scores update
-          // In a real implementation, we'd refetch the data
-          console.log("Team scores updated");
+          // TODO: Implement data refetch when scores update (e.g., router.refresh())
         },
       )
       .on(
@@ -57,8 +51,7 @@ export default function DashboardClient({
           table: "movies",
         },
         () => {
-          // Refresh when movie scores are calculated
-          console.log("Movie scores updated");
+          // TODO: Implement data refetch when movie scores are calculated
         },
       )
       .on(

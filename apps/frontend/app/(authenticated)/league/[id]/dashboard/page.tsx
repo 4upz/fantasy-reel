@@ -191,7 +191,6 @@ export default async function DashboardPage({ params }: PageProps) {
       userTeam={userTeam}
       standings={standings}
       totalTeams={participantsData.length}
-      currentUserId={user.id}
     />
   )
 }
