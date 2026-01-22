@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import Image from 'next/image'
-import { ArrowLeft, Film, Trophy, ShoppingCart, Trash2 } from 'lucide-react'
+import { Film, Trophy, ShoppingCart, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League, Movie, TeamBudget, DraftPick, Pickup } from '@/types'
@@ -61,41 +60,31 @@ export default function RosterClient({
   const totalSlots = league.total_slots
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="mb-6">
-        <Link
-          href={`/league/${league.id}`}
-          className="inline-flex items-center gap-2 text-foreground-secondary hover:text-foreground mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to League
-        </Link>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-foreground">
+            {team.name}&apos;s Roster
+          </h1>
+          <p className="text-foreground-secondary">
+            {totalMovies}/{totalSlots} slots filled
+          </p>
+        </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="font-display text-2xl font-bold text-foreground">
-              {team.name}&apos;s Roster
-            </h1>
-            <p className="text-foreground-secondary">
-              {totalMovies}/{totalSlots} slots filled
-            </p>
-          </div>
-
-          <div className="text-right">
-            <p className="text-foreground-muted text-sm">Budget Remaining</p>
-            <p className="font-display text-2xl font-semibold text-gold">
-              ${budget?.remaining_budget ?? 100}
-            </p>
-            <p className="text-foreground-muted text-sm">
-              Drops: {dropCount}/{league.drop_limit} used
-            </p>
-          </div>
+        <div className="text-right">
+          <p className="text-foreground-muted text-sm">Budget Remaining</p>
+          <p className="font-display text-2xl font-semibold text-gold">
+            ${budget?.remaining_budget ?? 100}
+          </p>
+          <p className="text-foreground-muted text-sm">
+            Drops: {dropCount}/{league.drop_limit} used
+          </p>
         </div>
       </div>
 
       {/* Draft Picks Section */}
-      <div className="mb-8">
+      <div>
         <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
           <Trophy className="w-5 h-5 text-gold" />
           Draft Picks ({initialDraftPicks.length})

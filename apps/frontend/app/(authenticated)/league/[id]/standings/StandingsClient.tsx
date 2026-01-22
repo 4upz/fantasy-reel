@@ -1,9 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { createClient } from '@/utils/supabase/client'
-import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
 import type {
   League,
   ParticipantWithTeamScore,
@@ -246,104 +244,69 @@ export default function StandingsClient({
   }, [league.id, supabase, fetchParticipants, fetchDraftPicks, participants, draftPicks])
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-5xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="card p-6 animate-fade-in">
-          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-2">
-                <Link
-                  href={`/league/${league.id}`}
-                  className="text-foreground-muted hover:text-gold transition-colors"
-                >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </Link>
-                <h1 className="text-2xl font-bold font-display text-foreground">{league.name}</h1>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <span className={`badge ${STATUS_BADGE_CLASS[league.status]}`}>
-                  {getStatusLabel(league.status)}
-                </span>
-                <ConnectionStatusIndicator status={realtimeStatus} />
-              </div>
-            </div>
-
-            {/* Summary Stats */}
-            <div className="flex gap-6 text-sm">
-              <div className="text-center">
-                <div className="text-2xl font-bold font-display text-gold">{summaryStats.totalMovies}</div>
-                <div className="text-foreground-muted">Total Movies</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold font-display text-success">{summaryStats.moviesScored}</div>
-                <div className="text-foreground-muted">Scored</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold font-display text-foreground-secondary">{summaryStats.moviesPending}</div>
-                <div className="text-foreground-muted">Pending</div>
-              </div>
-            </div>
+    <div className="space-y-6 animate-fade-in">
+      {/* Summary Stats Bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <ConnectionStatusIndicator status={realtimeStatus} />
+        </div>
+        <div className="flex gap-6 text-sm">
+          <div className="text-center">
+            <div className="text-xl font-bold font-display text-gold">{summaryStats.totalMovies}</div>
+            <div className="text-foreground-muted text-xs">Total</div>
           </div>
-
-          {/* Tab Navigation */}
-          <div className="mt-6 flex gap-1 border-b border-border">
-            <Link
-              href={`/league/${league.id}`}
-              className="px-4 py-2 text-sm font-medium text-foreground-muted hover:text-foreground transition-colors border-b-2 border-transparent"
-            >
-              Draft
-            </Link>
-            <span className="px-4 py-2 text-sm font-medium text-gold border-b-2 border-gold">
-              Standings
-            </span>
+          <div className="text-center">
+            <div className="text-xl font-bold font-display text-success">{summaryStats.moviesScored}</div>
+            <div className="text-foreground-muted text-xs">Scored</div>
+          </div>
+          <div className="text-center">
+            <div className="text-xl font-bold font-display text-foreground-secondary">{summaryStats.moviesPending}</div>
+            <div className="text-foreground-muted text-xs">Pending</div>
           </div>
         </div>
-
-        {/* No Scores Yet Alert */}
-        {summaryStats.moviesScored === 0 && (
-          <div className="mt-6 alert alert-info animate-fade-in">
-            <div className="flex items-start gap-3">
-              <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <p className="font-medium">No scores available yet</p>
-                <p className="text-sm mt-1 opacity-80">
-                  Scores are calculated nightly for released movies. Check back after movies in your draft have been released!
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Leaderboard */}
-        <div className="mt-6 space-y-4">
-          {rankedTeams.map((rankedTeam, index) => (
-            <TeamStandingCard
-              key={rankedTeam.participant.id}
-              rankedTeam={rankedTeam}
-              isCurrentUser={rankedTeam.participant.user_id === currentUserId}
-              animationDelay={index * 100}
-            />
-          ))}
-        </div>
-
-        {/* Empty State */}
-        {rankedTeams.length === 0 && (
-          <div className="mt-6 card p-12 text-center animate-fade-in">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-elevated flex items-center justify-center">
-              <svg className="w-8 h-8 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-display font-semibold text-foreground">No teams yet</h3>
-            <p className="mt-2 text-foreground-muted">Teams will appear here once the draft begins.</p>
-          </div>
-        )}
       </div>
+
+      {/* No Scores Yet Alert */}
+      {summaryStats.moviesScored === 0 && (
+        <div className="alert alert-info">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="font-medium">No scores available yet</p>
+              <p className="text-sm mt-1 opacity-80">
+                Scores are calculated nightly for released movies. Check back after movies in your draft have been released!
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leaderboard */}
+      <div className="space-y-4">
+        {rankedTeams.map((rankedTeam, index) => (
+          <TeamStandingCard
+            key={rankedTeam.participant.id}
+            rankedTeam={rankedTeam}
+            isCurrentUser={rankedTeam.participant.user_id === currentUserId}
+            animationDelay={index * 100}
+          />
+        ))}
+      </div>
+
+      {/* Empty State */}
+      {rankedTeams.length === 0 && (
+        <div className="card p-12 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-elevated flex items-center justify-center">
+            <svg className="w-8 h-8 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-display font-semibold text-foreground">No teams yet</h3>
+          <p className="mt-2 text-foreground-muted">Teams will appear here once the draft begins.</p>
+        </div>
+      )}
     </div>
   )
 }
