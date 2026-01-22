@@ -298,6 +298,94 @@ INSERT INTO invitations (id, league_id, invited_by, email, token, status, sent_a
    NOW() - INTERVAL '5 days', NOW() + INTERVAL '2 days', NOW() - INTERVAL '4 days');
 
 -- ============================================================
+-- 10. TEAM BUDGETS (for active league bidding)
+-- ============================================================
+
+INSERT INTO team_budgets (id, team_id, remaining_budget, total_spent) VALUES
+  -- Oscar Contenders (active league)
+  ('bb222222-0001-0001-0001-000000000001', 'e2222222-0001-0001-0001-000000000001', 85, 15),  -- Alice: spent $15
+  ('bb222222-0002-0002-0002-000000000002', 'e2222222-0002-0002-0002-000000000002', 72, 28),  -- Bob: spent $28
+  ('bb222222-0003-0003-0003-000000000003', 'e2222222-0003-0003-0003-000000000003', 91, 9);   -- Carol: spent $9
+
+-- ============================================================
+-- 11. PICKUP BIDS (various states for testing)
+-- ============================================================
+
+INSERT INTO pickup_bids (id, league_id, team_id, tmdb_id, movie_data, amount, status, created_at, countered_at, response_deadline, processing_deadline) VALUES
+  -- ACTIVE BID: Alice bidding $12 on Tron: Ares (no competition)
+  ('0b000001-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0001-0001-0001-000000000001',
+   550988, '{"title": "Tron: Ares", "poster_url": "/tronposter.jpg", "release_date": "2025-10-10"}'::jsonb,
+   12, 'active', NOW() - INTERVAL '2 days', NULL, NULL, (date_trunc('week', NOW()) + INTERVAL '5 days 20 hours')),
+
+  -- BIDDING WAR: Alice outbid by Bob on Minions 3
+  -- Alice's original $8 bid (outbid, has counter-bid window)
+  ('0b000002-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0001-0001-0001-000000000001',
+   438148, '{"title": "Minions 3", "poster_url": "/minions3poster.jpg", "release_date": "2025-06-27"}'::jsonb,
+   8, 'outbid', NOW() - INTERVAL '1 day', NOW() - INTERVAL '6 hours', NOW() + INTERVAL '18 hours', (date_trunc('week', NOW()) + INTERVAL '5 days 20 hours')),
+  -- Bob's higher $15 bid (currently winning)
+  ('0b000002-0002-0002-0002-000000000002', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0002-0002-0002-000000000002',
+   438148, '{"title": "Minions 3", "poster_url": "/minions3poster.jpg", "release_date": "2025-06-27"}'::jsonb,
+   15, 'active', NOW() - INTERVAL '6 hours', NULL, NULL, (date_trunc('week', NOW()) + INTERVAL '5 days 20 hours')),
+
+  -- HISTORICAL: Bob won Fast X Part 2 for $13
+  ('0b000003-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0002-0002-0002-000000000002',
+   385687, '{"title": "Fast X Part 2", "poster_url": "/fastx2poster.jpg", "release_date": "2025-04-04"}'::jsonb,
+   13, 'won', NOW() - INTERVAL '7 days', NULL, NULL, NOW() - INTERVAL '2 days'),
+
+  -- HISTORICAL: Carol lost to Bob on Fast X Part 2
+  ('0b000003-0002-0002-0002-000000000002', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003',
+   385687, '{"title": "Fast X Part 2", "poster_url": "/fastx2poster.jpg", "release_date": "2025-04-04"}'::jsonb,
+   9, 'lost', NOW() - INTERVAL '8 days', NOW() - INTERVAL '7 days 12 hours', NOW() - INTERVAL '7 days', NOW() - INTERVAL '2 days'),
+
+  -- CANCELLED: Carol cancelled her Luca 2 bid
+  ('0b000004-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003',
+   508943, '{"title": "Luca 2", "poster_url": "/luca2poster.jpg", "release_date": "2025-06-13"}'::jsonb,
+   5, 'cancelled', NOW() - INTERVAL '3 days', NULL, NULL, (date_trunc('week', NOW()) + INTERVAL '5 days 20 hours'));
+
+-- ============================================================
+-- 12. PICKUPS (completed acquisitions via bidding)
+-- ============================================================
+
+INSERT INTO pickups (id, league_id, team_id, movie_id, bid_id, amount_paid, picked_up_at) VALUES
+  -- Bob won Fast X Part 2 for $13 (using existing movie f0000015)
+  ('0a000001-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0002-0002-0002-000000000002',
+   'f0000015-0000-0000-0000-000000000015', '0b000003-0001-0001-0001-000000000001', 13, NOW() - INTERVAL '2 days');
+
+-- ============================================================
+-- 13. NOTIFICATIONS (for testing notification bell)
+-- ============================================================
+
+INSERT INTO notifications (id, user_id, league_id, type, title, body, data, read_at, created_at) VALUES
+  -- Alice: outbid notification (unread)
+  ('0c000001-0001-0001-0001-000000000001', 'a1111111-1111-1111-1111-111111111111', '22222222-bbbb-bbbb-bbbb-222222222222',
+   'outbid', 'You''ve been outbid on Minions 3',
+   'Someone bid $15 on Minions 3. You have 24 hours to counter.',
+   '{"bid_id": "0b000002-0001-0001-0001-000000000001", "tmdb_id": 438148, "new_amount": 15}'::jsonb,
+   NULL, NOW() - INTERVAL '6 hours'),
+
+  -- Carol: bid lost notification (unread)
+  ('0c000002-0001-0001-0001-000000000001', 'c3333333-3333-3333-3333-333333333333', '22222222-bbbb-bbbb-bbbb-222222222222',
+   'bid_lost', 'Bid unsuccessful for Fast X Part 2',
+   'Your bid of $9 was not enough. The winning bid was $13.',
+   '{"bid_id": "0b000003-0002-0002-0002-000000000002", "tmdb_id": 385687, "winning_amount": 13}'::jsonb,
+   NULL, NOW() - INTERVAL '2 days'),
+
+  -- Bob: bid won notification (read)
+  ('0c000003-0001-0001-0001-000000000001', 'b2222222-2222-2222-2222-222222222222', '22222222-bbbb-bbbb-bbbb-222222222222',
+   'bid_won', 'You won Fast X Part 2!',
+   'Your bid of $13 won. Fast X Part 2 has been added to your roster.',
+   '{"bid_id": "0b000003-0001-0001-0001-000000000001", "tmdb_id": 385687, "amount": 13}'::jsonb,
+   NOW() - INTERVAL '1 day', NOW() - INTERVAL '2 days'),
+
+  -- Bob: older outbid notification (read)
+  ('0c000004-0001-0001-0001-000000000001', 'b2222222-2222-2222-2222-222222222222', '22222222-bbbb-bbbb-bbbb-222222222222',
+   'outbid', 'You''ve been outbid on Luca 2',
+   'Someone bid $7 on Luca 2. You have 24 hours to counter.',
+   '{"bid_id": "0b000004-0001-0001-0001-000000000001", "tmdb_id": 508943}'::jsonb,
+   NOW() - INTERVAL '2 days', NOW() - INTERVAL '4 days');
+
+-- ============================================================
 -- SUMMARY: 6 users, 4 leagues, 10 participants, 10 teams,
---          30 movies, 37 picks, 45 reviews, 5 scores, 4 invites
+--          30 movies, 37 picks, 45 reviews, 5 scores, 4 invites,
+--          3 team_budgets, 6 bids, 1 pickup, 4 notifications
 -- ============================================================
