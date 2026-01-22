@@ -6,6 +6,7 @@ import Image from 'next/image'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
+import { getTmdbPosterUrl } from './utils'
 
 interface PlaceBidModalProps {
   isOpen: boolean
@@ -14,6 +15,7 @@ interface PlaceBidModalProps {
   existingBids: PickupBid[]
   draftedTmdbIds: number[]
   onPlaceBid: (tmdbId: number, amount: number, movieData: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
+  counterBidTarget?: PickupBid | null
 }
 
 export default function PlaceBidModal({
@@ -23,6 +25,7 @@ export default function PlaceBidModal({
   existingBids,
   draftedTmdbIds,
   onPlaceBid,
+  counterBidTarget,
 }: PlaceBidModalProps) {
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [bidAmount, setBidAmount] = useState(0)
@@ -71,12 +74,40 @@ export default function PlaceBidModal({
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
-      setSelectedMovie(null)
-      setBidAmount(0)
+      if (counterBidTarget?.movie_data) {
+        // Pre-select the movie for counter-bidding
+        const movieData = counterBidTarget.movie_data as {
+          title: string
+          overview?: string | null
+          poster_url?: string | null
+          release_date?: string | null
+          vote_average?: number
+          popularity?: number
+          genre_ids?: number[]
+        }
+        setSelectedMovie({
+          tmdb_id: counterBidTarget.tmdb_id,
+          title: movieData.title,
+          overview: movieData.overview || null,
+          poster_url: movieData.poster_url || null,
+          release_date: movieData.release_date || null,
+          vote_average: movieData.vote_average ?? 0,
+          popularity: movieData.popularity ?? 0,
+          genre_ids: movieData.genre_ids || [],
+        })
+        // Find the current high bid for this movie and set minimum counter
+        const highBid = existingBids
+          .filter(b => b.tmdb_id === counterBidTarget.tmdb_id && b.status === 'active')
+          .reduce((max, b) => Math.max(max, b.amount), 0)
+        setBidAmount(highBid + 1)
+      } else {
+        setSelectedMovie(null)
+        setBidAmount(0)
+      }
       setSearchQuery('')
       clearSearch()
     }
-  }, [isOpen, clearSearch])
+  }, [isOpen, counterBidTarget, existingBids, clearSearch])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
@@ -120,7 +151,9 @@ export default function PlaceBidModal({
       <div ref={modalRef} className="glass max-w-2xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="font-display text-xl font-semibold text-foreground">Place a Bid</h2>
+          <h2 className="font-display text-xl font-semibold text-foreground">
+            {counterBidTarget ? 'Counter Bid' : 'Place a Bid'}
+          </h2>
           <button onClick={onClose} className="btn btn-ghost p-2">
             <X className="w-5 h-5" />
           </button>
@@ -173,7 +206,7 @@ export default function PlaceBidModal({
                       <div className="relative w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-elevated">
                         {movie.poster_url ? (
                           <Image
-                            src={`https://image.tmdb.org/t/p/w92${movie.poster_url}`}
+                            src={getTmdbPosterUrl(movie.poster_url, 'w92')!}
                             alt={movie.title}
                             fill
                             className="object-cover"
@@ -203,7 +236,7 @@ export default function PlaceBidModal({
                   <div className="relative w-20 h-30 flex-shrink-0 rounded overflow-hidden bg-elevated">
                     {selectedMovie.poster_url ? (
                       <Image
-                        src={`https://image.tmdb.org/t/p/w154${selectedMovie.poster_url}`}
+                        src={getTmdbPosterUrl(selectedMovie.poster_url, 'w154')!}
                         alt={selectedMovie.title}
                         fill
                         className="object-cover"
@@ -227,12 +260,14 @@ export default function PlaceBidModal({
                           })
                         : 'Release date TBA'}
                     </p>
-                    <button
-                      onClick={() => setSelectedMovie(null)}
-                      className="text-gold text-sm mt-2 hover:underline"
-                    >
-                      Choose different movie
-                    </button>
+                    {!counterBidTarget && (
+                      <button
+                        onClick={() => setSelectedMovie(null)}
+                        className="text-gold text-sm mt-2 hover:underline"
+                      >
+                        Choose different movie
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

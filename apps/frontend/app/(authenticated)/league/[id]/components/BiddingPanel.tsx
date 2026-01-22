@@ -29,7 +29,6 @@ export default function BiddingPanel({
   onCancelBid,
 }: BiddingPanelProps) {
   const [isModalOpen, setIsModalOpen] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [counterBidTarget, setCounterBidTarget] = useState<PickupBid | null>(null)
 
   const pickupSlots = league.total_slots - league.draft_slots
@@ -173,6 +172,7 @@ export default function BiddingPanel({
         existingBids={bids}
         draftedTmdbIds={draftedTmdbIds}
         onPlaceBid={onPlaceBid}
+        counterBidTarget={counterBidTarget}
       />
     </div>
   )

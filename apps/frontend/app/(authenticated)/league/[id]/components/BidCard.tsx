@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Clock, DollarSign, X, AlertTriangle } from 'lucide-react'
 import type { PickupBid } from '@/types'
+import { getTmdbPosterUrl } from './utils'
 
 interface BidCardProps {
   bid: PickupBid
@@ -51,7 +52,7 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardPr
         <div className="relative w-16 h-24 flex-shrink-0 rounded overflow-hidden bg-elevated">
           {movieData?.poster_url ? (
             <Image
-              src={`https://image.tmdb.org/t/p/w92${movieData.poster_url}`}
+              src={getTmdbPosterUrl(movieData.poster_url, 'w92')!}
               alt={movieData.title || 'Movie poster'}
               fill
               className="object-cover"
