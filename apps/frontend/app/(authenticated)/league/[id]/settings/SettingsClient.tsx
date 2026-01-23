@@ -2,8 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
-import Link from 'next/link'
 import type { League, ParticipantWithProfile } from '@/types'
 import LeagueInfoSection from './components/LeagueInfoSection'
 import DraftConfigSection from './components/DraftConfigSection'
@@ -44,13 +42,6 @@ export default function SettingsClient({
     <div className="animate-fade-in">
       {/* Header */}
       <header className="mb-8">
-        <Link
-          href={`/league/${league.id}`}
-          className="inline-flex items-center gap-2 text-sm text-foreground-muted hover:text-foreground transition-colors mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to League
-        </Link>
         <h1 className="text-3xl sm:text-4xl font-display font-bold text-foreground">
           League Settings
         </h1>

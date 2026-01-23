@@ -14,9 +14,10 @@ interface Tab {
 interface Props {
   league: League
   outbidCount?: number
+  isOwner?: boolean
 }
 
-export default function LeagueTabs({ league, outbidCount = 0 }: Props) {
+export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }: Props) {
   const pathname = usePathname()
   const baseUrl = `/league/${league.id}`
 
@@ -35,7 +36,7 @@ export default function LeagueTabs({ league, outbidCount = 0 }: Props) {
       badge: outbidCount > 0 ? outbidCount : undefined,
     },
     { name: 'Roster', href: `${baseUrl}/roster` },
-    { name: 'Settings', href: `${baseUrl}/settings` },
+    ...(isOwner ? [{ name: 'Settings', href: `${baseUrl}/settings` }] : []),
   ]
 
   return (
