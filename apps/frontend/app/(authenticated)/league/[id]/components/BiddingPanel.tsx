@@ -1,11 +1,63 @@
 'use client'
 
 import { useState } from 'react'
-import { DollarSign, Plus, TrendingUp } from 'lucide-react'
+import { Plus, TrendingUp, AlertCircle, Film, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import type { League, PickupBid, TeamBudget } from '@/types'
 import BidCard from './BidCard'
 import PlaceBidModal from './PlaceBidModal'
+
+interface BidSectionProps {
+  title: string
+  icon: React.ReactNode
+  count: number
+  bids: PickupBid[]
+  isOwner: boolean
+  onCancel?: (bidId: string) => void
+  onCounter?: (bid: PickupBid) => void
+  titleClassName?: string
+}
+
+function BidSection({
+  title,
+  icon,
+  count,
+  bids,
+  isOwner,
+  onCancel,
+  onCounter,
+  titleClassName = 'text-foreground',
+}: BidSectionProps): React.ReactElement {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        {icon}
+        <h3 className={`font-display font-semibold ${titleClassName}`}>
+          {title}
+        </h3>
+        <span className="text-foreground-muted text-sm">
+          ({count})
+        </span>
+      </div>
+      <div className="space-y-3">
+        {bids.map((bid, index) => (
+          <div
+            key={bid.id}
+            className="animate-slide-up"
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            <BidCard
+              bid={bid}
+              isOwner={isOwner}
+              onCancel={onCancel ? () => onCancel(bid.id) : undefined}
+              onCounter={onCounter ? () => onCounter(bid) : undefined}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 interface BiddingPanelProps {
   league: League
@@ -34,6 +86,7 @@ export default function BiddingPanel({
   const pickupSlots = league.total_slots - league.draft_slots
   const usedPickupSlots = 0 // TODO: Get from pickups query
   const availableSlots = pickupSlots - usedPickupSlots
+  const remainingBudget = budget?.remaining_budget ?? 100
 
   const handleCancelBid = async (bidId: string) => {
     const { success, error } = await onCancelBid(bidId)
@@ -56,106 +109,128 @@ export default function BiddingPanel({
   // Other teams' active bids (for visibility)
   const otherBids = bids.filter(b => b.team_id !== teamId && b.status === 'active')
 
+  // Calculate total pending bid amount
+  const totalPendingBids = activeBids.reduce((sum, b) => sum + b.amount, 0) +
+    outbidBids.reduce((sum, b) => sum + b.amount, 0)
+
   return (
     <div className="space-y-6">
-      {/* Budget & Slots Header */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between">
+      {/* Budget & Slots Header Card */}
+      <div className="card p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Stats */}
           <div className="flex items-center gap-6">
+            {/* Budget */}
             <div>
-              <p className="text-foreground-muted text-sm">Budget</p>
-              <p className="font-display font-semibold text-2xl text-gold">
-                ${budget?.remaining_budget ?? 100}
+              <p className="text-foreground-muted text-xs uppercase tracking-wide mb-1">Budget</p>
+              <p className="bid-amount-display text-3xl">
+                ${remainingBudget}
               </p>
+              {totalPendingBids > 0 && (
+                <p className="text-foreground-muted text-xs mt-1">
+                  ${totalPendingBids} in active bids
+                </p>
+              )}
             </div>
-            <div className="h-10 w-px bg-border" />
+
+            <div className="h-14 w-px bg-border" />
+
+            {/* Pickup Slots */}
             <div>
-              <p className="text-foreground-muted text-sm">Pickup Slots</p>
-              <p className="font-display font-semibold text-xl text-foreground">
-                {usedPickupSlots}/{pickupSlots}
+              <p className="text-foreground-muted text-xs uppercase tracking-wide mb-1">Pickup Slots</p>
+              <div className="flex items-baseline gap-1">
+                <span className="font-display font-bold text-3xl text-foreground">
+                  {usedPickupSlots}
+                </span>
+                <span className="text-foreground-muted text-lg">/ {pickupSlots}</span>
+              </div>
+              <p className="text-foreground-muted text-xs mt-1">
+                {availableSlots} available
               </p>
             </div>
           </div>
 
+          {/* Place Bid Button */}
           <button
             onClick={() => setIsModalOpen(true)}
             disabled={availableSlots <= 0}
-            className="btn btn-primary"
+            className="btn btn-primary px-6 py-3 text-base"
           >
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-5 h-5 mr-2" />
             Place Bid
           </button>
         </div>
       </div>
 
-      {/* Outbid Warning */}
+      {/* Outbid Warning Section */}
       {outbidBids.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-warning" />
-            Action Required ({outbidBids.length})
-          </h3>
-          {outbidBids.map(bid => (
-            <BidCard
-              key={bid.id}
-              bid={bid}
-              isOwner={true}
-              onCancel={() => handleCancelBid(bid.id)}
-              onCounter={() => handleCounter(bid)}
-            />
-          ))}
+        <div className="animate-fade-in">
+          <BidSection
+            title="Action Required"
+            icon={
+              <div className="p-1.5 bg-warning-bg rounded-lg">
+                <AlertCircle className="w-5 h-5 text-warning" />
+              </div>
+            }
+            count={outbidBids.length}
+            bids={outbidBids}
+            isOwner={true}
+            onCancel={handleCancelBid}
+            onCounter={handleCounter}
+          />
         </div>
       )}
 
-      {/* My Active Bids */}
+      {/* My Active Bids Section */}
       {activeBids.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-display font-semibold text-foreground flex items-center gap-2">
-            <DollarSign className="w-5 h-5 text-gold" />
-            My Active Bids ({activeBids.length})
-          </h3>
-          {activeBids.map(bid => (
-            <BidCard
-              key={bid.id}
-              bid={bid}
-              isOwner={true}
-              onCancel={() => handleCancelBid(bid.id)}
-            />
-          ))}
-        </div>
+        <BidSection
+          title="My Active Bids"
+          icon={
+            <div className="p-1.5 bg-gold-muted rounded-lg">
+              <Sparkles className="w-5 h-5 text-gold" />
+            </div>
+          }
+          count={activeBids.length}
+          bids={activeBids}
+          isOwner={true}
+          onCancel={handleCancelBid}
+        />
       )}
 
-      {/* Other Bids */}
+      {/* Other Bids Section */}
       {otherBids.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-display font-semibold text-foreground-secondary">
-            Other Active Bids ({otherBids.length})
-          </h3>
-          {otherBids.map(bid => (
-            <BidCard
-              key={bid.id}
-              bid={bid}
-              isOwner={false}
-            />
-          ))}
-        </div>
+        <BidSection
+          title="Other Active Bids"
+          icon={
+            <div className="p-1.5 bg-elevated rounded-lg">
+              <TrendingUp className="w-5 h-5 text-foreground-secondary" />
+            </div>
+          }
+          count={otherBids.length}
+          bids={otherBids}
+          isOwner={false}
+          titleClassName="text-foreground-secondary"
+        />
       )}
 
       {/* Empty State */}
       {myBids.length === 0 && otherBids.length === 0 && (
-        <div className="card p-8 text-center">
-          <DollarSign className="w-12 h-12 text-foreground-muted mx-auto mb-4" />
-          <h3 className="font-display font-semibold text-foreground mb-2">
+        <div className="card p-10 text-center animate-fade-in">
+          <div className="w-16 h-16 bg-elevated rounded-2xl flex items-center justify-center mx-auto mb-5">
+            <Film className="w-8 h-8 text-foreground-muted" />
+          </div>
+          <h3 className="font-display font-bold text-xl text-foreground mb-2">
             No Active Bids
           </h3>
-          <p className="text-foreground-secondary mb-4">
+          <p className="text-foreground-secondary mb-6 max-w-md mx-auto">
             Place a bid on upcoming movies to add them to your roster.
+            Movies are awarded to the highest bidder when bidding closes.
           </p>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="btn btn-primary"
+            className="btn btn-primary px-6 py-3"
           >
-            <Plus className="w-4 h-4 mr-2" />
+            <Plus className="w-5 h-5 mr-2" />
             Place Your First Bid
           </button>
         </div>

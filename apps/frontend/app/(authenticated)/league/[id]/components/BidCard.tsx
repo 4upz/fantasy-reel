@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { Clock, DollarSign, X, AlertTriangle } from 'lucide-react'
+import { Clock, DollarSign, AlertTriangle, Film, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
 import { getTmdbPosterUrl } from './utils'
 
@@ -33,8 +33,134 @@ function formatTimeRemaining(deadline: string | null): string {
   return `${hours}h ${minutes}m`
 }
 
+interface CancelBidModalProps {
+  isOpen: boolean
+  onClose: () => void
+  onConfirm: () => void
+  movieTitle: string
+  moviePoster: string | null
+  bidAmount: number
+}
+
+function CancelBidModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  movieTitle,
+  moviePoster,
+  bidAmount,
+}: CancelBidModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null)
+
+  // Close on escape
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape)
+      return () => document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen, onClose])
+
+  // Close on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        onClose()
+      }
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen, onClose])
+
+  if (!isOpen) return null
+
+  return (
+    <div className="modal-overlay">
+      <div
+        ref={modalRef}
+        className="glass modal-panel max-w-sm w-full mx-4 rounded-xl border border-border shadow-heavy"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <h2 className="font-display text-lg font-semibold text-foreground">
+            Cancel Bid
+          </h2>
+          <button
+            onClick={onClose}
+            className="btn btn-ghost p-1.5 rounded-full"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="p-4">
+          <p className="text-foreground-secondary mb-3">
+            Are you sure you want to cancel your bid?
+          </p>
+
+          <div className="card p-3 mb-4">
+            <div className="flex gap-3 items-center">
+              <div className="relative w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-elevated">
+                {moviePoster ? (
+                  <Image
+                    src={getTmdbPosterUrl(moviePoster, 'w92')!}
+                    alt={movieTitle}
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Film className="w-5 h-5 text-foreground-muted" />
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-display font-semibold text-foreground truncate">
+                  {movieTitle}
+                </p>
+                <p className="bid-amount-display text-lg">
+                  ${bidAmount}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-foreground-muted text-sm mb-4">
+            ${bidAmount} will be returned to your budget.
+          </p>
+
+          {/* Actions */}
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="btn btn-ghost flex-1"
+            >
+              Keep Bid
+            </button>
+            <button
+              onClick={() => {
+                onConfirm()
+                onClose()
+              }}
+              className="btn btn-danger flex-1"
+            >
+              Cancel Bid
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardProps) {
-  const [isConfirmingCancel, setIsConfirmingCancel] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
 
   const movieData = bid.movie_data as {
     title?: string
@@ -44,106 +170,102 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardPr
 
   const isOutbid = bid.status === 'outbid'
   const deadline = isOutbid ? bid.response_deadline : bid.processing_deadline
+  const movieTitle = movieData?.title || `Movie #${bid.tmdb_id}`
 
   return (
-    <div className={`card p-4 ${isOutbid ? 'border-warning bg-warning-bg/20' : ''}`}>
-      <div className="flex gap-4">
-        {/* Movie Poster */}
-        <div className="relative w-16 h-24 flex-shrink-0 rounded overflow-hidden bg-elevated">
-          {movieData?.poster_url ? (
-            <Image
-              src={getTmdbPosterUrl(movieData.poster_url, 'w92')!}
-              alt={movieData.title || 'Movie poster'}
-              fill
-              className="object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-foreground-muted">
-              No poster
-            </div>
-          )}
-        </div>
-
-        {/* Bid Info */}
-        <div className="flex-1 min-w-0">
-          <h4 className="font-display font-semibold text-foreground truncate">
-            {movieData?.title || `Movie #${bid.tmdb_id}`}
-          </h4>
-
-          {movieData?.release_date && (
-            <p className="text-sm text-foreground-secondary">
-              {new Date(movieData.release_date).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </p>
-          )}
-
-          <div className="flex items-center gap-4 mt-2">
-            <div className="flex items-center gap-1 text-gold font-semibold">
-              <DollarSign className="w-4 h-4" />
-              <span>{bid.amount}</span>
-            </div>
-
-            <div className="flex items-center gap-1 text-foreground-secondary text-sm">
-              <Clock className="w-4 h-4" />
-              <span>{formatTimeRemaining(deadline)}</span>
-            </div>
+    <>
+      <div
+        className={`card bid-card-interactive p-4 ${
+          isOutbid ? 'border-warning bg-warning-bg/20 outbid-pulse' : ''
+        }`}
+      >
+        <div className="flex gap-4">
+          {/* Movie Poster */}
+          <div className="relative w-16 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
+            {movieData?.poster_url ? (
+              <Image
+                src={getTmdbPosterUrl(movieData.poster_url, 'w92')!}
+                alt={movieTitle}
+                fill
+                className="object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <Film className="w-6 h-6 text-foreground-muted" />
+              </div>
+            )}
           </div>
 
-          {isOutbid && (
-            <div className="flex items-center gap-1 mt-2 text-warning text-sm">
-              <AlertTriangle className="w-4 h-4" />
-              <span>You&apos;ve been outbid!</span>
-            </div>
-          )}
-        </div>
+          {/* Bid Info */}
+          <div className="flex-1 min-w-0">
+            <h4 className="font-display font-semibold text-foreground truncate">
+              {movieTitle}
+            </h4>
 
-        {/* Actions */}
-        {isOwner && (
-          <div className="flex flex-col gap-2">
-            {isOutbid && onCounter && (
-              <button
-                onClick={onCounter}
-                className="btn btn-primary text-sm py-1 px-3"
-              >
-                Counter
-              </button>
+            {movieData?.release_date && (
+              <p className="text-sm text-foreground-secondary mt-0.5">
+                {new Date(movieData.release_date).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </p>
             )}
 
-            {bid.status === 'active' && (
-              isConfirmingCancel ? (
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => {
-                      onCancel?.()
-                      setIsConfirmingCancel(false)
-                    }}
-                    className="btn btn-danger text-xs py-1 px-2"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    onClick={() => setIsConfirmingCancel(false)}
-                    className="btn btn-ghost text-xs py-1 px-2"
-                  >
-                    No
-                  </button>
-                </div>
-              ) : (
+            <div className="flex items-center gap-4 mt-2">
+              <div className="flex items-center gap-1.5 bid-amount-display text-lg">
+                <DollarSign className="w-5 h-5" />
+                <span>{bid.amount}</span>
+              </div>
+
+              <div className="flex items-center gap-1.5 text-foreground-secondary text-sm">
+                <Clock className="w-4 h-4" />
+                <span>{formatTimeRemaining(deadline)}</span>
+              </div>
+            </div>
+
+            {isOutbid && (
+              <div className="flex items-center gap-1.5 mt-2 text-warning text-sm font-medium">
+                <AlertTriangle className="w-4 h-4" />
+                <span>You&apos;ve been outbid!</span>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          {isOwner && (
+            <div className="flex flex-col items-end gap-2">
+              {isOutbid && onCounter && (
                 <button
-                  onClick={() => setIsConfirmingCancel(true)}
-                  className="btn btn-ghost text-sm py-1 px-2"
-                  title="Cancel bid"
+                  onClick={onCounter}
+                  className="btn btn-primary text-sm px-4"
                 >
-                  <X className="w-4 h-4" />
+                  Counter Bid
                 </button>
-              )
-            )}
-          </div>
-        )}
+              )}
+
+              {bid.status === 'active' && (
+                <button
+                  onClick={() => setShowCancelModal(true)}
+                  className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-crimson/10"
+                >
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  Cancel
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      <CancelBidModal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        onConfirm={() => onCancel?.()}
+        movieTitle={movieTitle}
+        moviePoster={movieData?.poster_url || null}
+        bidAmount={bid.amount}
+      />
+    </>
   )
 }
