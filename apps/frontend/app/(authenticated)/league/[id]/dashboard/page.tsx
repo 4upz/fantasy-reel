@@ -1,48 +1,11 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DashboardClient from './DashboardClient'
-import type {
-  League,
-  DashboardTeam,
-  StandingEntry,
-  MovieTimelineItem,
-  Review,
-} from '@/types'
+import { getMovieStatus, extractScores } from '@/utils/league'
+import type { League, DashboardTeam, MovieTimelineItem, Review } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
-}
-
-function getMovieStatus(
-  releaseDate: string | null,
-  combinedScore: number | null
-): MovieTimelineItem['status'] {
-  if (combinedScore !== null) return 'scored'
-
-  if (!releaseDate) return 'upcoming'
-
-  const release = new Date(releaseDate)
-  const now = new Date()
-  const diffDays = Math.ceil((release.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-
-  if (diffDays <= 30 && diffDays >= 0) return 'releasing_soon'
-  return 'upcoming'
-}
-
-function extractScores(reviews: Review[]): MovieTimelineItem['scores'] {
-  const scores: MovieTimelineItem['scores'] = {
-    imdb: null,
-    rotten_tomatoes: null,
-    metacritic: null,
-  }
-
-  for (const review of reviews) {
-    if (review.source === 'imdb') scores.imdb = review.score
-    if (review.source === 'rotten_tomatoes') scores.rotten_tomatoes = review.score
-    if (review.source === 'metacritic') scores.metacritic = review.score
-  }
-
-  return scores
 }
 
 export default async function DashboardPage({ params }: PageProps) {
@@ -94,48 +57,29 @@ export default async function DashboardPage({ params }: PageProps) {
   const participantsData = participants || []
   const picksData = draftPicks || []
 
-  // Calculate rankings
+  // Calculate rankings for user's rank display
   const teamsWithScores = participantsData
     .filter((p) => p.teams)
     .map((p) => {
       const team = p.teams as { id: string; name: string; avatar_url: string | null; team_scores: { total_points: number } | null }
       return {
         participantUserId: p.user_id,
-        team: {
-          id: team.id,
-          name: team.name,
-          avatar_url: team.avatar_url,
-        },
+        teamId: team.id,
         total_points: team.team_scores?.total_points ?? 0,
       }
     })
     .sort((a, b) => b.total_points - a.total_points)
 
-  // Assign ranks with tie handling
+  // Build rank map with tie handling
   let currentRank = 1
-  const standings: StandingEntry[] = teamsWithScores.map((t, idx, arr) => {
+  const rankMap = new Map<string, number>()
+  teamsWithScores.forEach((t, idx, arr) => {
     const prevTeam = arr[idx - 1]
     const isTied = prevTeam && prevTeam.total_points === t.total_points
-
     if (!isTied && idx > 0) {
       currentRank = idx + 1
     }
-
-    // Find top movie for this team
-    const teamPicks = picksData.filter((p) => p.team_id === t.team.id)
-    const topMovie = teamPicks
-      .map((p) => ({ title: p.movies?.title, score: p.movies?.combined_score }))
-      .filter((m) => m.score !== null)
-      .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))[0]
-
-    return {
-      rank: currentRank,
-      isTied,
-      team: t.team,
-      total_points: t.total_points,
-      topMovie: topMovie ? { title: topMovie.title, score: topMovie.score ?? 0 } : null,
-      isCurrentUser: t.participantUserId === user.id,
-    }
+    rankMap.set(t.teamId, currentRank)
   })
 
   // Find current user's team
@@ -149,7 +93,6 @@ export default async function DashboardPage({ params }: PageProps) {
       avatar_url: string | null
       team_scores: { total_points: number } | null
     }
-    const userStanding = standings.find((s) => s.team.id === team.id)
 
     const userPicks = picksData.filter((p) => p.team_id === team.id)
     const movies: MovieTimelineItem[] = userPicks.map((pick) => {
@@ -180,7 +123,7 @@ export default async function DashboardPage({ params }: PageProps) {
       name: team.name,
       avatar_url: team.avatar_url,
       total_points: team.team_scores?.total_points ?? 0,
-      rank: userStanding?.rank ?? participantsData.length,
+      rank: rankMap.get(team.id) ?? participantsData.length,
       movies,
     }
   }
@@ -189,7 +132,6 @@ export default async function DashboardPage({ params }: PageProps) {
     <DashboardClient
       league={league as League}
       userTeam={userTeam}
-      standings={standings}
       totalTeams={participantsData.length}
     />
   )

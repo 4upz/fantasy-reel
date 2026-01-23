@@ -22,6 +22,11 @@ export default function LeagueTabs({ league, outbidCount = 0 }: Props) {
 
   const tabs: Tab[] = [
     { name: 'Dashboard', href: `${baseUrl}/dashboard` },
+    {
+      name: 'Standings',
+      href: `${baseUrl}/standings`,
+      disabled: league.status === 'setup' || league.status === 'drafting',
+    },
     { name: 'Draft', href: `${baseUrl}/draft` },
     {
       name: 'Bidding',
