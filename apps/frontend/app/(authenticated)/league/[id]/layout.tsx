@@ -1,7 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
-import Link from 'next/link'
-import { Settings } from 'lucide-react'
 import type { League } from '@/types'
 import LeagueTabs from './components/LeagueTabs'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
@@ -59,43 +57,31 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
       <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {/* League Header */}
         <div className="card p-6">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-2xl font-bold font-display text-foreground">
-                {typedLeague.name}
-              </h1>
-              <div className="mt-3 flex items-center gap-4 flex-wrap">
-                <span className={`badge ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
-                  {getStatusLabel(typedLeague.status)}
-                </span>
-                <span className="text-sm text-foreground-muted">
-                  {typedLeague.invite_only ? 'Invite Only' : 'Open'}
-                </span>
-                <span className="text-sm text-foreground-muted">
-                  {participantCount ?? 0} / {typedLeague.max_participants} participants
-                </span>
-              </div>
+          <div>
+            <h1 className="text-2xl font-bold font-display text-foreground">
+              {typedLeague.name}
+            </h1>
+            <div className="mt-3 flex items-center gap-4 flex-wrap">
+              <span className={`badge ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
+                {getStatusLabel(typedLeague.status)}
+              </span>
+              <span className="text-sm text-foreground-muted">
+                {typedLeague.invite_only ? 'Invite Only' : 'Open'}
+              </span>
+              <span className="text-sm text-foreground-muted">
+                {participantCount ?? 0} / {typedLeague.max_participants} participants
+              </span>
             </div>
-
-            {isOwner && (
-              <Link
-                href={`/league/${typedLeague.id}/settings`}
-                className="btn btn-ghost p-2"
-                title="League Settings"
-              >
-                <Settings className="w-5 h-5" />
-              </Link>
-            )}
           </div>
 
           {/* Tab Navigation */}
-          <div className="mt-6">
-            <LeagueTabs league={typedLeague} />
+          <div className="mt-4">
+            <LeagueTabs league={typedLeague} isOwner={isOwner} />
           </div>
         </div>
 
         {/* Page Content */}
-        <div className="mt-6">
+        <div className="mt-4">
           {children}
         </div>
       </div>
