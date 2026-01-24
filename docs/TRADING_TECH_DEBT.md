@@ -1,0 +1,307 @@
+# Trading System Technical Debt
+
+This document tracks known issues and improvements for the trading system, identified during code review on 2026-01-24.
+
+## Critical (Fixed)
+
+These issues have been resolved:
+
+- [x] **`execute_trade` constraint violation** - Function inserted both `movie_id` AND `draft_pick_id`, violating `check_exactly_one_asset` constraint. Fixed in `20260130_fix_trade_assets_constraint.sql`.
+- [x] **Counter button missing** - `onCounter` prop was wired but no button rendered. Fixed in `TradeOfferCard.tsx`.
+- [x] **Veto used `window.prompt()`** - Poor UX, doesn't work on mobile. Replaced with `VetoModal` component.
+
+---
+
+## Backend Issues
+
+### High Priority
+
+#### 1. Race Condition: Same Movie in Multiple Pending Trades
+**Location:** `propose-trade/index.ts`, `counter-trade/index.ts`
+
+**Problem:** A movie can be included in multiple pending trade offers simultaneously. If both trades are accepted, the same movie could be transferred twice.
+
+**Solution:** Add a check before creating/updating trades:
+```sql
+-- Check if movie is already in a pending trade
+SELECT 1 FROM trade_offers
+WHERE league_id = $1
+  AND status IN ('proposed', 'countered', 'review')
+  AND (
+    initiator_items->'movies' @> '[{"source_id": "..."}]'
+    OR recipient_items->'movies' @> '[{"source_id": "..."}]'
+  )
+```
+
+Or add a database constraint/trigger to enforce this.
+
+---
+
+#### 2. No Row-Level Locking on Trade Status Updates
+**Location:** `respond-trade/index.ts`, `counter-trade/index.ts`, `veto-trade/index.ts`
+
+**Problem:** Concurrent requests could update the same trade simultaneously, leading to inconsistent state.
+
+**Solution:** Use `SELECT ... FOR UPDATE` when fetching the trade before modifying:
+```sql
+SELECT * FROM trade_offers WHERE id = $1 FOR UPDATE
+```
+
+The `execute_trade` function already does this, but the Edge Functions don't.
+
+---
+
+#### 3. FAAB Budget Race Condition
+**Location:** `execute_trade` function, `_shared/trade-validation.ts`
+
+**Problem:** If multiple trades involving the same team execute simultaneously, budget validation happens before the atomic transfer. Team could end up with negative FAAB.
+
+**Solution:**
+1. Lock team_budgets rows during validation: `SELECT ... FOR UPDATE`
+2. Or use a database constraint: `CHECK (remaining_budget >= 0)`
+3. Or serialize trade execution per team
+
+---
+
+#### 4. `process-trades` Endpoint Has No Authentication
+**Location:** `process-trades/index.ts`
+
+**Problem:** The endpoint that auto-completes trades after review period has no auth check. Anyone could trigger it.
+
+**Solution:** Either:
+1. Add service role key validation (for cron jobs)
+2. Or check for a specific header/secret
+3. Or make it a database cron job instead of an HTTP endpoint
+
+```typescript
+// Add at start of handler
+const authHeader = req.headers.get('Authorization')
+if (authHeader !== `Bearer ${Deno.env.get('CRON_SECRET')}`) {
+  return new Response('Unauthorized', { status: 401 })
+}
+```
+
+---
+
+### Medium Priority
+
+#### 5. Counter-Offer Role Swap is Confusing
+**Location:** `counter-trade/index.ts`
+
+**Problem:** When a trade is countered, the initiator and recipient swap. This is confusing for:
+- Authorization checks (who can cancel?)
+- Email notifications (who gets what email?)
+- UI display (who proposed originally?)
+
+**Solution:** Consider keeping original initiator/recipient and adding a `current_proposer_team_id` field, or adding a `trade_history` table to track the conversation.
+
+---
+
+#### 6. Missing Uniqueness Constraint for Active Trades
+**Location:** Database schema
+
+**Problem:** Two pending trades can exist between the same two teams simultaneously, which is confusing UX.
+
+**Solution:** Add a partial unique index:
+```sql
+CREATE UNIQUE INDEX idx_unique_active_trade_between_teams
+ON trade_offers (
+  LEAST(initiator_team_id, recipient_team_id),
+  GREATEST(initiator_team_id, recipient_team_id)
+)
+WHERE status IN ('proposed', 'countered');
+```
+
+---
+
+#### 7. RLS Policy Overly Permissive
+**Location:** `20260128_create_trading_system.sql`
+
+**Problem:** The SELECT policy allows any league member to see all trades, including the full JSONB items. This exposes what movies/FAAB other teams are offering.
+
+**Solution:** Consider restricting to only show trades where the user is a participant, or limit visible fields for non-participants.
+
+---
+
+#### 8. Hard-Coded FAAB Maximum
+**Location:** `propose-trade/index.ts:58`, `counter-trade/index.ts`
+
+**Problem:** FAAB validation uses hard-coded max of 100:
+```typescript
+if (faab < 0 || faab > 100) {
+  return errorResponse('FAAB must be a number between 0 and 100', 400)
+}
+```
+
+**Solution:** Fetch the league's configured FAAB budget and validate against that.
+
+---
+
+### Low Priority
+
+#### 9. Email Notifications are Non-Blocking but Silent Failures
+**Location:** `_shared/trade-validation.ts`
+
+**Problem:** Email failures are caught and logged but not surfaced anywhere.
+
+**Solution:** Consider adding a `notification_status` column or a separate notifications table to track delivery.
+
+---
+
+## Frontend Issues
+
+### High Priority
+
+#### 1. No Loading State for Recipient Movies
+**Location:** `ProposeTradeModal.tsx:311-313`
+
+**Problem:** When selecting a trade partner, the recipient's movies are fetched but only shows "Loading..." text. No spinner or skeleton.
+
+**Solution:** Add a proper loading skeleton:
+```tsx
+{isLoadingRecipientMovies ? (
+  <div className="space-y-2">
+    {[1,2,3].map(i => (
+      <div key={i} className="h-14 bg-surface-hover animate-pulse rounded-lg" />
+    ))}
+  </div>
+) : (
+  <MovieSelector ... />
+)}
+```
+
+---
+
+#### 2. No Confirmation Before Accepting Trade
+**Location:** `TradeOfferCard.tsx:197-202`
+
+**Problem:** Clicking "Accept" immediately triggers the action. Users could accidentally accept trades.
+
+**Solution:** Add an `AcceptConfirmModal` similar to `VetoModal`:
+```tsx
+{showAcceptModal && (
+  <AcceptConfirmModal
+    trade={trade}
+    onClose={() => setShowAcceptModal(false)}
+    onConfirm={() => handleAction('accept')}
+  />
+)}
+```
+
+---
+
+#### 3. Real-time Subscription Doesn't Update Roster
+**Location:** `useTrading.ts`
+
+**Problem:** After a trade completes, the `tradeableMovies` list isn't refreshed. Users still see movies they traded away.
+
+**Solution:** Subscribe to `draft_picks` and `pickups` changes, or refetch `tradeableMovies` when a trade status changes to 'completed'.
+
+---
+
+### Medium Priority
+
+#### 4. Supabase Client Created in Component Body
+**Location:** `ProposeTradeModal.tsx:45`
+
+**Problem:** `const supabase = createClient()` is called on every render.
+
+**Solution:** Use `useMemo` or move outside component:
+```typescript
+const supabase = useMemo(() => createClient(), [])
+```
+
+---
+
+#### 5. TypeScript Errors in Trading Files
+**Location:** `ProposeTradeModal.tsx:71,94`, `useTrading.ts:104,127`
+
+**Problem:** Type casting errors for movie data from Supabase queries.
+
+**Solution:** Properly type the Supabase query responses or use type guards.
+
+---
+
+#### 6. No Accessibility Attributes
+**Location:** All trading components
+
+**Problem:** Missing `aria-label`, `role`, `aria-describedby` attributes on interactive elements.
+
+**Solution:** Audit and add appropriate ARIA attributes:
+```tsx
+<button
+  aria-label="Accept trade offer"
+  aria-describedby="trade-summary"
+  ...
+>
+```
+
+---
+
+### Low Priority
+
+#### 7. No Empty State for "No Tradeable Movies"
+**Location:** `ProposeTradeModal.tsx`, `CounterTradeModal`
+
+**Problem:** If a team has no movies to trade, the UI just shows empty space.
+
+**Solution:** Add helpful empty state:
+```tsx
+{movies.length === 0 && (
+  <div className="text-center py-8">
+    <p className="text-foreground-muted">No movies available to trade</p>
+    <p className="text-sm text-foreground-muted mt-1">
+      Draft or pick up movies first
+    </p>
+  </div>
+)}
+```
+
+---
+
+#### 8. Missing Keyboard Navigation
+**Location:** All modals and interactive lists
+
+**Problem:** Can't navigate movie selection with keyboard, modals don't trap focus.
+
+**Solution:** Implement focus trap in modals, add keyboard handlers for lists.
+
+---
+
+#### 9. No Optimistic UI Updates
+**Location:** `useTrading.ts`
+
+**Problem:** All actions wait for server response before updating UI, causing perceived lag.
+
+**Solution:** Implement optimistic updates with rollback on error.
+
+---
+
+## Testing Gaps
+
+1. **Integration tests need Supabase keys** - Tests in `supabase/functions/tests/` require ES256 JWT keys that aren't easily accessible from new Supabase local setup.
+
+2. **No E2E tests** - Trading flow should have Playwright tests covering:
+   - Propose → Accept → Complete flow
+   - Propose → Counter → Accept flow
+   - Propose → Reject flow
+   - Veto flow
+
+3. **No load testing** - Race conditions won't surface without concurrent request testing.
+
+---
+
+## Related Files
+
+- `supabase/migrations/20260128_create_trading_system.sql` - Schema
+- `supabase/migrations/20260130_fix_trade_assets_constraint.sql` - Bug fix
+- `supabase/functions/propose-trade/index.ts`
+- `supabase/functions/respond-trade/index.ts`
+- `supabase/functions/counter-trade/index.ts`
+- `supabase/functions/cancel-trade/index.ts`
+- `supabase/functions/veto-trade/index.ts`
+- `supabase/functions/process-trades/index.ts`
+- `apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard.tsx`
+- `apps/frontend/app/(authenticated)/league/[id]/components/TradingPanel.tsx`
+- `apps/frontend/app/(authenticated)/league/[id]/components/ProposeTradeModal.tsx`
+- `apps/frontend/app/(authenticated)/league/[id]/hooks/useTrading.ts`
