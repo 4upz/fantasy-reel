@@ -14,6 +14,7 @@ import {
   validateTradeStatus,
   createServiceClient,
   notifyTradeParties,
+  sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 
 interface CounterTradeRequest {
@@ -110,6 +111,12 @@ Deno.serve(async (req) => {
         bodyFn: () =>
           `${counterTeamInfo?.name ?? 'A team'} has sent a counter-offer to your trade proposal`,
       },
+    })
+
+    // Send email notification (non-blocking)
+    await sendTradeEmailNotifications(serviceClient, updatedOffer, 'countered', {
+      notifyRecipient: true,
+      message: message?.trim(),
     })
 
     return jsonResponse({

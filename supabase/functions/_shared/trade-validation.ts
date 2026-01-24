@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isValidUUID, errorResponse } from './utils.ts'
+import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData } from './email.ts'
 
 // ============================================================================
 // Types
@@ -591,5 +592,200 @@ export async function enrichTradeItems(
   return {
     movies: enrichedMovies,
     faab: items.faab,
+  }
+}
+
+// ============================================================================
+// Email Notification Helpers
+// ============================================================================
+
+type TradeEmailType =
+  | 'proposed'
+  | 'countered'
+  | 'accepted'
+  | 'rejected'
+  | 'completed'
+  | 'vetoed'
+
+interface TradePartyInfo {
+  userId: string
+  email: string
+  teamName: string
+}
+
+/**
+ * Get user email and team name for a team
+ */
+async function getTradePartyInfo(
+  supabase: SupabaseClient,
+  teamId: string
+): Promise<TradePartyInfo | null> {
+  const { data: team } = await supabase
+    .from('teams')
+    .select(`
+      name,
+      league_participants!inner(user_id)
+    `)
+    .eq('id', teamId)
+    .single()
+
+  if (!team) return null
+
+  const participant = team.league_participants as unknown as { user_id: string }
+
+  // Get user email from auth.users via RPC or profiles
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('id', participant.user_id)
+    .single()
+
+  // If profile doesn't have email, try auth.users
+  if (!profile?.email) {
+    const { data: authUser } = await supabase.auth.admin.getUserById(participant.user_id)
+    if (!authUser?.user?.email) return null
+
+    return {
+      userId: participant.user_id,
+      email: authUser.user.email,
+      teamName: team.name,
+    }
+  }
+
+  return {
+    userId: participant.user_id,
+    email: profile.email,
+    teamName: team.name,
+  }
+}
+
+/**
+ * Get league name and URL
+ */
+async function getLeagueInfo(
+  supabase: SupabaseClient,
+  leagueId: string
+): Promise<{ name: string; url: string } | null> {
+  const { data } = await supabase
+    .from('leagues')
+    .select('name')
+    .eq('id', leagueId)
+    .single()
+
+  if (!data) return null
+
+  const appUrl = Deno.env.get('APP_URL') || 'http://localhost:3000'
+  return {
+    name: data.name,
+    url: `${appUrl}/league/${leagueId}`,
+  }
+}
+
+/**
+ * Format trade items to string for email display
+ */
+async function formatItemsForEmail(
+  supabase: SupabaseClient,
+  items: TradeItems
+): Promise<string> {
+  const movieTitles: string[] = []
+
+  for (const movie of items.movies) {
+    const table = movie.source === 'draft_pick' ? 'draft_picks' : 'pickups'
+    const { data } = await supabase
+      .from(table)
+      .select('movies(title)')
+      .eq('id', movie.source_id)
+      .single()
+
+    const movieData = data?.movies as unknown as { title: string } | null
+    movieTitles.push(movieData?.title ?? 'Unknown Movie')
+  }
+
+  return formatTradeItemsForEmail(movieTitles, items.faab)
+}
+
+/**
+ * Send trade email notifications to one or both parties
+ */
+export async function sendTradeEmailNotifications(
+  supabase: SupabaseClient,
+  tradeOffer: TradeOffer,
+  emailType: TradeEmailType,
+  options?: {
+    notifyInitiator?: boolean
+    notifyRecipient?: boolean
+    message?: string
+    vetoReason?: string
+  }
+): Promise<void> {
+  const { notifyInitiator = false, notifyRecipient = false, message, vetoReason } = options ?? {}
+
+  if (!notifyInitiator && !notifyRecipient) return
+
+  try {
+    // Get league info
+    const leagueInfo = await getLeagueInfo(supabase, tradeOffer.league_id)
+    if (!leagueInfo) {
+      console.warn('Could not get league info for trade email')
+      return
+    }
+
+    // Get party info
+    const initiatorInfo = notifyInitiator
+      ? await getTradePartyInfo(supabase, tradeOffer.initiator_team_id)
+      : null
+    const recipientInfo = notifyRecipient
+      ? await getTradePartyInfo(supabase, tradeOffer.recipient_team_id)
+      : null
+
+    // Format items
+    const initiatorItemsStr = await formatItemsForEmail(supabase, tradeOffer.initiator_items)
+    const recipientItemsStr = await formatItemsForEmail(supabase, tradeOffer.recipient_items)
+
+    // Send to initiator if requested
+    if (initiatorInfo) {
+      const recipientName = recipientInfo?.teamName ?? await getTeamName(supabase, tradeOffer.recipient_team_id)
+
+      const emailData: TradeEmailData = {
+        recipientEmail: initiatorInfo.email,
+        recipientTeamName: initiatorInfo.teamName,
+        otherTeamName: recipientName,
+        leagueName: leagueInfo.name,
+        leagueUrl: leagueInfo.url,
+        // From initiator's perspective: they offered initiator_items, requesting recipient_items
+        offeredItems: initiatorItemsStr,
+        requestedItems: recipientItemsStr,
+        message,
+        vetoReason,
+        reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
+      }
+
+      await sendTradeEmail(emailType, emailData)
+    }
+
+    // Send to recipient if requested
+    if (recipientInfo) {
+      const initiatorName = initiatorInfo?.teamName ?? await getTeamName(supabase, tradeOffer.initiator_team_id)
+
+      const emailData: TradeEmailData = {
+        recipientEmail: recipientInfo.email,
+        recipientTeamName: recipientInfo.teamName,
+        otherTeamName: initiatorName,
+        leagueName: leagueInfo.name,
+        leagueUrl: leagueInfo.url,
+        // From recipient's perspective: they're being offered initiator_items in exchange for recipient_items
+        offeredItems: initiatorItemsStr,
+        requestedItems: recipientItemsStr,
+        message,
+        vetoReason,
+        reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
+      }
+
+      await sendTradeEmail(emailType, emailData)
+    }
+  } catch (error) {
+    // Non-blocking: log and continue
+    console.error('Error sending trade email notifications:', error)
   }
 }

@@ -10,6 +10,8 @@ import {
   getTeamInfo,
   createServiceClient,
   TradeNotification,
+  sendTradeEmailNotifications,
+  TradeOffer,
 } from '../_shared/trade-validation.ts'
 
 interface VetoTradeRequest {
@@ -108,6 +110,29 @@ Deno.serve(async (req) => {
     if (notifications.length > 0) {
       await serviceClient.from('notifications').insert(notifications)
     }
+
+    // Send email notifications to both parties (non-blocking)
+    const tradeOfferForEmail: TradeOffer = {
+      id: tradeOffer.id,
+      league_id: tradeOffer.league_id,
+      initiator_team_id: tradeOffer.initiator_team_id,
+      recipient_team_id: tradeOffer.recipient_team_id,
+      initiator_items: tradeOffer.initiator_items,
+      recipient_items: tradeOffer.recipient_items,
+      status: 'vetoed',
+      proposed_at: tradeOffer.proposed_at,
+      responded_at: tradeOffer.responded_at,
+      accepted_at: tradeOffer.accepted_at,
+      review_ends_at: tradeOffer.review_ends_at,
+      initiator_message: tradeOffer.initiator_message,
+      response_message: tradeOffer.response_message,
+      veto_reason: reason?.trim() || null,
+    }
+    await sendTradeEmailNotifications(serviceClient, tradeOfferForEmail, 'vetoed', {
+      notifyInitiator: true,
+      notifyRecipient: true,
+      vetoReason: reason?.trim(),
+    })
 
     return jsonResponse({
       message: 'Trade vetoed successfully',

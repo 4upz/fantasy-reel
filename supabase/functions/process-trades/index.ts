@@ -10,6 +10,8 @@ import {
   createServiceClient,
   TradeNotification,
   TradeItems,
+  TradeOffer,
+  sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 
 interface TradeRecord {
@@ -19,6 +21,14 @@ interface TradeRecord {
   recipient_team_id: string
   initiator_items: TradeItems
   recipient_items: TradeItems
+  status: string
+  proposed_at: string
+  responded_at: string | null
+  accepted_at: string | null
+  review_ends_at: string | null
+  initiator_message: string | null
+  response_message: string | null
+  veto_reason: string | null
 }
 
 interface ProcessResults {
@@ -157,6 +167,28 @@ async function notifyTradeCompleted(
   if (notifications.length > 0) {
     await supabase.from('notifications').insert(notifications)
   }
+
+  // Send email notifications to both parties (non-blocking)
+  const tradeOffer: TradeOffer = {
+    id: trade.id,
+    league_id: trade.league_id,
+    initiator_team_id: trade.initiator_team_id,
+    recipient_team_id: trade.recipient_team_id,
+    initiator_items: trade.initiator_items,
+    recipient_items: trade.recipient_items,
+    status: 'completed',
+    proposed_at: trade.proposed_at,
+    responded_at: trade.responded_at,
+    accepted_at: trade.accepted_at,
+    review_ends_at: trade.review_ends_at,
+    initiator_message: trade.initiator_message,
+    response_message: trade.response_message,
+    veto_reason: trade.veto_reason,
+  }
+  await sendTradeEmailNotifications(supabase, tradeOffer, 'completed', {
+    notifyInitiator: true,
+    notifyRecipient: true,
+  })
 }
 
 async function notifyTradeExpired(

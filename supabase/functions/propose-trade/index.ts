@@ -13,6 +13,7 @@ import {
   getTeamInfo,
   createServiceClient,
   notifyTradeParties,
+  sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 
 interface ProposeTradeRequest {
@@ -119,6 +120,12 @@ Deno.serve(async (req) => {
         title: 'New Trade Proposal',
         bodyFn: () => `${initiatorInfo?.name ?? 'A team'} has proposed a trade with you`,
       },
+    })
+
+    // Send email notification (non-blocking)
+    await sendTradeEmailNotifications(serviceClient, tradeOffer, 'proposed', {
+      notifyRecipient: true,
+      message: message?.trim(),
     })
 
     return jsonResponse(

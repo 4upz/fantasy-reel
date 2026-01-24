@@ -12,6 +12,7 @@ import {
   validateTradeStatus,
   createServiceClient,
   notifyTradeParties,
+  sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 
 interface RespondTradeRequest {
@@ -75,6 +76,12 @@ Deno.serve(async (req) => {
           title: 'Trade Rejected',
           bodyFn: (teamName) => `${teamName} has rejected your trade proposal`,
         },
+      })
+
+      // Send email notification (non-blocking)
+      await sendTradeEmailNotifications(serviceClient, tradeOffer, 'rejected', {
+        notifyInitiator: true,
+        message: message?.trim(),
       })
 
       return jsonResponse({ message: 'Trade rejected', trade_offer_id })
@@ -148,6 +155,13 @@ Deno.serve(async (req) => {
             : `${teamName} accepted your trade. It will be processed shortly.`,
         data: { review_ends_at: reviewEndsAt },
       },
+    })
+
+    // Send email notification with updated trade offer data
+    const tradeOfferWithReview = { ...tradeOffer, review_ends_at: reviewEndsAt }
+    await sendTradeEmailNotifications(serviceClient, tradeOfferWithReview, 'accepted', {
+      notifyInitiator: true,
+      message: message?.trim(),
     })
 
     return jsonResponse({
