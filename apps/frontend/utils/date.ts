@@ -44,3 +44,36 @@ export function formatRuntime(minutes: number): string {
   if (hours > 0) return `${hours}h ${mins}m`
   return `${mins}m`
 }
+
+/**
+ * Format a date as relative time (e.g., "2 hours ago", "in 3 days")
+ */
+export function formatRelativeDate(dateString: string): string {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffMs = date.getTime() - now.getTime()
+  const diffMins = Math.round(diffMs / (1000 * 60))
+  const diffHours = Math.round(diffMs / (1000 * 60 * 60))
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24))
+
+  const absMins = Math.abs(diffMins)
+  const absHours = Math.abs(diffHours)
+  const absDays = Math.abs(diffDays)
+
+  const isFuture = diffMs > 0
+
+  if (absMins < 1) {
+    return 'just now'
+  }
+  if (absMins < 60) {
+    return isFuture ? `in ${absMins} minute${absMins === 1 ? '' : 's'}` : `${absMins} minute${absMins === 1 ? '' : 's'} ago`
+  }
+  if (absHours < 24) {
+    return isFuture ? `in ${absHours} hour${absHours === 1 ? '' : 's'}` : `${absHours} hour${absHours === 1 ? '' : 's'} ago`
+  }
+  if (absDays < 7) {
+    return isFuture ? `in ${absDays} day${absDays === 1 ? '' : 's'}` : `${absDays} day${absDays === 1 ? '' : 's'} ago`
+  }
+
+  return formatDate(dateString)
+}

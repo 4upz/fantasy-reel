@@ -294,7 +294,18 @@ export interface TeamDrop {
   created_at: string
 }
 
-export type NotificationType = 'outbid' | 'bid_won' | 'bid_lost' | 'pickup_available'
+export type NotificationType =
+  | 'outbid'
+  | 'bid_won'
+  | 'bid_lost'
+  | 'pickup_available'
+  | 'trade_proposed'
+  | 'trade_countered'
+  | 'trade_accepted'
+  | 'trade_rejected'
+  | 'trade_cancelled'
+  | 'trade_completed'
+  | 'trade_vetoed'
 
 export interface Notification {
   id: string
@@ -373,4 +384,88 @@ export interface StandingEntry {
     score: number
   } | null
   isCurrentUser: boolean
+}
+
+// ============================================================================
+// Trading system types
+// ============================================================================
+
+export type TradeStatus =
+  | 'proposed'
+  | 'countered'
+  | 'accepted'
+  | 'review'
+  | 'completed'
+  | 'rejected'
+  | 'cancelled'
+  | 'vetoed'
+  | 'expired'
+
+export interface TradeMovieItem {
+  movie_id: string
+  source: 'draft_pick' | 'pickup'
+  source_id: string
+  // Cached movie data for display
+  title?: string
+  poster_url?: string | null
+  release_date?: string | null
+}
+
+export interface TradeItems {
+  movies: TradeMovieItem[]
+  faab: number
+}
+
+export interface TradeOffer {
+  id: string
+  league_id: string
+  initiator_team_id: string
+  recipient_team_id: string
+  initiator_items: TradeItems
+  recipient_items: TradeItems
+  status: TradeStatus
+  proposed_at: string
+  responded_at: string | null
+  accepted_at: string | null
+  review_ends_at: string | null
+  completed_at: string | null
+  initiator_message: string | null
+  response_message: string | null
+  veto_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TradeAsset {
+  id: string
+  trade_offer_id: string
+  from_team_id: string
+  to_team_id: string
+  movie_id: string | null
+  draft_pick_id: string | null
+  pickup_id: string | null
+  faab_amount: number | null
+  transferred_at: string
+  created_at: string
+}
+
+// Extended types for queries with relations
+export interface TradeOfferWithTeams extends TradeOffer {
+  initiator_team: Team
+  recipient_team: Team
+}
+
+export interface TradeOfferWithDetails extends TradeOfferWithTeams {
+  trade_assets?: TradeAsset[]
+}
+
+// For the trade proposal UI - team's available movies
+export interface TradeableMovie {
+  movie_id: string
+  source: 'draft_pick' | 'pickup'
+  source_id: string
+  title: string
+  poster_url: string | null
+  release_date: string | null
+  combined_score: number | null
 }

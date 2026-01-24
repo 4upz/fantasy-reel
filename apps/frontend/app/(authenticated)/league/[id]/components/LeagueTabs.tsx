@@ -35,6 +35,11 @@ export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }:
       disabled: league.status === 'setup' || league.status === 'drafting',
       badge: outbidCount > 0 ? outbidCount : undefined,
     },
+    {
+      name: 'Trading',
+      href: `${baseUrl}/trading`,
+      disabled: league.status === 'setup' || league.status === 'drafting',
+    },
     { name: 'Roster', href: `${baseUrl}/roster` },
     ...(isOwner ? [{ name: 'Settings', href: `${baseUrl}/settings` }] : []),
   ]
