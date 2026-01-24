@@ -207,6 +207,9 @@ export async function cleanupTestData(
 
     // Delete bidding-related tables first (respect FK order)
     if (teamIds.length > 0) {
+      // Delete trade_offers (references teams)
+      await client.from('trade_offers').delete().in('league_id', leagueIds)
+
       // Delete team_drops (references pickups)
       await client.from('team_drops').delete().in('team_id', teamIds)
 
@@ -778,6 +781,81 @@ export class TestDataFactory {
    */
   trackLeague(leagueId: string): void {
     this.leagueIds.push(leagueId)
+  }
+
+  /**
+   * Create an active league with trading enabled
+   */
+  async createTradingLeague(name: string, numParticipants = 2): Promise<string> {
+    const leagueId = await this.createActiveLeague(name, numParticipants)
+
+    // Enable trading on the league
+    const serviceClient = getServiceClient()
+    await serviceClient
+      .from('leagues')
+      .update({
+        trades_enabled: true,
+        trade_deadline: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 year
+        trade_veto_hours: 24,
+        trade_review_enabled: true,
+      })
+      .eq('id', leagueId)
+
+    return leagueId
+  }
+
+  /**
+   * Get team info for a user in a league
+   */
+  async getTeamForUser(
+    leagueId: string,
+    userClient: SupabaseClient
+  ): Promise<{ teamId: string; teamName: string } | null> {
+    const { data: { user } } = await userClient.auth.getUser()
+    if (!user) throw new Error('Client is not authenticated')
+
+    const serviceClient = getServiceClient()
+    const { data: participant } = await serviceClient
+      .from('league_participants')
+      .select('id, teams(id, name)')
+      .eq('league_id', leagueId)
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single()
+
+    if (!participant) return null
+
+    const team = participant.teams as unknown as { id: string; name: string }
+    if (!team) return null
+
+    return { teamId: team.id, teamName: team.name }
+  }
+
+  /**
+   * Get user's draft picks in a league (for trading tests)
+   */
+  async getDraftPicksForUser(
+    leagueId: string,
+    userClient: SupabaseClient
+  ): Promise<Array<{ id: string; movie_id: string; movie_title: string }>> {
+    const teamInfo = await this.getTeamForUser(leagueId, userClient)
+    if (!teamInfo) return []
+
+    const serviceClient = getServiceClient()
+    const { data: picks } = await serviceClient
+      .from('draft_picks')
+      .select('id, movie_id, movies(title)')
+      .eq('team_id', teamInfo.teamId)
+      .eq('league_id', leagueId)
+      .is('dropped_at', null)
+
+    if (!picks) return []
+
+    return picks.map((p) => ({
+      id: p.id,
+      movie_id: p.movie_id,
+      movie_title: (p.movies as unknown as { title: string })?.title ?? 'Unknown',
+    }))
   }
 
   /**
