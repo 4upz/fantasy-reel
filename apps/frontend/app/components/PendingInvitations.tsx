@@ -44,25 +44,30 @@ export default function PendingInvitations({ initialInvitations }: PendingInvita
   }
 
   return (
-    <div className="card mb-6">
-      <div className="px-4 py-5 sm:p-6">
-        <h3 className="text-lg leading-6 font-medium font-display text-foreground mb-4">
-          Pending Invitations
-        </h3>
-
-        {error && <ErrorAlert message={error} />}
-
-        <div className="space-y-3">
-          {invitations.map((invitation) => (
-            <InvitationCard
-              key={invitation.id}
-              invitation={invitation}
-              onAccept={handleAccept}
-              onDecline={handleDecline}
-              isDeclining={decliningId === invitation.id}
-            />
-          ))}
+    <div className="invitation-banner px-5 py-4">
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gold-muted shrink-0">
+          <svg className="w-4 h-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
         </div>
+        <h3 className="font-display font-semibold text-foreground">
+          {invitations.length === 1 ? 'You have a pending invitation' : `You have ${invitations.length} pending invitations`}
+        </h3>
+      </div>
+
+      {error && <ErrorAlert message={error} />}
+
+      <div className="space-y-2">
+        {invitations.map((invitation) => (
+          <InvitationCard
+            key={invitation.id}
+            invitation={invitation}
+            onAccept={handleAccept}
+            onDecline={handleDecline}
+            isDeclining={decliningId === invitation.id}
+          />
+        ))}
       </div>
     </div>
   )
@@ -84,37 +89,36 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
   }
 
   return (
-    <div className="border border-border rounded-lg p-4 bg-elevated hover:bg-surface-hover transition-colors">
-      <div className="flex justify-between items-start">
-        <div className="flex-1">
-          <h4 className="text-lg font-medium text-foreground">
-            {invitation.leagues.name}
-          </h4>
-          <div className="mt-1 space-y-1 text-sm text-foreground-muted">
-            <p>Sent on {formatDate(invitation.sent_at)}</p>
-            <p className={isExpiringSoon ? 'text-warning font-medium' : ''}>
-              {daysLeft > 0
-                ? `Expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
-                : 'Expires today'}
-            </p>
-          </div>
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-surface border border-border">
+      <div className="flex-1 min-w-0">
+        <h4 className="font-semibold text-foreground truncate">
+          {invitation.leagues.name}
+        </h4>
+        <div className="flex items-center gap-2 text-sm text-foreground-muted">
+          <span>Sent {formatDate(invitation.sent_at)}</span>
+          <span className="w-1 h-1 rounded-full bg-foreground-muted" />
+          <span className={isExpiringSoon ? 'text-warning font-medium' : ''}>
+            {daysLeft > 0
+              ? `Expires in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`
+              : 'Expires today'}
+          </span>
         </div>
+      </div>
 
-        <div className="flex space-x-2">
-          <button
-            onClick={() => onAccept(invitation.token)}
-            className="btn btn-primary text-sm"
-          >
-            Accept
-          </button>
-          <button
-            onClick={() => onDecline(invitation.id)}
-            disabled={isDeclining}
-            className="btn btn-ghost text-sm"
-          >
-            {isDeclining ? 'Declining...' : 'Decline'}
-          </button>
-        </div>
+      <div className="flex gap-2 shrink-0">
+        <button
+          onClick={() => onAccept(invitation.token)}
+          className="btn btn-primary text-sm"
+        >
+          Accept
+        </button>
+        <button
+          onClick={() => onDecline(invitation.id)}
+          disabled={isDeclining}
+          className="btn btn-ghost text-sm"
+        >
+          {isDeclining ? '...' : 'Decline'}
+        </button>
       </div>
     </div>
   )
