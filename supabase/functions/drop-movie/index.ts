@@ -7,7 +7,8 @@ import {
 } from '../_shared/utils.ts'
 
 interface DropMovieRequest {
-  pickup_id: string
+  pickup_id?: string
+  draft_pick_id?: string
 }
 
 Deno.serve(async (req) => {
@@ -41,59 +42,108 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { pickup_id }: DropMovieRequest = await req.json()
+    const { pickup_id, draft_pick_id }: DropMovieRequest = await req.json()
 
-    // Validate input
-    if (!pickup_id || !isValidUUID(pickup_id)) {
-      return errorResponse('Valid pickup_id is required', 400)
+    // Validate input: exactly one of pickup_id or draft_pick_id must be provided
+    const hasPickupId = pickup_id && isValidUUID(pickup_id)
+    const hasDraftPickId = draft_pick_id && isValidUUID(draft_pick_id)
+
+    if (!hasPickupId && !hasDraftPickId) {
+      return errorResponse('Valid pickup_id or draft_pick_id is required', 400)
     }
 
-    // Fetch the pickup with movie, team, and league info
-    const { data: pickup, error: pickupError } = await serviceClient
-      .from('pickups')
-      .select(`
-        *,
-        movies(id, title, tmdb_id, release_date),
-        teams(
-          id,
-          participant_id,
-          league_participants(user_id, league_id)
-        )
-      `)
-      .eq('id', pickup_id)
-      .single()
-
-    if (pickupError || !pickup) {
-      return errorResponse('Pickup not found', 404)
+    if (hasPickupId && hasDraftPickId) {
+      return errorResponse('Provide only one of pickup_id or draft_pick_id', 400)
     }
 
-    // Check ownership - only the owner can drop their movies
-    const teamInfo = pickup.teams as unknown as {
-      id: string
-      participant_id: string
-      league_participants: { user_id: string; league_id: string }
-    }
-    const pickupUserId = teamInfo?.league_participants?.user_id
+    // Common variables
+    let teamId: string
+    let movieId: string
+    let leagueId: string
+    let movie: { id: string; title: string; tmdb_id: number; release_date: string | null }
 
-    if (pickupUserId !== user.id) {
-      return errorResponse('You can only drop your own movies', 403)
-    }
+    if (hasPickupId) {
+      // ========== PICKUP DROP FLOW ==========
+      const { data: pickup, error: pickupError } = await serviceClient
+        .from('pickups')
+        .select(`
+          *,
+          movies(id, title, tmdb_id, release_date),
+          teams(
+            id,
+            participant_id,
+            league_participants(user_id, league_id)
+          )
+        `)
+        .eq('id', pickup_id)
+        .single()
 
-    // Check if already dropped
-    if (pickup.dropped_at) {
-      return errorResponse('Movie has already been dropped', 400)
+      if (pickupError || !pickup) {
+        return errorResponse('Pickup not found', 404)
+      }
+
+      const teamInfo = pickup.teams as unknown as {
+        id: string
+        participant_id: string
+        league_participants: { user_id: string; league_id: string }
+      }
+      const pickupUserId = teamInfo?.league_participants?.user_id
+
+      if (pickupUserId !== user.id) {
+        return errorResponse('You can only drop your own movies', 403)
+      }
+
+      if (pickup.dropped_at) {
+        return errorResponse('Movie has already been dropped', 400)
+      }
+
+      teamId = pickup.team_id
+      movieId = pickup.movie_id
+      leagueId = teamInfo.league_participants.league_id
+      movie = pickup.movies as unknown as typeof movie
+    } else {
+      // ========== DRAFT PICK DROP FLOW ==========
+      const { data: draftPick, error: draftPickError } = await serviceClient
+        .from('draft_picks')
+        .select(`
+          *,
+          movies(id, title, tmdb_id, release_date),
+          teams(
+            id,
+            participant_id,
+            league_participants(user_id, league_id)
+          )
+        `)
+        .eq('id', draft_pick_id)
+        .single()
+
+      if (draftPickError || !draftPick) {
+        return errorResponse('Draft pick not found', 404)
+      }
+
+      const teamInfo = draftPick.teams as unknown as {
+        id: string
+        participant_id: string
+        league_participants: { user_id: string; league_id: string }
+      }
+      const draftPickUserId = teamInfo?.league_participants?.user_id
+
+      if (draftPickUserId !== user.id) {
+        return errorResponse('You can only drop your own movies', 403)
+      }
+
+      if (draftPick.dropped_at) {
+        return errorResponse('Movie has already been dropped', 400)
+      }
+
+      teamId = draftPick.team_id
+      movieId = draftPick.movie_id
+      leagueId = teamInfo.league_participants.league_id
+      movie = draftPick.movies as unknown as typeof movie
     }
 
     // Check if movie is released (can't drop released movies)
-    const movie = pickup.movies as unknown as {
-      id: string
-      title: string
-      tmdb_id: number
-      release_date: string | null
-    }
     if (movie.release_date) {
-      // Use UTC date string comparison to avoid timezone issues
-      // release_date is stored as 'YYYY-MM-DD' format
       const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD in UTC
 
       if (movie.release_date < today) {
@@ -102,7 +152,6 @@ Deno.serve(async (req) => {
     }
 
     // Fetch league to check drop_limit
-    const leagueId = teamInfo.league_participants.league_id
     const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
       .select('drop_limit')
@@ -116,53 +165,82 @@ Deno.serve(async (req) => {
     const dropLimit = league.drop_limit ?? 2
 
     // Check drop limit using the helper function
-    // Note: There is a potential race condition between this check and the insert below.
-    // For the POC, we accept this risk. In production, consider using a database trigger
-    // or advisory lock to enforce the limit atomically.
     const { data: dropCount } = await serviceClient.rpc('get_team_drop_count', {
-      p_team_id: pickup.team_id,
+      p_team_id: teamId,
     })
 
     if ((dropCount ?? 0) >= dropLimit) {
       return errorResponse(`You have reached the drop limit of ${dropLimit}`, 400)
     }
 
-    const droppedAt = new Date().toISOString()
+    const droppedAtTimestamp = new Date().toISOString()
 
-    // Record the drop in team_drops table first (authoritative record)
-    // This makes the drop "real" - if this fails, the drop doesn't happen
-    const { error: dropRecordError } = await serviceClient
-      .from('team_drops')
-      .insert({
-        team_id: pickup.team_id,
-        movie_id: pickup.movie_id,
-        pickup_id: pickup_id,
-        dropped_at: droppedAt,
-      })
+    if (hasPickupId) {
+      // ========== RECORD PICKUP DROP ==========
+      const { error: dropRecordError } = await serviceClient
+        .from('team_drops')
+        .insert({
+          team_id: teamId,
+          movie_id: movieId,
+          pickup_id: pickup_id,
+          dropped_at: droppedAtTimestamp,
+        })
 
-    if (dropRecordError) {
-      console.error('Failed to record drop in team_drops:', dropRecordError)
-      // Could be a race condition - check if limit was exceeded
-      const { data: newDropCount } = await serviceClient.rpc('get_team_drop_count', {
-        p_team_id: pickup.team_id,
-      })
-      if ((newDropCount ?? 0) >= dropLimit) {
-        return errorResponse(`You have reached the drop limit of ${dropLimit}`, 400)
+      if (dropRecordError) {
+        console.error('Failed to record drop in team_drops:', dropRecordError)
+        const { data: newDropCount } = await serviceClient.rpc('get_team_drop_count', {
+          p_team_id: teamId,
+        })
+        if ((newDropCount ?? 0) >= dropLimit) {
+          return errorResponse(`You have reached the drop limit of ${dropLimit}`, 400)
+        }
+        return errorResponse('Failed to drop movie', 500)
       }
-      return errorResponse('Failed to drop movie', 500)
-    }
 
-    // Mark pickup as dropped
-    const { error: updateError } = await serviceClient
-      .from('pickups')
-      .update({ dropped_at: droppedAt })
-      .eq('id', pickup_id)
+      // Mark pickup as dropped
+      const { error: updateError } = await serviceClient
+        .from('pickups')
+        .update({ dropped_at: droppedAtTimestamp })
+        .eq('id', pickup_id)
 
-    if (updateError) {
-      console.error('Error updating pickup:', updateError)
-      // Rollback the team_drops entry since the pickup update failed
-      await serviceClient.from('team_drops').delete().eq('pickup_id', pickup_id)
-      return errorResponse('Failed to drop movie', 500)
+      if (updateError) {
+        console.error('Error updating pickup:', updateError)
+        await serviceClient.from('team_drops').delete().eq('pickup_id', pickup_id)
+        return errorResponse('Failed to drop movie', 500)
+      }
+    } else {
+      // ========== RECORD DRAFT PICK DROP ==========
+      const { error: dropRecordError } = await serviceClient
+        .from('team_drops')
+        .insert({
+          team_id: teamId,
+          movie_id: movieId,
+          draft_pick_id: draft_pick_id,
+          dropped_at: droppedAtTimestamp,
+        })
+
+      if (dropRecordError) {
+        console.error('Failed to record drop in team_drops:', dropRecordError)
+        const { data: newDropCount } = await serviceClient.rpc('get_team_drop_count', {
+          p_team_id: teamId,
+        })
+        if ((newDropCount ?? 0) >= dropLimit) {
+          return errorResponse(`You have reached the drop limit of ${dropLimit}`, 400)
+        }
+        return errorResponse('Failed to drop movie', 500)
+      }
+
+      // Mark draft pick as dropped
+      const { error: updateError } = await serviceClient
+        .from('draft_picks')
+        .update({ dropped_at: droppedAtTimestamp })
+        .eq('id', draft_pick_id)
+
+      if (updateError) {
+        console.error('Error updating draft pick:', updateError)
+        await serviceClient.from('team_drops').delete().eq('draft_pick_id', draft_pick_id)
+        return errorResponse('Failed to drop movie', 500)
+      }
     }
 
     // Notify other league members that movie is available
@@ -191,7 +269,6 @@ Deno.serve(async (req) => {
         .insert(notifications)
 
       if (notificationError) {
-        // Log but don't fail - notifications are non-critical
         console.error('Failed to create notifications:', notificationError)
       }
     }

@@ -672,6 +672,108 @@ export class TestDataFactory {
   }
 
   /**
+   * Create a draft pick record for a user's team (for testing drop functionality)
+   * This directly inserts a draft pick record.
+   */
+  async createDraftPickForUser(
+    leagueId: string,
+    userClient: SupabaseClient,
+    movieData: {
+      tmdb_id: number
+      title: string
+      release_date: string | null
+      overview?: string
+      poster_url?: string | null
+      vote_average?: number
+      popularity?: number
+    }
+  ): Promise<string> {
+    const serviceClient = getServiceClient()
+
+    // Get user's team
+    const { data: { user } } = await userClient.auth.getUser()
+    if (!user) throw new Error('Client is not authenticated')
+
+    const { data: participant } = await serviceClient
+      .from('league_participants')
+      .select('id, teams(id)')
+      .eq('league_id', leagueId)
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single()
+
+    if (!participant) throw new Error('User is not a member of this league')
+
+    const team = participant.teams as unknown as { id: string }
+    if (!team) throw new Error('Team not found for user')
+
+    // Create or find the movie
+    let movieId: string
+    const { data: existingMovie } = await serviceClient
+      .from('movies')
+      .select('id')
+      .eq('tmdb_id', movieData.tmdb_id)
+      .single()
+
+    if (existingMovie) {
+      movieId = existingMovie.id
+    } else {
+      const { data: newMovie, error: movieError } = await serviceClient
+        .from('movies')
+        .insert({
+          tmdb_id: movieData.tmdb_id,
+          title: movieData.title,
+          overview: movieData.overview || 'Test movie',
+          poster_url: movieData.poster_url || null,
+          release_date: movieData.release_date,
+          vote_average: movieData.vote_average ?? 0,
+          popularity: movieData.popularity ?? 100,
+          status: 'upcoming',
+        })
+        .select('id')
+        .single()
+
+      if (movieError || !newMovie) {
+        throw new Error(`Failed to create movie: ${movieError?.message}`)
+      }
+      movieId = newMovie.id
+      this.movieIds.push(movieId)
+    }
+
+    // Get the next pick number for this league
+    const { data: existingPicks } = await serviceClient
+      .from('draft_picks')
+      .select('pick_number')
+      .eq('league_id', leagueId)
+      .order('pick_number', { ascending: false })
+      .limit(1)
+
+    const nextPickNumber = existingPicks && existingPicks.length > 0
+      ? existingPicks[0].pick_number + 1
+      : 1
+
+    // Create the draft pick record
+    const { data: draftPick, error: draftPickError } = await serviceClient
+      .from('draft_picks')
+      .insert({
+        league_id: leagueId,
+        team_id: team.id,
+        movie_id: movieId,
+        round: 1,
+        pick_number: nextPickNumber,
+        picked_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single()
+
+    if (draftPickError || !draftPick) {
+      throw new Error(`Failed to create draft pick: ${draftPickError?.message}`)
+    }
+
+    return draftPick.id
+  }
+
+  /**
    * Track a league ID for cleanup (for leagues created outside the factory)
    */
   trackLeague(leagueId: string): void {

@@ -68,6 +68,7 @@ export interface DraftPick {
   pick_number: number
   picked_at: string
   created_at: string
+  dropped_at: string | null
 }
 
 export interface Review {
@@ -287,7 +288,8 @@ export interface TeamDrop {
   id: string
   team_id: string
   movie_id: string
-  pickup_id: string
+  pickup_id: string | null
+  draft_pick_id: string | null
   dropped_at: string
   created_at: string
 }

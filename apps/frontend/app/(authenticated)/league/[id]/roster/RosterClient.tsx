@@ -27,13 +27,21 @@ export default function RosterClient({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   userId,
 }: RosterClientProps) {
+  const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
   const [pickups, setPickups] = useState(initialPickups)
   const [dropCount, setDropCount] = useState(initialDropCount)
   const [droppingId, setDroppingId] = useState<string | null>(null)
 
   const canDrop = dropCount < league.drop_limit
 
-  const handleDrop = async (pickupId: string, movieTitle: string) => {
+  // Check if a movie can be dropped (not released yet)
+  const canDropMovie = (movie: Movie): boolean => {
+    if (!movie.release_date) return true // Unknown release date = can drop
+    const today = new Date().toISOString().split('T')[0]
+    return movie.release_date >= today
+  }
+
+  const handleDropPickup = async (pickupId: string, movieTitle: string) => {
     if (!canDrop) {
       toast.error(`You've used all ${league.drop_limit} drops`)
       return
@@ -56,7 +64,30 @@ export default function RosterClient({
     }
   }
 
-  const totalMovies = initialDraftPicks.length + pickups.length
+  const handleDropDraftPick = async (draftPickId: string, movieTitle: string) => {
+    if (!canDrop) {
+      toast.error(`You've used all ${league.drop_limit} drops`)
+      return
+    }
+
+    setDroppingId(draftPickId)
+
+    const { error } = await callEdgeFunction('drop-movie', {
+      body: { draft_pick_id: draftPickId },
+    })
+
+    setDroppingId(null)
+
+    if (error) {
+      toast.error(error)
+    } else {
+      toast.success(`Dropped ${movieTitle}`)
+      setDraftPicks(prev => prev.filter(p => p.id !== draftPickId))
+      setDropCount(prev => prev + 1)
+    }
+  }
+
+  const totalMovies = draftPicks.length + pickups.length
   const totalSlots = league.total_slots
 
   return (
@@ -87,18 +118,22 @@ export default function RosterClient({
       <div>
         <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
           <Trophy className="w-5 h-5 text-gold" />
-          Draft Picks ({initialDraftPicks.length})
+          Draft Picks ({draftPicks.length})
         </h2>
 
-        {initialDraftPicks.length === 0 ? (
+        {draftPicks.length === 0 ? (
           <p className="text-foreground-muted">No draft picks yet.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {initialDraftPicks.map((pick) => (
+            {draftPicks.map((pick) => (
               <MovieCard
                 key={pick.id}
                 movie={pick.movies}
                 label={`Round ${pick.round}, Pick ${pick.pick_number}`}
+                onDrop={canDrop && canDropMovie(pick.movies)
+                  ? () => handleDropDraftPick(pick.id, pick.movies.title)
+                  : undefined}
+                isDropping={droppingId === pick.id}
               />
             ))}
           </div>
@@ -121,7 +156,9 @@ export default function RosterClient({
                 key={pickup.id}
                 movie={pickup.movies}
                 label={`$${pickup.amount_paid}`}
-                onDrop={canDrop ? () => handleDrop(pickup.id, pickup.movies.title) : undefined}
+                onDrop={canDrop && canDropMovie(pickup.movies)
+                  ? () => handleDropPickup(pickup.id, pickup.movies.title)
+                  : undefined}
                 isDropping={droppingId === pickup.id}
               />
             ))}

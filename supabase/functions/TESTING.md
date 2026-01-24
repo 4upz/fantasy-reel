@@ -34,13 +34,21 @@ supabase/functions/
 ## Running Tests
 
 ### Prerequisites
-1. Start local Supabase: `npx supabase start`
-2. Serve Edge Functions: `npx supabase functions serve`
+
+Start local Supabase (this automatically serves Edge Functions):
+
+```bash
+npx supabase start
+```
+
+> **Note:** You do NOT need to run `npx supabase functions serve` separately. The `supabase start` command serves Edge Functions automatically at `http://127.0.0.1:54321/functions/v1/`.
 
 ### Commands
 
+**IMPORTANT:** Always use these commands - they automatically load the correct environment variables.
+
 ```bash
-# From project root
+# From project root (RECOMMENDED)
 npm run test:functions           # Run integration tests
 npm run test:functions:watch     # Run in watch mode
 
@@ -50,6 +58,8 @@ deno task test:unit              # Unit tests only
 deno task test:all               # All tests
 deno task test:watch             # Integration tests with watch mode
 ```
+
+> **Warning:** Do NOT run `deno test` directly - it won't load the `.env.test` file. Always use `deno task test` or `npm run test:functions`.
 
 ## Writing Tests
 
@@ -134,6 +144,15 @@ await factory.addSecondParticipant(leagueId)
 // Create drafting league (2 participants + started draft)
 const draftingLeagueId = await factory.createDraftingLeague('Drafting League')
 
+// Create active league (draft completed, ready for bidding/drops)
+const activeLeagueId = await factory.createActiveLeague('Active League')
+
+// Create pickup for testing drops
+const pickupId = await factory.createPickupForUser(leagueId, client, movieData)
+
+// Create draft pick for testing drops
+const draftPickId = await factory.createDraftPickForUser(leagueId, client, movieData)
+
 // Create league with invitation
 const { leagueId, invitationId, token } = await factory.createLeagueWithInvitation('League')
 
@@ -159,9 +178,10 @@ const leagueName = uniqueName('my-test')  // "my-test-1737341234567-abc123"
 | `getAnonClient()` | Creates unauthenticated client for 401 tests |
 | `getAuthenticatedClient()` | Creates client for primary test user |
 | `getSecondAuthenticatedClient()` | Creates client for secondary test user |
+| `getThirdAuthenticatedClient()` | Creates client for third test user (multi-user tests) |
 | `invokeFunction(client, name, body)` | Invokes function with proper error extraction |
 | `uniqueName(prefix)` | Generates unique name with timestamp |
-| `TEST_USER` / `TEST_USER_2` | Test user credentials |
+| `TEST_USER` / `TEST_USER_2` / `TEST_USER_3` | Test user credentials |
 
 ## Environment Variables
 
@@ -186,12 +206,16 @@ npx supabase status --output env
 - Ensure test files use `.test.ts` suffix (not `-test.ts`)
 
 ### "Missing required environment variables"
+- **Are you running `deno test` directly?** Use `deno task test` instead
 - Ensure `.env.test` exists in `supabase/functions/`
 - Ensure local Supabase is running: `npx supabase status`
 
 ### "Edge Function returned a non-2xx status code"
 - Use `invokeFunction()` helper to properly extract error messages
-- Check that Edge Functions are being served: `npx supabase functions serve`
+- Check that Supabase is running: `npx supabase status`
+
+### "Connection refused" or "ECONNREFUSED"
+- Local Supabase isn't running. Start it with: `npx supabase start`
 
 ### Resource/Op Leaks
 - Use `sanitizeResources: false` and `sanitizeOps: false` in test definition

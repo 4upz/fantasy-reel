@@ -44,11 +44,12 @@ export default async function RosterPage({ params }: RosterPageProps) {
 
   const team = participant.teams as unknown as { id: string; name: string }
 
-  // Fetch draft picks
+  // Fetch draft picks (excluding dropped ones)
   const { data: draftPicks } = await supabase
     .from('draft_picks')
     .select('*, movies(*)')
     .eq('team_id', team.id)
+    .is('dropped_at', null)
     .order('pick_number', { ascending: true })
 
   // Fetch pickups
