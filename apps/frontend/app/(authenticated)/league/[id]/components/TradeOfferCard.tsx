@@ -52,12 +52,18 @@ export default function TradeOfferCard({
   trade,
   currentTeamId,
   isOwner,
+  otherTeams,
+  tradeableMovies,
+  budget,
   onRespond,
+  onCounter,
   onCancel,
   onVeto,
 }: Props) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showCounterModal, setShowCounterModal] = useState(false)
+  const [showVetoModal, setShowVetoModal] = useState(false)
 
   const isInitiator = trade.initiator_team_id === currentTeamId
   const isRecipient = trade.recipient_team_id === currentTeamId
@@ -196,6 +202,13 @@ export default function TradeOfferCard({
                 {isLoading ? 'Processing...' : 'Accept'}
               </button>
               <button
+                onClick={() => setShowCounterModal(true)}
+                disabled={isLoading}
+                className="btn btn-secondary"
+              >
+                Counter
+              </button>
+              <button
                 onClick={() => handleAction('reject')}
                 disabled={isLoading}
                 className="btn btn-ghost"
@@ -217,10 +230,7 @@ export default function TradeOfferCard({
 
           {canVeto && (
             <button
-              onClick={() => {
-                const reason = window.prompt('Enter veto reason (optional):')
-                handleAction('veto', reason || undefined)
-              }}
+              onClick={() => setShowVetoModal(true)}
               disabled={isLoading}
               className="btn btn-danger"
             >
@@ -228,6 +238,40 @@ export default function TradeOfferCard({
             </button>
           )}
         </div>
+      )}
+
+      {/* Counter Trade Modal */}
+      {showCounterModal && (
+        <CounterTradeModal
+          trade={trade}
+          currentTeamId={currentTeamId}
+          tradeableMovies={tradeableMovies}
+          budget={budget}
+          onClose={() => setShowCounterModal(false)}
+          onCounter={async (counterOfferedItems, counterRequestedItems, message) => {
+            setShowCounterModal(false)
+            setIsLoading(true)
+            setError(null)
+            const result = await onCounter(trade.id, counterOfferedItems, counterRequestedItems, message)
+            setIsLoading(false)
+            if (!result.success && result.error) {
+              setError(result.error)
+            }
+            return result
+          }}
+        />
+      )}
+
+      {/* Veto Modal */}
+      {showVetoModal && (
+        <VetoModal
+          trade={trade}
+          onClose={() => setShowVetoModal(false)}
+          onVeto={async (reason) => {
+            setShowVetoModal(false)
+            await handleAction('veto', reason)
+          }}
+        />
       )}
     </div>
   )
@@ -310,6 +354,356 @@ function TradeItemsSection({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// =============================================================================
+// Counter Trade Modal
+// =============================================================================
+
+interface CounterTradeModalProps {
+  trade: TradeOfferWithTeams
+  currentTeamId: string
+  tradeableMovies: TradeableMovie[]
+  budget: TeamBudget | null
+  onClose: () => void
+  onCounter: (
+    counterOfferedItems: TradeItems,
+    counterRequestedItems: TradeItems,
+    message?: string
+  ) => Promise<{ success: boolean; error?: string }>
+}
+
+function CounterTradeModal({
+  trade,
+  currentTeamId,
+  tradeableMovies,
+  budget,
+  onClose,
+  onCounter,
+}: CounterTradeModalProps) {
+  // In a counter, the recipient becomes the new initiator
+  // They offer items (what they give) and request items (what they want)
+  const existingInitiatorItems = trade.initiator_items as TradeItems
+  const existingRecipientItems = trade.recipient_items as TradeItems
+
+  // Pre-populate: what was requested FROM you becomes what you now OFFER
+  // What was offered TO you becomes what you now REQUEST
+  const [offeredMovies, setOfferedMovies] = useState<Set<string>>(() => {
+    const ids = new Set<string>()
+    existingRecipientItems.movies.forEach((m) => ids.add(m.source_id))
+    return ids
+  })
+  const [offeredFaab, setOfferedFaab] = useState(existingRecipientItems.faab || 0)
+
+  const [requestedMovies, setRequestedMovies] = useState<Set<string>>(() => {
+    const ids = new Set<string>()
+    existingInitiatorItems.movies.forEach((m) => ids.add(m.source_id))
+    return ids
+  })
+  const [requestedFaab, setRequestedFaab] = useState(existingInitiatorItems.faab || 0)
+  const [message, setMessage] = useState('')
+
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Get the other team's movies from the original trade items
+  const otherTeamMovies: TradeableMovie[] = existingInitiatorItems.movies.map((m) => ({
+    movie_id: m.movie_id,
+    source: m.source,
+    source_id: m.source_id,
+    title: m.title || 'Unknown',
+    poster_url: m.poster_url || null,
+    release_date: m.release_date || null,
+    combined_score: null,
+  }))
+
+  const initiatorTeam = trade.initiator_team as { id: string; name: string }
+  const recipientTeam = trade.recipient_team as { id: string; name: string }
+
+  const toggleOfferedMovie = (sourceId: string) => {
+    setOfferedMovies((prev) => {
+      const next = new Set(prev)
+      if (next.has(sourceId)) {
+        next.delete(sourceId)
+      } else {
+        next.add(sourceId)
+      }
+      return next
+    })
+  }
+
+  const toggleRequestedMovie = (sourceId: string) => {
+    setRequestedMovies((prev) => {
+      const next = new Set(prev)
+      if (next.has(sourceId)) {
+        next.delete(sourceId)
+      } else {
+        next.add(sourceId)
+      }
+      return next
+    })
+  }
+
+  const hasItems =
+    offeredMovies.size > 0 || offeredFaab > 0 || requestedMovies.size > 0 || requestedFaab > 0
+
+  const handleSubmit = async () => {
+    setIsLoading(true)
+    setError(null)
+
+    const counterOfferedItems: TradeItems = {
+      movies: tradeableMovies
+        .filter((m) => offeredMovies.has(m.source_id))
+        .map((m) => ({
+          movie_id: m.movie_id,
+          source: m.source,
+          source_id: m.source_id,
+        })),
+      faab: offeredFaab,
+    }
+
+    const counterRequestedItems: TradeItems = {
+      movies: otherTeamMovies
+        .filter((m) => requestedMovies.has(m.source_id))
+        .map((m) => ({
+          movie_id: m.movie_id,
+          source: m.source,
+          source_id: m.source_id,
+        })),
+      faab: requestedFaab,
+    }
+
+    const result = await onCounter(counterOfferedItems, counterRequestedItems, message.trim() || undefined)
+
+    setIsLoading(false)
+
+    if (!result.success) {
+      setError(result.error || 'Failed to submit counter-offer')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <h2 className="text-lg font-display font-bold text-foreground">
+            Counter Trade with {initiatorTeam.name}
+          </h2>
+          <button onClick={onClose} className="text-foreground-muted hover:text-foreground transition-colors">
+            ✕
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-6">
+          {/* Your side - what you offer */}
+          <div>
+            <h3 className="text-sm font-medium text-foreground mb-3">You give ({recipientTeam.name})</h3>
+            <MovieSelector
+              movies={tradeableMovies}
+              selectedIds={offeredMovies}
+              onToggle={toggleOfferedMovie}
+            />
+            <div className="mt-3">
+              <label className="text-sm text-foreground-secondary">FAAB (max ${budget?.remaining_budget ?? 0})</label>
+              <input
+                type="number"
+                min={0}
+                max={budget?.remaining_budget ?? 0}
+                value={offeredFaab}
+                onChange={(e) => setOfferedFaab(Math.max(0, parseInt(e.target.value) || 0))}
+                className="input mt-1 w-24"
+              />
+            </div>
+          </div>
+
+          {/* Their side - what you request */}
+          <div>
+            <h3 className="text-sm font-medium text-foreground mb-3">You receive ({initiatorTeam.name})</h3>
+            <MovieSelector
+              movies={otherTeamMovies}
+              selectedIds={requestedMovies}
+              onToggle={toggleRequestedMovie}
+            />
+            <div className="mt-3">
+              <label className="text-sm text-foreground-secondary">FAAB</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={requestedFaab}
+                onChange={(e) => setRequestedFaab(Math.max(0, parseInt(e.target.value) || 0))}
+                className="input mt-1 w-24"
+              />
+            </div>
+          </div>
+
+          {/* Message */}
+          <div>
+            <label className="text-sm text-foreground-secondary">Message (optional)</label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              className="input mt-1 w-full h-20 resize-none"
+              placeholder="Add a note to your counter-offer..."
+            />
+          </div>
+
+          {error && (
+            <div className="alert alert-error">
+              <p>{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-border flex justify-end gap-2">
+          <button onClick={onClose} className="btn btn-ghost">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={!hasItems || isLoading} className="btn btn-primary">
+            {isLoading ? 'Submitting...' : 'Submit Counter'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// =============================================================================
+// Movie Selector (shared helper)
+// =============================================================================
+
+function MovieSelector({
+  movies,
+  selectedIds,
+  onToggle,
+}: {
+  movies: TradeableMovie[]
+  selectedIds: Set<string>
+  onToggle: (sourceId: string) => void
+}) {
+  if (movies.length === 0) {
+    return <p className="text-sm text-foreground-muted italic">No movies available</p>
+  }
+
+  return (
+    <div className="space-y-2 max-h-48 overflow-y-auto">
+      {movies.map((movie) => {
+        const isSelected = selectedIds.has(movie.source_id)
+        return (
+          <button
+            key={movie.source_id}
+            onClick={() => onToggle(movie.source_id)}
+            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors ${
+              isSelected
+                ? 'bg-gold/20 border border-gold'
+                : 'bg-surface-hover hover:bg-elevated border border-transparent'
+            }`}
+          >
+            {movie.poster_url ? (
+              <Image
+                src={movie.poster_url}
+                alt={movie.title}
+                width={32}
+                height={48}
+                className="w-8 h-12 object-cover rounded"
+              />
+            ) : (
+              <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
+                <span className="text-xs text-foreground-muted">?</span>
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground truncate">{movie.title}</p>
+              {movie.release_date && (
+                <p className="text-xs text-foreground-muted">{new Date(movie.release_date).getFullYear()}</p>
+              )}
+            </div>
+            <div
+              className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                isSelected ? 'border-gold bg-gold' : 'border-border'
+              }`}
+            >
+              {isSelected && (
+                <svg className="w-3 h-3 text-background" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              )}
+            </div>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// =============================================================================
+// Veto Modal
+// =============================================================================
+
+interface VetoModalProps {
+  trade: TradeOfferWithTeams
+  onClose: () => void
+  onVeto: (reason?: string) => Promise<void>
+}
+
+function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
+  const [reason, setReason] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+
+  const initiatorTeam = trade.initiator_team as { name: string }
+  const recipientTeam = trade.recipient_team as { name: string }
+
+  const handleVeto = async () => {
+    setIsLoading(true)
+    await onVeto(reason.trim() || undefined)
+    setIsLoading(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-surface rounded-lg shadow-heavy max-w-md w-full">
+        <div className="p-4 border-b border-border">
+          <h2 className="text-lg font-display font-bold text-foreground">Veto Trade</h2>
+          <p className="text-sm text-foreground-secondary mt-1">
+            Are you sure you want to veto the trade between {initiatorTeam.name} and {recipientTeam.name}?
+          </p>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="text-sm text-foreground-secondary">Reason (optional)</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="input mt-1 w-full h-24 resize-none"
+              placeholder="Explain why you're vetoing this trade..."
+            />
+          </div>
+
+          <div className="bg-error-bg p-3 rounded-lg">
+            <p className="text-sm text-error">
+              This action cannot be undone. The trade will be cancelled and both teams will be notified.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-border flex justify-end gap-2">
+          <button onClick={onClose} className="btn btn-ghost" disabled={isLoading}>
+            Cancel
+          </button>
+          <button onClick={handleVeto} className="btn btn-danger" disabled={isLoading}>
+            {isLoading ? 'Vetoing...' : 'Veto Trade'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
