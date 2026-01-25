@@ -1,7 +1,7 @@
 const PRODUCTION_ORIGINS = [
+  'https://fantasyreel.com',
+  'https://www.fantasyreel.com',
   'https://fantasy-reel.vercel.app',
-  'https://fantasyreels.com',
-  'https://www.fantasyreels.com',
 ]
 
 const DEV_ORIGINS = [

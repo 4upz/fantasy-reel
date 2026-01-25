@@ -1,4 +1,3 @@
-import { corsHeaders } from '../_shared/cors.ts'
 import {
   jsonResponse,
   errorResponse,
