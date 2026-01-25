@@ -63,7 +63,16 @@ Deno.serve(async (req) => {
     const statusError = validateTradeStatus(originalOffer, ['proposed', 'countered'], 'counter')
     if (statusError) return statusError
 
-    // For counter-offer, roles are swapped
+    // ROLE SWAP DESIGN DECISION:
+    // When a counter-offer is submitted, the initiator and recipient roles are swapped.
+    // This means:
+    // - The person countering (originally the recipient) becomes the new initiator
+    // - The original proposer becomes the new recipient (must respond to the counter)
+    // - initiator_team_id always = "who proposed this version of the trade"
+    // - recipient_team_id always = "who must respond to this version"
+    //
+    // This simplifies the "who is waiting for a response" logic: it's always recipient_team_id.
+    // See counter_trade() function in the database for detailed rationale.
     const counterInitiatorTeamId = originalOffer.recipient_team_id
     const counterRecipientTeamId = originalOffer.initiator_team_id
 
@@ -119,16 +128,17 @@ Deno.serve(async (req) => {
       return errorResponse('Failed to fetch updated trade offer', 500)
     }
 
-    // Notify the other team (original initiator, now recipient)
+    // Notify the other team (original initiator, now recipient of the counter-offer)
+    // The recipient_team_id is now the team that needs to respond
     const counterTeamInfo = await getTeamInfo(serviceClient, counterInitiatorTeamId)
 
     await notifyTradeParties(serviceClient, {
       tradeOffer: updatedOffer,
       notifyRecipient: {
         type: 'trade_countered',
-        title: 'Trade Counter-Offer',
+        title: 'Trade Counter-Offer Received',
         bodyFn: () =>
-          `${counterTeamInfo?.name ?? 'A team'} has sent a counter-offer to your trade proposal`,
+          `${counterTeamInfo?.name ?? 'A team'} has sent a counter-offer. You are now responding to their revised proposal.`,
       },
     })
 

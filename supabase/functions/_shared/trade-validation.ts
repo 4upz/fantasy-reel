@@ -31,6 +31,7 @@ export interface LeagueTradeConfig {
   trade_veto_hours: number
   trade_review_enabled: boolean
   total_slots: number
+  faab_budget: number
 }
 
 export interface TeamInfo {
@@ -214,17 +215,23 @@ export async function getTeamName(
 
 /**
  * Validate that a string is a valid trade items structure
+ * @param items - The trade items to validate
+ * @param maxFaab - Maximum FAAB allowed (from league configuration, defaults to 100)
  */
-export function validateTradeItemsStructure(items: unknown): ValidationResult {
+export function validateTradeItemsStructure(items: unknown, maxFaab = 100): ValidationResult {
   if (!items || typeof items !== 'object') {
     return { valid: false, error: 'Invalid items structure' }
   }
 
   const typedItems = items as TradeItems
 
-  // Validate faab
-  if (typeof typedItems.faab !== 'number' || typedItems.faab < 0 || typedItems.faab > 100) {
-    return { valid: false, error: 'FAAB must be a number between 0 and 100' }
+  // Validate faab - use league's configured maximum
+  if (typeof typedItems.faab !== 'number' || typedItems.faab < 0) {
+    return { valid: false, error: 'FAAB must be a non-negative number' }
+  }
+
+  if (typedItems.faab > maxFaab) {
+    return { valid: false, error: `FAAB must not exceed league budget of $${maxFaab}` }
   }
 
   if (!Number.isInteger(typedItems.faab)) {
@@ -455,13 +462,17 @@ export async function getLeagueTradeConfig(
 ): Promise<(LeagueTradeConfig & { status: string }) | null> {
   const { data, error } = await supabase
     .from('leagues')
-    .select('status, trades_enabled, trade_deadline, trade_veto_hours, trade_review_enabled, total_slots')
+    .select('status, trades_enabled, trade_deadline, trade_veto_hours, trade_review_enabled, total_slots, faab_budget')
     .eq('id', leagueId)
     .single()
 
   if (error || !data) return null
 
-  return data as LeagueTradeConfig & { status: string }
+  // Default faab_budget to 100 if not set (for backwards compatibility)
+  return {
+    ...data,
+    faab_budget: data.faab_budget ?? 100,
+  } as LeagueTradeConfig & { status: string }
 }
 
 /**
@@ -475,27 +486,28 @@ export async function validateTradeProposal(
   initiatorItems: TradeItems,
   recipientItems: TradeItems
 ): Promise<ValidationResult> {
-  // 1. Validate items structure
-  let result = validateTradeItemsStructure(initiatorItems)
-  if (!result.valid) return result
-
-  result = validateTradeItemsStructure(recipientItems)
-  if (!result.valid) return result
-
-  // 2. Validate trade not empty
-  result = validateTradeNotEmpty(initiatorItems, recipientItems)
-  if (!result.valid) return result
-
-  // 3. Get league config and validate trading enabled
+  // 1. Get league config first (needed for FAAB validation)
   const config = await getLeagueTradeConfig(supabase, leagueId)
   if (!config) {
     return { valid: false, error: 'League not found' }
   }
 
+  // 2. Validate items structure (using league's FAAB budget)
+  let result = validateTradeItemsStructure(initiatorItems, config.faab_budget)
+  if (!result.valid) return result
+
+  result = validateTradeItemsStructure(recipientItems, config.faab_budget)
+  if (!result.valid) return result
+
+  // 3. Validate trade not empty
+  result = validateTradeNotEmpty(initiatorItems, recipientItems)
+  if (!result.valid) return result
+
+  // 4. Validate trading enabled
   result = validateLeagueTradingEnabled(config, config.status)
   if (!result.valid) return result
 
-  // 4. Get team info
+  // 5. Get team info
   const initiatorInfo = await getTeamInfo(supabase, initiatorTeamId)
   const recipientInfo = await getTeamInfo(supabase, recipientTeamId)
 
@@ -506,26 +518,26 @@ export async function validateTradeProposal(
     return { valid: false, error: 'Recipient team not found' }
   }
 
-  // 5. Validate teams are in the same league
+  // 6. Validate teams are in the same league
   if (initiatorInfo.league_id !== leagueId || recipientInfo.league_id !== leagueId) {
     return { valid: false, error: 'Both teams must be in the same league' }
   }
 
-  // 6. Validate movie ownership
+  // 7. Validate movie ownership
   result = await validateMovieOwnership(supabase, initiatorTeamId, initiatorItems)
   if (!result.valid) return result
 
   result = await validateMovieOwnership(supabase, recipientTeamId, recipientItems)
   if (!result.valid) return result
 
-  // 7. Validate FAAB budgets
+  // 8. Validate FAAB budgets
   result = validateFaabBudget(initiatorInfo.remaining_budget, initiatorItems.faab)
   if (!result.valid) return result
 
   result = validateFaabBudget(recipientInfo.remaining_budget, recipientItems.faab)
   if (!result.valid) return result
 
-  // 8. Validate roster space
+  // 9. Validate roster space
   result = await validateRosterSpace(
     supabase,
     initiatorTeamId,

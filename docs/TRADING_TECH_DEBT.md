@@ -67,46 +67,47 @@ The `execute_trade` function already does this, but the Edge Functions don't.
 
 ### Medium Priority
 
-#### 4. Counter-Offer Role Swap is Confusing
-**Location:** `counter-trade/index.ts`
+#### 4. Counter-Offer Role Swap is Confusing (DOCUMENTED)
+**Location:** `counter-trade/index.ts`, `20260201_trading_faab_config.sql`
 
-**Problem:** When a trade is countered, the initiator and recipient swap. This is confusing for:
-- Authorization checks (who can cancel?)
-- Email notifications (who gets what email?)
-- UI display (who proposed originally?)
+**Status:** DOCUMENTED - Design decision explained
 
-**Solution:** Consider keeping original initiator/recipient and adding a `current_proposer_team_id` field, or adding a `trade_history` table to track the conversation.
+**Design Decision:** The role swap is intentional and simplifies the system:
+- `initiator_team_id` = who proposed the CURRENT version of the trade
+- `recipient_team_id` = who must RESPOND to the current version
+- This means "who is waiting for a response" is always `recipient_team_id`
 
----
+**Documentation Added:**
+1. Detailed comment in `counter-trade/index.ts` explaining the swap
+2. Comprehensive COMMENT on `counter_trade()` database function
+3. Notification message updated: "You are now responding to their revised proposal"
 
-#### 5. Missing Uniqueness Constraint for Active Trades
-**Location:** Database schema
-
-**Problem:** Two pending trades can exist between the same two teams simultaneously, which is confusing UX.
-
-**Solution:** Add a partial unique index:
-```sql
-CREATE UNIQUE INDEX idx_unique_active_trade_between_teams
-ON trade_offers (
-  LEAST(initiator_team_id, recipient_team_id),
-  GREATEST(initiator_team_id, recipient_team_id)
-)
-WHERE status IN ('proposed', 'countered');
-```
+**Why Keep It:**
+- Simpler than tracking `current_proposer_team_id` separately
+- Always clear who must act next (recipient_team_id)
+- Alternative (new trade records) loses single-trade view
 
 ---
 
-#### 6. Hard-Coded FAAB Maximum
-**Location:** `propose-trade/index.ts:58`, `counter-trade/index.ts`
+#### 5. Missing Uniqueness Constraint for Active Trades (FIXED)
+**Location:** `20260131_trading_race_condition_fixes.sql`
 
-**Problem:** FAAB validation uses hard-coded max of 100:
-```typescript
-if (faab < 0 || faab > 100) {
-  return errorResponse('FAAB must be a number between 0 and 100', 400)
-}
-```
+**Status:** FIXED in prior migration
 
-**Solution:** Fetch the league's configured FAAB budget and validate against that.
+---
+
+#### 6. Hard-Coded FAAB Maximum (FIXED)
+**Location:** `_shared/trade-validation.ts`, `20260201_trading_faab_config.sql`
+
+**Status:** FIXED
+
+**Solution Implemented:**
+1. Added `faab_budget` column to `leagues` table (default 100)
+2. Updated `validateTradeItemsStructure()` to accept `maxFaab` parameter
+3. Updated `getLeagueTradeConfig()` to fetch `faab_budget`
+4. Updated `validateTradeProposal()` to use league's configured budget
+5. Updated `validate_trade_items()` database function to use dynamic max
+6. Error messages now show actual league limit: "FAAB must not exceed league budget of $X"
 
 ---
 
