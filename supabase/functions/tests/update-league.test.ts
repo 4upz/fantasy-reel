@@ -560,6 +560,182 @@ Deno.test({
   })
 
   // ============================================================================
+  // update_counterpick_config Tests
+  // ============================================================================
+
+  await t.step('update_counterpick_config: updates draft_counterpick_slots', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-draft-slots'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: {
+        action: 'update_counterpick_config',
+        league_id: leagueId,
+        draft_counterpick_slots: 2,
+      },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.draft_counterpick_slots, 2)
+    assertEquals(data.message, 'Counterpick configuration updated successfully')
+  })
+
+  await t.step('update_counterpick_config: updates bidding_counterpick_slots', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-bidding-slots'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: {
+        action: 'update_counterpick_config',
+        league_id: leagueId,
+        bidding_counterpick_slots: 1,
+      },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.bidding_counterpick_slots, 1)
+  })
+
+  await t.step('update_counterpick_config: updates counterpicks_block_drops', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-block-drops'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: {
+        action: 'update_counterpick_config',
+        league_id: leagueId,
+        counterpicks_block_drops: false,
+      },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.counterpicks_block_drops, false)
+  })
+
+  await t.step('update_counterpick_config: updates multiple fields at once', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-multiple'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: {
+        action: 'update_counterpick_config',
+        league_id: leagueId,
+        draft_counterpick_slots: 3,
+        bidding_counterpick_slots: 2,
+        counterpicks_block_drops: true,
+      },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.draft_counterpick_slots, 3)
+    assertEquals(data.league.bidding_counterpick_slots, 2)
+    assertEquals(data.league.counterpicks_block_drops, true)
+  })
+
+  await t.step('update_counterpick_config: returns 400 for draft_counterpick_slots < 0', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-draft-min'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      draft_counterpick_slots: -1,
+    })
+
+    assertEquals(result.error, 'draft_counterpick_slots must be an integer between 0 and 5')
+  })
+
+  await t.step('update_counterpick_config: returns 400 for draft_counterpick_slots > 5', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-draft-max'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      draft_counterpick_slots: 6,
+    })
+
+    assertEquals(result.error, 'draft_counterpick_slots must be an integer between 0 and 5')
+  })
+
+  await t.step('update_counterpick_config: returns 400 for bidding_counterpick_slots < 0', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-bidding-min'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      bidding_counterpick_slots: -1,
+    })
+
+    assertEquals(result.error, 'bidding_counterpick_slots must be an integer between 0 and 5')
+  })
+
+  await t.step('update_counterpick_config: returns 400 for bidding_counterpick_slots > 5', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-bidding-max'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      bidding_counterpick_slots: 6,
+    })
+
+    assertEquals(result.error, 'bidding_counterpick_slots must be an integer between 0 and 5')
+  })
+
+  await t.step('update_counterpick_config: returns 400 for no fields provided', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-no-fields'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+    })
+
+    assertEquals(result.error, 'No counterpick config fields provided')
+  })
+
+  await t.step('update_counterpick_config: returns 400 for non-boolean counterpicks_block_drops', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-invalid-bool'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      counterpicks_block_drops: 'true', // string instead of boolean
+    })
+
+    assertEquals(result.error, 'counterpicks_block_drops must be a boolean')
+  })
+
+  await t.step('update_counterpick_config: returns 400 for non-integer draft_counterpick_slots', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-decimal'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      draft_counterpick_slots: 2.5,
+    })
+
+    assertEquals(result.error, 'draft_counterpick_slots must be an integer between 0 and 5')
+  })
+
+  await t.step('update_counterpick_config: returns 400 for non-integer bidding_counterpick_slots', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('cp-bidding-decimal'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      bidding_counterpick_slots: 1.5,
+    })
+
+    assertEquals(result.error, 'bidding_counterpick_slots must be an integer between 0 and 5')
+  })
+
+  await t.step('update_counterpick_config: returns 400 when league not in setup status', async () => {
+    const leagueId = await factory.createDraftingLeague(uniqueName('cp-drafting'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_counterpick_config',
+      league_id: leagueId,
+      draft_counterpick_slots: 2,
+    })
+
+    assertEquals(result.error, 'Counterpick configuration can only be changed before the draft starts')
+  })
+
+  // ============================================================================
   // Cleanup
   // ============================================================================
 

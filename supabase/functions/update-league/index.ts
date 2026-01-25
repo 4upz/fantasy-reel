@@ -8,7 +8,7 @@ import {
   isValidUUID,
 } from '../_shared/utils.ts'
 
-type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'kick_participant' | 'delete_league'
+type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'kick_participant' | 'delete_league'
 
 interface UpdateInfoRequest {
   action: 'update_info'
@@ -43,10 +43,19 @@ interface DeleteLeagueRequest {
   league_id: string
 }
 
+interface UpdateCounterpickConfigRequest {
+  action: 'update_counterpick_config'
+  league_id: string
+  draft_counterpick_slots?: number
+  bidding_counterpick_slots?: number
+  counterpicks_block_drops?: boolean
+}
+
 type UpdateLeagueRequest =
   | UpdateInfoRequest
   | UpdateDraftConfigRequest
   | UpdateBiddingConfigRequest
+  | UpdateCounterpickConfigRequest
   | KickParticipantRequest
   | DeleteLeagueRequest
 
@@ -62,6 +71,10 @@ const MIN_DROP_LIMIT = 0
 const MAX_DROP_LIMIT = 10
 const MIN_COUNTERBID_HOURS = 1
 const MAX_COUNTERBID_HOURS = 72
+
+// Counterpick config constraints
+const MIN_COUNTERPICK_SLOTS = 0
+const MAX_COUNTERPICK_SLOTS = 5
 
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
@@ -105,6 +118,9 @@ Deno.serve(async (req) => {
 
       case 'update_bidding_config':
         return await handleUpdateBiddingConfig(supabase, league, body as UpdateBiddingConfigRequest)
+
+      case 'update_counterpick_config':
+        return await handleUpdateCounterpickConfig(supabase, league, body as UpdateCounterpickConfigRequest)
 
       case 'kick_participant':
         return await handleKickParticipant(supabase, league, user.id, body as KickParticipantRequest)
@@ -287,6 +303,68 @@ async function handleUpdateBiddingConfig(
   }
 
   return jsonResponse({ league: updatedLeague, message: 'Bidding configuration updated successfully' })
+}
+
+async function handleUpdateCounterpickConfig(
+  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  league: { id: string; status: string },
+  body: UpdateCounterpickConfigRequest
+): Promise<Response> {
+  // Only allow in setup status
+  if (league.status !== 'setup') {
+    return errorResponse('Counterpick configuration can only be changed before the draft starts', 400)
+  }
+
+  const { draft_counterpick_slots, bidding_counterpick_slots, counterpicks_block_drops } = body
+  const updates: Record<string, unknown> = {}
+
+  // Validate draft_counterpick_slots
+  if (draft_counterpick_slots !== undefined) {
+    if (typeof draft_counterpick_slots !== 'number' ||
+        !Number.isInteger(draft_counterpick_slots) ||
+        draft_counterpick_slots < MIN_COUNTERPICK_SLOTS ||
+        draft_counterpick_slots > MAX_COUNTERPICK_SLOTS) {
+      return errorResponse(`draft_counterpick_slots must be an integer between ${MIN_COUNTERPICK_SLOTS} and ${MAX_COUNTERPICK_SLOTS}`, 400)
+    }
+    updates.draft_counterpick_slots = draft_counterpick_slots
+  }
+
+  // Validate bidding_counterpick_slots
+  if (bidding_counterpick_slots !== undefined) {
+    if (typeof bidding_counterpick_slots !== 'number' ||
+        !Number.isInteger(bidding_counterpick_slots) ||
+        bidding_counterpick_slots < MIN_COUNTERPICK_SLOTS ||
+        bidding_counterpick_slots > MAX_COUNTERPICK_SLOTS) {
+      return errorResponse(`bidding_counterpick_slots must be an integer between ${MIN_COUNTERPICK_SLOTS} and ${MAX_COUNTERPICK_SLOTS}`, 400)
+    }
+    updates.bidding_counterpick_slots = bidding_counterpick_slots
+  }
+
+  // Validate counterpicks_block_drops
+  if (counterpicks_block_drops !== undefined) {
+    if (typeof counterpicks_block_drops !== 'boolean') {
+      return errorResponse('counterpicks_block_drops must be a boolean', 400)
+    }
+    updates.counterpicks_block_drops = counterpicks_block_drops
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return errorResponse('No counterpick config fields provided', 400)
+  }
+
+  const { data: updatedLeague, error } = await supabase
+    .from('leagues')
+    .update(updates)
+    .eq('id', league.id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating counterpick config:', error)
+    return errorResponse('Failed to update counterpick config', 500)
+  }
+
+  return jsonResponse({ league: updatedLeague, message: 'Counterpick configuration updated successfully' })
 }
 
 async function handleKickParticipant(
