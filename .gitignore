@@ -53,3 +53,6 @@ logs
 # Claude local files
 CLAUDE.local.md
 claude.local.md
+
+# Git worktrees
+.worktrees/
