@@ -45,46 +45,6 @@ export function useNotifications(): UseNotificationsReturn {
     fetchNotifications()
   }, [fetchNotifications])
 
-  // Real-time subscription
-  useEffect(() => {
-    let channel: ReturnType<typeof supabase.channel> | null = null
-
-    const setupSubscription = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      channel = supabase
-        .channel('user-notifications')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        }, (payload) => {
-          setNotifications(prev => [payload.new as Notification, ...prev])
-        })
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        }, (payload) => {
-          setNotifications(prev =>
-            prev.map(n => n.id === payload.new.id ? payload.new as Notification : n)
-          )
-        })
-        .subscribe()
-    }
-
-    setupSubscription()
-
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel)
-      }
-    }
-  }, [supabase])
-
   const markAsRead = useCallback(async (notificationId: string) => {
     const { error: updateError } = await supabase
       .from('notifications')

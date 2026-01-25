@@ -44,6 +44,7 @@ export default function NotificationBell() {
     loading,
     markAsRead,
     markAllAsRead,
+    refetch,
   } = useNotifications()
 
   // Close on outside click
@@ -58,6 +59,13 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const handleToggle = () => {
+    if (!isOpen) {
+      refetch()
+    }
+    setIsOpen(!isOpen)
+  }
+
   const handleNotificationClick = async (notification: Notification) => {
     if (!notification.read_at) {
       await markAsRead(notification.id)
@@ -68,7 +76,7 @@ export default function NotificationBell() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className="relative p-2 rounded-lg hover:bg-surface-hover transition-colors"
         aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
       >
