@@ -210,6 +210,9 @@ export async function cleanupTestData(
       // Delete trade_offers (references teams)
       await client.from('trade_offers').delete().in('league_id', leagueIds)
 
+      // Delete counterpicks before draft_picks (FK constraint)
+      await client.from('counterpicks').delete().in('league_id', leagueIds)
+
       // Delete team_drops (references pickups)
       await client.from('team_drops').delete().in('team_id', teamIds)
 

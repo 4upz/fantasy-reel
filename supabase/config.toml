@@ -434,3 +434,6 @@ verify_jwt = false
 # Counterpick system functions
 [functions.start-counterpick-round]
 verify_jwt = false
+
+[functions.make-counterpick]
+verify_jwt = false
