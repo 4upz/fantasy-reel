@@ -9,6 +9,8 @@ These issues have been resolved:
 - [x] **`execute_trade` constraint violation** - Function inserted both `movie_id` AND `draft_pick_id`, violating `check_exactly_one_asset` constraint. Fixed in `20260130_fix_trade_assets_constraint.sql`.
 - [x] **Counter button missing** - `onCounter` prop was wired but no button rendered. Fixed in `TradeOfferCard.tsx`.
 - [x] **Veto used `window.prompt()`** - Poor UX, doesn't work on mobile. Replaced with `VetoModal` component.
+- [x] **`process-trades` endpoint had no authentication** - Anyone could trigger trade processing. Fixed by adding CRON_SECRET check in `process-trades/index.ts`.
+- [x] **RLS policy overly permissive** - Any league member could see all trades. Fixed in `20260131_trading_rls_restrictions.sql` - now only trade participants and league owners can view.
 
 ---
 
@@ -63,29 +65,9 @@ The `execute_trade` function already does this, but the Edge Functions don't.
 
 ---
 
-#### 4. `process-trades` Endpoint Has No Authentication
-**Location:** `process-trades/index.ts`
-
-**Problem:** The endpoint that auto-completes trades after review period has no auth check. Anyone could trigger it.
-
-**Solution:** Either:
-1. Add service role key validation (for cron jobs)
-2. Or check for a specific header/secret
-3. Or make it a database cron job instead of an HTTP endpoint
-
-```typescript
-// Add at start of handler
-const authHeader = req.headers.get('Authorization')
-if (authHeader !== `Bearer ${Deno.env.get('CRON_SECRET')}`) {
-  return new Response('Unauthorized', { status: 401 })
-}
-```
-
----
-
 ### Medium Priority
 
-#### 5. Counter-Offer Role Swap is Confusing
+#### 4. Counter-Offer Role Swap is Confusing
 **Location:** `counter-trade/index.ts`
 
 **Problem:** When a trade is countered, the initiator and recipient swap. This is confusing for:
@@ -97,7 +79,7 @@ if (authHeader !== `Bearer ${Deno.env.get('CRON_SECRET')}`) {
 
 ---
 
-#### 6. Missing Uniqueness Constraint for Active Trades
+#### 5. Missing Uniqueness Constraint for Active Trades
 **Location:** Database schema
 
 **Problem:** Two pending trades can exist between the same two teams simultaneously, which is confusing UX.
@@ -114,16 +96,7 @@ WHERE status IN ('proposed', 'countered');
 
 ---
 
-#### 7. RLS Policy Overly Permissive
-**Location:** `20260128_create_trading_system.sql`
-
-**Problem:** The SELECT policy allows any league member to see all trades, including the full JSONB items. This exposes what movies/FAAB other teams are offering.
-
-**Solution:** Consider restricting to only show trades where the user is a participant, or limit visible fields for non-participants.
-
----
-
-#### 8. Hard-Coded FAAB Maximum
+#### 6. Hard-Coded FAAB Maximum
 **Location:** `propose-trade/index.ts:58`, `counter-trade/index.ts`
 
 **Problem:** FAAB validation uses hard-coded max of 100:
@@ -139,7 +112,7 @@ if (faab < 0 || faab > 100) {
 
 ### Low Priority
 
-#### 9. Email Notifications are Non-Blocking but Silent Failures
+#### 7. Email Notifications are Non-Blocking but Silent Failures
 **Location:** `_shared/trade-validation.ts`
 
 **Problem:** Email failures are caught and logged but not surfaced anywhere.
@@ -295,6 +268,7 @@ const supabase = useMemo(() => createClient(), [])
 
 - `supabase/migrations/20260128_create_trading_system.sql` - Schema
 - `supabase/migrations/20260130_fix_trade_assets_constraint.sql` - Bug fix
+- `supabase/migrations/20260131_trading_rls_restrictions.sql` - RLS security fix
 - `supabase/functions/propose-trade/index.ts`
 - `supabase/functions/respond-trade/index.ts`
 - `supabase/functions/counter-trade/index.ts`
