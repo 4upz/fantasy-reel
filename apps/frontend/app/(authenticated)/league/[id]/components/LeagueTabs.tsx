@@ -21,24 +21,27 @@ export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }:
   const pathname = usePathname()
   const baseUrl = `/league/${league.id}`
 
+  // These features require the league to be fully active (not in setup, drafting, or counterpicking)
+  const isPreActive = league.status === 'setup' || league.status === 'drafting' || league.status === 'counterpicking'
+
   const tabs: Tab[] = [
     { name: 'Dashboard', href: `${baseUrl}/dashboard` },
     {
       name: 'Standings',
       href: `${baseUrl}/standings`,
-      disabled: league.status === 'setup' || league.status === 'drafting',
+      disabled: isPreActive,
     },
     { name: 'Draft', href: `${baseUrl}/draft` },
     {
       name: 'Bidding',
       href: `${baseUrl}/bidding`,
-      disabled: league.status === 'setup' || league.status === 'drafting',
+      disabled: isPreActive,
       badge: outbidCount > 0 ? outbidCount : undefined,
     },
     {
       name: 'Trading',
       href: `${baseUrl}/trading`,
-      disabled: league.status === 'setup' || league.status === 'drafting',
+      disabled: isPreActive,
     },
     { name: 'Roster', href: `${baseUrl}/roster` },
     ...(isOwner ? [{ name: 'Settings', href: `${baseUrl}/settings` }] : []),

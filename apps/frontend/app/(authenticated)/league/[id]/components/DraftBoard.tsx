@@ -1,20 +1,24 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import { Target } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
+import CounterpickRound from './CounterpickRound'
 import { ClapperboardIcon, ArrowUpIcon, ClockIcon } from './Icons'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, Counterpick } from '@/types'
 
 interface Props {
   league: League
   participants: ParticipantWithTeam[]
   draftPicks: DraftPickWithDetails[]
+  counterpicks: Counterpick[]
   currentUserId: string
   favoriteMovieIds?: Set<number>
   onPickMade: () => void
+  onCounterpickMade?: () => void
   onToggleFavorite?: (tmdbId: number) => void
 }
 
@@ -22,9 +26,11 @@ export default function DraftBoard({
   league,
   participants,
   draftPicks,
+  counterpicks,
   currentUserId,
   favoriteMovieIds = new Set(),
   onPickMade,
+  onCounterpickMade,
   onToggleFavorite,
 }: Props) {
   const [picking, setPicking] = useState(false)
@@ -85,6 +91,17 @@ export default function DraftBoard({
     return map
   }, [participants])
 
+  // Map of team_id to team name for counterpick indicator
+  const teamNamesById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const participant of participants) {
+      if (participant.teams) {
+        map.set(participant.teams.id, participant.teams.name)
+      }
+    }
+    return map
+  }, [participants])
+
   async function handleDraftPick(tmdbId: number, movieData: TMDbSearchResult): Promise<void> {
     setPicking(true)
     setError(null)
@@ -139,6 +156,19 @@ export default function DraftBoard({
     )
   }
 
+  // Counterpicking phase - render CounterpickRound instead
+  if (league.status === 'counterpicking') {
+    return (
+      <CounterpickRound
+        league={league}
+        participants={participants}
+        counterpicks={counterpicks}
+        currentUserId={currentUserId}
+        onCounterpickMade={onCounterpickMade || (() => {})}
+      />
+    )
+  }
+
   if (league.status === 'active' || league.status === 'completed') {
     return (
       <div className="card p-6">
@@ -147,7 +177,7 @@ export default function DraftBoard({
           <DraftProgressRing current={picksMade} total={totalPicks} size="sm" showLabel={false} />
         </div>
         <p className="text-foreground-secondary mb-4">The draft is complete!</p>
-        <PickHistory draftPicks={draftPicks} />
+        <PickHistory draftPicks={draftPicks} teamNamesById={teamNamesById} />
       </div>
     )
   }
@@ -248,14 +278,19 @@ export default function DraftBoard({
           <h3 className="text-lg font-display font-semibold text-foreground mb-4">
             Pick History
           </h3>
-          <PickHistory draftPicks={draftPicks} />
+          <PickHistory draftPicks={draftPicks} teamNamesById={teamNamesById} />
         </div>
       )}
     </div>
   )
 }
 
-function PickHistory({ draftPicks }: { draftPicks: DraftPickWithDetails[] }) {
+interface PickHistoryProps {
+  draftPicks: DraftPickWithDetails[]
+  teamNamesById?: Map<string, string>
+}
+
+function PickHistory({ draftPicks, teamNamesById }: PickHistoryProps) {
   if (draftPicks.length === 0) {
     return <p className="text-foreground-muted">No picks yet</p>
   }
@@ -268,46 +303,62 @@ function PickHistory({ draftPicks }: { draftPicks: DraftPickWithDetails[] }) {
 
   return (
     <div className="space-y-2 max-h-80 overflow-y-auto">
-      {sortedPicks.map((pick, index) => (
-        <div
-          key={pick.id}
-          className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-            index === 0
-              ? 'bg-gold-muted border-gold animate-fade-in'
-              : 'bg-elevated border-border'
-          }`}
-        >
-          {/* Movie Poster Thumbnail */}
-          {pick.movies?.poster_url ? (
-            <img
-              src={pick.movies.poster_url}
-              alt={pick.movies.title}
-              className="w-10 h-15 object-cover rounded-lg border border-border flex-shrink-0"
-            />
-          ) : (
-            <div className="w-10 h-15 bg-surface rounded-lg border border-border flex items-center justify-center flex-shrink-0">
-              <ClapperboardIcon className="w-5 h-5 text-foreground-muted" />
+      {sortedPicks.map((pick, index) => {
+        const counterpickerName = pick.counterpicked_by_team_id
+          ? teamNamesById?.get(pick.counterpicked_by_team_id) || 'Unknown Team'
+          : null
+
+        return (
+          <div
+            key={pick.id}
+            className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+              index === 0
+                ? 'bg-gold-muted border-gold animate-fade-in'
+                : 'bg-elevated border-border'
+            }`}
+          >
+            {/* Movie Poster Thumbnail */}
+            {pick.movies?.poster_url ? (
+              <img
+                src={pick.movies.poster_url}
+                alt={pick.movies.title}
+                className="w-10 h-15 object-cover rounded-lg border border-border flex-shrink-0"
+              />
+            ) : (
+              <div className="w-10 h-15 bg-surface rounded-lg border border-border flex items-center justify-center flex-shrink-0">
+                <ClapperboardIcon className="w-5 h-5 text-foreground-muted" />
+              </div>
+            )}
+
+            {/* Pick Info */}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground truncate">{pick.movies?.title}</p>
+              <p className="text-sm text-foreground-muted truncate">{pick.teams?.name}</p>
             </div>
-          )}
 
-          {/* Pick Info */}
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-foreground truncate">{pick.movies?.title}</p>
-            <p className="text-sm text-foreground-muted truncate">{pick.teams?.name}</p>
-          </div>
+            {/* Counterpick Indicator */}
+            {pick.counterpicked_by_team_id && (
+              <div
+                className="flex-shrink-0"
+                title={`Counterpicked by ${counterpickerName}`}
+              >
+                <Target className="w-4 h-4 text-crimson" />
+              </div>
+            )}
 
-          {/* Round/Pick Badge */}
-          <div className="flex-shrink-0 text-right">
-            <span
-              className={`inline-block px-2 py-1 rounded-lg text-xs font-medium ${
-                index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-muted'
-              }`}
-            >
-              R{pick.round} P{pick.pick_number}
-            </span>
+            {/* Round/Pick Badge */}
+            <div className="flex-shrink-0 text-right">
+              <span
+                className={`inline-block px-2 py-1 rounded-lg text-xs font-medium ${
+                  index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-muted'
+                }`}
+              >
+                R{pick.round} P{pick.pick_number}
+              </span>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

@@ -81,6 +81,7 @@ export interface DraftPick {
   picked_at: string
   created_at: string
   dropped_at: string | null
+  counterpicked_by_team_id: string | null
 }
 
 export interface Review {
