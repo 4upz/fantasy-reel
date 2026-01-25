@@ -19,6 +19,12 @@ interface VetoTradeRequest {
   reason?: string
 }
 
+interface VetoTradeResult {
+  success?: boolean
+  error?: string
+  status_code?: number
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
@@ -36,7 +42,7 @@ Deno.serve(async (req) => {
       return errorResponse('Valid trade_offer_id is required', 400)
     }
 
-    // Get the trade offer with league info for owner check
+    // Get the trade offer with league info for owner check (without locking)
     const { data: tradeOffer, error: offerError } = await serviceClient
       .from('trade_offers')
       .select('*, leagues(owner_id)')
@@ -53,24 +59,21 @@ Deno.serve(async (req) => {
       return errorResponse('Only the league commissioner can veto trades', 403)
     }
 
-    if (tradeOffer.status !== 'review') {
-      return errorResponse(
-        `Cannot veto a trade with status "${tradeOffer.status}". Trades can only be vetoed during the review period.`,
-        400
-      )
+    // Use the atomic database function with row-level locking
+    const { data: rpcResult, error: rpcError } = await serviceClient.rpc('veto_trade', {
+      p_trade_id: trade_offer_id,
+      p_reason: reason?.trim() || null,
+    })
+
+    if (rpcError) {
+      console.error('Failed to veto trade:', rpcError)
+      return errorResponse('Failed to veto trade', 500)
     }
 
-    const { error: updateError } = await serviceClient
-      .from('trade_offers')
-      .update({
-        status: 'vetoed',
-        veto_reason: reason?.trim() || null,
-      })
-      .eq('id', trade_offer_id)
+    const result = rpcResult as VetoTradeResult
 
-    if (updateError) {
-      console.error('Failed to veto trade:', updateError)
-      return errorResponse('Failed to veto trade', 500)
+    if (result.error) {
+      return errorResponse(result.error, result.status_code || 400)
     }
 
     // Notify both teams

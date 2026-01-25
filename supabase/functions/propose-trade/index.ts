@@ -108,6 +108,14 @@ Deno.serve(async (req) => {
 
     if (insertError || !tradeOffer) {
       console.error('Failed to create trade offer:', insertError)
+      // Check for movie-already-in-trade error from trigger
+      if (insertError?.message?.includes('already in a pending trade')) {
+        return errorResponse('One or more movies are already involved in another pending trade', 400)
+      }
+      // Check for unique constraint violation (same teams already have pending trade)
+      if (insertError?.code === '23505') {
+        return errorResponse('You already have a pending trade with this team', 400)
+      }
       return errorResponse('Failed to create trade offer', 500)
     }
 
