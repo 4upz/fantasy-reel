@@ -787,6 +787,102 @@ export class TestDataFactory {
   }
 
   /**
+   * Add a counterpick to a draft pick (for testing drop blocking)
+   * This simulates another team placing a counterpick on the draft pick.
+   */
+  async addCounterpickToDraftPick(
+    leagueId: string,
+    draftPickId: string,
+    counterpickerClient: SupabaseClient
+  ): Promise<string> {
+    const serviceClient = getServiceClient()
+
+    // Get counterpicker's team
+    const { data: { user } } = await counterpickerClient.auth.getUser()
+    if (!user) throw new Error('Client is not authenticated')
+
+    const { data: counterpickerParticipant } = await serviceClient
+      .from('league_participants')
+      .select('id, teams(id)')
+      .eq('league_id', leagueId)
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single()
+
+    if (!counterpickerParticipant) throw new Error('Counterpicker is not a member of this league')
+
+    const counterpickerTeam = counterpickerParticipant.teams as unknown as { id: string }
+    if (!counterpickerTeam) throw new Error('Team not found for counterpicker')
+
+    // Get the draft pick details
+    const { data: draftPick } = await serviceClient
+      .from('draft_picks')
+      .select('movie_id, team_id')
+      .eq('id', draftPickId)
+      .single()
+
+    if (!draftPick) throw new Error('Draft pick not found')
+
+    // Get the next pick order for counterpicks
+    const { data: existingCounterpicks } = await serviceClient
+      .from('counterpicks')
+      .select('pick_order')
+      .eq('league_id', leagueId)
+      .order('pick_order', { ascending: false })
+      .limit(1)
+
+    const nextPickOrder = existingCounterpicks && existingCounterpicks.length > 0
+      ? existingCounterpicks[0].pick_order + 1
+      : 1
+
+    // Create the counterpick record
+    const { data: counterpick, error: counterpickError } = await serviceClient
+      .from('counterpicks')
+      .insert({
+        league_id: leagueId,
+        counterpicker_team_id: counterpickerTeam.id,
+        target_team_id: draftPick.team_id,
+        movie_id: draftPick.movie_id,
+        draft_pick_id: draftPickId,
+        pick_order: nextPickOrder,
+        phase: 'draft',
+      })
+      .select('id')
+      .single()
+
+    if (counterpickError || !counterpick) {
+      throw new Error(`Failed to create counterpick: ${counterpickError?.message}`)
+    }
+
+    // Update the draft_picks table to mark it as counterpicked
+    const { error: updateError } = await serviceClient
+      .from('draft_picks')
+      .update({ counterpicked_by_team_id: counterpickerTeam.id })
+      .eq('id', draftPickId)
+
+    if (updateError) {
+      throw new Error(`Failed to update draft pick with counterpick: ${updateError.message}`)
+    }
+
+    return counterpick.id
+  }
+
+  /**
+   * Update a league's counterpick blocking setting
+   */
+  async setCounterpickBlockDrops(leagueId: string, blockDrops: boolean): Promise<void> {
+    const serviceClient = getServiceClient()
+    const { error } = await serviceClient
+      .from('leagues')
+      .update({ counterpicks_block_drops: blockDrops })
+      .eq('id', leagueId)
+
+    if (error) {
+      throw new Error(`Failed to update counterpicks_block_drops: ${error.message}`)
+    }
+  }
+
+  /**
    * Create an active league with trading enabled
    */
   async createTradingLeague(name: string, numParticipants = 2): Promise<string> {
