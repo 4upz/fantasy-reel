@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Target } from 'lucide-react'
 import { formatDate } from '@/utils/date'
 import type { MovieWithScores } from '@/types'
 import ScoreSourceBadge from './ScoreSourceBadge'
@@ -9,6 +10,7 @@ interface Props {
   movie: MovieWithScores
   pickNumber: number
   round: number
+  isCounterpicked?: boolean
 }
 
 function formatFantasyPoints(points: number): string {
@@ -37,7 +39,7 @@ function BonusBadge({ type, active }: { type: 'fresh' | 'darling' | 'disaster'; 
   )
 }
 
-export default function MovieScoreCard({ movie, pickNumber, round }: Props) {
+export default function MovieScoreCard({ movie, pickNumber, round, isCounterpicked = false }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
@@ -99,6 +101,15 @@ export default function MovieScoreCard({ movie, pickNumber, round }: Props) {
             {round}.{pickNumber}
           </span>
         </div>
+        {/* Counterpicked Indicator */}
+        {isCounterpicked && (
+          <div
+            className="absolute -top-2 -right-2 w-6 h-6 bg-crimson/90 border border-crimson rounded-full flex items-center justify-center"
+            title="Counterpicked by opponent"
+          >
+            <Target className="w-3.5 h-3.5 text-white" />
+          </div>
+        )}
       </div>
 
       {/* Movie Info */}
