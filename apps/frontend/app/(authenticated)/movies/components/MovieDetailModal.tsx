@@ -37,14 +37,14 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 modal-overlay animate-fade-in"
+        className="fixed inset-0 bg-background animate-fade-in"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Modal content */}
       <div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-slide-up">
-        <div className="glass card overflow-hidden">
+        <div className="card bg-surface overflow-hidden">
           {/* Backdrop image */}
           {details?.backdrop_url && (
             <div className="relative h-48 sm:h-64 overflow-hidden">
