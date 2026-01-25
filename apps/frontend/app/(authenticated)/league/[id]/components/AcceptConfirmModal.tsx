@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import type { TradeOfferWithTeams, TradeItems, TradeMovieItem } from '@/types'
 
@@ -39,12 +39,28 @@ export default function AcceptConfirmModal({
     setIsLoading(false)
   }
 
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isLoading) {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose, isLoading])
+
   return (
-    <div className="modal-overlay p-4">
+    <div
+      className="modal-overlay p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="accept-confirm-title"
+    >
       <div className="modal-panel glass rounded-lg shadow-heavy max-w-lg w-full border border-border">
         {/* Header */}
         <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-display font-bold text-foreground">Confirm Trade</h2>
+          <h2 id="accept-confirm-title" className="text-lg font-display font-bold text-foreground">Confirm Trade</h2>
           <p className="text-sm text-foreground-secondary mt-1">
             Review the trade details before accepting.
           </p>
@@ -84,10 +100,21 @@ export default function AcceptConfirmModal({
 
         {/* Footer */}
         <div className="p-4 border-t border-border flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-ghost" disabled={isLoading}>
+          <button
+            onClick={onClose}
+            className="btn btn-ghost"
+            disabled={isLoading}
+            aria-label="Cancel acceptance"
+          >
             Cancel
           </button>
-          <button onClick={handleConfirm} className="btn btn-primary" disabled={isLoading}>
+          <button
+            onClick={handleConfirm}
+            className="btn btn-primary"
+            disabled={isLoading}
+            aria-label={isLoading ? 'Accepting trade...' : 'Confirm accept trade'}
+            aria-busy={isLoading}
+          >
             {isLoading ? 'Accepting...' : 'Confirm Accept'}
           </button>
         </div>
