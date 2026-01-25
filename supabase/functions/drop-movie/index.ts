@@ -103,12 +103,14 @@ Deno.serve(async (req) => {
       movie = pickup.movies as unknown as typeof movie
     } else {
       // ========== DRAFT PICK DROP FLOW ==========
+      // Note: Must specify !draft_picks_team_id_fkey because draft_picks has two FKs to teams:
+      // team_id (the drafter) and counterpicked_by_team_id (the counterpicker)
       const { data: draftPick, error: draftPickError } = await serviceClient
         .from('draft_picks')
         .select(`
           *,
           movies(id, title, tmdb_id, release_date),
-          teams(
+          teams!draft_picks_team_id_fkey(
             id,
             participant_id,
             league_participants(user_id, league_id)
@@ -151,15 +153,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch league to check drop_limit
+    // Fetch league to check drop_limit and counterpick blocking
     const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
-      .select('drop_limit')
+      .select('drop_limit, counterpicks_block_drops')
       .eq('id', leagueId)
       .single()
 
     if (leagueError || !league) {
       return errorResponse('League not found', 404)
+    }
+
+    // Check if movie is counterpicked and blocking is enabled (draft picks only)
+    if (hasDraftPickId && league.counterpicks_block_drops) {
+      const { data: counterpickCheck } = await serviceClient
+        .from('draft_picks')
+        .select('counterpicked_by_team_id')
+        .eq('id', draft_pick_id)
+        .single()
+
+      if (counterpickCheck?.counterpicked_by_team_id) {
+        return errorResponse('Cannot drop a movie that has been counterpicked', 400)
+      }
     }
 
     const dropLimit = league.drop_limit ?? 2

@@ -433,6 +433,77 @@ Deno.test({
     })
 
     // ============================================================================
+    // Counterpick Blocking Tests
+    // ============================================================================
+
+    await t.step('returns 400 when movie is counterpicked and blocking enabled', async () => {
+      // Create active league (counterpicks_block_drops defaults to true)
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-block'))
+
+      // Create a draft pick for user1
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 500301,
+        ...testMovieData,
+        title: 'Counterpicked Movie',
+      })
+
+      // User2 counterpicks user1's movie
+      await factory.addCounterpickToDraftPick(leagueId, draftPickId, secondClient)
+
+      // User1 tries to drop the counterpicked movie - should fail
+      const result = await invokeFunction(client, 'drop-movie', {
+        draft_pick_id: draftPickId,
+      })
+      assertEquals(result.error, 'Cannot drop a movie that has been counterpicked')
+    })
+
+    await t.step('allows drop when counterpick blocking is disabled', async () => {
+      // Create active league
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-no-block'))
+
+      // Disable counterpick blocking
+      await factory.setCounterpickBlockDrops(leagueId, false)
+
+      // Create a draft pick for user1
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 500302,
+        ...testMovieData,
+        title: 'Counterpicked But Droppable',
+      })
+
+      // User2 counterpicks user1's movie
+      await factory.addCounterpickToDraftPick(leagueId, draftPickId, secondClient)
+
+      // User1 should still be able to drop (blocking disabled)
+      const { data, error } = await client.functions.invoke('drop-movie', {
+        body: { draft_pick_id: draftPickId },
+      })
+
+      assertEquals(error, null)
+      assertEquals(data.message, 'Movie dropped successfully')
+    })
+
+    await t.step('allows drop when movie is not counterpicked', async () => {
+      // Create active league with blocking enabled
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-not-picked'))
+
+      // Create a draft pick for user1 (not counterpicked)
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 500303,
+        ...testMovieData,
+        title: 'Non-Counterpicked Movie',
+      })
+
+      // User1 should be able to drop (no counterpick)
+      const { data, error } = await client.functions.invoke('drop-movie', {
+        body: { draft_pick_id: draftPickId },
+      })
+
+      assertEquals(error, null)
+      assertEquals(data.message, 'Movie dropped successfully')
+    })
+
+    // ============================================================================
     // Notification Tests
     // ============================================================================
 
