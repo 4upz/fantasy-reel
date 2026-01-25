@@ -9,7 +9,6 @@ import {
   validateTradeProposal,
   getTeamInfo,
   getTradeOffer,
-  validateTradeStatus,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
@@ -19,6 +18,14 @@ interface RespondTradeRequest {
   trade_offer_id: string
   response: 'accept' | 'reject'
   message?: string
+}
+
+interface RespondToTradeResult {
+  success?: boolean
+  error?: string
+  status_code?: number
+  status?: string
+  review_ends_at?: string | null
 }
 
 Deno.serve(async (req) => {
@@ -38,6 +45,7 @@ Deno.serve(async (req) => {
       return errorResponse('Response must be "accept" or "reject"', 400)
     }
 
+    // First fetch the trade to verify authorization (without locking)
     const tradeResult = await getTradeOffer(serviceClient, trade_offer_id)
     if (tradeResult.error) return tradeResult.error
 
@@ -49,26 +57,54 @@ Deno.serve(async (req) => {
       return errorResponse('You can only respond to trades sent to your team', 403)
     }
 
-    const statusError = validateTradeStatus(tradeOffer, ['proposed', 'countered'], 'respond to')
-    if (statusError) return statusError
+    // For accept, re-validate trade items before the atomic operation
+    if (response === 'accept') {
+      const validationResult = await validateTradeProposal(
+        serviceClient,
+        tradeOffer.league_id,
+        tradeOffer.initiator_team_id,
+        tradeOffer.recipient_team_id,
+        tradeOffer.initiator_items,
+        tradeOffer.recipient_items
+      )
 
-    const now = new Date().toISOString()
+      if (!validationResult.valid) {
+        return errorResponse(
+          `Trade can no longer be accepted: ${validationResult.error}`,
+          400
+        )
+      }
+    }
+
+    // Use the atomic database function with row-level locking
+    const { data: rpcResult, error: rpcError } = await serviceClient.rpc('respond_to_trade', {
+      p_trade_id: trade_offer_id,
+      p_response: response,
+      p_message: message?.trim() || null,
+    })
+
+    if (rpcError) {
+      console.error('Failed to respond to trade:', rpcError)
+      return errorResponse('Failed to respond to trade', 500)
+    }
+
+    const result = rpcResult as RespondToTradeResult
+
+    if (result.error) {
+      return errorResponse(result.error, result.status_code || 400)
+    }
+
+    // Get league config for notification messages
+    const { data: league } = await serviceClient
+      .from('leagues')
+      .select('trade_veto_hours, trade_review_enabled')
+      .eq('id', tradeOffer.league_id)
+      .single()
+
+    const vetoHours = league?.trade_veto_hours ?? 24
+    const reviewEnabled = league?.trade_review_enabled ?? true
 
     if (response === 'reject') {
-      const { error: updateError } = await serviceClient
-        .from('trade_offers')
-        .update({
-          status: 'rejected',
-          responded_at: now,
-          response_message: message?.trim() || null,
-        })
-        .eq('id', trade_offer_id)
-
-      if (updateError) {
-        console.error('Failed to reject trade:', updateError)
-        return errorResponse('Failed to reject trade', 500)
-      }
-
       await notifyTradeParties(serviceClient, {
         tradeOffer,
         notifyInitiator: {
@@ -87,62 +123,12 @@ Deno.serve(async (req) => {
       return jsonResponse({ message: 'Trade rejected', trade_offer_id })
     }
 
-    // Accept the trade - re-validate before accepting
-    const validationResult = await validateTradeProposal(
-      serviceClient,
-      tradeOffer.league_id,
-      tradeOffer.initiator_team_id,
-      tradeOffer.recipient_team_id,
-      tradeOffer.initiator_items,
-      tradeOffer.recipient_items
-    )
-
-    if (!validationResult.valid) {
-      return errorResponse(
-        `Trade can no longer be accepted: ${validationResult.error}`,
-        400
-      )
-    }
-
-    // Get league config for review settings
-    const { data: league } = await serviceClient
-      .from('leagues')
-      .select('trade_veto_hours, trade_review_enabled')
-      .eq('id', tradeOffer.league_id)
-      .single()
-
-    const vetoHours = league?.trade_veto_hours ?? 24
-    const reviewEnabled = league?.trade_review_enabled ?? true
-
-    let newStatus: string
-    let reviewEndsAt: string | null = null
-
-    if (reviewEnabled && vetoHours > 0) {
-      newStatus = 'review'
-      const reviewEnd = new Date()
-      reviewEnd.setHours(reviewEnd.getHours() + vetoHours)
-      reviewEndsAt = reviewEnd.toISOString()
-    } else {
-      newStatus = 'accepted'
-    }
-
-    const { data: updatedOffer, error: updateError } = await serviceClient
+    // Fetch the updated trade offer for response
+    const { data: updatedOffer } = await serviceClient
       .from('trade_offers')
-      .update({
-        status: newStatus,
-        responded_at: now,
-        accepted_at: now,
-        review_ends_at: reviewEndsAt,
-        response_message: message?.trim() || null,
-      })
-      .eq('id', trade_offer_id)
       .select()
+      .eq('id', trade_offer_id)
       .single()
-
-    if (updateError) {
-      console.error('Failed to accept trade:', updateError)
-      return errorResponse('Failed to accept trade', 500)
-    }
 
     await notifyTradeParties(serviceClient, {
       tradeOffer,
@@ -153,12 +139,12 @@ Deno.serve(async (req) => {
           reviewEnabled
             ? `${teamName} accepted your trade. It's now in review for ${vetoHours} hours.`
             : `${teamName} accepted your trade. It will be processed shortly.`,
-        data: { review_ends_at: reviewEndsAt },
+        data: { review_ends_at: result.review_ends_at },
       },
     })
 
     // Send email notification with updated trade offer data
-    const tradeOfferWithReview = { ...tradeOffer, review_ends_at: reviewEndsAt }
+    const tradeOfferWithReview = { ...tradeOffer, review_ends_at: result.review_ends_at ?? null }
     await sendTradeEmailNotifications(serviceClient, tradeOfferWithReview, 'accepted', {
       notifyInitiator: true,
       message: message?.trim(),

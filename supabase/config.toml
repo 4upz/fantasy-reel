@@ -408,3 +408,22 @@ verify_jwt = false
 
 [functions.process-bids]
 verify_jwt = false
+
+# Trading system functions
+[functions.propose-trade]
+verify_jwt = false
+
+[functions.respond-trade]
+verify_jwt = false
+
+[functions.counter-trade]
+verify_jwt = false
+
+[functions.cancel-trade]
+verify_jwt = false
+
+[functions.veto-trade]
+verify_jwt = false
+
+[functions.process-trades]
+verify_jwt = false

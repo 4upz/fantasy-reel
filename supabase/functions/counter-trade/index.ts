@@ -24,6 +24,12 @@ interface CounterTradeRequest {
   message?: string
 }
 
+interface CounterTradeResult {
+  success?: boolean
+  error?: string
+  status_code?: number
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
@@ -42,6 +48,7 @@ Deno.serve(async (req) => {
       message,
     }: CounterTradeRequest = await req.json()
 
+    // First fetch the trade to verify authorization (without locking)
     const tradeResult = await getTradeOffer(serviceClient, trade_offer_id)
     if (tradeResult.error) return tradeResult.error
 
@@ -76,28 +83,40 @@ Deno.serve(async (req) => {
     const enrichedOfferedItems = await enrichTradeItems(serviceClient, counter_offered_items)
     const enrichedRequestedItems = await enrichTradeItems(serviceClient, counter_requested_items)
 
-    const now = new Date().toISOString()
+    // Use the atomic database function with row-level locking
+    const { data: rpcResult, error: rpcError } = await serviceClient.rpc('counter_trade', {
+      p_trade_id: trade_offer_id,
+      p_new_initiator_team_id: counterInitiatorTeamId,
+      p_new_recipient_team_id: counterRecipientTeamId,
+      p_new_initiator_items: enrichedOfferedItems,
+      p_new_recipient_items: enrichedRequestedItems,
+      p_message: message?.trim() || null,
+    })
 
-    const { data: updatedOffer, error: updateError } = await serviceClient
+    if (rpcError) {
+      console.error('Failed to counter trade:', rpcError)
+      // Check if it's a movie-already-in-trade error
+      if (rpcError.message?.includes('already in a pending trade')) {
+        return errorResponse('One or more movies are already involved in another pending trade', 400)
+      }
+      return errorResponse('Failed to submit counter-offer', 500)
+    }
+
+    const result = rpcResult as CounterTradeResult
+
+    if (result.error) {
+      return errorResponse(result.error, result.status_code || 400)
+    }
+
+    // Fetch the updated trade offer for response and notifications
+    const { data: updatedOffer } = await serviceClient
       .from('trade_offers')
-      .update({
-        status: 'countered',
-        initiator_team_id: counterInitiatorTeamId,
-        recipient_team_id: counterRecipientTeamId,
-        initiator_items: enrichedOfferedItems,
-        recipient_items: enrichedRequestedItems,
-        responded_at: now,
-        accepted_at: null,
-        review_ends_at: null,
-        response_message: message?.trim() || null,
-      })
-      .eq('id', trade_offer_id)
       .select()
+      .eq('id', trade_offer_id)
       .single()
 
-    if (updateError) {
-      console.error('Failed to counter trade:', updateError)
-      return errorResponse('Failed to submit counter-offer', 500)
+    if (!updatedOffer) {
+      return errorResponse('Failed to fetch updated trade offer', 500)
     }
 
     // Notify the other team (original initiator, now recipient)
