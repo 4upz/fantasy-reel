@@ -37,7 +37,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-background animate-fade-in"
+        className="fixed inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
         onClick={onClose}
         aria-hidden="true"
       />
