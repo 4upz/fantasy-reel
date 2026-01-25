@@ -259,8 +259,12 @@ Deno.serve(async (req) => {
         const teamScores = teams.map(team => ({
           team_id: team.id,
           total_points: 0,
+          draft_points: 0,
+          counterpick_points: 0,
           movies_scored: 0,
-          movies_pending: 0
+          movies_pending: 0,
+          counterpicks_made: 0,
+          counterpicks_scored: 0,
         }))
 
         const { error: scoresError } = await serviceClient
