@@ -110,14 +110,9 @@ if (faab < 0 || faab > 100) {
 
 ---
 
-### Low Priority
+### Low Priority (Fixed)
 
-#### 7. Email Notifications are Non-Blocking but Silent Failures
-**Location:** `_shared/trade-validation.ts`
-
-**Problem:** Email failures are caught and logged but not surfaced anywhere.
-
-**Solution:** Consider adding a `notification_status` column or a separate notifications table to track delivery.
+- [x] **Email Notifications are Non-Blocking but Silent Failures** - Email failures were caught and logged but not surfaced anywhere. Fixed in `20260201_add_notification_log.sql` - added `notification_log` table to track delivery status (sent/failed/skipped) with error details. Updated `_shared/trade-validation.ts` to log all email delivery results.
 
 ---
 
@@ -269,6 +264,7 @@ const supabase = useMemo(() => createClient(), [])
 - `supabase/migrations/20260128_create_trading_system.sql` - Schema
 - `supabase/migrations/20260130_fix_trade_assets_constraint.sql` - Bug fix
 - `supabase/migrations/20260131_trading_rls_restrictions.sql` - RLS security fix
+- `supabase/migrations/20260201_add_notification_log.sql` - Notification delivery tracking
 - `supabase/functions/propose-trade/index.ts`
 - `supabase/functions/respond-trade/index.ts`
 - `supabase/functions/counter-trade/index.ts`
