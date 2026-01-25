@@ -1,42 +1,24 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-
 interface Props {
-  onSearch: (query: string) => void
+  value: string
+  onChange: (value: string) => void
+  onClear: () => void
   loading: boolean
   compact?: boolean
-  initialValue?: string
 }
 
+/**
+ * Pure controlled movie search input.
+ * All debouncing and search logic is handled by the parent component.
+ */
 export default function MovieSearchBar({
-  onSearch,
+  value,
+  onChange,
+  onClear,
   loading,
   compact = false,
-  initialValue = '',
 }: Props): React.ReactElement {
-  const [value, setValue] = useState(initialValue)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    setValue(initialValue)
-  }, [initialValue])
-
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-
-    debounceRef.current = setTimeout(() => onSearch(value), 300)
-
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-    }
-  }, [value, onSearch])
-
-  function handleClear(): void {
-    setValue('')
-    onSearch('')
-  }
-
   return (
     <div className="relative group">
       <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -58,11 +40,9 @@ export default function MovieSearchBar({
       <input
         type="text"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         placeholder="Search for movies..."
-        className={`w-full pl-12 pr-12 bg-elevated border border-border rounded-xl text-foreground placeholder:text-foreground-muted focus:border-gold focus:ring-2 focus:ring-gold-muted focus:outline-none transition-all ${
-          compact ? 'py-2.5 text-base' : 'py-4 text-lg'
-        }`}
+        className={`input w-full pl-12 pr-12 rounded-xl ${compact ? 'py-2.5 text-base' : 'py-4 text-lg'}`}
       />
 
       <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -71,7 +51,7 @@ export default function MovieSearchBar({
         )}
         {!loading && value && (
           <button
-            onClick={handleClear}
+            onClick={onClear}
             className="p-1 text-foreground-muted hover:text-foreground transition-colors rounded-full hover:bg-surface-hover"
             aria-label="Clear search"
           >

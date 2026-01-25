@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { Clapperboard, Search } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { useScrollPosition } from '@/hooks/useScrollPosition'
-import type { TMDbSearchResult, TMDbSearchResponse, TMDbMovieDetails } from '@/types'
+import { useDebounce } from '@/hooks/useDebounce'
+import { useMovieSearch } from '@/hooks/useMovieSearch'
+import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
 import MovieSearchBar from './components/MovieSearchBar'
 import MovieFilters from './components/MovieFilters'
 import MovieGrid from './components/MovieGrid'
@@ -13,101 +15,48 @@ import MovieGridSkeleton from './components/MovieGridSkeleton'
 import MovieDetailModal from './components/MovieDetailModal'
 
 export default function MovieSearchClient(): React.ReactElement {
-  const [results, setResults] = useState<TMDbSearchResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(0)
-  const [totalResults, setTotalResults] = useState(0)
-  const [loadingMore, setLoadingMore] = useState(false)
+  // Input state (controlled by both search bars)
+  const [inputValue, setInputValue] = useState('')
   const [year, setYear] = useState<number | null>(null)
+
+  // Debounce the input value - single source of truth for search
+  const debouncedQuery = useDebounce(inputValue, 300)
+
+  // SWR-powered search with automatic request deduplication
+  const {
+    results,
+    loading,
+    loadingMore,
+    error,
+    totalResults,
+    hasMore,
+    loadMore,
+  } = useMovieSearch(debouncedQuery, { year })
+
+  // Movie detail modal state
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [movieDetails, setMovieDetails] = useState<TMDbMovieDetails | null>(null)
   const [loadingDetails, setLoadingDetails] = useState(false)
 
-  const searchMovies = useCallback(
-    async (searchQuery: string, searchPage: number = 1, append: boolean = false) => {
-      if (!searchQuery.trim()) {
-        setResults([])
-        setTotalPages(0)
-        setTotalResults(0)
-        return
-      }
-
-      if (append) {
-        setLoadingMore(true)
-      } else {
-        setLoading(true)
-        setError(null)
-      }
-
-      const { data, error: apiError } = await callEdgeFunction<TMDbSearchResponse>(
-        'search-movies',
-        {
-          body: {
-            query: searchQuery,
-            page: searchPage,
-            upcoming_only: false,
-            ...(year && { year }),
-          },
-        }
-      )
-
-      if (apiError) {
-        setError(apiError)
-        setLoading(false)
-        setLoadingMore(false)
-        return
-      }
-
-      if (data) {
-        if (append) {
-          setResults((prev) => {
-            const existingIds = new Set(prev.map((m) => m.tmdb_id))
-            const newResults = data.results.filter((m) => !existingIds.has(m.tmdb_id))
-            return [...prev, ...newResults]
-          })
-        } else {
-          setResults(data.results)
-        }
-        setPage(data.page)
-        setTotalPages(data.total_pages)
-        setTotalResults(data.total_results)
-      }
-
-      setLoading(false)
-      setLoadingMore(false)
-    },
-    [year]
-  )
-
-  const handleSearch = useCallback(
-    (newQuery: string) => {
-      setQuery(newQuery)
+  function handleInputChange(value: string): void {
+    setInputValue(value)
+    if (value && results.length > 0) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
-      searchMovies(newQuery, 1)
-    },
-    [searchMovies]
-  )
-
-  const handleYearChange = (newYear: number | null) => {
-    setYear(newYear)
-    if (query) {
-      searchMovies(query, 1)
     }
   }
 
-  const handleMovieClick = async (movie: TMDbSearchResult) => {
+  function handleClear(): void {
+    setInputValue('')
+  }
+
+  async function handleMovieClick(movie: TMDbSearchResult): Promise<void> {
     setSelectedMovie(movie)
     setLoadingDetails(true)
     setMovieDetails(null)
 
     const { data, error: detailError } = await callEdgeFunction<TMDbMovieDetails>(
       'get-movie-details',
-      {
-        body: { tmdb_id: movie.tmdb_id },
-      }
+      { body: { tmdb_id: movie.tmdb_id } }
     )
 
     if (data && !detailError) {
@@ -122,14 +71,13 @@ export default function MovieSearchClient(): React.ReactElement {
   }
 
   const hasResults = results.length > 0
-  const hasMore = page < totalPages
-  const showEmptyState = !loading && query && !hasResults && !error
-  const showInitialState = !loading && !query && !hasResults
+  const showEmptyState = !loading && debouncedQuery && !hasResults && !error
+  const showInitialState = !loading && !debouncedQuery && !hasResults
 
   const sentinelRef = useInfiniteScroll({
     hasMore,
     isLoading: loading || loadingMore,
-    onLoadMore: () => searchMovies(query, page + 1, true),
+    onLoadMore: loadMore,
   })
 
   const isScrolled = useScrollPosition({ threshold: 200 })
@@ -139,10 +87,11 @@ export default function MovieSearchClient(): React.ReactElement {
       <div className={`search-bar-floating ${isScrolled ? 'visible' : ''}`}>
         <div className="max-w-3xl mx-auto px-4">
           <MovieSearchBar
-            onSearch={handleSearch}
+            value={inputValue}
+            onChange={handleInputChange}
+            onClear={handleClear}
             loading={loading}
             compact
-            initialValue={query}
           />
         </div>
       </div>
@@ -166,7 +115,12 @@ export default function MovieSearchClient(): React.ReactElement {
           </div>
 
           <div className="max-w-2xl mx-auto">
-            <MovieSearchBar onSearch={handleSearch} loading={loading} initialValue={query} />
+            <MovieSearchBar
+              value={inputValue}
+              onChange={handleInputChange}
+              onClear={handleClear}
+              loading={loading}
+            />
           </div>
         </div>
 
@@ -174,11 +128,11 @@ export default function MovieSearchClient(): React.ReactElement {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {(hasResults || query) && (
+        {(hasResults || debouncedQuery) && (
           <div className="mb-8 animate-fade-in">
             <MovieFilters
               year={year}
-              onYearChange={handleYearChange}
+              onYearChange={setYear}
               totalResults={totalResults}
             />
           </div>
@@ -207,7 +161,7 @@ export default function MovieSearchClient(): React.ReactElement {
               <Search className="w-16 h-16 text-foreground-muted" />
             </div>
             <p className="text-foreground-secondary text-lg">
-              No movies found for &ldquo;{query}&rdquo;
+              No movies found for &ldquo;{debouncedQuery}&rdquo;
             </p>
             <p className="text-foreground-muted mt-2">Try a different search term</p>
           </div>
