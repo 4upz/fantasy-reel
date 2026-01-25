@@ -636,18 +636,41 @@ Reference: https://supabase.com/docs/guides/database/postgres/row-level-security
 
 ## 9. Scoring System
 
-### Point Calculation
-Movies are scored based on aggregated review data:
-- **IMDb:** Score out of 10, normalized to 100-point scale
-- **Rotten Tomatoes:** Tomatometer percentage (0-100)
-- **Metacritic:** Metascore (0-100)
+### Hybrid Fantasy Points
 
-**Formula:** `total_points = (imdb_normalized + rt_score + metacritic) / 3`
+Movies earn fantasy points based on a **70-point baseline** system, not a simple average:
+
+**Base Points:**
+| Critic Score | Calculation |
+|--------------|-------------|
+| 90+ | +20 base + 2 pts per point above 90 |
+| 70-89 | +1 pt per point above 70 |
+| Below 70 | -0.5 pts per point below 70 (floor: -15) |
+
+**Bonus Multipliers:**
+| Bonus | Condition | Points |
+|-------|-----------|--------|
+| Certified Fresh | RT ≥ 75% | +3 |
+| Critical Darling | All 3 sources ≥ 80 | +5 |
+| Critical Disaster | Any source < 40 | -5 |
+
+**Examples:**
+- 92 avg, all ≥80 → +24 base + 3 CF + 5 Darling = **+32 pts**
+- 82 avg, RT=78 → +12 base + 3 CF = **+15 pts**
+- 70 avg → **0 pts**
+- 55 avg → -7.5 base = **-8 pts**
+- 32 avg, IMDb=25 → -15 floor - 5 Disaster = **-20 pts**
+
+### Data Sources
+- **IMDb:** Score out of 10, normalized to 100-point scale (35% weight)
+- **Rotten Tomatoes:** Tomatometer percentage (40% weight)
+- **Metacritic:** Metascore (25% weight)
 
 ### Score Sync
 - Nightly cron job fetches latest scores from OMDb
 - Only updates movies that have been released
-- Recalculates team totals after each sync
+- Recalculates fantasy points and team totals after each sync
+- See `supabase/SCORING.md` for full architecture details
 
 ---
 

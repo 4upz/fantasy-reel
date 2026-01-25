@@ -12,8 +12,14 @@ const RANK_STYLES: Record<number, { bg: string; text: string; icon: boolean }> =
   3: { bg: 'bg-[#cd7f32]/20', text: 'text-[#cd7f32]', icon: true },
 }
 
+function formatFantasyPoints(points: number): string {
+  const rounded = Math.round(points)
+  return rounded >= 0 ? `+${rounded}` : `${rounded}`
+}
+
 export default function TeamHeader({ team, totalTeams }: Props) {
   const rankStyle = RANK_STYLES[team.rank] || { bg: 'bg-elevated', text: 'text-foreground-muted', icon: false }
+  const isPositive = team.total_points >= 0
 
   return (
     <div className="card p-6">
@@ -43,8 +49,8 @@ export default function TeamHeader({ team, totalTeams }: Props) {
 
           {/* Points */}
           <div className="text-right">
-            <div className="text-3xl font-display font-bold text-gold">
-              {team.total_points}
+            <div className={`text-3xl font-display font-bold ${isPositive ? 'text-gold' : 'text-crimson'}`}>
+              {formatFantasyPoints(team.total_points)}
             </div>
             <div className="text-xs text-foreground-muted uppercase tracking-wide">
               points

@@ -25,6 +25,11 @@ const PODIUM_STYLES: Record<number, { gradient: string; shadow: string }> = {
   },
 }
 
+function formatFantasyPoints(points: number): string {
+  const rounded = Math.round(points)
+  return rounded >= 0 ? `+${rounded}` : `${rounded}`
+}
+
 function RankBadge({ rank, isTied }: { rank: number; isTied: boolean }): React.ReactElement {
   const prefix = isTied ? 'T' : '#'
   const podiumStyle = PODIUM_STYLES[rank]
@@ -64,6 +69,7 @@ export default function TeamStandingCard({
   const moviesScored = teamScore?.movies_scored ?? 0
   const moviesPending = teamScore?.movies_pending ?? 0
   const averageScore = teamScore?.average_score ?? 0
+  const isPositive = totalPoints >= 0
 
   const displayName = team?.name || profile?.display_name || 'Unnamed Team'
 
@@ -130,16 +136,16 @@ export default function TeamStandingCard({
         <div className="hidden sm:flex items-center gap-6 text-center">
           <div>
             <div className="text-sm text-foreground-muted">Avg</div>
-            <div className="text-lg font-semibold text-foreground-secondary">
-              {moviesScored > 0 ? averageScore.toFixed(1) : '--'}
+            <div className={`text-lg font-semibold ${moviesScored > 0 && averageScore < 0 ? 'text-crimson' : 'text-foreground-secondary'}`}>
+              {moviesScored > 0 ? (averageScore >= 0 ? '+' : '') + averageScore.toFixed(1) : '--'}
             </div>
           </div>
         </div>
 
         {/* Total Points */}
         <div className="text-right">
-          <div className="text-3xl sm:text-4xl font-bold font-display text-gold">
-            {Math.round(totalPoints)}
+          <div className={`text-3xl sm:text-4xl font-bold font-display ${isPositive ? 'text-gold' : 'text-crimson'}`}>
+            {formatFantasyPoints(totalPoints)}
           </div>
           <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
             Points
@@ -185,14 +191,21 @@ export default function TeamStandingCard({
             )}
           </div>
 
-          {/* Score Weights Info */}
+          {/* Scoring Formula Info */}
           {draftPicks.length > 0 && (
             <div className="mt-4 pt-4 border-t border-border">
-              <div className="flex items-center justify-center gap-6 text-[11px] text-foreground-muted">
-                <span>Score weights:</span>
-                <span className="text-[#f5c518]">IMDb 35%</span>
-                <span className="text-[#fa320a]">RT 40%</span>
-                <span className="text-[#66cc33]">MC 25%</span>
+              <div className="text-center text-[11px] text-foreground-muted space-y-1">
+                <div>Fantasy points based on 70-point baseline</div>
+                <div className="flex items-center justify-center gap-4">
+                  <span className="text-gold">90+: +20 base +2/pt</span>
+                  <span className="text-foreground-secondary">70-89: +1/pt</span>
+                  <span className="text-crimson">&lt;70: -0.5/pt</span>
+                </div>
+                <div className="flex items-center justify-center gap-4">
+                  <span className="text-[#fa320a]">CF +3</span>
+                  <span className="text-gold">★ +5</span>
+                  <span className="text-crimson">💀 -5</span>
+                </div>
               </div>
             </div>
           )}

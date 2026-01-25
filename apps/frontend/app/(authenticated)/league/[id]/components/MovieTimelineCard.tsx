@@ -34,9 +34,16 @@ function formatCountdown(releaseDate: string | null): string {
   return 'TBD'
 }
 
+function formatFantasyPoints(points: number): string {
+  const rounded = Math.round(points)
+  return rounded >= 0 ? `+${rounded}` : `${rounded}`
+}
+
 export default function MovieTimelineCard({ movie, onClick }: Props) {
   const indicator = getStatusIndicator(movie.status)
   const isScored = movie.status === 'scored'
+  const hasFantasyPoints = movie.fantasy_points != null
+  const isPositive = hasFantasyPoints && movie.fantasy_points! >= 0
 
   return (
     <button
@@ -74,15 +81,35 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
             <div className="text-xs text-foreground-muted mb-1">Scores</div>
             <div className="text-xs space-y-0.5">
               {movie.scores.imdb && (
-                <div className="text-yellow-400">IMDb: {movie.scores.imdb}</div>
+                <div className={movie.scores.imdb < 40 ? 'text-crimson' : 'text-yellow-400'}>
+                  IMDb: {movie.scores.imdb}
+                </div>
               )}
               {movie.scores.rotten_tomatoes && (
-                <div className="text-red-400">RT: {movie.scores.rotten_tomatoes}%</div>
+                <div className={movie.scores.rotten_tomatoes < 40 ? 'text-crimson' : 'text-red-400'}>
+                  RT: {movie.scores.rotten_tomatoes}%
+                </div>
               )}
               {movie.scores.metacritic && (
-                <div className="text-green-400">MC: {movie.scores.metacritic}</div>
+                <div className={movie.scores.metacritic < 40 ? 'text-crimson' : 'text-green-400'}>
+                  MC: {movie.scores.metacritic}
+                </div>
               )}
             </div>
+            {/* Show bonuses in overlay */}
+            {movie.scoring_bonuses && (
+              <div className="flex gap-1 mt-1">
+                {movie.scoring_bonuses.certified_fresh && (
+                  <span className="text-[10px] text-[#fa320a]" title="Certified Fresh +3">CF</span>
+                )}
+                {movie.scoring_bonuses.critical_darling && (
+                  <span className="text-[10px] text-gold" title="Critical Darling +5">★</span>
+                )}
+                {movie.scoring_bonuses.critical_disaster && (
+                  <span className="text-[10px] text-crimson" title="Critical Disaster -5">💀</span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -92,9 +119,21 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
         {movie.title}
       </p>
 
-      {/* Score or Countdown */}
-      <p className={`text-sm text-center ${isScored ? 'text-gold font-semibold' : 'text-foreground-muted'}`}>
-        {isScored ? `${movie.combined_score} pts` : formatCountdown(movie.release_date)}
+      {/* Fantasy Points or Countdown */}
+      <p className={`text-sm text-center font-semibold ${
+        isScored
+          ? hasFantasyPoints && isPositive
+            ? 'text-gold'
+            : hasFantasyPoints
+              ? 'text-crimson'
+              : 'text-foreground-muted'
+          : 'text-foreground-muted font-normal'
+      }`}>
+        {isScored && hasFantasyPoints
+          ? `${formatFantasyPoints(movie.fantasy_points!)} pts`
+          : isScored
+            ? 'Pending'
+            : formatCountdown(movie.release_date)}
       </p>
     </button>
   )

@@ -11,12 +11,39 @@ interface Props {
   round: number
 }
 
+function formatFantasyPoints(points: number): string {
+  const rounded = Math.round(points)
+  return rounded >= 0 ? `+${rounded}` : `${rounded}`
+}
+
+function BonusBadge({ type, active }: { type: 'fresh' | 'darling' | 'disaster'; active: boolean }) {
+  if (!active) return null
+
+  const config = {
+    fresh: { label: 'CF', title: 'Certified Fresh (+3)', className: 'bg-[#fa320a]/20 text-[#fa320a] border-[#fa320a]/30' },
+    darling: { label: '★', title: 'Critical Darling (+5)', className: 'bg-gold/20 text-gold border-gold/30' },
+    disaster: { label: '💀', title: 'Critical Disaster (-5)', className: 'bg-crimson/20 text-crimson border-crimson/30' },
+  }
+
+  const { label, title, className } = config[type]
+
+  return (
+    <span
+      className={`px-1.5 py-0.5 text-[10px] font-bold border rounded ${className}`}
+      title={title}
+    >
+      {label}
+    </span>
+  )
+}
+
 export default function MovieScoreCard({ movie, pickNumber, round }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
-  const hasScore = movie.combined_score != null
+  const hasScore = movie.fantasy_points != null
   const isReleased = movie.status === 'released'
+  const isPositive = hasScore && movie.fantasy_points! >= 0
 
   // Get individual review scores
   const imdbReview = movie.reviews?.find((r) => r.source === 'imdb')
@@ -24,6 +51,9 @@ export default function MovieScoreCard({ movie, pickNumber, round }: Props) {
   const mcReview = movie.reviews?.find((r) => r.source === 'metacritic')
 
   const releaseDate = movie.release_date ? formatDate(movie.release_date) : 'TBA'
+
+  // Get scoring bonuses
+  const bonuses = movie.scoring_bonuses
 
   return (
     <div className="flex gap-4 p-4 bg-elevated/50 rounded-xl border border-border hover:border-border-hover transition-colors">
@@ -83,6 +113,14 @@ export default function MovieScoreCard({ movie, pickNumber, round }: Props) {
               Upcoming
             </span>
           )}
+          {/* Bonus Badges */}
+          {bonuses && (
+            <>
+              <BonusBadge type="fresh" active={bonuses.certified_fresh} />
+              <BonusBadge type="darling" active={bonuses.critical_darling} />
+              <BonusBadge type="disaster" active={bonuses.critical_disaster} />
+            </>
+          )}
         </div>
 
         {/* Score Sources */}
@@ -93,16 +131,22 @@ export default function MovieScoreCard({ movie, pickNumber, round }: Props) {
         </div>
       </div>
 
-      {/* Combined Score */}
+      {/* Fantasy Points */}
       <div className="flex flex-col items-center justify-center pl-4 border-l border-border">
         {hasScore ? (
           <>
-            <div className="text-3xl font-bold font-display text-gold">
-              {Math.round(movie.combined_score!)}
+            <div className={`text-3xl font-bold font-display ${isPositive ? 'text-gold' : 'text-crimson'}`}>
+              {formatFantasyPoints(movie.fantasy_points!)}
             </div>
             <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
               Points
             </div>
+            {/* Show raw critic score for context */}
+            {movie.combined_score != null && (
+              <div className="text-[10px] text-foreground-muted mt-1">
+                {Math.round(movie.combined_score)} avg
+              </div>
+            )}
           </>
         ) : (
           <>

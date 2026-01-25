@@ -16,7 +16,6 @@ const SOURCE_CONFIG = {
     bgColor: 'bg-[#f5c518]/10',
     borderColor: 'border-[#f5c518]/30',
     textColor: 'text-[#f5c518]',
-    weight: '35%',
   },
   rotten_tomatoes: {
     label: 'RT',
@@ -28,7 +27,6 @@ const SOURCE_CONFIG = {
     bgColor: 'bg-[#fa320a]/10',
     borderColor: 'border-[#fa320a]/30',
     textColor: 'text-[#fa320a]',
-    weight: '40%',
   },
   metacritic: {
     label: 'MC',
@@ -38,13 +36,20 @@ const SOURCE_CONFIG = {
     bgColor: 'bg-[#66cc33]/10',
     borderColor: 'border-[#66cc33]/30',
     textColor: 'text-[#66cc33]',
-    weight: '25%',
   },
 } as const
+
+// Disaster threshold styling for scores below 40
+const DISASTER_STYLE = {
+  bgColor: 'bg-crimson/20',
+  borderColor: 'border-crimson/50',
+  textColor: 'text-crimson',
+}
 
 export default function ScoreSourceBadge({ source, score }: Props) {
   const config = SOURCE_CONFIG[source]
   const isPending = score == null
+  const isDisaster = score != null && score < 40
 
   if (isPending) {
     return (
@@ -58,13 +63,16 @@ export default function ScoreSourceBadge({ source, score }: Props) {
     )
   }
 
+  // Use disaster styling for scores below 40
+  const styling = isDisaster ? DISASTER_STYLE : config
+
   return (
     <div className="flex flex-col items-center gap-1">
       <div
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${config.bgColor} border ${config.borderColor}`}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg ${styling.bgColor} border ${styling.borderColor}`}
       >
-        <span className={config.textColor}>{config.icon}</span>
-        <span className={`text-sm font-semibold ${config.textColor}`}>
+        <span className={styling.textColor}>{config.icon}</span>
+        <span className={`text-sm font-semibold ${styling.textColor}`}>
           {Math.round(score)}
         </span>
       </div>

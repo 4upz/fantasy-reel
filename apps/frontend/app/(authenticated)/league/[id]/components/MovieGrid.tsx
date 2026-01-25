@@ -36,9 +36,16 @@ function formatCountdown(releaseDate: string | null): string {
   return formatReleaseDate(releaseDate)
 }
 
+function formatFantasyPoints(points: number): string {
+  const rounded = Math.round(points)
+  return rounded >= 0 ? `+${rounded}` : `${rounded}`
+}
+
 function MovieCard({ movie, variant }: MovieCardProps) {
   const isReleasingSoon = variant === 'releasing_soon'
   const isScored = variant === 'scored'
+  const hasFantasyPoints = movie.fantasy_points != null
+  const isPositive = hasFantasyPoints && movie.fantasy_points! >= 0
 
   return (
     <div
@@ -69,9 +76,31 @@ function MovieCard({ movie, variant }: MovieCardProps) {
         {/* Info */}
         <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
           <div>
-            <h4 className="font-display font-semibold text-foreground truncate group-hover:text-gold transition-colors">
-              {movie.title}
-            </h4>
+            <div className="flex items-center gap-2">
+              <h4 className="font-display font-semibold text-foreground truncate group-hover:text-gold transition-colors">
+                {movie.title}
+              </h4>
+              {/* Bonus badges */}
+              {movie.scoring_bonuses && (
+                <div className="flex gap-1 flex-shrink-0">
+                  {movie.scoring_bonuses.certified_fresh && (
+                    <span className="px-1 py-0.5 text-[10px] font-bold bg-[#fa320a]/20 text-[#fa320a] border border-[#fa320a]/30 rounded" title="Certified Fresh +3">
+                      CF
+                    </span>
+                  )}
+                  {movie.scoring_bonuses.critical_darling && (
+                    <span className="px-1 py-0.5 text-[10px] font-bold bg-gold/20 text-gold border border-gold/30 rounded" title="Critical Darling +5">
+                      ★
+                    </span>
+                  )}
+                  {movie.scoring_bonuses.critical_disaster && (
+                    <span className="px-1 py-0.5 text-[10px] font-bold bg-crimson/20 text-crimson border border-crimson/30 rounded" title="Critical Disaster -5">
+                      💀
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
             <p className="text-sm text-foreground-muted mt-1">
               {isScored ? 'Released' : formatReleaseDate(movie.release_date)}
             </p>
@@ -79,30 +108,32 @@ function MovieCard({ movie, variant }: MovieCardProps) {
 
           {/* Score or Countdown */}
           <div className="mt-2">
-            {isScored && movie.scores ? (
+            {isScored && hasFantasyPoints ? (
               <div className="flex items-center gap-3">
-                <span className="text-xl font-display font-bold text-gold">
-                  {movie.combined_score}
+                <span className={`text-xl font-display font-bold ${isPositive ? 'text-gold' : 'text-crimson'}`}>
+                  {formatFantasyPoints(movie.fantasy_points!)}
                   <span className="text-sm font-normal text-foreground-muted ml-1">pts</span>
                 </span>
                 <div className="flex gap-2 text-xs">
-                  {movie.scores.imdb && (
-                    <span className="px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
+                  {movie.scores?.imdb && (
+                    <span className={`px-1.5 py-0.5 rounded ${movie.scores.imdb < 40 ? 'bg-crimson/20 text-crimson' : 'bg-yellow-500/20 text-yellow-400'}`}>
                       IMDb {movie.scores.imdb}
                     </span>
                   )}
-                  {movie.scores.rotten_tomatoes && (
-                    <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
+                  {movie.scores?.rotten_tomatoes && (
+                    <span className={`px-1.5 py-0.5 rounded ${movie.scores.rotten_tomatoes < 40 ? 'bg-crimson/20 text-crimson' : 'bg-red-500/20 text-red-400'}`}>
                       RT {movie.scores.rotten_tomatoes}%
                     </span>
                   )}
-                  {movie.scores.metacritic && (
-                    <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-400">
+                  {movie.scores?.metacritic && (
+                    <span className={`px-1.5 py-0.5 rounded ${movie.scores.metacritic < 40 ? 'bg-crimson/20 text-crimson' : 'bg-green-500/20 text-green-400'}`}>
                       MC {movie.scores.metacritic}
                     </span>
                   )}
                 </div>
               </div>
+            ) : isScored ? (
+              <span className="text-sm text-foreground-muted">Pending scores</span>
             ) : (
               <span
                 className={`inline-flex items-center gap-1.5 text-sm font-medium ${
@@ -201,7 +232,7 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
   }
 
   const sortByScore = (a: MovieTimelineItem, b: MovieTimelineItem) => {
-    return (b.combined_score || 0) - (a.combined_score || 0)
+    return (b.fantasy_points || 0) - (a.fantasy_points || 0)
   }
 
   releasingSoon.sort(sortByDate)

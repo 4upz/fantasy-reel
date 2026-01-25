@@ -39,6 +39,12 @@ export interface Team {
   updated_at: string
 }
 
+export interface ScoringBonuses {
+  certified_fresh: boolean
+  critical_darling: boolean
+  critical_disaster: boolean
+}
+
 export interface Movie {
   id: string
   tmdb_id: number
@@ -53,6 +59,8 @@ export interface Movie {
   vote_count: number | null
   status: 'upcoming' | 'released' | 'canceled'
   combined_score: number | null
+  fantasy_points: number | null
+  scoring_bonuses: ScoringBonuses | null
   scores_updated_at: string | null
   last_synced_at: string
   created_at: string
@@ -354,6 +362,8 @@ export interface MovieTimelineItem {
   release_date: string | null
   status: 'scored' | 'releasing_soon' | 'upcoming'
   combined_score: number | null
+  fantasy_points: number | null
+  scoring_bonuses: ScoringBonuses | null
   scores: {
     imdb: number | null
     rotten_tomatoes: number | null

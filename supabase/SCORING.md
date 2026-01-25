@@ -9,7 +9,45 @@ When movies are released, their scores are fetched from:
 - **Rotten Tomatoes** (40% weight) - Critic consensus (Tomatometer)
 - **Metacritic** (25% weight) - Weighted critic average
 
-These are combined into a single `combined_score` (0-100 scale) that determines fantasy points.
+These are combined into a weighted average (`combined_score`, 0-100 scale) which is then converted to **fantasy points** using a baseline-relative formula.
+
+## Fantasy Points Formula
+
+Unlike a simple average, fantasy points reward excellence and penalize poor performance relative to a 70-point baseline:
+
+### Base Points
+
+| Weighted Average | Calculation | Example |
+|------------------|-------------|---------|
+| 90+ | +20 base + 2 pts per point above 90 | 95 avg → +20 + (5×2) = **+30** |
+| 70-89 | +1 pt per point above 70 | 82 avg → **+12** |
+| Below 70 | -0.5 pts per point below 70 (floor: -15) | 55 avg → (55-70)×-0.5 = **-7.5** |
+
+### Bonus Multipliers
+
+| Bonus | Condition | Points |
+|-------|-----------|--------|
+| **Certified Fresh** | RT ≥ 75% | +3 |
+| **Critical Darling** | All 3 sources ≥ 80 | +5 |
+| **Critical Disaster** | Any source < 40 | -5 (doesn't stack) |
+
+### Example Calculations
+
+| Movie | Avg | Base | Bonuses | Fantasy Pts |
+|-------|-----|------|---------|-------------|
+| Excellent (92 avg, all ≥80) | 92 | +24 | +3 CF, +5 Darling | **+32** |
+| Good (82 avg, RT=78) | 82 | +12 | +3 CF | **+15** |
+| Average (70 avg) | 70 | 0 | - | **0** |
+| Poor (55 avg) | 55 | -7.5 | - | **-8** |
+| Disaster (32 avg, IMDb=25) | 32 | -15 | -5 Disaster | **-20** |
+
+### Key Design Decisions
+
+1. **70 as baseline**: The average movie scores around 70. Above = positive points, below = negative.
+2. **Accelerated rewards**: 90+ movies get disproportionately more points to reward finding gems.
+3. **Capped penalties**: The -15 floor prevents one terrible movie from destroying a team.
+4. **Bonuses encourage quality**: Certified Fresh and Critical Darling reward consistent excellence.
+5. **Counter-pick ready**: `fantasy_points` is stored separately from raw scores for future features.
 
 ## Architecture
 
@@ -65,8 +103,10 @@ These are combined into a single `combined_score` (0-100 scale) that determines 
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
 │  │  calculate_movie_score(movie_id)                                      │  │
 │  │  - Read IMDb, RT, Metacritic from reviews table                       │  │
-│  │  - Apply weights: IMDb=0.35, RT=0.40, Metacritic=0.25                 │  │
-│  │  - Update movies.combined_score                                       │  │
+│  │  - Calculate weighted average (combined_score)                        │  │
+│  │  - Apply hybrid formula → fantasy_points                              │  │
+│  │  - Check bonuses (CF, Darling, Disaster)                              │  │
+│  │  - Update movies.fantasy_points + scoring_bonuses                     │  │
 │  │  - Trigger recalculate_teams_for_movie()                               │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -96,10 +136,12 @@ Weights can be adjusted in the `calculate_movie_score()` function.
 
 ## Database Schema
 
-### Movies Table (new columns)
+### Movies Table (scoring columns)
 
 ```sql
-ALTER TABLE movies ADD COLUMN combined_score DECIMAL(5, 2);
+ALTER TABLE movies ADD COLUMN combined_score DECIMAL(5, 2);   -- Weighted average (0-100)
+ALTER TABLE movies ADD COLUMN fantasy_points DECIMAL(6, 2);    -- Hybrid formula result (can be negative)
+ALTER TABLE movies ADD COLUMN scoring_bonuses JSONB;           -- { certified_fresh, critical_darling, critical_disaster }
 ALTER TABLE movies ADD COLUMN scores_updated_at TIMESTAMPTZ;
 ```
 
@@ -120,7 +162,7 @@ CREATE TABLE reviews (
 
 ## Score Calculation
 
-### Formula
+### Step 1: Weighted Average (combined_score)
 
 ```
 combined_score = (IMDb * 0.35 + RT * 0.40 + Metacritic * 0.25) / sum_of_available_weights
@@ -135,6 +177,24 @@ If only some sources are available, the weights are normalized:
 | RT + Metacritic | `(rt*0.40 + mc*0.25) / 0.65` |
 | IMDb only | `imdb` (no weighting) |
 
+### Step 2: Fantasy Points (hybrid formula)
+
+```sql
+-- Base points from combined_score
+IF combined_score >= 90 THEN
+    base_pts = 20 + (combined_score - 90) * 2
+ELSIF combined_score >= 70 THEN
+    base_pts = combined_score - 70
+ELSE
+    base_pts = GREATEST((70 - combined_score) * -0.5, -15)  -- Floor at -15
+END IF
+
+-- Apply bonuses
+IF rt >= 75 THEN fantasy_pts += 3                              -- Certified Fresh
+IF imdb >= 80 AND rt >= 80 AND mc >= 80 THEN fantasy_pts += 5  -- Critical Darling
+IF imdb < 40 OR rt < 40 OR mc < 40 THEN fantasy_pts -= 5       -- Critical Disaster
+```
+
 ### Example
 
 Movie: "Inception"
@@ -146,6 +206,10 @@ Movie: "Inception"
 combined_score = (88 * 0.35 + 87 * 0.40 + 74 * 0.25) / 1.0
                = (30.8 + 34.8 + 18.5) / 1.0
                = 84.1
+
+fantasy_points = base_pts + bonuses
+               = (84.1 - 70) + 3     -- 14.1 base + Certified Fresh (RT >= 75)
+               = +17.1
 ```
 
 ## Cron Jobs
