@@ -58,7 +58,7 @@ export default async function TradingPage({ params }: PageProps) {
   // Get all teams in the league for trade partner selection
   const { data: participants } = await supabase
     .from('league_participants')
-    .select(`*, teams (*), profiles (*)`)
+    .select(`*, teams (*)`)
     .eq('league_id', id)
     .eq('status', 'active')
     .neq('user_id', user.id)
