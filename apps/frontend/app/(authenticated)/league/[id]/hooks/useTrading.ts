@@ -45,6 +45,7 @@ interface UseTradingReturn {
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>
   refreshTrades: () => Promise<void>
+  refreshRoster: () => Promise<void>
 }
 
 export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingReturn {
@@ -99,15 +100,17 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
       const movies: TradeableMovie[] = []
 
+      type MovieData = {
+        id: string
+        title: string
+        poster_url: string | null
+        release_date: string | null
+        combined_score: number | null
+      }
+
       if (draftPicks) {
         for (const pick of draftPicks) {
-          const movie = pick.movies as {
-            id: string
-            title: string
-            poster_url: string | null
-            release_date: string | null
-            combined_score: number | null
-          } | null
+          const movie = pick.movies as unknown as MovieData | null
           if (movie) {
             movies.push({
               movie_id: movie.id,
@@ -124,13 +127,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
       if (pickups) {
         for (const pickup of pickups) {
-          const movie = pickup.movies as {
-            id: string
-            title: string
-            poster_url: string | null
-            release_date: string | null
-            combined_score: number | null
-          } | null
+          const movie = pickup.movies as unknown as MovieData | null
           if (movie) {
             movies.push({
               movie_id: movie.id,
@@ -172,7 +169,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     init()
   }, [fetchTrades, fetchTradeableMovies, fetchBudget])
 
-  // Real-time subscription
+  // Real-time subscription for trades
   useEffect(() => {
     const channel = supabase
       .channel(`trades:${leagueId}`)
@@ -184,8 +181,14 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           table: 'trade_offers',
           filter: `league_id=eq.${leagueId}`,
         },
-        () => {
+        (payload) => {
           fetchTrades()
+          // If a trade was completed or accepted, refetch roster to reflect changes
+          const newStatus = (payload.new as { status?: string })?.status
+          if (newStatus === 'completed' || newStatus === 'accepted') {
+            fetchTradeableMovies()
+            fetchBudget()
+          }
         }
       )
       .subscribe()
@@ -193,7 +196,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, leagueId, fetchTrades])
+  }, [supabase, leagueId, fetchTrades, fetchTradeableMovies, fetchBudget])
 
   // Propose a new trade
   const proposeTrade = useCallback(
@@ -268,12 +271,16 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         }
 
         await fetchTrades()
+        // If accepted, roster will change - refresh it
+        if (response === 'accept') {
+          await Promise.all([fetchTradeableMovies(), fetchBudget()])
+        }
         return { success: true }
       } catch (err) {
         return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
       }
     },
-    [supabase.auth, fetchTrades]
+    [supabase.auth, fetchTrades, fetchTradeableMovies, fetchBudget]
   )
 
   // Counter a trade
@@ -391,6 +398,11 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     (t) => t.initiator_team_id === teamId || t.recipient_team_id === teamId
   )
 
+  // Refresh roster manually (useful after trade completion)
+  const refreshRoster = useCallback(async () => {
+    await Promise.all([fetchTradeableMovies(), fetchBudget()])
+  }, [fetchTradeableMovies, fetchBudget])
+
   return {
     trades,
     pendingTrades,
@@ -405,5 +417,6 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     cancelTrade,
     vetoTrade,
     refreshTrades: fetchTrades,
+    refreshRoster,
   }
 }

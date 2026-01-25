@@ -31,6 +31,7 @@ export default function ProposeTradeModal({
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const [recipientMovies, setRecipientMovies] = useState<TradeableMovie[]>([])
   const [recipientBudget, setRecipientBudget] = useState<TeamBudget | null>(null)
+  const [isLoadingRecipient, setIsLoadingRecipient] = useState(false)
 
   // Selected items
   const [offeredMovies, setOfferedMovies] = useState<Set<string>>(new Set())
@@ -49,6 +50,7 @@ export default function ProposeTradeModal({
     if (!selectedTeamId) return
 
     const fetchRecipientMovies = async () => {
+      setIsLoadingRecipient(true)
       try {
         // Fetch draft picks
         const { data: draftPicks } = await supabase
@@ -66,15 +68,17 @@ export default function ProposeTradeModal({
 
         const movies: TradeableMovie[] = []
 
+        type MovieData = {
+          id: string
+          title: string
+          poster_url: string | null
+          release_date: string | null
+          combined_score: number | null
+        }
+
         if (draftPicks) {
           for (const pick of draftPicks) {
-            const movie = pick.movies as {
-              id: string
-              title: string
-              poster_url: string | null
-              release_date: string | null
-              combined_score: number | null
-            } | null
+            const movie = pick.movies as unknown as MovieData | null
             if (movie) {
               movies.push({
                 movie_id: movie.id,
@@ -91,13 +95,7 @@ export default function ProposeTradeModal({
 
         if (pickups) {
           for (const pickup of pickups) {
-            const movie = pickup.movies as {
-              id: string
-              title: string
-              poster_url: string | null
-              release_date: string | null
-              combined_score: number | null
-            } | null
+            const movie = pickup.movies as unknown as MovieData | null
             if (movie) {
               movies.push({
                 movie_id: movie.id,
@@ -124,6 +122,8 @@ export default function ProposeTradeModal({
         setRecipientBudget(budgetData)
       } catch (err) {
         console.error('Error fetching recipient movies:', err)
+      } finally {
+        setIsLoadingRecipient(false)
       }
     }
 
@@ -308,8 +308,8 @@ export default function ProposeTradeModal({
                 <h3 className="text-sm font-medium text-foreground mb-3">
                   You receive ({selectedTeam?.name})
                 </h3>
-                {recipientMovies.length === 0 && !recipientBudget ? (
-                  <p className="text-sm text-foreground-muted">Loading...</p>
+                {isLoadingRecipient ? (
+                  <MovieSelectorSkeleton />
                 ) : (
                   <>
                     <MovieSelector
@@ -374,6 +374,29 @@ export default function ProposeTradeModal({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function MovieSelectorSkeleton() {
+  return (
+    <div className="space-y-2 max-h-48 overflow-y-auto">
+      {[1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="w-full p-2 rounded-lg flex items-center gap-3 bg-surface-hover border border-transparent"
+        >
+          {/* Poster skeleton */}
+          <div className="w-8 h-12 skeleton rounded" />
+          {/* Text skeletons */}
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-4 skeleton rounded w-3/4" />
+            <div className="h-3 skeleton rounded w-1/2" />
+          </div>
+          {/* Checkbox skeleton */}
+          <div className="w-5 h-5 skeleton rounded" />
+        </div>
+      ))}
     </div>
   )
 }

@@ -10,6 +10,7 @@ import type {
   TeamBudget,
 } from '@/types'
 import { formatRelativeDate } from '@/utils/date'
+import AcceptConfirmModal from './AcceptConfirmModal'
 
 interface Props {
   trade: TradeOfferWithTeams
@@ -48,22 +49,24 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   expired: { bg: 'bg-surface-hover', text: 'text-foreground-muted', label: 'Expired' },
 }
 
-export default function TradeOfferCard({
-  trade,
-  currentTeamId,
-  isOwner,
-  otherTeams,
-  tradeableMovies,
-  budget,
-  onRespond,
-  onCounter,
-  onCancel,
-  onVeto,
-}: Props) {
+export default function TradeOfferCard(props: Props) {
+  const {
+    trade,
+    currentTeamId,
+    isOwner,
+    // otherTeams - passed for potential future use
+    tradeableMovies,
+    budget,
+    onRespond,
+    onCounter,
+    onCancel,
+    onVeto,
+  } = props
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCounterModal, setShowCounterModal] = useState(false)
   const [showVetoModal, setShowVetoModal] = useState(false)
+  const [showAcceptModal, setShowAcceptModal] = useState(false)
 
   const isInitiator = trade.initiator_team_id === currentTeamId
   const isRecipient = trade.recipient_team_id === currentTeamId
@@ -195,7 +198,7 @@ export default function TradeOfferCard({
           {canRespond && (
             <>
               <button
-                onClick={() => handleAction('accept')}
+                onClick={() => setShowAcceptModal(true)}
                 disabled={isLoading}
                 className="btn btn-primary"
               >
@@ -270,6 +273,19 @@ export default function TradeOfferCard({
           onVeto={async (reason) => {
             setShowVetoModal(false)
             await handleAction('veto', reason)
+          }}
+        />
+      )}
+
+      {/* Accept Confirmation Modal */}
+      {showAcceptModal && (
+        <AcceptConfirmModal
+          trade={trade}
+          currentTeamId={currentTeamId}
+          onClose={() => setShowAcceptModal(false)}
+          onConfirm={async () => {
+            setShowAcceptModal(false)
+            await handleAction('accept')
           }}
         />
       )}
@@ -375,14 +391,15 @@ interface CounterTradeModalProps {
   ) => Promise<{ success: boolean; error?: string }>
 }
 
-function CounterTradeModal({
-  trade,
-  currentTeamId,
-  tradeableMovies,
-  budget,
-  onClose,
-  onCounter,
-}: CounterTradeModalProps) {
+function CounterTradeModal(counterProps: CounterTradeModalProps) {
+  const {
+    trade,
+    // currentTeamId - passed for potential future use
+    tradeableMovies,
+    budget,
+    onClose,
+    onCounter,
+  } = counterProps
   // In a counter, the recipient becomes the new initiator
   // They offer items (what they give) and request items (what they want)
   const existingInitiatorItems = trade.initiator_items as TradeItems
