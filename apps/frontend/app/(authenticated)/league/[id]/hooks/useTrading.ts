@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import type { Session } from '@supabase/supabase-js'
 import { createClient } from '@/utils/supabase/client'
 import type {
   TradeItems,
@@ -57,14 +58,37 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
   const supabase = useMemo(() => createClient(), [])
 
+  // Cache auth session to avoid redundant getSession() calls (client-swr-dedup optimization)
+  const sessionRef = useRef<Session | null>(null)
+
+  const getSession = useCallback(async (): Promise<Session | null> => {
+    if (!sessionRef.current) {
+      const { data: { session } } = await supabase.auth.getSession()
+      sessionRef.current = session
+    }
+    return sessionRef.current
+  }, [supabase])
+
+  // Clear session cache on auth state change
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      sessionRef.current = session
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase])
+
   // Fetch trades
   const fetchTrades = useCallback(async () => {
     try {
+      const session = await getSession()
       const response = await fetch(
         `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/get-trades?league_id=${leagueId}`,
         {
           headers: {
-            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+            Authorization: `Bearer ${session?.access_token}`,
           },
         }
       )
@@ -79,7 +103,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       console.error('Error fetching trades:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch trades')
     }
-  }, [leagueId, supabase.auth])
+  }, [leagueId, getSession])
 
   // Fetch tradeable movies (team's roster)
   const fetchTradeableMovies = useCallback(async () => {
@@ -207,13 +231,14 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       message?: string
     ): Promise<{ success: boolean; error?: string }> => {
       try {
+        const session = await getSession()
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/propose-trade`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              Authorization: `Bearer ${session?.access_token}`,
             },
             body: JSON.stringify({
               league_id: leagueId,
@@ -237,7 +262,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
       }
     },
-    [supabase.auth, leagueId, fetchTrades]
+    [getSession, leagueId, fetchTrades]
   )
 
   // Respond to a trade (accept/reject)
@@ -248,13 +273,14 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       message?: string
     ): Promise<{ success: boolean; error?: string }> => {
       try {
+        const session = await getSession()
         const res = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/respond-trade`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              Authorization: `Bearer ${session?.access_token}`,
             },
             body: JSON.stringify({
               trade_offer_id: tradeOfferId,
@@ -280,7 +306,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
       }
     },
-    [supabase.auth, fetchTrades, fetchTradeableMovies, fetchBudget]
+    [getSession, fetchTrades, fetchTradeableMovies, fetchBudget]
   )
 
   // Counter a trade
@@ -292,13 +318,14 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       message?: string
     ): Promise<{ success: boolean; error?: string }> => {
       try {
+        const session = await getSession()
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/counter-trade`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              Authorization: `Bearer ${session?.access_token}`,
             },
             body: JSON.stringify({
               trade_offer_id: tradeOfferId,
@@ -321,20 +348,21 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
       }
     },
-    [supabase.auth, fetchTrades]
+    [getSession, fetchTrades]
   )
 
   // Cancel a trade
   const cancelTrade = useCallback(
     async (tradeOfferId: string): Promise<{ success: boolean; error?: string }> => {
       try {
+        const session = await getSession()
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cancel-trade`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              Authorization: `Bearer ${session?.access_token}`,
             },
             body: JSON.stringify({ trade_offer_id: tradeOfferId }),
           }
@@ -352,7 +380,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
       }
     },
-    [supabase.auth, fetchTrades]
+    [getSession, fetchTrades]
   )
 
   // Veto a trade (commissioner only)
@@ -362,13 +390,14 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       reason?: string
     ): Promise<{ success: boolean; error?: string }> => {
       try {
+        const session = await getSession()
         const response = await fetch(
           `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/veto-trade`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+              Authorization: `Bearer ${session?.access_token}`,
             },
             body: JSON.stringify({ trade_offer_id: tradeOfferId, reason }),
           }
@@ -386,7 +415,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
       }
     },
-    [supabase.auth, fetchTrades]
+    [getSession, fetchTrades]
   )
 
   // Computed values

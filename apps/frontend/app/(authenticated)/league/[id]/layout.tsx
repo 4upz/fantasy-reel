@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import type { League } from '@/types'
 import LeagueTabs from './components/LeagueTabs'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
+import { getCachedUser } from '@/utils/supabase/cached'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -13,12 +14,12 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { user } } = await getCachedUser()
   if (!user) {
     redirect('/login')
   }
 
-  // Fetch the league
+  // Fetch the league first (required for validation)
   const { data: league, error: leagueError } = await supabase
     .from('leagues')
     .select('*')
@@ -29,25 +30,27 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
     notFound()
   }
 
-  // Check if user is a participant
-  const { data: userParticipant } = await supabase
-    .from('league_participants')
-    .select('id')
-    .eq('league_id', id)
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .single()
+  // Parallelize participant check and count queries (async-parallel optimization)
+  const [userParticipantResult, participantCountResult] = await Promise.all([
+    supabase
+      .from('league_participants')
+      .select('id')
+      .eq('league_id', id)
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single(),
+    supabase
+      .from('league_participants')
+      .select('*', { count: 'exact', head: true })
+      .eq('league_id', id)
+      .eq('status', 'active'),
+  ])
 
-  if (!userParticipant) {
+  if (!userParticipantResult.data) {
     redirect('/dashboard')
   }
 
-  // Get participant count
-  const { count: participantCount } = await supabase
-    .from('league_participants')
-    .select('*', { count: 'exact', head: true })
-    .eq('league_id', id)
-    .eq('status', 'active')
+  const participantCount = participantCountResult.count
 
   const isOwner = league.owner_id === user.id
   const typedLeague = league as League

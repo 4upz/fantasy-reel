@@ -1,15 +1,20 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League, ParticipantWithTeam, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard from '../components/DraftBoard'
 import InvitationsList from '../components/InvitationsList'
-import InviteModal from '../components/InviteModal'
 import ParticipantsList from '../components/ParticipantsList'
 import { SpinnerIcon } from '../components/Icons'
+
+// Dynamic import for code splitting (bundle-dynamic-imports optimization)
+const InviteModal = dynamic(() => import('../components/InviteModal'), {
+  loading: () => <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4"><div className="animate-pulse h-64 w-full max-w-md bg-surface rounded-lg" /></div>,
+})
 
 const MAX_RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 2000

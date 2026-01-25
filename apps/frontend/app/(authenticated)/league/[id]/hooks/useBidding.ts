@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { PickupBid, TeamBudget } from '@/types'
@@ -27,7 +27,8 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const supabase = useMemo(() => createClient(), [])
 
   const fetchBids = useCallback(async () => {
     const { data, error: fetchError } = await supabase
@@ -128,7 +129,8 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
     return { success: true }
   }, [refetch])
 
-  const myBids = bids.filter(bid => bid.team_id === teamId)
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const myBids = useMemo(() => bids.filter(bid => bid.team_id === teamId), [bids, teamId])
 
   return {
     bids,

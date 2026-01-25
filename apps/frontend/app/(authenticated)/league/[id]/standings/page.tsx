@@ -51,27 +51,47 @@ export default async function StandingsPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  // Fetch participants with teams and team_scores
-  const { data: participants } = await supabase
-    .from('league_participants')
-    .select(
-      `
-      *,
-      teams (
+  // Parallelize independent queries (async-parallel optimization)
+  const [participantsResult, draftPicksResult] = await Promise.all([
+    supabase
+      .from('league_participants')
+      .select(
+        `
         *,
-        team_scores (*)
+        teams (
+          *,
+          team_scores (*)
+        )
+      `
       )
-    `
-    )
-    .eq('league_id', id)
-    .eq('status', 'active')
-    .order('draft_order', { ascending: true })
+      .eq('league_id', id)
+      .eq('status', 'active')
+      .order('draft_order', { ascending: true }),
+    supabase
+      .from('draft_picks')
+      .select(
+        `
+        *,
+        movies (
+          *,
+          reviews (*)
+        )
+      `
+      )
+      .eq('league_id', id)
+      .order('round', { ascending: true })
+      .order('pick_number', { ascending: true }),
+  ])
+
+  const { data: participants } = participantsResult
+  const { data: draftPicks } = draftPicksResult
 
   // Fetch profiles separately (no direct FK from league_participants)
   const userIds = (participants ?? []).map((p) => p.user_id)
-  const { data: profiles } = userIds.length > 0
-    ? await supabase.from('profiles').select('*').in('user_id', userIds)
-    : { data: [] }
+  const { data: profiles } =
+    userIds.length > 0
+      ? await supabase.from('profiles').select('*').in('user_id', userIds)
+      : { data: [] }
 
   // Build profile lookup map for O(1) access
   const profilesByUserId = new Map(
@@ -83,22 +103,6 @@ export default async function StandingsPage({ params }: PageProps) {
     ...p,
     profiles: profilesByUserId.get(p.user_id) ?? null,
   }))
-
-  // Fetch draft picks with movies and reviews
-  const { data: draftPicks } = await supabase
-    .from('draft_picks')
-    .select(
-      `
-      *,
-      movies (
-        *,
-        reviews (*)
-      )
-    `
-    )
-    .eq('league_id', id)
-    .order('round', { ascending: true })
-    .order('pick_number', { ascending: true })
 
   return (
     <StandingsClient

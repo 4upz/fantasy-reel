@@ -1,11 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/utils/supabase/client'
 import type { League } from '@/types'
-import CreateLeagueModal from './CreateLeagueModal'
 import FeaturedLeagueCard from './FeaturedLeagueCard'
 import LeagueListItem from './LeagueListItem'
+
+// Dynamic import for code splitting (bundle-dynamic-imports optimization)
+const CreateLeagueModal = dynamic(() => import('./CreateLeagueModal'), {
+  loading: () => <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4"><div className="animate-pulse h-96 w-full max-w-lg bg-surface rounded-lg" /></div>,
+})
 
 interface Props {
   showCreateModal: boolean

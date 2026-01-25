@@ -40,28 +40,31 @@ export default async function DraftPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
-  // Fetch participants with their teams
-  const { data: participants } = await supabase
-    .from('league_participants')
-    .select(`*, teams (*)`)
-    .eq('league_id', id)
-    .eq('status', 'active')
-    .order('draft_order', { ascending: true })
+  // Parallelize independent queries (async-parallel optimization)
+  const [participantsResult, draftPicksResult, counterpicksResult] =
+    await Promise.all([
+      supabase
+        .from('league_participants')
+        .select(`*, teams (*)`)
+        .eq('league_id', id)
+        .eq('status', 'active')
+        .order('draft_order', { ascending: true }),
+      supabase
+        .from('draft_picks')
+        .select(`*, movies (*), teams (*)`)
+        .eq('league_id', id)
+        .order('round', { ascending: true })
+        .order('pick_number', { ascending: true }),
+      supabase
+        .from('counterpicks')
+        .select('*, movies (*)')
+        .eq('league_id', id)
+        .order('pick_order', { ascending: true }),
+    ])
 
-  // Fetch draft picks with movie and team info
-  const { data: draftPicks } = await supabase
-    .from('draft_picks')
-    .select(`*, movies (*), teams (*)`)
-    .eq('league_id', id)
-    .order('round', { ascending: true })
-    .order('pick_number', { ascending: true })
-
-  // Fetch counterpicks with movie data
-  const { data: counterpicks } = await supabase
-    .from('counterpicks')
-    .select('*, movies (*)')
-    .eq('league_id', id)
-    .order('pick_order', { ascending: true })
+  const { data: participants } = participantsResult
+  const { data: draftPicks } = draftPicksResult
+  const { data: counterpicks } = counterpicksResult
 
   const isOwner = league.owner_id === user.id
 

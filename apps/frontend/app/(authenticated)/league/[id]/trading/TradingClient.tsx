@@ -1,10 +1,15 @@
 'use client'
 
 import { useState } from 'react'
-import type { League, Team } from '@/types'
+import dynamic from 'next/dynamic'
+import type { League, Team, TradeItems } from '@/types'
 import { useTrading } from '../hooks/useTrading'
 import TradingPanel from '../components/TradingPanel'
-import ProposeTradeModal from '../components/ProposeTradeModal'
+
+// Dynamic import for code splitting (bundle-dynamic-imports optimization)
+const ProposeTradeModal = dynamic(() => import('../components/ProposeTradeModal'), {
+  loading: () => <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60" /><div className="relative animate-pulse h-[90vh] max-w-2xl w-full bg-surface rounded-lg" /></div>,
+})
 
 interface Props {
   league: League
@@ -76,7 +81,7 @@ export default function TradingClient({ league, team, otherTeams, isOwner }: Pro
           tradeableMovies={tradeableMovies}
           budget={budget}
           onClose={() => setShowProposeModal(false)}
-          onPropose={async (recipientTeamId, offeredItems, requestedItems, message) => {
+          onPropose={async (recipientTeamId: string, offeredItems: TradeItems, requestedItems: TradeItems, message?: string) => {
             const result = await proposeTrade(recipientTeamId, offeredItems, requestedItems, message)
             if (result.success) {
               setShowProposeModal(false)

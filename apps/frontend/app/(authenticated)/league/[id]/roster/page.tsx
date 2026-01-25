@@ -44,32 +44,29 @@ export default async function RosterPage({ params }: RosterPageProps) {
 
   const team = participant.teams as unknown as { id: string; name: string }
 
-  // Fetch draft picks (excluding dropped ones)
-  const { data: draftPicks } = await supabase
-    .from('draft_picks')
-    .select('*, movies(*)')
-    .eq('team_id', team.id)
-    .is('dropped_at', null)
-    .order('pick_number', { ascending: true })
+  // Parallelize independent queries (async-parallel optimization)
+  const [draftPicksResult, pickupsResult, budgetResult, dropCountResult] =
+    await Promise.all([
+      supabase
+        .from('draft_picks')
+        .select('*, movies(*)')
+        .eq('team_id', team.id)
+        .is('dropped_at', null)
+        .order('pick_number', { ascending: true }),
+      supabase
+        .from('pickups')
+        .select('*, movies(*)')
+        .eq('team_id', team.id)
+        .is('dropped_at', null)
+        .order('picked_up_at', { ascending: true }),
+      supabase.from('team_budgets').select('*').eq('team_id', team.id).single(),
+      supabase.rpc('get_team_drop_count', { p_team_id: team.id }),
+    ])
 
-  // Fetch pickups
-  const { data: pickups } = await supabase
-    .from('pickups')
-    .select('*, movies(*)')
-    .eq('team_id', team.id)
-    .is('dropped_at', null)
-    .order('picked_up_at', { ascending: true })
-
-  // Fetch team budget
-  const { data: budget } = await supabase
-    .from('team_budgets')
-    .select('*')
-    .eq('team_id', team.id)
-    .single()
-
-  // Fetch drop count
-  const { data: dropCount } = await supabase
-    .rpc('get_team_drop_count', { p_team_id: team.id })
+  const { data: draftPicks } = draftPicksResult
+  const { data: pickups } = pickupsResult
+  const { data: budget } = budgetResult
+  const { data: dropCount } = dropCountResult
 
   return (
     <RosterClient

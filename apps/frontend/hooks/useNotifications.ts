@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import type { Notification } from '@/types'
 
@@ -19,7 +19,8 @@ export function useNotifications(): UseNotificationsReturn {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const supabase = useMemo(() => createClient(), [])
 
   const fetchNotifications = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser()
@@ -79,7 +80,8 @@ export function useNotifications(): UseNotificationsReturn {
     }
   }, [supabase, notifications])
 
-  const unreadCount = notifications.filter(n => !n.read_at).length
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read_at).length, [notifications])
 
   return {
     notifications,

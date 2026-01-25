@@ -37,15 +37,24 @@ export default async function TradingPage({ params }: PageProps) {
     redirect(`/league/${id}/dashboard`)
   }
 
-  // Get user's team
-  const { data: participant } = await supabase
-    .from('league_participants')
-    .select(`*, teams (*)`)
-    .eq('league_id', id)
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .single()
+  // Parallelize independent queries (async-parallel optimization)
+  const [participantResult, otherParticipantsResult] = await Promise.all([
+    supabase
+      .from('league_participants')
+      .select(`*, teams (*)`)
+      .eq('league_id', id)
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single(),
+    supabase
+      .from('league_participants')
+      .select(`*, teams (*)`)
+      .eq('league_id', id)
+      .eq('status', 'active')
+      .neq('user_id', user.id),
+  ])
 
+  const { data: participant } = participantResult
   if (!participant) {
     redirect('/dashboard')
   }
@@ -55,13 +64,7 @@ export default async function TradingPage({ params }: PageProps) {
     redirect(`/league/${id}`)
   }
 
-  // Get all teams in the league for trade partner selection
-  const { data: participants } = await supabase
-    .from('league_participants')
-    .select(`*, teams (*)`)
-    .eq('league_id', id)
-    .eq('status', 'active')
-    .neq('user_id', user.id)
+  const { data: participants } = otherParticipantsResult
 
   const otherTeams = (participants || [])
     .filter((p): p is ParticipantWithTeam & { teams: Team } => p.teams !== null)

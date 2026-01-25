@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
 import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
@@ -80,32 +80,25 @@ export default function MoviePicker({
     [loading, loadingMore, loadMore]
   )
 
-  // Apply tab-specific filtering
-  const getFilteredMovies = useCallback(() => {
-    let result = movies
-
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const filteredMovies = useMemo(() => {
     switch (activeTab) {
       case 'trending':
-        result = result.filter((m) => (m.popularity || 0) >= 50)
-        break
+        return movies.filter((m) => (m.popularity || 0) >= 50)
       case 'releasing-soon':
-        result = result.filter((m) => {
+        return movies.filter((m) => {
           if (!m.release_date) return false
           const releaseDate = new Date(m.release_date)
           const now = new Date()
           const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
           return releaseDate >= now && releaseDate <= thirtyDaysFromNow
         })
-        break
       case 'favorites':
-        result = result.filter((m) => favoriteMovieIds.has(m.tmdb_id))
-        break
+        return movies.filter((m) => favoriteMovieIds.has(m.tmdb_id))
+      default:
+        return movies
     }
-
-    return result
   }, [movies, activeTab, favoriteMovieIds])
-
-  const filteredMovies = getFilteredMovies()
 
   // Handle filter changes - hook handles debouncing
   const handleFiltersChange = useCallback(

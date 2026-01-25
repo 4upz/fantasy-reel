@@ -1,11 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
+import dynamic from 'next/dynamic'
 import { Plus, TrendingUp, AlertCircle, Film, Sparkles } from 'lucide-react'
 import { toast } from 'sonner'
 import type { League, PickupBid, TeamBudget } from '@/types'
 import BidCard from './BidCard'
-import PlaceBidModal from './PlaceBidModal'
+
+// Dynamic import for code splitting (bundle-dynamic-imports optimization)
+const PlaceBidModal = dynamic(() => import('./PlaceBidModal'), {
+  loading: () => <div className="modal-overlay"><div className="animate-pulse h-[85vh] max-w-2xl w-full mx-4 bg-surface rounded-2xl" /></div>,
+})
 
 interface BidSectionProps {
   title: string
@@ -88,30 +93,31 @@ export default function BiddingPanel({
   const availableSlots = pickupSlots - usedPickupSlots
   const remainingBudget = budget?.remaining_budget ?? 100
 
-  const handleCancelBid = async (bidId: string) => {
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const handleCancelBid = useCallback(async (bidId: string) => {
     const { success, error } = await onCancelBid(bidId)
     if (success) {
       toast.success('Bid cancelled')
     } else {
       toast.error(error || 'Failed to cancel bid')
     }
-  }
+  }, [onCancelBid])
 
-  const handleCounter = (bid: PickupBid) => {
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const handleCounter = useCallback((bid: PickupBid) => {
     setCounterBidTarget(bid)
     setIsModalOpen(true)
-  }
+  }, [])
 
-  // Separate outbid (urgent) from active bids
-  const outbidBids = myBids.filter(b => b.status === 'outbid')
-  const activeBids = myBids.filter(b => b.status === 'active')
-
-  // Other teams' active bids (for visibility)
-  const otherBids = bids.filter(b => b.team_id !== teamId && b.status === 'active')
-
-  // Calculate total pending bid amount
-  const totalPendingBids = activeBids.reduce((sum, b) => sum + b.amount, 0) +
-    outbidBids.reduce((sum, b) => sum + b.amount, 0)
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  const { outbidBids, activeBids, otherBids, totalPendingBids } = useMemo(() => {
+    const outbid = myBids.filter(b => b.status === 'outbid')
+    const active = myBids.filter(b => b.status === 'active')
+    const other = bids.filter(b => b.team_id !== teamId && b.status === 'active')
+    const totalPending = active.reduce((sum, b) => sum + b.amount, 0) +
+      outbid.reduce((sum, b) => sum + b.amount, 0)
+    return { outbidBids: outbid, activeBids: active, otherBids: other, totalPendingBids: totalPending }
+  }, [myBids, bids, teamId])
 
   return (
     <div className="space-y-6">

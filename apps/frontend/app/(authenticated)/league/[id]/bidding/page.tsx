@@ -32,15 +32,19 @@ export default async function BiddingPage({ params }: PageProps) {
     redirect(`/league/${id}`)
   }
 
-  // Get user's team
-  const { data: participant } = await supabase
-    .from('league_participants')
-    .select(`*, teams (*)`)
-    .eq('league_id', id)
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .single()
+  // Parallelize independent queries (async-parallel optimization)
+  const [participantResult, draftPicksResult] = await Promise.all([
+    supabase
+      .from('league_participants')
+      .select(`*, teams (*)`)
+      .eq('league_id', id)
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single(),
+    supabase.from('draft_picks').select(`*, movies (tmdb_id)`).eq('league_id', id),
+  ])
 
+  const { data: participant } = participantResult
   if (!participant) {
     redirect('/dashboard')
   }
@@ -50,11 +54,7 @@ export default async function BiddingPage({ params }: PageProps) {
     redirect(`/league/${id}`)
   }
 
-  // Fetch draft picks for drafted tmdb_ids
-  const { data: draftPicks } = await supabase
-    .from('draft_picks')
-    .select(`*, movies (tmdb_id)`)
-    .eq('league_id', id)
+  const { data: draftPicks } = draftPicksResult
 
   const draftedTmdbIds = (draftPicks || [])
     .map((p) => p.movies?.tmdb_id)

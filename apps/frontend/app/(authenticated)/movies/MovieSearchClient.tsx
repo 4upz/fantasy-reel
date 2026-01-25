@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import { Clapperboard, Search } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
@@ -12,7 +13,11 @@ import MovieSearchBar from './components/MovieSearchBar'
 import MovieFilters from './components/MovieFilters'
 import MovieGrid from './components/MovieGrid'
 import MovieGridSkeleton from './components/MovieGridSkeleton'
-import MovieDetailModal from './components/MovieDetailModal'
+
+// Dynamic import for code splitting (bundle-dynamic-imports optimization)
+const MovieDetailModal = dynamic(() => import('./components/MovieDetailModal'), {
+  loading: () => <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"><div className="fixed inset-0 bg-black/85" /><div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-pulse h-[600px] bg-surface rounded-lg" /></div>,
+})
 
 export default function MovieSearchClient(): React.ReactElement {
   // Input state (controlled by both search bars)

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import Image from 'next/image'
 import { Flame, Calendar, CheckCircle2 } from 'lucide-react'
 import type { MovieTimelineItem, League } from '@/types'
@@ -187,6 +188,30 @@ function Section({ title, icon, count, children, variant = 'default' }: SectionP
 }
 
 export default function MovieGrid({ movies, leagueStatus }: Props) {
+  // Memoize to prevent re-renders (rerender-memo optimization)
+  // Must be called before any early returns to satisfy React hooks rules
+  const { releasingSoon, upcoming, scored } = useMemo(() => {
+    if (movies.length === 0) {
+      return { releasingSoon: [], upcoming: [], scored: [] }
+    }
+
+    const sortByDate = (a: MovieTimelineItem, b: MovieTimelineItem) => {
+      if (!a.release_date) return 1
+      if (!b.release_date) return -1
+      return new Date(a.release_date).getTime() - new Date(b.release_date).getTime()
+    }
+
+    const sortByScore = (a: MovieTimelineItem, b: MovieTimelineItem) => {
+      return (b.fantasy_points || 0) - (a.fantasy_points || 0)
+    }
+
+    const releasing = movies.filter((m) => m.status === 'releasing_soon').sort(sortByDate)
+    const upcomingMovies = movies.filter((m) => m.status === 'upcoming').sort(sortByDate)
+    const scoredMovies = movies.filter((m) => m.status === 'scored').sort(sortByScore)
+
+    return { releasingSoon: releasing, upcoming: upcomingMovies, scored: scoredMovies }
+  }, [movies])
+
   // Empty state for setup phase
   if (leagueStatus === 'setup') {
     return (
@@ -218,26 +243,6 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
       </div>
     )
   }
-
-  // Group movies by status
-  const releasingSoon = movies.filter((m) => m.status === 'releasing_soon')
-  const upcoming = movies.filter((m) => m.status === 'upcoming')
-  const scored = movies.filter((m) => m.status === 'scored')
-
-  // Sort each group
-  const sortByDate = (a: MovieTimelineItem, b: MovieTimelineItem) => {
-    if (!a.release_date) return 1
-    if (!b.release_date) return -1
-    return new Date(a.release_date).getTime() - new Date(b.release_date).getTime()
-  }
-
-  const sortByScore = (a: MovieTimelineItem, b: MovieTimelineItem) => {
-    return (b.fantasy_points || 0) - (a.fantasy_points || 0)
-  }
-
-  releasingSoon.sort(sortByDate)
-  upcoming.sort(sortByDate)
-  scored.sort(sortByScore)
 
   return (
     <div className="space-y-8">
