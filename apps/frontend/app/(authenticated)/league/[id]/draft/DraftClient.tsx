@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, Counterpick } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard from '../components/DraftBoard'
 import InvitationsList from '../components/InvitationsList'
 import InviteModal from '../components/InviteModal'
@@ -18,7 +18,7 @@ interface Props {
   league: League
   participants: ParticipantWithTeam[]
   draftPicks: DraftPickWithDetails[]
-  counterpicks: Counterpick[]
+  counterpicks: CounterpickWithDetails[]
   currentUserId: string
   isOwner: boolean
 }
@@ -99,12 +99,12 @@ export default function DraftClient({
   const fetchCounterpicks = useCallback(async () => {
     const { data } = await supabase
       .from('counterpicks')
-      .select('*')
+      .select('*, movies (*)')
       .eq('league_id', league.id)
       .order('pick_order', { ascending: true })
 
     if (data) {
-      setCounterpicks(data as Counterpick[])
+      setCounterpicks(data as CounterpickWithDetails[])
     }
   }, [supabase, league.id])
 

@@ -8,13 +8,13 @@ import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
 import CounterpickRound from './CounterpickRound'
 import { ClapperboardIcon, ArrowUpIcon, ClockIcon } from './Icons'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, Counterpick } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, CounterpickWithDetails } from '@/types'
 
 interface Props {
   league: League
   participants: ParticipantWithTeam[]
   draftPicks: DraftPickWithDetails[]
-  counterpicks: Counterpick[]
+  counterpicks: CounterpickWithDetails[]
   currentUserId: string
   favoriteMovieIds?: Set<number>
   onPickMade: () => void
