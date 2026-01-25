@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
 import { CloseIcon, StarIcon, HeartIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
@@ -75,10 +76,12 @@ export default function MovieQuickPreview({
           {/* Backdrop Image */}
           {details?.backdrop_url ? (
             <div className="relative h-40 sm:h-56 overflow-hidden">
-              <img
+              <Image
                 src={details.backdrop_url}
                 alt=""
-                className="w-full h-full object-cover opacity-50"
+                fill
+                sizes="(max-width: 768px) 100vw, 768px"
+                className="object-cover opacity-50"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/60 to-transparent" />
             </div>
@@ -101,11 +104,15 @@ export default function MovieQuickPreview({
               <div className="flex-shrink-0 mx-auto sm:mx-0">
                 <div className="relative w-36 sm:w-44 rounded-xl overflow-hidden shadow-heavy border border-border">
                   {displayData.poster_url ? (
-                    <img
-                      src={displayData.poster_url}
-                      alt={displayData.title}
-                      className="w-full aspect-[2/3] object-cover"
-                    />
+                    <div className="relative w-full aspect-[2/3]">
+                      <Image
+                        src={displayData.poster_url}
+                        alt={displayData.title}
+                        fill
+                        sizes="176px"
+                        className="object-cover"
+                      />
+                    </div>
                   ) : (
                     <div className="w-full aspect-[2/3] bg-elevated flex items-center justify-center">
                       <ClapperboardIcon className="w-12 h-12 text-foreground-muted" />
@@ -225,12 +232,14 @@ export default function MovieQuickPreview({
                   <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2">
                     {details.cast.slice(0, 6).map((actor) => (
                       <div key={actor.id} className="flex-shrink-0 text-center w-16">
-                        <div className="w-14 h-14 mx-auto rounded-full overflow-hidden bg-elevated border border-border">
+                        <div className="w-14 h-14 mx-auto rounded-full overflow-hidden bg-elevated border border-border relative">
                           {actor.profile_url ? (
-                            <img
+                            <Image
                               src={actor.profile_url}
                               alt={actor.name}
-                              className="w-full h-full object-cover"
+                              fill
+                              sizes="56px"
+                              className="object-cover"
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-foreground-muted">

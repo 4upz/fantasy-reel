@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
 import { StarIcon, HeartIcon, CheckIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
@@ -59,11 +60,13 @@ export default function DraftMovieCard({
 
         {/* Poster Image */}
         {movie.poster_url && !imageError ? (
-          <img
+          <Image
             src={movie.poster_url}
             alt={movie.title}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
             className={cn(
-              'w-full h-full object-cover transition-opacity duration-300',
+              'object-cover transition-opacity duration-300',
               imageLoaded ? 'opacity-100' : 'opacity-0'
             )}
             onLoad={() => setImageLoaded(true)}

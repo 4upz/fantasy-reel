@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import type { CounterpickOption } from '@/types'
@@ -201,11 +202,15 @@ export default function CounterpickPicker({
               {/* Selected movie preview */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {selectedOption.poster_url ? (
-                  <img
-                    src={selectedOption.poster_url}
-                    alt={selectedOption.movie_title}
-                    className="w-12 h-16 object-cover rounded-lg border border-border"
-                  />
+                  <div className="relative w-12 h-16 rounded-lg overflow-hidden border border-border">
+                    <Image
+                      src={selectedOption.poster_url}
+                      alt={selectedOption.movie_title}
+                      fill
+                      sizes="48px"
+                      className="object-cover"
+                    />
+                  </div>
                 ) : (
                   <div className="w-12 h-16 bg-elevated rounded-lg border border-border flex items-center justify-center">
                     <ClapperboardIcon className="w-5 h-5 text-foreground-muted" />
@@ -295,10 +300,12 @@ function CounterpickMovieCard({
       {/* Poster */}
       <div className="aspect-[2/3] relative bg-elevated">
         {option.poster_url ? (
-          <img
+          <Image
             src={option.poster_url}
             alt={option.movie_title}
-            className="w-full h-full object-cover"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+            className="object-cover"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">

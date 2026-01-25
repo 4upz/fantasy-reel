@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef } from 'react'
+import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
 import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
 import DraftFilters from './DraftFilters'
@@ -291,11 +292,15 @@ export default function MoviePicker({
               {/* Selected movie preview */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {selectedMovie.poster_url && (
-                  <img
-                    src={selectedMovie.poster_url}
-                    alt={selectedMovie.title}
-                    className="w-12 h-18 object-cover rounded-lg border border-border"
-                  />
+                  <div className="relative w-12 h-18 rounded-lg overflow-hidden border border-border">
+                    <Image
+                      src={selectedMovie.poster_url}
+                      alt={selectedMovie.title}
+                      fill
+                      sizes="48px"
+                      className="object-cover"
+                    />
+                  </div>
                 )}
                 <div className="min-w-0">
                   <p className="font-semibold text-foreground truncate">{selectedMovie.title}</p>

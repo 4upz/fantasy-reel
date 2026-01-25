@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { Clapperboard } from 'lucide-react'
 import type { TMDbSearchResult } from '@/types'
 import { getReleaseYear } from '@/utils/date'
@@ -22,11 +23,12 @@ export default function MovieCard({ movie, onClick, index }: Props) {
       {/* Poster container with aspect ratio */}
       <div className="relative aspect-[2/3] overflow-hidden bg-elevated">
         {movie.poster_url ? (
-          <img
+          <Image
             src={movie.poster_url}
             alt={movie.title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted">

@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import type { UserSearchResult } from '@/hooks/useUserSearch'
 
 interface UserAvatarProps {
@@ -11,14 +12,20 @@ interface UserAvatarProps {
 function UserAvatar({ avatarUrl, displayName, size = 'md' }: UserAvatarProps): React.ReactElement {
   const initial = displayName?.charAt(0).toUpperCase() || 'U'
   const sizeClasses = size === 'sm' ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'
+  const imageSize = size === 'sm' ? 24 : 32
 
   if (avatarUrl) {
     return (
-      <img
-        src={avatarUrl}
-        alt={displayName}
-        className={`${sizeClasses} rounded-full object-cover border border-border`}
-      />
+      <div className={`${sizeClasses} relative rounded-full overflow-hidden border border-border`}>
+        <Image
+          src={avatarUrl}
+          alt={displayName}
+          width={imageSize}
+          height={imageSize}
+          className="object-cover"
+          unoptimized
+        />
+      </div>
     )
   }
 

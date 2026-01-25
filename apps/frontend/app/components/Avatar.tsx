@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 interface Props {
   src: string | null | undefined
   name: string
@@ -13,17 +15,29 @@ const sizeClasses = {
   lg: 'w-24 h-24 text-3xl',
 } as const
 
+const imageSizes = {
+  sm: 32,
+  md: 36,
+  lg: 96,
+} as const
+
 export default function Avatar({ src, name, size = 'md', className = '' }: Props): React.ReactElement {
   const initial = name.charAt(0).toUpperCase()
   const sizeClass = sizeClasses[size]
+  const imageSize = imageSizes[size]
 
   if (src) {
     return (
-      <img
-        src={src}
-        alt={name}
-        className={`${sizeClass} rounded-full object-cover border-2 border-gold ${className}`}
-      />
+      <div className={`${sizeClass} relative rounded-full overflow-hidden border-2 border-gold ${className}`}>
+        <Image
+          src={src}
+          alt={name}
+          width={imageSize}
+          height={imageSize}
+          className="object-cover"
+          unoptimized
+        />
+      </div>
     )
   }
 

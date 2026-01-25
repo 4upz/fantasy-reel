@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import Image from 'next/image'
 import { Clapperboard, X, Clock, User, ExternalLink } from 'lucide-react'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
 import { getReleaseYear, formatRuntime } from '@/utils/date'
@@ -47,10 +48,12 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
           {/* Backdrop image */}
           {details?.backdrop_url && (
             <div className="relative h-48 sm:h-64 overflow-hidden">
-              <img
+              <Image
                 src={details.backdrop_url}
                 alt=""
-                className="w-full h-full object-cover opacity-40"
+                fill
+                sizes="(max-width: 1024px) 100vw, 1024px"
+                className="object-cover opacity-40"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/50 to-transparent" />
             </div>
@@ -72,11 +75,15 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
               <div className="flex-shrink-0 mx-auto sm:mx-0">
                 <div className="relative w-40 sm:w-48 rounded-lg overflow-hidden shadow-heavy border border-border">
                   {displayData.poster_url ? (
-                    <img
-                      src={displayData.poster_url}
-                      alt={displayData.title}
-                      className="w-full aspect-[2/3] object-cover"
-                    />
+                    <div className="relative w-full aspect-[2/3]">
+                      <Image
+                        src={displayData.poster_url}
+                        alt={displayData.title}
+                        fill
+                        sizes="192px"
+                        className="object-cover"
+                      />
+                    </div>
                   ) : (
                     <div className="w-full aspect-[2/3] bg-elevated flex items-center justify-center">
                       <Clapperboard className="w-16 h-16 text-foreground-muted" />
@@ -183,12 +190,14 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
                   {details.cast.map((actor) => (
                     <div key={actor.id} className="text-center">
-                      <div className="w-16 h-16 mx-auto rounded-full overflow-hidden bg-elevated border border-border">
+                      <div className="w-16 h-16 mx-auto rounded-full overflow-hidden bg-elevated border border-border relative">
                         {actor.profile_url ? (
-                          <img
+                          <Image
                             src={actor.profile_url}
                             alt={actor.name}
-                            className="w-full h-full object-cover"
+                            fill
+                            sizes="64px"
+                            className="object-cover"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-foreground-muted">

@@ -6,7 +6,7 @@ import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import CounterpickPicker from './CounterpickPicker'
 import DraftProgressRing from './DraftProgressRing'
-import { SpinnerIcon, ClockIcon, ArrowUpIcon, ClapperboardIcon, CheckIcon } from './Icons'
+import { SpinnerIcon, ClockIcon, ArrowUpIcon, CheckIcon } from './Icons'
 import type {
   League,
   ParticipantWithTeam,
@@ -97,6 +97,7 @@ export default function CounterpickRound({
   }
 
   // Handle making a counterpick
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleCounterpick(movieId: string, option: CounterpickOption): Promise<void> {
     setPicking(true)
     setError(null)
@@ -402,7 +403,7 @@ function CounterpickQueue({
     }
 
     return picks
-  }, [participants, currentPickIndex, currentUserId, rounds, totalParticipants, totalPicks])
+  }, [participants, currentPickIndex, currentUserId, totalParticipants, totalPicks])
 
   if (upcomingPicks.length === 0) {
     return null

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { formatDate } from '@/utils/date'
 import type { MovieWithScores } from '@/types'
@@ -67,10 +68,12 @@ export default function MovieScoreCard({ movie, pickNumber, round, isCounterpick
               {!imageLoaded && (
                 <div className="absolute inset-0 bg-surface animate-shimmer" />
               )}
-              <img
+              <Image
                 src={movie.poster_url}
                 alt={movie.title}
-                className={`w-full h-full object-cover transition-opacity duration-300 ${
+                fill
+                sizes="80px"
+                className={`object-cover transition-opacity duration-300 ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 }`}
                 onLoad={() => setImageLoaded(true)}

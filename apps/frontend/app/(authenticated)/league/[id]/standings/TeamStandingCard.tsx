@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { Target } from 'lucide-react'
 import type { RankedTeam } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
@@ -104,12 +105,15 @@ export default function TeamStandingCard({
         <RankBadge rank={rank} isTied={isTied} />
 
         {/* Team Avatar */}
-        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gold-muted border-2 border-gold flex-shrink-0">
+        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gold-muted border-2 border-gold flex-shrink-0 relative">
           {team?.avatar_url ? (
-            <img
+            <Image
               src={team.avatar_url}
               alt={displayName}
-              className="w-full h-full object-cover"
+              fill
+              sizes="48px"
+              className="object-cover"
+              unoptimized
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
