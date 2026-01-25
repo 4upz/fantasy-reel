@@ -99,6 +99,10 @@ export interface TeamScore {
   id: string
   team_id: string
   total_points: number
+  draft_points: number
+  counterpick_points: number
+  counterpicks_made: number
+  counterpicks_scored: number
   movies_scored: number
   movies_pending: number
   average_score: number
@@ -482,4 +486,49 @@ export interface TradeableMovie {
   poster_url: string | null
   release_date: string | null
   combined_score: number | null
+}
+
+// ============================================================================
+// Counterpick system types
+// ============================================================================
+
+export interface Counterpick {
+  id: string
+  league_id: string
+  counterpicker_team_id: string
+  target_team_id: string
+  movie_id: string
+  draft_pick_id: string
+  pick_order: number
+  phase: 'draft' | 'bidding'
+  fantasy_points: number | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CounterpickOption {
+  draft_pick_id: string
+  movie_id: string
+  movie_title: string
+  poster_url: string | null
+  release_date: string | null
+  owner_team_id: string
+  owner_team_name: string
+  fantasy_points: number | null
+}
+
+export interface CounterpickTurnInfo {
+  round: number
+  pick_number: number
+  team_id: string
+  participant_id: string
+  user_id: string
+  counterpicks_remaining: number
+}
+
+// Extended counterpick types for queries with relations
+export interface CounterpickWithDetails extends Counterpick {
+  movies: Movie
+  target_team: Team
+  counterpicker_team: Team
 }
