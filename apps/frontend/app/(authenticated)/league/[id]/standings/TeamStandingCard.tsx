@@ -96,6 +96,8 @@ export default function TeamStandingCard({
       {/* Main Card Header */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
+        aria-expanded={isExpanded}
+        aria-controls={`team-movies-${team?.id}`}
         className="w-full p-4 sm:p-5 flex items-center gap-4 hover:bg-surface-hover transition-colors text-left"
       >
         {/* Rank Badge */}
@@ -191,6 +193,7 @@ export default function TeamStandingCard({
 
       {/* Expanded Movies List */}
       <div
+        id={`team-movies-${team?.id}`}
         className={`overflow-hidden transition-all duration-300 ease-in-out ${
           isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
         }`}

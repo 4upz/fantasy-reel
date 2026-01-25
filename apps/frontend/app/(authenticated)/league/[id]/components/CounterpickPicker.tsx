@@ -133,7 +133,7 @@ export default function CounterpickPicker({
   }
 
   return (
-    <div className="space-y-6">
+    <div className={`space-y-6 ${selectedOption && isMyTurn ? 'pb-32 sm:pb-24' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-display font-semibold text-foreground">
@@ -152,7 +152,7 @@ export default function CounterpickPicker({
           <Target className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-foreground-secondary text-sm">
-              Bet against an opponent&apos;s movie. If the movie scores poorly, you earn the inverse of their fantasy points.
+              Bet against an opponent&apos;s movie. If it scores below 70, you earn points equal to their loss. If it scores above 70, you lose points equal to their gain.
             </p>
           </div>
         </div>
@@ -204,10 +204,10 @@ export default function CounterpickPicker({
                   <img
                     src={selectedOption.poster_url}
                     alt={selectedOption.movie_title}
-                    className="w-12 h-18 object-cover rounded-lg border border-border"
+                    className="w-12 h-16 object-cover rounded-lg border border-border"
                   />
                 ) : (
-                  <div className="w-12 h-18 bg-elevated rounded-lg border border-border flex items-center justify-center">
+                  <div className="w-12 h-16 bg-elevated rounded-lg border border-border flex items-center justify-center">
                     <ClapperboardIcon className="w-5 h-5 text-foreground-muted" />
                   </div>
                 )}
@@ -233,7 +233,7 @@ export default function CounterpickPicker({
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   onClick={handleCancelSelection}
                   disabled={isPicking}
@@ -283,6 +283,7 @@ function CounterpickMovieCard({
     <button
       onClick={() => onSelect(option)}
       disabled={!isSelectable}
+      title={!isSelectable ? "Wait for your turn to make a counterpick" : undefined}
       className={`relative group text-left rounded-xl overflow-hidden transition-all ${
         isSelected
           ? 'ring-2 ring-crimson shadow-glow-crimson scale-[1.02]'

@@ -11,6 +11,7 @@ import type {
   League,
   ParticipantWithTeam,
   Counterpick,
+  CounterpickWithDetails,
   CounterpickTurnInfo,
   CounterpickOption,
 } from '@/types'
@@ -18,7 +19,7 @@ import type {
 interface Props {
   league: League
   participants: ParticipantWithTeam[]
-  counterpicks: Counterpick[]
+  counterpicks: CounterpickWithDetails[]
   currentUserId: string
   onCounterpickMade: () => void
 }
@@ -201,7 +202,7 @@ export default function CounterpickRound({
                 <div className="flex items-center gap-3">
                   <div
                     className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      isMyTurn ? 'bg-success text-background' : 'bg-crimson text-white'
+                      isMyTurn ? 'bg-success text-background' : 'bg-gold text-background'
                     }`}
                   >
                     {isMyTurn ? (
@@ -280,7 +281,7 @@ export default function CounterpickRound({
 }
 
 interface CounterpickHistoryProps {
-  counterpicks: Counterpick[]
+  counterpicks: CounterpickWithDetails[]
   participants: ParticipantWithTeam[]
 }
 
@@ -331,9 +332,11 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
                 {teamNamesById.get(pick.target_team_id) || 'Unknown'}
               </span>
             </p>
-            <p className="text-xs text-foreground-muted">
-              Pick #{pick.pick_order}
-            </p>
+            {pick.movies && (
+              <p className="text-xs text-foreground-muted truncate mt-0.5">
+                {pick.movies.title}
+              </p>
+            )}
           </div>
 
           {/* Pick order badge */}
