@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isValidUUID, errorResponse } from './utils.ts'
-import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData } from './email.ts'
+import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData, SendEmailResult } from './email.ts'
 
 // ============================================================================
 // Types
@@ -718,7 +718,47 @@ async function formatItemsForEmail(
 }
 
 /**
+ * Log notification delivery result to the notification_log table
+ */
+async function logNotificationDelivery(
+  supabase: SupabaseClient,
+  tradeOfferId: string,
+  notificationType: string,
+  recipientEmail: string,
+  recipientUserId: string | null,
+  result: SendEmailResult,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  try {
+    // Determine status based on result
+    let status: 'sent' | 'failed' | 'skipped'
+    if (result.success) {
+      status = 'sent'
+    } else if (result.error === 'RESEND_API_KEY not configured') {
+      status = 'skipped'
+    } else {
+      status = 'failed'
+    }
+
+    await supabase.rpc('log_notification_delivery', {
+      p_trade_offer_id: tradeOfferId,
+      p_notification_type: notificationType,
+      p_recipient_email: recipientEmail,
+      p_recipient_user_id: recipientUserId,
+      p_status: status,
+      p_message_id: result.messageId ?? null,
+      p_error_message: result.error ?? null,
+      p_metadata: metadata ?? {},
+    })
+  } catch (error) {
+    // Don't let logging failures affect the main flow
+    console.error('Failed to log notification delivery:', error)
+  }
+}
+
+/**
  * Send trade email notifications to one or both parties
+ * Now with delivery tracking for observability
  */
 export async function sendTradeEmailNotifications(
   supabase: SupabaseClient,
@@ -755,6 +795,13 @@ export async function sendTradeEmailNotifications(
     const initiatorItemsStr = await formatItemsForEmail(supabase, tradeOffer.initiator_items)
     const recipientItemsStr = await formatItemsForEmail(supabase, tradeOffer.recipient_items)
 
+    // Build metadata for logging
+    const baseMetadata = {
+      league_id: tradeOffer.league_id,
+      league_name: leagueInfo.name,
+      email_type: emailType,
+    }
+
     // Send to initiator if requested
     if (initiatorInfo) {
       const recipientName = recipientInfo?.teamName ?? await getTeamName(supabase, tradeOffer.recipient_team_id)
@@ -773,7 +820,18 @@ export async function sendTradeEmailNotifications(
         reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
       }
 
-      await sendTradeEmail(emailType, emailData)
+      const result = await sendTradeEmail(emailType, emailData)
+
+      // Log the delivery result
+      await logNotificationDelivery(
+        supabase,
+        tradeOffer.id,
+        `trade_${emailType}`,
+        initiatorInfo.email,
+        initiatorInfo.userId,
+        result,
+        { ...baseMetadata, recipient_team_name: initiatorInfo.teamName, party: 'initiator' }
+      )
     }
 
     // Send to recipient if requested
@@ -794,7 +852,18 @@ export async function sendTradeEmailNotifications(
         reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
       }
 
-      await sendTradeEmail(emailType, emailData)
+      const result = await sendTradeEmail(emailType, emailData)
+
+      // Log the delivery result
+      await logNotificationDelivery(
+        supabase,
+        tradeOffer.id,
+        `trade_${emailType}`,
+        recipientInfo.email,
+        recipientInfo.userId,
+        result,
+        { ...baseMetadata, recipient_team_name: recipientInfo.teamName, party: 'recipient' }
+      )
     }
   } catch (error) {
     // Non-blocking: log and continue
