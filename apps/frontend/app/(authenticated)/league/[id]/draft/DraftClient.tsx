@@ -1,13 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
-import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails, Counterpick } from '@/types'
 import DraftBoard from '../components/DraftBoard'
 import InvitationsList from '../components/InvitationsList'
 import InviteModal from '../components/InviteModal'
 import ParticipantsList from '../components/ParticipantsList'
+import { SpinnerIcon } from '../components/Icons'
 
 const MAX_RECONNECT_ATTEMPTS = 3
 const RECONNECT_DELAY_MS = 2000
@@ -16,6 +18,7 @@ interface Props {
   league: League
   participants: ParticipantWithTeam[]
   draftPicks: DraftPickWithDetails[]
+  counterpicks: Counterpick[]
   currentUserId: string
   isOwner: boolean
 }
@@ -24,14 +27,17 @@ export default function DraftClient({
   league: initialLeague,
   participants: initialParticipants,
   draftPicks: initialDraftPicks,
+  counterpicks: initialCounterpicks,
   currentUserId,
   isOwner,
 }: Props) {
   const [league, setLeague] = useState(initialLeague)
   const [participants, setParticipants] = useState(initialParticipants)
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
+  const [counterpicks, setCounterpicks] = useState(initialCounterpicks)
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [startingDraft, setStartingDraft] = useState(false)
+  const [startingCounterpick, setStartingCounterpick] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Local favorites state
@@ -90,6 +96,18 @@ export default function DraftClient({
     }
   }, [supabase, league.id])
 
+  const fetchCounterpicks = useCallback(async () => {
+    const { data } = await supabase
+      .from('counterpicks')
+      .select('*')
+      .eq('league_id', league.id)
+      .order('pick_order', { ascending: true })
+
+    if (data) {
+      setCounterpicks(data as Counterpick[])
+    }
+  }, [supabase, league.id])
+
   // Real-time subscriptions
   useEffect(() => {
     let currentChannel: ReturnType<typeof supabase.channel> | null = null
@@ -111,7 +129,7 @@ export default function DraftClient({
         .on(
           'postgres_changes',
           {
-            event: 'INSERT',
+            event: '*',
             schema: 'public',
             table: 'draft_picks',
             filter: `league_id=eq.${league.id}`,
@@ -137,6 +155,16 @@ export default function DraftClient({
             filter: `league_id=eq.${league.id}`,
           },
           fetchParticipants
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'counterpicks',
+            filter: `league_id=eq.${league.id}`,
+          },
+          fetchCounterpicks
         )
         .subscribe((status) => {
           if (isCleaningUp || thisChannelId !== channelIdRef.current) return
@@ -168,11 +196,16 @@ export default function DraftClient({
         supabase.removeChannel(currentChannel)
       }
     }
-  }, [league.id, supabase, fetchDraftPicks, fetchParticipants])
+  }, [league.id, supabase, fetchDraftPicks, fetchParticipants, fetchCounterpicks])
 
   const handlePickMade = useCallback(() => {
     fetchDraftPicks()
   }, [fetchDraftPicks])
+
+  const handleCounterpickMade = useCallback(() => {
+    fetchCounterpicks()
+    fetchDraftPicks() // Also refetch draft picks to get updated counterpicked_by_team_id
+  }, [fetchCounterpicks, fetchDraftPicks])
 
   const handleToggleFavorite = useCallback((tmdbId: number) => {
     setFavoriteMovieIds((prev) => {
@@ -206,6 +239,29 @@ export default function DraftClient({
     setStartingDraft(false)
   }
 
+  // Check if draft is complete (all picks made)
+  const totalPicks = participants.length * league.draft_slots
+  const isDraftComplete = league.status === 'drafting' && draftPicks.length >= totalPicks
+  const canStartCounterpick =
+    isOwner &&
+    isDraftComplete &&
+    league.draft_counterpick_slots > 0
+
+  async function handleStartCounterpickRound(): Promise<void> {
+    setStartingCounterpick(true)
+    setError(null)
+
+    const { error: startError } = await callEdgeFunction('start-counterpick-round', {
+      body: { league_id: league.id },
+    })
+
+    if (startError) {
+      setError(startError)
+    }
+
+    setStartingCounterpick(false)
+  }
+
   return (
     <>
       {/* Owner Controls for Setup */}
@@ -225,15 +281,56 @@ export default function DraftClient({
         </div>
       )}
 
+      {/* Owner Controls for Starting Counterpick Round */}
+      {canStartCounterpick && (
+        <div className="mb-6">
+          <div className="card p-4 bg-crimson/10 border-crimson/30">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-crimson/20 rounded-full flex items-center justify-center">
+                  <Target className="w-5 h-5 text-crimson" />
+                </div>
+                <div>
+                  <p className="font-semibold text-foreground">Draft Complete!</p>
+                  <p className="text-sm text-foreground-muted">
+                    Ready to start the counterpick round ({league.draft_counterpick_slots} pick{league.draft_counterpick_slots !== 1 ? 's' : ''} per team)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={handleStartCounterpickRound}
+                disabled={startingCounterpick}
+                className="btn btn-primary flex items-center gap-2"
+              >
+                {startingCounterpick ? (
+                  <>
+                    <SpinnerIcon className="w-4 h-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <Target className="w-4 h-4" />
+                    Start Counterpick Round
+                  </>
+                )}
+              </button>
+            </div>
+            {error && <p className="mt-3 text-sm text-error">{error}</p>}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           <DraftBoard
             league={league}
             participants={participants}
             draftPicks={draftPicks}
+            counterpicks={counterpicks}
             currentUserId={currentUserId}
             favoriteMovieIds={favoriteMovieIds}
             onPickMade={handlePickMade}
+            onCounterpickMade={handleCounterpickMade}
             onToggleFavorite={handleToggleFavorite}
           />
         </div>

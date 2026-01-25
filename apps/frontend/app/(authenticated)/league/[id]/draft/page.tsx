@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DraftClient from './DraftClient'
-import type { League, ParticipantWithTeam, DraftPickWithDetails } from '@/types'
+import type { League, ParticipantWithTeam, DraftPickWithDetails, Counterpick } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -56,6 +56,13 @@ export default async function DraftPage({ params }: PageProps) {
     .order('round', { ascending: true })
     .order('pick_number', { ascending: true })
 
+  // Fetch counterpicks
+  const { data: counterpicks } = await supabase
+    .from('counterpicks')
+    .select('*')
+    .eq('league_id', id)
+    .order('pick_order', { ascending: true })
+
   const isOwner = league.owner_id === user.id
 
   return (
@@ -63,6 +70,7 @@ export default async function DraftPage({ params }: PageProps) {
       league={league as League}
       participants={(participants || []) as ParticipantWithTeam[]}
       draftPicks={(draftPicks || []) as DraftPickWithDetails[]}
+      counterpicks={(counterpicks || []) as Counterpick[]}
       currentUserId={user.id}
       isOwner={isOwner}
     />
