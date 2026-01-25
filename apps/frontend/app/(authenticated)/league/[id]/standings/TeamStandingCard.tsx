@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { Target } from 'lucide-react'
 import type { RankedTeam } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
 
@@ -66,6 +67,10 @@ export default function TeamStandingCard({
   const profile = participant.profiles
 
   const totalPoints = teamScore?.total_points ?? 0
+  const draftPoints = teamScore?.draft_points ?? 0
+  const counterpickPoints = teamScore?.counterpick_points ?? 0
+  const counterpicksMade = teamScore?.counterpicks_made ?? 0
+  const counterpicksScored = teamScore?.counterpicks_scored ?? 0
   const moviesScored = teamScore?.movies_scored ?? 0
   const moviesPending = teamScore?.movies_pending ?? 0
   const averageScore = teamScore?.average_score ?? 0
@@ -150,6 +155,23 @@ export default function TeamStandingCard({
           <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
             Points
           </div>
+          {/* Points Breakdown */}
+          <div className="text-xs text-foreground-muted mt-1 flex items-center justify-end gap-2">
+            <span className={draftPoints >= 0 ? 'text-gold' : 'text-crimson'}>
+              Draft: {draftPoints >= 0 ? '+' : ''}{Math.round(draftPoints)}
+            </span>
+            {counterpicksMade > 0 && (
+              <>
+                <span className="text-foreground-muted/50">|</span>
+                <span className="flex items-center gap-1">
+                  <Target className="w-3 h-3 text-crimson" />
+                  <span className={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}>
+                    {counterpickPoints >= 0 ? '+' : ''}{Math.round(counterpickPoints)}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
         </div>
 
         {/* Expand Arrow */}
@@ -182,6 +204,7 @@ export default function TeamStandingCard({
                   movie={pick.movies}
                   pickNumber={pick.pick_number}
                   round={pick.round}
+                  isCounterpicked={!!pick.counterpicked_by_team_id}
                 />
               ))
             ) : (
@@ -190,6 +213,22 @@ export default function TeamStandingCard({
               </div>
             )}
           </div>
+
+          {/* Counterpicks Summary */}
+          {counterpicksMade > 0 && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="flex items-center justify-center gap-2 text-sm">
+                <Target className="w-4 h-4 text-crimson" />
+                <span className="text-foreground-secondary">
+                  {counterpicksMade} counterpick{counterpicksMade !== 1 ? 's' : ''}
+                  {counterpicksScored > 0 && ` (${counterpicksScored} scored)`}
+                </span>
+                <span className={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}>
+                  {counterpickPoints >= 0 ? '+' : ''}{Math.round(counterpickPoints)} pts
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Scoring Formula Info */}
           {draftPicks.length > 0 && (
