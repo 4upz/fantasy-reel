@@ -6,6 +6,7 @@ import type { League, ParticipantWithProfile, MovieTimelineItem, Review } from '
 export const STATUS_BADGE_CLASS: Record<League['status'], string> = {
   setup: 'badge-setup',
   drafting: 'badge-drafting',
+  counterpicking: 'badge-drafting', // Use same style as drafting
   active: 'badge-active',
   completed: 'badge-completed',
 }

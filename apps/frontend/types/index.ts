@@ -5,7 +5,7 @@ export interface League {
   name: string
   owner_id: string
   invite_only: boolean
-  status: 'setup' | 'drafting' | 'active' | 'completed'
+  status: 'setup' | 'drafting' | 'counterpicking' | 'active' | 'completed'
   max_participants: number
   draft_start_date: string | null
   draft_end_date: string | null
@@ -14,6 +14,10 @@ export interface League {
   draft_slots: number
   drop_limit: number
   counterbid_hours: number
+  // Counterpick configuration
+  draft_counterpick_slots: number
+  bidding_counterpick_slots: number
+  counterpicks_block_drops: boolean
   created_at: string
   updated_at: string
 }
@@ -140,7 +144,7 @@ export interface InvitationWithLeague extends Invitation {
   leagues: {
     id: string
     name: string
-    status: 'setup' | 'drafting' | 'active' | 'completed'
+    status: 'setup' | 'drafting' | 'counterpicking' | 'active' | 'completed'
     owner_id: string
   } | null
 }
