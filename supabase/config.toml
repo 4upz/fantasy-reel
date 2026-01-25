@@ -427,3 +427,10 @@ verify_jwt = false
 
 [functions.process-trades]
 verify_jwt = false
+
+[functions.get-trades]
+verify_jwt = false
+
+# Counterpick system functions
+[functions.start-counterpick-round]
+verify_jwt = false
