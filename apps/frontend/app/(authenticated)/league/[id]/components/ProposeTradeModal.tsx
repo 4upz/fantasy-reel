@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import type { Team, TradeItems, TradeableMovie, TeamBudget, TradeMovieItem } from '@/types'
 import { createClient } from '@/utils/supabase/client'
@@ -17,6 +17,48 @@ interface Props {
     requestedItems: TradeItems,
     message?: string
   ) => Promise<{ success: boolean; error?: string }>
+}
+
+/**
+ * Focus trap hook - keeps focus within modal
+ */
+function useFocusTrap(isActive: boolean) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isActive || !containerRef.current) return
+
+    const container = containerRef.current
+    const focusableElements = container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+    const firstElement = focusableElements[0]
+    const lastElement = focusableElements[focusableElements.length - 1]
+
+    // Focus first element on mount
+    firstElement?.focus()
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault()
+          lastElement?.focus()
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault()
+          firstElement?.focus()
+        }
+      }
+    }
+
+    container.addEventListener('keydown', handleKeyDown)
+    return () => container.removeEventListener('keydown', handleKeyDown)
+  }, [isActive])
+
+  return containerRef
 }
 
 export default function ProposeTradeModal({
@@ -44,6 +86,18 @@ export default function ProposeTradeModal({
   const [error, setError] = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
+  const modalRef = useFocusTrap(true)
+
+  // Handle escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isLoading) {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [onClose, isLoading])
 
   // Fetch recipient's tradeable movies when team is selected
   useEffect(() => {
@@ -210,20 +264,33 @@ export default function ProposeTradeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="propose-trade-title"
+    >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
       {/* Modal */}
-      <div className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div
+        ref={modalRef}
+        className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+      >
         {/* Header */}
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-lg font-display font-bold text-foreground">
+          <h2 id="propose-trade-title" className="text-lg font-display font-bold text-foreground">
             {step === 'select-team' ? 'Select Trade Partner' : `Trade with ${selectedTeam?.name}`}
           </h2>
           <button
             onClick={onClose}
             className="text-foreground-muted hover:text-foreground transition-colors"
+            aria-label="Close trade proposal"
           >
             ✕
           </button>
@@ -233,33 +300,37 @@ export default function ProposeTradeModal({
         <div className="flex-1 overflow-y-auto p-4">
           {step === 'select-team' ? (
             <div className="space-y-2">
-              <p className="text-sm text-foreground-secondary mb-4">
+              <p id="team-selection-label" className="text-sm text-foreground-secondary mb-4">
                 Choose a team to trade with:
               </p>
-              {otherTeams.map((otherTeam) => (
-                <button
-                  key={otherTeam.id}
-                  onClick={() => handleSelectTeam(otherTeam.id)}
-                  className="w-full card-interactive p-4 flex items-center gap-3 text-left"
-                >
-                  <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center overflow-hidden">
-                    {otherTeam.avatar_url ? (
-                      <Image
-                        src={otherTeam.avatar_url}
-                        alt={otherTeam.name}
-                        width={40}
-                        height={40}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-sm font-medium text-foreground-muted">
-                        {otherTeam.name.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <span className="font-medium text-foreground">{otherTeam.name}</span>
-                </button>
-              ))}
+              <div role="listbox" aria-labelledby="team-selection-label">
+                {otherTeams.map((otherTeam) => (
+                  <button
+                    key={otherTeam.id}
+                    onClick={() => handleSelectTeam(otherTeam.id)}
+                    className="w-full card-interactive p-4 flex items-center gap-3 text-left mb-2"
+                    role="option"
+                    aria-selected={selectedTeamId === otherTeam.id}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center overflow-hidden">
+                      {otherTeam.avatar_url ? (
+                        <Image
+                          src={otherTeam.avatar_url}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-sm font-medium text-foreground-muted" aria-hidden="true">
+                          {otherTeam.name.charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-medium text-foreground">{otherTeam.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="space-y-6">
@@ -361,13 +432,19 @@ export default function ProposeTradeModal({
         {/* Footer */}
         {step === 'select-items' && (
           <div className="p-4 border-t border-border flex justify-end gap-2">
-            <button onClick={onClose} className="btn btn-ghost">
+            <button
+              onClick={onClose}
+              className="btn btn-ghost"
+              aria-label="Cancel trade proposal"
+            >
               Cancel
             </button>
             <button
               onClick={handleSubmit}
               disabled={!hasItems || isLoading}
               className="btn btn-primary"
+              aria-label={isLoading ? 'Proposing trade...' : 'Submit trade proposal'}
+              aria-busy={isLoading}
             >
               {isLoading ? 'Proposing...' : 'Propose Trade'}
             </button>
@@ -401,44 +478,133 @@ function MovieSelectorSkeleton() {
   )
 }
 
+interface MovieSelectorProps {
+  movies: TradeableMovie[]
+  selectedIds: Set<string>
+  onToggle: (sourceId: string) => void
+  listId?: string
+  emptyMessage?: string
+}
+
 function MovieSelector({
   movies,
   selectedIds,
   onToggle,
-}: {
-  movies: TradeableMovie[]
-  selectedIds: Set<string>
-  onToggle: (sourceId: string) => void
-}) {
+  listId = 'movie-list',
+  emptyMessage,
+}: MovieSelectorProps) {
+  const [focusedIndex, setFocusedIndex] = useState(-1)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // Handle keyboard navigation
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (movies.length === 0) return
+
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault()
+          setFocusedIndex((prev) => Math.min(prev + 1, movies.length - 1))
+          break
+        case 'ArrowUp':
+          e.preventDefault()
+          setFocusedIndex((prev) => Math.max(prev - 1, 0))
+          break
+        case ' ':
+        case 'Enter':
+          e.preventDefault()
+          if (focusedIndex >= 0 && focusedIndex < movies.length) {
+            onToggle(movies[focusedIndex].source_id)
+          }
+          break
+        case 'Home':
+          e.preventDefault()
+          setFocusedIndex(0)
+          break
+        case 'End':
+          e.preventDefault()
+          setFocusedIndex(movies.length - 1)
+          break
+      }
+    },
+    [movies, focusedIndex, onToggle]
+  )
+
+  // Scroll focused item into view
+  useEffect(() => {
+    if (focusedIndex >= 0 && listRef.current) {
+      const items = listRef.current.querySelectorAll('[role="option"]')
+      items[focusedIndex]?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [focusedIndex])
+
+  // Empty state with helpful message (FE#7)
   if (movies.length === 0) {
-    return <p className="text-sm text-foreground-muted italic">No movies available</p>
+    const message = emptyMessage || 'No tradeable movies'
+    return (
+      <div className="card p-6 text-center">
+        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-hover flex items-center justify-center">
+          <svg
+            className="w-6 h-6 text-foreground-muted"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+            />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-foreground-secondary mb-1">{message}</p>
+        <p className="text-xs text-foreground-muted">
+          Draft movies or pick them up during the bidding phase to start trading.
+        </p>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-2 max-h-48 overflow-y-auto">
-      {movies.map((movie) => {
+    <div
+      ref={listRef}
+      role="listbox"
+      id={listId}
+      aria-label="Select movies to trade"
+      aria-multiselectable="true"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onFocus={() => focusedIndex === -1 && setFocusedIndex(0)}
+      className="space-y-2 max-h-48 overflow-y-auto focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface rounded-lg"
+    >
+      {movies.map((movie, index) => {
         const isSelected = selectedIds.has(movie.source_id)
+        const isFocused = focusedIndex === index
         return (
-          <button
+          <div
             key={movie.source_id}
+            role="option"
+            aria-selected={isSelected}
             onClick={() => onToggle(movie.source_id)}
-            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors ${
+            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors cursor-pointer ${
               isSelected
                 ? 'bg-gold/20 border border-gold'
                 : 'bg-surface-hover hover:bg-elevated border border-transparent'
-            }`}
+            } ${isFocused ? 'ring-2 ring-gold ring-offset-2 ring-offset-surface' : ''}`}
           >
             {movie.poster_url ? (
               <Image
                 src={movie.poster_url}
-                alt={movie.title}
+                alt=""
                 width={32}
                 height={48}
                 className="w-8 h-12 object-cover rounded"
               />
             ) : (
               <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
-                <span className="text-xs text-foreground-muted">?</span>
+                <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
               </div>
             )}
             <div className="min-w-0 flex-1">
@@ -456,6 +622,7 @@ function MovieSelector({
               className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
                 isSelected ? 'border-gold bg-gold' : 'border-border'
               }`}
+              aria-hidden="true"
             >
               {isSelected && (
                 <svg className="w-3 h-3 text-background" fill="currentColor" viewBox="0 0 20 20">
@@ -467,9 +634,13 @@ function MovieSelector({
                 </svg>
               )}
             </div>
-          </button>
+          </div>
         )
       })}
+      {/* Screen reader announcement for selection count */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {selectedIds.size} movie{selectedIds.size !== 1 ? 's' : ''} selected
+      </div>
     </div>
   )
 }

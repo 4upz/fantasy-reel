@@ -99,7 +99,7 @@ export default function TradingPanel({
   ]
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" role="region" aria-label="Trading Block">
       {/* Header */}
       <div className="card p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -112,11 +112,15 @@ export default function TradingPanel({
 
           <div className="flex items-center gap-4">
             {actionNeededCount > 0 && (
-              <span className="text-sm text-crimson font-medium">
+              <span className="text-sm text-crimson font-medium" role="status" aria-live="polite">
                 {actionNeededCount} trade{actionNeededCount !== 1 ? 's' : ''} need your response
               </span>
             )}
-            <button onClick={onProposeTrade} className="btn btn-primary">
+            <button
+              onClick={onProposeTrade}
+              className="btn btn-primary"
+              aria-label="Propose a new trade"
+            >
               Propose Trade
             </button>
           </div>
@@ -126,7 +130,7 @@ export default function TradingPanel({
         {budget && (
           <div className="mt-4 pt-4 border-t border-border">
             <p className="text-sm text-foreground-secondary">
-              Available FAAB: <span className="text-gold font-medium">${budget.remaining_budget}</span>
+              Available FAAB: <span className="text-gold font-medium" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
             </p>
           </div>
         )}
@@ -135,11 +139,19 @@ export default function TradingPanel({
       {/* Tabs */}
       <div className="card">
         <div className="border-b border-border">
-          <nav className="flex gap-1 px-4 overflow-x-auto">
+          <nav
+            className="flex gap-1 px-4 overflow-x-auto"
+            role="tablist"
+            aria-label="Trade categories"
+          >
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`trade-panel-${tab.id}`}
+                id={`trade-tab-${tab.id}`}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
                   activeTab === tab.id
                     ? 'text-gold border-gold'
@@ -148,7 +160,10 @@ export default function TradingPanel({
               >
                 {tab.label}
                 {tab.count !== undefined && tab.count > 0 && (
-                  <span className="bg-surface-hover text-foreground-secondary text-xs px-1.5 py-0.5 rounded-full">
+                  <span
+                    className="bg-surface-hover text-foreground-secondary text-xs px-1.5 py-0.5 rounded-full"
+                    aria-label={`${tab.count} ${tab.label.toLowerCase()}`}
+                  >
                     {tab.count}
                   </span>
                 )}
@@ -158,10 +173,15 @@ export default function TradingPanel({
         </div>
 
         {/* Trade list */}
-        <div className="p-4">
+        <div
+          className="p-4"
+          role="tabpanel"
+          id={`trade-panel-${activeTab}`}
+          aria-labelledby={`trade-tab-${activeTab}`}
+        >
           {filteredTrades.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-foreground-muted">
+              <p className="text-foreground-muted" role="status">
                 {activeTab === 'pending' && 'No pending trades'}
                 {activeTab === 'my-trades' && 'You have no active trades'}
                 {activeTab === 'all' && 'No active trades in this league'}
@@ -169,7 +189,7 @@ export default function TradingPanel({
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-4" aria-live="polite">
               {filteredTrades.map((trade) => (
                 <TradeOfferCard
                   key={trade.id}

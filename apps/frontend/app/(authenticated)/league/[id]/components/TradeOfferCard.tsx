@@ -63,10 +63,14 @@ export default function TradeOfferCard(props: Props) {
     onVeto,
   } = props
   const [isLoading, setIsLoading] = useState(false)
+  const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCounterModal, setShowCounterModal] = useState(false)
   const [showVetoModal, setShowVetoModal] = useState(false)
   const [showAcceptModal, setShowAcceptModal] = useState(false)
+
+  // Optimistic UI state (FE#9)
+  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null)
 
   const isInitiator = trade.initiator_team_id === currentTeamId
   const isRecipient = trade.recipient_team_id === currentTeamId
@@ -74,14 +78,26 @@ export default function TradeOfferCard(props: Props) {
   const canCancel = isInitiator && (trade.status === 'proposed' || trade.status === 'countered')
   const canVeto = isOwner && trade.status === 'review'
 
-  const statusStyle = STATUS_STYLES[trade.status] || STATUS_STYLES.proposed
+  // Use optimistic status if available, otherwise actual status
+  const displayStatus = optimisticStatus || trade.status
+  const statusStyle = STATUS_STYLES[displayStatus] || STATUS_STYLES.proposed
 
   const handleAction = async (
     action: 'accept' | 'reject' | 'cancel' | 'veto',
     message?: string
   ) => {
     setIsLoading(true)
+    setPendingAction(action)
     setError(null)
+
+    // Optimistic UI update (FE#9)
+    const optimisticStatusMap: Record<string, string> = {
+      accept: 'review',
+      reject: 'rejected',
+      cancel: 'cancelled',
+      veto: 'vetoed',
+    }
+    setOptimisticStatus(optimisticStatusMap[action])
 
     let result: { success: boolean; error?: string }
 
@@ -103,36 +119,49 @@ export default function TradeOfferCard(props: Props) {
     }
 
     setIsLoading(false)
+    setPendingAction(null)
 
-    if (!result.success && result.error) {
-      setError(result.error)
+    if (!result.success) {
+      // Roll back optimistic update on error
+      setOptimisticStatus(null)
+      if (result.error) {
+        setError(result.error)
+      }
     }
+    // If successful, the real-time subscription will update the trade
   }
 
   const initiatorTeam = trade.initiator_team as { id: string; name: string; avatar_url: string | null }
   const recipientTeam = trade.recipient_team as { id: string; name: string; avatar_url: string | null }
 
   return (
-    <div className="card p-4">
+    <article
+      className="card p-4"
+      aria-label={`Trade offer from ${initiatorTeam.name} to ${recipientTeam.name}`}
+    >
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
-          <div className="flex -space-x-2">
+          <div className="flex -space-x-2" aria-hidden="true">
             <TeamAvatar team={initiatorTeam} />
             <TeamAvatar team={recipientTeam} />
           </div>
           <div>
             <p className="font-medium text-foreground">
-              {initiatorTeam.name} → {recipientTeam.name}
+              {initiatorTeam.name} <span aria-label="to">→</span> {recipientTeam.name}
             </p>
             <p className="text-sm text-foreground-muted">
-              {formatRelativeDate(trade.proposed_at)}
+              <time dateTime={trade.proposed_at}>{formatRelativeDate(trade.proposed_at)}</time>
             </p>
           </div>
         </div>
 
-        <span className={`px-2 py-1 text-xs font-medium rounded ${statusStyle.bg} ${statusStyle.text}`}>
-          {statusStyle.label}
+        <span
+          className={`px-2 py-1 text-xs font-medium rounded ${statusStyle.bg} ${statusStyle.text}`}
+          role="status"
+          aria-live="polite"
+        >
+          {optimisticStatus ? `${statusStyle.label}...` : statusStyle.label}
         </span>
       </div>
 
@@ -193,21 +222,24 @@ export default function TradeOfferCard(props: Props) {
       )}
 
       {/* Actions */}
-      {(canRespond || canCancel || canVeto) && (
-        <div className="flex flex-wrap gap-2 pt-4 border-t border-border">
+      {(canRespond || canCancel || canVeto) && !optimisticStatus && (
+        <div className="flex flex-wrap gap-2 pt-4 border-t border-border" role="group" aria-label="Trade actions">
           {canRespond && (
             <>
               <button
                 onClick={() => setShowAcceptModal(true)}
                 disabled={isLoading}
                 className="btn btn-primary"
+                aria-label="Accept trade offer"
+                aria-busy={pendingAction === 'accept'}
               >
-                {isLoading ? 'Processing...' : 'Accept'}
+                {pendingAction === 'accept' ? 'Accepting...' : 'Accept'}
               </button>
               <button
                 onClick={() => setShowCounterModal(true)}
                 disabled={isLoading}
                 className="btn btn-secondary"
+                aria-label="Counter trade offer"
               >
                 Counter
               </button>
@@ -215,8 +247,10 @@ export default function TradeOfferCard(props: Props) {
                 onClick={() => handleAction('reject')}
                 disabled={isLoading}
                 className="btn btn-ghost"
+                aria-label="Reject trade offer"
+                aria-busy={pendingAction === 'reject'}
               >
-                Reject
+                {pendingAction === 'reject' ? 'Rejecting...' : 'Reject'}
               </button>
             </>
           )}
@@ -226,8 +260,10 @@ export default function TradeOfferCard(props: Props) {
               onClick={() => handleAction('cancel')}
               disabled={isLoading}
               className="btn btn-ghost text-crimson"
+              aria-label="Cancel trade offer"
+              aria-busy={pendingAction === 'cancel'}
             >
-              Cancel Trade
+              {pendingAction === 'cancel' ? 'Cancelling...' : 'Cancel Trade'}
             </button>
           )}
 
@@ -236,6 +272,7 @@ export default function TradeOfferCard(props: Props) {
               onClick={() => setShowVetoModal(true)}
               disabled={isLoading}
               className="btn btn-danger"
+              aria-label="Veto trade"
             >
               Veto Trade
             </button>
@@ -289,7 +326,7 @@ export default function TradeOfferCard(props: Props) {
           }}
         />
       )}
-    </div>
+    </article>
   )
 }
 
@@ -501,15 +538,36 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
     }
   }
 
+  // Handle escape key to close modal
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && !isLoading) {
+      onClose()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="counter-trade-title"
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 className="text-lg font-display font-bold text-foreground">
+          <h2 id="counter-trade-title" className="text-lg font-display font-bold text-foreground">
             Counter Trade with {initiatorTeam.name}
           </h2>
-          <button onClick={onClose} className="text-foreground-muted hover:text-foreground transition-colors">
+          <button
+            onClick={onClose}
+            className="text-foreground-muted hover:text-foreground transition-colors"
+            aria-label="Close counter trade modal"
+          >
             ✕
           </button>
         </div>
@@ -517,15 +575,16 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {/* Your side - what you offer */}
           <div>
-            <h3 className="text-sm font-medium text-foreground mb-3">You give ({recipientTeam.name})</h3>
+            <h3 id="counter-offer-section" className="text-sm font-medium text-foreground mb-3">You give ({recipientTeam.name})</h3>
             <MovieSelector
               movies={tradeableMovies}
               selectedIds={offeredMovies}
               onToggle={toggleOfferedMovie}
             />
             <div className="mt-3">
-              <label className="text-sm text-foreground-secondary">FAAB (max ${budget?.remaining_budget ?? 0})</label>
+              <label htmlFor="counter-offered-faab" className="text-sm text-foreground-secondary">FAAB (max ${budget?.remaining_budget ?? 0})</label>
               <input
+                id="counter-offered-faab"
                 type="number"
                 min={0}
                 max={budget?.remaining_budget ?? 0}
@@ -538,15 +597,16 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 
           {/* Their side - what you request */}
           <div>
-            <h3 className="text-sm font-medium text-foreground mb-3">You receive ({initiatorTeam.name})</h3>
+            <h3 id="counter-request-section" className="text-sm font-medium text-foreground mb-3">You receive ({initiatorTeam.name})</h3>
             <MovieSelector
               movies={otherTeamMovies}
               selectedIds={requestedMovies}
               onToggle={toggleRequestedMovie}
             />
             <div className="mt-3">
-              <label className="text-sm text-foreground-secondary">FAAB</label>
+              <label htmlFor="counter-requested-faab" className="text-sm text-foreground-secondary">FAAB</label>
               <input
+                id="counter-requested-faab"
                 type="number"
                 min={0}
                 max={100}
@@ -559,8 +619,9 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 
           {/* Message */}
           <div>
-            <label className="text-sm text-foreground-secondary">Message (optional)</label>
+            <label htmlFor="counter-message" className="text-sm text-foreground-secondary">Message (optional)</label>
             <textarea
+              id="counter-message"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               className="input mt-1 w-full h-20 resize-none"
@@ -569,17 +630,27 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
           </div>
 
           {error && (
-            <div className="alert alert-error">
+            <div className="alert alert-error" role="alert">
               <p>{error}</p>
             </div>
           )}
         </div>
 
         <div className="p-4 border-t border-border flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-ghost">
+          <button
+            onClick={onClose}
+            className="btn btn-ghost"
+            aria-label="Cancel counter offer"
+          >
             Cancel
           </button>
-          <button onClick={handleSubmit} disabled={!hasItems || isLoading} className="btn btn-primary">
+          <button
+            onClick={handleSubmit}
+            disabled={!hasItems || isLoading}
+            className="btn btn-primary"
+            aria-label={isLoading ? 'Submitting counter offer...' : 'Submit counter offer'}
+            aria-busy={isLoading}
+          >
             {isLoading ? 'Submitting...' : 'Submit Counter'}
           </button>
         </div>
@@ -589,7 +660,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 }
 
 // =============================================================================
-// Movie Selector (shared helper)
+// Movie Selector (shared helper with accessibility)
 // =============================================================================
 
 function MovieSelector({
@@ -601,35 +672,70 @@ function MovieSelector({
   selectedIds: Set<string>
   onToggle: (sourceId: string) => void
 }) {
+  // Empty state with helpful message (FE#7)
   if (movies.length === 0) {
-    return <p className="text-sm text-foreground-muted italic">No movies available</p>
+    return (
+      <div className="card p-4 text-center">
+        <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-hover flex items-center justify-center">
+          <svg
+            className="w-5 h-5 text-foreground-muted"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={1.5}
+              d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+            />
+          </svg>
+        </div>
+        <p className="text-sm text-foreground-muted">No movies available to trade</p>
+      </div>
+    )
   }
 
   return (
-    <div className="space-y-2 max-h-48 overflow-y-auto">
+    <div
+      role="listbox"
+      aria-label="Select movies"
+      aria-multiselectable="true"
+      className="space-y-2 max-h-48 overflow-y-auto"
+    >
       {movies.map((movie) => {
         const isSelected = selectedIds.has(movie.source_id)
         return (
-          <button
+          <div
             key={movie.source_id}
+            role="option"
+            aria-selected={isSelected}
             onClick={() => onToggle(movie.source_id)}
-            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors ${
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault()
+                onToggle(movie.source_id)
+              }
+            }}
+            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors cursor-pointer ${
               isSelected
                 ? 'bg-gold/20 border border-gold'
                 : 'bg-surface-hover hover:bg-elevated border border-transparent'
-            }`}
+            } focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface`}
           >
             {movie.poster_url ? (
               <Image
                 src={movie.poster_url}
-                alt={movie.title}
+                alt=""
                 width={32}
                 height={48}
                 className="w-8 h-12 object-cover rounded"
               />
             ) : (
               <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
-                <span className="text-xs text-foreground-muted">?</span>
+                <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
               </div>
             )}
             <div className="min-w-0 flex-1">
@@ -642,6 +748,7 @@ function MovieSelector({
               className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
                 isSelected ? 'border-gold bg-gold' : 'border-border'
               }`}
+              aria-hidden="true"
             >
               {isSelected && (
                 <svg className="w-3 h-3 text-background" fill="currentColor" viewBox="0 0 20 20">
@@ -653,7 +760,7 @@ function MovieSelector({
                 </svg>
               )}
             </div>
-          </button>
+          </div>
         )
       })}
     </div>
@@ -683,12 +790,29 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
     setIsLoading(false)
   }
 
+  // Handle escape key to close modal
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && !isLoading) {
+      onClose()
+    }
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="veto-modal-title"
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-md w-full">
         <div className="p-4 border-b border-border">
-          <h2 className="text-lg font-display font-bold text-foreground">Veto Trade</h2>
+          <h2 id="veto-modal-title" className="text-lg font-display font-bold text-foreground">Veto Trade</h2>
           <p className="text-sm text-foreground-secondary mt-1">
             Are you sure you want to veto the trade between {initiatorTeam.name} and {recipientTeam.name}?
           </p>
@@ -696,8 +820,9 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
 
         <div className="p-4 space-y-4">
           <div>
-            <label className="text-sm text-foreground-secondary">Reason (optional)</label>
+            <label htmlFor="veto-reason" className="text-sm text-foreground-secondary">Reason (optional)</label>
             <textarea
+              id="veto-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               className="input mt-1 w-full h-24 resize-none"
@@ -705,7 +830,7 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
             />
           </div>
 
-          <div className="bg-error-bg p-3 rounded-lg">
+          <div className="bg-error-bg p-3 rounded-lg" role="alert">
             <p className="text-sm text-error">
               This action cannot be undone. The trade will be cancelled and both teams will be notified.
             </p>
@@ -713,10 +838,21 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
         </div>
 
         <div className="p-4 border-t border-border flex justify-end gap-2">
-          <button onClick={onClose} className="btn btn-ghost" disabled={isLoading}>
+          <button
+            onClick={onClose}
+            className="btn btn-ghost"
+            disabled={isLoading}
+            aria-label="Cancel veto"
+          >
             Cancel
           </button>
-          <button onClick={handleVeto} className="btn btn-danger" disabled={isLoading}>
+          <button
+            onClick={handleVeto}
+            className="btn btn-danger"
+            disabled={isLoading}
+            aria-label="Confirm veto trade"
+            aria-busy={isLoading}
+          >
             {isLoading ? 'Vetoing...' : 'Veto Trade'}
           </button>
         </div>
