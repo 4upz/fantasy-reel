@@ -56,3 +56,6 @@ claude.local.md
 
 # Git worktrees
 .worktrees/
+
+# Drafts and notes
+.drafts/
