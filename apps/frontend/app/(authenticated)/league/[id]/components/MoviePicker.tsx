@@ -49,7 +49,6 @@ export default function MoviePicker({
   onToggleFavorite,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('all')
-  const [searchQuery, setSearchQuery] = useState('')
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [previewMovie, setPreviewMovie] = useState<TMDbSearchResult | null>(null)
   const {
@@ -108,23 +107,18 @@ export default function MoviePicker({
 
   const filteredMovies = getFilteredMovies()
 
-  // Handle filter changes (when not searching)
+  // Handle filter changes - hook handles debouncing
   const handleFiltersChange = useCallback(
     (newFilters: BrowseFilters & { search: string }) => {
       const { search: searchValue, ...browseFilters } = newFilters
 
-      if (searchValue !== searchQuery) {
-        setSearchQuery(searchValue)
-        if (searchValue) {
-          search(searchValue)
-        } else {
-          browse(browseFilters)
-        }
-      } else if (!searchValue) {
+      if (searchValue) {
+        search(searchValue)
+      } else {
         browse(browseFilters)
       }
     },
-    [browse, search, searchQuery]
+    [browse, search]
   )
 
   const handleSelectMovie = (movie: TMDbSearchResult) => {

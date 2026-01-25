@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { TMDB_GENRES } from '@/types'
 import { SearchIcon, ChevronDownIcon, CloseIcon, CheckIcon, SpinnerIcon } from './Icons'
 import { cn } from './utils'
@@ -32,7 +32,17 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
   const [minRating, setMinRating] = useState(0)
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
   const genreDropdownRef = useRef<HTMLDivElement>(null)
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Stable callback ref to avoid triggering effects on callback changes
+  const onFiltersChangeRef = useRef(onFiltersChange)
+  onFiltersChangeRef.current = onFiltersChange
+
+  const notifyFiltersChange = useCallback(
+    (filters: DraftFilters) => {
+      onFiltersChangeRef.current(filters)
+    },
+    []
+  )
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -45,21 +55,10 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Debounced filter callback
+  // Notify parent of filter changes immediately (hook handles debouncing)
   useEffect(() => {
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
-    }
-    searchTimeoutRef.current = setTimeout(() => {
-      onFiltersChange({ releaseWindow, genres: selectedGenres, minRating, search })
-    }, 300)
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
-      }
-    }
-  }, [search, releaseWindow, selectedGenres, minRating, onFiltersChange])
+    notifyFiltersChange({ releaseWindow, genres: selectedGenres, minRating, search })
+  }, [search, releaseWindow, selectedGenres, minRating, notifyFiltersChange])
 
   function toggleGenre(genreId: number): void {
     setSelectedGenres((prev) =>
