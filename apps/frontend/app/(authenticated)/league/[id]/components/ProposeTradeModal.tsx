@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Image from 'next/image'
 import type { Team, TradeItems, TradeableMovie, TeamBudget, TradeMovieItem } from '@/types'
 import { createClient } from '@/utils/supabase/client'
@@ -43,7 +43,7 @@ export default function ProposeTradeModal({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   // Fetch recipient's tradeable movies when team is selected
   useEffect(() => {
