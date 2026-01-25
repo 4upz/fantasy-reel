@@ -13,7 +13,8 @@
     "lint": "npm run lint --workspace=apps/frontend",
     "test": "npm run test --workspace=apps/frontend",
     "test:functions": "./scripts/check-supabase.sh && cd supabase/functions && deno task test",
-    "test:functions:watch": "./scripts/check-supabase.sh && cd supabase/functions && deno task test:watch"
+    "test:functions:watch": "./scripts/check-supabase.sh && cd supabase/functions && deno task test:watch",
+    "test:load:trades": "./scripts/check-supabase.sh && deno run --allow-all scripts/test-concurrent-trades.ts"
   },
   "devDependencies": {
     "supabase": "^2.72.8",

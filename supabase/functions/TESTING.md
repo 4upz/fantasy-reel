@@ -2,6 +2,19 @@
 
 This document describes the testing infrastructure for Supabase Edge Functions in the Fantasy Reel project.
 
+## Quick Start
+
+```bash
+# 1. Start local Supabase
+npx supabase start
+
+# 2. (First time only) Create the .env.test file
+cp supabase/functions/.env.test.example supabase/functions/.env.test
+
+# 3. Run tests
+npm run test:functions
+```
+
 ## Test Structure
 
 ```
@@ -185,20 +198,48 @@ const leagueName = uniqueName('my-test')  // "my-test-1737341234567-abc123"
 
 ## Environment Variables
 
-The `.env.test` file contains local Supabase credentials:
+### Setup (First Time)
+
+1. Copy the example file:
+   ```bash
+   cp supabase/functions/.env.test.example supabase/functions/.env.test
+   ```
+
+2. The default values use Supabase's standard local development keys, which should work out of the box.
+
+### Required Variables
+
+| Variable | Description | How to Get |
+|----------|-------------|------------|
+| `SUPABASE_URL` | Local API URL | Default: `http://127.0.0.1:54321` |
+| `SUPABASE_ANON_KEY` | Anonymous JWT key | `npx supabase status` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service role JWT key (for admin operations) | `npx supabase status` |
+
+### Verifying Your Setup
 
 ```bash
-SUPABASE_URL=http://127.0.0.1:54321
-SUPABASE_ANON_KEY=<local anon key>
-SUPABASE_SERVICE_ROLE_KEY=<local service role key>
+# Check if Supabase is running and get the keys
+npx supabase status
 ```
 
-These are standard local development keys (safe to commit).
-
-To regenerate if needed:
-```bash
-npx supabase status --output env
+Look for the output:
 ```
+         API URL: http://127.0.0.1:54321
+     GraphQL URL: http://127.0.0.1:54321/graphql/v1
+          DB URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+      Studio URL: http://127.0.0.1:54323
+        anon key: eyJhbGciOiJIUzI1...
+service_role key: eyJhbGciOiJIUzI1...
+```
+
+Copy the `anon key` and `service_role key` to your `.env.test` if they differ from the defaults.
+
+### Note on Standard Keys
+
+Supabase uses standardized JWT keys for local development:
+- These are **NOT** secrets - they are publicly known test keys
+- They work across all local Supabase instances
+- **NEVER** use these keys in production
 
 ## Troubleshooting
 
@@ -229,8 +270,145 @@ const result = await invokeFunction(client, 'function-name', body)
 console.log('Actual error:', result.error)
 ```
 
+## E2E Testing (Future Work)
+
+The project does not currently have E2E tests configured. When setting up Playwright for frontend E2E testing, the following flows should be covered:
+
+### Trading System E2E Tests (Priority)
+
+1. **Propose Trade Flow**
+   - Navigate to league trades tab
+   - Click "Propose Trade"
+   - Select recipient team
+   - Add movies/FAAB to offer
+   - Add movies/FAAB to request
+   - Submit proposal
+   - Verify trade appears in pending list
+
+2. **Accept Trade Flow**
+   - As recipient, view incoming trade
+   - Click "Accept"
+   - Confirm in modal
+   - Verify trade moves to completed
+   - Verify movies transferred correctly
+
+3. **Counter Trade Flow**
+   - As recipient, view incoming trade
+   - Click "Counter"
+   - Modify trade terms
+   - Submit counter
+   - Original proposer sees updated trade
+
+4. **Reject Trade Flow**
+   - As recipient, reject trade
+   - Verify trade marked as rejected
+   - Verify movies returned to original owners
+
+5. **Veto Trade Flow**
+   - League owner views trade in review
+   - Click "Veto" with reason
+   - Verify trade vetoed and assets returned
+
+### Playwright Setup (When Ready)
+
+```bash
+# Install Playwright in frontend
+cd apps/frontend
+npm install -D @playwright/test
+npx playwright install
+
+# Add to package.json scripts
+"test:e2e": "playwright test",
+"test:e2e:ui": "playwright test --ui"
+```
+
+Example E2E test structure:
+```
+apps/frontend/
+├── e2e/
+│   ├── trading.spec.ts
+│   ├── draft.spec.ts
+│   ├── league.spec.ts
+│   └── fixtures/
+│       └── test-users.ts
+├── playwright.config.ts
+```
+
+---
+
+## Load Testing / Race Condition Testing
+
+To test concurrent operations and race conditions, use the load testing script:
+
+```bash
+# Run concurrent trade operations test
+npm run test:load:trades
+```
+
+### Manual Concurrent Testing
+
+For quick race condition testing, use this approach in a Deno script:
+
+```typescript
+// scripts/test-concurrent-trades.ts
+import { createClient } from '@supabase/supabase-js'
+
+const NUM_CONCURRENT = 5
+const SUPABASE_URL = 'http://127.0.0.1:54321'
+const SUPABASE_ANON_KEY = '...'
+
+async function testConcurrentBids(leagueId: string, movieId: string) {
+  // Create multiple clients (simulating different users)
+  const clients = await Promise.all(
+    Array(NUM_CONCURRENT).fill(null).map(async (_, i) => {
+      const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+      // Sign in as different test users
+      await client.auth.signInWithPassword({
+        email: `load-test-${i}@example.com`,
+        password: 'test-password-123!'
+      })
+      return client
+    })
+  )
+
+  // Fire concurrent bid requests
+  console.log(`Firing ${NUM_CONCURRENT} concurrent bids...`)
+  const results = await Promise.allSettled(
+    clients.map((client, i) =>
+      client.functions.invoke('place-bid', {
+        body: {
+          league_id: leagueId,
+          tmdb_id: 12345,
+          amount: 50 + i, // Different amounts
+        }
+      })
+    )
+  )
+
+  // Analyze results
+  const successes = results.filter(r => r.status === 'fulfilled')
+  const failures = results.filter(r => r.status === 'rejected')
+
+  console.log(`Successes: ${successes.length}`)
+  console.log(`Failures: ${failures.length}`)
+
+  // Only ONE should win (highest bid)
+  // Others should get "outbid" errors
+}
+```
+
+### What to Test for Race Conditions
+
+1. **Same movie in multiple trades** - Should prevent accepting both
+2. **Concurrent bid processing** - Only highest bid should win
+3. **FAAB budget exhaustion** - Can't spend more than available
+4. **Trade execution conflicts** - Same movie can't be in two accepted trades
+
+---
+
 ## Sources
 
 - [Supabase Testing Docs](https://supabase.com/docs/guides/functions/unit-test)
 - [Supabase Error Handling](https://supabase.com/docs/guides/functions/error-handling)
 - [Deno Test Runner](https://docs.deno.com/runtime/manual/testing/)
+- [Playwright Docs](https://playwright.dev/docs/intro)

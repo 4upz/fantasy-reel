@@ -248,15 +248,26 @@ const supabase = useMemo(() => createClient(), [])
 
 ## Testing Gaps
 
-1. **Integration tests need Supabase keys** - Tests in `supabase/functions/tests/` require ES256 JWT keys that aren't easily accessible from new Supabase local setup.
+1. **Integration tests need Supabase keys** - ADDRESSED
+   - Added `.env.test.example` with documented setup instructions
+   - Added `.env.test` with standard local Supabase keys
+   - Updated `TESTING.md` with comprehensive environment setup guide
+   - Tests now work out of the box with `npx supabase start`
 
-2. **No E2E tests** - Trading flow should have Playwright tests covering:
-   - Propose → Accept → Complete flow
-   - Propose → Counter → Accept flow
-   - Propose → Reject flow
-   - Veto flow
+2. **No E2E tests** - DOCUMENTED FOR FUTURE WORK
+   - Playwright not currently set up in frontend
+   - Documented required test flows in `TESTING.md`:
+     - Propose → Accept → Complete flow
+     - Propose → Counter → Accept flow
+     - Propose → Reject flow
+     - Veto flow
+   - Setup instructions provided when ready to implement
 
-3. **No load testing** - Race conditions won't surface without concurrent request testing.
+3. **No load testing** - ADDRESSED
+   - Created `scripts/test-concurrent-trades.ts` for race condition testing
+   - Added `npm run test:load:trades` command
+   - Tests concurrent bids, trade proposals, trade accepts, FAAB exhaustion
+   - Documented in `TESTING.md` under "Load Testing / Race Condition Testing"
 
 ---
 
