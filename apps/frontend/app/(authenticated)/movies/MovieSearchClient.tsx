@@ -48,6 +48,7 @@ export default function MovieSearchClient(): React.ReactElement {
           body: {
             query: searchQuery,
             page: searchPage,
+            upcoming_only: false,
             ...(year && { year }),
           },
         }

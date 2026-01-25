@@ -43,7 +43,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
       />
 
       {/* Modal content */}
-      <div className="relative w-full max-w-4xl mx-4 my-8 sm:my-12 animate-slide-up">
+      <div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-slide-up">
         <div className="glass card overflow-hidden">
           {/* Backdrop image */}
           {details?.backdrop_url && (

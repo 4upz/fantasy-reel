@@ -4,6 +4,7 @@ interface SearchMoviesRequest {
   query: string
   page?: number
   year?: number
+  upcoming_only?: boolean
 }
 
 interface TMDbMovie {
@@ -61,7 +62,7 @@ Deno.serve(async (req) => {
       return errorResponse('Invalid JSON body', 400)
     }
 
-    const { query, page = 1, year } = params
+    const { query, page = 1, year, upcoming_only = true } = params
 
     if (!query || query.trim().length === 0) {
       return errorResponse('Query is required', 400)
@@ -112,13 +113,13 @@ Deno.serve(async (req) => {
       genre_ids: movie.genre_ids,
     }))
 
-    // Filter to only include upcoming movies from current year or later
-    const results = filterUpcomingMovies(mappedResults)
+    // Filter to only include upcoming movies if requested (default for draft contexts)
+    const results = upcoming_only ? filterUpcomingMovies(mappedResults) : mappedResults
 
     return jsonResponse({
       page: tmdbData.page,
       total_pages: tmdbData.total_pages,
-      total_results: results.length,
+      total_results: upcoming_only ? results.length : tmdbData.total_results,
       results,
     })
   } catch (error) {
