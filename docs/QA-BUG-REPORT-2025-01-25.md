@@ -103,10 +103,21 @@ These bugs block core user flows and should be prioritized first:
 - **Fix:** Update local league state immediately after successful API call using returned league data.
 - **Files modified:** `apps/frontend/app/(authenticated)/league/[id]/draft/DraftClient.tsx` (handleStartDraft function)
 
-### DRF-003 (Medium) - Unclear click behavior on movie cards
+### DRF-003 (Medium) - Unclear click behavior on movie cards - FIXED (Code)
 - **Feature:** Draft
 - **Issue:** Clicking a movie in draft search inconsistently triggers either "Confirm pick" dialog or movie details view. No clear distinction between the two actions.
-- **Fix:** Add distinct UI affordances - e.g., "Draft" button vs clickable card area for details, or use single-click for details and double-click/button for draft
+- **Root cause:** The `DraftMovieCard` component had a single click handler on the entire card that triggered `onSelect()` (draft selection). The "Quick Preview" button was a small hover-only overlay that was easy to miss. Users expected clicking the card to show details (the more common action), not start the draft process.
+- **Fix:** Redesigned the card interaction pattern to match user intent:
+  1. **Card click** now opens movie preview/details (most common user intent)
+  2. **Hover overlay** shows two distinct action buttons:
+     - "Draft Movie" (gold/primary) - Deliberate action to select for drafting
+     - "View Details" (secondary) - Alternative access to movie preview
+  3. Clear visual hierarchy with gold primary button standing out
+  4. Added Plus and Eye icons to differentiate actions
+- **UX Pattern:** This follows the principle that the most common action (viewing details) should be the default, while the deliberate action (drafting) should require explicit intent.
+- **Files modified:**
+  - `apps/frontend/app/(authenticated)/league/[id]/components/DraftMovieCard.tsx` - Updated click handlers and hover overlay
+  - `apps/frontend/app/(authenticated)/league/[id]/components/Icons.tsx` - Added PlusIcon and EyeIcon exports
 
 ### NAV-002 (Medium) - No help/how-to documentation - FIXED (Code)
 - **Feature:** Navigation / UI
@@ -139,10 +150,17 @@ These bugs block core user flows and should be prioritized first:
   - `apps/frontend/app/(public)/login/page.tsx` - Added NavLogo import and centered logo above login form
   - `apps/frontend/app/(public)/signup/page.tsx` - Added NavLogo import and centered logo above signup form and success screen
 
-### DRF-004 (Low) - Movie description truncated with no expand option
+### DRF-004 (Low) - Movie description truncated with no expand option - FIXED (Code)
 - **Feature:** Draft
 - **Issue:** When viewing movie details in draft search, the description is truncated with no "see more" or expand action.
-- **Fix:** Add expandable text or modal with full description
+- **Root cause:** The `MovieQuickPreview` component used `line-clamp-4` CSS class to truncate the movie overview/description but provided no way for users to expand and read the full text.
+- **Fix:** Implemented expandable description with "Read more" / "Show less" toggle:
+  1. Added `isDescriptionExpanded` state to track expansion
+  2. Replaced `line-clamp-4` with CSS `max-height` transition for smooth expand/collapse
+  3. Added conditional "Read more" / "Show less" button (only shown if description exceeds 200 characters)
+  4. Button uses gold color for interactive text following Cinematic Dark design system
+  5. Smooth 300ms `max-height` transition for polished UX
+- **Files modified:** `apps/frontend/app/(authenticated)/league/[id]/components/MovieQuickPreview.tsx`
 
 ---
 
@@ -151,10 +169,10 @@ These bugs block core user flows and should be prioritized first:
 | Severity | Count | Open | IDs |
 |----------|-------|------|-----|
 | High | 5 | 0 | ~~DRF-002~~, ~~LGE-001~~, ~~LGE-002~~, ~~AUTH-002~~, ~~MOV-001~~ |
-| Medium | 5 | 1 | ~~AUTH-001~~, ~~LGE-003~~, ~~DRF-001~~, DRF-003, ~~NAV-002~~ |
-| Low | 2 | 1 | ~~NAV-001~~, DRF-004 |
+| Medium | 5 | 0 | ~~AUTH-001~~, ~~LGE-003~~, ~~DRF-001~~, ~~DRF-003~~, ~~NAV-002~~ |
+| Low | 2 | 0 | ~~NAV-001~~, ~~DRF-004~~ |
 
-**Fixed this session:** LGE-001 (config), LGE-002 (config), LGE-003 (code), AUTH-001 (code), AUTH-002 (code), NAV-001 (code), NAV-002 (code), MOV-001 (code), DRF-001 (code), DRF-002 (code)
+**Fixed this session:** LGE-001 (config), LGE-002 (config), LGE-003 (code), AUTH-001 (code), AUTH-002 (code), NAV-001 (code), NAV-002 (code), MOV-001 (code), DRF-001 (code), DRF-002 (code), DRF-003 (code), DRF-004 (code)
 
 ---
 
