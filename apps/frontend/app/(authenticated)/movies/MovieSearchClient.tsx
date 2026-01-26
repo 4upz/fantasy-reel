@@ -9,6 +9,7 @@ import { useScrollPosition } from '@/hooks/useScrollPosition'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useMovieSearch } from '@/hooks/useMovieSearch'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
+import TMDbAttribution from '@/components/TMDbAttribution'
 import MovieSearchBar from './components/MovieSearchBar'
 import MovieFilters from './components/MovieFilters'
 import MovieGrid from './components/MovieGrid'
@@ -189,6 +190,11 @@ export default function MovieSearchClient(): React.ReactElement {
             )}
           </>
         )}
+
+        {/* TMDb Attribution - Powered By section */}
+        <div className="mt-16 py-12 border-t border-border">
+          <TMDbAttribution variant="powered-by" className="mx-auto" />
+        </div>
       </div>
 
       {selectedMovie && (

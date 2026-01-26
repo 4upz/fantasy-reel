@@ -3,6 +3,7 @@ import UiPreview from './components/landing/UiPreview'
 import ScoringReveal from './components/landing/ScoringReveal'
 import MovieShowcase from './components/landing/MovieShowcase'
 import CTAFooter from './components/landing/CTAFooter'
+import SiteFooter from './components/landing/SiteFooter'
 import { generateTickerEntries, FALLBACK_MOVIES } from './components/landing/data'
 import type { TMDbSearchResult } from '@/types'
 
@@ -83,6 +84,7 @@ export default async function LandingPage(): Promise<React.ReactElement> {
       <ScoringReveal />
       <MovieShowcase movies={movies} />
       <CTAFooter />
+      <SiteFooter />
     </main>
   )
 }

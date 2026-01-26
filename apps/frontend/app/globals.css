@@ -328,25 +328,425 @@
 
   /* ============================================
      NAVIGATION SYSTEM
-     Cinema Marquee - Premium glass navbar
+     Cinema Side Rail - Premium collapsible sidebar
      ============================================ */
 
-  /* Glass navbar background */
-  .nav-glass {
-    background: oklch(0.08 0 0 / 0.8);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+  /* Desktop Sidebar */
+  .sidenav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 40;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+  }
+
+  .sidenav-desktop {
+    display: none;
+    width: 68px;
+  }
+
+  .sidenav-desktop.sidenav-expanded {
+    width: 240px;
+  }
+
+  @media (min-width: 1024px) {
+    .sidenav-desktop {
+      display: flex;
+      flex-direction: column;
+    }
+  }
+
+  /* Toggle button */
+  .sidenav-toggle {
+    position: absolute;
+    bottom: 1rem;
+    right: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 0.375rem;
+    color: var(--color-foreground-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .sidenav-toggle:hover {
+    color: var(--color-foreground);
+    background-color: var(--color-surface-hover);
+    border-color: var(--color-border);
+  }
+
+  .sidenav-expanded .sidenav-toggle {
+    right: auto;
+    left: calc(240px - 28px - 0.75rem);
+  }
+
+  .sidenav-inner {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 1rem 0.75rem;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sidenav-inner-mobile {
+    padding-top: 3.5rem;
+  }
+
+  /* Brand / Logo */
+  .sidenav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    margin-bottom: 1.5rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s ease;
+  }
+
+  .sidenav-brand:hover {
+    background-color: var(--color-surface-hover);
+  }
+
+  .sidenav-brand-icon {
+    flex-shrink: 0;
+    color: var(--color-gold);
+    transition: filter 0.2s ease;
+  }
+
+  .sidenav-brand:hover .sidenav-brand-icon {
+    filter: drop-shadow(0 0 8px oklch(0.65 0.15 85 / 0.4));
+  }
+
+  .sidenav-brand-text {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    color: var(--color-gold);
+    white-space: nowrap;
+  }
+
+  /* Section */
+  .sidenav-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .sidenav-section-label {
+    display: block;
+    padding: 0 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-foreground-muted);
+    white-space: nowrap;
+  }
+
+  .sidenav-section-label-league {
+    color: var(--color-gold);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidenav-section-league {
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .sidenav-league-indicator {
+    display: flex;
+    justify-content: center;
+    padding: 0.5rem 0;
+  }
+
+  .sidenav-league-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-gold);
+    box-shadow: 0 0 8px var(--color-gold);
+  }
+
+  /* Nav Items */
+  .sidenav-items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sidenav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.5rem;
+    border-radius: 0.5rem;
+    color: var(--color-foreground-secondary);
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  .sidenav-item:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+
+  .sidenav-item-active {
+    color: var(--color-gold);
+    background-color: var(--color-gold-muted);
+  }
+
+  .sidenav-item-active:hover {
+    color: var(--color-gold);
+    background-color: var(--color-gold-muted);
+  }
+
+  .sidenav-item-disabled {
+    color: var(--color-foreground-muted);
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* Active indicator - gold left border */
+  .sidenav-active-indicator {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60%;
+    background: var(--color-gold);
+    border-radius: 0 2px 2px 0;
+    box-shadow: 0 0 8px var(--color-gold);
+  }
+
+  .sidenav-icon {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidenav-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .sidenav-badge {
+    margin-left: auto;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: var(--color-crimson);
+    color: var(--color-foreground);
+    border-radius: 9999px;
+  }
+
+  /* Expand hint chevron */
+  .sidenav-expand-hint {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 0.5rem 0.25rem;
+    color: var(--color-foreground-muted);
+    background: linear-gradient(to right, transparent, var(--color-surface));
+    transition: opacity 0.2s ease;
+  }
+
+  /* Footer - Settings & User */
+  .sidenav-footer {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .sidenav-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 0.5rem;
+    margin-top: 0.5rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s ease;
+  }
+
+  .sidenav-user-expanded:hover {
+    background-color: var(--color-surface-hover);
+  }
+
+  .sidenav-user-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sidenav-user-name {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidenav-signout {
+    margin-top: 0.25rem;
+  }
+
+  .sidenav-signout-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0;
+    font-size: 0.75rem;
+    color: var(--color-foreground-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .sidenav-signout-btn:hover {
+    color: var(--color-crimson);
+  }
+
+  /* ============================================
+     MOBILE NAVIGATION
+     ============================================ */
+
+  .sidenav-mobile-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 56px;
+    padding: 0 1rem;
+    background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
-    transition: background-color 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+    z-index: 40;
   }
 
-  .nav-glass-scrolled {
-    background: oklch(0.08 0 0 / 0.95);
-    box-shadow: var(--shadow-soft);
-    border-color: var(--color-border-hover);
+  @media (min-width: 1024px) {
+    .sidenav-mobile-header {
+      display: none;
+    }
   }
 
-  /* Navigation links */
+  .sidenav-mobile-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 0.5rem;
+    color: var(--color-foreground-secondary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .sidenav-mobile-trigger:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+
+  .sidenav-mobile-brand {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .sidenav-mobile-title {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sidenav-mobile-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  /* Mobile Drawer Overlay */
+  .sidenav-mobile-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: overlay-fade-in 0.2s ease-out;
+  }
+
+  @media (min-width: 1024px) {
+    .sidenav-mobile-overlay {
+      display: none;
+    }
+  }
+
+  /* Mobile Drawer Panel */
+  .sidenav-mobile-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 280px;
+    max-width: 85vw;
+    height: 100vh;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    box-shadow: var(--shadow-heavy);
+    animation: slide-in-left 0.25s ease-out;
+    overflow-y: auto;
+  }
+
+  .sidenav-mobile-close {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 0.5rem;
+    color: var(--color-foreground-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    z-index: 10;
+  }
+
+  .sidenav-mobile-close:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+
+  /* Legacy nav classes (keep for compatibility) */
   .nav-link {
     color: var(--color-foreground-secondary);
     transition: color 0.2s ease;
@@ -383,7 +783,7 @@
     box-shadow: 0 0 12px oklch(0.65 0.15 85 / 0.25);
   }
 
-  /* Drawer styles */
+  /* Legacy drawer styles (keep for other components) */
   .drawer-overlay {
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
@@ -396,12 +796,10 @@
     box-shadow: var(--shadow-heavy);
   }
 
-  /* Drawer slide-in animation */
   .animate-slide-in-right {
     animation: slide-in-right 0.25s ease-out;
   }
 
-  /* Logo hover glow */
   .nav-logo:hover {
     filter: drop-shadow(0 0 8px oklch(0.65 0.15 85 / 0.3));
   }
@@ -988,6 +1386,11 @@
 
 @keyframes slide-in-right {
   from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
   to { transform: translateX(0); }
 }
 

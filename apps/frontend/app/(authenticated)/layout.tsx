@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation'
-import CinemaNav from '../components/navigation/CinemaNav'
+import SideNav from '../components/navigation/SideNav'
 import { getCachedUser, getCachedProfile } from '@/utils/supabase/cached'
 
 interface Props {
@@ -20,8 +20,9 @@ export default async function AuthenticatedLayout({ children }: Props) {
 
   return (
     <div className="min-h-screen bg-background">
-      <CinemaNav user={user} profile={profile} />
-      <main className="pt-16">
+      <SideNav user={user} profile={profile} />
+      {/* Mobile: top padding for header. Desktop: left padding for sidebar (uses CSS custom property) */}
+      <main className="pt-14 lg:pt-0 lg:pl-[var(--sidenav-width,68px)] transition-[padding] duration-250 ease-out">
         {children}
       </main>
     </div>

@@ -1,7 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import type { League } from '@/types'
-import LeagueTabs from './components/LeagueTabs'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
 import { getCachedUser } from '@/utils/supabase/cached'
 
@@ -51,42 +50,26 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
   }
 
   const participantCount = participantCountResult.count
-
-  const isOwner = league.owner_id === user.id
   const typedLeague = league as League
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* League Header */}
-        <div className="card p-6">
-          <div>
-            <h1 className="text-2xl font-bold font-display text-foreground">
-              {typedLeague.name}
-            </h1>
-            <div className="mt-3 flex items-center gap-4 flex-wrap">
-              <span className={`badge ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
-                {getStatusLabel(typedLeague.status)}
-              </span>
-              <span className="text-sm text-foreground-muted">
-                {typedLeague.invite_only ? 'Invite Only' : 'Open'}
-              </span>
-              <span className="text-sm text-foreground-muted">
-                {participantCount ?? 0} / {typedLeague.max_participants} participants
-              </span>
-            </div>
-          </div>
-
-          {/* Tab Navigation */}
-          <div className="mt-4">
-            <LeagueTabs league={typedLeague} isOwner={isOwner} />
-          </div>
+      <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        {/* League Header - Compact info bar */}
+        <div className="flex items-center gap-3 mb-6 flex-wrap">
+          <span className={`badge ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
+            {getStatusLabel(typedLeague.status)}
+          </span>
+          <span className="text-sm text-foreground-muted">
+            {typedLeague.invite_only ? 'Invite Only' : 'Open'}
+          </span>
+          <span className="text-sm text-foreground-muted">
+            {participantCount ?? 0} / {typedLeague.max_participants} participants
+          </span>
         </div>
 
         {/* Page Content */}
-        <div className="mt-4">
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   )
