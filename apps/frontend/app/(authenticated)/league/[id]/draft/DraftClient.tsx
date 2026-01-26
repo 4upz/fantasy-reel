@@ -342,7 +342,7 @@ export default function DraftClient({
 
         <div className="space-y-6">
           <ParticipantsList participants={participants} ownerId={league.owner_id} />
-          {league.status === 'setup' && (
+          {isOwner && league.status === 'setup' && (
             <InvitationsList
               leagueId={league.id}
               isOwner={isOwner}

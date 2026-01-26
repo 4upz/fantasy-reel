@@ -103,14 +103,16 @@ In Supabase Dashboard → Project Settings → Edge Functions → Secrets, add:
 
 | Secret Name | Description |
 |-------------|-------------|
+| `SITE_URL` | **REQUIRED** - Production domain URL (e.g., `https://fantasyreel.com`) - used in invite links |
 | `TMDB_API_KEY` | TMDb API read access token (JWT format) |
 | `OMDB_API_KEY` | OMDb API key |
-| `RESEND_API_KEY` | Resend API key for emails |
+| `RESEND_API_KEY` | **REQUIRED** - Resend API key for emails (invitations, notifications) |
 | `RESEND_FROM_EMAIL` | Sender email (e.g., `Fantasy Reel <noreply@yourdomain.com>`) |
 | `CRON_SECRET` | Random string for Vercel cron auth (generate with `openssl rand -hex 32`) |
 
 Or via CLI:
 ```bash
+npx supabase secrets set SITE_URL=https://your-production-domain.com
 npx supabase secrets set TMDB_API_KEY=your_key
 npx supabase secrets set OMDB_API_KEY=your_key
 npx supabase secrets set RESEND_API_KEY=your_key
