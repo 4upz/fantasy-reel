@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
     }
 
     // Construct invite URL
-    const siteUrl = Deno.env.get('SITE_URL') || 'http://localhost:3000'
+    const siteUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
     const inviteUrl = `${siteUrl}/join?token=${invitation.token}`
 
     // Fetch inviter's display name for email personalization

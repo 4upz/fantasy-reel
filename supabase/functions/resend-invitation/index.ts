@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
       return errorResponse('Failed to resend invitation', 500)
     }
 
-    const siteUrl = Deno.env.get('SITE_URL') || 'http://localhost:3000'
+    const siteUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
     const inviteUrl = `${siteUrl}/join?token=${updated.token}`
 
     // Fetch inviter's display name for email personalization
