@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
-import { StarIcon, HeartIcon, CheckIcon, ClapperboardIcon } from './Icons'
+import { StarIcon, HeartIcon, CheckIcon, ClapperboardIcon, PlusIcon, EyeIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
@@ -15,6 +15,16 @@ interface Props {
   onToggleFavorite?: (tmdbId: number) => void
   onPreview?: (movie: TMDbSearchResult) => void
 }
+
+/**
+ * DraftMovieCard - Movie card for draft selection
+ *
+ * UX Pattern:
+ * - Clicking the card opens movie details/preview (most common user intent)
+ * - Hover reveals two action buttons: "View Details" and "Draft"
+ * - "Draft" button (gold) is the primary action for deliberate pick selection
+ * - "View Details" button (secondary) provides quick access to preview
+ */
 
 export default function DraftMovieCard({
   movie,
@@ -35,6 +45,20 @@ export default function DraftMovieCard({
     onToggleFavorite?.(movie.tmdb_id)
   }
 
+  function handleCardClick(): void {
+    // Card click opens preview (most common user intent)
+    if (!isDrafted && onPreview) {
+      onPreview(movie)
+    }
+  }
+
+  function handleDraftClick(e: React.MouseEvent): void {
+    e.stopPropagation()
+    if (!isDrafted) {
+      onSelect(movie)
+    }
+  }
+
   function handlePreviewClick(e: React.MouseEvent): void {
     e.stopPropagation()
     onPreview?.(movie)
@@ -48,7 +72,7 @@ export default function DraftMovieCard({
   )
 
   return (
-    <div onClick={() => !isDrafted && onSelect(movie)} className={cardClasses}>
+    <div onClick={handleCardClick} className={cardClasses}>
       {/* Poster Container */}
       <div className="relative aspect-[2/3] bg-elevated">
         {/* Skeleton loader */}
@@ -151,15 +175,29 @@ export default function DraftMovieCard({
           </div>
         )}
 
-        {/* Hover Preview Button */}
-        {onPreview && !isDrafted && (
-          <div className="absolute inset-x-0 bottom-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={handlePreviewClick}
-              className="w-full py-2 bg-gold/90 hover:bg-gold text-background text-sm font-semibold rounded-lg transition-colors backdrop-blur-sm"
-            >
-              Quick Preview
-            </button>
+        {/* Hover Action Buttons */}
+        {!isDrafted && (
+          <div className="absolute inset-x-0 bottom-0 p-3 opacity-0 group-hover:opacity-100 transition-all duration-200">
+            <div className="flex flex-col gap-2">
+              {/* Draft Button - Primary Action */}
+              <button
+                onClick={handleDraftClick}
+                className="w-full py-2.5 bg-gold hover:bg-gold-hover text-background text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-glow-gold"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Draft Movie
+              </button>
+              {/* View Details Button - Secondary Action */}
+              {onPreview && (
+                <button
+                  onClick={handlePreviewClick}
+                  className="w-full py-2 bg-surface/90 hover:bg-surface-hover text-foreground-secondary hover:text-foreground text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border border-border hover:border-border-hover flex items-center justify-center gap-2"
+                >
+                  <EyeIcon className="w-4 h-4" />
+                  View Details
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

@@ -14,6 +14,8 @@ import {
   ArrowUp,
   Clapperboard,
   TrendingUp,
+  Plus,
+  Eye,
 } from 'lucide-react'
 
 interface IconProps {
@@ -48,6 +50,8 @@ export const ArrowRightIcon = createIcon(ArrowRight, 'w-4 h-4')
 export const ArrowUpIcon = createIcon(ArrowUp, 'w-4 h-4')
 export const ClapperboardIcon = createIcon(Clapperboard, 'w-6 h-6')
 export const TrendingUpIcon = createIcon(TrendingUp, 'w-4 h-4')
+export const PlusIcon = createIcon(Plus, 'w-4 h-4')
+export const EyeIcon = createIcon(Eye, 'w-4 h-4')
 
 export const StarIcon = createFillableIcon(Star, 'w-4 h-4', true)
 export const HeartIcon = createFillableIcon(Heart, 'w-4 h-4', false)
