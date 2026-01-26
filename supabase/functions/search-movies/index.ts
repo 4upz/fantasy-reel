@@ -39,6 +39,7 @@ interface SearchResult {
 
 /**
  * Filters search results to only include upcoming movies from the current year or later.
+ * Only used when upcoming_only=true is explicitly passed.
  */
 function filterUpcomingMovies(results: SearchResult[]): SearchResult[] {
   return results.filter((movie) => isUpcomingMovie(movie.release_date).valid)
@@ -62,7 +63,7 @@ Deno.serve(async (req) => {
       return errorResponse('Invalid JSON body', 400)
     }
 
-    const { query, page = 1, year, upcoming_only = true } = params
+    const { query, page = 1, year, upcoming_only = false } = params
 
     if (!query || query.trim().length === 0) {
       return errorResponse('Query is required', 400)
