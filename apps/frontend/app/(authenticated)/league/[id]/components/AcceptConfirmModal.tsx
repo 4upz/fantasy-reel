@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import Image from 'next/image'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import type { TradeOfferWithTeams, TradeItems, TradeMovieItem } from '@/types'
 
 interface Props {
@@ -17,8 +18,6 @@ export default function AcceptConfirmModal({
   onClose,
   onConfirm,
 }: Props) {
-  const [isLoading, setIsLoading] = useState(false)
-
   const isInitiator = trade.initiator_team_id === currentTeamId
   const initiatorTeam = trade.initiator_team as { id: string; name: string; avatar_url: string | null }
   const recipientTeam = trade.recipient_team as { id: string; name: string; avatar_url: string | null }
@@ -33,11 +32,7 @@ export default function AcceptConfirmModal({
 
   const otherTeamName = isInitiator ? recipientTeam.name : initiatorTeam.name
 
-  const handleConfirm = async () => {
-    setIsLoading(true)
-    await onConfirm()
-    setIsLoading(false)
-  }
+  const { execute: handleConfirm, isLoading } = useAsyncAction(onConfirm)
 
   // Handle escape key to close modal
   useEffect(() => {

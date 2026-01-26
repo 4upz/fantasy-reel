@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import CounterpickPicker from './CounterpickPicker'
 import DraftProgressRing from './DraftProgressRing'
 import { SpinnerIcon, ClockIcon, ArrowUpIcon, CheckIcon } from './Icons'
@@ -33,8 +34,7 @@ export default function CounterpickRound({
 }: Props) {
   const [currentTurn, setCurrentTurn] = useState<CounterpickTurnInfo | null>(null)
   const [loading, setLoading] = useState(true)
-  const [picking, setPicking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   const totalParticipants = participants.length
   const totalCounterpicks = totalParticipants * league.draft_counterpick_slots
@@ -44,16 +44,16 @@ export default function CounterpickRound({
   useEffect(() => {
     async function fetchCurrentTurn() {
       setLoading(true)
-      setError(null)
+      setFetchError(null)
 
       const supabase = createClient()
-      const { data, error: fetchError } = await supabase.rpc('get_next_counterpick_turn', {
+      const { data, error: rpcError } = await supabase.rpc('get_next_counterpick_turn', {
         p_league_id: league.id,
       })
 
-      if (fetchError) {
-        console.error('Error fetching counterpick turn:', fetchError)
-        setError('Failed to load turn information')
+      if (rpcError) {
+        console.error('Error fetching counterpick turn:', rpcError)
+        setFetchError('Failed to load turn information')
         setCurrentTurn(null)
       } else if (data && data.length > 0) {
         setCurrentTurn(data[0])
@@ -96,34 +96,34 @@ export default function CounterpickRound({
     return teamNamesByUserId.get(userId) || 'Unknown Team'
   }
 
-  // Handle making a counterpick
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function handleCounterpick(movieId: string, option: CounterpickOption): Promise<void> {
-    setPicking(true)
-    setError(null)
+  // Handle making a counterpick - second param required by CounterpickPicker but unused here
+  const counterpickAction = useCallback(
+    async (movieId: string, _option: CounterpickOption): Promise<void> => {
+      void _option // Mark as intentionally unused
+      const { data, error: pickError } = await callEdgeFunction<{
+        counterpick: Counterpick
+        round_complete: boolean
+      }>('make-counterpick', {
+        body: {
+          league_id: league.id,
+          movie_id: movieId,
+        },
+      })
 
-    const { data, error: pickError } = await callEdgeFunction<{
-      counterpick: Counterpick
-      round_complete: boolean
-    }>('make-counterpick', {
-      body: {
-        league_id: league.id,
-        movie_id: movieId,
-      },
-    })
+      if (pickError) {
+        throw new Error(pickError)
+      }
 
-    if (pickError) {
-      setError(pickError)
-    } else {
       onCounterpickMade()
       // If round complete, turn will be null on next fetch
       if (data?.round_complete) {
         setCurrentTurn(null)
       }
-    }
+    },
+    [league.id, onCounterpickMade]
+  )
 
-    setPicking(false)
-  }
+  const { execute: handleCounterpick, isLoading: picking, error } = useAsyncAction(counterpickAction)
 
   // Render different states based on league status
   if (league.status !== 'counterpicking') {
@@ -253,7 +253,7 @@ export default function CounterpickRound({
         )}
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {(fetchError || error) && <div className="alert alert-error">{fetchError || error}</div>}
 
       {/* Counterpick Picker - Only show when user is a participant */}
       {currentUserTeamId && (

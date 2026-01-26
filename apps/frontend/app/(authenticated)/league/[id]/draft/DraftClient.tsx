@@ -76,9 +76,11 @@ export default function DraftClient({
   }, [favoriteMovieIds, league.id])
 
   const fetchDraftPicks = useCallback(async () => {
+    // Explicit FK required: draft_picks has two FKs to teams (team_id, counterpicked_by_team_id)
+    // Without explicit FK, PostgREST returns PGRST201 ambiguous relationship error
     const { data } = await supabase
       .from('draft_picks')
-      .select(`*, movies (*), teams (*)`)
+      .select(`*, movies (*), teams!draft_picks_team_id_fkey (*)`)
       .eq('league_id', league.id)
       .order('round', { ascending: true })
       .order('pick_number', { ascending: true })

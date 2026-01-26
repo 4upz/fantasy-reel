@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useMemo, useCallback } from 'react'
 import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
@@ -34,9 +35,6 @@ export default function DraftBoard({
   onCounterpickMade,
   onToggleFavorite,
 }: Props) {
-  const [picking, setPicking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
   const totalParticipants = participants.length
   const totalPicks = totalParticipants * league.draft_slots
   const picksMade = draftPicks.length
@@ -103,34 +101,34 @@ export default function DraftBoard({
     return map
   }, [participants])
 
-  async function handleDraftPick(tmdbId: number, movieData: TMDbSearchResult): Promise<void> {
-    setPicking(true)
-    setError(null)
-
-    const { error: pickError } = await callEdgeFunction('draft-pick', {
-      body: {
-        league_id: league.id,
-        tmdb_id: tmdbId,
-        movie_data: {
-          title: movieData.title,
-          overview: movieData.overview,
-          poster_url: movieData.poster_url,
-          release_date: movieData.release_date,
-          vote_average: movieData.vote_average,
-          popularity: movieData.popularity,
-          genre_ids: movieData.genre_ids,
+  const draftPickAction = useCallback(
+    async (tmdbId: number, movieData: TMDbSearchResult): Promise<void> => {
+      const { error: pickError } = await callEdgeFunction('draft-pick', {
+        body: {
+          league_id: league.id,
+          tmdb_id: tmdbId,
+          movie_data: {
+            title: movieData.title,
+            overview: movieData.overview,
+            poster_url: movieData.poster_url,
+            release_date: movieData.release_date,
+            vote_average: movieData.vote_average,
+            popularity: movieData.popularity,
+            genre_ids: movieData.genre_ids,
+          },
         },
-      },
-    })
+      })
 
-    if (pickError) {
-      setError(pickError)
-      setPicking(false)
-    } else {
+      if (pickError) {
+        throw new Error(pickError)
+      }
+
       await onPickMade()
-      setPicking(false)
-    }
-  }
+    },
+    [league.id, onPickMade]
+  )
+
+  const { execute: handleDraftPick, isLoading: picking, error } = useAsyncAction(draftPickAction)
 
   function getTeamName(userId: string): string {
     return teamNamesByUserId.get(userId) || 'Unknown Team'

@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import type { Team, TradeItems, TradeableMovie, TeamBudget, TradeMovieItem } from '@/types'
 import { createClient } from '@/utils/supabase/client'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 
 interface Props {
   team: Team
@@ -81,8 +82,6 @@ export default function ProposeTradeModal({
   const [requestedMovies, setRequestedMovies] = useState<Set<string>>(new Set())
   const [requestedFaab, setRequestedFaab] = useState(0)
   const [message, setMessage] = useState('')
-
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
@@ -91,13 +90,13 @@ export default function ProposeTradeModal({
   // Handle escape key to close modal
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) {
+      if (e.key === 'Escape') {
         onClose()
       }
     }
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
-  }, [onClose, isLoading])
+  }, [onClose])
 
   // Fetch recipient's tradeable movies when team is selected
   useEffect(() => {
@@ -221,10 +220,9 @@ export default function ProposeTradeModal({
     requestedMovies.size > 0 ||
     requestedFaab > 0
 
-  const handleSubmit = async () => {
+  const submitTradeAction = useCallback(async () => {
     if (!selectedTeamId) return
 
-    setIsLoading(true)
     setError(null)
 
     const offeredItems: TradeItems = {
@@ -256,12 +254,12 @@ export default function ProposeTradeModal({
       message.trim() || undefined
     )
 
-    setIsLoading(false)
-
     if (!result.success) {
       setError(result.error || 'Failed to propose trade')
     }
-  }
+  }, [selectedTeamId, tradeableMovies, offeredMovies, offeredFaab, recipientMovies, requestedMovies, requestedFaab, message, onPropose])
+
+  const { execute: handleSubmit, isLoading } = useAsyncAction(submitTradeAction)
 
   return (
     <div
