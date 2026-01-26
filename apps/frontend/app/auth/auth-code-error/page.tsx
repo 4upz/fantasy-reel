@@ -83,19 +83,21 @@ export default function AuthCodeErrorPage() {
           )}
 
           {/* Local development helper */}
-          <div className="alert alert-info mt-4">
-            <p className="text-xs">
-              <strong>Local development?</strong> Check Mailpit at{' '}
-              <a
-                href="http://localhost:54324"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-info"
-              >
-                http://localhost:54324
-              </a>
-            </p>
-          </div>
+          {process.env.NODE_ENV === 'development' && (
+            <div className="alert alert-info mt-4">
+              <p className="text-xs">
+                <strong>Local development?</strong> Check Mailpit at{' '}
+                <a
+                  href="http://localhost:54324"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-info"
+                >
+                  http://localhost:54324
+                </a>
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="text-center">

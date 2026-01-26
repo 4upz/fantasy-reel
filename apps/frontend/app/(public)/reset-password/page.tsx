@@ -1,0 +1,143 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { updatePassword } from './actions'
+import Link from 'next/link'
+import { FormError, FormSuccess } from '../../components/FormError'
+import { createClient } from '@/utils/supabase/client'
+import { toast } from 'sonner'
+
+export default function ResetPasswordPage() {
+  const [error, setError] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [isValidSession, setIsValidSession] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    // Check if user has a valid recovery session
+    const checkSession = async () => {
+      const supabase = createClient()
+      const { data: { session } } = await supabase.auth.getSession()
+      setIsValidSession(!!session)
+    }
+    checkSession()
+  }, [])
+
+  async function handleSubmit(formData: FormData) {
+    setError(null)
+    setIsLoading(true)
+
+    try {
+      const result = await updatePassword(formData)
+      if (result.error) {
+        setError(result.error)
+        toast.error(result.error)
+      } else if (result.success) {
+        setSuccess(true)
+        toast.success('Password updated successfully!')
+      }
+    } catch {
+      setError('An unexpected error occurred')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Still loading session check
+  if (isValidSession === null) {
+    return (
+      <div className="w-full max-w-md space-y-8 px-4">
+        <div className="card p-8 text-center">
+          <p className="text-foreground-secondary">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // No valid session - link may be expired or invalid
+  if (!isValidSession) {
+    return (
+      <div className="w-full max-w-md space-y-8 px-4">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
+        </div>
+        <div className="card p-8 text-center">
+          <h2 className="text-2xl font-bold font-display text-foreground mb-4">Invalid or Expired Link</h2>
+          <p className="text-foreground-secondary mb-6">
+            This password reset link is invalid or has expired. Please request a new one.
+          </p>
+          <Link href="/forgot-password" className="btn btn-primary">
+            Request new link
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  if (success) {
+    return (
+      <div className="w-full max-w-md space-y-8 text-center px-4">
+        <div className="card p-8">
+          <FormSuccess message="Your password has been updated successfully!" />
+          <div className="mt-6">
+            <Link href="/login" className="btn btn-primary">
+              Sign in with new password
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full max-w-md space-y-8 px-4">
+      <div className="text-center">
+        <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
+        <p className="mt-3 text-foreground-secondary">Set your new password</p>
+      </div>
+
+      <div className="card p-8">
+        <form action={handleSubmit} className="space-y-6">
+          <FormError message={error} />
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="password" className="sr-only">
+                New Password
+              </label>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                disabled={isLoading}
+                className="input"
+                placeholder="New password (min 6 characters)"
+              />
+            </div>
+            <div>
+              <label htmlFor="confirmPassword" className="sr-only">
+                Confirm New Password
+              </label>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                required
+                disabled={isLoading}
+                className="input"
+                placeholder="Confirm new password"
+              />
+            </div>
+          </div>
+
+          <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3">
+            {isLoading ? 'Updating...' : 'Update password'}
+          </button>
+        </form>
+      </div>
+    </div>
+  )
+}

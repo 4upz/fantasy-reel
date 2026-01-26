@@ -5,6 +5,7 @@ import { signup } from './actions'
 import Link from 'next/link'
 import { FormError } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
+import NavLogo from '../../components/navigation/NavLogo'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
@@ -41,6 +42,11 @@ export default function SignupPage() {
   if (signupSuccess) {
     return (
       <div className="w-full max-w-md space-y-8 text-center px-4">
+          {/* Back to home navigation */}
+          <div className="flex justify-center">
+            <NavLogo href="/" />
+          </div>
+
           <div className="card p-8">
             <h2 className="text-2xl font-bold font-display text-foreground">Check your email</h2>
             <div className="mt-6 space-y-4">
@@ -50,21 +56,23 @@ export default function SignupPage() {
               <p className="text-foreground-secondary">
                 Click the link in the email to activate your account.
               </p>
-              <div className="alert alert-info mt-6">
-                <p className="text-sm">
-                  <strong>Using local Supabase?</strong>
-                  <br />
-                  Check Mailpit at{' '}
-                  <a
-                    href="http://localhost:54324"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-info"
-                  >
-                    http://localhost:54324
-                  </a>
-                </p>
-              </div>
+              {process.env.NODE_ENV === 'development' && (
+                <div className="alert alert-info mt-6">
+                  <p className="text-sm">
+                    <strong>Using local Supabase?</strong>
+                    <br />
+                    Check Mailpit at{' '}
+                    <a
+                      href="http://localhost:54324"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-info"
+                    >
+                      http://localhost:54324
+                    </a>
+                  </p>
+                </div>
+              )}
               <div className="mt-6">
                 <Link href="/login" className="text-gold hover:text-gold-hover font-semibold transition-colors">
                   Back to sign in
@@ -78,8 +86,13 @@ export default function SignupPage() {
 
   return (
     <div className="w-full max-w-md space-y-8 px-4">
+        {/* Back to home navigation */}
+        <div className="flex justify-center">
+          <NavLogo href="/" />
+        </div>
+
         <div className="text-center">
-          <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
+          <h1 className="text-3xl font-bold font-display text-foreground">Join Fantasy Reel</h1>
           <p className="mt-3 text-foreground-secondary">Create your account</p>
         </div>
 

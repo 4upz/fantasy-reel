@@ -5,6 +5,7 @@ import { login, resendConfirmationEmail } from './actions'
 import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
+import NavLogo from '../../components/navigation/NavLogo'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
@@ -67,8 +68,13 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-md space-y-8 px-4">
+        {/* Back to home navigation */}
+        <div className="flex justify-center">
+          <NavLogo href="/" />
+        </div>
+
         <div className="text-center">
-          <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
+          <h1 className="text-3xl font-bold font-display text-foreground">Welcome Back</h1>
           <p className="mt-3 text-foreground-secondary">Sign in to your account</p>
         </div>
 
@@ -143,6 +149,14 @@ export default function LoginPage() {
             <DiscordLoginButton />
 
             <div className="text-center space-y-3">
+              <p className="text-sm">
+                <Link
+                  href="/forgot-password"
+                  className="text-foreground-muted hover:text-gold transition-colors"
+                >
+                  Forgot your password?
+                </Link>
+              </p>
               <p className="text-sm text-foreground-secondary">
                 Don&apos;t have an account?{' '}
                 <Link
