@@ -1,6 +1,6 @@
-Fantasy Movies App Proof-of-Concept Plan
+# Fantasy Movies App
 
-This document provides the context, requirements, architecture, and recommended proof-of-concept stack for an LLM coding agent to begin co-piloting development of the Fantasy Movies web application.
+Developer context for the Fantasy Movies web application - a fantasy league platform for movies.
 
 ---
 
@@ -22,6 +22,27 @@ When implementing any UI changes, new components, or frontend features, **always
 - High-quality, distinctive UI that avoids generic "AI slop" aesthetics
 - Proper use of design tokens, component classes, and animations
 - Production-grade, polished implementation
+
+---
+
+## Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Start local Supabase (Docker required)
+npx supabase start
+
+# Start frontend dev server
+npm run dev
+
+# Run Edge Function tests
+npm run test:functions
+
+# Build for production
+npm run build
+```
 
 ---
 
@@ -160,51 +181,7 @@ apps/frontend/app/
 
 ---
 
-## 1. Project Overview
-
-**Goal:** Build a proof-of-concept web application that allows users to create fantasy leagues for movies, draft upcoming releases, and score based on aggregated review data (IMDb, Rotten Tomatoes, Metacritic).
-
-**Core Flow:**
-1. User signs up / logs in.
-2. User creates or joins a League.
-3. Each League member creates a Production Company (team).
-4. Teams draft movies from the current year's upcoming releases.
-5. Once movies release, a background job fetches review scores and computes points.
-6. Leaderboard updates in real time or via periodic polling.
-
----
-
-## 2. Functional Requirements
-
-- **League Management:** create, invite, join, configure (open vs. invite-only); invitation links.
-- **Team (Production Company):** one team per league participant; customizable name and avatar.
-- **Movie Drafting:** snake or simple pick order; enforce one pick per movie; rounds.
-- **Pickup Bidding:** post-draft phase where teams bid on undrafted movies; highest bid wins.
-- **Data Source:**
-  - Metadata: TMDb for upcoming list, posters, release dates.
-  - Reviews: OMDb or a paid aggregator for IMDb/RT/Metacritic scores.
-- **Scoring Engine:** nightly job to fetch and normalize review scores; update each team's total points.
-- **Dashboard & Standings:** per-league and per-team views, with movie release schedule and current points.
-- **Notifications:** email for invitations, draft reminders, bid updates, and movie releases.
-- **Auth & Permissions:** Email/password or Discord OAuth; account linking; role checks (owner, member).
-
----
-
-## 3. Non-Functional Requirements
-
-- **API-First:** REST endpoints via Supabase Edge Functions for complex business logic.
-- **Mobile-Ready:** Architecture supports future native mobile apps using same backend APIs.
-- **Scalability:**
-  - Start serverless (Vercel) and managed services.
-  - Direct Supabase calls for simple CRUD; Edge Functions for complex operations.
-  - Supabase handles scaling automatically; add read replicas if needed.
-- **Speed-to-Market:** leverage managed auth (Supabase Auth), managed database (Supabase), a PaaS for deployment.
-- **Maintainability:** structured code, modular Edge Functions, Supabase migrations, unit/integration tests.
-- **Security:** JWT validation via Supabase, RLS policies, atomic draft transactions.
-
----
-
-## 4. High-Level Architecture
+## 1. High-Level Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -266,7 +243,7 @@ apps/frontend/app/
 
 ---
 
-## 5. Core Data Model
+## 2. Core Data Model
 
 ### Tables
 
@@ -275,10 +252,12 @@ apps/frontend/app/
 - **leagues:** id, name, owner_id, invite_only, draft config, status
 - **league_participants:** id, league_id, user_id, role, status
 - **league_bidding_config:** league_id, bidding_enabled, bidding_start_date, bidding_end_date, min_bid, max_bid
-- **teams:** id, participant_id, name, avatar_url
+- **teams:** id, participant_id, name, avatar_url, faab_budget
 - **movies:** id, tmdb_id, title, release_date, poster_url, status, imdb_id
 - **draft_picks:** id, league_id, team_id, movie_id, pick_order, round, picked_at
 - **pickup_bids:** id, league_id, team_id, movie_id, bid_amount, status, created_at, processed_at
+- **trades:** id, league_id, proposer_team_id, recipient_team_id, status, proposed_at, resolved_at
+- **trade_items:** id, trade_id, team_id, movie_id
 - **reviews:** id, movie_id, source, score, fetched_at
 - **team_scores:** id, team_id, total_points, last_updated
 - **invitations:** id, league_id, invited_by, email, token, status, sent_at
@@ -306,12 +285,16 @@ auth.users (Supabase managed)
                     │
                     ├── pickup_bids (1:N)
                     │
+                    ├── trades (1:N as proposer or recipient)
+                    │       │
+                    │       └── trade_items (1:N)
+                    │
                     └── team_scores (1:1)
 ```
 
 ---
 
-## 6. API Endpoint Sketch
+## 3. API Endpoint Sketch
 
 ### Direct Supabase (via client SDK)
 ```
@@ -343,10 +326,23 @@ POST   /functions/v1/start-draft        # Transition league status to 'drafting'
 POST   /functions/v1/draft-pick         # Atomic: validate turn, check availability, record pick
 POST   /functions/v1/drop-movie         # Team drops a drafted movie
 
+# Counterpick
+POST   /functions/v1/start-counterpick-round  # Start counterpick round after draft
+POST   /functions/v1/make-counterpick         # Make a counterpick selection
+
 # Bidding (Pickup Phase)
 POST   /functions/v1/place-bid          # Place or update a pickup bid
 POST   /functions/v1/cancel-bid         # Cancel an active bid
 POST   /functions/v1/process-bids       # Auto-process won/lost bids (cron job)
+
+# Trading
+POST   /functions/v1/propose-trade      # Create trade proposal
+POST   /functions/v1/respond-trade      # Accept/reject trade
+POST   /functions/v1/counter-trade      # Counter-offer on trade
+POST   /functions/v1/cancel-trade       # Cancel pending trade
+POST   /functions/v1/veto-trade         # League owner vetoes a trade
+GET    /functions/v1/get-trades         # List trades for league
+POST   /functions/v1/process-trades     # Process pending trades (cron)
 
 # Movies
 GET    /functions/v1/browse-movies      # Browse upcoming movies via TMDb discover
@@ -367,7 +363,7 @@ POST   /functions/v1/merge-accounts     # Merge OAuth account with existing acco
 
 ---
 
-## 7. Recommended POC Stack
+## 4. Tech Stack
 
 - **Frontend:** Next.js 15 + React 19 + Tailwind CSS 4
 - **Auth:** Supabase Auth (JWT tokens, email/password, Discord OAuth)
@@ -480,7 +476,7 @@ Reference: https://supabase.com/docs/guides/database/postgres/row-level-security
 
 ---
 
-## 8. Implementation Progress
+## 5. Implementation Progress
 
 ### Completed
 1. ✅ Initialize Repo: monorepo with npm workspaces
@@ -488,153 +484,41 @@ Reference: https://supabase.com/docs/guides/database/postgres/row-level-security
 3. ✅ Create leagues table with RLS policies
 4. ✅ Basic league creation and listing UI
 5. ✅ Define Database Schema: all tables (participants, teams, movies, drafts, reviews, scores, invitations)
-6. ✅ Implement Edge Functions for league operations:
-   - `create-league` - Creates league + owner participant + team
-   - `join-league` - Join via invitation token or direct (open leagues)
-   - `send-invite` - Create invitation + send email via Resend
-   - `resend-invitation` - Resend invitation email with new token
-   - `draft-pick` - Atomic draft picks with turn validation, accepts `tmdb_id` with find-or-create
-   - `sync-movies` - Fetch upcoming movies from TMDb (includes IMDb IDs)
-   - `update-scores` - Fetch reviews from OMDb, normalize scores, update team totals
-   - `get-leagues` - List user's leagues
-   - `start-draft` - Transition league from setup to drafting status
-   - `browse-movies` - Browse upcoming movies via TMDb discover API (with filters)
-   - `search-movies` - Search movies via TMDb search API
-   - `get-movie-details` - Get detailed movie info including cast from TMDb
+6. ✅ Implement Edge Functions for league operations
 7. ✅ Unit test suite for all Edge Functions (100+ tests, 100% pass)
-8. ✅ Build league detail page with draft board:
-   - `/league/[id]` - Server component with data fetching
-   - `LeagueDetailClient` - Client component with real-time subscriptions
-   - `DraftBoard` - Snake draft turn calculation, pick history
-   - `MoviePicker` - Search and select available movies
-   - `ParticipantsList` - Teams with draft order display
-   - `LeagueHeader` - Status, invite button, start draft button
-   - `InviteModal` - Send invitations with shareable link
-9. ✅ Connect frontend to Edge Functions:
-   - `LeagueManager` now uses `create-league` Edge Function
-   - League cards navigate to detail page
-   - Draft picks use `draft-pick` Edge Function
-   - Invitations use `send-invite` Edge Function
-10. ✅ Implement real-time subscriptions for draft board:
-    - Enabled Supabase Realtime for `leagues`, `draft_picks`, `league_participants`
-    - Frontend subscribes to postgres_changes for live updates
-11. ✅ Join league flow:
-    - `/join` page for accepting invitations via token
-    - Calls `join-league` Edge Function
-    - Redirects to league detail on success
-12. ✅ Resend confirmation email flow:
-    - `resendConfirmationEmail` server action using Supabase `auth.resend()`
-    - Login page shows resend button when email is unconfirmed
-    - `/auth/auth-code-error` page converted to resend form for expired links
-    - Security: never reveals email existence, uses Supabase rate limiting
-13. ✅ TMDb API-powered movie drafting:
-    - Replaced pre-synced DB movies with direct TMDb API integration
-    - `browse-movies` Edge Function for discovering upcoming movies
-    - `useDraftMovies` hook for search/browse with pagination and debouncing
-    - `MoviePicker` refactored to use TMDb API instead of local DB
-    - `draft-pick` updated to accept `tmdb_id` with find-or-create logic
-    - Movies are only saved to DB when drafted (no pre-sync required)
-14. ✅ Email integration with Resend:
-    - Shared email module (`_shared/email.ts`) with Resend API integration
-    - Cinematic Dark themed HTML email templates
-    - `send-invite` and `resend-invitation` now send actual emails
-    - Security hardening: header injection protection, input validation
-    - Non-blocking: email failures don't block invitation creation
-    - See `EMAIL_SETUP.md` for configuration instructions
-
-15. ✅ Leaderboard/standings page:
-    - `/league/[id]/standings` - Server component with data fetching
-    - `StandingsClient` - Client component with real-time subscriptions
-    - `TeamStandingCard` - Expandable team ranking cards with gold/silver/bronze badges
-    - `MovieScoreCard` - Movie display with poster, title, and combined score
-    - `ScoreSourceBadge` - Color-coded IMDb (yellow), RT (red), Metacritic (green)
-    - Team rankings sorted by total_points with tie handling (T1, T2)
-    - Tab navigation between Draft and Standings views
-    - Real-time subscriptions for `team_scores` and `movies` tables
-    - Shared utilities extracted to `utils/league.ts`
-
-16. ✅ Nightly score updates via Supabase pg_cron:
-    - `queue-movies-for-scoring` - Daily at midnight UTC, queues released movies
-    - `process-score-queue` - Every minute, processes batches of 5 via Edge Function
-    - Three-layer architecture: pgmq queue → pg_cron scheduler → Edge Function worker
-    - See `supabase/SCORING.md` for full documentation
-
-17. ✅ Discord OAuth integration:
-    - Discord as OAuth provider via Supabase Auth
-    - `DiscordLoginButton` component with branded styling
-    - `/auth/callback` handles OAuth redirect flow
-    - Profile auto-populated with Discord username/avatar
-    - See `docs/OAUTH.md` for setup instructions
-
-18. ✅ Account linking and merging:
-    - `/auth/link-account` page for linking OAuth to existing account
-    - `merge-accounts` Edge Function for account consolidation
-    - Handles duplicate detection (same email, different auth providers)
-    - Profile data merged during account link
-    - See `docs/PLAN-account-linking.md` for design
-
-19. ✅ League settings/configuration UI:
-    - `/league/[id]/settings` - Full league management page
-    - `LeagueInfoSection` - Edit name, description, visibility
-    - `DraftConfigSection` - Configure draft type, rounds, dates
-    - `BiddingConfigSection` - Enable/configure bidding phase
-    - `ParticipantsSection` - Manage members, kick participants
-    - `DangerZoneSection` - Delete league with confirmation
-    - Owner-only access via RLS and UI guards
-
-20. ✅ Pickup bidding system:
-    - Complete bid lifecycle: place → counter → process → notify
-    - `place-bid` / `cancel-bid` Edge Functions with validation
-    - `process-bids` cron job for auto-resolution
-    - Email notifications: outbid, bid won, bid lost
-    - `/league/[id]/bidding` - Dedicated bidding interface
-    - `BiddingPanel`, `BidCard`, `PlaceBidModal` components
-    - `useBidding` hook for state management
-    - See Section 11 "Bidding System" for full details
-
-21. ✅ League dashboard redesign:
-    - Multi-tab layout: Dashboard, Draft, Bidding, Standings, Roster, Settings
-    - `/league/[id]/dashboard` - Team overview with stats
-    - `TeamHeader` - Team name, avatar, points display
-    - `MovieTimeline` - Horizontal scroll of upcoming releases
-    - `StandingsSidebar` - Compact league standings
-    - `MovieGrid` - Team's drafted movies display
-    - Shared layout with `LeagueTabs` navigation
-
-22. ✅ User settings and avatar upload:
-    - `/settings` - User account management page
-    - `AvatarUpload` component with Supabase Storage
-    - `ConnectedAccounts` - View/manage OAuth connections
-    - Avatar bucket with RLS policies for secure uploads
-
-23. ✅ Movie browsing and roster pages:
-    - `/movies` - Browse all movies with filters
-    - `/league/[id]/roster` - Team's movie collection
-    - `MovieFilters` - Genre, date range, status filters
-    - `MovieDetailModal` - Full movie info with cast
-    - Infinite scroll pagination
-
-24. ✅ Integration test suite:
-    - 14+ integration tests in `supabase/functions/tests/`
-    - Tests actual Edge Function invocation against local Supabase
-    - Test utilities in `tests/_setup.ts` for auth/cleanup
-    - Covers: leagues, invitations, drafting, bidding, accounts
-
-25. ✅ RLS performance optimizations:
-    - Security definer helper functions to break recursion
-    - `(SELECT auth.uid())` wrapping for single evaluation
-    - `TO authenticated` role targeting
-    - Supporting indexes for common RLS queries
-    - See migration `20260126_rls_performance_optimizations.sql`
+8. ✅ Build league detail page with draft board
+9. ✅ Connect frontend to Edge Functions
+10. ✅ Implement real-time subscriptions for draft board
+11. ✅ Join league flow via invitation token
+12. ✅ Resend confirmation email flow
+13. ✅ TMDb API-powered movie drafting
+14. ✅ Email integration with Resend
+15. ✅ Leaderboard/standings page
+16. ✅ Nightly score updates via Supabase pg_cron
+17. ✅ Discord OAuth integration
+18. ✅ Account linking and merging
+19. ✅ League settings/configuration UI
+20. ✅ Pickup bidding system (place/cancel/process bids, email notifications)
+21. ✅ League dashboard redesign (multi-tab layout)
+22. ✅ User settings and avatar upload
+23. ✅ Movie browsing and roster pages
+24. ✅ Integration test suite (14+ tests)
+25. ✅ RLS performance optimizations
+26. ✅ Trading system (propose/respond/counter/cancel/veto/get-trades, process-trades cron)
+27. ✅ Counterpick rounds (start-counterpick-round, make-counterpick)
+28. ✅ Drop movie functionality (drop-movie Edge Function)
+29. ✅ Notification logging system
+30. ✅ FAAB budget configuration for leagues
+31. ✅ Hybrid fantasy points scoring system
 
 ### Next Up
-26. ⬜ Production deployment configuration
-27. ⬜ End-to-end tests (Playwright)
-28. ⬜ Mobile-responsive polish
+32. ⬜ Production deployment configuration
+33. ⬜ End-to-end tests (Playwright)
+34. ⬜ Mobile-responsive polish
 
 ---
 
-## 9. Scoring System
+## 6. Scoring System
 
 ### Hybrid Fantasy Points
 
@@ -674,7 +558,7 @@ Movies earn fantasy points based on a **70-point baseline** system, not a simple
 
 ---
 
-## 10. Draft System
+## 7. Draft System
 
 ### Draft Configuration
 - **Draft Type:** Snake draft (1-2-3...3-2-1) or Linear (1-2-3...1-2-3)
@@ -726,7 +610,7 @@ Movies are discovered directly from TMDb API - **no pre-syncing required**.
 
 ---
 
-## 11. Bidding System (Pickup Phase)
+## 8. Bidding System (Pickup Phase)
 
 After the draft completes, leagues can enable a **bidding phase** where teams compete to pick up undrafted movies.
 
@@ -765,11 +649,6 @@ League owners configure bidding via `/league/[id]/settings`:
 | `cancel-bid` | Cancel pending bid before processing |
 | `process-bids` | Resolve all pending bids (cron) |
 
-### Database Tables
-
-- **pickup_bids:** id, league_id, team_id, movie_id, bid_amount, status, created_at
-- **league_bidding_config:** league_id, bidding_enabled, dates, min/max constraints
-
 ### Frontend Components
 
 ```
@@ -780,16 +659,55 @@ League owners configure bidding via `/league/[id]/settings`:
 └── useBidding hook            # Bid state management
 ```
 
-### Email Notifications
+---
 
-Bidding triggers three email types (via Resend):
-1. **Outbid:** When someone places a higher bid
-2. **Bid Won:** When your bid wins
-3. **Bid Lost:** When another bid beats yours
+## 9. Trading System
+
+Teams can trade movies with each other during the active season.
+
+### Configuration
+
+- **FAAB Budget:** Teams have a budget for bidding (Free Agent Acquisition Budget)
+- **Review Period:** Optional window for league review before trades execute
+- **Veto:** League owner can veto trades
+
+### Trade Lifecycle
+
+```
+1. Team proposes trade
+   └── propose-trade creates trade with status='pending'
+       └── Specifies movies from each side
+
+2. Recipient responds
+   └── respond-trade: accept, reject, or counter
+       └── Accept → trade executes (draft_picks updated)
+       └── Reject → trade cancelled
+       └── Counter → new counter-offer created
+
+3. Counter-offers
+   └── counter-trade modifies the proposal
+       └── Original proposer can accept/reject/counter
+
+4. Processing
+   └── process-trades cron handles expired trades
+       └── Pending trades past deadline → cancelled
+```
+
+### Edge Functions
+
+| Function | Purpose |
+|----------|---------|
+| `propose-trade` | Create trade proposal |
+| `respond-trade` | Accept or reject trade |
+| `counter-trade` | Counter-offer on trade |
+| `cancel-trade` | Cancel pending trade |
+| `veto-trade` | League owner vetoes trade |
+| `get-trades` | List trades for league |
+| `process-trades` | Process pending/expired trades (cron) |
 
 ---
 
-## 12. Testing Strategy
+## 10. Testing Strategy
 
 ### Edge Functions Testing (Deno)
 
@@ -811,16 +729,7 @@ supabase/functions/
 │   ├── create-league.test.ts
 │   ├── join-league.test.ts
 │   ├── draft-pick.test.ts
-│   ├── place-bid.test.ts
-│   ├── cancel-bid.test.ts
-│   ├── drop-movie.test.ts
-│   ├── send-invite.test.ts
-│   ├── invitation-actions.test.ts
-│   ├── search-users.test.ts
-│   ├── update-league.test.ts
-│   ├── start-draft.test.ts
-│   ├── merge-accounts.test.ts
-│   └── get-leagues.test.ts
+│   └── ...                      # More test files
 └── [function-name]/
     └── index.ts
 ```
@@ -860,10 +769,7 @@ const mockConfig = {
 const mockClient = createMockSupabaseClient(mockConfig)
 ```
 
-**2. Test handler logic directly:**
-Since Edge Functions use `Deno.serve()`, tests recreate the handler logic with mocked dependencies. See existing test files for patterns.
-
-**3. Test categories to cover:**
+**2. Test categories to cover:**
 - Authentication (401 responses)
 - Input validation (400 responses)
 - Authorization (403 responses)
@@ -871,7 +777,7 @@ Since Edge Functions use `Deno.serve()`, tests recreate the handler logic with m
 - Success paths (201/200 responses)
 - Error handling (500 responses, race conditions)
 
-**4. Important: Use valid UUID format (8-4-4-4-12 hex chars):**
+**3. Important: Use valid UUID format (8-4-4-4-12 hex chars):**
 ```typescript
 // CORRECT
 const validId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
@@ -879,17 +785,6 @@ const validId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
 // WRONG - will fail isValidUUID()
 const invalidId = 'league-uuid-1234-5678-90ab-cdef12345678'
 ```
-
-#### Mock Utilities Reference
-
-| Utility | Purpose |
-|---------|---------|
-| `createMockSupabaseClient(config)` | Mock Supabase client with configurable responses |
-| `createMockAuthRequest(body, options)` | Create Request with Authorization header |
-| `createMockOptionsRequest()` | Create CORS preflight request |
-| `mockEnvVars(vars)` | Mock Deno.env.get(), returns cleanup function |
-| `mockFetch(responses)` | Mock global fetch for external APIs |
-| `mockJsonResponse(data, status)` | Create mock Response object |
 
 ### Integration Tests
 
@@ -903,27 +798,9 @@ npm run test:functions:integration
 cd supabase/functions && deno test tests/create-league.test.ts
 ```
 
-**Test utilities in `tests/_setup.ts`:**
-- `createTestUser()` - Create authenticated test user
-- `getAuthenticatedClient()` - Get Supabase client with auth
-- `cleanupTestData()` - Remove test data after tests
-- `invokeFunction()` - Call Edge Function with auth headers
-
-### Frontend Testing (Future)
-
-Frontend uses Next.js 15 with React 19. Testing approach planned:
-- **Unit tests:** Vitest for components/hooks
-- **E2E tests:** Playwright for critical user flows
-
-### Database Testing
-
-For testing RLS policies and database functions:
-- Use Supabase's pgTAP framework
-- See: https://supabase.com/docs/guides/local-development/testing
-
 ---
 
-## 13. Known Issues & Technical Debt
+## 11. Known Issues & Technical Debt
 
 ### Medium Priority
 1. **CORS:** Currently allows all origins (`*`). Should restrict in production.
@@ -937,21 +814,17 @@ For testing RLS policies and database functions:
 
 ---
 
-## 14. Additional Documentation
+## 12. Additional Documentation
 
 | File | Purpose |
 |------|---------|
 | `docs/OAUTH.md` | Discord OAuth setup instructions |
 | `docs/PLAN-account-linking.md` | Account linking design document |
-| `docs/PLAN-discord-oauth.md` | Discord OAuth implementation plan |
-| `docs/plans/2026-01-20-bidding-system-design.md` | Bidding system architecture |
-| `docs/plans/2026-01-20-bidding-system-implementation.md` | Bidding implementation details |
-| `docs/plans/2026-01-21-bidding-ui-implementation.md` | Bidding UI components plan |
-| `docs/plans/2026-01-22-league-dashboard-redesign.md` | Dashboard redesign spec |
+| `docs/archive/TRADING_TECH_DEBT_RESOLVED.md` | Historical trading system fixes |
 | `supabase/SCORING.md` | Nightly score update architecture |
 | `supabase/functions/TESTING.md` | Edge Function testing guide |
 | `supabase/README.md` | Supabase local development setup |
 
 ---
 
-End of POC Plan
+End of Developer Context
