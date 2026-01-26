@@ -191,7 +191,7 @@ export interface SendEmailParams {
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const apiKey = Deno.env.get('RESEND_API_KEY')
-  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'Fantasy Reel <noreply@fantasyreels.com>'
+  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'Fantasy Reel <noreply@fantasyreel.com>'
 
   if (!apiKey) {
     console.warn('RESEND_API_KEY not configured - skipping email send')
@@ -247,7 +247,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
  */
 export async function sendInvitationEmail(data: InvitationEmailData): Promise<SendEmailResult> {
   const apiKey = Deno.env.get('RESEND_API_KEY')
-  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'Fantasy Reel <noreply@fantasyreels.com>'
+  const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'Fantasy Reel <noreply@fantasyreel.com>'
 
   if (!apiKey) {
     console.warn('RESEND_API_KEY not configured - skipping email send')

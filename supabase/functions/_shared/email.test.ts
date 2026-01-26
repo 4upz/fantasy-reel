@@ -262,7 +262,7 @@ Deno.test('sendInvitationEmail - uses default from email when not configured', a
     await sendInvitationEmail(mockEmailData)
 
     const body = JSON.parse(capturedBody!)
-    assertEquals(body.from, 'Fantasy Reel <noreply@fantasyreels.com>')
+    assertEquals(body.from, 'Fantasy Reel <noreply@fantasyreel.com>')
   } finally {
     restoreEnv()
     restoreFetch()
