@@ -14,13 +14,30 @@ export default function ResetPasswordPage() {
   const [isValidSession, setIsValidSession] = useState<boolean | null>(null)
 
   useEffect(() => {
-    // Check if user has a valid recovery session
-    const checkSession = async () => {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      setIsValidSession(!!session)
-    }
-    checkSession()
+    const supabase = createClient()
+
+    // Listen for auth state changes to handle the recovery token from URL hash
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        // Recovery token was processed, user has a valid session
+        setIsValidSession(true)
+      } else if (event === 'SIGNED_IN' && session) {
+        // User signed in (could be from recovery)
+        setIsValidSession(true)
+      } else if (event === 'INITIAL_SESSION') {
+        // Initial session check - if no session after this, link is invalid
+        setIsValidSession(!!session)
+      }
+    })
+
+    // Also check current session in case event already fired
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (isValidSession === null) {
+        setIsValidSession(!!session)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   async function handleSubmit(formData: FormData) {
@@ -36,7 +53,8 @@ export default function ResetPasswordPage() {
         setSuccess(true)
         toast.success('Password updated successfully!')
       }
-    } catch {
+    } catch (err) {
+      console.error('Password update failed:', err)
       setError('An unexpected error occurred')
     } finally {
       setIsLoading(false)
