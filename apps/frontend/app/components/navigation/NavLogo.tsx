@@ -1,9 +1,13 @@
 import Link from 'next/link'
 
-export default function NavLogo(): React.ReactElement {
+interface NavLogoProps {
+  href?: string
+}
+
+export default function NavLogo({ href = '/dashboard' }: NavLogoProps): React.ReactElement {
   return (
     <Link
-      href="/dashboard"
+      href={href}
       className="nav-logo group flex items-center gap-2 transition-all duration-300"
     >
       {/* Film reel icon */}
