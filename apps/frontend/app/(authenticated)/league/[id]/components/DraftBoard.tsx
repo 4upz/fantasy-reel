@@ -18,8 +18,8 @@ interface Props {
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
   favoriteMovieIds?: Set<number>
-  onPickMade: () => void
-  onCounterpickMade?: () => void
+  onPickMade: () => void | Promise<void>
+  onCounterpickMade?: () => void | Promise<void>
   onToggleFavorite?: (tmdbId: number) => void
 }
 
@@ -125,11 +125,11 @@ export default function DraftBoard({
 
     if (pickError) {
       setError(pickError)
+      setPicking(false)
     } else {
-      onPickMade()
+      await onPickMade()
+      setPicking(false)
     }
-
-    setPicking(false)
   }
 
   function getTeamName(userId: string): string {

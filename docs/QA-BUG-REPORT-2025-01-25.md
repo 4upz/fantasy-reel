@@ -10,11 +10,18 @@
 
 These bugs block core user flows and should be prioritized first:
 
-### DRF-002 (High) - Draft turn state not advancing
+### DRF-002 (High) - Draft turn state not advancing - FIXED (Code)
 - **Feature:** Draft
 - **Issue:** After successfully drafting a movie, the turn state doesn't advance. The movie appears in the user's league dashboard as "upcoming" (pick was recorded), but the draft UI still shows it's the user's turn. Attempting another pick returns "not your turn" error.
 - **Impact:** Completely blocks draft progression
-- **Likely cause:** Real-time subscription not updating turn state, or backend turn calculation bug
+- **Root cause:** In `DraftBoard.tsx`, after a successful pick, `onPickMade()` was called synchronously but `setPicking(false)` ran immediately without waiting for the fetch to complete. Turn calculation uses `draftPicks.length`, so the UI showed stale turn state until realtime subscription caught up.
+- **Fix:** Made `onPickMade` callback async and awaited it before updating picking state:
+  1. Changed callback types to `() => void | Promise<void>`
+  2. Await `onPickMade()` before `setPicking(false)`
+  3. Made `handlePickMade` and `handleCounterpickMade` async in DraftClient.tsx
+- **Files modified:**
+  - `apps/frontend/app/(authenticated)/league/[id]/components/DraftBoard.tsx`
+  - `apps/frontend/app/(authenticated)/league/[id]/draft/DraftClient.tsx`
 
 ### LGE-001 (High) - Invite link hardcoded to localhost - FIXED (Config)
 - **Feature:** Leagues
@@ -89,10 +96,12 @@ These bugs block core user flows and should be prioritized first:
 - **Before:** `{league.status === 'setup' && (<InvitationsList ...`
 - **After:** `{isOwner && league.status === 'setup' && (<InvitationsList ...`
 
-### DRF-001 (Medium) - UI doesn't update when draft starts
+### DRF-001 (Medium) - UI doesn't update when draft starts - FIXED (Code)
 - **Feature:** Draft
 - **Issue:** After league manager clicks "Start Draft", the UI doesn't reflect the draft has started until page is manually refreshed.
-- **Fix:** Add real-time subscription for league status changes, or refresh state after start-draft API call
+- **Root cause:** `handleStartDraft()` called the API but didn't update local state on success, relying only on realtime subscription which has latency.
+- **Fix:** Update local league state immediately after successful API call using returned league data.
+- **Files modified:** `apps/frontend/app/(authenticated)/league/[id]/draft/DraftClient.tsx` (handleStartDraft function)
 
 ### DRF-003 (Medium) - Unclear click behavior on movie cards
 - **Feature:** Draft
@@ -141,11 +150,11 @@ These bugs block core user flows and should be prioritized first:
 
 | Severity | Count | Open | IDs |
 |----------|-------|------|-----|
-| High | 5 | 1 | DRF-002, ~~LGE-001~~, ~~LGE-002~~, ~~AUTH-002~~, ~~MOV-001~~ |
-| Medium | 5 | 2 | ~~AUTH-001~~, ~~LGE-003~~, DRF-001, DRF-003, ~~NAV-002~~ |
+| High | 5 | 0 | ~~DRF-002~~, ~~LGE-001~~, ~~LGE-002~~, ~~AUTH-002~~, ~~MOV-001~~ |
+| Medium | 5 | 1 | ~~AUTH-001~~, ~~LGE-003~~, ~~DRF-001~~, DRF-003, ~~NAV-002~~ |
 | Low | 2 | 1 | ~~NAV-001~~, DRF-004 |
 
-**Fixed this session:** LGE-001 (config), LGE-002 (config), LGE-003 (code), AUTH-001 (code), AUTH-002 (code), NAV-001 (code), NAV-002 (code), MOV-001 (code)
+**Fixed this session:** LGE-001 (config), LGE-002 (config), LGE-003 (code), AUTH-001 (code), AUTH-002 (code), NAV-001 (code), NAV-002 (code), MOV-001 (code), DRF-001 (code), DRF-002 (code)
 
 ---
 

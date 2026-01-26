@@ -203,13 +203,13 @@ export default function DraftClient({
     }
   }, [league.id, supabase, fetchDraftPicks, fetchParticipants, fetchCounterpicks])
 
-  const handlePickMade = useCallback(() => {
-    fetchDraftPicks()
+  const handlePickMade = useCallback(async () => {
+    await fetchDraftPicks()
   }, [fetchDraftPicks])
 
-  const handleCounterpickMade = useCallback(() => {
-    fetchCounterpicks()
-    fetchDraftPicks() // Also refetch draft picks to get updated counterpicked_by_team_id
+  const handleCounterpickMade = useCallback(async () => {
+    await fetchCounterpicks()
+    await fetchDraftPicks() // Also refetch draft picks to get updated counterpicked_by_team_id
   }, [fetchCounterpicks, fetchDraftPicks])
 
   const handleToggleFavorite = useCallback((tmdbId: number) => {
@@ -233,12 +233,14 @@ export default function DraftClient({
     setStartingDraft(true)
     setError(null)
 
-    const { error: startError } = await callEdgeFunction('start-draft', {
+    const { data, error: startError } = await callEdgeFunction<{ league: League }>('start-draft', {
       body: { league_id: league.id },
     })
 
     if (startError) {
       setError(startError)
+    } else if (data?.league) {
+      setLeague(data.league)
     }
 
     setStartingDraft(false)
