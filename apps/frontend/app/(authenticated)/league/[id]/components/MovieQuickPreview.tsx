@@ -1,11 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
 import { CloseIcon, StarIcon, HeartIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
+
+const DESCRIPTION_CHAR_THRESHOLD = 200
 
 interface Props {
   movie: TMDbSearchResult
@@ -28,6 +30,8 @@ export default function MovieQuickPreview({
 }: Props) {
   const [details, setDetails] = useState<TMDbMovieDetails | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
+  const descriptionRef = useRef<HTMLParagraphElement>(null)
 
   useEffect(() => {
     async function fetchDetails(): Promise<void> {
@@ -209,9 +213,27 @@ export default function MovieQuickPreview({
                 {/* Overview */}
                 {displayData.overview && (
                   <div className="mt-4">
-                    <p className="text-foreground-secondary text-sm leading-relaxed line-clamp-4">
-                      {displayData.overview}
-                    </p>
+                    <div
+                      className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${
+                        isDescriptionExpanded ? 'max-h-[500px]' : 'max-h-[5.25rem]'
+                      }`}
+                    >
+                      <p
+                        ref={descriptionRef}
+                        className="text-foreground-secondary text-sm leading-relaxed"
+                      >
+                        {displayData.overview}
+                      </p>
+                    </div>
+                    {displayData.overview.length > DESCRIPTION_CHAR_THRESHOLD && (
+                      <button
+                        type="button"
+                        onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
+                        className="mt-2 text-sm font-medium text-gold hover:text-gold-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                      >
+                        {isDescriptionExpanded ? 'Show less' : 'Read more'}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
