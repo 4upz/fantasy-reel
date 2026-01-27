@@ -1,6 +1,5 @@
-import type { User } from '@supabase/supabase-js'
-
 import { createClient } from '@/utils/supabase/server'
+import { getDisplayNameFromUser, getAvatarUrlFromUser } from '@/utils/oauth'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 
@@ -10,20 +9,6 @@ import { NextResponse } from 'next/server'
  */
 function isValidRedirectPath(path: string): boolean {
   return path.startsWith('/') && !path.startsWith('//')
-}
-
-/**
- * Extract display name from user metadata, with fallbacks.
- */
-function getDisplayName(user: User): string {
-  return (
-    user.user_metadata.full_name ||
-    user.user_metadata.name ||
-    user.user_metadata.global_name ||
-    user.user_metadata.custom_claims?.global_name ||
-    user.email?.split('@')[0] ||
-    'User'
-  )
 }
 
 export async function GET(request: Request) {
@@ -70,12 +55,14 @@ export async function GET(request: Request) {
 
             if (count && count > 1) {
               // Duplicate detected! Store context and redirect to link-account page
-              const discordIdentity = user.identities?.find((i) => i.provider === 'discord')
-              const discordUsername =
-                user.user_metadata.global_name ||
-                user.user_metadata.full_name ||
+              const oauthIdentity = user.identities?.find(
+                (i) => i.provider === 'discord' || i.provider === 'google'
+              )
+              const oauthUsername =
+                user.user_metadata.global_name || // Discord
+                user.user_metadata.full_name || // Google
                 user.user_metadata.name ||
-                'Discord User'
+                'OAuth User'
 
               // Store duplicate context in a cookie
               const cookieStore = await cookies()
@@ -84,8 +71,9 @@ export async function GET(request: Request) {
                 JSON.stringify({
                   duplicateUserId: user.id,
                   email: user.email,
-                  discordUsername,
-                  discordIdentityId: discordIdentity?.identity_id,
+                  oauthProvider: oauthIdentity?.provider,
+                  oauthUsername,
+                  oauthIdentityId: oauthIdentity?.identity_id,
                 }),
                 {
                   httpOnly: true,
@@ -102,16 +90,16 @@ export async function GET(request: Request) {
             // No duplicate - create profile for new OAuth user
             await supabase.from('profiles').insert({
               user_id: user.id,
-              display_name: getDisplayName(user),
-              avatar_url: user.user_metadata.avatar_url || null,
+              display_name: getDisplayNameFromUser(user),
+              avatar_url: getAvatarUrlFromUser(user),
             })
           }
         } else if (!profile) {
           // Existing user without profile (edge case) - create profile
           await supabase.from('profiles').insert({
             user_id: user.id,
-            display_name: getDisplayName(user),
-            avatar_url: user.user_metadata.avatar_url || null,
+            display_name: getDisplayNameFromUser(user),
+            avatar_url: getAvatarUrlFromUser(user),
           })
         }
       }

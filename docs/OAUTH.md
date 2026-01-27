@@ -65,6 +65,74 @@ supabase migration up
 5. Authorize the application in Discord
 6. You should be redirected back to the dashboard
 
+## Google OAuth Setup
+
+Fantasy Reel supports Google as an OAuth provider through Supabase's built-in authentication.
+
+### 1. Create Google Cloud Project
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Navigate to **APIs & Services** > **Credentials**
+
+### 2. Configure OAuth Consent Screen
+
+1. Go to **APIs & Services** > **OAuth consent screen**
+2. Choose **External** user type (unless you have a Google Workspace organization)
+3. Fill in the required fields:
+   - **App name**: Fantasy Reel
+   - **User support email**: Your email
+   - **Developer contact email**: Your email
+4. Add scopes:
+   - `openid`
+   - `email`
+   - `profile`
+5. Add test users if in testing mode
+
+### 3. Create OAuth Credentials
+
+1. Go to **APIs & Services** > **Credentials**
+2. Click **Create Credentials** > **OAuth client ID**
+3. Select **Web application** as the application type
+4. Configure:
+   - **Name**: Fantasy Reel (or your app name)
+   - **Authorized redirect URIs**:
+     - For local development: `http://127.0.0.1:54321/auth/v1/callback`
+     - For production: `https://<your-project-ref>.supabase.co/auth/v1/callback`
+5. Click **Create** and copy the **Client ID** and **Client Secret**
+
+> Note: Use `127.0.0.1` (not `localhost`) for local development.
+
+### 4. Configure Environment Variables
+
+#### Local Development
+
+Create or update `supabase/.env` with:
+
+```bash
+GOOGLE_CLIENT_ID=your_client_id_here
+GOOGLE_CLIENT_SECRET=your_client_secret_here
+```
+
+#### Production (Supabase Dashboard)
+
+1. Go to your Supabase project dashboard
+2. Navigate to **Authentication** > **Providers**
+3. Find **Google** and toggle it on
+4. Enter your Client ID and Client Secret
+5. Save the configuration
+
+### 5. Test the Integration
+
+1. Restart local Supabase: `supabase stop && supabase start`
+2. Start the frontend: `npm run dev`
+3. Navigate to `/login` or `/signup`
+4. Click "Continue with Google"
+5. Complete the Google sign-in flow
+6. You should be redirected back to the dashboard
+
+---
+
 ## How It Works
 
 ### Authentication Flow
@@ -79,15 +147,16 @@ supabase migration up
    - Creates a profile if one doesn't exist (using Discord data)
    - Redirects to the dashboard
 
-### Profile Data from Discord
+### Profile Data from OAuth Providers
 
-When a user signs in with Discord, the following data is used:
+When a user signs in with an OAuth provider, the following data is used:
 
-| Discord Field | Fantasy Reel Field |
-|--------------|-------------------|
-| `global_name` or `username` | `display_name` |
-| `avatar` URL | `avatar_url` |
-| `email` | Used for account identification |
+| Provider | Display Name Source | Avatar Source |
+|----------|---------------------|---------------|
+| Discord | `global_name` or `username` | `avatar_url` |
+| Google | `full_name` or `name` | `picture` |
+
+Note: Google uses `picture` for avatar URLs while Discord uses `avatar_url`. The database triggers and auth callback handle both formats automatically.
 
 ### Database Trigger
 
@@ -126,23 +195,15 @@ Check that:
 
 ## Adding More OAuth Providers
 
-Supabase supports many OAuth providers. To add another:
+Supabase supports many OAuth providers (GitHub, GitLab, Apple, Azure, Twitch, and more). To add another:
 
-1. Update `supabase/config.toml`:
-   ```toml
-   [auth.external.google]
-   enabled = true
-   client_id = "env(GOOGLE_CLIENT_ID)"
-   secret = "env(GOOGLE_CLIENT_SECRET)"
-   ```
-
-2. Create the OAuth button component (similar to `DiscordLoginButton.tsx`)
-
+1. Update `supabase/config.toml` with the provider configuration
+2. Create an OAuth button component (similar to `GoogleLoginButton.tsx` or `DiscordLoginButton.tsx`)
 3. Add the button to login/signup pages
-
 4. Update environment variables
+5. If the provider uses a different avatar field (not `avatar_url` or `picture`), update the database triggers and auth callback
 
-Supported providers include: Google, GitHub, GitLab, Apple, Azure, Twitch, and more.
+See the [Supabase Auth documentation](https://supabase.com/docs/guides/auth/social-login) for provider-specific setup instructions.
 
 ## Security Considerations
 
