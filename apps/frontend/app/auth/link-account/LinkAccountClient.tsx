@@ -5,20 +5,39 @@ import { useRouter } from 'next/navigation'
 import { Link2, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import DiscordIcon from '@/app/components/icons/DiscordIcon'
+import GoogleIcon from '@/app/components/icons/GoogleIcon'
 import { FormError } from '@/app/components/FormError'
 import { verifyAndMergeAccounts, keepSeparateAccount } from './actions'
 
+type OAuthProvider = 'discord' | 'google'
+
+const PROVIDER_DISPLAY: Record<OAuthProvider, { name: string; icon: React.ReactNode; bgClass: string }> = {
+  discord: {
+    name: 'Discord',
+    icon: <DiscordIcon className="w-5 h-5 text-[#5865F2]" />,
+    bgClass: 'bg-[#5865F2]/10',
+  },
+  google: {
+    name: 'Google',
+    icon: <GoogleIcon className="w-5 h-5" />,
+    bgClass: 'bg-white/10',
+  },
+}
+
 interface Props {
   email: string
-  discordUsername: string
+  oauthProvider: OAuthProvider
+  oauthUsername: string
   duplicateUserId: string
 }
 
 export default function LinkAccountClient({
   email,
-  discordUsername,
+  oauthProvider,
+  oauthUsername,
   duplicateUserId,
 }: Props): React.ReactElement {
+  const { name: providerName, icon: providerIcon, bgClass: providerBgClass } = PROVIDER_DISPLAY[oauthProvider]
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -32,7 +51,7 @@ export default function LinkAccountClient({
     setIsLinking(true)
 
     try {
-      const result = await verifyAndMergeAccounts(password, duplicateUserId, email)
+      const result = await verifyAndMergeAccounts(password, duplicateUserId, email, oauthProvider)
 
       if (result.success) {
         toast.success('Accounts linked successfully!')
@@ -78,22 +97,22 @@ export default function LinkAccountClient({
         </h1>
         <p className="mt-3 text-foreground-secondary">
           An account with <strong className="text-foreground">{email}</strong> already exists.
-          Enter your password to link Discord to your existing account.
+          Enter your password to link {providerName} to your existing account.
         </p>
       </div>
 
       {/* Form */}
       <div className="card p-6 sm:p-8">
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Discord account being linked */}
+          {/* OAuth account being linked */}
           <div className="p-4 rounded-lg bg-surface border border-border">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-[#5865F2]/10 flex items-center justify-center">
-                <DiscordIcon className="w-5 h-5 text-[#5865F2]" />
+              <div className={`w-10 h-10 rounded-full ${providerBgClass} flex items-center justify-center`}>
+                {providerIcon}
               </div>
               <div>
-                <p className="font-medium text-foreground">{discordUsername}</p>
-                <p className="text-sm text-foreground-muted">Discord account to link</p>
+                <p className="font-medium text-foreground">{oauthUsername}</p>
+                <p className="text-sm text-foreground-muted">{providerName} account to link</p>
               </div>
             </div>
           </div>

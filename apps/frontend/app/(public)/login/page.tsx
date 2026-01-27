@@ -5,6 +5,7 @@ import { login, resendConfirmationEmail } from './actions'
 import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
+import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import NavLogo from '../../components/navigation/NavLogo'
 import { toast } from 'sonner'
 
@@ -146,7 +147,10 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <DiscordLoginButton />
+            <div className="space-y-3">
+              <GoogleLoginButton />
+              <DiscordLoginButton />
+            </div>
 
             <div className="text-center space-y-3">
               <p className="text-sm">
