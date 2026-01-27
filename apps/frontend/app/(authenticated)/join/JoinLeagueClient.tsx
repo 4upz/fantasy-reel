@@ -140,6 +140,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
+                aria-describedby={joinError ? 'join-error' : undefined}
                 className="input text-center font-mono text-2xl font-bold tracking-[0.3em] uppercase placeholder:text-foreground-muted/50 placeholder:tracking-[0.3em]"
               />
             </div>
@@ -166,7 +167,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             </div>
 
             {joinError && (
-              <div className="alert alert-error mb-4">
+              <div id="join-error" className="alert alert-error mb-4" role="alert">
                 <p className="font-medium">Unable to join</p>
                 <p className="text-sm opacity-90">{joinError}</p>
               </div>
@@ -241,7 +242,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
           </div>
 
           {joinError && (
-            <div className="alert alert-error mb-4">
+            <div id="join-error" className="alert alert-error mb-4" role="alert">
               <p className="font-medium">Unable to join</p>
               <p className="text-sm opacity-90">{joinError}</p>
             </div>
