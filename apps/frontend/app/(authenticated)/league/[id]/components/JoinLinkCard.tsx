@@ -81,7 +81,16 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
           {/* Join Code Display */}
           <div
             onClick={copyToClipboard}
-            className="bg-elevated border border-border rounded-lg px-3 py-2.5 cursor-pointer hover:border-gold/50 transition-colors group"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                copyToClipboard()
+              }
+            }}
+            role="button"
+            tabIndex={0}
+            aria-label={showFullUrl ? 'Copy join link to clipboard' : 'Copy join code to clipboard'}
+            className="bg-elevated border border-border rounded-lg px-3 py-2.5 cursor-pointer hover:border-gold/50 transition-colors group focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold/50"
           >
             <div className="flex items-center justify-between">
               {showFullUrl ? (
