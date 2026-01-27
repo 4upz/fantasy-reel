@@ -1,9 +1,10 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidJoinCode } from '../_shared/utils.ts'
 
 interface JoinLeagueRequest {
   league_id?: string
   invitation_token?: string
+  join_code?: string
   team_name?: string
 }
 
@@ -43,11 +44,11 @@ Deno.serve(async (req) => {
     )
 
     // Parse request body
-    const { league_id, invitation_token, team_name }: JoinLeagueRequest = await req.json()
+    const { league_id, invitation_token, join_code, team_name }: JoinLeagueRequest = await req.json()
 
-    // Validate input - need either league_id or invitation_token
-    if (!league_id && !invitation_token) {
-      return errorResponse('Either league_id or invitation_token is required', 400)
+    // Validate input - need either league_id, invitation_token, or join_code
+    if (!league_id && !invitation_token && !join_code) {
+      return errorResponse('Either league_id, invitation_token, or join_code is required', 400)
     }
 
     let targetLeagueId: string
@@ -98,6 +99,29 @@ Deno.serve(async (req) => {
       if (updateInviteError) {
         console.error('Error updating invitation:', updateInviteError)
       }
+    } else if (join_code) {
+      // Join code flow - validate format
+      if (!isValidJoinCode(join_code)) {
+        return errorResponse('Invalid join code format', 400)
+      }
+
+      // Look up league by join code
+      const { data: league, error: lookupError } = await serviceClient
+        .from('leagues')
+        .select('id, status, join_code')
+        .eq('join_code', join_code.toUpperCase())
+        .single()
+
+      if (lookupError || !league) {
+        return errorResponse('Invalid join code', 404)
+      }
+
+      // Verify league is still in setup status
+      if (league.status !== 'setup') {
+        return errorResponse('This join link has expired - the draft has already started', 400)
+      }
+
+      targetLeagueId = league.id
     } else {
       // Direct join flow - validate league_id
       if (!isValidUUID(league_id!)) {
@@ -117,8 +141,8 @@ Deno.serve(async (req) => {
       return errorResponse('League not found', 404)
     }
 
-    // For direct join (not via invitation), check if league is open
-    if (!invitation_token && league.invite_only) {
+    // For direct join (not via invitation or join_code), check if league is open
+    if (!invitation_token && !join_code && league.invite_only) {
       return errorResponse('This league is invite-only', 403)
     }
 
