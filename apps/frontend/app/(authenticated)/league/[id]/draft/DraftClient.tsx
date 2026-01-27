@@ -8,6 +8,7 @@ import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League, ParticipantWithTeam, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard from '../components/DraftBoard'
 import InvitationsList from '../components/InvitationsList'
+import JoinLinkCard from '../components/JoinLinkCard'
 import ParticipantsList from '../components/ParticipantsList'
 import { SpinnerIcon } from '../components/Icons'
 
@@ -347,11 +348,17 @@ export default function DraftClient({
         <div className="space-y-6">
           <ParticipantsList participants={participants} ownerId={league.owner_id} />
           {isOwner && league.status === 'setup' && (
-            <InvitationsList
-              leagueId={league.id}
-              isOwner={isOwner}
-              leagueStatus={league.status}
-            />
+            <>
+              <JoinLinkCard
+                league={league}
+                onUpdate={setLeague}
+              />
+              <InvitationsList
+                leagueId={league.id}
+                isOwner={isOwner}
+                leagueStatus={league.status}
+              />
+            </>
           )}
         </div>
       </div>
