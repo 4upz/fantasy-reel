@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Link2, Copy, Check, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
@@ -15,6 +15,15 @@ interface Props {
 export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactElement {
   const [copied, setCopied] = useState(false)
   const [showFullUrl, setShowFullUrl] = useState(false)
+
+  const copiedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current)
+    }
+  }, [])
 
   const joinCode = league.join_code
   const hasJoinLink = !!joinCode
@@ -50,7 +59,8 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
     try {
       await navigator.clipboard.writeText(textToCopy)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current)
+      copiedTimeoutRef.current = setTimeout(() => setCopied(false), 2000)
       toast.success(`${showFullUrl ? 'Join link' : 'Join code'} copied`)
     } catch {
       toast.error('Failed to copy')

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Link2, Copy, RefreshCw, Check, AlertTriangle } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
@@ -23,6 +23,17 @@ export default function JoinLinkSection({
   const [copiedCode, setCopiedCode] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false)
+
+  const copiedCodeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const copiedUrlTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      if (copiedCodeTimeoutRef.current) clearTimeout(copiedCodeTimeoutRef.current)
+      if (copiedUrlTimeoutRef.current) clearTimeout(copiedUrlTimeoutRef.current)
+    }
+  }, [])
 
   const joinCode = league.join_code
   const hasJoinLink = !!joinCode
@@ -60,10 +71,12 @@ export default function JoinLinkSection({
       await navigator.clipboard.writeText(text)
       if (type === 'code') {
         setCopiedCode(true)
-        setTimeout(() => setCopiedCode(false), 2000)
+        if (copiedCodeTimeoutRef.current) clearTimeout(copiedCodeTimeoutRef.current)
+        copiedCodeTimeoutRef.current = setTimeout(() => setCopiedCode(false), 2000)
       } else {
         setCopiedUrl(true)
-        setTimeout(() => setCopiedUrl(false), 2000)
+        if (copiedUrlTimeoutRef.current) clearTimeout(copiedUrlTimeoutRef.current)
+        copiedUrlTimeoutRef.current = setTimeout(() => setCopiedUrl(false), 2000)
       }
       toast.success(`${type === 'code' ? 'Join code' : 'Join link'} copied to clipboard`)
     } catch {
