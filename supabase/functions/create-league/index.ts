@@ -8,6 +8,15 @@ interface CreateLeagueRequest {
   draft_end_date?: string
   max_participants?: number
   team_name?: string
+  // Roster configuration
+  total_slots?: number
+  draft_slots?: number
+  drop_limit?: number
+  counterbid_hours?: number
+  // Counterpick configuration
+  draft_counterpick_slots?: number
+  bidding_counterpick_slots?: number
+  counterpicks_block_drops?: boolean
 }
 
 Deno.serve(async (req) => {
@@ -44,7 +53,16 @@ Deno.serve(async (req) => {
       draft_start_date,
       draft_end_date,
       max_participants,
-      team_name
+      team_name,
+      // Roster configuration
+      total_slots,
+      draft_slots,
+      drop_limit,
+      counterbid_hours,
+      // Counterpick configuration
+      draft_counterpick_slots,
+      bidding_counterpick_slots,
+      counterpicks_block_drops,
     }: CreateLeagueRequest = await req.json()
 
     // Validate required fields
@@ -52,18 +70,32 @@ Deno.serve(async (req) => {
       return errorResponse('League name is required', 400)
     }
 
+    // Build league insert object with optional configuration fields
+    const leagueInsert: Record<string, unknown> = {
+      name: name.trim(),
+      owner_id: user.id,
+      invite_only: invite_only || false,
+      draft_start_date: draft_start_date || null,
+      draft_end_date: draft_end_date || null,
+      max_participants: max_participants || 8,
+      status: 'setup',
+    }
+
+    // Add roster configuration if provided
+    if (total_slots !== undefined) leagueInsert.total_slots = total_slots
+    if (draft_slots !== undefined) leagueInsert.draft_slots = draft_slots
+    if (drop_limit !== undefined) leagueInsert.drop_limit = drop_limit
+    if (counterbid_hours !== undefined) leagueInsert.counterbid_hours = counterbid_hours
+
+    // Add counterpick configuration if provided
+    if (draft_counterpick_slots !== undefined) leagueInsert.draft_counterpick_slots = draft_counterpick_slots
+    if (bidding_counterpick_slots !== undefined) leagueInsert.bidding_counterpick_slots = bidding_counterpick_slots
+    if (counterpicks_block_drops !== undefined) leagueInsert.counterpicks_block_drops = counterpicks_block_drops
+
     // Create the league
     const { data: league, error: leagueError } = await supabaseClient
       .from('leagues')
-      .insert({
-        name: name.trim(),
-        owner_id: user.id,
-        invite_only: invite_only || false,
-        draft_start_date: draft_start_date || null,
-        draft_end_date: draft_end_date || null,
-        max_participants: max_participants || 8,
-        status: 'setup'
-      })
+      .insert(leagueInsert)
       .select()
       .single()
 
