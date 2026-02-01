@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { FormError } from '@/app/components/FormError'
 import type { League } from '@/types'
 
@@ -50,8 +51,6 @@ const INITIAL_FORM_DATA = {
 
 export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props): React.ReactElement | null {
   const router = useRouter()
-  const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [formData, setFormData] = useState(INITIAL_FORM_DATA)
   const [showAdvanced, setShowAdvanced] = useState(false)
 
@@ -62,20 +61,10 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
     }
   }, [formData.total_slots, formData.draft_slots])
 
-  if (!isOpen) return null
-
-  const pickupSlots = formData.total_slots - formData.draft_slots
-
-  async function handleSubmit(e: React.FormEvent): Promise<void> {
-    e.preventDefault()
-
+  const createLeagueAction = useCallback(async (): Promise<void> => {
     if (!formData.name.trim()) {
-      setError('Please enter a league name')
-      return
+      throw new Error('Please enter a league name')
     }
-
-    setCreating(true)
-    setError(null)
 
     const { data, error: createError } = await callEdgeFunction<CreateLeagueResponse>(
       'create-league',
@@ -99,9 +88,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
     )
 
     if (createError) {
-      setError(createError)
-      setCreating(false)
-      return
+      throw new Error(createError)
     }
 
     if (data?.league) {
@@ -110,16 +97,26 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
       onClose()
       router.push(`/league/${data.league.id}`)
     }
+  }, [formData, onSuccess, onClose, router])
 
-    setCreating(false)
+  const { execute: handleCreateLeague, isLoading: creating, error, reset: resetError } = useAsyncAction(createLeagueAction)
+
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
+    e.preventDefault()
+    resetError()
+    await handleCreateLeague()
   }
 
   function handleClose(): void {
     if (!creating) {
-      setError(null)
+      resetError()
       onClose()
     }
   }
+
+  if (!isOpen) return null
+
+  const pickupSlots = formData.total_slots - formData.draft_slots
 
   return (
     <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 overflow-y-auto">
