@@ -445,3 +445,7 @@ verify_jwt = false
 
 [functions.make-counterpick]
 verify_jwt = false
+
+# Join link functions
+[functions.generate-join-link]
+verify_jwt = false
