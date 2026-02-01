@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
+import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard from '../components/DraftBoard'
 import InvitationsList from '../components/InvitationsList'
 import JoinLinkCard from '../components/JoinLinkCard'
@@ -22,7 +22,7 @@ const RECONNECT_DELAY_MS = 2000
 
 interface Props {
   league: League
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
   draftPicks: DraftPickWithDetails[]
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
@@ -94,13 +94,13 @@ export default function DraftClient({
   const fetchParticipants = useCallback(async () => {
     const { data } = await supabase
       .from('league_participants')
-      .select(`*, teams (*)`)
+      .select(`*, teams (*), profiles (*)`)
       .eq('league_id', league.id)
       .eq('status', 'active')
       .order('draft_order', { ascending: true })
 
     if (data) {
-      setParticipants(data as ParticipantWithTeam[])
+      setParticipants(data as ParticipantWithProfile[])
     }
   }, [supabase, league.id])
 

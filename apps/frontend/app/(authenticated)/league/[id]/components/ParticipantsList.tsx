@@ -1,7 +1,7 @@
-import type { ParticipantWithTeam } from '@/types'
+import type { ParticipantWithProfile } from '@/types'
 
 interface Props {
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
   ownerId: string
 }
 
@@ -20,6 +20,9 @@ export default function ParticipantsList({ participants, ownerId }: Props) {
             >
               <div className="flex-1">
                 <p className="font-medium text-foreground">{participant.teams?.name || 'No Team'}</p>
+                {participant.profiles?.display_name && (
+                  <p className="text-xs text-foreground-muted">{participant.profiles.display_name}</p>
+                )}
                 <p className="text-sm text-foreground-muted">
                   Draft Order: {participant.draft_order}
                   {participant.user_id === ownerId && (

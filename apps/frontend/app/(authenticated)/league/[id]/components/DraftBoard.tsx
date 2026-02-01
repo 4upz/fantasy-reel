@@ -5,16 +5,17 @@ import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { buildTeamInfoByUserId, buildTeamInfoByTeamId, type TeamDisplayInfo } from '@/utils/league'
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
 import CounterpickRound from './CounterpickRound'
 import { ClapperboardIcon, ArrowUpIcon, ClockIcon } from './Icons'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, CounterpickWithDetails } from '@/types'
+import type { League, ParticipantWithProfile, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, CounterpickWithDetails } from '@/types'
 
 interface Props {
   league: League
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
   draftPicks: DraftPickWithDetails[]
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
@@ -81,25 +82,9 @@ export default function DraftBoard({
     )
   }, [draftPicks])
 
-  // Map of user_id to team name for display
-  const teamNamesByUserId = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const participant of participants) {
-      map.set(participant.user_id, participant.teams?.name || 'Unknown Team')
-    }
-    return map
-  }, [participants])
-
-  // Map of team_id to team name for counterpick indicator
-  const teamNamesById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const participant of participants) {
-      if (participant.teams) {
-        map.set(participant.teams.id, participant.teams.name)
-      }
-    }
-    return map
-  }, [participants])
+  // Maps for looking up team info by user_id or team_id
+  const teamInfoByUserId = useMemo(() => buildTeamInfoByUserId(participants), [participants])
+  const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
 
   const draftPickAction = useCallback(
     async (tmdbId: number, movieData: TMDbSearchResult): Promise<void> => {
@@ -131,7 +116,11 @@ export default function DraftBoard({
   const { execute: handleDraftPick, isLoading: picking, error } = useAsyncAction(draftPickAction)
 
   function getTeamName(userId: string): string {
-    return teamNamesByUserId.get(userId) || 'Unknown Team'
+    return teamInfoByUserId.get(userId)?.teamName ?? 'Unknown Team'
+  }
+
+  function getOwnerName(userId: string): string | null {
+    return teamInfoByUserId.get(userId)?.ownerName ?? null
   }
 
   // Render different views based on league status
@@ -176,7 +165,7 @@ export default function DraftBoard({
           <DraftProgressRing current={picksMade} total={totalPicks} size="sm" showLabel={false} />
         </div>
         <p className="text-foreground-secondary mb-4">The draft is complete!</p>
-        <PickHistory draftPicks={draftPicks} teamNamesById={teamNamesById} />
+        <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
       </div>
     )
   }
@@ -224,6 +213,11 @@ export default function DraftBoard({
                     >
                       {isMyTurn ? "It's your turn!" : `${getTeamName(nextPick.user_id)}'s pick`}
                     </p>
+                    {!isMyTurn && getOwnerName(nextPick.user_id) && (
+                      <p className="text-xs text-foreground-muted">
+                        {getOwnerName(nextPick.user_id)}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -277,7 +271,7 @@ export default function DraftBoard({
           <h3 className="text-lg font-display font-semibold text-foreground mb-4">
             Pick History
           </h3>
-          <PickHistory draftPicks={draftPicks} teamNamesById={teamNamesById} />
+          <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
         </div>
       )}
     </div>
@@ -286,10 +280,10 @@ export default function DraftBoard({
 
 interface PickHistoryProps {
   draftPicks: DraftPickWithDetails[]
-  teamNamesById?: Map<string, string>
+  teamInfoById?: Map<string, TeamDisplayInfo>
 }
 
-function PickHistory({ draftPicks, teamNamesById }: PickHistoryProps) {
+function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps) {
   if (draftPicks.length === 0) {
     return <p className="text-foreground-muted">No picks yet</p>
   }
@@ -303,9 +297,11 @@ function PickHistory({ draftPicks, teamNamesById }: PickHistoryProps) {
   return (
     <div className="space-y-2 max-h-80 overflow-y-auto">
       {sortedPicks.map((pick, index) => {
-        const counterpickerName = pick.counterpicked_by_team_id
-          ? teamNamesById?.get(pick.counterpicked_by_team_id) || 'Unknown Team'
+        const counterpickerInfo = pick.counterpicked_by_team_id
+          ? teamInfoById?.get(pick.counterpicked_by_team_id)
           : null
+        const counterpickerName = counterpickerInfo?.teamName || 'Unknown Team'
+        const pickerInfo = pick.teams?.id ? teamInfoById?.get(pick.teams.id) : null
 
         return (
           <div
@@ -337,6 +333,9 @@ function PickHistory({ draftPicks, teamNamesById }: PickHistoryProps) {
             <div className="flex-1 min-w-0">
               <p className="font-medium text-foreground truncate">{pick.movies?.title}</p>
               <p className="text-sm text-foreground-muted truncate">{pick.teams?.name}</p>
+              {pickerInfo?.ownerName && (
+                <p className="text-xs text-foreground-muted truncate">{pickerInfo.ownerName}</p>
+              )}
             </div>
 
             {/* Counterpick Indicator */}

@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DraftClient from './DraftClient'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
+import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 
 // Force dynamic rendering to ensure fresh data on every request
 export const dynamic = 'force-dynamic'
@@ -48,7 +48,7 @@ export default async function DraftPage({ params }: PageProps) {
     await Promise.all([
       supabase
         .from('league_participants')
-        .select(`*, teams (*)`)
+        .select(`*, teams (*), profiles (*)`)
         .eq('league_id', id)
         .eq('status', 'active')
         .order('draft_order', { ascending: true }),
@@ -76,7 +76,7 @@ export default async function DraftPage({ params }: PageProps) {
   return (
     <DraftClient
       league={league as League}
-      participants={(participants || []) as ParticipantWithTeam[]}
+      participants={(participants || []) as ParticipantWithProfile[]}
       draftPicks={(draftPicks || []) as DraftPickWithDetails[]}
       counterpicks={(counterpicks || []) as CounterpickWithDetails[]}
       currentUserId={user.id}
