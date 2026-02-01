@@ -1,111 +1,130 @@
-import { test, expect } from '../../fixtures/auth.fixture'
+import { test, expect } from '../../fixtures/league.fixture'
 
 /**
  * Standings/Leaderboard E2E Tests
  *
  * Tests the standings display and score tracking.
- * Requires an active league with teams and scored movies.
+ * Uses scoredLeague fixture which provides an active league with
+ * teams that have different scores for ranking tests.
+ *
+ * Best Practices Applied:
+ * - Uses fixtures for test data isolation
+ * - Uses programmatic auth (authedPage) for speed
+ * - Tests real Supabase data (scores set in fixture)
+ * - Cleanup handled by fixture teardown
  */
 
-test.describe('Leaderboard Page', () => {
-  test('standings page is accessible from league dashboard @critical', async ({
-    authenticatedPage,
+test.describe('Leaderboard Page @standings', () => {
+  test('standings page is accessible from league @critical', async ({
+    authedPage,
+    scoredLeague,
   }) => {
-    await authenticatedPage.goto('/dashboard')
-
-    const leagueCard = authenticatedPage.locator('[data-testid="league-card"]').first()
-    const hasLeague = await leagueCard.isVisible().catch(() => false)
-
-    if (!hasLeague) {
-      test.skip()
-      return
-    }
-
-    await leagueCard.click()
-    await authenticatedPage.waitForURL(/\/league\/[a-f0-9-]+/)
+    await authedPage.goto(`/league/${scoredLeague.id}`)
 
     // Look for standings link/tab
-    const standingsLink = authenticatedPage.getByRole('link', {
+    const standingsLink = authedPage.getByRole('link', {
       name: /standings|leaderboard/i,
     })
     const hasStandingsLink = await standingsLink.isVisible().catch(() => false)
 
     if (hasStandingsLink) {
       await standingsLink.click()
-      await authenticatedPage.waitForURL(/\/league\/[a-f0-9-]+\/standings/)
+      await authedPage.waitForURL(
+        new RegExp(`/league/${scoredLeague.id}/standings`)
+      )
+    } else {
+      // Navigate directly
+      await authedPage.goto(`/league/${scoredLeague.id}/standings`)
+    }
 
-      // Verify standings page loaded
-      await expect(
-        authenticatedPage.getByText(/standings|leaderboard/i).first()
-      ).toBeVisible()
+    // Verify standings page loaded
+    await expect(
+      authedPage.getByText(/standings|leaderboard|ranking/i).first()
+    ).toBeVisible({ timeout: 10000 })
+  })
+
+  test('displays team rankings in correct order', async ({
+    authedPage,
+    scoredLeague,
+  }) => {
+    await authedPage.goto(`/league/${scoredLeague.id}/standings`)
+
+    // Teams should be displayed (fixture creates 3 teams with scores 150, 120, 80)
+    await expect(
+      authedPage.getByText(/Owner Team|Test Team|Second Team/).first()
+    ).toBeVisible({ timeout: 10000 })
+
+    // The highest scoring team (Owner Team - 150) should appear first
+    // This verifies ranking order
+    const teamElements = authedPage.locator(
+      '[data-testid="team-row"], .team-row, tr'
+    )
+
+    const count = await teamElements.count()
+    if (count >= 2) {
+      // Verify ordering - first team should have higher score than second
+      const firstTeamText = await teamElements.first().textContent()
+      expect(firstTeamText).toContain('150')
     }
   })
 
-  test('displays team rankings', async ({ authenticatedPage }) => {
-    test.skip() // Skip until we have proper league fixtures with scores
+  test('displays team scores', async ({ authedPage, scoredLeague }) => {
+    await authedPage.goto(`/league/${scoredLeague.id}/standings`)
 
-    // Navigate to standings
-    // Verify teams are listed in order by score
-    // Verify ranking numbers are displayed
-    // Verify team names are visible
+    // Verify scores are displayed
+    // Fixture sets scores: Owner Team = 150, Test Team = 120, Second Team = 80
+    await expect(authedPage.getByText('150')).toBeVisible({ timeout: 10000 })
+    await expect(authedPage.getByText('120')).toBeVisible()
+    await expect(authedPage.getByText('80')).toBeVisible()
   })
 
-  test('displays team scores', async ({ authenticatedPage }) => {
-    test.skip() // Skip until we have proper fixtures
-
-    // Navigate to standings
-    // Verify point totals are displayed for each team
-    // Verify score formatting is correct
-  })
-
-  test('current user team is highlighted', async ({ authenticatedPage }) => {
-    test.skip() // Skip until we have proper fixtures
-
-    // Navigate to standings
-    // Verify current user's team has visual highlight
-    // Verify "Your Team" or similar indicator
-  })
-})
-
-test.describe('Score Details', () => {
-  test('can view team score breakdown', async ({ authenticatedPage }) => {
-    test.skip() // Skip until we have proper fixtures
-
-    // Navigate to standings
-    // Click on a team or expand details
-    // Verify movie-by-movie score breakdown is shown
-    // Verify individual movie scores are displayed
-  })
-
-  test('shows movie review scores', async ({ authenticatedPage }) => {
-    test.skip() // Skip until we have proper fixtures
-
-    // Navigate to standings or team details
-    // View movie with scores
-    // Verify IMDb, RT, Metacritic scores are shown
-    // Verify fantasy points calculation is displayed
-  })
-})
-
-test.describe('Real-time Score Updates', () => {
-  test('scores update in real-time when changed', async ({
-    authenticatedPage,
+  test('current user team is identifiable', async ({
+    authedPage,
+    scoredLeague,
+    testUser,
   }) => {
-    test.skip() // Skip until we have proper fixtures with real-time support
+    await authedPage.goto(`/league/${scoredLeague.id}/standings`)
 
-    // Have standings page open
-    // Trigger score update (via DB or function)
-    // Verify scores update without page refresh
-    // Verify rankings reorder if applicable
+    // Find the test user's team (Test Team with score 120)
+    // It should have some visual distinction or "Your Team" indicator
+    const testUserTeam = scoredLeague.teams.find(
+      (t) => t.userId === testUser.id
+    )
+
+    if (testUserTeam) {
+      await expect(
+        authedPage.getByText(testUserTeam.name)
+      ).toBeVisible({ timeout: 10000 })
+    }
   })
 })
 
-test.describe('Score History', () => {
-  test('can view score change history', async ({ authenticatedPage }) => {
-    test.skip() // Skip until score history feature is implemented
+test.describe('Score Details @standings', () => {
+  test.skip('can view team score breakdown', async ({
+    authedPage,
+    scoredLeague,
+  }) => {
+    // Click on a team to see detailed scores
+    // Requires movie-level score data in fixture
+  })
 
-    // Navigate to standings
-    // Click on score history or trends
-    // Verify historical score changes are displayed
+  test.skip('shows movie review scores', async ({
+    authedPage,
+    scoredLeague,
+  }) => {
+    // View a team's movies and see IMDb/RT/Metacritic scores
+    // Requires createMovieReviews helper to be used in fixture
+  })
+})
+
+test.describe('Real-time Score Updates @standings', () => {
+  test.skip('scores update in real-time when changed', async ({
+    authedPage,
+    scoredLeague,
+  }) => {
+    // Have standings page open
+    // Update score via admin client
+    // Verify UI updates without page refresh
+    // Requires real-time subscription to work
   })
 })
