@@ -289,3 +289,180 @@ export async function updateLeagueStatus(
     throw new Error(`Failed to update league status: ${error.message}`)
   }
 }
+
+/**
+ * Generate a shareable join link for a league
+ */
+export async function generateJoinLink(
+  leagueId: string
+): Promise<{ joinCode: string }> {
+  const client = getAdminClient()
+
+  // Generate a random join code (matches Edge Function format)
+  const joinCode = generateRandomCode(12)
+
+  const { error } = await client
+    .from('leagues')
+    .update({ join_code: joinCode })
+    .eq('id', leagueId)
+
+  if (error) {
+    throw new Error(`Failed to generate join link: ${error.message}`)
+  }
+
+  return { joinCode }
+}
+
+/**
+ * Get the join code for a league
+ */
+export async function getLeagueJoinCode(
+  leagueId: string
+): Promise<string | null> {
+  const client = getAdminClient()
+
+  const { data, error } = await client
+    .from('leagues')
+    .select('join_code')
+    .eq('id', leagueId)
+    .single()
+
+  if (error) {
+    throw new Error(`Failed to get join code: ${error.message}`)
+  }
+
+  return data?.join_code || null
+}
+
+/**
+ * Clear the join code for a league (for testing regeneration)
+ */
+export async function clearJoinCode(leagueId: string): Promise<void> {
+  const client = getAdminClient()
+
+  const { error } = await client
+    .from('leagues')
+    .update({ join_code: null })
+    .eq('id', leagueId)
+
+  if (error) {
+    throw new Error(`Failed to clear join code: ${error.message}`)
+  }
+}
+
+/**
+ * Create a draft pick for testing
+ */
+export async function createDraftPick(
+  leagueId: string,
+  teamId: string,
+  movieId: string,
+  pickOrder: number,
+  round: number
+): Promise<{ id: string }> {
+  const client = getAdminClient()
+
+  const { data, error } = await client
+    .from('draft_picks')
+    .insert({
+      league_id: leagueId,
+      team_id: teamId,
+      movie_id: movieId,
+      pick_order: pickOrder,
+      round,
+      picked_at: new Date().toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create draft pick: ${error?.message}`)
+  }
+
+  return { id: data.id }
+}
+
+/**
+ * Create a movie in the database for testing
+ */
+export async function createTestMovie(
+  tmdbId: number,
+  title: string,
+  releaseDate: string,
+  options?: {
+    posterUrl?: string
+    status?: 'upcoming' | 'released'
+    overview?: string
+  }
+): Promise<{ id: string; tmdbId: number }> {
+  const client = getAdminClient()
+
+  const { data, error } = await client
+    .from('movies')
+    .upsert(
+      {
+        tmdb_id: tmdbId,
+        title,
+        release_date: releaseDate,
+        poster_url: options?.posterUrl || `/test-poster-${tmdbId}.jpg`,
+        status: options?.status || 'upcoming',
+        overview: options?.overview || `Test movie ${title}`,
+      },
+      { onConflict: 'tmdb_id' }
+    )
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create test movie: ${error?.message}`)
+  }
+
+  return { id: data.id, tmdbId: data.tmdb_id }
+}
+
+/**
+ * Helper to generate random alphanumeric code
+ */
+function generateRandomCode(length: number): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let result = ''
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return result
+}
+
+/**
+ * Create an expired invitation for testing
+ */
+export async function createExpiredInvitation(
+  leagueId: string,
+  email: string,
+  invitedBy: string
+): Promise<{ id: string; token: string }> {
+  const client = getAdminClient()
+  const token = `expired-token-${Date.now()}`
+
+  // Set expires_at to yesterday
+  const yesterday = new Date()
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  const { data, error } = await client
+    .from('invitations')
+    .insert({
+      league_id: leagueId,
+      email,
+      invited_by: invitedBy,
+      token,
+      status: 'pending',
+      expires_at: yesterday.toISOString(),
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create expired invitation: ${error?.message}`)
+  }
+
+  return { id: data.id, token: data.token }
+}
