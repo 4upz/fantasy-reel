@@ -149,6 +149,7 @@ function CancelBidModal({
                 onClose()
               }}
               className="btn btn-danger flex-1"
+              data-testid="confirm-cancel-bid"
             >
               Cancel Bid
             </button>
@@ -178,6 +179,7 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardPr
         className={`card bid-card-interactive p-4 ${
           isOutbid ? 'border-warning bg-warning-bg/20 outbid-pulse' : ''
         }`}
+        data-testid={`bid-card-${bid.tmdb_id}`}
       >
         <div className="flex gap-4">
           {/* Movie Poster */}
@@ -239,6 +241,7 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardPr
                 <button
                   onClick={onCounter}
                   className="btn btn-primary text-sm px-4"
+                  data-testid={`counter-bid-${bid.tmdb_id}`}
                 >
                   Counter Bid
                 </button>
@@ -248,6 +251,7 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardPr
                 <button
                   onClick={() => setShowCancelModal(true)}
                   className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-crimson/10"
+                  data-testid={`cancel-bid-${bid.tmdb_id}`}
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
                   Cancel

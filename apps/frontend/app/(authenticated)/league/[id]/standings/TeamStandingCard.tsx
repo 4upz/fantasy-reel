@@ -93,6 +93,7 @@ export default function TeamStandingCard({
         isCurrentUser ? 'ring-1 ring-gold/30' : ''
       }`}
       style={{ animationDelay: `${animationDelay}ms` }}
+      data-testid={`team-row-${team?.id}`}
     >
       {/* Main Card Header */}
       <button

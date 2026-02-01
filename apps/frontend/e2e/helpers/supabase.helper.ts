@@ -1,5 +1,4 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from '../../types/database'
 
 /**
  * Supabase helper for E2E test database operations
@@ -12,14 +11,16 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 // Admin client for test setup/teardown
-let adminClient: SupabaseClient<Database> | null = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let adminClient: SupabaseClient<any> | null = null
 
-export function getAdminClient(): SupabaseClient<Database> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getAdminClient(): SupabaseClient<any> {
   if (!adminClient) {
     if (!SUPABASE_SERVICE_KEY) {
       throw new Error('SUPABASE_SERVICE_ROLE_KEY is required for E2E tests')
     }
-    adminClient = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+    adminClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
       auth: {
         autoRefreshToken: false,
         persistSession: false,
@@ -30,8 +31,9 @@ export function getAdminClient(): SupabaseClient<Database> {
 }
 
 // Anon client for simulating unauthenticated requests
-export function getAnonClient(): SupabaseClient<Database> {
-  return createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function getAnonClient(): SupabaseClient<any> {
+  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 }
 
 export interface TestUser {

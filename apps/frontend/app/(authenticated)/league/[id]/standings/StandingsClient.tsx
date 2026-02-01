@@ -244,7 +244,7 @@ export default function StandingsClient({
   }, [league.id, supabase, fetchParticipants, fetchDraftPicks, participants, draftPicks])
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in" data-testid="standings-container">
       {/* Summary Stats Bar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
