@@ -492,6 +492,32 @@ npx supabase db reset
 # Re-register test users at /signup
 ```
 
+### Deploying Edge Functions to Production
+
+**CRITICAL: New Edge Functions require config.toml entry to work in production!**
+
+Due to an [ES256 JWT verification bug in Supabase CLI](https://github.com/supabase/cli/issues/4453), all Edge Functions in this project must have `verify_jwt = false` in `config.toml`. Functions handle auth internally via `supabase.auth.getUser()`.
+
+**Checklist for deploying a new Edge Function:**
+
+1. **Add to `config.toml`** (required for production):
+   ```toml
+   [functions.my-new-function]
+   verify_jwt = false
+   ```
+
+2. **Deploy the function:**
+   ```bash
+   npx supabase functions deploy my-new-function
+   ```
+
+3. **Push any related migrations:**
+   ```bash
+   npx supabase db push
+   ```
+
+**Common error if you skip step 1:** `{"code":401,"message":"Invalid JWT"}` even with valid auth token.
+
 ### RLS Best Practices
 
 When writing or modifying Row Level Security policies, follow these patterns for optimal performance:
