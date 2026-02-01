@@ -43,6 +43,10 @@ interface AuthFixtures {
   authedPage: Page
   /** Browser context with programmatic auth */
   authedContext: BrowserContext
+  /** Browser context authenticated as secondUser (for multi-user tests) */
+  secondUserContext: BrowserContext
+  /** A page authenticated as secondUser (for multi-user tests like trading, outbidding) */
+  secondUserPage: Page
 }
 
 export const test = base.extend<AuthFixtures>({
@@ -116,6 +120,44 @@ export const test = base.extend<AuthFixtures>({
 
   authedPage: async ({ authedContext }, use) => {
     const page = await authedContext.newPage()
+    await use(page)
+  },
+
+  /**
+   * Browser context authenticated as secondUser
+   * For multi-user tests like trading, outbidding, real-time updates
+   */
+  secondUserContext: async ({ browser, secondUser }, use) => {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: secondUser.email,
+      password: secondUser.password,
+    })
+
+    if (error || !data.session) {
+      throw new Error(`Failed to authenticate second user: ${error?.message}`)
+    }
+
+    const context = await browser.newContext()
+
+    await context.addInitScript((session) => {
+      const storageKey = `sb-127-auth-token`
+      localStorage.setItem(storageKey, JSON.stringify(session))
+    }, data.session)
+
+    await use(context)
+
+    await context.close()
+    await supabase.auth.signOut()
+  },
+
+  /**
+   * Page authenticated as secondUser
+   * Use for multi-user scenarios: User A does action -> User B sees result
+   */
+  secondUserPage: async ({ secondUserContext }, use) => {
+    const page = await secondUserContext.newPage()
     await use(page)
   },
 })
