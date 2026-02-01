@@ -2,14 +2,47 @@ import { defineConfig, devices } from '@playwright/test'
 
 /**
  * E2E Test Configuration for Fantasy Reel
+ *
+ * Supabase Best Practices Applied:
+ * - Global setup/teardown for database management
+ * - Test isolation with fresh browser contexts
+ * - Proper timeout handling for async Supabase operations
+ * - Network interception support for external API mocking
+ *
  * See: docs/E2E_TESTING_STRATEGY.md for full strategy details
+ *
+ * References:
+ * - https://github.com/isaacharrisholt/supawright
+ * - https://fireship.io/courses/supabase/setup-playwright/
  */
 export default defineConfig({
   testDir: './e2e/tests',
+
+  /**
+   * Run tests in parallel for speed, but be aware:
+   * - Each test should create its own test data
+   * - Use unique identifiers (timestamps, UUIDs) to avoid conflicts
+   * - Cleanup should be per-test, not global
+   */
   fullyParallel: true,
+
+  // Fail CI if test.only is accidentally committed
   forbidOnly: !!process.env.CI,
+
+  // Retry failed tests in CI to handle flakiness
   retries: process.env.CI ? 2 : 0,
+
+  // Limit workers in CI to avoid resource contention with Supabase
   workers: process.env.CI ? 4 : undefined,
+
+  // Timeout for each test (Supabase operations can be slow)
+  timeout: 60 * 1000, // 60 seconds per test
+
+  // Timeout for expect() assertions
+  expect: {
+    timeout: 10 * 1000, // 10 seconds for assertions
+  },
+
   reporter: [
     ['html', { outputFolder: 'playwright-report' }],
     ['json', { outputFile: 'test-results.json' }],
@@ -18,13 +51,37 @@ export default defineConfig({
 
   use: {
     baseURL: 'http://localhost:3000',
+
+    // Capture trace on first retry for debugging
     trace: 'on-first-retry',
+
+    // Capture screenshots on failure
     screenshot: 'only-on-failure',
+
+    // Retain video on failure for debugging
     video: 'retain-on-failure',
+
+    /**
+     * Action timeout - time to wait for click(), fill(), etc.
+     * Supabase real-time subscriptions can take a moment to connect
+     */
+    actionTimeout: 15 * 1000,
+
+    /**
+     * Navigation timeout - time to wait for page.goto()
+     * Allow extra time for Supabase auth middleware
+     */
+    navigationTimeout: 30 * 1000,
   },
 
   projects: [
-    // Setup project runs first - seeds database
+    /**
+     * Global Setup Project
+     * Runs before all tests to:
+     * - Verify Supabase connection
+     * - Clean up stale test data
+     * - Seed required test data (movies)
+     */
     {
       name: 'setup',
       testMatch: /global-setup\.ts/,
@@ -35,24 +92,40 @@ export default defineConfig({
       testMatch: /global-teardown\.ts/,
     },
 
-    // Desktop browsers
+    /**
+     * Chromium - Primary browser for CI
+     * Use for fastest test runs
+     */
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
       dependencies: ['setup'],
     },
+
+    /**
+     * Firefox - Secondary browser
+     * Tests WebSocket/real-time behavior differences
+     */
     {
       name: 'firefox',
       use: { ...devices['Desktop Firefox'] },
       dependencies: ['setup'],
     },
+
+    /**
+     * WebKit (Safari) - Tertiary browser
+     * Important for macOS/iOS users
+     */
     {
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
       dependencies: ['setup'],
     },
 
-    // Mobile viewport
+    /**
+     * Mobile Chrome - Responsive testing
+     * Tests mobile navigation and touch interactions
+     */
     {
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
@@ -60,11 +133,22 @@ export default defineConfig({
     },
   ],
 
-  // Start local dev server before tests
+  /**
+   * Web Server Configuration
+   *
+   * In CI: Start fresh dev server
+   * Locally: Reuse existing server (faster iteration)
+   */
   webServer: {
     command: 'npm run dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
+    timeout: 120 * 1000, // 2 minutes to start
+
+    // Environment variables for the dev server
+    env: {
+      // Ensure we're using local Supabase
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+    },
   },
 })

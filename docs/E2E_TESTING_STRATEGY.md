@@ -335,7 +335,119 @@ export async function clearMailbox(email: string): Promise<void> {
 
 ---
 
-## 4. Test Fixtures & Authentication
+## 4. Supabase E2E Best Practices
+
+Based on community patterns and official recommendations, we follow these Supabase-specific best practices:
+
+### 4.1 Service Role vs User Authentication
+
+| Client | Use Case | RLS |
+|--------|----------|-----|
+| **Service Role** | Test setup/teardown, seeding data | Bypassed |
+| **User JWT** | Actual test execution | Enforced |
+
+```typescript
+// Setup: Use service role to create test data (bypasses RLS)
+const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
+await admin.from('leagues').insert({ ... })
+
+// Test: Use user's JWT to verify RLS works
+const userClient = await getAuthenticatedClient(testUser)
+const { data } = await userClient.from('leagues').select()
+// User should only see their leagues
+```
+
+### 4.2 Programmatic Authentication (Faster Tests)
+
+For tests that don't verify login UI, skip the UI and inject session directly:
+
+```typescript
+// SLOW: Login via UI for every test
+await page.goto('/login')
+await page.fill('[data-testid="email-input"]', email)
+await page.fill('[data-testid="password-input"]', password)
+await page.click('[data-testid="login-button"]')
+
+// FAST: Inject session programmatically
+const { data } = await supabase.auth.signInWithPassword({ email, password })
+await page.addInitScript((session) => {
+  localStorage.setItem('sb-127-auth-token', JSON.stringify(session))
+}, data.session)
+await page.goto('/dashboard') // Already authenticated!
+```
+
+### 4.3 Test Isolation
+
+Each test should:
+1. Create its own test data with unique identifiers (timestamps/UUIDs)
+2. Clean up after itself via fixture teardown
+3. Not depend on data from other tests
+
+```typescript
+// Good: Fixture creates and cleans up
+testUser: async ({}, use) => {
+  const user = await createTestUser('primary')
+  await use(user)
+  await deleteTestUser(user.id) // Always runs, even on failure
+},
+```
+
+### 4.4 Database Reset Strategy
+
+| Environment | Strategy |
+|-------------|----------|
+| **Local development** | Per-test cleanup via fixtures |
+| **CI** | `supabase db reset` before test suite |
+| **Parallel tests** | Unique data identifiers to avoid conflicts |
+
+### 4.5 RLS Verification
+
+Always verify RLS policies work correctly:
+
+```typescript
+// Verify user can't see other users' data
+await verifyRLS({
+  setup: async (admin) => {
+    // Create data owned by another user
+    await admin.from('leagues').insert({ owner_id: 'other-user-id', ... })
+  },
+  test: async (userClient) => {
+    const { data } = await userClient.from('leagues').select()
+    expect(data).toHaveLength(0) // User shouldn't see it
+  },
+  user: testUser,
+})
+```
+
+### 4.6 Real-time Testing
+
+For Supabase Realtime subscriptions:
+
+```typescript
+// Wait for real-time update after action
+await page.click('[data-testid="draft-pick-button"]')
+
+// Verify update propagates to other user's page
+await expect(otherUserPage.getByTestId('draft-history'))
+  .toContainText('Movie Title', { timeout: 10000 })
+```
+
+### 4.7 Edge Function Testing
+
+Test Edge Functions through the app UI (integration) rather than calling directly (unit):
+
+- **Integration (E2E)**: User clicks "Draft" → UI calls Edge Function → Result displayed
+- **Unit (separate)**: Direct HTTP calls to Edge Function with mocked Supabase
+
+### References
+
+- [Supawright](https://github.com/isaacharrisholt/supawright) - Playwright test harness for Supabase
+- [Fireship Supabase Course](https://fireship.io/courses/supabase/setup-playwright/) - E2E testing setup
+- [Supabase Testing Docs](https://supabase.com/docs/guides/local-development/testing/overview)
+
+---
+
+## 5. Test Fixtures & Authentication
 
 ### Authenticated User Fixture
 
@@ -492,7 +604,7 @@ export const test = authTest.extend<LeagueFixtures>({
 
 ---
 
-## 5. Critical User Journeys
+## 6. Critical User Journeys
 
 ### Priority 1: Authentication (Gate to Everything)
 
@@ -978,7 +1090,7 @@ test.describe('Trading System', () => {
 
 ---
 
-## 6. Test Data Management
+## 7. Test Data Management
 
 ### Database Seeding
 
@@ -1051,7 +1163,7 @@ $$;
 
 ---
 
-## 7. CI/CD Integration
+## 8. CI/CD Integration
 
 ### GitHub Actions Workflow
 
@@ -1131,7 +1243,7 @@ jobs:
 
 ---
 
-## 8. Test Coverage Matrix
+## 9. Test Coverage Matrix
 
 ### Critical Paths (Must Pass Before Deploy)
 
@@ -1167,7 +1279,7 @@ test('outbid notification @realtime @bidding', async ({ page }) => { ... })
 
 ---
 
-## 9. Implementation Roadmap
+## 10. Implementation Roadmap
 
 ### Phase 1: Foundation (Week 1)
 
@@ -1200,7 +1312,7 @@ test('outbid notification @realtime @bidding', async ({ page }) => { ... })
 
 ---
 
-## 10. Best Practices
+## 11. Best Practices
 
 ### Do's
 
