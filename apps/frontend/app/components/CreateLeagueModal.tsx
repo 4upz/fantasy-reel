@@ -165,6 +165,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               placeholder="e.g., Oscar Contenders 2026"
               required
               autoFocus
+              data-testid="league-name-input"
             />
           </div>
 
@@ -181,6 +182,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               onChange={(e) => setFormData(prev => ({ ...prev, team_name: e.target.value }))}
               className="input"
               placeholder="e.g., Dreamworks Dynasty"
+              data-testid="team-name-input"
             />
           </div>
 
@@ -198,6 +200,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                 className="input"
                 min="2"
                 max="20"
+                data-testid="max-participants-input"
               />
             </div>
 
@@ -387,6 +390,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               type="submit"
               disabled={creating}
               className="btn btn-primary flex-1"
+              data-testid="create-league-submit"
             >
               {creating ? (
                 <>

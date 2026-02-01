@@ -114,6 +114,7 @@ export default function SignupPage() {
                   disabled={isLoading}
                   className="input"
                   placeholder="Display Name"
+                  data-testid="display-name-input"
                 />
               </div>
               <div>
@@ -129,6 +130,7 @@ export default function SignupPage() {
                   disabled={isLoading}
                   className="input"
                   placeholder="Email address"
+                  data-testid="email-input"
                 />
               </div>
               <div>
@@ -144,6 +146,7 @@ export default function SignupPage() {
                   disabled={isLoading}
                   className="input"
                   placeholder="Password (min 6 characters)"
+                  data-testid="password-input"
                 />
               </div>
               <div>
@@ -163,7 +166,7 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3">
+            <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="signup-button">
               {isLoading ? 'Creating account...' : 'Sign up'}
             </button>
 

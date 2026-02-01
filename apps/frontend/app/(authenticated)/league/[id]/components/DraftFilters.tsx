@@ -93,6 +93,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="input pl-12 pr-4 py-3 text-base"
+          data-testid="movie-search-input"
         />
         {loading && (
           <div className="absolute inset-y-0 right-0 pr-4 flex items-center">

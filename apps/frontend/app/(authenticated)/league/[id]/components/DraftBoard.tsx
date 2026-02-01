@@ -171,7 +171,7 @@ export default function DraftBoard({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="draft-board">
       {/* Draft Header Card */}
       <div className="card p-6">
         <div className="flex items-start justify-between gap-6">
@@ -267,7 +267,7 @@ export default function DraftBoard({
 
       {/* Pick History */}
       {draftPicks.length > 0 && (
-        <div className="card p-6">
+        <div className="card p-6" data-testid="draft-history">
           <h3 className="text-lg font-display font-semibold text-foreground mb-4">
             Pick History
           </h3>

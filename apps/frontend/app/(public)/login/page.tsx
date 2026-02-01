@@ -115,6 +115,7 @@ export default function LoginPage() {
                   disabled={isLoading}
                   className="input"
                   placeholder="Email address"
+                  data-testid="email-input"
                 />
               </div>
               <div>
@@ -130,11 +131,12 @@ export default function LoginPage() {
                   disabled={isLoading}
                   className="input"
                   placeholder="Password"
+                  data-testid="password-input"
                 />
               </div>
             </div>
 
-            <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3">
+            <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="login-button">
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
 
