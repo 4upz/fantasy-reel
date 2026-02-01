@@ -493,6 +493,21 @@ export interface TradeableMovie {
 }
 
 // ============================================================================
+// Team display types (used in trading, draft, etc.)
+// ============================================================================
+
+/**
+ * Team info with owner's display name for UI components
+ * Used when showing team name + owner name together
+ */
+export interface TeamWithOwner {
+  id: string
+  name: string
+  avatar_url: string | null
+  display_name: string | null
+}
+
+// ============================================================================
 // Counterpick system types
 // ============================================================================
 

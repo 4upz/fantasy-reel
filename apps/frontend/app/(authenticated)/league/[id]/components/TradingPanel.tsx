@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type {
   Team,
+  TeamWithOwner,
   TradeOfferWithTeams,
   TradeableMovie,
   TeamBudget,
@@ -12,7 +13,8 @@ import TradeOfferCard from './TradeOfferCard'
 
 interface Props {
   team: Team
-  otherTeams: { id: string; name: string; avatar_url: string | null }[]
+  currentTeam: TeamWithOwner
+  otherTeams: TeamWithOwner[]
   trades: TradeOfferWithTeams[]
   pendingTrades: TradeOfferWithTeams[]
   myTrades: TradeOfferWithTeams[]
@@ -42,6 +44,7 @@ type TabType = 'pending' | 'my-trades' | 'all' | 'history'
 
 export default function TradingPanel({
   team,
+  currentTeam,
   otherTeams,
   trades,
   pendingTrades,
@@ -195,6 +198,7 @@ export default function TradingPanel({
                   key={trade.id}
                   trade={trade}
                   currentTeamId={team.id}
+                  currentTeam={currentTeam}
                   isOwner={isOwner}
                   otherTeams={otherTeams}
                   tradeableMovies={tradeableMovies}
