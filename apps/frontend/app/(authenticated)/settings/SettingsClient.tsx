@@ -5,9 +5,10 @@ import { toast } from 'sonner'
 import { User, Mail, Shield } from 'lucide-react'
 import type { Profile } from '@/types'
 import type { UserIdentity } from '@supabase/supabase-js'
-import { updateProfile } from './actions'
+import { updateProfile, changePassword } from './actions'
 import AvatarUpload from './components/AvatarUpload'
 import ConnectedAccounts from './components/ConnectedAccounts'
+import ChangePasswordModal from './components/ChangePasswordModal'
 
 interface Props {
   userId: string
@@ -28,6 +29,7 @@ export default function SettingsClient({
 }: Props): React.ReactElement {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '')
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
 
   const charCount = displayName.length
   const isOverLimit = charCount > MAX_DISPLAY_NAME_LENGTH
@@ -52,6 +54,16 @@ export default function SettingsClient({
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  async function handlePasswordChange(
+    formData: FormData
+  ): Promise<{ success: boolean; error?: string }> {
+    const result = await changePassword(formData)
+    if (result.success) {
+      toast.success('Password updated successfully')
+    }
+    return result
   }
 
   return (
@@ -183,14 +195,33 @@ export default function SettingsClient({
           <div>
             <p className="text-sm font-medium text-foreground">Password</p>
             <p className="text-xs text-foreground-muted mt-0.5">
-              Last changed: Never
+              {hasPassword
+                ? 'Change your account password'
+                : 'No password set (signed in via OAuth)'}
             </p>
           </div>
-          <button className="btn btn-ghost text-sm">
-            Change Password
-          </button>
+          {hasPassword ? (
+            <button
+              onClick={() => setShowPasswordModal(true)}
+              className="btn btn-ghost text-sm"
+            >
+              Change Password
+            </button>
+          ) : (
+            <span className="text-xs text-foreground-muted">
+              Use forgot password to set one
+            </span>
+          )}
         </div>
       </section>
+
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <ChangePasswordModal
+          onClose={() => setShowPasswordModal(false)}
+          onSubmit={handlePasswordChange}
+        />
+      )}
     </div>
   )
 }
