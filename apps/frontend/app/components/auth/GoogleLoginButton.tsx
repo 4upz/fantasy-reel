@@ -36,6 +36,7 @@ export default function GoogleLoginButton({ redirectTo }: Props): React.ReactEle
       onClick={handleGoogleLogin}
       disabled={isLoading}
       className="btn w-full py-3 bg-white hover:bg-gray-100 text-gray-800 border-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      data-testid="google-login-button"
     >
       <GoogleIcon className="w-5 h-5 mr-2" />
       {isLoading ? 'Connecting...' : 'Continue with Google'}

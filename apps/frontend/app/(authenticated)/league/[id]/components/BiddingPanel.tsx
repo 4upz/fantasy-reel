@@ -120,7 +120,7 @@ export default function BiddingPanel({
   }, [myBids, bids, teamId])
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="bidding-panel">
       {/* Budget & Slots Header Card */}
       <div className="card p-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -161,6 +161,7 @@ export default function BiddingPanel({
             onClick={() => setIsModalOpen(true)}
             disabled={availableSlots <= 0}
             className="btn btn-primary px-6 py-3 text-base"
+            data-testid="place-bid-button"
           >
             <Plus className="w-5 h-5 mr-2" />
             Place Bid

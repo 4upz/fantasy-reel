@@ -239,6 +239,7 @@ export default function PlaceBidModal({
                   onChange={(e) => handleSearchChange(e.target.value)}
                   placeholder="Search for a movie..."
                   className="input w-full pl-12 py-3 text-base"
+                  data-testid="bid-movie-search-input"
                 />
                 {searchQuery && (
                   <button
@@ -400,6 +401,7 @@ export default function PlaceBidModal({
                     className={`input w-full pl-14 py-4 text-2xl font-display font-bold text-center ${
                       !isValidBid ? 'border-error focus:border-error' : 'focus:border-gold'
                     }`}
+                    data-testid="bid-amount-input"
                   />
                 </div>
 
@@ -426,6 +428,7 @@ export default function PlaceBidModal({
               onClick={handleSubmit}
               disabled={!isValidBid || isSubmitting}
               className="btn btn-primary w-full py-3 text-base font-semibold"
+              data-testid="submit-bid-button"
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center gap-2">
