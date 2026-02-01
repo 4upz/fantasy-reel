@@ -150,7 +150,7 @@ export default function MoviePicker({
   const availableCount = filteredMovies.filter((m) => !draftedTmdbIds.has(m.tmdb_id)).length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="movie-picker">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-display font-semibold text-foreground">
@@ -317,6 +317,7 @@ export default function MoviePicker({
                   onClick={handleConfirmPick}
                   disabled={picking}
                   className="btn btn-primary px-6"
+                  data-testid="confirm-pick-button"
                 >
                   {picking ? (
                     <span className="flex items-center gap-2">

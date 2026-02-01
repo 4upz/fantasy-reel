@@ -36,6 +36,7 @@ export default function DiscordLoginButton({ redirectTo }: Props): React.ReactEl
       onClick={handleDiscordLogin}
       disabled={isLoading}
       className="btn w-full py-3 bg-[#5865F2] hover:bg-[#4752C4] text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      data-testid="discord-login-button"
     >
       <DiscordIcon className="w-5 h-5 mr-2" />
       {isLoading ? 'Connecting...' : 'Continue with Discord'}

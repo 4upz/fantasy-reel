@@ -72,7 +72,7 @@ export default function DraftMovieCard({
   )
 
   return (
-    <div onClick={handleCardClick} className={cardClasses}>
+    <div onClick={handleCardClick} className={cardClasses} data-testid={`movie-card-${movie.tmdb_id}`}>
       {/* Poster Container */}
       <div className="relative aspect-[2/3] bg-elevated">
         {/* Skeleton loader */}
@@ -183,6 +183,7 @@ export default function DraftMovieCard({
               <button
                 onClick={handleDraftClick}
                 className="w-full py-2.5 bg-gold hover:bg-gold-hover text-background text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-glow-gold"
+                data-testid={`draft-pick-button-${movie.tmdb_id}`}
               >
                 <PlusIcon className="w-4 h-4" />
                 Draft Movie

@@ -284,6 +284,7 @@ export default function DraftClient({
             onClick={handleStartDraft}
             disabled={startingDraft || participants.length < 2}
             className="btn btn-primary"
+            data-testid="start-draft-button"
           >
             {startingDraft ? 'Starting...' : 'Start Draft'}
           </button>

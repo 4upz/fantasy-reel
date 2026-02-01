@@ -53,6 +53,7 @@ export default function NavUserMenu({ user, avatarUrl, onMenuToggle, showMobileD
           className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-hover transition-colors group"
           aria-expanded={isOpen}
           aria-haspopup="true"
+          data-testid="user-menu-button"
         >
           <Avatar
             src={avatarUrl}
@@ -98,6 +99,7 @@ export default function NavUserMenu({ user, avatarUrl, onMenuToggle, showMobileD
                 <button
                   type="submit"
                   className="w-full text-left px-4 py-2 text-sm text-foreground-secondary hover:text-crimson hover:bg-surface-hover transition-colors"
+                  data-testid="signout-button"
                 >
                   Sign out
                 </button>
