@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { X, DollarSign, Search, Film, Sparkles, TrendingUp, Calendar, ArrowLeft } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
 import { getTmdbPosterUrl, formatReleaseDateFull } from './utils'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 
 interface PlaceBidModalProps {
   isOpen: boolean
@@ -42,7 +43,6 @@ export default function PlaceBidModal({
 }: PlaceBidModalProps) {
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [bidAmount, setBidAmount] = useState(0)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
   const modalRef = useRef<HTMLDivElement>(null)
@@ -146,10 +146,8 @@ export default function PlaceBidModal({
     search(value)
   }
 
-  const handleSubmit = async () => {
+  const submitBidAction = useCallback(async () => {
     if (!selectedMovie) return
-
-    setIsSubmitting(true)
 
     const movieData = {
       title: selectedMovie.title,
@@ -163,15 +161,16 @@ export default function PlaceBidModal({
 
     const { success, error } = await onPlaceBid(selectedMovie.tmdb_id, bidAmount, movieData)
 
-    setIsSubmitting(false)
-
-    if (success) {
-      toast.success(`Bid of $${bidAmount} placed on ${selectedMovie.title}`)
-      onClose()
-    } else {
+    if (!success) {
       toast.error(error || 'Failed to place bid')
+      return
     }
-  }
+
+    toast.success(`Bid of $${bidAmount} placed on ${selectedMovie.title}`)
+    onClose()
+  }, [selectedMovie, bidAmount, onPlaceBid, onClose])
+
+  const { execute: handleSubmit, isLoading: isSubmitting } = useAsyncAction(submitBidAction)
 
   const remainingBudget = budget?.remaining_budget ?? 0
   const isValidBid = bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100

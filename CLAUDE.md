@@ -153,6 +153,56 @@ The app uses a **Cinematic Dark** theme inspired by premium streaming services a
 4. **Gold for interactive elements** - Links, buttons, focus states
 5. **Animations for state changes** - Use `animate-fade-in` for appearing content
 6. **"Your turn" glow** - Use `animate-glow-pulse` with `bg-success-bg border-success`
+7. **Protect async actions from double-clicks** - Use `useAsyncAction` hook for API calls
+
+### Double-Click Protection: `useAsyncAction` Hook
+
+**Location:** `apps/frontend/hooks/useAsyncAction.ts`
+
+**Problem:** React's `useState` updates are batched and asynchronous. When a button triggers an API call with `disabled={isLoading}`, rapid double-clicks can both execute before the first `setIsLoading(true)` is reflected in the DOM. This causes race conditions like "It's not your turn to pick" errors.
+
+**Solution:** The `useAsyncAction` hook uses a **ref** for synchronous, immediate protection combined with state for UI updates:
+
+```typescript
+import { useAsyncAction } from '@/hooks/useAsyncAction'
+
+// Define the async action (must be wrapped in useCallback for stable reference)
+const myAction = useCallback(async (arg1: string, arg2: number) => {
+  const result = await apiCall(arg1, arg2)
+  if (result.error) {
+    throw new Error(result.error) // Hook stores error in `error` state
+  }
+  return result
+}, [])
+
+// Get the protected execute function and loading state
+const { execute, isLoading, error, reset } = useAsyncAction(myAction)
+
+// Use in JSX - second rapid click is silently ignored
+<button onClick={() => execute('foo', 123)} disabled={isLoading}>
+  {isLoading ? 'Saving...' : 'Save'}
+</button>
+{error && <p className="text-error">{error}</p>}
+```
+
+**When to use:**
+- Any button that triggers an API call (draft picks, bids, trades, etc.)
+- Form submissions
+- Any action where duplicate requests would be harmful
+
+**Hook returns:**
+- `execute` - Protected function that silently ignores calls while already processing
+- `isLoading` - Boolean for UI feedback (spinners, disabled state)
+- `error` - Error message if the action threw/rejected
+- `reset` - Clear the error state
+
+**Components using this pattern:**
+- `DraftBoard.tsx` - Draft picks
+- `CounterpickRound.tsx` - Counterpick selections
+- `PlaceBidModal.tsx` - Bid submissions
+- `ProposeTradeModal.tsx` - Trade proposals
+- `TradeOfferCard.tsx` - Trade actions (accept/reject/cancel/veto)
+- `AcceptConfirmModal.tsx` - Trade acceptance confirmation
 
 ### File Structure
 
@@ -167,6 +217,7 @@ apps/frontend/app/
 │   ├── CinemaNav.tsx              # Main navigation
 │   └── ...                        # 15+ shared components
 ├── hooks/                         # Shared hooks
+│   ├── useAsyncAction.ts          # Double-click protection for async actions
 │   ├── useInfiniteScroll.ts
 │   ├── useNotifications.ts
 │   └── useScrollPosition.ts
@@ -441,6 +492,32 @@ npx supabase db reset
 # Re-register test users at /signup
 ```
 
+### Deploying Edge Functions to Production
+
+**CRITICAL: New Edge Functions require config.toml entry to work in production!**
+
+Due to an [ES256 JWT verification bug in Supabase CLI](https://github.com/supabase/cli/issues/4453), all Edge Functions in this project must have `verify_jwt = false` in `config.toml`. Functions handle auth internally via `supabase.auth.getUser()`.
+
+**Checklist for deploying a new Edge Function:**
+
+1. **Add to `config.toml`** (required for production):
+   ```toml
+   [functions.my-new-function]
+   verify_jwt = false
+   ```
+
+2. **Deploy the function:**
+   ```bash
+   npx supabase functions deploy my-new-function
+   ```
+
+3. **Push any related migrations:**
+   ```bash
+   npx supabase db push
+   ```
+
+**Common error if you skip step 1:** `{"code":401,"message":"Invalid JWT"}` even with valid auth token.
+
 ### RLS Best Practices
 
 When writing or modifying Row Level Security policies, follow these patterns for optimal performance:
@@ -473,6 +550,33 @@ CREATE POLICY "..." ON table FOR SELECT USING (...)
 - Partial indexes for common filters: `CREATE INDEX ... ON table(col) WHERE status = 'active'`
 
 Reference: https://supabase.com/docs/guides/database/postgres/row-level-security
+
+### PostgREST Ambiguous Relationships
+
+When a table has **multiple foreign keys to the same target table**, PostgREST cannot determine which relationship to use and returns error `PGRST201`. You must explicitly specify the FK constraint name.
+
+**Tables with multiple FKs to `teams`:**
+| Table | FK Columns | Use Case |
+|-------|------------|----------|
+| `draft_picks` | `team_id`, `counterpicked_by_team_id` | Team that drafted vs team that counterpicked |
+| `trade_offers` | `initiator_team_id`, `recipient_team_id` | Trade proposer vs recipient |
+| `trade_assets` | `from_team_id`, `to_team_id` | Asset source vs destination |
+| `counterpicks` | `counterpicker_team_id`, `target_team_id` | Who counterpicked vs whose movie |
+
+**Fix pattern:**
+```typescript
+// BAD: Ambiguous - returns PGRST201 error
+.select(`*, teams (*)`)
+
+// GOOD: Explicit FK constraint name
+.select(`*, teams!draft_picks_team_id_fkey (*)`)
+```
+
+**Finding FK constraint names:**
+```sql
+SELECT conname FROM pg_constraint
+WHERE conrelid = 'draft_picks'::regclass AND contype = 'f';
+```
 
 ---
 

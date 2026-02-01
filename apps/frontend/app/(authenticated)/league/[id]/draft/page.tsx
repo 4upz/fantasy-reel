@@ -1,7 +1,10 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DraftClient from './DraftClient'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
+import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
+
+// Force dynamic rendering to ensure fresh data on every request
+export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -45,13 +48,15 @@ export default async function DraftPage({ params }: PageProps) {
     await Promise.all([
       supabase
         .from('league_participants')
-        .select(`*, teams (*)`)
+        .select(`*, teams (*), profiles (*)`)
         .eq('league_id', id)
         .eq('status', 'active')
         .order('draft_order', { ascending: true }),
+      // Explicit FK required: draft_picks has two FKs to teams (team_id, counterpicked_by_team_id)
+      // Without explicit FK, PostgREST returns PGRST201 ambiguous relationship error
       supabase
         .from('draft_picks')
-        .select(`*, movies (*), teams (*)`)
+        .select(`*, movies (*), teams!draft_picks_team_id_fkey (*)`)
         .eq('league_id', id)
         .order('round', { ascending: true })
         .order('pick_number', { ascending: true }),
@@ -71,7 +76,7 @@ export default async function DraftPage({ params }: PageProps) {
   return (
     <DraftClient
       league={league as League}
-      participants={(participants || []) as ParticipantWithTeam[]}
+      participants={(participants || []) as ParticipantWithProfile[]}
       draftPicks={(draftPicks || []) as DraftPickWithDetails[]}
       counterpicks={(counterpicks || []) as CounterpickWithDetails[]}
       currentUserId={user.id}

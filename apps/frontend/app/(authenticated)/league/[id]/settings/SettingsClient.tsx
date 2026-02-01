@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { League, ParticipantWithProfile } from '@/types'
 import LeagueInfoSection from './components/LeagueInfoSection'
+import JoinLinkSection from './components/JoinLinkSection'
 import DraftConfigSection from './components/DraftConfigSection'
 import CounterpickConfigSection from './components/CounterpickConfigSection'
 import BiddingConfigSection from './components/BiddingConfigSection'
@@ -55,6 +56,12 @@ export default function SettingsClient({
       <div className="space-y-6">
         <LeagueInfoSection
           league={league}
+          onUpdate={handleLeagueUpdate}
+        />
+
+        <JoinLinkSection
+          league={league}
+          isLocked={!isSetup}
           onUpdate={handleLeagueUpdate}
         />
 

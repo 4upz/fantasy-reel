@@ -5,6 +5,7 @@ import { signup } from './actions'
 import Link from 'next/link'
 import { FormError } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
+import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import NavLogo from '../../components/navigation/NavLogo'
 import { toast } from 'sonner'
 
@@ -175,7 +176,10 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <DiscordLoginButton />
+            <div className="space-y-3">
+              <GoogleLoginButton />
+              <DiscordLoginButton />
+            </div>
 
             <div className="text-center">
               <p className="text-sm text-foreground-secondary">

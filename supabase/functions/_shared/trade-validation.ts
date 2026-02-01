@@ -686,7 +686,7 @@ async function getLeagueInfo(
 
   if (!data) return null
 
-  const appUrl = Deno.env.get('APP_URL') || 'http://localhost:3000'
+  const appUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
   return {
     name: data.name,
     url: `${appUrl}/league/${leagueId}`,

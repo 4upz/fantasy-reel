@@ -5,9 +5,10 @@ import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
-import type { League, ParticipantWithTeam, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
+import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard from '../components/DraftBoard'
 import InvitationsList from '../components/InvitationsList'
+import JoinLinkCard from '../components/JoinLinkCard'
 import ParticipantsList from '../components/ParticipantsList'
 import { SpinnerIcon } from '../components/Icons'
 
@@ -21,7 +22,7 @@ const RECONNECT_DELAY_MS = 2000
 
 interface Props {
   league: League
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
   draftPicks: DraftPickWithDetails[]
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
@@ -76,9 +77,11 @@ export default function DraftClient({
   }, [favoriteMovieIds, league.id])
 
   const fetchDraftPicks = useCallback(async () => {
+    // Explicit FK required: draft_picks has two FKs to teams (team_id, counterpicked_by_team_id)
+    // Without explicit FK, PostgREST returns PGRST201 ambiguous relationship error
     const { data } = await supabase
       .from('draft_picks')
-      .select(`*, movies (*), teams (*)`)
+      .select(`*, movies (*), teams!draft_picks_team_id_fkey (*)`)
       .eq('league_id', league.id)
       .order('round', { ascending: true })
       .order('pick_number', { ascending: true })
@@ -91,13 +94,13 @@ export default function DraftClient({
   const fetchParticipants = useCallback(async () => {
     const { data } = await supabase
       .from('league_participants')
-      .select(`*, teams (*)`)
+      .select(`*, teams (*), profiles (*)`)
       .eq('league_id', league.id)
       .eq('status', 'active')
       .order('draft_order', { ascending: true })
 
     if (data) {
-      setParticipants(data as ParticipantWithTeam[])
+      setParticipants(data as ParticipantWithProfile[])
     }
   }, [supabase, league.id])
 
@@ -345,11 +348,17 @@ export default function DraftClient({
         <div className="space-y-6">
           <ParticipantsList participants={participants} ownerId={league.owner_id} />
           {isOwner && league.status === 'setup' && (
-            <InvitationsList
-              leagueId={league.id}
-              isOwner={isOwner}
-              leagueStatus={league.status}
-            />
+            <>
+              <JoinLinkCard
+                league={league}
+                onUpdate={setLeague}
+              />
+              <InvitationsList
+                leagueId={league.id}
+                isOwner={isOwner}
+                leagueStatus={league.status}
+              />
+            </>
           )}
         </div>
       </div>

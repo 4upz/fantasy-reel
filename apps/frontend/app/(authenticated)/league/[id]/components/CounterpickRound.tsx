@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { buildTeamInfoByUserId, buildTeamInfoByTeamId, type TeamDisplayInfo } from '@/utils/league'
 import CounterpickPicker from './CounterpickPicker'
 import DraftProgressRing from './DraftProgressRing'
 import { SpinnerIcon, ClockIcon, ArrowUpIcon, CheckIcon } from './Icons'
 import type {
   League,
-  ParticipantWithTeam,
+  ParticipantWithProfile,
   Counterpick,
   CounterpickWithDetails,
   CounterpickTurnInfo,
@@ -18,7 +20,7 @@ import type {
 
 interface Props {
   league: League
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
   onCounterpickMade: () => void
@@ -33,8 +35,7 @@ export default function CounterpickRound({
 }: Props) {
   const [currentTurn, setCurrentTurn] = useState<CounterpickTurnInfo | null>(null)
   const [loading, setLoading] = useState(true)
-  const [picking, setPicking] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   const totalParticipants = participants.length
   const totalCounterpicks = totalParticipants * league.draft_counterpick_slots
@@ -44,16 +45,16 @@ export default function CounterpickRound({
   useEffect(() => {
     async function fetchCurrentTurn() {
       setLoading(true)
-      setError(null)
+      setFetchError(null)
 
       const supabase = createClient()
-      const { data, error: fetchError } = await supabase.rpc('get_next_counterpick_turn', {
+      const { data, error: rpcError } = await supabase.rpc('get_next_counterpick_turn', {
         p_league_id: league.id,
       })
 
-      if (fetchError) {
-        console.error('Error fetching counterpick turn:', fetchError)
-        setError('Failed to load turn information')
+      if (rpcError) {
+        console.error('Error fetching counterpick turn:', rpcError)
+        setFetchError('Failed to load turn information')
         setCurrentTurn(null)
       } else if (data && data.length > 0) {
         setCurrentTurn(data[0])
@@ -83,47 +84,45 @@ export default function CounterpickRound({
   // Check if round is complete
   const isRoundComplete = league.status === 'counterpicking' && !currentTurn && !loading
 
-  // Map of user_id to team name for display
-  const teamNamesByUserId = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const participant of participants) {
-      map.set(participant.user_id, participant.teams?.name || 'Unknown Team')
-    }
-    return map
-  }, [participants])
+  // Map of user_id to team info for display
+  const teamInfoByUserId = useMemo(() => buildTeamInfoByUserId(participants), [participants])
 
   function getTeamName(userId: string): string {
-    return teamNamesByUserId.get(userId) || 'Unknown Team'
+    return teamInfoByUserId.get(userId)?.teamName ?? 'Unknown Team'
   }
 
-  // Handle making a counterpick
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function handleCounterpick(movieId: string, option: CounterpickOption): Promise<void> {
-    setPicking(true)
-    setError(null)
+  function getOwnerName(userId: string): string | null {
+    return teamInfoByUserId.get(userId)?.ownerName ?? null
+  }
 
-    const { data, error: pickError } = await callEdgeFunction<{
-      counterpick: Counterpick
-      round_complete: boolean
-    }>('make-counterpick', {
-      body: {
-        league_id: league.id,
-        movie_id: movieId,
-      },
-    })
+  // Handle making a counterpick - second param required by CounterpickPicker but unused here
+  const counterpickAction = useCallback(
+    async (movieId: string, _option: CounterpickOption): Promise<void> => {
+      void _option // Mark as intentionally unused
+      const { data, error: pickError } = await callEdgeFunction<{
+        counterpick: Counterpick
+        round_complete: boolean
+      }>('make-counterpick', {
+        body: {
+          league_id: league.id,
+          movie_id: movieId,
+        },
+      })
 
-    if (pickError) {
-      setError(pickError)
-    } else {
+      if (pickError) {
+        throw new Error(pickError)
+      }
+
       onCounterpickMade()
       // If round complete, turn will be null on next fetch
       if (data?.round_complete) {
         setCurrentTurn(null)
       }
-    }
+    },
+    [league.id, onCounterpickMade]
+  )
 
-    setPicking(false)
-  }
+  const { execute: handleCounterpick, isLoading: picking, error } = useAsyncAction(counterpickAction)
 
   // Render different states based on league status
   if (league.status !== 'counterpicking') {
@@ -223,6 +222,11 @@ export default function CounterpickRound({
                     >
                       {isMyTurn ? "It's your turn!" : `${getTeamName(currentTurn.user_id)}'s pick`}
                     </p>
+                    {!isMyTurn && getOwnerName(currentTurn.user_id) && (
+                      <p className="text-xs text-foreground-muted">
+                        {getOwnerName(currentTurn.user_id)}
+                      </p>
+                    )}
                     {isMyTurn && (
                       <p className="text-sm text-foreground-muted mt-1">
                         {currentTurn.counterpicks_remaining} counterpick{currentTurn.counterpicks_remaining !== 1 ? 's' : ''} remaining
@@ -253,7 +257,7 @@ export default function CounterpickRound({
         )}
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {(fetchError || error) && <div className="alert alert-error">{fetchError || error}</div>}
 
       {/* Counterpick Picker - Only show when user is a participant */}
       {currentUserTeamId && (
@@ -283,20 +287,12 @@ export default function CounterpickRound({
 
 interface CounterpickHistoryProps {
   counterpicks: CounterpickWithDetails[]
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
 }
 
 function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryProps) {
-  // Map team_id to team name
-  const teamNamesById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const participant of participants) {
-      if (participant.teams) {
-        map.set(participant.teams.id, participant.teams.name)
-      }
-    }
-    return map
-  }, [participants])
+  // Map team_id to team info
+  const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
 
   if (counterpicks.length === 0) {
     return <p className="text-foreground-muted">No counterpicks yet</p>
@@ -328,10 +324,15 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
           {/* Pick Info */}
           <div className="flex-1 min-w-0">
             <p className="font-medium text-foreground text-sm">
-              {teamNamesById.get(pick.counterpicker_team_id) || 'Unknown'} counterpicked{' '}
+              {teamInfoById.get(pick.counterpicker_team_id)?.teamName ?? 'Unknown'} counterpicked{' '}
               <span className="text-foreground-secondary">
-                {teamNamesById.get(pick.target_team_id) || 'Unknown'}
+                {teamInfoById.get(pick.target_team_id)?.teamName ?? 'Unknown'}
               </span>
+            </p>
+            <p className="text-xs text-foreground-muted">
+              {teamInfoById.get(pick.counterpicker_team_id)?.ownerName ?? ''}
+              {teamInfoById.get(pick.counterpicker_team_id)?.ownerName && ' → '}
+              {teamInfoById.get(pick.target_team_id)?.ownerName ?? ''}
             </p>
             {pick.movies && (
               <p className="text-xs text-foreground-muted truncate mt-0.5">
@@ -357,7 +358,7 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
 }
 
 interface CounterpickQueueProps {
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
   currentPickIndex: number
   currentUserId: string
   rounds: number
@@ -374,7 +375,7 @@ function CounterpickQueue({
 
   // Calculate upcoming picks (reverse snake order for counterpicks)
   const upcomingPicks = useMemo(() => {
-    const picks: Array<{ participant: ParticipantWithTeam; round: number; isCurrentUser: boolean }> = []
+    const picks: Array<{ participant: ParticipantWithProfile; round: number; isCurrentUser: boolean }> = []
     const showCount = Math.min(6, totalPicks - currentPickIndex)
 
     for (let i = 0; i < showCount; i++) {
@@ -429,6 +430,11 @@ function CounterpickQueue({
             }`}>
               {pick.isCurrentUser ? 'You' : pick.participant.teams?.name || 'Unknown'}
             </p>
+            {!pick.isCurrentUser && pick.participant.profiles?.display_name && (
+              <p className="text-xs text-foreground-muted truncate max-w-20">
+                {pick.participant.profiles.display_name}
+              </p>
+            )}
             <p className="text-xs text-foreground-muted">R{pick.round}</p>
           </div>
         ))}

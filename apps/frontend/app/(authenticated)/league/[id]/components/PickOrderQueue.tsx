@@ -2,17 +2,17 @@
 
 import { ArrowRightIcon } from './Icons'
 import { cn } from './utils'
-import type { ParticipantWithTeam } from '@/types'
+import type { ParticipantWithProfile } from '@/types'
 
 interface Props {
-  participants: ParticipantWithTeam[]
+  participants: ParticipantWithProfile[]
   currentPickIndex: number
   currentUserId: string
   rounds: number
 }
 
 interface QueueItem {
-  participant: ParticipantWithTeam
+  participant: ParticipantWithProfile
   round: number
   pickNumber: number
   isCurrentPick: boolean
@@ -20,7 +20,7 @@ interface QueueItem {
 }
 
 function calculatePickOrder(
-  participants: ParticipantWithTeam[],
+  participants: ParticipantWithProfile[],
   currentPickIndex: number,
   rounds: number,
   currentUserId: string
@@ -125,6 +125,11 @@ export default function PickOrderQueue({
               >
                 {item.participant.teams?.name || 'Unknown'}
               </p>
+              {item.participant.profiles?.display_name && (
+                <p className="text-xs text-foreground-muted truncate max-w-24">
+                  {item.participant.profiles.display_name}
+                </p>
+              )}
               <p className="text-xs text-foreground-muted">
                 R{item.round} P{item.pickNumber}
               </p>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
-import type { League, Team, TradeItems } from '@/types'
+import type { League, Team, TeamWithOwner, TradeItems } from '@/types'
 import { useTrading } from '../hooks/useTrading'
 import TradingPanel from '../components/TradingPanel'
 
@@ -14,11 +14,12 @@ const ProposeTradeModal = dynamic(() => import('../components/ProposeTradeModal'
 interface Props {
   league: League
   team: Team
-  otherTeams: { id: string; name: string; avatar_url: string | null }[]
+  currentTeam: TeamWithOwner
+  otherTeams: TeamWithOwner[]
   isOwner: boolean
 }
 
-export default function TradingClient({ league, team, otherTeams, isOwner }: Props) {
+export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner }: Props) {
   const [showProposeModal, setShowProposeModal] = useState(false)
 
   const {
@@ -60,6 +61,7 @@ export default function TradingClient({ league, team, otherTeams, isOwner }: Pro
     <>
       <TradingPanel
         team={team}
+        currentTeam={currentTeam}
         otherTeams={otherTeams}
         trades={trades}
         pendingTrades={pendingTrades}

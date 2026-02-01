@@ -18,6 +18,9 @@ export interface League {
   draft_counterpick_slots: number
   bidding_counterpick_slots: number
   counterpicks_block_drops: boolean
+  // Shareable join link
+  join_code: string | null
+  join_token: string | null
   created_at: string
   updated_at: string
 }
@@ -490,6 +493,21 @@ export interface TradeableMovie {
 }
 
 // ============================================================================
+// Team display types (used in trading, draft, etc.)
+// ============================================================================
+
+/**
+ * Team info with owner's display name for UI components
+ * Used when showing team name + owner name together
+ */
+export interface TeamWithOwner {
+  id: string
+  name: string
+  avatar_url: string | null
+  display_name: string | null
+}
+
+// ============================================================================
 // Counterpick system types
 // ============================================================================
 
@@ -532,4 +550,16 @@ export interface CounterpickWithDetails extends Counterpick {
   movies: Movie
   target_team: Team
   counterpicker_team: Team
+}
+
+// ============================================================================
+// API response types
+// ============================================================================
+
+export interface GenerateJoinLinkResponse {
+  join_code: string
+  join_token: string
+  join_url: string
+  league_id: string
+  league_name: string
 }

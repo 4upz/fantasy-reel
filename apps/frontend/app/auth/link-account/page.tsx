@@ -5,8 +5,9 @@ import LinkAccountClient from './LinkAccountClient'
 interface LinkAccountContext {
   duplicateUserId: string
   email: string
-  discordUsername: string
-  discordIdentityId?: string
+  oauthProvider: 'discord' | 'google'
+  oauthUsername: string
+  oauthIdentityId?: string
 }
 
 export default async function LinkAccountPage() {
@@ -34,7 +35,8 @@ export default async function LinkAccountPage() {
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
       <LinkAccountClient
         email={context.email}
-        discordUsername={context.discordUsername}
+        oauthProvider={context.oauthProvider}
+        oauthUsername={context.oauthUsername}
         duplicateUserId={context.duplicateUserId}
       />
     </div>

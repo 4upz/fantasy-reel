@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Image from 'next/image'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import type {
+  TeamWithOwner,
   TradeOfferWithTeams,
   TradeItems,
   TradeMovieItem,
@@ -15,8 +17,9 @@ import AcceptConfirmModal from './AcceptConfirmModal'
 interface Props {
   trade: TradeOfferWithTeams
   currentTeamId: string
+  currentTeam: TeamWithOwner
   isOwner: boolean
-  otherTeams: { id: string; name: string; avatar_url: string | null }[]
+  otherTeams: TeamWithOwner[]
   tradeableMovies: TradeableMovie[]
   budget: TeamBudget | null
   onRespond: (
@@ -49,12 +52,25 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
   expired: { bg: 'bg-surface-hover', text: 'text-foreground-muted', label: 'Expired' },
 }
 
+/**
+ * Find display name for a team by ID from the available team info
+ */
+function findDisplayName(
+  teamId: string,
+  currentTeam: TeamWithOwner,
+  otherTeams: TeamWithOwner[]
+): string | null {
+  if (teamId === currentTeam.id) return currentTeam.display_name
+  return otherTeams.find((t) => t.id === teamId)?.display_name ?? null
+}
+
 export default function TradeOfferCard(props: Props) {
   const {
     trade,
     currentTeamId,
+    currentTeam,
     isOwner,
-    // otherTeams - passed for potential future use
+    otherTeams,
     tradeableMovies,
     budget,
     onRespond,
@@ -62,7 +78,7 @@ export default function TradeOfferCard(props: Props) {
     onCancel,
     onVeto,
   } = props
-  const [isLoading, setIsLoading] = useState(false)
+
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCounterModal, setShowCounterModal] = useState(false)
@@ -82,57 +98,61 @@ export default function TradeOfferCard(props: Props) {
   const displayStatus = optimisticStatus || trade.status
   const statusStyle = STATUS_STYLES[displayStatus] || STATUS_STYLES.proposed
 
-  const handleAction = async (
-    action: 'accept' | 'reject' | 'cancel' | 'veto',
-    message?: string
-  ) => {
-    setIsLoading(true)
-    setPendingAction(action)
-    setError(null)
+  const tradeAction = useCallback(
+    async (action: 'accept' | 'reject' | 'cancel' | 'veto', message?: string) => {
+      setPendingAction(action)
+      setError(null)
 
-    // Optimistic UI update (FE#9)
-    const optimisticStatusMap: Record<string, string> = {
-      accept: 'review',
-      reject: 'rejected',
-      cancel: 'cancelled',
-      veto: 'vetoed',
-    }
-    setOptimisticStatus(optimisticStatusMap[action])
-
-    let result: { success: boolean; error?: string }
-
-    switch (action) {
-      case 'accept':
-        result = await onRespond(trade.id, 'accept', message)
-        break
-      case 'reject':
-        result = await onRespond(trade.id, 'reject', message)
-        break
-      case 'cancel':
-        result = await onCancel(trade.id)
-        break
-      case 'veto':
-        result = await onVeto(trade.id, message)
-        break
-      default:
-        result = { success: false, error: 'Unknown action' }
-    }
-
-    setIsLoading(false)
-    setPendingAction(null)
-
-    if (!result.success) {
-      // Roll back optimistic update on error
-      setOptimisticStatus(null)
-      if (result.error) {
-        setError(result.error)
+      // Optimistic UI update (FE#9)
+      const optimisticStatusMap: Record<string, string> = {
+        accept: 'review',
+        reject: 'rejected',
+        cancel: 'cancelled',
+        veto: 'vetoed',
       }
-    }
-    // If successful, the real-time subscription will update the trade
-  }
+      setOptimisticStatus(optimisticStatusMap[action])
+
+      let result: { success: boolean; error?: string }
+
+      switch (action) {
+        case 'accept':
+          result = await onRespond(trade.id, 'accept', message)
+          break
+        case 'reject':
+          result = await onRespond(trade.id, 'reject', message)
+          break
+        case 'cancel':
+          result = await onCancel(trade.id)
+          break
+        case 'veto':
+          result = await onVeto(trade.id, message)
+          break
+        default:
+          result = { success: false, error: 'Unknown action' }
+      }
+
+      setPendingAction(null)
+
+      if (!result.success) {
+        // Roll back optimistic update on error
+        setOptimisticStatus(null)
+        if (result.error) {
+          setError(result.error)
+        }
+      }
+      // If successful, the real-time subscription will update the trade
+    },
+    [trade.id, onRespond, onCancel, onVeto]
+  )
+
+  const { execute: handleAction, isLoading } = useAsyncAction(tradeAction)
 
   const initiatorTeam = trade.initiator_team as { id: string; name: string; avatar_url: string | null }
   const recipientTeam = trade.recipient_team as { id: string; name: string; avatar_url: string | null }
+
+  // Get display names for both teams
+  const initiatorDisplayName = findDisplayName(initiatorTeam.id, currentTeam, otherTeams)
+  const recipientDisplayName = findDisplayName(recipientTeam.id, currentTeam, otherTeams)
 
   return (
     <article
@@ -150,6 +170,11 @@ export default function TradeOfferCard(props: Props) {
             <p className="font-medium text-foreground">
               {initiatorTeam.name} <span aria-label="to">→</span> {recipientTeam.name}
             </p>
+            {initiatorDisplayName && recipientDisplayName && (
+              <p className="text-xs text-foreground-muted">
+                {initiatorDisplayName} <span aria-label="to">→</span> {recipientDisplayName}
+              </p>
+            )}
             <p className="text-sm text-foreground-muted">
               <time dateTime={trade.proposed_at}>{formatRelativeDate(trade.proposed_at)}</time>
             </p>
@@ -289,12 +314,10 @@ export default function TradeOfferCard(props: Props) {
           budget={budget}
           onClose={() => setShowCounterModal(false)}
           onCounter={async (counterOfferedItems, counterRequestedItems, message) => {
-            setShowCounterModal(false)
-            setIsLoading(true)
-            setError(null)
             const result = await onCounter(trade.id, counterOfferedItems, counterRequestedItems, message)
-            setIsLoading(false)
-            if (!result.success && result.error) {
+            if (result.success) {
+              setShowCounterModal(false)
+            } else if (result.error) {
               setError(result.error)
             }
             return result
@@ -458,8 +481,6 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
   })
   const [requestedFaab, setRequestedFaab] = useState(existingInitiatorItems.faab || 0)
   const [message, setMessage] = useState('')
-
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   // Get the other team's movies from the original trade items
@@ -503,8 +524,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
   const hasItems =
     offeredMovies.size > 0 || offeredFaab > 0 || requestedMovies.size > 0 || requestedFaab > 0
 
-  const handleSubmit = async () => {
-    setIsLoading(true)
+  const submitCounterAction = useCallback(async () => {
     setError(null)
 
     const counterOfferedItems: TradeItems = {
@@ -531,12 +551,12 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 
     const result = await onCounter(counterOfferedItems, counterRequestedItems, message.trim() || undefined)
 
-    setIsLoading(false)
-
     if (!result.success) {
       setError(result.error || 'Failed to submit counter-offer')
     }
-  }
+  }, [tradeableMovies, offeredMovies, offeredFaab, otherTeamMovies, requestedMovies, requestedFaab, message, onCounter])
+
+  const { execute: handleSubmit, isLoading } = useAsyncAction(submitCounterAction)
 
   // Handle escape key to close modal
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -779,15 +799,21 @@ interface VetoModalProps {
 
 function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
   const [reason, setReason] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
 
   const initiatorTeam = trade.initiator_team as { name: string }
   const recipientTeam = trade.recipient_team as { name: string }
 
-  const handleVeto = async () => {
-    setIsLoading(true)
-    await onVeto(reason.trim() || undefined)
-    setIsLoading(false)
+  const vetoAction = useCallback(
+    async (reasonText: string) => {
+      await onVeto(reasonText || undefined)
+    },
+    [onVeto]
+  )
+
+  const { execute, isLoading } = useAsyncAction(vetoAction)
+
+  function handleVeto(): void {
+    execute(reason.trim())
   }
 
   // Handle escape key to close modal

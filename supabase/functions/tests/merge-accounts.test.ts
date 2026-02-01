@@ -68,10 +68,28 @@ Deno.test({
     assertEquals(result.error, 'Valid duplicateUserId is required')
   })
 
+  await t.step('returns 400 when provider is missing', async () => {
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: '00000000-0000-0000-0000-000000000002',
+    })
+    assertEquals(result.error, 'Valid provider is required (discord or google)')
+  })
+
+  await t.step('returns 400 when provider is invalid', async () => {
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: '00000000-0000-0000-0000-000000000002',
+      provider: 'invalid',
+    })
+    assertEquals(result.error, 'Valid provider is required (discord or google)')
+  })
+
   await t.step('returns 400 when trying to merge account with itself', async () => {
     const result = await invokeFunction(client, 'merge-accounts', {
       originalUserId: userId,
       duplicateUserId: userId,
+      provider: 'discord',
     })
     assertEquals(result.error, 'Cannot merge an account with itself')
   })
@@ -85,6 +103,7 @@ Deno.test({
     const result = await invokeFunction(secondClient, 'merge-accounts', {
       originalUserId: userId, // First user's ID
       duplicateUserId: '00000000-0000-0000-0000-000000000002',
+      provider: 'discord',
     })
     assertEquals(result.error, 'You must be signed in as the original account to merge')
   })
@@ -97,6 +116,7 @@ Deno.test({
     const result = await invokeFunction(client, 'merge-accounts', {
       originalUserId: userId,
       duplicateUserId: '00000000-0000-0000-0000-000000000099',
+      provider: 'discord',
     })
     assertEquals(result.error, 'Duplicate account not found')
   })
@@ -110,8 +130,19 @@ Deno.test({
     const result = await invokeFunction(client, 'merge-accounts', {
       originalUserId: userId,
       duplicateUserId: secondUserId,
+      provider: 'discord',
     })
     assertEquals(result.error, 'No Discord identity found on duplicate account')
+  })
+
+  await t.step('returns 400 when duplicate account has no Google identity', async () => {
+    // Second user is a regular email user without Google identity
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: secondUserId,
+      provider: 'google',
+    })
+    assertEquals(result.error, 'No Google identity found on duplicate account')
   })
 
   // ============================================================================

@@ -1,7 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import TradingClient from './TradingClient'
-import type { League, Team, ParticipantWithTeam } from '@/types'
+import type { League, Team, TeamWithOwner, ParticipantWithProfile } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -41,14 +41,14 @@ export default async function TradingPage({ params }: PageProps) {
   const [participantResult, otherParticipantsResult] = await Promise.all([
     supabase
       .from('league_participants')
-      .select(`*, teams (*)`)
+      .select(`*, teams (*), profiles (*)`)
       .eq('league_id', id)
       .eq('user_id', user.id)
       .eq('status', 'active')
       .single(),
     supabase
       .from('league_participants')
-      .select(`*, teams (*)`)
+      .select(`*, teams (*), profiles (*)`)
       .eq('league_id', id)
       .eq('status', 'active')
       .neq('user_id', user.id),
@@ -64,14 +64,23 @@ export default async function TradingPage({ params }: PageProps) {
     redirect(`/league/${id}`)
   }
 
+  // Build current team info with display name
+  const currentTeam: TeamWithOwner = {
+    id: team.id,
+    name: team.name,
+    avatar_url: team.avatar_url,
+    display_name: participant.profiles?.display_name ?? null,
+  }
+
   const { data: participants } = otherParticipantsResult
 
-  const otherTeams = (participants || [])
-    .filter((p): p is ParticipantWithTeam & { teams: Team } => p.teams !== null)
+  const otherTeams: TeamWithOwner[] = (participants ?? [])
+    .filter((p): p is ParticipantWithProfile & { teams: Team } => p.teams !== null)
     .map((p) => ({
       id: p.teams.id,
       name: p.teams.name,
       avatar_url: p.teams.avatar_url,
+      display_name: p.profiles?.display_name ?? null,
     }))
 
   const isOwner = league.owner_id === user.id
@@ -80,6 +89,7 @@ export default async function TradingPage({ params }: PageProps) {
     <TradingClient
       league={league as League}
       team={team}
+      currentTeam={currentTeam}
       otherTeams={otherTeams}
       isOwner={isOwner}
     />

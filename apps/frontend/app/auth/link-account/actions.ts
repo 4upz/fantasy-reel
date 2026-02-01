@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { getDisplayNameFromUser, getAvatarUrlFromUser } from '@/utils/oauth'
 import { cookies } from 'next/headers'
 
 interface ActionResult {
@@ -11,7 +12,8 @@ interface ActionResult {
 export async function verifyAndMergeAccounts(
   password: string,
   duplicateUserId: string,
-  email: string
+  email: string,
+  provider: 'discord' | 'google'
 ): Promise<ActionResult> {
   const supabase = await createClient()
 
@@ -40,6 +42,7 @@ export async function verifyAndMergeAccounts(
     body: {
       originalUserId,
       duplicateUserId,
+      provider,
     },
   })
 
@@ -82,13 +85,8 @@ export async function keepSeparateAccount(duplicateUserId: string): Promise<Acti
   if (!existingProfile) {
     const { error: profileError } = await supabase.from('profiles').insert({
       user_id: duplicateUserId,
-      display_name:
-        user.user_metadata.global_name ||
-        user.user_metadata.full_name ||
-        user.user_metadata.name ||
-        user.email?.split('@')[0] ||
-        'User',
-      avatar_url: user.user_metadata.avatar_url || null,
+      display_name: getDisplayNameFromUser(user),
+      avatar_url: getAvatarUrlFromUser(user),
     })
 
     if (profileError) {

@@ -106,3 +106,20 @@ export function isUpcomingMovie(releaseDate: string | null | undefined): DraftEl
 
   return { valid: true }
 }
+
+// Characters for join codes - excludes ambiguous chars (0, O, I, 1, L)
+const JOIN_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+
+export function generateJoinCode(length = 6): string {
+  let code = ''
+  for (let i = 0; i < length; i++) {
+    code += JOIN_CODE_CHARS[Math.floor(Math.random() * JOIN_CODE_CHARS.length)]
+  }
+  return code
+}
+
+const JOIN_CODE_REGEX = /^[A-HJ-KM-NP-Z2-9]{6}$/
+
+export function isValidJoinCode(code: string): boolean {
+  return Boolean(code) && JOIN_CODE_REGEX.test(code.toUpperCase())
+}

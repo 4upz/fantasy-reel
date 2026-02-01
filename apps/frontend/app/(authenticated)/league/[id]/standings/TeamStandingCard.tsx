@@ -134,6 +134,9 @@ export default function TeamStandingCard({
               </span>
             )}
           </div>
+          {profile?.display_name && team?.name && (
+            <p className="text-xs text-foreground-muted truncate">{profile.display_name}</p>
+          )}
           <div className="flex items-center gap-3 mt-1 text-sm text-foreground-muted">
             <span>{draftPicks.length} movies</span>
             <span className="text-foreground-muted/50">|</span>

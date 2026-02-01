@@ -26,6 +26,58 @@ export function getParticipantDisplayName(participant: ParticipantWithProfile): 
 }
 
 /**
+ * Team display info for UI components that show both team name and owner name
+ */
+export interface TeamDisplayInfo {
+  teamName: string
+  ownerName: string | null
+}
+
+/**
+ * Get team name and owner display name from a participant
+ * Used for showing "Team Name" with "by Owner Name" underneath
+ */
+export function getTeamDisplayInfo(participant: ParticipantWithProfile): TeamDisplayInfo {
+  return {
+    teamName: participant.teams?.name || 'Unknown Team',
+    ownerName: participant.profiles?.display_name || null,
+  }
+}
+
+/**
+ * Build a map of user_id to TeamDisplayInfo from an array of participants
+ * Useful for looking up team info by user ID in draft/counterpick components
+ */
+export function buildTeamInfoByUserId(
+  participants: ParticipantWithProfile[]
+): Map<string, TeamDisplayInfo> {
+  const map = new Map<string, TeamDisplayInfo>()
+  for (const participant of participants) {
+    map.set(participant.user_id, getTeamDisplayInfo(participant))
+  }
+  return map
+}
+
+/**
+ * Build a map of team_id to TeamDisplayInfo from an array of participants
+ * Useful for looking up team info by team ID in pick history components
+ */
+export function buildTeamInfoByTeamId(
+  participants: ParticipantWithProfile[]
+): Map<string, TeamDisplayInfo> {
+  const map = new Map<string, TeamDisplayInfo>()
+  for (const participant of participants) {
+    if (participant.teams) {
+      map.set(participant.teams.id, {
+        teamName: participant.teams.name,
+        ownerName: participant.profiles?.display_name || null,
+      })
+    }
+  }
+  return map
+}
+
+/**
  * Determine movie status based on release date and score availability
  */
 export function getMovieStatus(
