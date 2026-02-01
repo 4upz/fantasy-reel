@@ -49,6 +49,8 @@ const INITIAL_FORM_DATA = {
   counterpicks_block_drops: true,
 }
 
+type FormData = typeof INITIAL_FORM_DATA
+
 export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props): React.ReactElement | null {
   const router = useRouter()
   const [formData, setFormData] = useState(INITIAL_FORM_DATA)
@@ -61,28 +63,28 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
     }
   }, [formData.total_slots, formData.draft_slots])
 
-  const createLeagueAction = useCallback(async (): Promise<void> => {
-    if (!formData.name.trim()) {
+  const createLeague = useCallback(async (data: FormData): Promise<void> => {
+    if (!data.name.trim()) {
       throw new Error('Please enter a league name')
     }
 
-    const { data, error: createError } = await callEdgeFunction<CreateLeagueResponse>(
+    const { data: responseData, error: createError } = await callEdgeFunction<CreateLeagueResponse>(
       'create-league',
       {
         body: {
-          name: formData.name.trim(),
-          invite_only: formData.invite_only,
-          max_participants: formData.max_participants,
-          team_name: formData.team_name.trim() || undefined,
+          name: data.name.trim(),
+          invite_only: data.invite_only,
+          max_participants: data.max_participants,
+          team_name: data.team_name.trim() || undefined,
           // Roster configuration
-          total_slots: formData.total_slots,
-          draft_slots: formData.draft_slots,
-          drop_limit: formData.drop_limit,
-          counterbid_hours: formData.counterbid_hours,
+          total_slots: data.total_slots,
+          draft_slots: data.draft_slots,
+          drop_limit: data.drop_limit,
+          counterbid_hours: data.counterbid_hours,
           // Counterpick configuration
-          draft_counterpick_slots: formData.draft_counterpick_slots,
-          bidding_counterpick_slots: formData.bidding_counterpick_slots,
-          counterpicks_block_drops: formData.counterpicks_block_drops,
+          draft_counterpick_slots: data.draft_counterpick_slots,
+          bidding_counterpick_slots: data.bidding_counterpick_slots,
+          counterpicks_block_drops: data.counterpicks_block_drops,
         },
       }
     )
@@ -91,20 +93,21 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
       throw new Error(createError)
     }
 
-    if (data?.league) {
+    if (responseData?.league) {
       setFormData(INITIAL_FORM_DATA)
-      onSuccess?.(data.league)
+      onSuccess?.(responseData.league)
       onClose()
-      router.push(`/league/${data.league.id}`)
+      router.push(`/league/${responseData.league.id}`)
     }
-  }, [formData, onSuccess, onClose, router])
+  }, [onSuccess, onClose, router])
 
-  const { execute: handleCreateLeague, isLoading: creating, error, reset: resetError } = useAsyncAction(createLeagueAction)
+  const { execute: handleCreateLeague, isLoading: creating, error, reset: resetError } = useAsyncAction(createLeague)
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
     resetError()
-    await handleCreateLeague()
+    // Pass current formData directly to avoid stale closure issues
+    await handleCreateLeague(formData)
   }
 
   function handleClose(): void {
@@ -157,7 +160,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               type="text"
               id="league-name"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
               className="input"
               placeholder="e.g., Oscar Contenders 2026"
               required
@@ -175,7 +178,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               type="text"
               id="team-name"
               value={formData.team_name}
-              onChange={(e) => setFormData({ ...formData, team_name: e.target.value })}
+              onChange={(e) => setFormData(prev => ({ ...prev, team_name: e.target.value }))}
               className="input"
               placeholder="e.g., Dreamworks Dynasty"
             />
@@ -191,7 +194,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                 type="number"
                 id="max-participants"
                 value={formData.max_participants}
-                onChange={(e) => setFormData({ ...formData, max_participants: parseInt(e.target.value) || 8 })}
+                onChange={(e) => setFormData(prev => ({ ...prev, max_participants: parseInt(e.target.value) || 8 }))}
                 className="input"
                 min="2"
                 max="20"
@@ -203,7 +206,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                 <input
                   type="checkbox"
                   checked={formData.invite_only}
-                  onChange={(e) => setFormData({ ...formData, invite_only: e.target.checked })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, invite_only: e.target.checked }))}
                   className="h-4 w-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-background"
                 />
                 <span className="text-sm text-foreground group-hover:text-gold transition-colors">
@@ -241,7 +244,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       type="number"
                       id="total-slots"
                       value={formData.total_slots}
-                      onChange={(e) => setFormData({ ...formData, total_slots: parseInt(e.target.value) || MIN_TOTAL_SLOTS })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, total_slots: parseInt(e.target.value) || MIN_TOTAL_SLOTS }))}
                       className="input w-20"
                       min={MIN_TOTAL_SLOTS}
                       max={MAX_TOTAL_SLOTS}
@@ -258,7 +261,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       type="number"
                       id="draft-slots"
                       value={formData.draft_slots}
-                      onChange={(e) => setFormData({ ...formData, draft_slots: parseInt(e.target.value) || MIN_DRAFT_SLOTS })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, draft_slots: parseInt(e.target.value) || MIN_DRAFT_SLOTS }))}
                       className="input w-20"
                       min={MIN_DRAFT_SLOTS}
                       max={formData.total_slots}
@@ -275,7 +278,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       type="number"
                       id="drop-limit"
                       value={formData.drop_limit}
-                      onChange={(e) => setFormData({ ...formData, drop_limit: parseInt(e.target.value) || MIN_DROP_LIMIT })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, drop_limit: parseInt(e.target.value) || MIN_DROP_LIMIT }))}
                       className="input w-20"
                       min={MIN_DROP_LIMIT}
                       max={MAX_DROP_LIMIT}
@@ -293,7 +296,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                         type="number"
                         id="counterbid-hours"
                         value={formData.counterbid_hours}
-                        onChange={(e) => setFormData({ ...formData, counterbid_hours: parseInt(e.target.value) || MIN_COUNTERBID_HOURS })}
+                        onChange={(e) => setFormData(prev => ({ ...prev, counterbid_hours: parseInt(e.target.value) || MIN_COUNTERBID_HOURS }))}
                         className="input w-16"
                         min={MIN_COUNTERBID_HOURS}
                         max={MAX_COUNTERBID_HOURS}
@@ -332,7 +335,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       type="number"
                       id="draft-counterpick-slots"
                       value={formData.draft_counterpick_slots}
-                      onChange={(e) => setFormData({ ...formData, draft_counterpick_slots: parseInt(e.target.value) || MIN_DRAFT_COUNTERPICK_SLOTS })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, draft_counterpick_slots: parseInt(e.target.value) || MIN_DRAFT_COUNTERPICK_SLOTS }))}
                       className="input w-20"
                       min={MIN_DRAFT_COUNTERPICK_SLOTS}
                       max={MAX_DRAFT_COUNTERPICK_SLOTS}
@@ -349,7 +352,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       type="number"
                       id="bidding-counterpick-slots"
                       value={formData.bidding_counterpick_slots}
-                      onChange={(e) => setFormData({ ...formData, bidding_counterpick_slots: parseInt(e.target.value) || MIN_BIDDING_COUNTERPICK_SLOTS })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, bidding_counterpick_slots: parseInt(e.target.value) || MIN_BIDDING_COUNTERPICK_SLOTS }))}
                       className="input w-20"
                       min={MIN_BIDDING_COUNTERPICK_SLOTS}
                       max={MAX_BIDDING_COUNTERPICK_SLOTS}
@@ -364,7 +367,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                     type="checkbox"
                     id="counterpicks-block-drops"
                     checked={formData.counterpicks_block_drops}
-                    onChange={(e) => setFormData({ ...formData, counterpicks_block_drops: e.target.checked })}
+                    onChange={(e) => setFormData(prev => ({ ...prev, counterpicks_block_drops: e.target.checked }))}
                     className="mt-0.5 w-4 h-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-0 focus:ring-2 cursor-pointer"
                   />
                   <label htmlFor="counterpicks-block-drops" className="cursor-pointer">
