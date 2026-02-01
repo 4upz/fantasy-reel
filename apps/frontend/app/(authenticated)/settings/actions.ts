@@ -87,6 +87,63 @@ export async function updateAvatarUrl(avatarUrl: string | null): Promise<UpdateP
   return { success: true }
 }
 
+export async function changePassword(formData: FormData): Promise<UpdateProfileResult> {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !user.email) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const currentPassword = formData.get('currentPassword') as string
+  const newPassword = formData.get('newPassword') as string
+  const confirmPassword = formData.get('confirmPassword') as string
+
+  // Validate inputs
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return { success: false, error: 'All fields are required' }
+  }
+
+  if (newPassword !== confirmPassword) {
+    return { success: false, error: 'New passwords do not match' }
+  }
+
+  if (newPassword.length < 6) {
+    return { success: false, error: 'New password must be at least 6 characters' }
+  }
+
+  // Re-authenticate with current password to verify it's correct
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: user.email,
+    password: currentPassword,
+  })
+
+  if (signInError) {
+    if (signInError.message.includes('Invalid login credentials')) {
+      return { success: false, error: 'Current password is incorrect' }
+    }
+    console.error('Re-authentication error:', signInError)
+    return { success: false, error: 'Failed to verify current password' }
+  }
+
+  // Update to new password
+  const { error: updateError } = await supabase.auth.updateUser({
+    password: newPassword,
+  })
+
+  if (updateError) {
+    console.error('Password update error:', updateError.message)
+
+    if (updateError.message.includes('should be different')) {
+      return { success: false, error: 'New password must be different from your current password' }
+    }
+
+    return { success: false, error: 'Failed to update password. Please try again.' }
+  }
+
+  return { success: true }
+}
+
 export async function unlinkIdentity(identityId: string): Promise<UpdateProfileResult> {
   const supabase = await createClient()
 
