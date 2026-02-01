@@ -13,7 +13,8 @@ env:
   SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
 
 jobs:
-  e2e:
+  e2e-tests:
+    name: E2E Tests (Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -44,9 +45,7 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: apps/frontend
 
-      - name: Build application
-        run: npm run build
-        working-directory: apps/frontend
+      # Note: No build step needed - Playwright's webServer config starts the dev server
 
       - name: Run E2E tests
         run: npm run test:e2e -- --project=chromium
