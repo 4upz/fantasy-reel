@@ -102,7 +102,7 @@ export default function TradingPanel({
   ]
 
   return (
-    <div className="space-y-4" role="region" aria-label="Trading Block">
+    <div className="space-y-4" role="region" aria-label="Trading Block" data-testid="trading-panel">
       {/* Header */}
       <div className="card p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -123,6 +123,7 @@ export default function TradingPanel({
               onClick={onProposeTrade}
               className="btn btn-primary"
               aria-label="Propose a new trade"
+              data-testid="propose-trade-button"
             >
               Propose Trade
             </button>

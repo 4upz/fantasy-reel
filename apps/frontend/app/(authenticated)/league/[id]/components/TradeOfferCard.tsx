@@ -158,6 +158,7 @@ export default function TradeOfferCard(props: Props) {
     <article
       className="card p-4"
       aria-label={`Trade offer from ${initiatorTeam.name} to ${recipientTeam.name}`}
+      data-testid={`trade-card-${trade.id}`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-4 mb-4">
@@ -257,6 +258,7 @@ export default function TradeOfferCard(props: Props) {
                 className="btn btn-primary"
                 aria-label="Accept trade offer"
                 aria-busy={pendingAction === 'accept'}
+                data-testid={`accept-trade-${trade.id}`}
               >
                 {pendingAction === 'accept' ? 'Accepting...' : 'Accept'}
               </button>
@@ -265,6 +267,7 @@ export default function TradeOfferCard(props: Props) {
                 disabled={isLoading}
                 className="btn btn-secondary"
                 aria-label="Counter trade offer"
+                data-testid={`counter-trade-${trade.id}`}
               >
                 Counter
               </button>
@@ -274,6 +277,7 @@ export default function TradeOfferCard(props: Props) {
                 className="btn btn-ghost"
                 aria-label="Reject trade offer"
                 aria-busy={pendingAction === 'reject'}
+                data-testid={`reject-trade-${trade.id}`}
               >
                 {pendingAction === 'reject' ? 'Rejecting...' : 'Reject'}
               </button>
@@ -287,6 +291,7 @@ export default function TradeOfferCard(props: Props) {
               className="btn btn-ghost text-crimson"
               aria-label="Cancel trade offer"
               aria-busy={pendingAction === 'cancel'}
+              data-testid={`cancel-trade-${trade.id}`}
             >
               {pendingAction === 'cancel' ? 'Cancelling...' : 'Cancel Trade'}
             </button>
@@ -298,6 +303,7 @@ export default function TradeOfferCard(props: Props) {
               disabled={isLoading}
               className="btn btn-danger"
               aria-label="Veto trade"
+              data-testid={`veto-trade-${trade.id}`}
             >
               Veto Trade
             </button>

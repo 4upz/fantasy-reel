@@ -159,23 +159,72 @@ test.describe('Place Bid Flow @bidding', () => {
 })
 
 test.describe('Cancel Bid Flow @bidding', () => {
-  test.skip('can cancel an active bid', async ({ authedPage, biddingLeague }) => {
-    // This test requires creating a bid first via the helper
-    // Then navigating to bidding page and canceling it
-    // Skipped until we add createPickupBid to test setup
+  test('can cancel an active bid', async ({ authedPage, biddingLeagueWithBid }) => {
+    // Navigate to the bidding page
+    await authedPage.goto(`/league/${biddingLeagueWithBid.id}/bidding`)
+
+    // Wait for the page to load and find the existing bid
+    await expect(authedPage.getByTestId('bidding-panel')).toBeVisible({
+      timeout: 10000,
+    })
+
+    // Find the bid card for our test bid
+    const bidCard = authedPage.getByTestId(`bid-card-${biddingLeagueWithBid.bidTmdbId}`)
+    await expect(bidCard).toBeVisible({ timeout: 10000 })
+
+    // Click the cancel button
+    const cancelButton = authedPage.getByTestId(`cancel-bid-${biddingLeagueWithBid.bidTmdbId}`)
+    await expect(cancelButton).toBeVisible()
+    await cancelButton.click()
+
+    // Confirm cancellation in the modal
+    await expect(authedPage.getByTestId('confirm-cancel-bid')).toBeVisible()
+    await authedPage.click('[data-testid="confirm-cancel-bid"]')
+
+    // Verify bid is no longer visible or shows as cancelled
+    await expect(authedPage.getByText(/cancelled|bid.*removed/i)).toBeVisible({
+      timeout: 10000,
+    })
   })
 })
 
 test.describe('Counter Bid Flow @bidding', () => {
-  test.skip('shows outbid state when another user bids higher', async ({
+  test('shows outbid notification when another user bids higher', async ({
     authedPage,
     secondUserPage,
     biddingLeague,
   }) => {
-    // Multi-user test:
-    // 1. User 1 places bid
-    // 2. User 2 places higher bid
-    // 3. User 1 sees "outbid" state
-    // Skipped until multi-user flow is implemented
+    // Navigate both users to bidding page
+    await authedPage.goto(`/league/${biddingLeague.id}/bidding`)
+    await secondUserPage.goto(`/league/${biddingLeague.id}/bidding`)
+
+    // User 1 places a bid
+    await authedPage.click('[data-testid="place-bid-button"]')
+    await authedPage.fill('[data-testid="bid-movie-search-input"]', 'Avatar')
+    await authedPage.waitForSelector('button:has-text("Avatar")', { timeout: 10000 })
+    await authedPage.click('button:has-text("Avatar")')
+    await authedPage.fill('[data-testid="bid-amount-input"]', '10')
+    await authedPage.click('[data-testid="submit-bid-button"]')
+
+    // Wait for bid to be placed
+    await expect(authedPage.getByText(/bid.*placed/i)).toBeVisible({ timeout: 10000 })
+
+    // User 2 places a higher bid on the same movie
+    await secondUserPage.click('[data-testid="place-bid-button"]')
+    await secondUserPage.fill('[data-testid="bid-movie-search-input"]', 'Avatar')
+    await secondUserPage.waitForSelector('button:has-text("Avatar")', { timeout: 10000 })
+    await secondUserPage.click('button:has-text("Avatar")')
+    await secondUserPage.fill('[data-testid="bid-amount-input"]', '20')
+    await secondUserPage.click('[data-testid="submit-bid-button"]')
+
+    // Wait for higher bid to be placed
+    await expect(secondUserPage.getByText(/bid.*placed/i)).toBeVisible({ timeout: 10000 })
+
+    // Refresh User 1's page and verify outbid state
+    await authedPage.reload()
+    await expect(authedPage.getByTestId('bidding-panel')).toBeVisible({ timeout: 10000 })
+
+    // User 1 should see "outbid" indicator
+    await expect(authedPage.getByText(/outbid/i)).toBeVisible({ timeout: 10000 })
   })
 })
