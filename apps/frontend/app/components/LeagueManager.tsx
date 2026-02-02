@@ -8,9 +8,12 @@ import FeaturedLeagueCard from './FeaturedLeagueCard'
 import LeagueListItem from './LeagueListItem'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
-const CreateLeagueModal = dynamic(() => import('./CreateLeagueModal'), {
-  loading: () => <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4"><div className="animate-pulse h-96 w-full max-w-lg bg-surface rounded-lg" /></div>,
-})
+const CreateLeagueModal = dynamic(() => import('./CreateLeagueModal'))
+
+// Preload modal on user intent to eliminate perceived latency
+function preloadCreateLeagueModal(): void {
+  void import('./CreateLeagueModal')
+}
 
 interface Props {
   showCreateModal: boolean
@@ -112,7 +115,12 @@ export default function LeagueManager({
           <p className="text-foreground-muted mb-8 max-w-md mx-auto">
             Create your first fantasy movie league and invite friends to compete. Draft upcoming releases and score points based on reviews.
           </p>
-          <button onClick={onCreateClick} className="btn btn-primary text-lg px-6 py-3">
+          <button
+            onClick={onCreateClick}
+            onMouseEnter={preloadCreateLeagueModal}
+            onFocus={preloadCreateLeagueModal}
+            className="btn btn-primary text-lg px-6 py-3"
+          >
             <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
