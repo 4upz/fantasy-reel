@@ -35,11 +35,7 @@ export default async function LeagueSettingsPage({ params }: PageProps) {
   // Fetch participants with their teams and profiles
   const { data: participants } = await supabase
     .from('league_participants')
-    .select(`
-      *,
-      teams (*),
-      profiles:user_id (*)
-    `)
+    .select(`*, teams (*), profiles (*)`)
     .eq('league_id', id)
     .eq('status', 'active')
     .order('draft_order', { ascending: true })
