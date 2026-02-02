@@ -23,6 +23,42 @@ When implementing any UI changes, new components, or frontend features, **always
 - Proper use of design tokens, component classes, and animations
 - Production-grade, polished implementation
 
+**Verifying Frontend Changes:**
+
+After implementing any frontend code, you MUST verify the changes work correctly by following these steps:
+
+1. **Restart the dev server** - Always stop and restart the dev server before testing to ensure the latest code is running:
+   ```bash
+   # Kill any running dev server, then restart
+   npm run dev
+   ```
+
+2. **Log in with a seeded test user** - Use one of the pre-seeded test accounts from `supabase/seed.sql`:
+   | Email | Password | Display Name |
+   |-------|----------|--------------|
+   | `alice@fantasyreel.test` | `testpass123!` | Alice Spielberg |
+   | `bob@fantasyreel.test` | `testpass123!` | Bob Nolan |
+   | `carol@fantasyreel.test` | `testpass123!` | Carol Coppola |
+   | `dave@fantasyreel.test` | `testpass123!` | Dave Kubrick |
+
+   **Note:** If users don't exist, run `npx supabase db reset` to re-seed the database.
+
+3. **Use browser automation to test** - Use the `mcp__claude-in-chrome__*` tools to:
+   - Navigate to the relevant page
+   - Interact with the new UI elements
+   - Verify the expected behavior occurs
+   - Check for console errors using `mcp__claude-in-chrome__read_console_messages`
+
+**Example verification flow:**
+```
+1. Restart dev server: npm run dev
+2. Navigate to http://localhost:3000/login
+3. Log in as alice@fantasyreel.test / testpass123!
+4. Navigate to the page with your changes
+5. Interact with the new feature
+6. Verify expected behavior and no console errors
+```
+
 ---
 
 ## Quick Start
