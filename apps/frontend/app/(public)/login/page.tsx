@@ -159,6 +159,7 @@ export default function LoginPage() {
                 <Link
                   href="/forgot-password"
                   className="text-foreground-muted hover:text-gold transition-colors"
+                  data-testid="forgot-password-link"
                 >
                   Forgot your password?
                 </Link>

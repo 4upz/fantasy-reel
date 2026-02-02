@@ -15,9 +15,10 @@
     "test:functions": "./scripts/check-supabase.sh && cd supabase/functions && deno task test",
     "test:functions:watch": "./scripts/check-supabase.sh && cd supabase/functions && deno task test:watch",
     "test:load:trades": "./scripts/check-supabase.sh && deno run --allow-all scripts/test-concurrent-trades.ts",
-    "test:e2e": "npm run test:e2e --workspace=apps/frontend",
-    "test:e2e:ui": "npm run test:e2e:ui --workspace=apps/frontend",
-    "test:e2e:headed": "npm run test:e2e:headed --workspace=apps/frontend"
+    "test:e2e": "./scripts/run-e2e-tests.sh",
+    "test:e2e:ui": "./scripts/run-e2e-tests.sh --ui",
+    "test:e2e:headed": "./scripts/run-e2e-tests.sh --headed",
+    "test:e2e:debug": "./scripts/run-e2e-tests.sh --debug"
   },
   "devDependencies": {
     "supabase": "^2.72.8",
