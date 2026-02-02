@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="goldGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#d4b23a"/>
+      <stop offset="100%" style="stop-color:#c9a227"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Dark background circle -->
+  <circle cx="16" cy="16" r="15" fill="#0f0f0f" stroke="#2e2e2e" stroke-width="1"/>
+
+  <!-- Film reel outer ring -->
+  <circle cx="16" cy="16" r="12" fill="none" stroke="url(#goldGradient)" stroke-width="2"/>
+
+  <!-- Center hub -->
+  <circle cx="16" cy="16" r="3" fill="url(#goldGradient)"/>
+
+  <!-- Film sprocket holes (4 around the reel) -->
+  <circle cx="16" cy="8" r="2" fill="url(#goldGradient)"/>
+  <circle cx="24" cy="16" r="2" fill="url(#goldGradient)"/>
+  <circle cx="16" cy="24" r="2" fill="url(#goldGradient)"/>
+  <circle cx="8" cy="16" r="2" fill="url(#goldGradient)"/>
+
+  <!-- Diagonal sprocket holes for reel effect -->
+  <circle cx="21.7" cy="10.3" r="1.5" fill="url(#goldGradient)" opacity="0.8"/>
+  <circle cx="21.7" cy="21.7" r="1.5" fill="url(#goldGradient)" opacity="0.8"/>
+  <circle cx="10.3" cy="21.7" r="1.5" fill="url(#goldGradient)" opacity="0.8"/>
+  <circle cx="10.3" cy="10.3" r="1.5" fill="url(#goldGradient)" opacity="0.8"/>
+</svg>

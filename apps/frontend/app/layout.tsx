@@ -29,6 +29,10 @@ const dmSans = DM_Sans({
 export const metadata: Metadata = {
   title: "Fantasy Reel",
   description: "Fantasy leagues for movies",
+  icons: {
+    icon: "/icon.svg",
+    apple: "/apple-icon.svg",
+  },
 };
 
 export default function RootLayout({
