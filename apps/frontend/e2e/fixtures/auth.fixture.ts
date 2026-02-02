@@ -6,6 +6,7 @@ import {
   TestUser,
   getAdminClient,
 } from '../helpers/supabase.helper'
+import { setWorkerIndex, getWorkerPrefix } from '../helpers/test-ids.helper'
 
 /**
  * Supabase E2E Testing Best Practices Applied:
@@ -51,7 +52,10 @@ interface AuthFixtures {
 
 export const test = base.extend<AuthFixtures>({
   // Create primary test user
-  testUser: async ({}, use) => {
+  testUser: async ({}, use, testInfo) => {
+    // Set worker index for unique ID generation
+    setWorkerIndex(testInfo.parallelIndex)
+
     const user = await createTestUser('primary')
     await use(user)
     await deleteTestUser(user.id)
@@ -278,6 +282,36 @@ export async function verifyRLS(options: {
     if (options.cleanup) {
       await options.cleanup(admin)
     }
+  }
+}
+
+/**
+ * Clean up worker-specific test data.
+ * Call this in afterEach hooks to remove data created by this worker.
+ *
+ * Uses worker prefix to identify and delete only this worker's test data.
+ */
+export async function cleanupWorkerData(): Promise<void> {
+  const client = getAdminClient()
+  const workerPrefix = getWorkerPrefix()
+
+  try {
+    // Delete test leagues created by this worker (cascades to participants, teams, etc.)
+    await client.from('leagues').delete().like('name', `%${workerPrefix}%`)
+
+    // Delete test users created by this worker
+    const { data: usersData } = await client.auth.admin.listUsers()
+    const workerUsers =
+      usersData?.users.filter((u) =>
+        u.email?.includes(`-${workerPrefix}-`)
+      ) || []
+
+    for (const user of workerUsers) {
+      await client.auth.admin.deleteUser(user.id)
+    }
+  } catch (error) {
+    // Log but don't fail - cleanup is best-effort
+    console.warn(`Worker ${workerPrefix} cleanup warning:`, error)
   }
 }
 
