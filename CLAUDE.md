@@ -6,14 +6,14 @@ Developer context for the Fantasy Movies web application - a fantasy league plat
 
 ## Development Workflow
 
-**IMPORTANT: After completing each implementation step, BEFORE committing:**
+**IMPORTANT: After completing each implementation step, follow this order:**
 
 1. Run the `code-simplifier:code-simplifier` agent on the recently modified code
 2. The agent will review and refactor for clarity, consistency, and reduced duplication
-3. Verify tests still pass after simplification
-4. Then commit the changes
+3. **Then** run UI/e2e verification (browser automation) on the simplified code
+4. Commit the changes
 
-This ensures all code is refined and maintainable before being committed to the repository.
+This order ensures verification is performed on the final state of the code, not on code that will be modified by the simplifier.
 
 **UI/Frontend Changes:**
 
@@ -25,7 +25,7 @@ When implementing any UI changes, new components, or frontend features, **always
 
 **Verifying Frontend Changes:**
 
-After implementing any frontend code, you MUST verify the changes work correctly by following these steps:
+After implementing frontend code and running the code-simplifier, verify the changes work correctly:
 
 1. **Restart the dev server** - Always stop and restart the dev server before testing to ensure the latest code is running:
    ```bash
@@ -51,12 +51,14 @@ After implementing any frontend code, you MUST verify the changes work correctly
 
 **Example verification flow:**
 ```
-1. Restart dev server: npm run dev
-2. Navigate to http://localhost:3000/login
-3. Log in as alice@fantasyreel.test / testpass123!
-4. Navigate to the page with your changes
-5. Interact with the new feature
-6. Verify expected behavior and no console errors
+1. Run code-simplifier on modified files
+2. Restart dev server: npm run dev
+3. Navigate to http://localhost:3000/login
+4. Log in as alice@fantasyreel.test / testpass123!
+5. Navigate to the page with your changes
+6. Interact with the new feature
+7. Verify expected behavior and no console errors
+8. Commit the changes
 ```
 
 ---
