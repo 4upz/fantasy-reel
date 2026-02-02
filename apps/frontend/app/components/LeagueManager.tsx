@@ -117,9 +117,10 @@ export default function LeagueManager({
           </p>
           <button
             onClick={onCreateClick}
+            className="btn btn-primary text-lg px-6 py-3"
+            data-testid="create-league-button"
             onMouseEnter={preloadCreateLeagueModal}
             onFocus={preloadCreateLeagueModal}
-            className="btn btn-primary text-lg px-6 py-3"
           >
             <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

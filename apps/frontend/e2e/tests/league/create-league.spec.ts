@@ -32,7 +32,6 @@ test.describe('Create League', () => {
     // Fill league details
     await page.fill('[data-testid="league-name-input"]', leagueName)
     await page.fill('[data-testid="max-participants-input"]', '8')
-    await page.selectOption('[data-testid="draft-type-select"]', 'snake')
 
     // Submit
     await page.click('[data-testid="create-league-submit"]')
@@ -155,6 +154,6 @@ test.describe('League List', () => {
     await page.goto('/dashboard')
 
     // Should show empty state or call to action
-    await expect(page.getByText(/no leagues|create.*first|get started/i)).toBeVisible()
+    await expect(page.getByText(/cinematic journey|create your first league/i)).toBeVisible()
   })
 })

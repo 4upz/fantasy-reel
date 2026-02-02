@@ -121,7 +121,10 @@ export default function ConnectedAccounts({
 
       <div className="space-y-4">
         {/* Email/Password */}
-        <div className="flex items-center justify-between p-3 rounded-lg bg-surface">
+        <div
+          className="flex items-center justify-between p-3 rounded-lg bg-surface"
+          data-testid="email-account-connected"
+        >
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-foreground-muted/10 flex items-center justify-center">
               <Mail className="w-5 h-5 text-foreground-secondary" />
@@ -167,6 +170,7 @@ export default function ConnectedAccounts({
                 <button
                   onClick={() => handleUnlink(provider)}
                   disabled={isUnlinking}
+                  data-testid={`disconnect-${provider}-button`}
                   className="btn btn-ghost text-sm text-foreground-muted hover:text-error disabled:opacity-50"
                 >
                   {isUnlinking ? (
@@ -185,6 +189,7 @@ export default function ConnectedAccounts({
                 <button
                   onClick={() => handleLink(provider)}
                   disabled={isLinking}
+                  data-testid={`connect-${provider}-button`}
                   className={`btn btn-ghost text-sm ${config.connectButtonClass} disabled:opacity-50`}
                 >
                   {isLinking ? (

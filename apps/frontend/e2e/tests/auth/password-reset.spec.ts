@@ -87,7 +87,7 @@ test.describe('Password Reset', () => {
       await page.goto('/forgot-password')
 
       // Click back to login
-      await page.click('text=Back to login')
+      await page.click('[data-testid="back-to-login-link"]')
 
       // Should navigate to login page
       await page.waitForURL('/login')
@@ -220,7 +220,7 @@ test.describe('Password Reset', () => {
         await page.goto('/login')
 
         // Click forgot password link
-        await page.click('text=Forgot password')
+        await page.click('[data-testid="forgot-password-link"]')
 
         // Should be on forgot password page
         await page.waitForURL('/forgot-password')
