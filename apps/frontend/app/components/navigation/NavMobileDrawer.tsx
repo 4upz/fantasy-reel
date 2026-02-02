@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Settings } from 'lucide-react'
+import { Settings, LogOut } from 'lucide-react'
 import type { User } from '@supabase/supabase-js'
 import Avatar from '../Avatar'
 
@@ -73,7 +73,7 @@ export default function NavMobileDrawer({ isOpen, onClose, user, avatarUrl }: Pr
           </button>
         </div>
 
-        {/* User info */}
+        {/* User info with sign out */}
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-3">
             <Avatar src={avatarUrl} name={displayName} />
@@ -82,10 +82,19 @@ export default function NavMobileDrawer({ isOpen, onClose, user, avatarUrl }: Pr
               <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
             </div>
           </div>
+          <form action="/auth/signout" method="post" className="mt-3">
+            <button
+              type="submit"
+              className="flex items-center gap-2 text-sm text-foreground-muted hover:text-crimson transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign out</span>
+            </button>
+          </form>
         </div>
 
         {/* Navigation links */}
-        <nav className="p-4">
+        <nav className="p-4 safe-area-bottom">
           <ul className="space-y-1">
             <li>
               <Link
@@ -123,21 +132,6 @@ export default function NavMobileDrawer({ isOpen, onClose, user, avatarUrl }: Pr
             </li>
           </ul>
         </nav>
-
-        {/* Sign out at bottom */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-border">
-          <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-foreground-secondary hover:text-crimson hover:bg-surface-hover transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span>Sign out</span>
-            </button>
-          </form>
-        </div>
       </div>
     </div>
   )

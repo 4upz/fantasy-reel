@@ -402,6 +402,11 @@
     padding-top: 3.5rem;
   }
 
+  /* Safe area bottom padding - for mobile navigation elements */
+  .safe-area-bottom {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  }
+
   /* Brand / Logo */
   .sidenav-brand {
     display: flex;
@@ -570,6 +575,7 @@
   .sidenav-footer {
     margin-top: auto;
     padding-top: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--color-border);
   }
 
@@ -606,7 +612,9 @@
     margin-top: 0.25rem;
   }
 
-  .sidenav-signout-btn {
+  /* Sign out button - shared styles for expanded and collapsed tooltip */
+  .sidenav-signout-btn,
+  .sidenav-user-tooltip-signout {
     display: flex;
     align-items: center;
     gap: 0.375rem;
@@ -619,8 +627,48 @@
     transition: color 0.15s ease;
   }
 
-  .sidenav-signout-btn:hover {
+  .sidenav-signout-btn:hover,
+  .sidenav-user-tooltip-signout:hover {
     color: var(--color-crimson);
+  }
+
+  /* Collapsed avatar with tooltip */
+  .sidenav-user-collapsed {
+    position: relative;
+    display: flex;
+    justify-content: center;
+  }
+
+  .sidenav-user-tooltip {
+    position: absolute;
+    left: calc(100% + 0.75rem);
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--color-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-medium);
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease;
+    z-index: 50;
+  }
+
+  .sidenav-user-collapsed:hover .sidenav-user-tooltip,
+  .sidenav-user-collapsed:focus-within .sidenav-user-tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .sidenav-user-tooltip-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-foreground);
   }
 
   /* ============================================
