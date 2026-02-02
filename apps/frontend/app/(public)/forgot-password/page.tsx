@@ -96,10 +96,16 @@ export default function ForgotPasswordPage() {
               disabled={isLoading}
               className="input"
               placeholder="Email address"
+              data-testid="email-input"
             />
           </div>
 
-          <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3">
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="btn btn-primary w-full py-3"
+            data-testid="reset-button"
+          >
             {isLoading ? 'Sending...' : 'Send reset link'}
           </button>
 
@@ -107,6 +113,7 @@ export default function ForgotPasswordPage() {
             <Link
               href="/login"
               className="text-sm text-foreground-secondary hover:text-gold transition-colors"
+              data-testid="back-to-login-link"
             >
               Back to sign in
             </Link>

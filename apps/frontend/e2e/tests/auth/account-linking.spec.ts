@@ -1,5 +1,6 @@
 import { test, expect } from '../../fixtures/auth.fixture'
 import { getAdminClient } from '../../helpers/supabase.helper'
+import { mockOAuthRedirect } from '../../helpers/mock-oauth.helper'
 
 /**
  * Account Linking E2E tests
@@ -18,11 +19,10 @@ test.describe('Account Linking', () => {
       // Should show Connected Accounts section
       await expect(page.getByText(/connected accounts/i)).toBeVisible()
 
-      // Should show email as connected
-      await expect(page.getByText(testUser.email)).toBeVisible()
-
-      // Should show email icon or indicator
-      await expect(page.getByTestId('email-account-connected')).toBeVisible()
+      // Should show email account row with the user's email
+      const emailAccountRow = page.getByTestId('email-account-connected')
+      await expect(emailAccountRow).toBeVisible()
+      await expect(emailAccountRow.getByText(testUser.email)).toBeVisible()
     })
 
     test('shows available OAuth providers to connect', async ({
@@ -44,20 +44,24 @@ test.describe('Account Linking', () => {
     }) => {
       const page = authenticatedPage
 
+      // Setup OAuth mock to intercept the redirect
+      await mockOAuthRedirect(page)
+
       await page.goto('/settings')
 
-      // Click connect Discord
-      const [popup] = await Promise.all([
-        page.waitForEvent('popup').catch(() => null),
-        page.getByTestId('connect-discord-button').click(),
-      ])
+      // Click connect Discord - with mock it will show intercepted message
+      await page.getByTestId('connect-discord-button').click()
 
-      if (popup) {
-        // Should redirect to Discord OAuth
-        const popupUrl = popup.url()
-        expect(popupUrl).toMatch(/discord\.com|supabase/)
-        await popup.close()
-      }
+      // Should have been redirected to our mock (OAuth was intercepted)
+      await page.waitForURL(/auth\/v1\/authorize|OAuth/, { timeout: 5000 }).catch(() => {})
+
+      // Verify OAuth was initiated (either via URL change or page content)
+      const url = page.url()
+      const hasOAuthInUrl = url.includes('authorize') || url.includes('discord')
+      const bodyText = await page.locator('body').textContent().catch(() => '')
+      const hasOAuthInBody = bodyText?.includes('OAuth redirect intercepted') || bodyText?.includes('discord')
+
+      expect(hasOAuthInUrl || hasOAuthInBody).toBe(true)
     })
 
     test('connect Google button initiates OAuth', async ({
@@ -65,20 +69,24 @@ test.describe('Account Linking', () => {
     }) => {
       const page = authenticatedPage
 
+      // Setup OAuth mock to intercept the redirect
+      await mockOAuthRedirect(page)
+
       await page.goto('/settings')
 
-      // Click connect Google
-      const [popup] = await Promise.all([
-        page.waitForEvent('popup').catch(() => null),
-        page.getByTestId('connect-google-button').click(),
-      ])
+      // Click connect Google - with mock it will show intercepted message
+      await page.getByTestId('connect-google-button').click()
 
-      if (popup) {
-        // Should redirect to Google OAuth
-        const popupUrl = popup.url()
-        expect(popupUrl).toMatch(/accounts\.google\.com|supabase/)
-        await popup.close()
-      }
+      // Should have been redirected to our mock (OAuth was intercepted)
+      await page.waitForURL(/auth\/v1\/authorize|OAuth/, { timeout: 5000 }).catch(() => {})
+
+      // Verify OAuth was initiated (either via URL change or page content)
+      const url = page.url()
+      const hasOAuthInUrl = url.includes('authorize') || url.includes('google')
+      const bodyText = await page.locator('body').textContent().catch(() => '')
+      const hasOAuthInBody = bodyText?.includes('OAuth redirect intercepted') || bodyText?.includes('google')
+
+      expect(hasOAuthInUrl || hasOAuthInBody).toBe(true)
     })
   })
 

@@ -124,13 +124,17 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
   return (
     <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 overflow-y-auto">
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-league-title"
         className="glass card p-6 w-full max-w-lg animate-slide-up my-auto max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
+        data-testid="create-league-modal"
       >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-xl font-semibold font-display text-foreground">
+            <h2 id="create-league-title" className="text-xl font-semibold font-display text-foreground">
               Create New League
             </h2>
             <p className="text-sm text-foreground-muted mt-1">

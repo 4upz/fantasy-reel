@@ -11,8 +11,8 @@ import { setWorkerIndex, getWorkerPrefix } from '../helpers/test-ids.helper'
 /**
  * Supabase E2E Testing Best Practices Applied:
  *
- * 1. PROGRAMMATIC AUTH - Use Supabase auth.signInWithPassword() to get session,
- *    then inject into browser context. Much faster than UI login for non-auth tests.
+ * 1. UI-BASED AUTH - Use UI login to authenticate browser contexts. This ensures
+ *    proper cookie setup for Supabase SSR middleware (which reads cookies, not localStorage).
  *
  * 2. SERVICE ROLE FOR SETUP - Use service role key for test data creation/cleanup
  *    (bypasses RLS), but test the actual app with user's JWT (respects RLS).
@@ -21,11 +21,17 @@ import { setWorkerIndex, getWorkerPrefix } from '../helpers/test-ids.helper'
  *
  * 4. PROPER CLEANUP - Fixtures ensure cleanup runs even if test fails.
  *
- * 5. STORAGE STATE - Save authenticated state to reuse across tests in same worker.
+ * 5. WORKER-SCOPED DATA - Use unique IDs per worker to avoid parallel test collisions.
+ *
+ * Why UI Login Instead of Programmatic Session Injection:
+ * - Supabase SSR middleware (Next.js) reads auth from cookies, not localStorage
+ * - Manual localStorage injection doesn't set the cookies the middleware expects
+ * - UI login through the browser's Supabase client properly sets both
+ * - While slightly slower, this is the reliable approach for SSR apps
  *
  * References:
- * - https://github.com/isaacharrisholt/supawright
- * - https://fireship.io/courses/supabase/setup-playwright/
+ * - https://playwright.dev/docs/auth
+ * - https://www.bekapod.dev/articles/supabase-magic-login-testing-with-playwright/
  */
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
@@ -83,43 +89,37 @@ export const test = base.extend<AuthFixtures>({
   },
 
   /**
-   * Provide a page with programmatic authentication (FASTER)
-   * Use this for tests that don't need to verify the login UI
+   * Provide a browser context with authenticated session
    *
-   * This follows Supabase best practices:
-   * - Sign in programmatically via Supabase client
-   * - Inject session cookies into browser context
-   * - App sees authenticated user without going through login UI
+   * This uses UI login to ensure proper cookie setup for Supabase SSR:
+   * - The browser's Supabase client handles auth and sets cookies correctly
+   * - Server-side middleware (which reads cookies) sees the authenticated user
+   * - More reliable than manual localStorage injection which doesn't work with SSR
+   *
+   * Note: While slightly slower than pure programmatic auth, this approach
+   * is necessary because Supabase SSR middleware reads auth from cookies,
+   * not localStorage. The UI login properly sets both.
+   *
+   * References:
+   * - https://playwright.dev/docs/auth
+   * - https://www.bekapod.dev/articles/supabase-magic-login-testing-with-playwright/
    */
   authedContext: async ({ browser, testUser }, use) => {
-    // Create authenticated session via Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: testUser.email,
-      password: testUser.password,
-    })
-
-    if (error || !data.session) {
-      throw new Error(`Failed to authenticate test user: ${error?.message}`)
-    }
-
     // Create new browser context
     const context = await browser.newContext()
+    const page = await context.newPage()
 
-    // Inject Supabase auth cookies/storage
-    // Supabase stores session in localStorage with key pattern: sb-<project-ref>-auth-token
-    await context.addInitScript((session) => {
-      // Store session in localStorage (Supabase client will pick this up)
-      const storageKey = `sb-127-auth-token` // Local Supabase uses '127' as project ref
-      localStorage.setItem(storageKey, JSON.stringify(session))
-    }, data.session)
+    // Login via UI - this ensures the browser's Supabase client
+    // properly sets cookies that the server middleware can read
+    await loginAs(page, testUser)
+
+    // Close the login page but keep the authenticated context
+    await page.close()
 
     await use(context)
 
-    // Cleanup: close context and sign out
+    // Cleanup: close context
     await context.close()
-    await supabase.auth.signOut()
   },
 
   authedPage: async ({ authedContext }, use) => {
@@ -130,30 +130,22 @@ export const test = base.extend<AuthFixtures>({
   /**
    * Browser context authenticated as secondUser
    * For multi-user tests like trading, outbidding, real-time updates
+   *
+   * Uses UI login for proper cookie setup (same as authedContext)
    */
   secondUserContext: async ({ browser, secondUser }, use) => {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: secondUser.email,
-      password: secondUser.password,
-    })
-
-    if (error || !data.session) {
-      throw new Error(`Failed to authenticate second user: ${error?.message}`)
-    }
-
     const context = await browser.newContext()
+    const page = await context.newPage()
 
-    await context.addInitScript((session) => {
-      const storageKey = `sb-127-auth-token`
-      localStorage.setItem(storageKey, JSON.stringify(session))
-    }, data.session)
+    // Login via UI for proper cookie setup
+    await loginAs(page, secondUser)
+
+    // Close the login page but keep the authenticated context
+    await page.close()
 
     await use(context)
 
     await context.close()
-    await supabase.auth.signOut()
   },
 
   /**
@@ -185,35 +177,20 @@ export async function loginAs(page: Page, user: TestUser): Promise<void> {
 }
 
 /**
- * Login programmatically and set session in page context
- * Faster than UI login - use for tests that don't need to verify login flow
+ * Login programmatically via UI
+ *
+ * Note: This now uses UI login because Supabase SSR middleware
+ * reads auth from cookies, not localStorage. The UI login properly
+ * sets both cookies and localStorage through the browser's Supabase client.
+ *
+ * @deprecated Use loginAs() directly instead - this function now just wraps it
  */
 export async function loginProgrammatically(
   page: Page,
   user: TestUser
 ): Promise<void> {
-  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: user.email,
-    password: user.password,
-  })
-
-  if (error || !data.session) {
-    throw new Error(`Failed to authenticate: ${error?.message}`)
-  }
-
-  // Inject session into page's localStorage before navigating
-  await page.addInitScript((session) => {
-    const storageKey = `sb-127-auth-token`
-    localStorage.setItem(storageKey, JSON.stringify(session))
-  }, data.session)
-
-  // Navigate to app - should be authenticated
-  await page.goto('/dashboard')
-
-  // Verify we're authenticated
-  await page.waitForURL('/dashboard', { timeout: 10000 })
+  // Use UI login for proper cookie setup
+  await loginAs(page, user)
 }
 
 /**
