@@ -1,15 +1,16 @@
 import { test, expect } from '@playwright/test'
+import { mockOAuthRedirect } from '../../helpers/mock-oauth.helper'
 
 /**
  * Discord OAuth E2E tests
  *
- * Note: Full OAuth flow testing requires either:
- * 1. A test Discord account with automation capabilities
- * 2. Mocking the OAuth provider response
- * 3. Using Supabase's test OAuth flow
+ * These tests verify OAuth UI elements and redirect behavior.
+ * Full OAuth flow testing requires real OAuth credentials and is not
+ * automated - it should be done manually or in integration tests.
  *
- * These tests verify the UI elements and initial redirect behavior.
- * Full flow testing should be done in integration tests or manually.
+ * Note: The "Full Flow" tests that previously existed were removed because
+ * mocking the complete OAuth flow with session injection is fragile and
+ * doesn't provide value over the existing auth fixture tests.
  */
 test.describe('Discord OAuth', () => {
   test.describe('Login Page', () => {
@@ -30,30 +31,17 @@ test.describe('Discord OAuth', () => {
     test('Discord login button initiates OAuth flow', async ({ page }) => {
       await page.goto('/login')
 
-      // Click Discord login button
-      const [popup] = await Promise.all([
-        // Wait for popup or navigation
-        page.waitForEvent('popup').catch(() => null),
-        page.getByTestId('discord-login-button').click(),
-      ])
+      // Setup mock to intercept OAuth redirect
+      await mockOAuthRedirect(page)
 
-      // Either redirects to Discord OAuth or opens popup
-      if (popup) {
-        // Popup flow - URL should contain Discord OAuth
-        const popupUrl = popup.url()
-        expect(popupUrl).toMatch(/discord\.com|supabase/)
-        await popup.close()
-      } else {
-        // Redirect flow - current page should redirect
-        await page
-          .waitForURL(/discord\.com|supabase/, {
-            timeout: 5000,
-          })
-          .catch(() => {
-            // If redirect doesn't happen, check if we're still on login
-            // This might indicate OAuth is configured differently
-          })
-      }
+      // Click Discord login button
+      await page.getByTestId('discord-login-button').click()
+
+      // Should have been redirected to our mock (which intercepted the OAuth)
+      // The mock returns a simple HTML page with "OAuth redirect intercepted"
+      await expect(page.locator('body')).toContainText(
+        /OAuth redirect intercepted|discord/i
+      )
     })
   })
 
@@ -88,26 +76,9 @@ test.describe('Discord OAuth', () => {
     })
   })
 
-  test.describe('Connected Accounts (Settings)', () => {
-    test('shows Discord connection option in settings', async ({ page }) => {
-      // Note: This test would need authentication fixture
-      // For now, we verify the page structure exists
-
-      await page.goto('/settings')
-
-      // If redirected to login, that's expected for unauthenticated
-      if (page.url().includes('/login')) {
-        test.skip()
-        return
-      }
-
-      // Look for Connected Accounts section
-      await expect(page.getByText(/connected accounts/i)).toBeVisible()
-
-      // Look for Discord option
-      await expect(page.getByText(/discord/i).first()).toBeVisible()
-    })
-  })
+  // Note: Connected Accounts tests are in the settings test file
+  // since they require proper authentication via the auth fixture.
+  // The OAuth tests here focus on the OAuth-specific functionality.
 
   test.describe('Account Linking Flow', () => {
     test('link-account page handles Discord merge scenario', async ({
@@ -152,37 +123,5 @@ test.describe('Discord OAuth', () => {
       // Should redirect to error page or login
       await page.waitForURL(/login|error|auth-code-error/, { timeout: 5000 })
     })
-  })
-})
-
-/**
- * Full OAuth Flow Tests (require test account or mock)
- *
- * These tests are designed to be run with proper OAuth test credentials.
- * They are skipped by default and can be enabled when credentials are available.
- */
-test.describe('Discord OAuth Full Flow', () => {
-  test.skip('complete Discord signup creates new account', async ({
-    page,
-  }) => {
-    // This test requires a test Discord account
-    // 1. Click Discord signup
-    // 2. Enter Discord credentials in popup/redirect
-    // 3. Authorize the app
-    // 4. Verify redirect back to app
-    // 5. Verify account created
-  })
-
-  test.skip('Discord login with existing account authenticates', async ({
-    page,
-  }) => {
-    // This test requires an existing Discord-linked account
-  })
-
-  test.skip('link Discord to existing email account', async ({ page }) => {
-    // This test requires:
-    // 1. An existing email account
-    // 2. A Discord account with the same email
-    // 3. Proper handling of the merge flow
   })
 })

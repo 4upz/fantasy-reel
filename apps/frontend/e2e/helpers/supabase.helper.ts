@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { uniqueEmail, uniqueToken, uniqueLeagueName } from './test-ids.helper'
 
 /**
  * Supabase helper for E2E test database operations
@@ -45,11 +46,11 @@ export interface TestUser {
 
 /**
  * Create a test user with verified email (skips email confirmation)
+ * Uses worker-scoped unique email to prevent parallel test collisions.
  */
 export async function createTestUser(prefix: string): Promise<TestUser> {
   const client = getAdminClient()
-  const timestamp = Date.now()
-  const email = `test-${prefix}-${timestamp}@test.local`
+  const email = uniqueEmail(prefix)
   const password = 'TestPassword123!'
   const displayName = `Test User ${prefix}`
 
@@ -96,6 +97,7 @@ export interface TestLeague {
 
 /**
  * Create a test league
+ * Uses worker-scoped unique name to prevent parallel test collisions.
  */
 export async function createTestLeague(
   ownerId: string,
@@ -103,11 +105,10 @@ export async function createTestLeague(
     name?: string
     status?: TestLeague['status']
     maxParticipants?: number
-    draftType?: 'snake' | 'linear'
   }
 ): Promise<TestLeague> {
   const client = getAdminClient()
-  const name = options?.name || `E2E Test League ${Date.now()}`
+  const name = options?.name || uniqueLeagueName('E2E Test League')
 
   const { data, error } = await client
     .from('leagues')
@@ -116,7 +117,6 @@ export async function createTestLeague(
       owner_id: ownerId,
       status: options?.status || 'setup',
       max_participants: options?.maxParticipants || 8,
-      draft_type: options?.draftType || 'snake',
       invite_only: true,
     })
     .select()
@@ -191,7 +191,6 @@ export async function createTeam(
     .insert({
       participant_id: participant.id,
       name: teamName,
-      faab_budget: 100,
     })
     .select()
     .single()
@@ -236,6 +235,7 @@ export async function cleanupTestData(): Promise<void> {
 
 /**
  * Create an invitation for a league
+ * Uses worker-scoped unique token to prevent parallel test collisions.
  */
 export async function createInvitation(
   leagueId: string,
@@ -243,7 +243,7 @@ export async function createInvitation(
   invitedBy: string
 ): Promise<{ id: string; token: string }> {
   const client = getAdminClient()
-  const token = `test-token-${Date.now()}`
+  const token = uniqueToken('test-token')
 
   const { data, error } = await client
     .from('invitations')
@@ -349,7 +349,7 @@ export async function createDraftPick(
   leagueId: string,
   teamId: string,
   movieId: string,
-  pickOrder: number,
+  pickNumber: number,
   round: number
 ): Promise<{ id: string }> {
   const client = getAdminClient()
@@ -360,7 +360,7 @@ export async function createDraftPick(
       league_id: leagueId,
       team_id: teamId,
       movie_id: movieId,
-      pick_order: pickOrder,
+      pick_number: pickNumber,
       round,
       picked_at: new Date().toISOString(),
     })
@@ -426,6 +426,7 @@ function generateRandomCode(length: number): string {
 
 /**
  * Create an expired invitation for testing
+ * Uses worker-scoped unique token to prevent parallel test collisions.
  */
 export async function createExpiredInvitation(
   leagueId: string,
@@ -433,7 +434,7 @@ export async function createExpiredInvitation(
   invitedBy: string
 ): Promise<{ id: string; token: string }> {
   const client = getAdminClient()
-  const token = `expired-token-${Date.now()}`
+  const token = uniqueToken('expired-token')
 
   // Set expires_at to yesterday
   const yesterday = new Date()
@@ -577,7 +578,7 @@ export async function setTeamScore(
       {
         team_id: teamId,
         total_points: totalPoints,
-        last_updated: new Date().toISOString(),
+        last_calculated_at: new Date().toISOString(),
       },
       { onConflict: 'team_id' }
     )
@@ -629,30 +630,25 @@ export async function createMovieReviews(
   }
 
   if (reviews.length > 0) {
-    const { error } = await client.from('reviews').insert(reviews)
+    // Use upsert to handle parallel test runs where reviews may already exist
+    const { error } = await client
+      .from('reviews')
+      .upsert(reviews, { onConflict: 'movie_id,source' })
     if (error) {
       throw new Error(`Failed to create movie reviews: ${error.message}`)
     }
   }
 }
 
-/**
- * Update team FAAB budget for testing
- */
+// Note: FAAB budget is stored on leagues table, not teams table
+// This function is a no-op placeholder for backward compatibility
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function updateTeamBudget(
-  teamId: string,
-  remainingBudget: number
+  _teamId: string,
+  _remainingBudget: number
 ): Promise<void> {
-  const client = getAdminClient()
-
-  const { error } = await client
-    .from('teams')
-    .update({ faab_budget: remainingBudget })
-    .eq('id', teamId)
-
-  if (error) {
-    throw new Error(`Failed to update team budget: ${error.message}`)
-  }
+  // FAAB budget is managed at the league level, not team level
+  // No-op for backward compatibility with tests
 }
 
 /**

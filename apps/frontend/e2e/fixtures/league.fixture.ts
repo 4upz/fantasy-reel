@@ -16,6 +16,7 @@ import {
   createMovieReviews,
   TestLeague,
 } from '../helpers/supabase.helper'
+import { uniqueTmdbId, uniqueLeagueName } from '../helpers/test-ids.helper'
 
 /**
  * Extended test with league fixtures
@@ -93,7 +94,7 @@ export const test = authTest.extend<LeagueFixtures>({
   // League with multiple participants ready to draft
   draftReadyLeague: async ({ leagueOwner, testUser, secondUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test League Draft Ready ${Date.now()}`,
+      name: uniqueLeagueName('E2E Draft Ready'),
       status: 'setup',
       maxParticipants: 4,
     })
@@ -117,7 +118,7 @@ export const test = authTest.extend<LeagueFixtures>({
   // Active league for bidding/trading tests
   activeLeague: async ({ leagueOwner, testUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test League Active ${Date.now()}`,
+      name: uniqueLeagueName('E2E Active'),
       status: 'active',
     })
 
@@ -142,7 +143,7 @@ export const test = authTest.extend<LeagueFixtures>({
    */
   biddingLeague: async ({ leagueOwner, testUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test Bidding League ${Date.now()}`,
+      name: uniqueLeagueName('E2E Bidding'),
       status: 'active',
     })
 
@@ -174,7 +175,7 @@ export const test = authTest.extend<LeagueFixtures>({
    */
   tradingLeague: async ({ leagueOwner, testUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test Trading League ${Date.now()}`,
+      name: uniqueLeagueName('E2E Trading'),
       status: 'active',
     })
 
@@ -186,9 +187,9 @@ export const test = authTest.extend<LeagueFixtures>({
       const ownerTeam = await createTeam(league.id, leagueOwner.id, 'Owner Team')
       const testUserTeam = await createTeam(league.id, testUser.id, 'Test Team')
 
-      // Create test movies
-      const movie1 = await createTestMovie(99001, 'Trade Movie Alpha', '2025-06-15')
-      const movie2 = await createTestMovie(99002, 'Trade Movie Beta', '2025-07-20')
+      // Create test movies with worker-unique TMDB IDs
+      const movie1 = await createTestMovie(uniqueTmdbId(1), 'Trade Movie Alpha', '2025-06-15')
+      const movie2 = await createTestMovie(uniqueTmdbId(2), 'Trade Movie Beta', '2025-07-20')
 
       // Create draft picks (assign movies to teams)
       await createDraftPick(league.id, ownerTeam.id, movie1.id, 1, 1)
@@ -213,7 +214,7 @@ export const test = authTest.extend<LeagueFixtures>({
    */
   scoredLeague: async ({ leagueOwner, testUser, secondUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test Scored League ${Date.now()}`,
+      name: uniqueLeagueName('E2E Scored'),
       status: 'active',
       maxParticipants: 4,
     })
@@ -253,7 +254,7 @@ export const test = authTest.extend<LeagueFixtures>({
    */
   biddingLeagueWithBid: async ({ leagueOwner, testUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test Bidding League With Bid ${Date.now()}`,
+      name: uniqueLeagueName('E2E Bidding With Bid'),
       status: 'active',
     })
 
@@ -268,8 +269,8 @@ export const test = authTest.extend<LeagueFixtures>({
       // Enable bidding
       await enableLeagueBidding(league.id)
 
-      // Create an active bid
-      const bidTmdbId = 88001
+      // Create an active bid with worker-unique TMDB ID
+      const bidTmdbId = uniqueTmdbId(101)
       const bidMovieTitle = 'Test Bid Movie'
       const bid = await createPickupBid(
         league.id,
@@ -302,7 +303,7 @@ export const test = authTest.extend<LeagueFixtures>({
    */
   tradingLeagueWithTrade: async ({ leagueOwner, testUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test Trading League With Trade ${Date.now()}`,
+      name: uniqueLeagueName('E2E Trading With Trade'),
       status: 'active',
     })
 
@@ -314,9 +315,9 @@ export const test = authTest.extend<LeagueFixtures>({
       const ownerTeam = await createTeam(league.id, leagueOwner.id, 'Owner Team')
       const testUserTeam = await createTeam(league.id, testUser.id, 'Test Team')
 
-      // Create test movies
-      const movie1 = await createTestMovie(99011, 'Trade Offer Movie Alpha', '2025-06-15')
-      const movie2 = await createTestMovie(99012, 'Trade Offer Movie Beta', '2025-07-20')
+      // Create test movies with worker-unique TMDB IDs
+      const movie1 = await createTestMovie(uniqueTmdbId(11), 'Trade Offer Movie Alpha', '2025-06-15')
+      const movie2 = await createTestMovie(uniqueTmdbId(12), 'Trade Offer Movie Beta', '2025-07-20')
 
       // Create draft picks (assign movies to teams)
       await createDraftPick(league.id, ownerTeam.id, movie1.id, 1, 1)
@@ -349,7 +350,7 @@ export const test = authTest.extend<LeagueFixtures>({
    */
   scoredLeagueWithReviews: async ({ leagueOwner, testUser, secondUser }, use) => {
     const league = await createTestLeague(leagueOwner.id, {
-      name: `E2E Test Scored League With Reviews ${Date.now()}`,
+      name: uniqueLeagueName('E2E Scored With Reviews'),
       status: 'active',
       maxParticipants: 4,
     })
@@ -364,14 +365,14 @@ export const test = authTest.extend<LeagueFixtures>({
       const testUserTeam = await createTeam(league.id, testUser.id, 'Test Team')
       const secondUserTeam = await createTeam(league.id, secondUser.id, 'Second Team')
 
-      // Create movies with reviews
-      const movie1 = await createTestMovie(99021, 'Scored Movie Alpha', '2025-01-15', {
+      // Create movies with reviews using worker-unique TMDB IDs
+      const movie1 = await createTestMovie(uniqueTmdbId(21), 'Scored Movie Alpha', '2025-01-15', {
         status: 'released',
       })
-      const movie2 = await createTestMovie(99022, 'Scored Movie Beta', '2025-02-20', {
+      const movie2 = await createTestMovie(uniqueTmdbId(22), 'Scored Movie Beta', '2025-02-20', {
         status: 'released',
       })
-      const movie3 = await createTestMovie(99023, 'Scored Movie Gamma', '2025-03-25', {
+      const movie3 = await createTestMovie(uniqueTmdbId(23), 'Scored Movie Gamma', '2025-03-25', {
         status: 'released',
       })
 
