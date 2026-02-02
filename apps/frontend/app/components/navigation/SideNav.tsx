@@ -187,7 +187,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
 
   // Sidebar content shared between desktop and mobile
   const sidebarContent = (showLabels: boolean, isMobile: boolean = false) => (
-    <div className={`sidenav-inner ${isMobile ? 'sidenav-inner-mobile' : ''}`}>
+    <div className={`sidenav-inner ${isMobile ? 'sidenav-inner-mobile safe-area-bottom' : ''}`}>
       {/* Logo / Brand */}
       <Link
         href="/dashboard"
@@ -257,9 +257,9 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         </Link>
 
         {/* User Profile */}
-        <div className={`sidenav-user ${showLabels ? 'sidenav-user-expanded' : ''}`}>
-          <Avatar src={profile?.avatar_url} name={displayName} size="sm" />
-          {showLabels && (
+        {showLabels ? (
+          <div className="sidenav-user sidenav-user-expanded">
+            <Avatar src={profile?.avatar_url} name={displayName} size="sm" />
             <div className="sidenav-user-info">
               <span className="sidenav-user-name">{displayName}</span>
               <form action="/auth/signout" method="post" className="sidenav-signout">
@@ -269,8 +269,21 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
                 </button>
               </form>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="sidenav-user sidenav-user-collapsed">
+            <Avatar src={profile?.avatar_url} name={displayName} size="sm" />
+            <div className="sidenav-user-tooltip">
+              <span className="sidenav-user-tooltip-name">{displayName}</span>
+              <form action="/auth/signout" method="post">
+                <button type="submit" className="sidenav-user-tooltip-signout" data-testid="signout-button-collapsed">
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Sign out</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
