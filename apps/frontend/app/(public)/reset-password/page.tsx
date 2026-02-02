@@ -32,9 +32,8 @@ export default function ResetPasswordPage() {
 
     // Also check current session in case event already fired
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (isValidSession === null) {
-        setIsValidSession(!!session)
-      }
+      // Only set if still null (first check) - using callback form to avoid stale closure
+      setIsValidSession((current) => (current === null ? !!session : current))
     })
 
     return () => subscription.unsubscribe()

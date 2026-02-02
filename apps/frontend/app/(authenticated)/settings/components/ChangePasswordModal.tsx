@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { X, Lock, Eye, EyeOff } from 'lucide-react'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 
 interface Props {
   onClose: () => void
@@ -18,20 +19,29 @@ export default function ChangePasswordModal({
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const isValid =
     currentPassword.length > 0 &&
     newPassword.length >= 6 &&
     confirmPassword === newPassword
 
+  const submitPasswordChange = useCallback(
+    async (formData: FormData) => {
+      const result = await onSubmit(formData)
+      if (!result.success) {
+        throw new Error(result.error ?? 'Failed to change password')
+      }
+      return result
+    },
+    [onSubmit]
+  )
+
+  const { execute, isLoading: isSubmitting, error } = useAsyncAction(submitPasswordChange)
+
   const isDisabled = isSubmitting || !isValid
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
-    setError(null)
-    setIsSubmitting(true)
 
     const formData = new FormData()
     formData.append('currentPassword', currentPassword)
@@ -39,16 +49,10 @@ export default function ChangePasswordModal({
     formData.append('confirmPassword', confirmPassword)
 
     try {
-      const result = await onSubmit(formData)
-      if (result.success) {
-        onClose()
-      } else {
-        setError(result.error ?? 'Failed to change password')
-      }
+      await execute(formData)
+      onClose()
     } catch {
-      setError('Something went wrong')
-    } finally {
-      setIsSubmitting(false)
+      // Error is handled by useAsyncAction and displayed in the UI
     }
   }
 
