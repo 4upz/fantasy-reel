@@ -65,18 +65,8 @@ export async function createTestUser(prefix: string): Promise<TestUser> {
     throw new Error(`Failed to create test user: ${authError?.message}`)
   }
 
-  // Create profile
-  const { error: profileError } = await client.from('profiles').insert({
-    id: authData.user.id,
-    user_id: authData.user.id,
-    display_name: displayName,
-  })
-
-  if (profileError) {
-    // Cleanup auth user if profile creation fails
-    await client.auth.admin.deleteUser(authData.user.id)
-    throw new Error(`Failed to create profile: ${profileError.message}`)
-  }
+  // Profile is created automatically by database trigger on_auth_user_created
+  // The trigger uses user_metadata.display_name which we set above
 
   return {
     id: authData.user.id,
