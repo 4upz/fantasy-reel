@@ -263,7 +263,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
             <div className="sidenav-user-info">
               <span className="sidenav-user-name">{displayName}</span>
               <form action="/auth/signout" method="post" className="sidenav-signout">
-                <button type="submit" className="sidenav-signout-btn">
+                <button type="submit" className="sidenav-signout-btn" data-testid="signout-button">
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Sign out</span>
                 </button>
@@ -287,6 +287,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
           className="sidenav-toggle"
           aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
           title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          data-testid="sidebar-toggle"
         >
           {isExpanded ? (
             <PanelLeftClose className="w-4 h-4" />

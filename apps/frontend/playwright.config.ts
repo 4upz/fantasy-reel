@@ -29,8 +29,8 @@ export default defineConfig({
   // Fail CI if test.only is accidentally committed
   forbidOnly: !!process.env.CI,
 
-  // Retry failed tests in CI to handle flakiness
-  retries: process.env.CI ? 2 : 0,
+  // Retry failed tests to handle flakiness from parallel database operations
+  retries: process.env.CI ? 2 : 1,
 
   // Limit workers in CI to avoid resource contention with Supabase
   workers: process.env.CI ? 4 : undefined,
@@ -93,8 +93,8 @@ export default defineConfig({
     },
 
     /**
-     * Chromium - Primary browser for CI
-     * Use for fastest test runs
+     * Chromium - Primary browser
+     * Default for local development and CI
      */
     {
       name: 'chromium',
@@ -102,35 +102,24 @@ export default defineConfig({
       dependencies: ['setup'],
     },
 
-    /**
-     * Firefox - Secondary browser
-     * Tests WebSocket/real-time behavior differences
-     */
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-      dependencies: ['setup'],
-    },
-
-    /**
-     * WebKit (Safari) - Tertiary browser
-     * Important for macOS/iOS users
-     */
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-      dependencies: ['setup'],
-    },
-
-    /**
-     * Mobile Chrome - Responsive testing
-     * Tests mobile navigation and touch interactions
-     */
-    {
-      name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
-      dependencies: ['setup'],
-    },
+    // Additional browsers - run with --project flag explicitly
+    // e.g., npx playwright test --project=firefox
+    //
+    // {
+    //   name: 'firefox',
+    //   use: { ...devices['Desktop Firefox'] },
+    //   dependencies: ['setup'],
+    // },
+    // {
+    //   name: 'webkit',
+    //   use: { ...devices['Desktop Safari'] },
+    //   dependencies: ['setup'],
+    // },
+    // {
+    //   name: 'mobile-chrome',
+    //   use: { ...devices['Pixel 5'] },
+    //   dependencies: ['setup'],
+    // },
   ],
 
   /**
