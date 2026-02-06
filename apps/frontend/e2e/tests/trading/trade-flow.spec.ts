@@ -1,4 +1,9 @@
 import { test, expect } from '../../fixtures/league.fixture'
+import {
+  waitForModalOpen,
+  waitForModalClose,
+  waitForPageSettle,
+} from '../../helpers/ui.helper'
 
 /**
  * Trading System E2E Tests
@@ -24,7 +29,7 @@ test.describe('Trading Page @trading', () => {
 
     // Look for trading link/tab
     const tradingLink = authedPage.getByRole('link', { name: /trad/i })
-    const hasTradingLink = await tradingLink.isVisible().catch(() => false)
+    const hasTradingLink = await tradingLink.isVisible({ timeout: 2000 }).catch(() => false)
 
     if (hasTradingLink) {
       await tradingLink.click()
@@ -68,10 +73,11 @@ test.describe('Propose Trade @trading', () => {
 
     // Look for propose trade button
     const proposeButton = authedPage.getByTestId('propose-trade-button')
-    const hasButton = await proposeButton.isVisible().catch(() => false)
+    const hasButton = await proposeButton.isVisible({ timeout: 2000 }).catch(() => false)
 
     if (hasButton) {
       await proposeButton.click()
+      await waitForModalOpen(authedPage)
 
       // Should see trade interface/modal
       await expect(
@@ -126,9 +132,16 @@ test.describe('Respond to Trade @trading', () => {
 
     // Confirm acceptance if there's a modal
     const confirmButton = authedPage.getByRole('button', { name: /confirm|accept/i })
-    if (await confirmButton.isVisible().catch(() => false)) {
+    const confirmVisible = await confirmButton.isVisible({ timeout: 2000 }).catch(() => false)
+    if (confirmVisible) {
+      await waitForModalOpen(authedPage)
       await confirmButton.click()
+      await waitForModalClose(authedPage)
     }
+
+    // Wait for network request to complete
+    await authedPage.waitForLoadState('networkidle')
+    await waitForPageSettle(authedPage)
 
     // Verify trade status changes
     await expect(
@@ -147,6 +160,10 @@ test.describe('Respond to Trade @trading', () => {
     const rejectButton = authedPage.getByTestId(`reject-trade-${tradingLeagueWithTrade.tradeOfferId}`)
     await expect(rejectButton).toBeVisible({ timeout: 10000 })
     await rejectButton.click()
+
+    // Wait for network request to complete
+    await authedPage.waitForLoadState('networkidle')
+    await waitForPageSettle(authedPage)
 
     // Verify trade status changes to rejected
     await expect(
@@ -197,9 +214,16 @@ test.describe('Veto Trade @trading', () => {
 
     // Confirm if needed
     const confirmButton = authedPage.getByRole('button', { name: /confirm|accept/i })
-    if (await confirmButton.isVisible().catch(() => false)) {
+    const confirmNeeded = await confirmButton.isVisible({ timeout: 2000 }).catch(() => false)
+    if (confirmNeeded) {
+      await waitForModalOpen(authedPage)
       await confirmButton.click()
+      await waitForModalClose(authedPage)
     }
+
+    // Wait for network request to complete
+    await authedPage.waitForLoadState('networkidle')
+    await waitForPageSettle(authedPage)
 
     // Wait for trade to go to review status
     await expect(

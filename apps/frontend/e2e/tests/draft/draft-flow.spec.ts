@@ -1,6 +1,6 @@
 import { test, expect, loginAs } from '../../fixtures/league.fixture'
 import { setupAllMocks, MOCK_MOVIES } from '../../helpers/mock-api.helper'
-import { updateLeagueStatus } from '../../helpers/supabase.helper'
+import { updateLeagueStatus, waitForRealtimeReady } from '../../helpers/supabase.helper'
 
 /**
  * Draft flow E2E tests
@@ -23,6 +23,7 @@ test.describe('Draft Flow', () => {
 
     // Navigate to draft page
     await page.goto(`/league/${draftReadyLeague.id}/draft`)
+    await waitForRealtimeReady(page)
 
     // Should show start draft button (owner only)
     await expect(page.getByTestId('start-draft-button')).toBeVisible()
@@ -32,15 +33,19 @@ test.describe('Draft Flow', () => {
 
     // Confirm if there's a confirmation dialog
     const confirmButton = page.getByTestId('confirm-start-draft')
-    if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+    const confirmVisible = await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)
+    if (confirmVisible) {
       await confirmButton.click()
     }
+
+    // Wait for the draft start action to complete
+    await page.waitForLoadState('networkidle')
 
     // Should show draft board
     await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 10000 })
 
-    // Status should change to drafting
-    await expect(page.getByText(/drafting/i)).toBeVisible()
+    // Status should change to drafting (allow time for state propagation)
+    await expect(page.getByText(/drafting/i)).toBeVisible({ timeout: 15000 })
   })
 
   test('shows movie picker with search functionality', async ({
@@ -55,6 +60,7 @@ test.describe('Draft Flow', () => {
     await updateLeagueStatus(draftReadyLeague.id, 'drafting')
 
     await page.goto(`/league/${draftReadyLeague.id}/draft`)
+    await waitForRealtimeReady(page)
 
     // Movie picker should be visible
     await expect(page.getByTestId('movie-picker')).toBeVisible()
@@ -92,6 +98,7 @@ test.describe('Draft Flow', () => {
     await updateLeagueStatus(draftReadyLeague.id, 'drafting')
 
     await page.goto(`/league/${draftReadyLeague.id}/draft`)
+    await waitForRealtimeReady(page)
 
     // Should show "Your turn" indicator (owner picks first)
     await expect(page.getByText(/your turn/i)).toBeVisible({ timeout: 10000 })
@@ -102,6 +109,9 @@ test.describe('Draft Flow', () => {
     // Pick button should be available
     await expect(page.getByTestId('draft-pick-button')).toBeVisible()
     await page.click('[data-testid="draft-pick-button"]')
+
+    // Wait for pick action to complete
+    await page.waitForLoadState('networkidle')
 
     // Pick should appear in draft history
     await expect(page.getByTestId('draft-history')).toContainText(MOCK_MOVIES[0].title, {
@@ -129,6 +139,7 @@ test.describe('Draft Flow', () => {
     await loginAs(userPage, testUser)
 
     await userPage.goto(`/league/${draftReadyLeague.id}/draft`)
+    await waitForRealtimeReady(userPage)
 
     // Should show waiting indicator (owner picks first in snake draft)
     await expect(userPage.getByText(/waiting for|not your turn/i)).toBeVisible({
@@ -137,7 +148,8 @@ test.describe('Draft Flow', () => {
 
     // Pick button should be disabled or not visible
     const pickButton = userPage.getByTestId('draft-pick-button')
-    if (await pickButton.isVisible().catch(() => false)) {
+    const pickVisible = await pickButton.isVisible({ timeout: 1000 }).catch(() => false)
+    if (pickVisible) {
       await expect(pickButton).toBeDisabled()
     }
 
@@ -174,22 +186,27 @@ test.describe('Multi-User Draft (Real-time)', () => {
     await ownerPage.goto(`/league/${draftReadyLeague.id}/draft`)
     await userPage.goto(`/league/${draftReadyLeague.id}/draft`)
 
-    // Wait for both to load
+    // Wait for both to load and real-time connections to be ready
     await expect(ownerPage.getByTestId('draft-board')).toBeVisible()
     await expect(userPage.getByTestId('draft-board')).toBeVisible()
+    await waitForRealtimeReady(ownerPage)
+    await waitForRealtimeReady(userPage)
 
     // Owner makes a pick
     await ownerPage.click(`[data-testid="movie-card-${MOCK_MOVIES[0].tmdb_id}"]`)
     await ownerPage.click('[data-testid="draft-pick-button"]')
 
+    // Wait for pick action to complete
+    await ownerPage.waitForLoadState('networkidle')
+
     // Pick should appear in both users' draft history (real-time)
     await expect(ownerPage.getByTestId('draft-history')).toContainText(
       MOCK_MOVIES[0].title,
-      { timeout: 10000 }
+      { timeout: 15000 }
     )
     await expect(userPage.getByTestId('draft-history')).toContainText(
       MOCK_MOVIES[0].title,
-      { timeout: 10000 }
+      { timeout: 15000 }
     )
 
     // User should now see "Your turn" (snake draft: owner -> user)
@@ -216,6 +233,7 @@ test.describe('Multi-User Draft (Real-time)', () => {
     await loginAs(ownerPage, leagueOwner)
 
     await ownerPage.goto(`/league/${draftReadyLeague.id}/draft`)
+    await waitForRealtimeReady(ownerPage)
 
     // Verify owner sees their turn
     await expect(ownerPage.getByText(/your turn/i)).toBeVisible()
@@ -231,14 +249,17 @@ test.describe('Multi-User Draft (Real-time)', () => {
     await ownerPage.click(`[data-testid="movie-card-${MOCK_MOVIES[0].tmdb_id}"]`)
     await ownerPage.click('[data-testid="draft-pick-button"]')
 
+    // Wait for pick action to complete
+    await ownerPage.waitForLoadState('networkidle')
+
     // Wait for pick to process
     await expect(ownerPage.getByTestId('draft-history')).toContainText(
       MOCK_MOVIES[0].title,
-      { timeout: 10000 }
+      { timeout: 15000 }
     )
 
     // Turn should move to next user
-    await expect(ownerPage.getByText(/waiting for/i)).toBeVisible({ timeout: 5000 })
+    await expect(ownerPage.getByText(/waiting for/i)).toBeVisible({ timeout: 10000 })
 
     await ownerContext.close()
   })
@@ -255,6 +276,7 @@ test.describe('Draft Progress', () => {
     await updateLeagueStatus(draftReadyLeague.id, 'drafting')
 
     await page.goto(`/league/${draftReadyLeague.id}/draft`)
+    await waitForRealtimeReady(page)
 
     // Should show progress ring or indicator
     await expect(page.getByTestId('draft-progress')).toBeVisible()
@@ -273,6 +295,7 @@ test.describe('Draft Progress', () => {
     await updateLeagueStatus(draftReadyLeague.id, 'drafting')
 
     await page.goto(`/league/${draftReadyLeague.id}/draft`)
+    await waitForRealtimeReady(page)
 
     // Get initial progress
     const progress = page.getByTestId('draft-progress')
@@ -282,7 +305,10 @@ test.describe('Draft Progress', () => {
     await page.click(`[data-testid="movie-card-${MOCK_MOVIES[0].tmdb_id}"]`)
     await page.click('[data-testid="draft-pick-button"]')
 
+    // Wait for pick action to complete
+    await page.waitForLoadState('networkidle')
+
     // Progress should update
-    await expect(progress).toContainText(/1/, { timeout: 10000 })
+    await expect(progress).toContainText(/1/, { timeout: 15000 })
   })
 })

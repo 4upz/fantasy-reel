@@ -156,6 +156,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
               <input
                 type="text"
                 id="teamName"
+                data-testid="team-name-input"
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 placeholder="My Production Company"
@@ -177,6 +178,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
               type="submit"
               disabled={isLoading || manualCode.length !== 6}
               className="btn btn-primary w-full py-3 text-lg"
+              data-testid="join-league-button"
             >
               {isLoading ? 'Joining...' : 'Join League'}
             </button>
@@ -223,14 +225,15 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
         <form onSubmit={handleSubmit}>
           <div className="mb-6">
             <label
-              htmlFor="teamName"
+              htmlFor="teamNameToken"
               className="block text-sm font-medium text-foreground-secondary mb-1"
             >
               Team Name <span className="text-foreground-muted">(optional)</span>
             </label>
             <input
               type="text"
-              id="teamName"
+              id="teamNameToken"
+              data-testid="team-name-input"
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}
               placeholder="My Production Company"
@@ -252,6 +255,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             type="submit"
             disabled={isLoading}
             className="btn btn-primary w-full py-3 text-lg"
+            data-testid="join-league-button"
           >
             {isLoading ? 'Joining...' : 'Join League'}
           </button>

@@ -146,6 +146,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
             disabled={creating}
             className="text-foreground-muted hover:text-foreground transition-colors disabled:opacity-50"
             aria-label="Close"
+            data-testid="close-modal-button"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

@@ -38,6 +38,8 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:5
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
 interface AuthFixtures {
+  /** Internal fixture that initializes worker index - runs automatically */
+  _workerInit: void
   /** A test user (auto-created and cleaned up) */
   testUser: TestUser
   /** A second test user for multi-user tests */
@@ -57,25 +59,32 @@ interface AuthFixtures {
 }
 
 export const test = base.extend<AuthFixtures>({
-  // Create primary test user
-  testUser: async ({}, use, testInfo) => {
-    // Set worker index for unique ID generation
+  /**
+   * Auto fixture that initializes worker index early in test setup.
+   * This ensures all fixtures (not just testUser) get proper worker isolation.
+   * Without this, tests using only draftReadyLeague would get workerIndex=0.
+   */
+  _workerInit: [async ({}, use, testInfo) => {
     setWorkerIndex(testInfo.parallelIndex)
+    await use(undefined)
+  }, { auto: true }],
 
+  // Create primary test user
+  testUser: async ({ _workerInit }, use) => {
     const user = await createTestUser('primary')
     await use(user)
     await deleteTestUser(user.id)
   },
 
   // Create secondary test user for multi-user scenarios
-  secondUser: async ({}, use) => {
+  secondUser: async ({ _workerInit }, use) => {
     const user = await createTestUser('secondary')
     await use(user)
     await deleteTestUser(user.id)
   },
 
   // Create league owner user
-  leagueOwner: async ({}, use) => {
+  leagueOwner: async ({ _workerInit }, use) => {
     const user = await createTestUser('owner')
     await use(user)
     await deleteTestUser(user.id)
