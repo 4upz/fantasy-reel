@@ -1,3 +1,8 @@
+## Project Context
+- This is a Next.js + Supabase + TypeScript fantasy movies app (Fantasy Reel) deployed on Vercel.
+- Frontend project on Vercel is named `fantasy-reel-frontend` (not `fantasy-reel`).
+- Design system conventions exist — check existing components before creating new patterns.
+
 # Fantasy Movies App
 
 Developer context for the Fantasy Movies web application - a fantasy league platform for movies.
@@ -81,6 +86,34 @@ npm run test:functions
 # Build for production
 npm run build
 ```
+
+---
+
+## E2E Testing
+- When fixing E2E tests, always start with infrastructure-level analysis (auth flow, DB setup, parallelization) before fixing individual test assertions.
+- Test selectors must account for mobile-hidden elements — prefer data-testid attributes over CSS/nav selectors.
+- After modifying test files, run the full test suite (not just individual tests) to catch parallelization and shared-state issues.
+- Always copy `.env.local` when creating worktrees for test environments.
+
+---
+
+## Git & Commits
+- Before committing, ALWAYS run `git status` and `git diff --stat` to confirm ALL changed files are staged — do not assume only the files you edited are the relevant ones.
+- Never use `--no-verify-jwt` or similar security-bypassing flags in production deployments without explicit user approval.
+
+---
+
+## Debugging Approach
+- When diagnosing bugs, form 2-3 hypotheses and validate each against the code BEFORE implementing a fix. Do not implement the first hypothesis without evidence.
+- If a fix doesn't resolve the issue after implementation, step back and re-examine assumptions rather than iterating on the same approach.
+- For Supabase/PostgREST issues, always check: FK relationships, RLS policies, config.toml entries, and migration status.
+
+---
+
+## Supabase & Deployment
+- Auth tokens use cookies (not localStorage) in this project — do not assume localStorage-based auth flows.
+- When deploying Edge Functions, verify: function is deployed, config.toml has the entry, and all migrations are applied.
+- Environment variables: use NEXT_PUBLIC_SITE_URL for client-side, SITE_URL for server-side. Clarify with user before introducing new env vars like APP_URL.
 
 ---
 
