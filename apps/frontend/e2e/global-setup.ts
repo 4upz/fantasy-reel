@@ -71,9 +71,9 @@ async function seedTestMovies(): Promise<void> {
     tmdb_id: m.tmdb_id,
     title: m.title,
     release_date: m.release_date,
-    poster_url: m.poster_path,
+    poster_url: m.poster_url,
     overview: m.overview,
-    status: 'upcoming' as const,
+    status: m.status,
   }))
 
   const { error } = await client

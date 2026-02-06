@@ -7,6 +7,8 @@
  * @see https://supabase.com/docs/guides/local-development/testing/overview
  */
 
+import { randomUUID } from 'crypto'
+
 let workerIndex: number = 0
 
 /**
@@ -30,39 +32,39 @@ export function getWorkerIndex(): number {
 /**
  * Generate a unique TMDB ID for this worker.
  *
- * Each worker gets 1000 IDs in distinct ranges:
- * - Worker 0: 90000-90999
- * - Worker 1: 91000-91999
- * - Worker 2: 92000-92999
+ * Each worker gets 10000 IDs in distinct ranges:
+ * - Worker 0: 900000-909999
+ * - Worker 1: 910000-919999
+ * - Worker 2: 920000-929999
  * - etc.
  *
  * This prevents upsert race conditions when parallel workers create movies.
  *
- * @param localId - A number 0-999 identifying the movie within this worker's tests
+ * @param localId - A number 0-9999 identifying the movie within this worker's tests
  * @returns A unique TMDB ID
  */
 export function uniqueTmdbId(localId: number): number {
-  if (localId < 0 || localId >= 1000) {
-    throw new Error(`localId must be 0-999, got ${localId}`)
+  if (localId < 0 || localId >= 10000) {
+    throw new Error(`localId must be 0-9999, got ${localId}`)
   }
-  const base = 90000 + workerIndex * 1000
+  const base = 900000 + workerIndex * 10000
   return base + localId
 }
 
 /**
  * Generate a unique user email for this worker.
  *
- * Format: test-{prefix}-w{workerIndex}-{timestamp}-{random}@test.local
+ * Format: test-{prefix}-w{workerIndex}-{timestamp}-{uuid}@test.local
  *
- * This prevents email collisions even if workers start at the same millisecond.
+ * Uses UUID instead of Math.random() for better uniqueness guarantees
+ * and prevents email collisions even if workers start at the same millisecond.
  *
  * @param prefix - A descriptive prefix (e.g., "primary", "owner")
  * @returns A unique email address
  */
 export function uniqueEmail(prefix: string): string {
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).slice(2, 8)
-  return `test-${prefix}-w${workerIndex}-${timestamp}-${random}@test.local`
+  const uuid = randomUUID().slice(0, 8)
+  return `test-${prefix}-w${workerIndex}-${Date.now()}-${uuid}@test.local`
 }
 
 /**

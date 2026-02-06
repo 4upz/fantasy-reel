@@ -92,7 +92,7 @@ export default function PickOrderQueue({
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-testid="pick-order-queue">
       <h4 className="text-xs font-medium text-foreground-muted uppercase tracking-wider">
         Upcoming Picks
       </h4>

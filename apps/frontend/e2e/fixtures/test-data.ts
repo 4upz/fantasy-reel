@@ -3,51 +3,75 @@
  * These match the mock responses from TMDb/OMDb APIs
  */
 
+/**
+ * Mock movie data matching TMDbSearchResult interface
+ * Used by mock-api.helper.ts to mock Edge Function responses
+ */
 export const MOCK_MOVIES = [
   {
-    id: 12345,
+    id: 12345, // kept for backward compatibility with some tests
     tmdb_id: 12345,
     title: 'Test Movie Alpha',
-    release_date: '2025-06-15',
+    release_date: '2026-06-15',
     poster_path: '/test-poster-alpha.jpg',
+    poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-alpha.jpg',
     overview: 'A test movie for E2E testing - action thriller',
     vote_average: 7.5,
+    popularity: 85.5,
+    genre_ids: [28, 53], // Action, Thriller
+    status: 'upcoming' as const,
   },
   {
     id: 12346,
     tmdb_id: 12346,
     title: 'Test Movie Beta',
-    release_date: '2025-07-20',
+    release_date: '2026-07-20',
     poster_path: '/test-poster-beta.jpg',
+    poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-beta.jpg',
     overview: 'Another test movie - drama',
     vote_average: 8.2,
+    popularity: 72.3,
+    genre_ids: [18], // Drama
+    status: 'upcoming' as const,
   },
   {
     id: 12347,
     tmdb_id: 12347,
     title: 'Test Movie Gamma',
-    release_date: '2025-08-10',
+    release_date: '2026-08-10',
     poster_path: '/test-poster-gamma.jpg',
+    poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-gamma.jpg',
     overview: 'Third test movie - comedy',
     vote_average: 6.8,
+    popularity: 63.1,
+    genre_ids: [35], // Comedy
+    status: 'upcoming' as const,
   },
   {
     id: 12348,
     tmdb_id: 12348,
     title: 'Test Movie Delta',
-    release_date: '2025-09-05',
+    release_date: '2026-09-05',
     poster_path: '/test-poster-delta.jpg',
+    poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-delta.jpg',
     overview: 'Fourth test movie - sci-fi',
     vote_average: 9.1,
+    popularity: 91.7,
+    genre_ids: [878], // Science Fiction
+    status: 'upcoming' as const,
   },
   {
     id: 12349,
     tmdb_id: 12349,
     title: 'Test Movie Epsilon',
-    release_date: '2025-10-15',
+    release_date: '2026-10-15',
     poster_path: '/test-poster-epsilon.jpg',
+    poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-epsilon.jpg',
     overview: 'Fifth test movie - horror',
     vote_average: 5.5,
+    popularity: 45.2,
+    genre_ids: [27], // Horror
+    status: 'upcoming' as const,
   },
 ] as const
 

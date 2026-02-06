@@ -186,23 +186,6 @@ export async function loginAs(page: Page, user: TestUser): Promise<void> {
 }
 
 /**
- * Login programmatically via UI
- *
- * Note: This now uses UI login because Supabase SSR middleware
- * reads auth from cookies, not localStorage. The UI login properly
- * sets both cookies and localStorage through the browser's Supabase client.
- *
- * @deprecated Use loginAs() directly instead - this function now just wraps it
- */
-export async function loginProgrammatically(
-  page: Page,
-  user: TestUser
-): Promise<void> {
-  // Use UI login for proper cookie setup
-  await loginAs(page, user)
-}
-
-/**
  * Logout the current user
  */
 export async function logout(page: Page): Promise<void> {

@@ -16,9 +16,9 @@ test.describe('Critical Path: Authentication @critical @smoke', () => {
     await expect(page).toHaveTitle(/Fantasy Reel/)
 
     // Complete login flow
-    await page.fill('[data-testid="email-input"]', testUser.email)
-    await page.fill('[data-testid="password-input"]', testUser.password)
-    await page.click('[data-testid="login-button"]')
+    await page.getByTestId('email-input').fill(testUser.email)
+    await page.getByTestId('password-input').fill(testUser.password)
+    await page.getByTestId('login-button').click()
 
     // Verify successful authentication
     await page.waitForURL('/dashboard')
@@ -45,27 +45,24 @@ test.describe('Critical Path: League Creation @critical @smoke', () => {
     await authenticatedPage.goto('/dashboard')
 
     // Click create league button (or "Create Your First League" in empty state)
-    const createButton = authenticatedPage.getByRole('button', {
-      name: /create.*league/i,
-    })
-    await expect(createButton.first()).toBeVisible()
-    await createButton.first().click()
+    const createButton = authenticatedPage.getByTestId('create-league-button')
+    await expect(createButton).toBeVisible({ timeout: 10000 })
+    await createButton.click()
+
+    // Wait for modal to appear
+    await expect(authenticatedPage.getByRole('dialog')).toBeVisible()
 
     // Fill league creation form
-    await authenticatedPage.fill('[data-testid="league-name-input"]', 'Smoke Test League')
-    await authenticatedPage.fill(
-      '[data-testid="team-name-input"]',
-      'Smoke Test Team'
-    )
+    await authenticatedPage.getByTestId('league-name-input').fill('Smoke Test League')
 
     // Submit the form
-    await authenticatedPage.click('[data-testid="create-league-submit"]')
+    await authenticatedPage.getByTestId('create-league-submit').click()
 
     // Verify navigation to league page
     await authenticatedPage.waitForURL(/\/league\/[a-f0-9-]+/)
 
-    // Verify league page loaded (shows draft board)
-    await expect(authenticatedPage.getByText(/draft board/i)).toBeVisible({
+    // Verify league page loaded (shows Setup status for new league)
+    await expect(authenticatedPage.getByText('Setup').first()).toBeVisible({
       timeout: 10000,
     })
   })
@@ -110,13 +107,15 @@ test.describe('Critical Path: Draft (Owner Flow) @critical @smoke', () => {
     // First create a league
     await authenticatedPage.goto('/dashboard')
 
-    const createButton = authenticatedPage.getByRole('button', {
-      name: /create.*league/i,
-    })
-    await createButton.first().click()
+    const createButton = authenticatedPage.getByTestId('create-league-button')
+    await expect(createButton).toBeVisible({ timeout: 10000 })
+    await createButton.click()
 
-    await authenticatedPage.fill('[data-testid="league-name-input"]', 'Draft Test League')
-    await authenticatedPage.click('[data-testid="create-league-submit"]')
+    // Wait for modal
+    await expect(authenticatedPage.getByRole('dialog')).toBeVisible()
+
+    await authenticatedPage.getByTestId('league-name-input').fill('Draft Test League')
+    await authenticatedPage.getByTestId('create-league-submit').click()
 
     // Wait for league page
     await authenticatedPage.waitForURL(/\/league\/[a-f0-9-]+/)

@@ -9,9 +9,9 @@ test.describe('User Login', () => {
     await page.goto('/login')
 
     // Fill login form
-    await page.fill('[data-testid="email-input"]', testUser.email)
-    await page.fill('[data-testid="password-input"]', testUser.password)
-    await page.click('[data-testid="login-button"]')
+    await page.getByTestId('email-input').fill(testUser.email)
+    await page.getByTestId('password-input').fill(testUser.password)
+    await page.getByTestId('login-button').click()
 
     // Should redirect to dashboard
     await page.waitForURL('/dashboard')
@@ -24,9 +24,9 @@ test.describe('User Login', () => {
     await page.goto('/login')
 
     // Fill form with invalid credentials
-    await page.fill('[data-testid="email-input"]', 'nonexistent@test.local')
-    await page.fill('[data-testid="password-input"]', 'WrongPassword123!')
-    await page.click('[data-testid="login-button"]')
+    await page.getByTestId('email-input').fill('nonexistent@test.local')
+    await page.getByTestId('password-input').fill('WrongPassword123!')
+    await page.getByTestId('login-button').click()
 
     // Should show error message (in form alert - use first() since toast may also show it)
     await expect(page.locator('form').getByText(/invalid email or password/i)).toBeVisible()
@@ -39,7 +39,7 @@ test.describe('User Login', () => {
     await page.goto('/login')
 
     // Click submit without filling form
-    await page.click('[data-testid="login-button"]')
+    await page.getByTestId('login-button').click()
 
     // Should show validation errors (implementation depends on form validation)
     // At minimum, should not navigate away
@@ -54,9 +54,9 @@ test.describe('User Login', () => {
     await page.waitForURL(/\/login/)
 
     // Login
-    await page.fill('[data-testid="email-input"]', testUser.email)
-    await page.fill('[data-testid="password-input"]', testUser.password)
-    await page.click('[data-testid="login-button"]')
+    await page.getByTestId('email-input').fill(testUser.email)
+    await page.getByTestId('password-input').fill(testUser.password)
+    await page.getByTestId('login-button').click()
 
     // Should redirect to originally requested page
     await page.waitForURL('/dashboard')
@@ -70,18 +70,20 @@ test.describe('User Login', () => {
   })
 
   test('forgot password link navigates correctly', async ({ page }) => {
-    // Directly navigate to forgot password to verify the page exists
-    await page.goto('/forgot-password')
+    await page.goto('/login')
 
-    // Verify we can access the forgot password page
-    await expect(page.getByText(/reset|password/i).first()).toBeVisible()
+    // Click forgot password link via testid
+    await page.getByTestId('forgot-password-link').click()
+
+    // Verify we navigated to the forgot password page
+    await page.waitForURL('/forgot-password')
   })
 
   test('signup link navigates correctly', async ({ page }) => {
     await page.goto('/login')
 
     // Click signup link
-    await page.click('text=Sign up')
+    await page.getByRole('link', { name: /sign up/i }).click()
 
     // Should navigate to signup page
     await page.waitForURL('/signup')
@@ -102,13 +104,8 @@ test.describe('Authenticated Session', () => {
     await authenticatedPage.goto('/dashboard')
     await expect(authenticatedPage.getByText(/your leagues/i)).toBeVisible()
 
-    // Use Playwright's request API to POST to signout endpoint with page cookies
-    const cookies = await authenticatedPage.context().cookies()
-    await authenticatedPage.request.post('/auth/signout', {
-      headers: {
-        Cookie: cookies.map(c => `${c.name}=${c.value}`).join('; '),
-      },
-    })
+    // POST to signout endpoint to clear session
+    await authenticatedPage.request.post('/auth/signout')
 
     // After signout, navigating to dashboard should redirect to login
     await authenticatedPage.goto('/dashboard')

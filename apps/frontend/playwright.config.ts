@@ -1,4 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
+import dotenv from 'dotenv'
+import path from 'path'
+
+// Load environment variables from .env.local
+dotenv.config({ path: path.resolve(__dirname, '.env.local') })
 
 /**
  * E2E Test Configuration for Fantasy Reel
@@ -84,11 +89,13 @@ export default defineConfig({
      */
     {
       name: 'setup',
+      testDir: './e2e',
       testMatch: /global-setup\.ts/,
       teardown: 'teardown',
     },
     {
       name: 'teardown',
+      testDir: './e2e',
       testMatch: /global-teardown\.ts/,
     },
 

@@ -181,6 +181,9 @@ export default function PlaceBidModal({
     <div className="modal-overlay">
       <div
         ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="place-bid-title"
         className="glass modal-panel max-w-2xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col rounded-2xl border border-border shadow-heavy"
       >
         {/* Header */}
@@ -196,7 +199,7 @@ export default function PlaceBidModal({
               </button>
             )}
             <div>
-              <h2 className="font-display text-xl font-semibold text-foreground">
+              <h2 id="place-bid-title" className="font-display text-xl font-semibold text-foreground">
                 {counterBidTarget ? 'Counter Bid' : selectedMovie ? 'Set Your Bid' : 'Place a Bid'}
               </h2>
               <p className="text-sm text-foreground-muted mt-0.5">

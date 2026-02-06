@@ -131,6 +131,7 @@ export default function ResetPasswordPage() {
                 disabled={isLoading}
                 className="input"
                 placeholder="New password (min 6 characters)"
+                data-testid="password-input"
               />
             </div>
             <div>
@@ -146,11 +147,12 @@ export default function ResetPasswordPage() {
                 disabled={isLoading}
                 className="input"
                 placeholder="Confirm new password"
+                data-testid="confirm-password-input"
               />
             </div>
           </div>
 
-          <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3">
+          <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="submit-button">
             {isLoading ? 'Updating...' : 'Update password'}
           </button>
         </form>
