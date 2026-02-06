@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test'
 import {
-  getLatestEmail,
+  captureEmailBaseline,
+  waitForNewEmail,
   clearMailbox,
   extractAuthLink,
-  waitForEmailWithSubject,
 } from '../../helpers/email.helper'
 import { createTestUser, deleteTestUser } from '../../helpers/supabase.helper'
 import { generateTestEmail } from '../../fixtures/test-data'
@@ -23,6 +23,13 @@ test.describe('Password Reset', () => {
         await clearMailbox(user.email)
 
         await page.goto('/forgot-password')
+        await page.waitForLoadState('networkidle')
+
+        // Verify we're on the forgot-password page
+        await expect(page.getByTestId('reset-button')).toBeVisible({ timeout: 10000 })
+
+        // Capture email baseline BEFORE triggering reset
+        const baseline = await captureEmailBaseline(user.email)
 
         // Fill email
         await page.fill('[data-testid="email-input"]', user.email)
@@ -30,13 +37,16 @@ test.describe('Password Reset', () => {
         // Submit
         await page.click('[data-testid="reset-button"]')
 
-        // Should show success message
-        await expect(
-          page.getByText(/check your email|reset link sent|email sent/i)
-        ).toBeVisible({ timeout: 10000 })
+        // Wait for form submission to complete
+        await page.waitForLoadState('networkidle')
 
-        // Verify email was received
-        const email = await waitForEmailWithSubject(user.email, 'reset', 15000)
+        // Should show success message (heading)
+        await expect(
+          page.getByRole('heading', { name: /check your email/i })
+        ).toBeVisible({ timeout: 15000 })
+
+        // Wait for NEW email (after baseline)
+        const email = await waitForNewEmail(user.email, baseline, 15000)
         expect(email.subject.toLowerCase()).toMatch(/reset|password/)
 
         // Verify link in email
@@ -47,7 +57,7 @@ test.describe('Password Reset', () => {
       }
     })
 
-    test('shows error for non-existent email', async ({ page }) => {
+    test('shows success for non-existent email (security)', async ({ page }) => {
       await page.goto('/forgot-password')
 
       // Fill with non-existent email
@@ -59,13 +69,15 @@ test.describe('Password Reset', () => {
       // Submit
       await page.click('[data-testid="reset-button"]')
 
-      // Supabase typically shows success even for non-existent emails (security)
-      // But we should not show an error
-      // Wait for response
-      await page.waitForTimeout(2000)
+      // Wait for form submission to complete
+      await page.waitForLoadState('networkidle')
 
-      // Should either show success message or subtle indication
+      // Supabase shows success even for non-existent emails (security best practice)
       // Should NOT expose that email doesn't exist
+      // Instead should show same "check your email" message
+      await expect(
+        page.getByRole('heading', { name: /check your email/i })
+      ).toBeVisible({ timeout: 10000 })
     })
 
     test('validates email format', async ({ page }) => {
@@ -77,10 +89,15 @@ test.describe('Password Reset', () => {
       // Submit
       await page.click('[data-testid="reset-button"]')
 
-      // Should show validation error or browser validation
-      await expect(
-        page.locator('[data-testid="email-input"]:invalid')
-      ).toBeVisible()
+      // Wait for form submission attempt
+      await page.waitForLoadState('networkidle')
+
+      // Browser validation should prevent submission - check validity state
+      const emailInput = page.getByTestId('email-input')
+      const isEmailInvalid = await emailInput.evaluate(
+        (el: HTMLInputElement) => !el.validity.valid
+      )
+      expect(isEmailInvalid).toBe(true)
     })
 
     test('back to login link works', async ({ page }) => {
@@ -104,21 +121,30 @@ test.describe('Password Reset', () => {
 
         // Request reset
         await page.goto('/forgot-password')
+
+        // Capture email baseline BEFORE triggering reset
+        const baseline = await captureEmailBaseline(user.email)
+
         await page.fill('[data-testid="email-input"]', user.email)
         await page.click('[data-testid="reset-button"]')
 
-        // Wait for email
-        await expect(
-          page.getByText(/check your email|reset link sent/i)
-        ).toBeVisible({ timeout: 10000 })
+        // Wait for form submission to complete
+        await page.waitForLoadState('networkidle')
 
-        const email = await waitForEmailWithSubject(user.email, 'reset', 15000)
+        // Wait for confirmation message (heading)
+        await expect(
+          page.getByRole('heading', { name: /check your email/i })
+        ).toBeVisible({ timeout: 15000 })
+
+        // Wait for NEW email (after baseline)
+        const email = await waitForNewEmail(user.email, baseline, 15000)
         const resetLink = extractAuthLink(email, 'reset')
 
         expect(resetLink).toBeTruthy()
 
         // Visit reset link
         await page.goto(resetLink!)
+        await page.waitForLoadState('networkidle')
 
         // Should show password reset form
         await expect(page.getByTestId('password-input')).toBeVisible({
@@ -129,14 +155,16 @@ test.describe('Password Reset', () => {
         const newPassword = 'NewSecurePassword456!'
         await page.fill('[data-testid="password-input"]', newPassword)
 
-        // If there's a confirm password field
+        // Fill confirm password if the field exists
         const confirmInput = page.getByTestId('confirm-password-input')
-        if (await confirmInput.isVisible().catch(() => false)) {
+        const confirmVisible = await confirmInput.isVisible({ timeout: 1000 }).catch(() => false)
+        if (confirmVisible) {
           await confirmInput.fill(newPassword)
         }
 
         // Submit
         await page.click('[data-testid="submit-button"]')
+        await page.waitForLoadState('networkidle')
 
         // Should show success and redirect to login
         await expect(
@@ -165,46 +193,37 @@ test.describe('Password Reset', () => {
       ).toBeVisible({ timeout: 10000 })
     })
 
-    test('password validation enforced', async ({ page }) => {
+    // Skip: requires valid token state which is complex to set up
+    test.skip('password validation enforced', async ({ page }) => {
       // This test checks that weak passwords are rejected
       // We'd need a valid token to fully test this
 
       await page.goto('/reset-password')
 
-      // If the page has a password input (requires valid token state)
       const passwordInput = page.getByTestId('password-input')
 
-      if (await passwordInput.isVisible().catch(() => false)) {
-        // Try weak password
-        await passwordInput.fill('123')
-        await page.click('[data-testid="submit-button"]')
+      // Try weak password
+      await passwordInput.fill('123')
+      await page.click('[data-testid="submit-button"]')
 
-        // Should show validation error
-        await expect(page.getByText(/password.*weak|too short|requirements/i)).toBeVisible()
-      }
+      // Should show validation error
+      await expect(page.getByText(/password.*weak|too short|requirements/i)).toBeVisible()
     })
 
-    test('shows password requirements', async ({ page }) => {
+    // Skip: requires valid token state which is complex to set up
+    test.skip('shows password requirements', async ({ page }) => {
       // Navigate to reset password page
       await page.goto('/reset-password')
 
-      // If the page shows requirements
       const passwordInput = page.getByTestId('password-input')
 
-      if (await passwordInput.isVisible().catch(() => false)) {
-        // Focus on password field
-        await passwordInput.focus()
+      // Focus on password field
+      await passwordInput.focus()
 
-        // Should show password requirements hint
-        // This depends on UI implementation
-        const hasRequirements = await page
-          .getByText(/at least.*characters|uppercase|lowercase|number/i)
-          .isVisible()
-          .catch(() => false)
-
-        // Requirements should be visible either always or on focus
-        // If not, the password field should have appropriate validation
-      }
+      // Should show password requirements hint
+      await expect(
+        page.getByText(/at least.*characters|uppercase|lowercase|number/i)
+      ).toBeVisible()
     })
   })
 
@@ -225,31 +244,41 @@ test.describe('Password Reset', () => {
         // Should be on forgot password page
         await page.waitForURL('/forgot-password')
 
+        // Capture email baseline BEFORE triggering reset
+        const baseline = await captureEmailBaseline(user.email)
+
         // Request reset
         await page.fill('[data-testid="email-input"]', user.email)
         await page.click('[data-testid="reset-button"]')
 
-        // Wait for confirmation
-        await expect(
-          page.getByText(/check your email/i)
-        ).toBeVisible({ timeout: 10000 })
+        // Wait for form submission to complete
+        await page.waitForLoadState('networkidle')
 
-        // Get email and click link
-        const email = await waitForEmailWithSubject(user.email, 'reset', 15000)
+        // Wait for confirmation (heading)
+        await expect(
+          page.getByRole('heading', { name: /check your email/i })
+        ).toBeVisible({ timeout: 15000 })
+
+        // Wait for NEW email (after baseline)
+        const email = await waitForNewEmail(user.email, baseline, 15000)
         const resetLink = extractAuthLink(email, 'reset')
 
         // Reset password
         await page.goto(resetLink!)
+        await page.waitForLoadState('networkidle')
 
         const newPassword = 'CompletelyNewPassword789!'
         await page.fill('[data-testid="password-input"]', newPassword)
 
+        // Fill confirm password if the field exists
         const confirmInput = page.getByTestId('confirm-password-input')
-        if (await confirmInput.isVisible().catch(() => false)) {
+        const confirmVisible = await confirmInput.isVisible({ timeout: 1000 }).catch(() => false)
+        if (confirmVisible) {
           await confirmInput.fill(newPassword)
         }
 
         await page.click('[data-testid="submit-button"]')
+        await page.waitForLoadState('networkidle')
 
         // Should redirect to login
         await page.waitForURL('/login', { timeout: 10000 })

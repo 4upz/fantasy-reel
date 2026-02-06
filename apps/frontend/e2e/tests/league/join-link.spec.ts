@@ -5,6 +5,7 @@ import {
   updateLeagueStatus,
   getAdminClient,
 } from '../../helpers/supabase.helper'
+import { waitForPageSettle } from '../../helpers/ui.helper'
 
 /**
  * Shareable Join Link E2E tests
@@ -29,6 +30,7 @@ test.describe('Shareable Join Links', () => {
 
       // Navigate to join page with code
       await userPage.goto(`/join?code=${joinCode}`)
+      await userPage.waitForLoadState('networkidle')
 
       // Should show league details
       await expect(userPage.getByText(testLeague.name)).toBeVisible()
@@ -39,8 +41,11 @@ test.describe('Shareable Join Links', () => {
       // Submit join request
       await userPage.click('[data-testid="join-league-button"]')
 
+      // Wait for network request to complete
+      await userPage.waitForLoadState('networkidle')
+
       // Should redirect to league page
-      await userPage.waitForURL(`/league/${testLeague.id}**`)
+      await userPage.waitForURL(`/league/${testLeague.id}**`, { timeout: 10000 })
 
       // Verify user is now a participant
       await expect(userPage.getByText('My New Team')).toBeVisible()
@@ -53,6 +58,7 @@ test.describe('Shareable Join Links', () => {
 
       // Navigate with invalid code
       await page.goto('/join?code=INVALIDCODE123')
+      await page.waitForLoadState('networkidle')
 
       // Should show error message
       await expect(
@@ -113,6 +119,7 @@ test.describe('Shareable Join Links', () => {
 
       await loginAs(userPage, testUser)
       await userPage.goto(`/join?code=${joinCode}`)
+      await userPage.waitForLoadState('networkidle')
 
       // Should show league full error
       await expect(userPage.getByText(/full|maximum.*reached/i)).toBeVisible()
@@ -142,6 +149,7 @@ test.describe('Shareable Join Links', () => {
 
       await loginAs(userPage, testUser)
       await userPage.goto(`/join?code=${joinCode}`)
+      await userPage.waitForLoadState('networkidle')
 
       // Should show error about draft already started
       await expect(
@@ -163,12 +171,16 @@ test.describe('Shareable Join Links', () => {
 
       // Navigate to league settings
       await page.goto(`/league/${testLeague.id}/settings`)
+      await page.waitForLoadState('networkidle')
 
       // Find join link section
       await expect(page.getByText(/shareable.*link|join.*link/i)).toBeVisible()
 
       // Click generate button
       await page.click('[data-testid="generate-join-link-button"]')
+
+      // Wait for network request to complete
+      await page.waitForLoadState('networkidle')
 
       // Should show the generated code
       await expect(page.getByTestId('join-code-display')).toBeVisible()
@@ -194,6 +206,7 @@ test.describe('Shareable Join Links', () => {
       await generateJoinLink(testLeague.id)
 
       await page.goto(`/league/${testLeague.id}/settings`)
+      await page.waitForLoadState('networkidle')
 
       // Find and click copy button
       await page.click('[data-testid="copy-join-link-button"]')
@@ -215,18 +228,21 @@ test.describe('Shareable Join Links', () => {
       const { joinCode: oldCode } = await generateJoinLink(testLeague.id)
 
       await page.goto(`/league/${testLeague.id}/settings`)
+      await page.waitForLoadState('networkidle')
 
       // Click regenerate
       await page.click('[data-testid="regenerate-join-link-button"]')
 
       // Confirm regeneration if dialog appears
       const confirmButton = page.getByTestId('confirm-regenerate-button')
-      if (await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+      const confirmVisible = await confirmButton.isVisible({ timeout: 1000 }).catch(() => false)
+      if (confirmVisible) {
         await confirmButton.click()
       }
 
-      // Wait for new code to appear
-      await page.waitForTimeout(1000)
+      // Wait for network request to complete
+      await page.waitForLoadState('networkidle')
+      await waitForPageSettle(page)
 
       // Get new code
       const newCodeElement = page.getByTestId('join-code-display')
@@ -241,6 +257,7 @@ test.describe('Shareable Join Links', () => {
 
       await loginAs(userPage, testUser)
       await userPage.goto(`/join?code=${oldCode}`)
+      await userPage.waitForLoadState('networkidle')
 
       // Should show error
       await expect(
@@ -266,11 +283,13 @@ test.describe('Shareable Join Links', () => {
       await updateLeagueStatus(testLeague.id, 'drafting')
 
       await page.goto(`/league/${testLeague.id}/settings`)
+      await page.waitForLoadState('networkidle')
 
       // Generate button should be disabled or section should indicate unavailable
       const generateButton = page.getByTestId('generate-join-link-button')
+      const buttonVisible = await generateButton.isVisible({ timeout: 2000 }).catch(() => false)
 
-      if (await generateButton.isVisible().catch(() => false)) {
+      if (buttonVisible) {
         await expect(generateButton).toBeDisabled()
       } else {
         // Or section shows unavailable message
@@ -292,6 +311,7 @@ test.describe('Shareable Join Links', () => {
 
       // Try to access settings directly
       await userPage.goto(`/league/${testLeague.id}/settings`)
+      await userPage.waitForLoadState('networkidle')
 
       // Should be redirected or show access denied
       // Either redirected away from settings or see error message
@@ -323,6 +343,7 @@ test.describe('Shareable Join Links', () => {
       const { joinCode } = await generateJoinLink(testLeague.id)
 
       await page.goto(`/league/${testLeague.id}/settings`)
+      await page.waitForLoadState('networkidle')
 
       // Should display existing code
       await expect(page.getByTestId('join-code-display')).toContainText(
@@ -342,13 +363,15 @@ test.describe('Shareable Join Links', () => {
       await clearJoinCode(testLeague.id)
 
       await page.goto(`/league/${testLeague.id}/settings`)
+      await page.waitForLoadState('networkidle')
 
       // Should show generate button/prompt, not a code
       await expect(page.getByTestId('generate-join-link-button')).toBeVisible()
 
       // Code display should not be visible or should be empty
       const codeDisplay = page.getByTestId('join-code-display')
-      if (await codeDisplay.isVisible().catch(() => false)) {
+      const codeVisible = await codeDisplay.isVisible({ timeout: 1000 }).catch(() => false)
+      if (codeVisible) {
         const text = await codeDisplay.textContent()
         expect(text?.trim()).toBeFalsy()
       }
@@ -368,6 +391,7 @@ test.describe('Shareable Join Links', () => {
       const { joinCode } = await generateJoinLink(testLeague.id)
 
       await page.goto(`/league/${testLeague.id}/draft`)
+      await page.waitForLoadState('networkidle')
 
       // JoinLinkCard should be visible
       await expect(page.getByTestId('join-link-card')).toBeVisible()
@@ -389,6 +413,7 @@ test.describe('Shareable Join Links', () => {
       await updateLeagueStatus(testLeague.id, 'drafting')
 
       await page.goto(`/league/${testLeague.id}/draft`)
+      await page.waitForLoadState('networkidle')
 
       // JoinLinkCard should not be visible
       await expect(page.getByTestId('join-link-card')).not.toBeVisible()
