@@ -8,12 +8,13 @@ import {
   createTestMovie,
   createDraftPick,
   enableLeagueBidding,
+  createTeamBudget,
   setTeamScore,
   getTeamId,
   createPickupBid,
   createTradeOffer,
-  addTradeAsset,
   createMovieReviews,
+  setDraftOrder,
   TestLeague,
 } from '../helpers/supabase.helper'
 import { uniqueTmdbId, uniqueLeagueName } from '../helpers/test-ids.helper'
@@ -109,6 +110,11 @@ export const test = authTest.extend<LeagueFixtures>({
       await createTeam(league.id, testUser.id, 'Test Team')
       await createTeam(league.id, secondUser.id, 'Second Team')
 
+      // Set draft order (required for DraftBoard turn calculation)
+      await setDraftOrder(league.id, leagueOwner.id, 1)
+      await setDraftOrder(league.id, testUser.id, 2)
+      await setDraftOrder(league.id, secondUser.id, 3)
+
       await use(league)
     } finally {
       await deleteTestLeague(league.id)
@@ -151,12 +157,16 @@ export const test = authTest.extend<LeagueFixtures>({
       // Add participant
       await addParticipant(league.id, testUser.id)
 
-      // Create teams with budgets
-      await createTeam(league.id, leagueOwner.id, 'Owner Team')
+      // Create teams
+      const ownerTeam = await createTeam(league.id, leagueOwner.id, 'Owner Team')
       const team = await createTeam(league.id, testUser.id, 'Test Team')
 
       // Enable bidding
       await enableLeagueBidding(league.id)
+
+      // Create team_budgets rows (required by place-bid edge function)
+      await createTeamBudget(ownerTeam.id, 100)
+      await createTeamBudget(team.id, 100)
 
       await use({
         ...league,
@@ -263,11 +273,15 @@ export const test = authTest.extend<LeagueFixtures>({
       await addParticipant(league.id, testUser.id)
 
       // Create teams
-      await createTeam(league.id, leagueOwner.id, 'Owner Team')
+      const ownerTeam = await createTeam(league.id, leagueOwner.id, 'Owner Team')
       const team = await createTeam(league.id, testUser.id, 'Test Team')
 
       // Enable bidding
       await enableLeagueBidding(league.id)
+
+      // Create team_budgets rows (required by place-bid edge function)
+      await createTeamBudget(ownerTeam.id, 100)
+      await createTeamBudget(team.id, 100)
 
       // Create an active bid with worker-unique TMDB ID
       const bidTmdbId = uniqueTmdbId(101)
@@ -324,11 +338,14 @@ export const test = authTest.extend<LeagueFixtures>({
       await createDraftPick(league.id, testUserTeam.id, movie2.id, 2, 1)
 
       // Create pending trade offer from owner to testUser
-      const tradeOffer = await createTradeOffer(league.id, ownerTeam.id, testUserTeam.id)
-
-      // Add trade assets
-      await addTradeAsset(tradeOffer.id, ownerTeam.id, testUserTeam.id, movie1.id)
-      await addTradeAsset(tradeOffer.id, testUserTeam.id, ownerTeam.id, movie2.id)
+      // Trade items are now embedded directly in the trade_offers table
+      const tradeOffer = await createTradeOffer(
+        league.id,
+        ownerTeam.id,
+        testUserTeam.id,
+        { movies: [{ movie_id: movie1.id, source: 'draft_pick' }], faab: 0 },
+        { movies: [{ movie_id: movie2.id, source: 'draft_pick' }], faab: 0 }
+      )
 
       await use({
         ...league,

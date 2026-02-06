@@ -82,11 +82,14 @@ function CancelBidModal({
     <div className="modal-overlay">
       <div
         ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-bid-title"
         className="glass modal-panel max-w-sm w-full mx-4 rounded-xl border border-border shadow-heavy"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="font-display text-lg font-semibold text-foreground">
+          <h2 id="cancel-bid-title" className="font-display text-lg font-semibold text-foreground">
             Cancel Bid
           </h2>
           <button

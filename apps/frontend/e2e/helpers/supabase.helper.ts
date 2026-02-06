@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
-import { uniqueEmail, uniqueToken, uniqueLeagueName } from './test-ids.helper'
+import type { Page } from '@playwright/test'
+import { uniqueEmail, uniqueLeagueName } from './test-ids.helper'
 
 /**
  * Supabase helper for E2E test database operations
@@ -37,6 +38,91 @@ export function getAnonClient(): SupabaseClient<any> {
   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 }
 
+/**
+ * Verify that data exists in the database with retries.
+ * Useful for ensuring data is queryable after inserts (race condition prevention).
+ * @param maxRetries - Number of retry attempts (default: 5)
+ * @param delayMs - Delay between retries in milliseconds (default: 100)
+ */
+export async function verifyDataExists(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: SupabaseClient<any>,
+  table: string,
+  id: string,
+  maxRetries = 5,
+  delayMs = 100
+): Promise<void> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const { data, error } = await client
+      .from(table)
+      .select('id')
+      .eq('id', id)
+      .single()
+
+    if (data && !error) {
+      return // Data found, success
+    }
+
+    if (attempt < maxRetries) {
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+
+  throw new Error(
+    `Data not found in table '${table}' with id '${id}' after ${maxRetries} retries`
+  )
+}
+
+/**
+ * Verify that a profile exists for a given user_id with retries.
+ * Profiles table uses user_id column (not id) to match auth.users.
+ * @param userId - The auth.users id (NOT the profile's auto-generated id)
+ * @param maxRetries - Number of retry attempts (default: 15)
+ * @param delayMs - Delay between retries in milliseconds (default: 200)
+ */
+async function verifyProfileExists(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  client: SupabaseClient<any>,
+  userId: string,
+  maxRetries = 15,
+  delayMs = 200
+): Promise<void> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const { data, error } = await client
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userId)
+      .single()
+
+    if (data && !error) {
+      return // Profile found, success
+    }
+
+    if (attempt < maxRetries) {
+      // Wait before retrying
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+
+  throw new Error(
+    `Profile not found for user '${userId}' after ${maxRetries} retries`
+  )
+}
+
+/**
+ * Wait for real-time subscriptions to be ready on a page.
+ * Waits for DOM content to load fully. Callers should follow up
+ * with specific element assertions rather than relying on networkidle
+ * (which is unreliable with Supabase Realtime WebSockets).
+ */
+export async function waitForRealtimeReady(
+  page: Page,
+  timeout = 10000
+): Promise<void> {
+  await page.waitForLoadState('domcontentloaded', { timeout })
+}
+
 export interface TestUser {
   id: string
   email: string
@@ -68,6 +154,10 @@ export async function createTestUser(prefix: string): Promise<TestUser> {
 
   // Profile is created automatically by database trigger on_auth_user_created
   // The trigger uses user_metadata.display_name which we set above
+  // Verify profile exists before returning (handles race conditions)
+  // Note: profiles table uses user_id column (not id) to match auth.users
+  // Use more retries with longer delay for trigger-created data
+  await verifyProfileExists(client, authData.user.id, 15, 200)
 
   return {
     id: authData.user.id,
@@ -126,13 +216,27 @@ export async function createTestLeague(
     throw new Error(`Failed to create test league: ${error?.message}`)
   }
 
+  // Verify league exists before continuing
+  await verifyDataExists(client, 'leagues', data.id)
+
   // Add owner as participant
-  await client.from('league_participants').insert({
-    league_id: data.id,
-    user_id: ownerId,
-    role: 'owner',
-    status: 'active',
-  })
+  const { data: participantData, error: participantError } = await client
+    .from('league_participants')
+    .insert({
+      league_id: data.id,
+      user_id: ownerId,
+      role: 'owner',
+      status: 'active',
+    })
+    .select()
+    .single()
+
+  if (participantError || !participantData) {
+    throw new Error(`Failed to add owner as participant: ${participantError?.message}`)
+  }
+
+  // Verify participant exists before returning
+  await verifyDataExists(client, 'league_participants', participantData.id)
 
   return {
     id: data.id,
@@ -219,8 +323,8 @@ export async function deleteTestLeague(leagueId: string): Promise<void> {
 export async function cleanupTestData(): Promise<void> {
   const client = getAdminClient()
 
-  // Delete test leagues
-  await client.from('leagues').delete().like('name', 'E2E Test League%')
+  // Delete test leagues - match all E2E-prefixed names (including worker-scoped names)
+  await client.from('leagues').delete().like('name', 'E2E %')
 
   // Delete test users
   const { data: users } = await client.auth.admin.listUsers()
@@ -243,7 +347,6 @@ export async function createInvitation(
   invitedBy: string
 ): Promise<{ id: string; token: string }> {
   const client = getAdminClient()
-  const token = uniqueToken('test-token')
 
   const { data, error } = await client
     .from('invitations')
@@ -251,7 +354,6 @@ export async function createInvitation(
       league_id: leagueId,
       email,
       invited_by: invitedBy,
-      token,
       status: 'pending',
     })
     .select()
@@ -290,8 +392,8 @@ export async function generateJoinLink(
 ): Promise<{ joinCode: string }> {
   const client = getAdminClient()
 
-  // Generate a random join code (matches Edge Function format)
-  const joinCode = generateRandomCode(12)
+  // Generate a random 6-char join code (matches Edge Function format and VARCHAR(8) column limit)
+  const joinCode = generateRandomCode(6)
 
   const { error } = await client
     .from('leagues')
@@ -416,7 +518,8 @@ export async function createTestMovie(
  * Helper to generate random alphanumeric code
  */
 function generateRandomCode(length: number): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  // Excludes ambiguous chars (I, L, O, 0, 1) to match JOIN_CODE_REGEX in JoinLeagueClient
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
   let result = ''
   for (let i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length))
@@ -434,7 +537,6 @@ export async function createExpiredInvitation(
   invitedBy: string
 ): Promise<{ id: string; token: string }> {
   const client = getAdminClient()
-  const token = uniqueToken('expired-token')
 
   // Set expires_at to yesterday
   const yesterday = new Date()
@@ -446,7 +548,6 @@ export async function createExpiredInvitation(
       league_id: leagueId,
       email,
       invited_by: invitedBy,
-      token,
       status: 'pending',
       expires_at: yesterday.toISOString(),
     })
@@ -479,6 +580,13 @@ export async function createPickupBid(
 ): Promise<{ id: string }> {
   const client = getAdminClient()
 
+  // Calculate next Saturday 8pm UTC as processing deadline (matches get_next_processing_deadline() DB function)
+  const now = new Date()
+  const daysUntilSaturday = (6 - now.getUTCDay() + 7) % 7 || 7
+  const nextSaturday = new Date(now)
+  nextSaturday.setUTCDate(now.getUTCDate() + daysUntilSaturday)
+  nextSaturday.setUTCHours(20, 0, 0, 0)
+
   const { data, error } = await client
     .from('pickup_bids')
     .insert({
@@ -487,6 +595,7 @@ export async function createPickupBid(
       tmdb_id: tmdbId,
       amount,
       status: options?.status || 'active',
+      processing_deadline: nextSaturday.toISOString(),
       movie_data: {
         title: movieData.title,
         poster_url: movieData.posterUrl || `/test-poster-${tmdbId}.jpg`,
@@ -504,14 +613,27 @@ export async function createPickupBid(
 }
 
 /**
+ * Trade items structure for creating trade offers
+ */
+interface TradeItems {
+  movies: Array<{ movie_id: string; source: 'draft_pick' | 'pickup'; source_id?: string }>
+  faab: number
+}
+
+/**
  * Create a trade offer for testing
+ * Status values: proposed, countered, accepted, review, completed, rejected, cancelled, vetoed, expired
+ *
+ * Note: The trade_offers table requires at least one item (movie or FAAB) from either party
  */
 export async function createTradeOffer(
   leagueId: string,
   initiatorTeamId: string,
   recipientTeamId: string,
+  initiatorItems: TradeItems,
+  recipientItems: TradeItems,
   options?: {
-    status?: 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'vetoed'
+    status?: 'proposed' | 'countered' | 'accepted' | 'review' | 'completed' | 'rejected' | 'cancelled' | 'vetoed' | 'expired'
   }
 ): Promise<{ id: string }> {
   const client = getAdminClient()
@@ -522,7 +644,9 @@ export async function createTradeOffer(
       league_id: leagueId,
       initiator_team_id: initiatorTeamId,
       recipient_team_id: recipientTeamId,
-      status: options?.status || 'pending',
+      initiator_items: initiatorItems,
+      recipient_items: recipientItems,
+      status: options?.status || 'proposed',
     })
     .select()
     .single()
@@ -535,32 +659,29 @@ export async function createTradeOffer(
 }
 
 /**
- * Add a movie to a trade offer
+ * Create a team_budgets row for a team.
+ * Required for bidding tests - the place-bid edge function requires this row.
  */
-export async function addTradeAsset(
-  tradeOfferId: string,
-  fromTeamId: string,
-  toTeamId: string,
-  movieId: string
-): Promise<{ id: string }> {
+export async function createTeamBudget(
+  teamId: string,
+  remainingBudget = 100
+): Promise<void> {
   const client = getAdminClient()
 
-  const { data, error } = await client
-    .from('trade_assets')
-    .insert({
-      trade_offer_id: tradeOfferId,
-      from_team_id: fromTeamId,
-      to_team_id: toTeamId,
-      movie_id: movieId,
-    })
-    .select()
-    .single()
+  const { error } = await client
+    .from('team_budgets')
+    .upsert(
+      {
+        team_id: teamId,
+        remaining_budget: remainingBudget,
+        total_spent: 0,
+      },
+      { onConflict: 'team_id' }
+    )
 
-  if (error || !data) {
-    throw new Error(`Failed to add trade asset: ${error?.message}`)
+  if (error) {
+    throw new Error(`Failed to create team budget: ${error.message}`)
   }
-
-  return { id: data.id }
 }
 
 /**
@@ -640,63 +761,38 @@ export async function createMovieReviews(
   }
 }
 
-// Note: FAAB budget is stored on leagues table, not teams table
-// This function is a no-op placeholder for backward compatibility
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function updateTeamBudget(
-  _teamId: string,
-  _remainingBudget: number
-): Promise<void> {
-  // FAAB budget is managed at the league level, not team level
-  // No-op for backward compatibility with tests
-}
 
 /**
  * Enable bidding for a league
+ * Bidding is available in active leagues - this function sets the league status to 'active'
  */
-export async function enableLeagueBidding(
+export async function enableLeagueBidding(leagueId: string): Promise<void> {
+  const client = getAdminClient()
+  const { error } = await client
+    .from('leagues')
+    .update({ status: 'active' })
+    .eq('id', leagueId)
+  if (error) throw new Error(`Failed to enable bidding: ${error.message}`)
+}
+
+/**
+ * Set draft_order on a league participant
+ */
+export async function setDraftOrder(
   leagueId: string,
-  options?: {
-    startDate?: string
-    endDate?: string
-  }
+  userId: string,
+  draftOrder: number
 ): Promise<void> {
   const client = getAdminClient()
 
-  const startDate = options?.startDate || new Date().toISOString()
-  const endDate = options?.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-
-  // First check if config exists
-  const { data: existing } = await client
-    .from('league_bidding_config')
-    .select('league_id')
+  const { error } = await client
+    .from('league_participants')
+    .update({ draft_order: draftOrder })
     .eq('league_id', leagueId)
-    .single()
+    .eq('user_id', userId)
 
-  if (existing) {
-    const { error } = await client
-      .from('league_bidding_config')
-      .update({
-        bidding_enabled: true,
-        bidding_start_date: startDate,
-        bidding_end_date: endDate,
-      })
-      .eq('league_id', leagueId)
-
-    if (error) {
-      throw new Error(`Failed to enable bidding: ${error.message}`)
-    }
-  } else {
-    const { error } = await client.from('league_bidding_config').insert({
-      league_id: leagueId,
-      bidding_enabled: true,
-      bidding_start_date: startDate,
-      bidding_end_date: endDate,
-    })
-
-    if (error) {
-      throw new Error(`Failed to enable bidding: ${error.message}`)
-    }
+  if (error) {
+    throw new Error(`Failed to set draft order: ${error.message}`)
   }
 }
 

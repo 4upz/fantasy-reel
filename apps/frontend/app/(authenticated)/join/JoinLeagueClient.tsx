@@ -168,7 +168,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             </div>
 
             {joinError && (
-              <div id="join-error" className="alert alert-error mb-4" role="alert">
+              <div id="join-error" className="alert alert-error mb-4" role="alert" data-testid="form-error">
                 <p className="font-medium">Unable to join</p>
                 <p className="text-sm opacity-90">{joinError}</p>
               </div>
@@ -245,7 +245,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
           </div>
 
           {joinError && (
-            <div id="join-error" className="alert alert-error mb-4" role="alert">
+            <div id="join-error" className="alert alert-error mb-4" role="alert" data-testid="form-error">
               <p className="font-medium">Unable to join</p>
               <p className="text-sm opacity-90">{joinError}</p>
             </div>

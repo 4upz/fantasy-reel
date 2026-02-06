@@ -7,10 +7,6 @@ import { mockOAuthRedirect } from '../../helpers/mock-oauth.helper'
  * These tests verify OAuth UI elements and redirect behavior.
  * Full OAuth flow testing requires real OAuth credentials and is not
  * automated - it should be done manually or in integration tests.
- *
- * Note: The "Full Flow" tests that previously existed were removed because
- * mocking the complete OAuth flow with session injection is fragile and
- * doesn't provide value over the existing auth fixture tests.
  */
 test.describe('Discord OAuth', () => {
   test.describe('Login Page', () => {
@@ -76,33 +72,15 @@ test.describe('Discord OAuth', () => {
     })
   })
 
-  // Note: Connected Accounts tests are in the settings test file
-  // since they require proper authentication via the auth fixture.
-  // The OAuth tests here focus on the OAuth-specific functionality.
-
   test.describe('Account Linking Flow', () => {
-    test('link-account page handles Discord merge scenario', async ({
-      page,
-    }) => {
+    test('link-account page loads without errors', async ({ page }) => {
       // Navigate to link-account page (simulating OAuth callback redirect)
       await page.goto('/auth/link-account')
 
-      // Page should load without errors
-      // It may redirect or show a form depending on auth state
-
-      // Check for common elements
-      const hasLinkOption = await page
-        .getByText(/link|merge|connect/i)
-        .isVisible()
-        .catch(() => false)
-      const hasError = await page
-        .getByText(/error/i)
-        .isVisible()
-        .catch(() => false)
-      const redirected = !page.url().includes('/auth/link-account')
-
-      // One of these should be true - page loaded correctly
-      expect(hasLinkOption || hasError || redirected).toBe(true)
+      // Page should load without 500 errors
+      // It may redirect if no pending link session
+      const response = await page.reload()
+      expect(response?.status()).toBeLessThan(500)
     })
   })
 

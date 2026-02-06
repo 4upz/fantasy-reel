@@ -31,7 +31,7 @@ export default function DraftProgressRing({
   const isComplete = current >= total
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-2" data-testid="draft-progress">
       <div className="relative" style={{ width: ring, height: ring }}>
         {/* Background Ring */}
         <svg className="transform -rotate-90" width={ring} height={ring}>

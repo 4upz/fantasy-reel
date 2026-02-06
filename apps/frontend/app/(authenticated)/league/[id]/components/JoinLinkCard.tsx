@@ -68,7 +68,7 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
   }
 
   return (
-    <div className="card p-4">
+    <div className="card p-4" data-testid="join-link-card">
       <div className="flex items-center gap-2 mb-3">
         <div className="p-1.5 rounded-md bg-gold/10">
           <Link2 className="w-4 h-4 text-gold" />
@@ -94,15 +94,15 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
           >
             <div className="flex items-center justify-between">
               {showFullUrl ? (
-                <span className="text-sm text-foreground-secondary truncate pr-2 flex-1">
+                <span className="text-sm text-foreground-secondary truncate pr-2 flex-1" data-testid="join-link-url">
                   {joinUrl}
                 </span>
               ) : (
-                <span className="font-mono text-lg font-bold tracking-[0.25em] text-gold">
+                <span className="font-mono text-lg font-bold tracking-[0.25em] text-gold" data-testid="join-code-display">
                   {joinCode}
                 </span>
               )}
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1" data-testid="copy-join-link-button">
                 {copied ? (
                   <Check className="w-4 h-4 text-success" />
                 ) : (
@@ -136,6 +136,7 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
               onClick={() => generateLink()}
               disabled={isGenerating}
               className="text-xs text-foreground-muted hover:text-foreground-secondary flex items-center gap-1 transition-colors disabled:opacity-50"
+              data-testid="regenerate-join-link-button"
             >
               <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
               {isGenerating ? 'Regenerating...' : 'Regenerate'}
@@ -156,6 +157,7 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
             onClick={() => generateLink()}
             disabled={isGenerating}
             className="btn btn-secondary text-sm py-2 px-4"
+            data-testid="generate-join-link-button"
           >
             {isGenerating ? (
               <>

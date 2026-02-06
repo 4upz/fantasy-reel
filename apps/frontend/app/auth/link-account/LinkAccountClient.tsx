@@ -153,6 +153,7 @@ export default function LinkAccountClient({
             type="submit"
             disabled={isLinking || !password}
             className="btn btn-primary w-full py-3"
+            data-testid="merge-account-button"
           >
             {isLinking ? (
               <>

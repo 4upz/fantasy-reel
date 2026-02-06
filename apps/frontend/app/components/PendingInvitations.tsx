@@ -89,7 +89,7 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
   }
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-surface border border-border">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-surface border border-border" data-testid="invitation-card">
       <div className="flex-1 min-w-0">
         <h4 className="font-semibold text-foreground truncate">
           {invitation.leagues.name}
@@ -109,6 +109,7 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
         <button
           onClick={() => onAccept(invitation.token)}
           className="btn btn-primary text-sm"
+          data-testid="accept-invitation-button"
         >
           Accept
         </button>
@@ -116,6 +117,7 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
           onClick={() => onDecline(invitation.id)}
           disabled={isDeclining}
           className="btn btn-ghost text-sm"
+          data-testid="decline-invitation-button"
         >
           {isDeclining ? '...' : 'Decline'}
         </button>

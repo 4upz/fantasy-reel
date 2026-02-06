@@ -7,11 +7,16 @@ import { test, expect } from '../../fixtures/league.fixture'
  * Uses scoredLeague fixture which provides an active league with
  * teams that have different scores for ranking tests.
  *
- * Best Practices Applied:
- * - Uses fixtures for test data isolation
- * - Uses programmatic auth (authedPage) for speed
- * - Tests real Supabase data (scores set in fixture)
- * - Cleanup handled by fixture teardown
+ * Key UI elements:
+ * - team-row-{id}: Individual team standing cards (TeamStandingCard)
+ *
+ * IMPORTANT: Scores are displayed with formatFantasyPoints() which adds a "+"
+ * prefix for positive values. So score 150 displays as "+150".
+ *
+ * Fixture scores:
+ * - Owner Team: 150 (displays as "+150")
+ * - Test Team: 120 (displays as "+120")
+ * - Second Team: 80 (displays as "+80")
  */
 
 test.describe('Leaderboard Page @standings', () => {
@@ -19,28 +24,12 @@ test.describe('Leaderboard Page @standings', () => {
     authedPage,
     scoredLeague,
   }) => {
-    await authedPage.goto(`/league/${scoredLeague.id}`)
+    // Navigate directly to standings page
+    await authedPage.goto(`/league/${scoredLeague.id}/standings`)
 
-    // Look for standings link/tab
-    const standingsLink = authedPage.getByRole('link', {
-      name: /standings|leaderboard/i,
-    })
-    const hasStandingsLink = await standingsLink.isVisible().catch(() => false)
-
-    if (hasStandingsLink) {
-      await standingsLink.click()
-      await authedPage.waitForURL(
-        new RegExp(`/league/${scoredLeague.id}/standings`)
-      )
-    } else {
-      // Navigate directly
-      await authedPage.goto(`/league/${scoredLeague.id}/standings`)
-    }
-
-    // Verify standings page loaded
-    await expect(
-      authedPage.getByText(/standings|leaderboard|ranking/i).first()
-    ).toBeVisible({ timeout: 10000 })
+    // Verify standings page loaded - look for team rows
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
   })
 
   test('displays team rankings in correct order', async ({
@@ -49,33 +38,34 @@ test.describe('Leaderboard Page @standings', () => {
   }) => {
     await authedPage.goto(`/league/${scoredLeague.id}/standings`)
 
-    // Teams should be displayed (fixture creates 3 teams with scores 150, 120, 80)
-    await expect(
-      authedPage.getByText(/Owner Team|Test Team|Second Team/).first()
-    ).toBeVisible({ timeout: 10000 })
-
-    // The highest scoring team (Owner Team - 150) should appear first
-    // This verifies ranking order
-    const teamElements = authedPage.locator(
-      '[data-testid^="team-row-"]'
-    )
+    // Teams should be displayed
+    const teamElements = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamElements.first()).toBeVisible({ timeout: 10000 })
 
     const count = await teamElements.count()
-    if (count >= 2) {
-      // Verify ordering - first team should have higher score than second
-      const firstTeamText = await teamElements.first().textContent()
-      expect(firstTeamText).toContain('150')
-    }
+    expect(count).toBeGreaterThanOrEqual(2)
+
+    // Verify ordering: first team should have higher score than second
+    // Scores are displayed with + prefix: "+150", "+120", "+80"
+    const firstTeamText = await teamElements.nth(0).textContent()
+    const secondTeamText = await teamElements.nth(1).textContent()
+
+    // The highest score team (Owner Team, +150) should be first
+    expect(firstTeamText).toContain('+150')
+    expect(secondTeamText).toContain('+120')
   })
 
   test('displays team scores', async ({ authedPage, scoredLeague }) => {
     await authedPage.goto(`/league/${scoredLeague.id}/standings`)
 
-    // Verify scores are displayed
-    // Fixture sets scores: Owner Team = 150, Test Team = 120, Second Team = 80
-    await expect(authedPage.getByText('150')).toBeVisible({ timeout: 10000 })
-    await expect(authedPage.getByText('120')).toBeVisible()
-    await expect(authedPage.getByText('80')).toBeVisible()
+    // Wait for standings to load
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
+
+    // Verify scores are displayed (with + prefix from formatFantasyPoints)
+    await expect(authedPage.getByText('+150')).toBeVisible()
+    await expect(authedPage.getByText('+120')).toBeVisible()
+    await expect(authedPage.getByText('+80')).toBeVisible()
   })
 
   test('current user team is identifiable', async ({
@@ -85,16 +75,21 @@ test.describe('Leaderboard Page @standings', () => {
   }) => {
     await authedPage.goto(`/league/${scoredLeague.id}/standings`)
 
-    // Find the test user's team (Test Team with score 120)
-    // It should have some visual distinction or "Your Team" indicator
+    // Find the test user's team row
     const testUserTeam = scoredLeague.teams.find(
       (t) => t.userId === testUser.id
     )
 
     if (testUserTeam) {
+      // The team name should be visible
       await expect(
         authedPage.getByText(testUserTeam.name)
       ).toBeVisible({ timeout: 10000 })
+
+      // The team row should have a "You" indicator for the current user
+      const teamRow = authedPage.getByTestId(`team-row-${testUserTeam.teamId}`)
+      await expect(teamRow).toBeVisible()
+      await expect(teamRow.getByText('You')).toBeVisible()
     }
   })
 })
@@ -107,25 +102,19 @@ test.describe('Score Details @standings', () => {
     await authedPage.goto(`/league/${scoredLeagueWithReviews.id}/standings`)
 
     // Wait for standings to load
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
+
+    // Click on a team row to expand details
+    await teamRows.first().click()
+
+    // After clicking, the expanded section should show movie details
+    // The TeamStandingCard expands to show MovieScoreCard components
+    // Scope to standings container to avoid matching hidden sidenav elements
+    const standingsContainer = authedPage.getByTestId('standings-container')
     await expect(
-      authedPage.getByText(/standings|leaderboard/i).first()
-    ).toBeVisible({ timeout: 10000 })
-
-    // Teams should be visible
-    await expect(authedPage.getByText('Owner Team')).toBeVisible()
-
-    // Click on a team row to see details if available
-    const teamRow = authedPage.locator('[data-testid^="team-row-"]').first()
-    if (await teamRow.isVisible().catch(() => false)) {
-      await teamRow.click()
-
-      // Look for any expanded details or modal
-      const details = authedPage.getByText(/details|movies|roster/i).first()
-      // This is optional - not all UIs expand on click
-      if (await details.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await expect(details).toBeVisible()
-      }
-    }
+      standingsContainer.getByText(/Scored Movie/i).first()
+    ).toBeVisible({ timeout: 5000 })
   })
 
   test('shows team movies in standings context', async ({
@@ -135,33 +124,48 @@ test.describe('Score Details @standings', () => {
     // Navigate to standings
     await authedPage.goto(`/league/${scoredLeagueWithReviews.id}/standings`)
 
-    // The fixture created movies - verify they appear
+    // Wait for team rows to load
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
+
+    // Click to expand a team row
+    await teamRows.first().click()
+
+    // The fixture created movies - "Scored Movie Alpha" etc.
+    // After expanding, the movie names should be visible
     await expect(
-      authedPage.getByText(/Scored Movie|movie/i).first()
-    ).toBeVisible({ timeout: 10000 })
+      authedPage.getByText(/Scored Movie/i).first()
+    ).toBeVisible({ timeout: 5000 })
   })
 })
 
-test.describe('Real-time Score Updates @standings', () => {
-  test('standings page shows current scores', async ({
+test.describe('Score Ordering @standings', () => {
+  test('standings page shows teams in descending score order', async ({
     authedPage,
     scoredLeagueWithReviews,
   }) => {
     await authedPage.goto(`/league/${scoredLeagueWithReviews.id}/standings`)
 
-    // Verify all three scores are displayed
-    await expect(authedPage.getByText('150')).toBeVisible({ timeout: 10000 })
-    await expect(authedPage.getByText('120')).toBeVisible()
-    await expect(authedPage.getByText('80')).toBeVisible()
+    // Wait for standings to load
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
 
-    // Verify teams are in correct order (highest first)
-    const pageContent = await authedPage.content()
-    const pos150 = pageContent.indexOf('150')
-    const pos120 = pageContent.indexOf('120')
-    const pos80 = pageContent.indexOf('80')
+    // Verify all three scores are displayed (with + prefix)
+    await expect(authedPage.getByText('+150')).toBeVisible()
+    await expect(authedPage.getByText('+120')).toBeVisible()
+    await expect(authedPage.getByText('+80')).toBeVisible()
 
-    // Higher scores should appear first in the DOM
-    expect(pos150).toBeLessThan(pos120)
-    expect(pos120).toBeLessThan(pos80)
+    // Verify teams are in correct order by checking team-row DOM order
+    const count = await teamRows.count()
+    expect(count).toBeGreaterThanOrEqual(3)
+
+    const firstRowText = await teamRows.nth(0).textContent()
+    const secondRowText = await teamRows.nth(1).textContent()
+    const thirdRowText = await teamRows.nth(2).textContent()
+
+    // Higher scores should appear first
+    expect(firstRowText).toContain('+150')
+    expect(secondRowText).toContain('+120')
+    expect(thirdRowText).toContain('+80')
   })
 })
