@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation'
 import type { League } from '@/types'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
 import { getCachedUser } from '@/utils/supabase/cached'
+import LeagueTabs from './components/LeagueTabs'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -49,14 +50,16 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
     redirect('/dashboard')
   }
 
-  const participantCount = participantCountResult.count
   const typedLeague = league as League
+  const isOwner = typedLeague.owner_id === user.id
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {/* League Header - Compact info bar */}
-        <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <h1 className="text-lg font-display font-semibold text-foreground">{typedLeague.name}</h1>
+
+        {/* Compact info bar */}
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
           <span className={`badge ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
             {getStatusLabel(typedLeague.status)}
           </span>
@@ -64,11 +67,14 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
             {typedLeague.invite_only ? 'Invite Only' : 'Open'}
           </span>
           <span className="text-sm text-foreground-muted">
-            {participantCount ?? 0} / {typedLeague.max_participants} participants
+            {participantCountResult.count ?? 0} / {typedLeague.max_participants} participants
           </span>
         </div>
 
-        {/* Page Content */}
+        <div className="mb-6">
+          <LeagueTabs league={typedLeague} isOwner={isOwner} />
+        </div>
+
         {children}
       </div>
     </div>
