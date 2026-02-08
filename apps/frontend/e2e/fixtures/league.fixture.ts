@@ -80,6 +80,11 @@ interface LeagueFixtures {
       movieTitle: string
     }>
   }
+  /** Two leagues where testUser is a participant (for league switcher tests) */
+  multiLeague: {
+    league1: { id: string; name: string; status: TestLeague['status'] }
+    league2: { id: string; name: string; status: TestLeague['status'] }
+  }
 }
 
 export const test = authTest.extend<LeagueFixtures>({
@@ -357,6 +362,44 @@ export const test = authTest.extend<LeagueFixtures>({
       })
     } finally {
       await deleteTestLeague(league.id)
+    }
+  },
+
+  /**
+   * Multi-League Fixture
+   * Two leagues where testUser is a participant in both.
+   * League 1 is active, League 2 is in setup status.
+   * Use for testing league switcher dropdown.
+   */
+  multiLeague: async ({ leagueOwner, testUser }, use) => {
+    const league1 = await createTestLeague(leagueOwner.id, {
+      name: uniqueLeagueName('E2E Multi Active'),
+      status: 'active',
+    })
+
+    const league2 = await createTestLeague(leagueOwner.id, {
+      name: uniqueLeagueName('E2E Multi Setup'),
+      status: 'setup',
+    })
+
+    try {
+      // Add testUser as participant in both leagues
+      await addParticipant(league1.id, testUser.id)
+      await addParticipant(league2.id, testUser.id)
+
+      // Create teams for testUser in both leagues
+      await createTeam(league1.id, leagueOwner.id, 'Owner Team L1')
+      await createTeam(league1.id, testUser.id, 'Test Team L1')
+      await createTeam(league2.id, leagueOwner.id, 'Owner Team L2')
+      await createTeam(league2.id, testUser.id, 'Test Team L2')
+
+      await use({
+        league1: { id: league1.id, name: league1.name, status: league1.status },
+        league2: { id: league2.id, name: league2.name, status: league2.status },
+      })
+    } finally {
+      await deleteTestLeague(league1.id)
+      await deleteTestLeague(league2.id)
     }
   },
 
