@@ -1,16 +1,17 @@
-import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
-import type { League } from '@/types'
-import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
+import { createClient } from '@/utils/supabase/server'
 import { getCachedUser } from '@/utils/supabase/cached'
+import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
+import LeagueSwitcher from './components/LeagueSwitcher'
 import LeagueTabs from './components/LeagueTabs'
+import type { League } from '@/types'
 
 interface LayoutProps {
   children: React.ReactNode
   params: Promise<{ id: string }>
 }
 
-export default async function LeagueLayout({ children, params }: LayoutProps) {
+export default async function LeagueLayout({ children, params }: LayoutProps): Promise<React.ReactElement> {
   const { id } = await params
   const supabase = await createClient()
 
@@ -19,7 +20,6 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
     redirect('/login')
   }
 
-  // Fetch the league first (required for validation)
   const { data: league, error: leagueError } = await supabase
     .from('leagues')
     .select('*')
@@ -30,8 +30,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
     notFound()
   }
 
-  // Parallelize participant check and count queries (async-parallel optimization)
-  const [userParticipantResult, participantCountResult] = await Promise.all([
+  const [memberResult, countResult] = await Promise.all([
     supabase
       .from('league_participants')
       .select('id')
@@ -46,19 +45,19 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
       .eq('status', 'active'),
   ])
 
-  if (!userParticipantResult.data) {
+  if (!memberResult.data) {
     redirect('/dashboard')
   }
 
   const typedLeague = league as League
   const isOwner = typedLeague.owner_id === user.id
+  const participantCount = countResult.count ?? 0
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-6xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <h1 className="text-lg font-display font-semibold text-foreground">{typedLeague.name}</h1>
+        <LeagueSwitcher currentLeagueId={typedLeague.id} currentLeagueName={typedLeague.name} />
 
-        {/* Compact info bar */}
         <div className="flex items-center gap-3 mb-3 flex-wrap">
           <span className={`badge ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
             {getStatusLabel(typedLeague.status)}
@@ -67,7 +66,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps) {
             {typedLeague.invite_only ? 'Invite Only' : 'Open'}
           </span>
           <span className="text-sm text-foreground-muted">
-            {participantCountResult.count ?? 0} / {typedLeague.max_participants} participants
+            {participantCount} / {typedLeague.max_participants} participants
           </span>
         </div>
 
