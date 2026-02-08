@@ -7,7 +7,6 @@ import type { League } from '@/types'
 interface Tab {
   name: string
   href: string
-  disabled?: boolean
   badge?: number
 }
 
@@ -17,35 +16,39 @@ interface Props {
   isOwner?: boolean
 }
 
-const PRE_ACTIVE_STATUSES = new Set(['setup', 'drafting', 'counterpicking'])
+type LeagueStatus = League['status']
+
+const ALL_STATUSES: LeagueStatus[] = ['setup', 'drafting', 'counterpicking', 'active', 'completed']
+
+const TAB_VISIBILITY: Record<string, Set<LeagueStatus>> = {
+  Overview: new Set(ALL_STATUSES),
+  Standings: new Set(['active', 'completed']),
+  Draft: new Set(ALL_STATUSES),
+  Bidding: new Set(['active']),
+  Trading: new Set(['active']),
+  Roster: new Set(ALL_STATUSES),
+  Settings: new Set(ALL_STATUSES),
+}
 
 export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }: Props): React.ReactElement {
   const pathname = usePathname()
   const baseUrl = `/league/${league.id}`
-  const isPreActive = PRE_ACTIVE_STATUSES.has(league.status)
 
-  const tabs: Tab[] = [
+  const allTabs: Tab[] = [
     { name: 'Overview', href: `${baseUrl}/dashboard` },
-    {
-      name: 'Standings',
-      href: `${baseUrl}/standings`,
-      disabled: isPreActive,
-    },
+    { name: 'Standings', href: `${baseUrl}/standings` },
     { name: 'Draft', href: `${baseUrl}/draft` },
     {
       name: 'Bidding',
       href: `${baseUrl}/bidding`,
-      disabled: isPreActive,
       badge: outbidCount > 0 ? outbidCount : undefined,
     },
-    {
-      name: 'Trading',
-      href: `${baseUrl}/trading`,
-      disabled: isPreActive,
-    },
+    { name: 'Trading', href: `${baseUrl}/trading` },
     { name: 'Roster', href: `${baseUrl}/roster` },
     ...(isOwner ? [{ name: 'Settings', href: `${baseUrl}/settings` }] : []),
   ]
+
+  const tabs = allTabs.filter((tab) => TAB_VISIBILITY[tab.name]?.has(league.status))
 
   return (
     <div className="relative">
@@ -56,20 +59,6 @@ export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }:
       >
         {tabs.map((tab) => {
           const isActive = pathname === tab.href || pathname.startsWith(`${tab.href}/`)
-
-          if (tab.disabled) {
-            return (
-              <span
-                key={tab.name}
-                className="px-4 py-3.5 text-sm font-medium text-foreground-muted/50 border-b-2 border-transparent cursor-not-allowed whitespace-nowrap"
-                title="Available after draft completes"
-                role="link"
-                aria-disabled="true"
-              >
-                {tab.name}
-              </span>
-            )
-          }
 
           return (
             <Link

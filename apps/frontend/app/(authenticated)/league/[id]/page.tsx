@@ -21,11 +21,13 @@ export default async function LeagueRootPage({ params }: PageProps) {
   }
 
   // Phase-aware default tab:
-  // - Setup/Drafting: Draft tab (the main event)
+  // - Setup/Drafting/Counterpicking: Draft tab (the main event)
   // - Active/Completed: Dashboard tab (team performance)
-  if (league.status === 'setup' || league.status === 'drafting') {
+  const draftPhaseStatuses = new Set(['setup', 'drafting', 'counterpicking'])
+
+  if (draftPhaseStatuses.has(league.status)) {
     redirect(`/league/${id}/draft`)
-  } else {
-    redirect(`/league/${id}/dashboard`)
   }
+
+  redirect(`/league/${id}/dashboard`)
 }

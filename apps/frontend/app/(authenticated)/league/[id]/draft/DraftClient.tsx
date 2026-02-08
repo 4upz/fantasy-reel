@@ -6,7 +6,8 @@ import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
-import DraftBoard from '../components/DraftBoard'
+import DraftBoard, { PickHistory } from '../components/DraftBoard'
+import { buildTeamInfoByTeamId, type TeamDisplayInfo } from '@/utils/league'
 import InvitationsList from '../components/InvitationsList'
 import JoinLinkCard from '../components/JoinLinkCard'
 import ParticipantsList from '../components/ParticipantsList'
@@ -29,6 +30,58 @@ interface Props {
   isOwner: boolean
 }
 
+interface MobilePickHistoryProps {
+  draftPicks: DraftPickWithDetails[]
+  teamInfoById: Map<string, TeamDisplayInfo>
+}
+
+function MobilePickHistory({ draftPicks, teamInfoById }: MobilePickHistoryProps): React.ReactElement {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <div className="lg:hidden">
+      {/* Floating toggle button */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="fixed bottom-16 right-4 z-30 bg-gold text-background rounded-full w-12 h-12 flex items-center justify-center shadow-heavy hover:bg-gold-hover transition-colors"
+        data-testid="pick-history-toggle"
+        aria-label={`Pick history (${draftPicks.length} picks)`}
+      >
+        <span className="text-sm font-bold">{draftPicks.length}</span>
+      </button>
+
+      {/* Slide-up panel */}
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setIsOpen(false)} />
+          <div
+            className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-2xl animate-slide-up safe-area-bottom"
+            data-testid="pick-history-panel"
+          >
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-display font-semibold text-foreground">
+                  Pick History ({draftPicks.length})
+                </h3>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="text-foreground-muted hover:text-foreground p-1"
+                  aria-label="Close pick history"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="max-h-[60vh] overflow-y-auto">
+                <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function DraftClient({
   league: initialLeague,
   participants: initialParticipants,
@@ -36,7 +89,7 @@ export default function DraftClient({
   counterpicks: initialCounterpicks,
   currentUserId,
   isOwner,
-}: Props) {
+}: Props): React.ReactElement {
   const [league, setLeague] = useState(initialLeague)
   const [participants, setParticipants] = useState(initialParticipants)
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
@@ -61,6 +114,7 @@ export default function DraftClient({
     return new Set()
   })
 
+  const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
   const supabase = useMemo(() => createClient(), [])
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -346,8 +400,19 @@ export default function DraftClient({
           />
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
           <ParticipantsList participants={participants} ownerId={league.owner_id} />
+
+          {/* Pick History in sidebar during drafting - desktop only */}
+          {league.status === 'drafting' && draftPicks.length > 0 && (
+            <div className="hidden lg:block card p-6" data-testid="draft-history">
+              <h3 className="text-lg font-display font-semibold text-foreground mb-4">
+                Pick History
+              </h3>
+              <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
+            </div>
+          )}
+
           {isOwner && league.status === 'setup' && (
             <>
               <JoinLinkCard
@@ -363,6 +428,11 @@ export default function DraftClient({
           )}
         </div>
       </div>
+
+      {/* Mobile Pick History Panel */}
+      {league.status === 'drafting' && draftPicks.length > 0 && (
+        <MobilePickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
+      )}
 
       {showInviteModal && (
         <InviteModal leagueId={league.id} onClose={() => setShowInviteModal(false)} />

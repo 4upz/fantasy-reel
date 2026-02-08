@@ -35,7 +35,7 @@ export default function DraftBoard({
   onPickMade,
   onCounterpickMade,
   onToggleFavorite,
-}: Props) {
+}: Props): React.ReactElement {
   const totalParticipants = participants.length
   const totalPicks = totalParticipants * league.draft_slots
   const picksMade = draftPicks.length
@@ -264,26 +264,16 @@ export default function DraftBoard({
           onToggleFavorite={onToggleFavorite}
         />
       </div>
-
-      {/* Pick History */}
-      {draftPicks.length > 0 && (
-        <div className="card p-6" data-testid="draft-history">
-          <h3 className="text-lg font-display font-semibold text-foreground mb-4">
-            Pick History
-          </h3>
-          <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
-        </div>
-      )}
     </div>
   )
 }
 
-interface PickHistoryProps {
+export interface PickHistoryProps {
   draftPicks: DraftPickWithDetails[]
   teamInfoById?: Map<string, TeamDisplayInfo>
 }
 
-function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps) {
+export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): React.ReactElement {
   if (draftPicks.length === 0) {
     return <p className="text-foreground-muted">No picks yet</p>
   }

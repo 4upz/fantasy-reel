@@ -27,7 +27,7 @@ const TAB_CONFIG: { id: TabType; label: string }[] = [
   { id: 'favorites', label: 'Favorites' },
 ]
 
-function getTabIcon(tabId: TabType, className: string = 'w-4 h-4') {
+function getTabIcon(tabId: TabType, className: string = 'w-4 h-4'): React.ReactElement {
   switch (tabId) {
     case 'all':
       return <ClapperboardIcon className={className} />
@@ -40,6 +40,20 @@ function getTabIcon(tabId: TabType, className: string = 'w-4 h-4') {
   }
 }
 
+function EmptyStateIcon({ activeTab, mode }: { activeTab: TabType; mode: string }): React.ReactElement {
+  const className = 'w-10 h-10 text-foreground-muted'
+
+  if (activeTab === 'favorites') return <HeartIcon className={className} />
+  if (mode === 'search') return <SearchIcon className={className} />
+  return <ClapperboardIcon className={className} />
+}
+
+function EmptyStateMessage({ activeTab, mode }: { activeTab: TabType; mode: string }): string {
+  if (activeTab === 'favorites') return 'No favorites yet. Heart movies to add them here!'
+  if (mode === 'search') return 'No movies found for your search'
+  return 'No movies match your filters'
+}
+
 export default function MoviePicker({
   draftedTmdbIds,
   favoriteMovieIds = new Set(),
@@ -47,7 +61,7 @@ export default function MoviePicker({
   picking,
   onPick,
   onToggleFavorite,
-}: Props) {
+}: Props): React.ReactElement {
   const [activeTab, setActiveTab] = useState<TabType>('all')
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [previewMovie, setPreviewMovie] = useState<TMDbSearchResult | null>(null)
@@ -216,20 +230,10 @@ export default function MoviePicker({
       {!loading && filteredMovies.length === 0 ? (
         <div className="text-center py-12 bg-elevated rounded-xl border border-border">
           <div className="flex justify-center mb-3">
-            {activeTab === 'favorites' ? (
-              <HeartIcon className="w-10 h-10 text-foreground-muted" />
-            ) : mode === 'search' ? (
-              <SearchIcon className="w-10 h-10 text-foreground-muted" />
-            ) : (
-              <ClapperboardIcon className="w-10 h-10 text-foreground-muted" />
-            )}
+            <EmptyStateIcon activeTab={activeTab} mode={mode} />
           </div>
           <p className="text-foreground-secondary">
-            {activeTab === 'favorites'
-              ? 'No favorites yet. Heart movies to add them here!'
-              : mode === 'search'
-              ? 'No movies found for your search'
-              : 'No movies match your filters'}
+            <EmptyStateMessage activeTab={activeTab} mode={mode} />
           </p>
           {activeTab !== 'all' && (
             <button
@@ -273,7 +277,7 @@ export default function MoviePicker({
 
       {/* Selection Confirmation */}
       {selectedMovie && isMyTurn && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-surface/95 backdrop-blur-md border-t border-border shadow-heavy z-40 animate-slide-up">
+        <div className="fixed bottom-0 left-0 right-0 p-4 bg-surface/95 backdrop-blur-md border-t border-border shadow-heavy z-40 animate-slide-up safe-area-bottom">
           <div className="max-w-4xl mx-auto">
             <div className="flex items-center gap-4">
               {/* Selected movie preview */}
