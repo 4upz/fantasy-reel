@@ -41,17 +41,20 @@ export default function RosterClient({
     return movie.release_date >= today
   }
 
-  const handleDropPickup = async (pickupId: string, movieTitle: string) => {
+  async function handleDrop(
+    id: string,
+    movieTitle: string,
+    body: Record<string, string>,
+    removeFrom: 'draftPicks' | 'pickups'
+  ): Promise<void> {
     if (!canDrop) {
       toast.error(`You've used all ${league.drop_limit} drops`)
       return
     }
 
-    setDroppingId(pickupId)
+    setDroppingId(id)
 
-    const { error } = await callEdgeFunction('drop-movie', {
-      body: { pickup_id: pickupId },
-    })
+    const { error } = await callEdgeFunction('drop-movie', { body })
 
     setDroppingId(null)
 
@@ -59,30 +62,11 @@ export default function RosterClient({
       toast.error(error)
     } else {
       toast.success(`Dropped ${movieTitle}`)
-      setPickups(prev => prev.filter(p => p.id !== pickupId))
-      setDropCount(prev => prev + 1)
-    }
-  }
-
-  const handleDropDraftPick = async (draftPickId: string, movieTitle: string) => {
-    if (!canDrop) {
-      toast.error(`You've used all ${league.drop_limit} drops`)
-      return
-    }
-
-    setDroppingId(draftPickId)
-
-    const { error } = await callEdgeFunction('drop-movie', {
-      body: { draft_pick_id: draftPickId },
-    })
-
-    setDroppingId(null)
-
-    if (error) {
-      toast.error(error)
-    } else {
-      toast.success(`Dropped ${movieTitle}`)
-      setDraftPicks(prev => prev.filter(p => p.id !== draftPickId))
+      if (removeFrom === 'draftPicks') {
+        setDraftPicks(prev => prev.filter(p => p.id !== id))
+      } else {
+        setPickups(prev => prev.filter(p => p.id !== id))
+      }
       setDropCount(prev => prev + 1)
     }
   }
@@ -95,7 +79,7 @@ export default function RosterClient({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground">
+          <h1 className="font-display text-2xl font-bold text-foreground" data-testid="roster-team-name">
             {team.name}&apos;s Roster
           </h1>
           <p className="text-foreground-secondary">
@@ -131,7 +115,7 @@ export default function RosterClient({
                 movie={pick.movies}
                 label={`Round ${pick.round}, Pick ${pick.pick_number}`}
                 onDrop={canDrop && canDropMovie(pick.movies)
-                  ? () => handleDropDraftPick(pick.id, pick.movies.title)
+                  ? () => handleDrop(pick.id, pick.movies.title, { draft_pick_id: pick.id }, 'draftPicks')
                   : undefined}
                 isDropping={droppingId === pick.id}
               />
@@ -157,7 +141,7 @@ export default function RosterClient({
                 movie={pickup.movies}
                 label={`$${pickup.amount_paid}`}
                 onDrop={canDrop && canDropMovie(pickup.movies)
-                  ? () => handleDropPickup(pickup.id, pickup.movies.title)
+                  ? () => handleDrop(pickup.id, pickup.movies.title, { pickup_id: pickup.id }, 'pickups')
                   : undefined}
                 isDropping={droppingId === pickup.id}
               />
