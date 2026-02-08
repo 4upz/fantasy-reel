@@ -1,9 +1,10 @@
-import { Trophy } from 'lucide-react'
+import { Trophy, Pencil } from 'lucide-react'
 import type { DashboardTeam } from '@/types'
 
 interface Props {
   team: DashboardTeam
   totalTeams: number
+  onEditTeam?: () => void
 }
 
 const RANK_STYLES: Record<number, { bg: string; text: string; icon: boolean }> = {
@@ -17,18 +18,31 @@ function formatFantasyPoints(points: number): string {
   return rounded >= 0 ? `+${rounded}` : `${rounded}`
 }
 
-export default function TeamHeader({ team, totalTeams }: Props) {
+export default function TeamHeader({ team, totalTeams, onEditTeam }: Props) {
   const rankStyle = RANK_STYLES[team.rank] || { bg: 'bg-elevated', text: 'text-foreground-muted', icon: false }
   const isPositive = team.total_points >= 0
 
   return (
-    <div className="card p-6">
+    <div className="card p-6" data-testid="team-header">
       <div className="flex items-center justify-between">
         {/* Team Name */}
         <div>
-          <h2 className="text-xl font-display font-bold text-foreground">
-            {team.name}
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-display font-bold text-foreground" data-testid="team-name">
+              {team.name}
+            </h2>
+            {onEditTeam && (
+              <button
+                type="button"
+                onClick={onEditTeam}
+                className="btn-ghost p-1.5 rounded-lg text-foreground-muted hover:text-gold transition-colors"
+                aria-label="Edit team"
+                data-testid="edit-team-button"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+          </div>
           <p className="text-sm text-foreground-muted mt-1">
             {team.movies.length} movies drafted
           </p>

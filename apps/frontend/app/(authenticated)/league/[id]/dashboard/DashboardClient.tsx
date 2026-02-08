@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import type { League, DashboardTeam } from '@/types'
 import TeamHeader from '../components/TeamHeader'
 import MovieGrid from '../components/MovieGrid'
+import EditTeamModal from '../components/EditTeamModal'
 
 interface Props {
   league: League
@@ -18,6 +19,7 @@ export default function DashboardClient({
   totalTeams,
 }: Props) {
   const [league, setLeague] = useState(initialLeague)
+  const [showEditTeamModal, setShowEditTeamModal] = useState(false)
 
   const supabase = useMemo(() => createClient(), [])
   const channelIdRef = useRef(0)
@@ -87,8 +89,22 @@ export default function DashboardClient({
 
   return (
     <div className="space-y-6">
-      <TeamHeader team={userTeam} totalTeams={totalTeams} />
+      <TeamHeader
+        team={userTeam}
+        totalTeams={totalTeams}
+        onEditTeam={() => setShowEditTeamModal(true)}
+      />
       <MovieGrid movies={userTeam.movies} leagueStatus={league.status} />
+
+      {showEditTeamModal && (
+        <EditTeamModal
+          teamId={userTeam.id}
+          leagueId={league.id}
+          currentName={userTeam.name}
+          currentAvatarUrl={userTeam.avatar_url}
+          onClose={() => setShowEditTeamModal(false)}
+        />
+      )}
     </div>
   )
 }
