@@ -1,106 +1,60 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
+import { normalizeRating, fetchImdbId } from '../_shared/scoring.ts'
+import type { OMDbResponse, MovieRecord } from '../_shared/scoring.ts'
 
 interface UpdateScoresRequest {
   movie_ids?: string[]
   league_id?: string
 }
 
-interface OMDbRating {
-  Source: string
-  Value: string
-}
-
-interface OMDbResponse {
-  Response: string
-  Error?: string
-  imdbID?: string
-  Title?: string
-  Ratings?: OMDbRating[]
-}
-
-/**
- * Normalize rating score to 0-100 scale
- */
-function normalizeScore(source: string, value: string): number | null {
+function parseRequestBody(body: string): UpdateScoresRequest {
   try {
-    switch (source) {
-      case 'Internet Movie Database':
-        // "8.5/10" -> 85
-        const imdbMatch = value.match(/^([\d.]+)\/10$/)
-        if (imdbMatch) {
-          return Math.round(parseFloat(imdbMatch[1]) * 10)
-        }
-        break
-      case 'Rotten Tomatoes':
-        // "85%" -> 85
-        const rtMatch = value.match(/^(\d+)%$/)
-        if (rtMatch) {
-          return parseInt(rtMatch[1])
-        }
-        break
-      case 'Metacritic':
-        // "78/100" -> 78
-        const mcMatch = value.match(/^(\d+)\/100$/)
-        if (mcMatch) {
-          return parseInt(mcMatch[1])
-        }
-        break
-    }
+    return body ? JSON.parse(body) : {}
   } catch {
-    // Parse error
-  }
-  return null
-}
-
-/**
- * Map OMDb source name to our internal source key
- */
-function mapSourceKey(omdbSource: string): string | null {
-  switch (omdbSource) {
-    case 'Internet Movie Database':
-      return 'imdb'
-    case 'Rotten Tomatoes':
-      return 'rotten_tomatoes'
-    case 'Metacritic':
-      return 'metacritic'
-    default:
-      return null
+    return {}
   }
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
   try {
+    // Verify caller is authorized (cron secret OR service role key)
+    const cronSecret = Deno.env.get('CRON_SECRET')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    const isAuthorizedByCron = cronSecret && req.headers.get('X-Cron-Secret') === cronSecret
+    const isAuthorizedByServiceRole =
+      serviceRoleKey && req.headers.get('Authorization') === `Bearer ${serviceRoleKey}`
+
+    if (!isAuthorizedByCron && !isAuthorizedByServiceRole) {
+      return errorResponse('Forbidden', 403)
+    }
+
     const omdbApiKey = Deno.env.get('OMDB_API_KEY')
     if (!omdbApiKey) {
       console.error('OMDB_API_KEY not configured')
       return errorResponse('Score update service not configured', 503)
     }
 
-    // Create service role client
-    const serviceClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    // Parse request body
-    let params: UpdateScoresRequest = {}
-    try {
-      if (req.method === 'POST') {
-        const body = await req.text()
-        if (body) {
-          params = JSON.parse(body)
-        }
-      }
-    } catch {
-      // Ignore parse errors
+    const tmdbApiKey = Deno.env.get('TMDB_API_KEY')
+    if (!tmdbApiKey) {
+      console.error('TMDB_API_KEY not configured')
+      return errorResponse('Score update service not configured', 503)
     }
 
-    let moviesToUpdate: Array<{ id: string; imdb_id: string | null; title: string }> = []
+    const serviceClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      serviceRoleKey!
+    )
+
+    const params = req.method === 'POST'
+      ? parseRequestBody(await req.text())
+      : {}
+
+    let moviesToUpdate: MovieRecord[] = []
 
     if (params.movie_ids && params.movie_ids.length > 0) {
       // Update specific movies
@@ -111,7 +65,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await serviceClient
         .from('movies')
-        .select('id, imdb_id, title')
+        .select('id, tmdb_id, imdb_id, title')
         .in('id', validIds)
 
       if (error) {
@@ -119,7 +73,7 @@ Deno.serve(async (req) => {
         return errorResponse('Failed to fetch movies', 500)
       }
 
-      moviesToUpdate = data || []
+      moviesToUpdate = (data as MovieRecord[]) || []
     } else if (params.league_id) {
       // Update movies drafted in a specific league
       if (!isValidUUID(params.league_id)) {
@@ -130,7 +84,7 @@ Deno.serve(async (req) => {
         .from('draft_picks')
         .select(`
           movie_id,
-          movies!inner(id, imdb_id, title, status)
+          movies!inner(id, tmdb_id, imdb_id, title, status)
         `)
         .eq('league_id', params.league_id)
 
@@ -139,50 +93,58 @@ Deno.serve(async (req) => {
         return errorResponse('Failed to fetch drafted movies', 500)
       }
 
-      moviesToUpdate = data?.map(d => ({
-        id: d.movies.id,
-        imdb_id: d.movies.imdb_id,
-        title: d.movies.title
-      })) || []
+      // Supabase types the !inner join as an array, but it always returns a single object
+      moviesToUpdate = data?.map((d: { movies: MovieRecord | MovieRecord[] }) => {
+        const m = Array.isArray(d.movies) ? d.movies[0] : d.movies
+        return { id: m.id, tmdb_id: m.tmdb_id, imdb_id: m.imdb_id, title: m.title }
+      }) || []
     } else {
-      // Default: update all released movies without recent scores
-      const oneWeekAgo = new Date()
-      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+      // Default: find released drafted movies needing score updates
+      const oneDayAgo = new Date()
+      oneDayAgo.setDate(oneDayAgo.getDate() - 1)
 
       const { data, error } = await serviceClient
         .from('movies')
-        .select('id, imdb_id, title')
-        .eq('status', 'released')
-        .or(`last_synced_at.is.null,last_synced_at.lt.${oneWeekAgo.toISOString()}`)
-        .limit(50) // Limit to avoid hitting OMDb rate limits
+        .select('id, tmdb_id, imdb_id, title')
+        .lte('release_date', new Date().toISOString().split('T')[0])
+        .neq('status', 'canceled')
+        .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
+        .limit(200)
 
       if (error) {
         console.error('Error fetching movies:', error)
         return errorResponse('Failed to fetch movies', 500)
       }
 
-      moviesToUpdate = data || []
+      moviesToUpdate = (data as MovieRecord[]) || []
     }
 
     if (moviesToUpdate.length === 0) {
       return jsonResponse({
         movies_fetched: 0,
-        reviews_updated: 0,
-        teams_recalculated: 0,
+        scores_updated: 0,
         errors: []
       })
     }
 
     const results = {
       movies_fetched: 0,
-      reviews_updated: 0,
-      teams_recalculated: 0,
+      scores_updated: 0,
       errors: [] as Array<{ movie_id: string; title: string; error: string }>
     }
 
     // Process each movie
     for (const movie of moviesToUpdate) {
-      if (!movie.imdb_id) {
+      // Resolve IMDB ID if missing
+      let imdbId = movie.imdb_id
+      if (!imdbId && movie.tmdb_id) {
+        imdbId = await fetchImdbId(movie.tmdb_id, tmdbApiKey)
+        if (imdbId) {
+          await serviceClient.from('movies').update({ imdb_id: imdbId }).eq('id', movie.id)
+        }
+      }
+
+      if (!imdbId) {
         results.errors.push({
           movie_id: movie.id,
           title: movie.title,
@@ -192,8 +154,8 @@ Deno.serve(async (req) => {
       }
 
       try {
-        // Fetch from OMDb
-        const omdbUrl = `http://www.omdbapi.com/?apikey=${omdbApiKey}&i=${movie.imdb_id}`
+        // Fetch from OMDb (HTTPS)
+        const omdbUrl = `https://www.omdbapi.com/?apikey=${omdbApiKey}&i=${imdbId}`
         const omdbResponse = await fetch(omdbUrl)
 
         if (!omdbResponse.ok) {
@@ -226,23 +188,20 @@ Deno.serve(async (req) => {
 
         results.movies_fetched++
 
-        // Process ratings
+        // Process and store ratings
+        let ratingsStored = 0
         if (omdbData.Ratings && omdbData.Ratings.length > 0) {
           for (const rating of omdbData.Ratings) {
-            const sourceKey = mapSourceKey(rating.Source)
-            if (!sourceKey) continue
+            const { source, score, raw } = normalizeRating(rating)
+            if (!source || score === null) continue
 
-            const normalizedScore = normalizeScore(rating.Source, rating.Value)
-            if (normalizedScore === null) continue
-
-            // Upsert review
             const { error: reviewError } = await serviceClient
               .from('reviews')
               .upsert({
                 movie_id: movie.id,
-                source: sourceKey,
-                score: normalizedScore,
-                raw_score: rating.Value,
+                source,
+                score,
+                raw_score: raw,
                 fetched_at: new Date().toISOString()
               }, {
                 onConflict: 'movie_id,source'
@@ -251,19 +210,34 @@ Deno.serve(async (req) => {
             if (reviewError) {
               console.error(`Error upserting review for ${movie.title}:`, reviewError)
             } else {
-              results.reviews_updated++
+              ratingsStored++
             }
           }
         }
 
-        // Update movie's last_synced_at
-        await serviceClient
-          .from('movies')
-          .update({ last_synced_at: new Date().toISOString() })
-          .eq('id', movie.id)
+        // Calculate fantasy points via PostgreSQL function
+        // This also cascades to recalculate_teams_for_movie() and updates scores_updated_at
+        if (ratingsStored > 0) {
+          const { data: fantasyPts, error: calcError } = await serviceClient.rpc(
+            'calculate_movie_score',
+            { p_movie_id: movie.id }
+          )
+
+          if (calcError) {
+            console.error(`Score calculation failed for ${movie.title}:`, calcError)
+            results.errors.push({
+              movie_id: movie.id,
+              title: movie.title,
+              error: 'Score calculation failed'
+            })
+          } else {
+            console.log(`Calculated score for ${movie.title}: ${fantasyPts}`)
+            results.scores_updated++
+          }
+        }
 
         // Small delay to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 50))
 
       } catch (error) {
         console.error(`Error processing movie ${movie.title}:`, error)
@@ -272,47 +246,6 @@ Deno.serve(async (req) => {
           title: movie.title,
           error: 'Failed to fetch or process ratings'
         })
-      }
-    }
-
-    // Recalculate team scores for affected leagues
-    if (params.league_id) {
-      // Get all teams in the league
-      const { data: participants } = await serviceClient
-        .from('league_participants')
-        .select('id')
-        .eq('league_id', params.league_id)
-        .eq('status', 'active')
-
-      if (participants) {
-        const { data: teams } = await serviceClient
-          .from('teams')
-          .select('id')
-          .in('participant_id', participants.map(p => p.id))
-
-        if (teams) {
-          for (const team of teams) {
-            // Calculate score using the database function
-            const { data: scoreData } = await serviceClient
-              .rpc('calculate_team_score', { p_team_id: team.id })
-
-            if (scoreData && scoreData.length > 0) {
-              const score = scoreData[0]
-              await serviceClient
-                .from('team_scores')
-                .upsert({
-                  team_id: team.id,
-                  total_points: score.total_points || 0,
-                  movies_scored: score.movies_scored || 0,
-                  movies_pending: score.movies_pending || 0,
-                  average_score: score.average_score || 0,
-                  last_calculated_at: new Date().toISOString()
-                }, { onConflict: 'team_id' })
-
-              results.teams_recalculated++
-            }
-          }
-        }
       }
     }
 
