@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test'
+import { Page, Route } from '@playwright/test'
 import { MOCK_MOVIES } from '../fixtures/test-data'
 
 /**
@@ -30,9 +30,9 @@ const GENRE_MAP: Record<number, string> = {
  * Read a parameter from the request - checks POST body first, then URL query params.
  * Edge Functions are invoked via POST with JSON body by callEdgeFunction().
  */
-function getRequestParam(route: { request: () => { postDataJSON?: () => Record<string, unknown>; url: () => string } }, key: string): string {
+function getRequestParam(route: Route, key: string): string {
   try {
-    const body = route.request().postDataJSON?.()
+    const body = route.request().postDataJSON()
     if (body && key in body) return String(body[key])
   } catch {
     // Not JSON or no body - fall through to URL params
@@ -87,37 +87,37 @@ export async function mockTMDbAPI(page: Page): Promise<void> {
     const tmdbId = parseInt(getRequestParam(route, 'tmdb_id') || '0')
     const movie = MOCK_MOVIES.find((m) => m.tmdb_id === tmdbId)
 
-    if (movie) {
-      // Convert genre_ids to genres array with names
-      const genres = movie.genre_ids.map((id) => ({
-        id,
-        name: GENRE_MAP[id] || 'Unknown',
-      }))
-
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          tmdb_id: movie.tmdb_id,
-          imdb_id: null,
-          title: movie.title,
-          tagline: null,
-          overview: movie.overview,
-          release_date: movie.release_date,
-          runtime: 120,
-          status: movie.status === 'upcoming' ? 'Post Production' : 'Released',
-          poster_url: movie.poster_url,
-          backdrop_url: null,
-          vote_average: movie.vote_average,
-          vote_count: 0,
-          genres,
-          cast: [],
-          director: null,
-        }),
-      })
-    } else {
+    if (!movie) {
       await route.fulfill({ status: 404, body: 'Movie not found' })
+      return
     }
+
+    const genres = movie.genre_ids.map((id) => ({
+      id,
+      name: GENRE_MAP[id] || 'Unknown',
+    }))
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tmdb_id: movie.tmdb_id,
+        imdb_id: null,
+        title: movie.title,
+        tagline: null,
+        overview: movie.overview,
+        release_date: movie.release_date,
+        runtime: 120,
+        status: movie.status === 'upcoming' ? 'Post Production' : 'Released',
+        poster_url: movie.poster_url,
+        backdrop_url: null,
+        vote_average: movie.vote_average,
+        vote_count: 0,
+        genres,
+        cast: [],
+        director: null,
+      }),
+    })
   })
 }
 
@@ -129,7 +129,7 @@ export async function mockOMDbAPI(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ updated: 5, errors: 0 }),
+      body: JSON.stringify({ movies_fetched: 5, scores_updated: 5, errors: [] }),
     })
   })
 
@@ -137,7 +137,7 @@ export async function mockOMDbAPI(page: Page): Promise<void> {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ processed: 5, errors: 0 }),
+      body: JSON.stringify({ processed: 5, errors: [] }),
     })
   })
 }
