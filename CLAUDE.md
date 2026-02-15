@@ -72,10 +72,25 @@ After implementing frontend code and running the code-simplifier, verify the cha
 
 ## Agent Teams
 
+### Concepts
+
+**Agent:** A focused Claude Code session (spawned via the Task tool) assigned a specific role and subset of work. Agents run in parallel on different subsystems while sharing a common plan file with handoff contracts.
+
+**Agent Roles:**
+- `lead` — Coordinates the team, merges work from other agents, owns all commits and final sign-off
+- `backend-dev` / `frontend-dev` — General-purpose implementers scoped to a subsystem
+- `fn-dev-a` / `fn-dev-b` — Edge Function implementers for parallel backend work
+- `qe-assessor` / `verifier` — Test analysis and verification specialists
+- `reviewer` — Code review and quality checks
+- `explorer` / `architect` / `implementer` — Investigation → design → build pipeline for unfamiliar code
+- `unit-tester` / `e2e-tester` — Test coverage specialists for Deno and Playwright respectively
+
+**Coordination:** Agents work in separate contexts but share a task list and plan file. The lead spawns agents, assigns tasks, and merges their output. Handoff contracts (types, schemas, function signatures) are defined upfront so agents can work independently.
+
 ### When to Use a Team
 
-- **Use a team when:** task touches 2+ subsystems (migration, Edge Function, frontend, tests), modifies 6+ files, or has parallelizable chunks
-- **Skip teams when:** single-file fix, purely sequential dependency chain, exploration-only task, or <3 files changed
+- **Use a team when:** task touches 2+ independent subsystems (e.g. migration + Edge Function + frontend), modifies 6+ files across those subsystems, or has parallelizable chunks. Example: adding a new feature that needs a DB migration, an Edge Function, and a UI page — three agents can work simultaneously.
+- **Skip teams when:** single-file fix, purely sequential dependency chain, exploration-only task, or changes are confined to one subsystem with <3 files. Example: fixing a bug in one Edge Function or tweaking a single component.
 
 ### Topographies
 
@@ -91,7 +106,7 @@ After implementing frontend code and running the code-simplifier, verify the cha
 
 1. Implementation CAN be parallelized across agents touching different subsystems
 2. Code-simplifier runs AFTER all agents finish, before testing
-3. Deno tests CAN overlap with code-simplifier (simplifier only changes style, not logic)
+3. Deno tests SHOULD run AFTER code-simplifier to catch any inadvertent logic changes. If tests fail after simplification, the simplifier's changes must be reviewed before proceeding.
 4. Browser verification runs AFTER code-simplifier
 5. Lead always owns commits
 
