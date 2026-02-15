@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
         .lte('release_date', new Date().toISOString().split('T')[0])
         .neq('status', 'canceled')
         .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
-        .limit(200)
+        .limit(30)
 
       if (error) {
         console.error('Error fetching movies:', error)
