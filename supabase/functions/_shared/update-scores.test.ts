@@ -9,10 +9,11 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import { normalizeRating } from './scoring.ts'
+import type { MovieRecord, OMDbRating, OMDbResponse } from './scoring.ts'
 import { isValidUUID } from './utils.ts'
 
 // ============================================================================
-// Types matching the Edge Function
+// Types specific to this test file
 // ============================================================================
 
 interface UpdateScoresRequest {
@@ -20,40 +21,10 @@ interface UpdateScoresRequest {
   league_id?: string
 }
 
-interface MovieRecord {
-  id: string
-  tmdb_id: number
-  imdb_id: string | null
-  title: string
-}
-
-interface OMDbRating {
-  Source: string
-  Value: string
-}
-
-interface OMDbResponse {
-  Response: string
-  Error?: string
-  Ratings?: OMDbRating[]
-}
-
 interface UpdateScoresResult {
   movies_fetched: number
   scores_updated: number
   errors: Array<{ movie_id: string; title: string; error: string }>
-}
-
-// ============================================================================
-// parseRequestBody - replicated from index.ts for unit testing
-// ============================================================================
-
-function parseRequestBody(body: string): UpdateScoresRequest {
-  try {
-    return body ? JSON.parse(body) : {}
-  } catch {
-    return {}
-  }
 }
 
 // ============================================================================
@@ -96,7 +67,6 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
       or: () => chain,
       limit: () => chain,
       single: () => Promise.resolve(result),
-      then: (resolve: (v: MockQueryResult) => void) => resolve(result),
     }
     return chain
   }
@@ -202,10 +172,16 @@ function buildHandler(
         })
       }
 
-      // Parse body
-      const params = req.method === 'POST'
-        ? parseRequestBody(await req.text())
-        : {}
+      // Parse body (inline — matches index.ts parseRequestBody)
+      let params: UpdateScoresRequest = {}
+      if (req.method === 'POST') {
+        try {
+          const text = await req.text()
+          params = text ? JSON.parse(text) : {}
+        } catch {
+          params = {}
+        }
+      }
 
       let moviesToUpdate: MovieRecord[] = []
 
@@ -218,8 +194,7 @@ function buildHandler(
           })
         }
 
-        const query = supabaseClient.from('movies').select()
-        const { data, error } = await (query as unknown as Promise<MockQueryResult>)
+        const { data, error } = await supabaseClient.from('movies').select().single()
         if (error) {
           return new Response(JSON.stringify({ error: 'Failed to fetch movies' }), {
             status: 500,
@@ -235,8 +210,7 @@ function buildHandler(
           })
         }
 
-        const query = supabaseClient.from('draft_picks').select()
-        const { data, error } = await (query as unknown as Promise<MockQueryResult>)
+        const { data, error } = await supabaseClient.from('draft_picks').select().single()
         if (error) {
           return new Response(JSON.stringify({ error: 'Failed to fetch drafted movies' }), {
             status: 500,
@@ -245,8 +219,7 @@ function buildHandler(
         }
         moviesToUpdate = (data as MovieRecord[]) || []
       } else {
-        const query = supabaseClient.from('movies').select()
-        const { data, error } = await (query as unknown as Promise<MockQueryResult>)
+        const { data, error } = await supabaseClient.from('movies').select().single()
         if (error) {
           return new Response(JSON.stringify({ error: 'Failed to fetch movies' }), {
             status: 500,
@@ -574,14 +547,31 @@ Deno.test('update-scores input validation', async (t) => {
     assertEquals(body.error, 'Invalid league_id')
   })
 
-  await t.step('parseRequestBody returns {} for invalid JSON', () => {
-    const result = parseRequestBody('not valid json {{{')
-    assertEquals(result, {})
+  await t.step('handles invalid JSON body gracefully (falls through to default path)', async () => {
+    const client = createMockSupabaseClient({
+      movies: { select: { data: [], error: null } },
+    })
+    const handler = buildHandler(DEFAULT_ENV, client)
+    const req = makeRequest('POST', 'not valid json {{{')
+
+    const res = await handler(req)
+    // Invalid JSON parses as {} → falls through to default movie fetch → empty result
+    assertEquals(res.status, 200)
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.movies_fetched, 0)
   })
 
-  await t.step('parseRequestBody returns {} for empty string', () => {
-    const result = parseRequestBody('')
-    assertEquals(result, {})
+  await t.step('handles empty body gracefully (falls through to default path)', async () => {
+    const client = createMockSupabaseClient({
+      movies: { select: { data: [], error: null } },
+    })
+    const handler = buildHandler(DEFAULT_ENV, client)
+    const req = makeRequest('POST', '')
+
+    const res = await handler(req)
+    assertEquals(res.status, 200)
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.movies_fetched, 0)
   })
 })
 
@@ -826,6 +816,33 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertEquals(body.errors.length, 1)
     assertEquals(body.errors[0].movie_id, VALID_MOVIE_ID)
     assertEquals(body.errors[0].error, 'Score calculation failed')
+  })
+
+  await t.step('fetches and scores movies via league_id path', async () => {
+    const movie1 = testMovie()
+    const movie2 = testMovie({ id: VALID_MOVIE_ID_2, tmdb_id: 680, imdb_id: 'tt0110912', title: 'Pulp Fiction' })
+    const client = createMockSupabaseClient({
+      draft_picks: { select: { data: [movie1, movie2], error: null } },
+      rpc: { calculate_movie_score: { data: 25, error: null } },
+    })
+
+    const fetchFn = (url: string | URL | Request) => {
+      const urlStr = typeof url === 'string' ? url : url.toString()
+      if (urlStr.includes('omdbapi.com')) {
+        return Promise.resolve(new Response(JSON.stringify(omdbSuccess()), { status: 200 }))
+      }
+      return Promise.resolve(new Response('', { status: 200 }))
+    }
+
+    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
+    const req = makeRequest('POST', { league_id: VALID_LEAGUE_ID })
+
+    const res = await handler(req)
+    assertEquals(res.status, 200)
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.movies_fetched, 2)
+    assertEquals(body.scores_updated, 2)
+    assertEquals(body.errors.length, 0)
   })
 
   await t.step('returns CORS headers for OPTIONS preflight', async () => {

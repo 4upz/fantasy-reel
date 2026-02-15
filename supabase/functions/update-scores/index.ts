@@ -45,10 +45,13 @@ Deno.serve(async (req) => {
       return errorResponse('Score update service not configured', 503)
     }
 
-    const serviceClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      serviceRoleKey!
-    )
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+      return errorResponse('Score update service not configured', 503)
+    }
+
+    const serviceClient = createClient(supabaseUrl, serviceRoleKey)
 
     const params = req.method === 'POST'
       ? parseRequestBody(await req.text())
