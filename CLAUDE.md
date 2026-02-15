@@ -20,6 +20,8 @@ Developer context for the Fantasy Movies web application - a fantasy league plat
 
 This order ensures verification is performed on the final state of the code, not on code that will be modified by the simplifier.
 
+**Planning:** During plan mode, evaluate whether the task benefits from agent team parallelization (see [Agent Teams](#agent-teams) below). Propose a topography in the plan file when criteria are met.
+
 **UI/Frontend Changes:**
 
 When implementing any UI changes, new components, or frontend features, **always invoke the `frontend-design` skill first** using `/frontend-design` or the Skill tool. This skill ensures:
@@ -64,6 +66,65 @@ After implementing frontend code and running the code-simplifier, verify the cha
 6. Interact with the new feature
 7. Verify expected behavior and no console errors
 8. Commit the changes
+```
+
+---
+
+## Agent Teams
+
+### When to Use a Team
+
+- **Use a team when:** task touches 2+ subsystems (migration, Edge Function, frontend, tests), modifies 6+ files, or has parallelizable chunks
+- **Skip teams when:** single-file fix, purely sequential dependency chain, exploration-only task, or <3 files changed
+
+### Topographies
+
+| Topography | When | Agents |
+|---|---|---|
+| Full-Stack Feature | migration + Edge Function + frontend | lead + backend-dev + frontend-dev + reviewer |
+| UI Refactor + QE | layout/nav changes that may break E2E selectors | lead + qe-assessor + verifier |
+| Backend Batch | 3+ related Edge Functions sharing utils | lead + fn-dev-a + fn-dev-b |
+| Explore → Plan → Implement | unfamiliar code, bug investigation, unclear scope | explorer + architect + implementer |
+| Test Hardening | adding test coverage across Deno + Playwright | lead + unit-tester + e2e-tester |
+
+### Coordination Rules
+
+1. Implementation CAN be parallelized across agents touching different subsystems
+2. Code-simplifier runs AFTER all agents finish, before testing
+3. Deno tests CAN overlap with code-simplifier (simplifier only changes style, not logic)
+4. Browser verification runs AFTER code-simplifier
+5. Lead always owns commits
+
+### Handoff Contracts
+
+When splitting work across agents, define these in the plan file before agents start:
+- Edge Function request/response shapes (TypeScript types)
+- DB table/column names from migrations
+- Component prop interfaces
+- Shared utility function signatures
+
+### Plan File Template
+
+```
+## Agent Team Strategy
+**Topography:** [name from table above]
+
+| Agent | Subagent Type | Owns |
+|---|---|---|
+| lead | — | coordination, commits |
+| backend-dev | general-purpose | migration, Edge Function |
+| frontend-dev | general-purpose | page component, hooks |
+
+### Phases
+1. **Parallel build** — backend-dev + frontend-dev work simultaneously
+2. **Integration** — lead merges, resolves conflicts
+3. **Simplify** — code-simplifier on all modified files
+4. **Verify** — browser automation on simplified code
+
+### Handoff Contracts
+- `POST /functions/v1/my-function` → `{ field: type }` → `{ field: type }`
+- `my_table.new_column` (text, not null)
+- `<MyComponent prop1: string, prop2: number />`
 ```
 
 ---
