@@ -1,32 +1,47 @@
 import { NextResponse } from 'next/server'
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
+export const maxDuration = 60
 
-export async function GET(request: Request) {
-  // Verify this is a Vercel cron request
+export async function GET(request: Request): Promise<Response> {
   const authHeader = request.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Determine mode from URL params
   const { searchParams } = new URL(request.url)
   const mode = searchParams.get('mode') || 'weekly'
 
-  // Call the Edge Function
-  const response = await fetch(
-    `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-bids`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Cron-Secret': process.env.CRON_SECRET || '',
-      },
-      body: JSON.stringify({ mode }),
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/process-bids`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Cron-Secret': process.env.CRON_SECRET || '',
+        },
+        body: JSON.stringify({ mode }),
+      }
+    )
+
+    const text = await response.text()
+    let data: unknown
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return NextResponse.json(
+        { error: 'Edge Function returned non-JSON response', status: response.status },
+        { status: 502 }
+      )
     }
-  )
 
-  const data = await response.json()
-
-  return NextResponse.json(data)
+    return NextResponse.json(data, { status: response.status })
+  } catch (error) {
+    console.error('Cron process-bids failed:', error)
+    return NextResponse.json(
+      { error: 'Failed to call Edge Function' },
+      { status: 502 }
+    )
+  }
 }

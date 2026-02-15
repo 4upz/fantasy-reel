@@ -23,19 +23,73 @@ async function handleCronRequest(request: Request): Promise<Response> {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const response = await fetch(
-    `${Deno.env.get('NEXT_PUBLIC_SUPABASE_URL')}/functions/v1/update-scores`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Cron-Secret': Deno.env.get('CRON_SECRET') || '',
-      },
-    }
-  )
+  try {
+    const response = await fetch(
+      `${Deno.env.get('NEXT_PUBLIC_SUPABASE_URL')}/functions/v1/update-scores`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Cron-Secret': Deno.env.get('CRON_SECRET') || '',
+        },
+      }
+    )
 
-  const data = await response.json()
-  return Response.json(data)
+    const text = await response.text()
+    let data: unknown
+    try {
+      data = JSON.parse(text)
+    } catch {
+      return Response.json(
+        { error: 'Edge Function returned non-JSON response', status: response.status },
+        { status: 502 }
+      )
+    }
+
+    return Response.json(data, { status: response.status })
+  } catch (error) {
+    console.error('Cron update-scores failed:', error)
+    return Response.json(
+      { error: 'Failed to call Edge Function' },
+      { status: 502 }
+    )
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Test helpers
+// ---------------------------------------------------------------------------
+
+const MOCK_SUPABASE_URL = 'http://mock-supabase.local'
+
+function setupEnv(cronSecret: string): void {
+  Deno.env.set('CRON_SECRET', cronSecret)
+  Deno.env.set('NEXT_PUBLIC_SUPABASE_URL', MOCK_SUPABASE_URL)
+}
+
+function createAuthorizedRequest(cronSecret: string): Request {
+  return new Request('http://localhost/api/cron/update-scores', {
+    headers: { authorization: `Bearer ${cronSecret}` },
+  })
+}
+
+async function withMockFetch<T>(
+  mockFn: typeof globalThis.fetch,
+  callback: () => Promise<T>
+): Promise<T> {
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = mockFn
+  try {
+    return await callback()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
+function resolveInputUrl(input: string | URL | Request): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.toString()
+  return input.url
 }
 
 // ---------------------------------------------------------------------------
@@ -68,68 +122,94 @@ Deno.test('cron route: returns 401 with wrong CRON_SECRET', async () => {
 
 Deno.test('cron route: proxies to Edge Function with correct headers', async () => {
   const cronSecret = 'test-secret-456'
-  const supabaseUrl = 'http://mock-supabase.local'
-  Deno.env.set('CRON_SECRET', cronSecret)
-  Deno.env.set('NEXT_PUBLIC_SUPABASE_URL', supabaseUrl)
+  setupEnv(cronSecret)
 
-  // Capture the proxied request details
   let capturedUrl = ''
   let capturedMethod = ''
   let capturedHeaders: Record<string, string> = {}
 
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    capturedUrl = url
-    capturedMethod = init?.method || 'GET'
-    const headers = init?.headers
-    if (headers instanceof Headers) {
-      headers.forEach((value, key) => { capturedHeaders[key] = value })
-    } else if (headers && typeof headers === 'object') {
-      capturedHeaders = { ...headers } as Record<string, string>
-    }
-    return Response.json({ movies_fetched: 3, scores_updated: 3, errors: [] })
-  }
+  const response = await withMockFetch(
+    async (input: string | URL | Request, init?: RequestInit) => {
+      capturedUrl = resolveInputUrl(input)
+      capturedMethod = init?.method || 'GET'
+      const headers = init?.headers
+      if (headers instanceof Headers) {
+        headers.forEach((value, key) => { capturedHeaders[key] = value })
+      } else if (headers && typeof headers === 'object') {
+        capturedHeaders = { ...headers } as Record<string, string>
+      }
+      return Response.json({ movies_fetched: 3, scores_updated: 3, errors: [] })
+    },
+    () => handleCronRequest(createAuthorizedRequest(cronSecret))
+  )
 
-  try {
-    const request = new Request('http://localhost/api/cron/update-scores', {
-      headers: { authorization: `Bearer ${cronSecret}` },
-    })
-    await handleCronRequest(request)
-
-    assertEquals(capturedUrl, `${supabaseUrl}/functions/v1/update-scores`)
-    assertEquals(capturedMethod, 'POST')
-    assertEquals(capturedHeaders['Content-Type'], 'application/json')
-    assertEquals(capturedHeaders['X-Cron-Secret'], cronSecret)
-  } finally {
-    globalThis.fetch = originalFetch
-  }
+  assertEquals(capturedUrl, `${MOCK_SUPABASE_URL}/functions/v1/update-scores`)
+  assertEquals(capturedMethod, 'POST')
+  assertEquals(capturedHeaders['Content-Type'], 'application/json')
+  assertEquals(capturedHeaders['X-Cron-Secret'], cronSecret)
+  assertEquals(response.status, 200)
 })
 
 Deno.test('cron route: returns Edge Function response data', async () => {
   const cronSecret = 'test-secret-789'
-  Deno.env.set('CRON_SECRET', cronSecret)
-  Deno.env.set('NEXT_PUBLIC_SUPABASE_URL', 'http://mock-supabase.local')
+  setupEnv(cronSecret)
 
   const expectedData = { movies_fetched: 10, scores_updated: 8, errors: ['movie-123 failed'] }
 
-  const originalFetch = globalThis.fetch
-  globalThis.fetch = async (_input: string | URL | Request, _init?: RequestInit): Promise<Response> => {
-    return Response.json(expectedData)
-  }
+  const response = await withMockFetch(
+    async () => Response.json(expectedData),
+    () => handleCronRequest(createAuthorizedRequest(cronSecret))
+  )
 
-  try {
-    const request = new Request('http://localhost/api/cron/update-scores', {
-      headers: { authorization: `Bearer ${cronSecret}` },
-    })
-    const response = await handleCronRequest(request)
+  assertEquals(response.status, 200)
+  const body = await response.json()
+  assertEquals(body.movies_fetched, 10)
+  assertEquals(body.scores_updated, 8)
+  assertEquals(body.errors, ['movie-123 failed'])
+})
 
-    assertEquals(response.status, 200)
-    const body = await response.json()
-    assertEquals(body.movies_fetched, 10)
-    assertEquals(body.scores_updated, 8)
-    assertEquals(body.errors, ['movie-123 failed'])
-  } finally {
-    globalThis.fetch = originalFetch
-  }
+Deno.test('cron route: forwards Edge Function error status codes', async () => {
+  const cronSecret = 'test-secret-status'
+  setupEnv(cronSecret)
+
+  const response = await withMockFetch(
+    async () => Response.json({ error: 'Forbidden' }, { status: 403 }),
+    () => handleCronRequest(createAuthorizedRequest(cronSecret))
+  )
+
+  assertEquals(response.status, 403)
+  const body = await response.json()
+  assertEquals(body.error, 'Forbidden')
+})
+
+Deno.test('cron route: returns 502 for non-JSON Edge Function response', async () => {
+  const cronSecret = 'test-secret-html'
+  setupEnv(cronSecret)
+
+  const response = await withMockFetch(
+    async () => new Response('<html>502 Bad Gateway</html>', {
+      status: 502,
+      headers: { 'Content-Type': 'text/html' },
+    }),
+    () => handleCronRequest(createAuthorizedRequest(cronSecret))
+  )
+
+  assertEquals(response.status, 502)
+  const body = await response.json()
+  assertEquals(body.error, 'Edge Function returned non-JSON response')
+  assertEquals(body.status, 502)
+})
+
+Deno.test('cron route: returns 502 when fetch throws (network error)', async () => {
+  const cronSecret = 'test-secret-network'
+  setupEnv(cronSecret)
+
+  const response = await withMockFetch(
+    async () => { throw new Error('Network error: connection refused') },
+    () => handleCronRequest(createAuthorizedRequest(cronSecret))
+  )
+
+  assertEquals(response.status, 502)
+  const body = await response.json()
+  assertEquals(body.error, 'Failed to call Edge Function')
 })
