@@ -18,8 +18,13 @@ import { assertEquals } from '@std/assert'
 // ---------------------------------------------------------------------------
 
 async function handleCronRequest(request: Request): Promise<Response> {
+  const cronSecret = Deno.env.get('CRON_SECRET')
+  if (!cronSecret) {
+    return Response.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+  }
+
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${Deno.env.get('CRON_SECRET')}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -30,7 +35,7 @@ async function handleCronRequest(request: Request): Promise<Response> {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Cron-Secret': Deno.env.get('CRON_SECRET') || '',
+          'X-Cron-Secret': cronSecret,
         },
       }
     )
@@ -95,6 +100,19 @@ function resolveInputUrl(input: string | URL | Request): string {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+Deno.test('cron route: returns 500 when CRON_SECRET is not configured', async () => {
+  Deno.env.delete('CRON_SECRET')
+
+  const request = new Request('http://localhost/api/cron/update-scores', {
+    headers: { authorization: 'Bearer anything' },
+  })
+  const response = await handleCronRequest(request)
+
+  assertEquals(response.status, 500)
+  const body = await response.json()
+  assertEquals(body.error, 'CRON_SECRET not configured')
+})
 
 Deno.test('cron route: returns 401 without authorization header', async () => {
   Deno.env.set('CRON_SECRET', 'test-secret-123')

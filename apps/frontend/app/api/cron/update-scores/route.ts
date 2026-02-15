@@ -4,8 +4,13 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function GET(request: Request): Promise<Response> {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
+  }
+
   const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -16,7 +21,7 @@ export async function GET(request: Request): Promise<Response> {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Cron-Secret': process.env.CRON_SECRET || '',
+          'X-Cron-Secret': cronSecret,
         },
       }
     )
