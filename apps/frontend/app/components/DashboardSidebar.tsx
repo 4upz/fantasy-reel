@@ -3,14 +3,11 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import QuickStats from './QuickStats'
-
 interface Props {
   onCreateClick: () => void
-  leagueCount: number
 }
 
-export default function DashboardSidebar({ onCreateClick, leagueCount }: Props): React.ReactElement {
+export default function DashboardSidebar({ onCreateClick }: Props): React.ReactElement {
   const router = useRouter()
   const [inviteCode, setInviteCode] = useState('')
   const [isJoining, setIsJoining] = useState(false)
@@ -96,8 +93,6 @@ export default function DashboardSidebar({ onCreateClick, leagueCount }: Props):
         </form>
       </div>
 
-      {/* Quick Stats */}
-      {leagueCount > 0 && <QuickStats leagueCount={leagueCount} />}
     </div>
   )
 }

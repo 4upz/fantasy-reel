@@ -16,14 +16,12 @@ interface Props {
   showCreateModal: boolean
   onModalClose: () => void
   onCreateClick: () => void
-  onLeaguesLoaded?: (count: number) => void
 }
 
 export default function LeagueManager({
   showCreateModal,
   onModalClose,
   onCreateClick,
-  onLeaguesLoaded,
 }: Props): React.ReactElement {
   const [leagues, setLeagues] = useState<League[]>([])
   const [loading, setLoading] = useState(true)
@@ -53,25 +51,20 @@ export default function LeagueManager({
         console.error('Supabase error fetching leagues:', error)
       } else {
         setLeagues(data ?? [])
-        onLeaguesLoaded?.(data?.length ?? 0)
       }
     } catch (error) {
       console.error('Unexpected error fetching leagues:', error)
     } finally {
       setLoading(false)
     }
-  }, [onLeaguesLoaded])
+  }, [])
 
   useEffect(() => {
     fetchLeagues()
   }, [fetchLeagues])
 
   function handleLeagueCreated(league: League): void {
-    setLeagues((prev) => {
-      const newLeagues = [league, ...prev]
-      onLeaguesLoaded?.(newLeagues.length)
-      return newLeagues
-    })
+    setLeagues((prev) => [league, ...prev])
   }
 
   // Loading state - skeleton

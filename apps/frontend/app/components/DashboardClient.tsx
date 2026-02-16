@@ -12,7 +12,6 @@ interface Props {
 
 export default function DashboardClient({ pendingInvitations }: Props): React.ReactElement {
   const [showCreateModal, setShowCreateModal] = useState(false)
-  const [leagueCount, setLeagueCount] = useState(0)
 
   function openModal(): void {
     setShowCreateModal(true)
@@ -20,10 +19,6 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
 
   function closeModal(): void {
     setShowCreateModal(false)
-  }
-
-  function handleLeaguesLoaded(count: number): void {
-    setLeagueCount(count)
   }
 
   return (
@@ -53,13 +48,12 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
             showCreateModal={showCreateModal}
             onModalClose={closeModal}
             onCreateClick={openModal}
-            onLeaguesLoaded={handleLeaguesLoaded}
           />
         </div>
 
         {/* Sidebar - Actions and Stats */}
         <div>
-          <DashboardSidebar onCreateClick={openModal} leagueCount={leagueCount} />
+          <DashboardSidebar onCreateClick={openModal} />
         </div>
       </div>
     </div>
