@@ -96,12 +96,12 @@ export default function PickOrderQueue({
       <h4 className="text-xs font-medium text-foreground-muted uppercase tracking-wider">
         Upcoming Picks
       </h4>
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-2 px-2">
+      <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none">
         {queue.map((item, index) => (
           <div
             key={`${item.round}-${item.pickNumber}`}
             className={cn(
-              'flex-shrink-0 flex items-center gap-2 px-3 py-2 rounded-lg border transition-all',
+              'flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border transition-all',
               getQueueItemStyles(item.isCurrentPick, item.isCurrentUser)
             )}
           >
@@ -119,14 +119,14 @@ export default function PickOrderQueue({
             <div className="min-w-0">
               <p
                 className={cn(
-                  'text-sm font-medium truncate max-w-24',
+                  'text-sm font-medium truncate max-w-20 sm:max-w-32',
                   item.isCurrentPick ? 'text-foreground' : 'text-foreground-secondary'
                 )}
               >
                 {item.participant.teams?.name || 'Unknown'}
               </p>
               {item.participant.profiles?.display_name && (
-                <p className="text-xs text-foreground-muted truncate max-w-24">
+                <p className="text-xs text-foreground-muted truncate max-w-20 sm:max-w-32">
                   {item.participant.profiles.display_name}
                 </p>
               )}

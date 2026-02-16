@@ -9,6 +9,7 @@ import { buildTeamInfoByUserId, buildTeamInfoByTeamId } from '@/utils/league'
 import CounterpickPicker from './CounterpickPicker'
 import DraftProgressRing from './DraftProgressRing'
 import { SpinnerIcon, ClockIcon, ArrowUpIcon, CheckIcon } from './Icons'
+import { cn } from './utils'
 import type {
   League,
   ParticipantWithProfile,
@@ -182,8 +183,8 @@ export default function CounterpickRound({
   return (
     <div className="space-y-6">
       {/* Counterpick Header Card */}
-      <div className="card p-6">
-        <div className="flex items-start justify-between gap-6">
+      <div className="card p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
           {/* Left: Title and Status */}
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
@@ -239,14 +240,14 @@ export default function CounterpickRound({
           </div>
 
           {/* Right: Progress Ring */}
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 self-center sm:self-start">
             <DraftProgressRing current={counterpicksMade} total={totalCounterpicks} size="lg" />
           </div>
         </div>
 
         {/* Counterpick Queue */}
         {currentTurn && (
-          <div className="mt-6 pt-6 border-t border-border">
+          <div className="mt-4 pt-4 sm:mt-6 sm:pt-6 border-t border-border">
             <CounterpickQueue
               participants={participants}
               currentPickIndex={counterpicksMade}
@@ -357,6 +358,16 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
   )
 }
 
+function getCounterpickQueueItemStyles(isFirst: boolean, isCurrentUser: boolean): string {
+  if (isFirst && isCurrentUser) {
+    return 'bg-success-bg border-success'
+  }
+  if (isFirst) {
+    return 'bg-crimson/10 border-crimson/30'
+  }
+  return 'bg-elevated border-border'
+}
+
 interface CounterpickQueueProps {
   participants: ParticipantWithProfile[]
   currentPickIndex: number
@@ -413,21 +424,19 @@ function CounterpickQueue({
   return (
     <div>
       <p className="text-sm text-foreground-muted mb-3">Upcoming Picks</p>
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
         {upcomingPicks.map((pick, index) => (
           <div
             key={`${pick.participant.id}-${pick.round}-${index}`}
-            className={`flex-shrink-0 px-3 py-2 rounded-lg border transition-all ${
-              index === 0
-                ? pick.isCurrentUser
-                  ? 'bg-success-bg border-success'
-                  : 'bg-crimson/10 border-crimson/30'
-                : 'bg-elevated border-border'
-            }`}
+            className={cn(
+              'flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border transition-all',
+              getCounterpickQueueItemStyles(index === 0, pick.isCurrentUser)
+            )}
           >
-            <p className={`text-xs font-medium ${
+            <p className={cn(
+              'text-xs font-medium',
               index === 0 && pick.isCurrentUser ? 'text-success' : 'text-foreground-secondary'
-            }`}>
+            )}>
               {pick.isCurrentUser ? 'You' : pick.participant.teams?.name || 'Unknown'}
             </p>
             {!pick.isCurrentUser && pick.participant.profiles?.display_name && (
@@ -439,7 +448,7 @@ function CounterpickQueue({
           </div>
         ))}
         {currentPickIndex + upcomingPicks.length < totalPicks && (
-          <div className="flex-shrink-0 px-3 py-2 rounded-lg bg-surface border border-border flex items-center">
+          <div className="flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-surface border border-border flex items-center">
             <p className="text-xs text-foreground-muted">
               +{totalPicks - currentPickIndex - upcomingPicks.length} more
             </p>

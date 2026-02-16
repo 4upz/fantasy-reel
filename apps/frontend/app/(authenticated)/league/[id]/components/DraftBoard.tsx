@@ -169,8 +169,8 @@ export default function DraftBoard({
   return (
     <div className="space-y-6" data-testid="draft-board">
       {/* Draft Header Card */}
-      <div className="card p-6">
-        <div className="flex items-start justify-between gap-6">
+      <div className="card p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
           {/* Left: Title and Status */}
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
@@ -229,14 +229,14 @@ export default function DraftBoard({
           </div>
 
           {/* Right: Progress Ring */}
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0 self-center sm:self-start">
             <DraftProgressRing current={picksMade} total={totalPicks} size="lg" />
           </div>
         </div>
 
         {/* Pick Order Queue */}
         {nextPick && (
-          <div className="mt-6 pt-6 border-t border-border">
+          <div className="mt-4 pt-4 sm:mt-6 sm:pt-6 border-t border-border">
             <PickOrderQueue
               participants={participants}
               currentPickIndex={picksMade}
@@ -250,7 +250,7 @@ export default function DraftBoard({
       {error && <div className="alert alert-error">{error}</div>}
 
       {/* Movie Picker - Always visible for browsing, but only pickable on your turn */}
-      <div className="card p-6">
+      <div className="card p-4 sm:p-6">
         <MoviePicker
           draftedTmdbIds={draftedTmdbIds}
           isMyTurn={isMyTurn}
