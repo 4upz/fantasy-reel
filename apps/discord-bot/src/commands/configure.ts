@@ -142,6 +142,8 @@ export const configure: Command = {
       const field = TOGGLE_MAP[buttonInteraction.customId]
       if (!field) return
 
+      await buttonInteraction.deferUpdate()
+
       settings[field] = !settings[field]
 
       // Update database
@@ -155,7 +157,7 @@ export const configure: Command = {
         settings[field] = !settings[field] // Revert on failure
       }
 
-      await buttonInteraction.update({
+      await interaction.editReply({
         embeds: [buildSettingsEmbed(settings, leagueName)],
         components: [buildButtons(settings)],
       })

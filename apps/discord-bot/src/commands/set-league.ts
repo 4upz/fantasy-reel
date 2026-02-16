@@ -1,7 +1,7 @@
 import {
+  ChannelType,
   ChatInputCommandInteraction,
   SlashCommandBuilder,
-  TextChannel,
   EmbedBuilder,
 } from 'discord.js'
 import { getSupabase } from '../supabase.js'
@@ -105,7 +105,14 @@ export const setLeague: Command = {
     }
 
     // Create webhook
-    const channel = interaction.channel as TextChannel
+    const channel = interaction.channel
+    if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
+      await interaction.editReply(
+        'This command must be run in a text or announcement channel.'
+      )
+      return
+    }
+
     let webhook
     try {
       webhook = await channel.createWebhook({

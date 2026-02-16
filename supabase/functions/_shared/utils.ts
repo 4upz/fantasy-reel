@@ -6,10 +6,11 @@ import { corsHeaders, getCorsHeaders } from './cors.ts'
  * Bypasses RLS — use only in Edge Functions for operations requiring elevated access.
  */
 export function createServiceClient(): SupabaseClient {
-  return createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  )
+  const url = Deno.env.get('SUPABASE_URL')
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!url) throw new Error('Missing SUPABASE_URL environment variable')
+  if (!key) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable')
+  return createClient(url, key)
 }
 
 let _currentRequest: Request | undefined
