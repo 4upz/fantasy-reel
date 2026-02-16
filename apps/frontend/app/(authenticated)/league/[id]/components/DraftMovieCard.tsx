@@ -4,32 +4,18 @@ import { useState } from 'react'
 import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
-import { StarIcon, CheckIcon, ClapperboardIcon, PlusIcon, EyeIcon } from './Icons'
+import { StarIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
   movie: TMDbSearchResult
-  isSelected?: boolean
   isDrafted?: boolean
-  onSelect: (movie: TMDbSearchResult) => void
-  onPreview?: (movie: TMDbSearchResult) => void
+  onPreview: (movie: TMDbSearchResult) => void
 }
-
-/**
- * DraftMovieCard - Movie card for draft selection
- *
- * UX Pattern:
- * - Clicking the card opens movie details/preview (most common user intent)
- * - Hover reveals two action buttons: "View Details" and "Draft"
- * - "Draft" button (gold) is the primary action for deliberate pick selection
- * - "View Details" button (secondary) provides quick access to preview
- */
 
 export default function DraftMovieCard({
   movie,
-  isSelected,
   isDrafted,
-  onSelect,
   onPreview,
 }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
@@ -38,29 +24,15 @@ export default function DraftMovieCard({
   const popularityBadge = getPopularityBadge(movie.popularity)
 
   function handleCardClick(): void {
-    // Card click opens preview (most common user intent)
-    if (!isDrafted && onPreview) {
+    if (!isDrafted) {
       onPreview(movie)
     }
-  }
-
-  function handleDraftClick(e: React.MouseEvent): void {
-    e.stopPropagation()
-    if (!isDrafted) {
-      onSelect(movie)
-    }
-  }
-
-  function handlePreviewClick(e: React.MouseEvent): void {
-    e.stopPropagation()
-    onPreview?.(movie)
   }
 
   const cardClasses = cn(
     'group relative rounded-xl overflow-hidden transition-all duration-300',
     isDrafted && 'opacity-40 cursor-not-allowed',
-    !isDrafted && 'cursor-pointer hover:scale-[1.02] hover:z-10',
-    isSelected ? 'ring-2 ring-gold shadow-glow-gold' : 'hover:shadow-medium'
+    !isDrafted && 'cursor-pointer hover:scale-[1.02] hover:z-10 hover:shadow-medium'
   )
 
   return (
@@ -149,40 +121,6 @@ export default function DraftMovieCard({
             </div>
           </div>
         )}
-
-        {/* Selected Checkmark */}
-        {isSelected && (
-          <div className="absolute top-2 right-2 w-7 h-7 bg-gold rounded-full flex items-center justify-center shadow-lg animate-fade-in">
-            <CheckIcon className="w-4 h-4 text-background" />
-          </div>
-        )}
-
-        {/* Hover Action Buttons */}
-        {!isDrafted && (
-          <div className="absolute inset-x-0 bottom-0 p-3 opacity-0 group-hover:opacity-100 transition-all duration-200">
-            <div className="flex flex-col gap-2">
-              {/* Draft Button - Primary Action */}
-              <button
-                onClick={handleDraftClick}
-                className="w-full py-2.5 bg-gold hover:bg-gold-hover text-background text-sm font-semibold rounded-lg transition-all duration-200 flex items-center justify-center gap-2 shadow-md hover:shadow-glow-gold"
-                data-testid={`draft-pick-button-${movie.tmdb_id}`}
-              >
-                <PlusIcon className="w-4 h-4" />
-                Draft Movie
-              </button>
-              {/* View Details Button - Secondary Action */}
-              {onPreview && (
-                <button
-                  onClick={handlePreviewClick}
-                  className="w-full py-2 bg-surface/90 hover:bg-surface-hover text-foreground-secondary hover:text-foreground text-sm font-medium rounded-lg transition-all duration-200 backdrop-blur-sm border border-border hover:border-border-hover flex items-center justify-center gap-2"
-                >
-                  <EyeIcon className="w-4 h-4" />
-                  View Details
-                </button>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Info Section */}
@@ -200,10 +138,6 @@ export default function DraftMovieCard({
         )}
       </div>
 
-      {/* Selection Border */}
-      {isSelected && (
-        <div className="absolute inset-0 rounded-xl border-2 border-gold pointer-events-none" />
-      )}
     </div>
   )
 }

@@ -12,9 +12,8 @@ import { updateLeagueStatus } from '../../helpers/supabase.helper'
  * - draft-board: Shown when league is in 'drafting' status
  * - movie-picker: Movie browsing/selection within draft-board
  * - movie-search-input: Search input in DraftFilters
- * - movie-card-{tmdb_id}: Individual movie cards
- * - draft-pick-button-{tmdb_id}: Draft button on each movie card (hover-revealed)
- * - confirm-pick-button: Confirm button in fixed bottom bar after selecting a movie
+ * - movie-card-{tmdb_id}: Individual movie cards (click opens detail modal)
+ * - draft-movie-button: "Draft This Movie" button inside the movie detail modal
  * - draft-history: Pick history section (only shown when picks exist)
  * - draft-progress: Progress ring showing picks made / total
  * - pick-order-queue: Shows upcoming pick order
@@ -103,17 +102,14 @@ test.describe('Draft Flow', () => {
     // Should show "It's your turn!" since owner has draft_order=1
     await expect(page.getByText("It's your turn!")).toBeVisible({ timeout: 10000 })
 
-    // Mock movies should be loaded - hover over first movie card to reveal draft button
+    // Click a movie card to open the detail modal
     const movieCard = page.getByTestId(`movie-card-${MOCK_MOVIES[0].tmdb_id}`)
     await expect(movieCard).toBeVisible({ timeout: 10000 })
-    await movieCard.hover()
+    await movieCard.click()
 
-    // Click the draft button (revealed on hover)
-    await page.getByTestId(`draft-pick-button-${MOCK_MOVIES[0].tmdb_id}`).click()
-
-    // Confirm pick button should appear in the fixed bottom bar
-    await expect(page.getByTestId('confirm-pick-button')).toBeVisible({ timeout: 5000 })
-    await page.getByTestId('confirm-pick-button').click()
+    // Draft button should be visible in the modal (it's our turn)
+    await expect(page.getByTestId('draft-movie-button')).toBeVisible({ timeout: 5000 })
+    await page.getByTestId('draft-movie-button').click()
 
     // After successful pick, the movie should appear in pick history
     await expect(page.getByTestId('draft-history')).toBeVisible({ timeout: 15000 })

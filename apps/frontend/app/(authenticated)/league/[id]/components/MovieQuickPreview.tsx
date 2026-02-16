@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
@@ -28,7 +28,6 @@ export default function MovieQuickPreview({
   const [details, setDetails] = useState<TMDbMovieDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
-  const descriptionRef = useRef<HTMLParagraphElement>(null)
 
   useEffect(() => {
     async function fetchDetails(): Promise<void> {
@@ -204,10 +203,7 @@ export default function MovieQuickPreview({
                         isDescriptionExpanded ? 'max-h-[500px]' : 'max-h-[5.25rem]'
                       }`}
                     >
-                      <p
-                        ref={descriptionRef}
-                        className="text-foreground-secondary text-sm leading-relaxed"
-                      >
+                      <p className="text-foreground-secondary text-sm leading-relaxed">
                         {displayData.overview}
                       </p>
                     </div>
@@ -273,6 +269,7 @@ export default function MovieQuickPreview({
                   onClick={() => onDraft(movie.tmdb_id)}
                   disabled={picking}
                   className="btn btn-primary flex-1 py-3 text-base font-semibold"
+                  data-testid="draft-movie-button"
                 >
                   {picking ? (
                     <span className="flex items-center justify-center gap-2">

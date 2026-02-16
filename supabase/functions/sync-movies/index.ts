@@ -17,6 +17,7 @@ interface TMDbMovie {
   popularity: number
   vote_average: number
   vote_count: number
+  adult?: boolean
 }
 
 interface TMDbResponse {
@@ -151,7 +152,7 @@ Deno.serve(async (req) => {
 
     // Filter out any movies flagged as adult
     const safeResults = tmdbData.results.filter(
-      (movie: TMDbMovie & { adult?: boolean }) => !movie.adult
+      (movie) => !movie.adult
     )
 
     // Fetch external IDs (including IMDb IDs) for each movie

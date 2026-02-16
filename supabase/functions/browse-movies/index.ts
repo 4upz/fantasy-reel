@@ -139,7 +139,7 @@ async function fetchTrendingMovies(
   let scannedCount = 0
 
   while (accumulated.length < TARGET_PAGE_SIZE && fetches < MAX_TMDB_FETCHES && tmdbPage <= totalTmdbPages) {
-    const url = `https://api.themoviedb.org/3/trending/movie/week?language=en-US&page=${tmdbPage}`
+    const url = `https://api.themoviedb.org/3/trending/movie/week?language=en-US&include_adult=false&page=${tmdbPage}`
     const data = await fetchTMDbPage(url, tmdbToken)
 
     totalTmdbPages = data.total_pages

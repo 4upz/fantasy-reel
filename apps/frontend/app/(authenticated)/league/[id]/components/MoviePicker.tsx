@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useRef, useMemo } from 'react'
-import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
 import { useWishlist } from '@/hooks/useWishlist'
 import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
@@ -9,6 +8,7 @@ import DraftFilters from './DraftFilters'
 import DraftMovieCard from './DraftMovieCard'
 import MovieQuickPreview from './MovieQuickPreview'
 import { SpinnerIcon, ClapperboardIcon, TrendingUpIcon, CalendarIcon, HeartIcon, SearchIcon } from './Icons'
+import { isWithinDays } from './utils'
 
 interface Props {
   draftedTmdbIds: Set<number>
@@ -61,7 +61,6 @@ export default function MoviePicker({
 }: Props): React.ReactElement {
   const { wishlistedIds } = useWishlist()
   const [activeTab, setActiveTab] = useState<TabType>('all')
-  const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [previewMovie, setPreviewMovie] = useState<TMDbSearchResult | null>(null)
   const {
     movies,
@@ -100,13 +99,7 @@ export default function MoviePicker({
         // Trending data comes from the server via fetchTrending — no client filter needed
         return movies
       case 'releasing-soon':
-        return movies.filter((m) => {
-          if (!m.release_date) return false
-          const releaseDate = new Date(m.release_date)
-          const now = new Date()
-          const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-          return releaseDate >= now && releaseDate <= thirtyDaysFromNow
-        })
+        return movies.filter((m) => isWithinDays(m.release_date, 30))
       case 'wishlist':
         return movies.filter((m) => wishlistedIds.has(m.tmdb_id))
       default:
@@ -147,29 +140,12 @@ export default function MoviePicker({
     [browse, search]
   )
 
-  const handleSelectMovie = (movie: TMDbSearchResult) => {
-    if (draftedTmdbIds.has(movie.tmdb_id)) return
-    setSelectedMovie(movie)
-  }
-
-  const handleConfirmPick = () => {
-    if (selectedMovie && isMyTurn) {
-      onPick(selectedMovie.tmdb_id, selectedMovie)
-      setSelectedMovie(null)
-    }
-  }
-
-  const handlePreview = (movie: TMDbSearchResult) => {
-    setPreviewMovie(movie)
-  }
-
-  const handleDraftFromPreview = (tmdbId: number) => {
+  function handleDraftFromPreview(tmdbId: number): void {
     const movie = movies.find((m) => m.tmdb_id === tmdbId)
     if (movie) {
       onPick(tmdbId, movie)
     }
     setPreviewMovie(null)
-    setSelectedMovie(null)
   }
 
   // Count available (non-drafted) movies
@@ -263,10 +239,8 @@ export default function MoviePicker({
               <DraftMovieCard
                 key={movie.tmdb_id}
                 movie={movie}
-                isSelected={selectedMovie?.tmdb_id === movie.tmdb_id}
                 isDrafted={draftedTmdbIds.has(movie.tmdb_id)}
-                onSelect={handleSelectMovie}
-                onPreview={handlePreview}
+                onPreview={setPreviewMovie}
               />
             ))}
           </div>
@@ -285,70 +259,7 @@ export default function MoviePicker({
         </>
       )}
 
-      {/* Selection Confirmation */}
-      {selectedMovie && isMyTurn && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-surface/95 backdrop-blur-md border-t border-border shadow-heavy z-40 animate-slide-up safe-area-bottom">
-          <div className="max-w-4xl mx-auto">
-            <div className="flex items-center gap-4">
-              {/* Selected movie preview */}
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                {selectedMovie.poster_url && (
-                  <div className="relative w-12 h-18 rounded-lg overflow-hidden border border-border">
-                    <Image
-                      src={selectedMovie.poster_url}
-                      alt={selectedMovie.title}
-                      fill
-                      sizes="48px"
-                      className="object-cover"
-                    />
-                  </div>
-                )}
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground truncate">{selectedMovie.title}</p>
-                  <p className="text-sm text-foreground-muted">
-                    {selectedMovie.release_date
-                      ? new Date(selectedMovie.release_date).toLocaleDateString()
-                      : 'TBA'}
-                    {selectedMovie.vote_average > 0 && (
-                      <span className="ml-2">
-                        <span className="text-gold">★</span> {selectedMovie.vote_average.toFixed(1)}
-                      </span>
-                    )}
-                  </p>
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSelectedMovie(null)}
-                  disabled={picking}
-                  className="btn btn-ghost px-4"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmPick}
-                  disabled={picking}
-                  className="btn btn-primary px-6"
-                  data-testid="confirm-pick-button"
-                >
-                  {picking ? (
-                    <span className="flex items-center gap-2">
-                      <SpinnerIcon className="w-4 h-4" />
-                      Drafting...
-                    </span>
-                  ) : (
-                    'Confirm Pick'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Quick Preview Modal */}
+      {/* Movie Detail Modal */}
       {previewMovie && (
         <MovieQuickPreview
           movie={previewMovie}

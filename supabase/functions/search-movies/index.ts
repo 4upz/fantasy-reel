@@ -17,6 +17,7 @@ interface TMDbMovie {
   vote_count: number
   popularity: number
   genre_ids: number[]
+  adult?: boolean
 }
 
 interface TMDbSearchResponse {
@@ -102,7 +103,7 @@ Deno.serve(async (req) => {
     const tmdbData: TMDbSearchResponse = await tmdbResponse.json()
 
     const mappedResults: SearchResult[] = tmdbData.results
-      .filter((movie: TMDbMovie & { adult?: boolean }) => !movie.adult)
+      .filter((movie) => !movie.adult)
       .map((movie) => ({
       tmdb_id: movie.id,
       title: movie.title,
