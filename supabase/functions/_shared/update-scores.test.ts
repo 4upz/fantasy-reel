@@ -241,7 +241,8 @@ function buildHandler(
         }
 
         try {
-          // Use injected fetchFn to allow mocking MDBList API
+          // fetchMDBListRatings uses globalThis.fetch internally and doesn't accept
+          // an injected fetch, so we temporarily replace it for test mocking.
           const originalGlobalFetch = globalThis.fetch
           globalThis.fetch = fetchFn
           let fetchResult: { ratings: Array<{ source: string | null; score: number | null; raw: string }>; error?: string }
@@ -271,22 +272,25 @@ function buildHandler(
 
           results.movies_fetched++
 
-          let ratingsStored = 0
-          for (const rating of fetchResult.ratings) {
-            if (!rating.source || rating.score === null) continue
+          const now = new Date().toISOString()
+          const reviewRows = fetchResult.ratings
+            .filter((r: { source: string | null; score: number | null }) => r.source && r.score !== null)
+            .map((r: { source: string | null; score: number | null; raw: string }) => ({
+              movie_id: movie.id,
+              source: r.source,
+              score: r.score,
+              raw_score: r.raw,
+              fetched_at: now,
+            }))
 
+          let ratingsStored = 0
+          if (reviewRows.length > 0) {
             const { error: reviewError } = await supabaseClient
               .from('reviews')
-              .upsert({
-                movie_id: movie.id,
-                source: rating.source,
-                score: rating.score,
-                raw_score: rating.raw,
-                fetched_at: new Date().toISOString(),
-              }, { onConflict: 'movie_id,source' })
+              .upsert(reviewRows, { onConflict: 'movie_id,source' })
 
             if (!reviewError) {
-              ratingsStored++
+              ratingsStored = reviewRows.length
             }
           }
 
@@ -593,8 +597,9 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertEquals(body.scores_updated, 1)
     assertEquals(body.errors.length, 0)
 
-    // Verify 3 ratings were upserted
-    assertEquals(client._upsertCalls.length, 3)
+    // Verify 1 batched upsert with 3 ratings
+    assertEquals(client._upsertCalls.length, 1)
+    assertEquals((client._upsertCalls[0] as unknown[]).length, 3)
 
     // Verify RPC was called
     assertEquals(client._rpcCalls.length, 1)
@@ -616,8 +621,9 @@ Deno.test('update-scores scoring logic', async (t) => {
     const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
     await handler(req)
 
-    // Verify source names in upsert calls
-    const sources = client._upsertCalls.map((c: unknown) => (c as { source: string }).source)
+    // Verify source names in batched upsert
+    const batch = client._upsertCalls[0] as Array<{ source: string }>
+    const sources = batch.map((r) => r.source)
     assertEquals(sources.includes('imdb'), true)
     assertEquals(sources.includes('rotten_tomatoes'), true)
     assertEquals(sources.includes('metacritic'), true)
