@@ -33,7 +33,7 @@ Deno.test({
 
   await t.step('returns 400 when neither league_id nor token provided', async () => {
     const result = await invokeFunction(secondClient, 'join-league', {})
-    assertEquals(result.error, 'Either league_id or invitation_token is required')
+    assertEquals(result.error, 'Either league_id, invitation_token, or join_code is required')
   })
 
   await t.step('returns 400 for invalid invitation token format', async () => {

@@ -140,7 +140,7 @@ Deno.test({
       })
 
       // ============================================================================
-      // Service Role Auth - Success
+      // Service Role Auth - Success (default mode with no body)
       // ============================================================================
 
       await t.step('succeeds with service role Bearer token', async () => {

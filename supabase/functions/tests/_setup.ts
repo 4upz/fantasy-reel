@@ -436,6 +436,25 @@ export class TestDataFactory {
 
     const result = await invokeFunction(this.client, 'start-draft', { league_id: leagueId })
     if (result.error) throw new Error(`Failed to start draft: ${result.error}`)
+
+    // start-draft randomizes draft_order via randomize_draft_order_if_needed().
+    // Force deterministic order for tests: owner=1, second=2.
+    const serviceClient = getServiceClient()
+    const ownerUserId = await getUserId(this.client)
+    const secondUserId = await getUserId(this.secondClient)
+
+    await serviceClient
+      .from('league_participants')
+      .update({ draft_order: 1 })
+      .eq('league_id', leagueId)
+      .eq('user_id', ownerUserId)
+
+    await serviceClient
+      .from('league_participants')
+      .update({ draft_order: 2 })
+      .eq('league_id', leagueId)
+      .eq('user_id', secondUserId)
+
     return leagueId
   }
 
@@ -490,18 +509,33 @@ export class TestDataFactory {
       await this.addParticipantToLeague(leagueId, thirdClient)
     }
 
-    // Build the clients array in draft order (1-indexed to match draft_order)
-    const clients: SupabaseClient[] = [this.client, this.secondClient]
-    if (thirdClient) {
-      clients.push(thirdClient)
-    }
-
-    // Start the draft
+    // Start the draft (randomizes draft_order via randomize_draft_order_if_needed)
     const startResult = await invokeFunction(this.client, 'start-draft', { league_id: leagueId })
     if (startResult.error) throw new Error(`Failed to start draft: ${startResult.error}`)
 
     // Get the service client for direct DB access
     const serviceClient = getServiceClient()
+
+    // Query actual draft order and build clients array to match
+    const { data: orderedParticipants } = await serviceClient
+      .from('league_participants')
+      .select('user_id, draft_order')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+      .order('draft_order', { ascending: true })
+
+    const allClients: SupabaseClient[] = [this.client, this.secondClient]
+    if (thirdClient) allClients.push(thirdClient)
+
+    const userIdToClient = new Map<string, SupabaseClient>()
+    for (const c of allClients) {
+      const { data: { user } } = await c.auth.getUser()
+      userIdToClient.set(user!.id, c)
+    }
+
+    const clients: SupabaseClient[] = orderedParticipants!.map(
+      p => userIdToClient.get(p.user_id)!
+    )
 
     // Get league config (draft_slots determines how many rounds)
     const { data: league } = await serviceClient

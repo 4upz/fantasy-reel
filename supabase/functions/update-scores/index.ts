@@ -33,12 +33,6 @@ Deno.serve(async (req) => {
       return errorResponse('Forbidden', 403)
     }
 
-    const mdblistApiKey = Deno.env.get('MDBLIST_API_KEY')
-    if (!mdblistApiKey) {
-      console.error('MDBLIST_API_KEY not configured')
-      return errorResponse('Score update service not configured', 503)
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     if (!supabaseUrl || !serviceRoleKey) {
       console.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
@@ -122,6 +116,14 @@ Deno.serve(async (req) => {
         scores_updated: 0,
         errors: []
       })
+    }
+
+    // Only require MDBLIST_API_KEY when there are movies that need external score lookups
+    const mdblistApiKey = Deno.env.get('MDBLIST_API_KEY')
+    const needsApiKey = moviesToUpdate.some(m => m.tmdb_id > 0)
+    if (needsApiKey && !mdblistApiKey) {
+      console.error('MDBLIST_API_KEY not configured')
+      return errorResponse('Score update service not configured', 503)
     }
 
     const results = {

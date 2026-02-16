@@ -14,7 +14,7 @@ Deno.test({
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async (t) => {
-  const { client, factory } = await createTestFactory()
+  const { client, secondClient, factory } = await createTestFactory()
 
   // Create a league for testing (owner is the authenticated user)
   let testLeagueId: string
@@ -66,15 +66,11 @@ Deno.test({
   // ============================================================================
 
   await t.step('returns 403 when user is not the league owner', async () => {
-    // Create a second user and their client
-    const { client: otherClient, factory: otherFactory } = await createTestFactory()
-
-    const result = await invokeFunction(otherClient, 'generate-join-link', {
+    // Use a different user who is NOT the league owner
+    const result = await invokeFunction(secondClient, 'generate-join-link', {
       league_id: testLeagueId,
     })
     assertEquals(result.error, 'Only the league owner can generate join links')
-
-    await otherFactory.cleanup()
   })
 
   // ============================================================================

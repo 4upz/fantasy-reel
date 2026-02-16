@@ -180,7 +180,7 @@ Deno.test({
       })
 
       assertEquals(error, null)
-      assertEquals(data.message, 'Trade cancelled')
+      assertEquals(data.message, 'Trade cancelled successfully')
       assertEquals(data.trade_offer_id, tradeOfferId)
 
       // Verify the trade status
@@ -221,7 +221,7 @@ Deno.test({
       })
 
       assertEquals(error, null)
-      assertEquals(data.message, 'Trade cancelled')
+      assertEquals(data.message, 'Trade cancelled successfully')
     })
 
     // ============================================================================

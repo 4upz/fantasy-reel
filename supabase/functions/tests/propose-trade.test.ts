@@ -6,7 +6,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
 
 Deno.test({
   name: 'propose-trade',
@@ -111,12 +111,17 @@ Deno.test({
         offered_items: { movies: [], faab: 10 },
         requested_items: { movies: [], faab: 0 },
       })
-      assertEquals(result.error, 'You are not an active participant in this league')
+      assertEquals(result.error, 'League must be active to trade')
     })
 
     await t.step('returns 400 when trading is not enabled', async () => {
-      // Create an active league without trading enabled
+      // Create an active league and explicitly disable trading
       const leagueId = await factory.createActiveLeague(uniqueName('trade-disabled'))
+      const serviceClient = getServiceClient()
+      await serviceClient
+        .from('leagues')
+        .update({ trades_enabled: false })
+        .eq('id', leagueId)
       const recipientTeam = await factory.getTeamForUser(leagueId, secondClient)
 
       const result = await invokeFunction(client, 'propose-trade', {
@@ -155,7 +160,7 @@ Deno.test({
         offered_items: { movies: [], faab: -10 },
         requested_items: { movies: [], faab: 0 },
       })
-      assertEquals(result.error, 'FAAB must be a number between 0 and 100')
+      assertEquals(result.error, 'FAAB must be a non-negative number')
     })
 
     await t.step('returns 400 when offering more FAAB than available', async () => {
@@ -169,8 +174,7 @@ Deno.test({
         offered_items: { movies: [], faab: 101 },
         requested_items: { movies: [], faab: 0 },
       })
-      // Validation happens first on structure (0-100)
-      assertEquals(result.error, 'FAAB must be a number between 0 and 100')
+      assertEquals(result.error, 'FAAB must not exceed league budget of $100')
     })
 
     // ============================================================================

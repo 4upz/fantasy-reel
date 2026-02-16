@@ -16,6 +16,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import {
   createTestFactory,
   getServiceClient,
+  getUserId,
   uniqueName,
   invokeFunction,
   TestDataFactory,
@@ -77,12 +78,28 @@ async function createLeagueWithDraftPicks(
     .update({ draft_slots: draftSlotsPerPlayer })
     .eq('id', leagueId)
 
-  // Start the draft
+  // Start the draft (randomizes draft_order via randomize_draft_order_if_needed)
   const startResult = await invokeFunction(client, 'start-draft', { league_id: leagueId })
   if (startResult.error) throw new Error(`Failed to start draft: ${startResult.error}`)
 
-  // Get clients in draft order
-  const clients = [client, secondClient]
+  // Query actual draft order and build clients array to match
+  const { data: orderedParticipants } = await serviceClient
+    .from('league_participants')
+    .select('user_id, draft_order')
+    .eq('league_id', leagueId)
+    .eq('status', 'active')
+    .order('draft_order', { ascending: true })
+
+  const allClients = [client, secondClient]
+  const userIdToClient = new Map<string, SupabaseClient>()
+  for (const c of allClients) {
+    const { data: { user } } = await c.auth.getUser()
+    userIdToClient.set(user!.id, c)
+  }
+
+  const clients = orderedParticipants!.map(
+    p => userIdToClient.get(p.user_id)!
+  )
   const numParticipants = 2
   const totalPicks = draftSlotsPerPlayer * numParticipants
   let tmdbIdCounter = 300001 + Math.floor(Math.random() * 100000) // Random offset to avoid conflicts
@@ -125,6 +142,23 @@ async function createLeagueWithDraftPicks(
 
     tmdbIdCounter++
   }
+
+  // Force deterministic draft order for tests: client=1, secondClient=2.
+  // start-draft randomizes via randomize_draft_order_if_needed().
+  const clientUserId = await getUserId(client)
+  const secondUserId = await getUserId(secondClient)
+
+  await serviceClient
+    .from('league_participants')
+    .update({ draft_order: 1 })
+    .eq('league_id', leagueId)
+    .eq('user_id', clientUserId)
+
+  await serviceClient
+    .from('league_participants')
+    .update({ draft_order: 2 })
+    .eq('league_id', leagueId)
+    .eq('user_id', secondUserId)
 
   // The draft-pick function auto-transitions to 'active' when draft completes.
   // For counterpick testing, we need to reset the status to 'drafting' to simulate
