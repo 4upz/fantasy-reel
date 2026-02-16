@@ -13,6 +13,7 @@ import {
   TradeOffer,
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface TradeRecord {
   id: string
@@ -185,27 +186,27 @@ async function notifyTradeCompleted(
     await supabase.from('notifications').insert(notifications)
   }
 
-  // Send email notifications to both parties (non-blocking)
-  const tradeOffer: TradeOffer = {
-    id: trade.id,
-    league_id: trade.league_id,
-    initiator_team_id: trade.initiator_team_id,
-    recipient_team_id: trade.recipient_team_id,
-    initiator_items: trade.initiator_items,
-    recipient_items: trade.recipient_items,
-    status: 'completed',
-    proposed_at: trade.proposed_at,
-    responded_at: trade.responded_at,
-    accepted_at: trade.accepted_at,
-    review_ends_at: trade.review_ends_at,
-    initiator_message: trade.initiator_message,
-    response_message: trade.response_message,
-    veto_reason: trade.veto_reason,
-  }
-  await sendTradeEmailNotifications(supabase, tradeOffer, 'completed', {
-    notifyInitiator: true,
-    notifyRecipient: true,
-  })
+  // Send email + Discord notifications in parallel
+  const tradeOffer: TradeOffer = { ...trade, status: 'completed' }
+  const leagueName = await getLeagueName(supabase, trade.league_id)
+
+  await Promise.allSettled([
+    sendTradeEmailNotifications(supabase, tradeOffer, 'completed', {
+      notifyInitiator: true,
+      notifyRecipient: true,
+    }),
+    sendDiscordNotification(supabase, {
+      leagueId: trade.league_id,
+      category: 'trades',
+      embeds: [{
+        author: buildEmbedAuthor(leagueName, trade.league_id),
+        title: `Trade completed between ${initiatorTeamName} and ${recipientTeamName}`,
+        color: DISCORD_COLORS.green,
+        footer: { text: `Trade #${trade.id.slice(0, 8)}` },
+        url: buildLeagueUrl(trade.league_id, '/trading'),
+      }],
+    }),
+  ])
 }
 
 async function notifyTradeExpired(

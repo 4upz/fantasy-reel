@@ -10,12 +10,14 @@ import {
   validateTradeProposal,
   enrichTradeItems,
   getTeamInfo,
+  getTeamName,
   getTradeOffer,
   validateTradeStatus,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface CounterTradeRequest {
   trade_offer_id: string
@@ -142,11 +144,39 @@ Deno.serve(async (req) => {
       },
     })
 
-    // Send email notification (non-blocking)
-    await sendTradeEmailNotifications(serviceClient, updatedOffer, 'countered', {
-      notifyRecipient: true,
-      message: message?.trim(),
-    })
+    // Send email + Discord notifications in parallel
+    const counterRecipientName = await getTeamName(serviceClient, counterRecipientTeamId)
+    const leagueName = await getLeagueName(serviceClient, originalOffer.league_id)
+
+    const counterMovies = enrichedOfferedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
+    const counterRequestedMovies = enrichedRequestedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
+
+    const counterFields = [
+      { name: `${counterTeamInfo?.name ?? 'Counterer'} offers`, value: counterMovies || 'Nothing', inline: true },
+      { name: `${counterRecipientName} offers`, value: counterRequestedMovies || 'Nothing', inline: true },
+    ]
+    if (message?.trim()) {
+      counterFields.push({ name: 'Message', value: message.trim(), inline: false })
+    }
+
+    await Promise.allSettled([
+      sendTradeEmailNotifications(serviceClient, updatedOffer, 'countered', {
+        notifyRecipient: true,
+        message: message?.trim(),
+      }),
+      sendDiscordNotification(serviceClient, {
+        leagueId: originalOffer.league_id,
+        category: 'trades',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, originalOffer.league_id),
+          title: `${counterTeamInfo?.name ?? 'A team'} countered with new terms`,
+          color: DISCORD_COLORS.yellow,
+          fields: counterFields,
+          footer: { text: `Trade #${originalOffer.id.slice(0, 8)}` },
+          url: buildLeagueUrl(originalOffer.league_id, '/trading'),
+        }],
+      }),
+    ])
 
     return jsonResponse({
       message: 'Counter-offer submitted successfully',

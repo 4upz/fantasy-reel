@@ -18,7 +18,8 @@
     "test:e2e": "./scripts/run-e2e-tests.sh",
     "test:e2e:ui": "./scripts/run-e2e-tests.sh --ui",
     "test:e2e:headed": "./scripts/run-e2e-tests.sh --headed",
-    "test:e2e:debug": "./scripts/run-e2e-tests.sh --debug"
+    "test:e2e:debug": "./scripts/run-e2e-tests.sh --debug",
+    "test:bot": "npm run test --workspace=apps/discord-bot"
   },
   "devDependencies": {
     "supabase": "^2.72.8",

@@ -5,7 +5,9 @@ import {
   authenticateRequest,
   isAuthError,
   isValidUUID,
+  createServiceClient,
 } from '../_shared/utils.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 
 interface StartDraftRequest {
   league_id: string
@@ -86,6 +88,30 @@ Deno.serve(async (req) => {
       console.error('Error updating league status:', updateError)
       return errorResponse('Failed to start draft', 500)
     }
+
+    // Discord notification: draft started
+    const serviceClient = createServiceClient()
+    const { data: firstPickData } = await supabaseClient.rpc('get_next_draft_pick', { p_league_id: league_id })
+    const firstPickTeamId = firstPickData?.[0]?.team_id
+    let firstTeamName = 'TBD'
+    if (firstPickTeamId) {
+      const { data: firstTeam } = await supabaseClient.from('teams').select('name').eq('id', firstPickTeamId).single()
+      firstTeamName = firstTeam?.name ?? 'TBD'
+    }
+    const leagueName = updatedLeague.name ?? 'Fantasy Reel League'
+
+    await sendDiscordNotification(serviceClient, {
+      leagueId: league_id,
+      category: 'drafts',
+      embeds: [{
+        author: buildEmbedAuthor(leagueName, league_id),
+        title: 'The Draft Is Open',
+        description: `${participantCount} teams on the clock. First pick: ${firstTeamName}.`,
+        color: DISCORD_COLORS.gold,
+        footer: { text: `Round 1 of ${updatedLeague.draft_rounds ?? 5}` },
+        url: buildLeagueUrl(league_id, '/draft'),
+      }],
+    })
 
     return jsonResponse({
       league: updatedLeague,

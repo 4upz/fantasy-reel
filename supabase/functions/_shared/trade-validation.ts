@@ -1,5 +1,5 @@
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { isValidUUID, errorResponse } from './utils.ts'
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { isValidUUID, errorResponse, createServiceClient } from './utils.ts'
 import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData, SendEmailResult } from './email.ts'
 
 // ============================================================================
@@ -68,19 +68,8 @@ export interface TradeNotification {
   data: Record<string, unknown>
 }
 
-// ============================================================================
-// Client Creation
-// ============================================================================
-
-/**
- * Create a service role Supabase client for admin operations
- */
-export function createServiceClient(): SupabaseClient {
-  return createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  )
-}
+// Re-export for backwards compatibility with existing imports
+export { createServiceClient } from './utils.ts'
 
 // ============================================================================
 // Trade Offer Operations

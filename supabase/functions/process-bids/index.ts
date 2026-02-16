@@ -23,6 +23,7 @@ import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_sha
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface ProcessBidsRequest {
   mode?: 'weekly' | 'extended'
@@ -417,6 +418,57 @@ Deno.serve(async (req) => {
           error: error instanceof Error ? error.message : 'Unknown error',
         })
       }
+    }
+
+    // Discord notifications: bid processing results (grouped by league)
+    if (results.length > 0) {
+      const resultsByLeague = new Map<string, ProcessResult[]>()
+      for (const result of results) {
+        const existing = resultsByLeague.get(result.league_id) ?? []
+        existing.push(result)
+        resultsByLeague.set(result.league_id, existing)
+      }
+
+      // Batch-query all winning team names to avoid N+1
+      const allTeamIds = [...new Set(results.map((r) => r.winner_team_id))]
+      const { data: teamsData } = await serviceClient
+        .from('teams')
+        .select('id, name')
+        .in('id', allTeamIds)
+
+      const teamNameMap = new Map<string, string>()
+      for (const t of teamsData ?? []) {
+        teamNameMap.set(t.id, t.name)
+      }
+
+      const discordPromises: Promise<void>[] = []
+      for (const [leagueId, leagueResults] of resultsByLeague) {
+        const leagueName = await getLeagueName(serviceClient, leagueId)
+
+        const fields = leagueResults.slice(0, 10).map((r) => ({
+          name: r.movie_title,
+          value: `Won by **${teamNameMap.get(r.winner_team_id) ?? 'A team'}** for $${r.amount}`,
+          inline: true,
+        }))
+
+        discordPromises.push(
+          sendDiscordNotification(serviceClient, {
+            leagueId,
+            category: 'bids',
+            embeds: [{
+              author: buildEmbedAuthor(leagueName, leagueId),
+              title: 'Bidding Results',
+              description: `${leagueResults.length} movie${leagueResults.length === 1 ? '' : 's'} awarded`,
+              fields,
+              color: DISCORD_COLORS.green,
+              footer: { text: leagueName },
+              url: buildLeagueUrl(leagueId, '/bidding'),
+            }],
+          })
+        )
+      }
+
+      await Promise.allSettled(discordPromises)
     }
 
     return jsonResponse({
