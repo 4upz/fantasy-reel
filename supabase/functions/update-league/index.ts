@@ -7,7 +7,7 @@ import {
   isValidUUID,
 } from '../_shared/utils.ts'
 
-type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'kick_participant' | 'delete_league'
+type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league'
 
 interface UpdateInfoRequest {
   action: 'update_info'
@@ -50,11 +50,24 @@ interface UpdateCounterpickConfigRequest {
   counterpicks_block_drops?: boolean
 }
 
+interface RandomizeDraftOrderRequest {
+  action: 'randomize_draft_order'
+  league_id: string
+}
+
+interface ReorderParticipantsRequest {
+  action: 'reorder_participants'
+  league_id: string
+  participant_order: string[]
+}
+
 type UpdateLeagueRequest =
   | UpdateInfoRequest
   | UpdateDraftConfigRequest
   | UpdateBiddingConfigRequest
   | UpdateCounterpickConfigRequest
+  | RandomizeDraftOrderRequest
+  | ReorderParticipantsRequest
   | KickParticipantRequest
   | DeleteLeagueRequest
 
@@ -120,6 +133,12 @@ Deno.serve(async (req) => {
 
       case 'update_counterpick_config':
         return await handleUpdateCounterpickConfig(supabase, league, body as UpdateCounterpickConfigRequest)
+
+      case 'randomize_draft_order':
+        return await handleRandomizeDraftOrder(supabase, league)
+
+      case 'reorder_participants':
+        return await handleReorderParticipants(supabase, league, body as ReorderParticipantsRequest)
 
       case 'kick_participant':
         return await handleKickParticipant(supabase, league, user.id, body as KickParticipantRequest)
@@ -429,6 +448,123 @@ async function handleKickParticipant(
   }
 
   return jsonResponse({ message: `${displayName} has been removed from the league` })
+}
+
+async function handleRandomizeDraftOrder(
+  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  league: { id: string; status: string }
+): Promise<Response> {
+  if (league.status !== 'setup') {
+    return errorResponse('Draft order can only be randomized before the draft starts', 400)
+  }
+
+  const { error: randomizeError } = await supabase.rpc('randomize_draft_order', {
+    p_league_id: league.id,
+  })
+
+  if (randomizeError) {
+    console.error('Error randomizing draft order:', randomizeError)
+    return errorResponse('Failed to randomize draft order', 500)
+  }
+
+  const { error: flagError } = await supabase
+    .from('leagues')
+    .update({ custom_draft_order: true })
+    .eq('id', league.id)
+
+  if (flagError) {
+    console.error('Error setting custom_draft_order flag:', flagError)
+  }
+
+  const { data: participants, error: fetchError } = await supabase
+    .from('league_participants')
+    .select('id, draft_order')
+    .eq('league_id', league.id)
+    .eq('status', 'active')
+    .order('draft_order', { ascending: true })
+
+  if (fetchError) {
+    console.error('Error fetching updated participants:', fetchError)
+  }
+
+  return jsonResponse({
+    message: 'Draft order randomized successfully',
+    participants: participants ?? [],
+  })
+}
+
+async function handleReorderParticipants(
+  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  league: { id: string; status: string },
+  body: ReorderParticipantsRequest
+): Promise<Response> {
+  if (league.status !== 'setup') {
+    return errorResponse('Draft order can only be changed before the draft starts', 400)
+  }
+
+  const { participant_order } = body
+
+  if (!Array.isArray(participant_order) || participant_order.length === 0) {
+    return errorResponse('participant_order must be a non-empty array', 400)
+  }
+
+  if (!participant_order.every(isValidUUID)) {
+    return errorResponse('All participant IDs must be valid UUIDs', 400)
+  }
+
+  // Check for duplicates
+  if (new Set(participant_order).size !== participant_order.length) {
+    return errorResponse('participant_order contains duplicate IDs', 400)
+  }
+
+  // Fetch all active participants for validation
+  const { data: participants, error: fetchError } = await supabase
+    .from('league_participants')
+    .select('id')
+    .eq('league_id', league.id)
+    .eq('status', 'active')
+
+  if (fetchError) {
+    console.error('Error fetching participants:', fetchError)
+    return errorResponse('Failed to fetch participants', 500)
+  }
+
+  const participantIds = new Set(participants.map((p: { id: string }) => p.id))
+
+  if (participant_order.length !== participantIds.size) {
+    return errorResponse('participant_order length must match active participant count', 400)
+  }
+
+  if (participant_order.some((id) => !participantIds.has(id))) {
+    return errorResponse('Invalid participant IDs provided', 400)
+  }
+
+  const updateResults = await Promise.all(
+    participant_order.map((participantId, index) =>
+      supabase
+        .from('league_participants')
+        .update({ draft_order: index + 1 })
+        .eq('id', participantId)
+        .eq('league_id', league.id)
+    )
+  )
+
+  const updateErrors = updateResults.filter((r) => r.error)
+  if (updateErrors.length > 0) {
+    console.error('Error updating draft order:', updateErrors)
+    return errorResponse('Failed to update draft order', 500)
+  }
+
+  const { error: flagError } = await supabase
+    .from('leagues')
+    .update({ custom_draft_order: true })
+    .eq('id', league.id)
+
+  if (flagError) {
+    console.error('Error setting custom_draft_order flag:', flagError)
+  }
+
+  return jsonResponse({ message: 'Draft order updated successfully' })
 }
 
 async function handleDeleteLeague(

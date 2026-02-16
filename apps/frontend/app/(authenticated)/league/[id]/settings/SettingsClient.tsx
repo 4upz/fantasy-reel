@@ -6,6 +6,7 @@ import type { League, ParticipantWithProfile } from '@/types'
 import LeagueInfoSection from './components/LeagueInfoSection'
 import JoinLinkSection from './components/JoinLinkSection'
 import DraftConfigSection from './components/DraftConfigSection'
+import DraftOrderSection from './components/DraftOrderSection'
 import CounterpickConfigSection from './components/CounterpickConfigSection'
 import BiddingConfigSection from './components/BiddingConfigSection'
 import ParticipantsSection from './components/ParticipantsSection'
@@ -34,6 +35,10 @@ export default function SettingsClient({
 
   function handleParticipantKicked(participantId: string): void {
     setParticipants((prev) => prev.filter((p) => p.id !== participantId))
+  }
+
+  function handleParticipantsReordered(updated: ParticipantWithProfile[]): void {
+    setParticipants(updated)
   }
 
   function handleLeagueDeleted(): void {
@@ -70,6 +75,13 @@ export default function SettingsClient({
           participantCount={participants.length}
           isLocked={!isSetup}
           onUpdate={handleLeagueUpdate}
+        />
+
+        <DraftOrderSection
+          league={league}
+          participants={participants}
+          isLocked={!isSetup}
+          onReorder={handleParticipantsReordered}
         />
 
         <CounterpickConfigSection

@@ -18,6 +18,8 @@ export interface League {
   draft_counterpick_slots: number
   bidding_counterpick_slots: number
   counterpicks_block_drops: boolean
+  // Draft order customization
+  custom_draft_order: boolean
   // Shareable join link
   join_code: string | null
   join_token: string | null

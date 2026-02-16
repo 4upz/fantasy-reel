@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { UserCog, Crown, UserMinus } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { getParticipantDisplayName } from '@/utils/league'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import type { League, ParticipantWithProfile } from '@/types'
 import { SectionHeader, LockedMessage } from './shared'
 import ConfirmKickModal from './ConfirmKickModal'
@@ -29,12 +30,9 @@ export default function ParticipantsSection({
   onKick,
 }: Props): React.ReactElement {
   const [kickTarget, setKickTarget] = useState<ParticipantWithProfile | null>(null)
-  const [isKicking, setIsKicking] = useState(false)
 
-  async function handleConfirmKick(): Promise<void> {
+  const kickAction = useCallback(async () => {
     if (!kickTarget) return
-
-    setIsKicking(true)
 
     const { data, error } = await callEdgeFunction<KickResponse>('update-league', {
       body: {
@@ -44,19 +42,16 @@ export default function ParticipantsSection({
       },
     })
 
-    setIsKicking(false)
-
-    if (error) {
-      toast.error(error)
-      return
-    }
+    if (error) throw new Error(error)
 
     if (data?.message) {
       toast.success(data.message)
       onKick(kickTarget.id)
       setKickTarget(null)
     }
-  }
+  }, [kickTarget, league.id, onKick])
+
+  const { execute: handleConfirmKick, isLoading: isKicking } = useAsyncAction(kickAction)
 
   return (
     <>
@@ -86,11 +81,6 @@ export default function ParticipantsSection({
                 className="flex items-center justify-between p-3 bg-surface rounded-lg border border-border"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-elevated flex items-center justify-center">
-                    <span className="text-sm font-medium text-foreground-secondary">
-                      {participant.draft_order}
-                    </span>
-                  </div>
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground">

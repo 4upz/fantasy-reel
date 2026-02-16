@@ -1,38 +1,25 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
+import {
+  jsonResponse,
+  errorResponse,
+  handleCorsPreflightRequest,
+  authenticateRequest,
+  isAuthError,
+  isValidUUID,
+} from '../_shared/utils.ts'
 
 interface StartDraftRequest {
   league_id: string
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
   try {
-    // Create Supabase client with user auth
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    )
+    const authResult = await authenticateRequest(req)
+    if (isAuthError(authResult)) return authResult
+    const { user, supabase: supabaseClient } = authResult
 
-    // Get the user from the JWT token
-    const {
-      data: { user },
-      error: authError,
-    } = await supabaseClient.auth.getUser()
-
-    if (authError || !user) {
-      return errorResponse('Unauthorized', 401)
-    }
-
-    // Parse request body
     const { league_id }: StartDraftRequest = await req.json()
 
     // Validate required fields
@@ -75,6 +62,16 @@ Deno.serve(async (req) => {
 
     if (!participantCount || participantCount < 2) {
       return errorResponse('Need at least 2 participants to start the draft', 400)
+    }
+
+    // Auto-randomize draft order if owner hasn't manually set it
+    const { error: randomizeError } = await supabaseClient.rpc('randomize_draft_order_if_needed', {
+      p_league_id: league_id,
+    })
+
+    if (randomizeError) {
+      console.error('Error auto-randomizing draft order:', randomizeError)
+      return errorResponse('Failed to prepare draft order', 500)
     }
 
     // Update league status to 'drafting'
