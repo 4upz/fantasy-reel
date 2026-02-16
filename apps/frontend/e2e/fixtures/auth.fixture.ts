@@ -56,6 +56,10 @@ interface AuthFixtures {
   secondUserContext: BrowserContext
   /** A page authenticated as secondUser (for multi-user tests like trading, outbidding) */
   secondUserPage: Page
+  /** Browser context authenticated as leagueOwner */
+  leagueOwnerContext: BrowserContext
+  /** A page authenticated as leagueOwner (for owner-only features like settings) */
+  leagueOwnerPage: Page
 }
 
 export const test = base.extend<AuthFixtures>({
@@ -163,6 +167,34 @@ export const test = base.extend<AuthFixtures>({
    */
   secondUserPage: async ({ secondUserContext }, use) => {
     const page = await secondUserContext.newPage()
+    await use(page)
+  },
+
+  /**
+   * Browser context authenticated as leagueOwner
+   * For owner-only tests like settings pages, draft order management
+   *
+   * Uses UI login for proper cookie setup (same as authedContext)
+   */
+  leagueOwnerContext: async ({ browser, leagueOwner }, use) => {
+    const context = await browser.newContext()
+    const page = await context.newPage()
+
+    await loginAs(page, leagueOwner)
+
+    await page.close()
+
+    await use(context)
+
+    await context.close()
+  },
+
+  /**
+   * Page authenticated as leagueOwner
+   * Use for testing owner-only features like league settings, draft order
+   */
+  leagueOwnerPage: async ({ leagueOwnerContext }, use) => {
+    const page = await leagueOwnerContext.newPage()
     await use(page)
   },
 })

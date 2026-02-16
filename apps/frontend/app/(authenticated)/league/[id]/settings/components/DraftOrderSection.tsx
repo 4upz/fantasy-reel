@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Shuffle, GripVertical, Crown } from 'lucide-react'
 import {
@@ -61,9 +61,11 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
     <div
       ref={setNodeRef}
       style={style}
+      role="listitem"
+      data-testid="draft-order-item"
       className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
         isDragging
-          ? 'bg-elevated border-gold shadow-medium z-10 opacity-90'
+          ? 'bg-elevated border-gold shadow-glow-gold z-10 opacity-90'
           : 'bg-surface border-border hover:border-border-hover'
       }`}
     >
@@ -71,6 +73,7 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
         <button
           type="button"
           className="cursor-grab active:cursor-grabbing text-foreground-muted hover:text-foreground-secondary touch-none"
+          aria-label={`Drag to reorder ${getParticipantDisplayName(participant)}`}
           {...attributes}
           {...listeners}
         >
@@ -144,16 +147,13 @@ export default function DraftOrderSection({
 
     if (data?.participants) {
       const orderMap = new Map(data.participants.map((p) => [p.id, p.draft_order]))
-      setLocalOrder((current) => {
-        return current
+      const applyOrder = (list: ParticipantWithProfile[]) =>
+        list
           .map((p) => ({ ...p, draft_order: orderMap.get(p.id) ?? p.draft_order }))
           .sort((a, b) => a.draft_order - b.draft_order)
-      })
-      // Build updated list for parent from response data — avoids stale closure
-      const updatedForParent = participants
-        .map((p) => ({ ...p, draft_order: orderMap.get(p.id) ?? p.draft_order }))
-        .sort((a, b) => a.draft_order - b.draft_order)
-      onReorder(updatedForParent)
+
+      setLocalOrder(applyOrder)
+      onReorder(applyOrder(participants))
       setHasChanges(false)
       toast.success(data.message)
     }
@@ -173,7 +173,6 @@ export default function DraftOrderSection({
     if (error) throw new Error(error)
 
     if (data?.message) {
-      // Update draft_order values to match new positions
       const updated = localOrder.map((p, i) => ({ ...p, draft_order: i + 1 }))
       onReorder(updated)
       setHasChanges(false)
@@ -181,11 +180,19 @@ export default function DraftOrderSection({
     }
   }, [league.id, localOrder, onReorder])
 
-  const { execute: randomize, isLoading: isRandomizing } = useAsyncAction(randomizeAction)
-  const { execute: save, isLoading: isSaving } = useAsyncAction(saveAction)
+  const { execute: randomize, isLoading: isRandomizing, error: randomizeError } = useAsyncAction(randomizeAction)
+  const { execute: save, isLoading: isSaving, error: saveError } = useAsyncAction(saveAction)
+
+  useEffect(() => {
+    if (randomizeError) toast.error(randomizeError)
+  }, [randomizeError])
+
+  useEffect(() => {
+    if (saveError) toast.error(saveError)
+  }, [saveError])
 
   return (
-    <section className="card p-6">
+    <section className="card p-6" data-testid="draft-order-section">
       <SectionHeader
         icon={Shuffle}
         title="Draft Order"
@@ -194,7 +201,9 @@ export default function DraftOrderSection({
       />
 
       {isLocked ? (
-        <LockedMessage message="Draft order cannot be changed after the draft has started." />
+        <div data-testid="draft-order-locked">
+          <LockedMessage message="Draft order cannot be changed after the draft has started." />
+        </div>
       ) : (
         <>
           <div className="flex items-center gap-3 mb-4">
@@ -203,6 +212,7 @@ export default function DraftOrderSection({
               onClick={() => randomize()}
               disabled={isRandomizing || isSaving}
               className="btn btn-secondary"
+              data-testid="randomize-button"
             >
               {isRandomizing ? (
                 <>
@@ -222,6 +232,8 @@ export default function DraftOrderSection({
                 onClick={() => save()}
                 disabled={isSaving}
                 className="btn btn-primary animate-fade-in"
+                data-testid="save-order-button"
+                aria-label="Save draft order changes"
               >
                 {isSaving ? (
                   <>
@@ -250,7 +262,7 @@ export default function DraftOrderSection({
               items={localOrder.map((p) => p.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-2">
+              <div className="space-y-2" role="list">
                 {localOrder.map((participant, index) => (
                   <SortableItem
                     key={participant.id}

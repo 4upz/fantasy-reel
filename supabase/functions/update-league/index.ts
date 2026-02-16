@@ -539,19 +539,14 @@ async function handleReorderParticipants(
     return errorResponse('Invalid participant IDs provided', 400)
   }
 
-  const updateResults = await Promise.all(
-    participant_order.map((participantId, index) =>
-      supabase
-        .from('league_participants')
-        .update({ draft_order: index + 1 })
-        .eq('id', participantId)
-        .eq('league_id', league.id)
-    )
-  )
+  // Use transactional RPC to update all draft_order values atomically
+  const { error: reorderError } = await supabase.rpc('reorder_draft_order', {
+    p_league_id: league.id,
+    p_participant_order: participant_order,
+  })
 
-  const updateErrors = updateResults.filter((r) => r.error)
-  if (updateErrors.length > 0) {
-    console.error('Error updating draft order:', updateErrors)
+  if (reorderError) {
+    console.error('Error updating draft order:', reorderError)
     return errorResponse('Failed to update draft order', 500)
   }
 

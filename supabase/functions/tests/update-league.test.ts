@@ -736,6 +736,324 @@ Deno.test({
   })
 
   // ============================================================================
+  // randomize_draft_order Tests
+  // ============================================================================
+
+  await t.step('randomize_draft_order: returns 400 when not in setup status', async () => {
+    const leagueId = await factory.createDraftingLeague(uniqueName('rand-drafting'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'randomize_draft_order',
+      league_id: leagueId,
+    })
+    assertEquals(result.error, 'Draft order can only be randomized before the draft starts')
+  })
+
+  await t.step('randomize_draft_order: randomizes order successfully', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('rand-success'))
+    await factory.addSecondParticipant(leagueId)
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: { action: 'randomize_draft_order', league_id: leagueId },
+    })
+
+    assertEquals(error, null)
+    assertExists(data.message)
+    assertEquals(data.message, 'Draft order randomized successfully')
+    assertExists(data.participants)
+    assertEquals(data.participants.length, 2)
+    assertExists(data.participants[0].id)
+    assertExists(data.participants[0].draft_order)
+  })
+
+  await t.step('randomize_draft_order: sets custom_draft_order flag', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('rand-flag'))
+    await factory.addSecondParticipant(leagueId)
+
+    await client.functions.invoke('update-league', {
+      body: { action: 'randomize_draft_order', league_id: leagueId },
+    })
+
+    const { data: league } = await client
+      .from('leagues')
+      .select('custom_draft_order')
+      .eq('id', leagueId)
+      .single()
+
+    assertEquals(league?.custom_draft_order, true)
+  })
+
+  await t.step('randomize_draft_order: returns participants sorted by draft_order', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('rand-sorted'))
+    await factory.addSecondParticipant(leagueId)
+
+    const { data } = await client.functions.invoke('update-league', {
+      body: { action: 'randomize_draft_order', league_id: leagueId },
+    })
+
+    assertEquals(data.participants.length, 2)
+    assertEquals(data.participants[0].draft_order < data.participants[1].draft_order, true)
+  })
+
+  await t.step('randomize_draft_order: draft order is contiguous 1..N', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('rand-contiguous'))
+    await factory.addSecondParticipant(leagueId)
+
+    await client.functions.invoke('update-league', {
+      body: { action: 'randomize_draft_order', league_id: leagueId },
+    })
+
+    const { data: participants } = await client
+      .from('league_participants')
+      .select('draft_order')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+      .order('draft_order', { ascending: true })
+
+    assertExists(participants)
+    const orders = participants.map((p: { draft_order: number }) => p.draft_order)
+    assertEquals(orders, [1, 2])
+  })
+
+  // ============================================================================
+  // reorder_participants Tests
+  // ============================================================================
+
+  await t.step('reorder_participants: returns 400 when not in setup status', async () => {
+    const leagueId = await factory.createDraftingLeague(uniqueName('reorder-drafting'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+      participant_order: ['00000000-0000-0000-0000-000000000001'],
+    })
+    assertEquals(result.error, 'Draft order can only be changed before the draft starts')
+  })
+
+  await t.step('reorder_participants: returns 400 for missing participant_order', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-missing'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+    })
+    assertEquals(result.error, 'participant_order must be a non-empty array')
+  })
+
+  await t.step('reorder_participants: returns 400 for empty array', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-empty'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+      participant_order: [],
+    })
+    assertEquals(result.error, 'participant_order must be a non-empty array')
+  })
+
+  await t.step('reorder_participants: returns 400 for non-array type', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-nonarray'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+      participant_order: 'not-an-array',
+    })
+    assertEquals(result.error, 'participant_order must be a non-empty array')
+  })
+
+  await t.step('reorder_participants: returns 400 for invalid UUIDs', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-invalid-uuid'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+      participant_order: ['not-a-uuid', 'also-not-a-uuid'],
+    })
+    assertEquals(result.error, 'All participant IDs must be valid UUIDs')
+  })
+
+  await t.step('reorder_participants: returns 400 for duplicates', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-dupes'))
+    await factory.addSecondParticipant(leagueId)
+
+    const { data: participants } = await client
+      .from('league_participants')
+      .select('id')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+
+    assertExists(participants)
+    const firstId = participants[0].id
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+      participant_order: [firstId, firstId],
+    })
+    assertEquals(result.error, 'participant_order contains duplicate IDs')
+  })
+
+  await t.step('reorder_participants: returns 400 when length mismatches', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-mismatch'))
+    await factory.addSecondParticipant(leagueId)
+
+    const { data: participants } = await client
+      .from('league_participants')
+      .select('id')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+
+    assertExists(participants)
+
+    // Send only 1 ID when there are 2 active participants
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+      participant_order: [participants[0].id],
+    })
+    assertEquals(result.error, 'participant_order length must match active participant count')
+  })
+
+  await t.step('reorder_participants: returns 400 for IDs not in league', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-wrong-ids'))
+    await factory.addSecondParticipant(leagueId)
+
+    const { data: participants } = await client
+      .from('league_participants')
+      .select('id')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+
+    assertExists(participants)
+
+    // Replace one ID with a valid UUID that doesn't belong to this league
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'reorder_participants',
+      league_id: leagueId,
+      participant_order: [participants[0].id, '00000000-0000-0000-0000-000000000099'],
+    })
+    assertEquals(result.error, 'Invalid participant IDs provided')
+  })
+
+  await t.step('reorder_participants: reorders correctly', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-success'))
+    await factory.addSecondParticipant(leagueId)
+
+    // Get current participants sorted by draft_order
+    const { data: participants } = await client
+      .from('league_participants')
+      .select('id, draft_order')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+      .order('draft_order', { ascending: true })
+
+    assertExists(participants)
+    assertEquals(participants.length, 2)
+
+    // Reverse the order
+    const reversed = [participants[1].id, participants[0].id]
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: {
+        action: 'reorder_participants',
+        league_id: leagueId,
+        participant_order: reversed,
+      },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.message, 'Draft order updated successfully')
+
+    // Verify DB state
+    const { data: updated } = await client
+      .from('league_participants')
+      .select('id, draft_order')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+      .order('draft_order', { ascending: true })
+
+    assertExists(updated)
+    assertEquals(updated[0].id, participants[1].id) // formerly second is now first
+    assertEquals(updated[0].draft_order, 1)
+    assertEquals(updated[1].id, participants[0].id) // formerly first is now second
+    assertEquals(updated[1].draft_order, 2)
+  })
+
+  await t.step('reorder_participants: sets custom_draft_order flag', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-flag'))
+    await factory.addSecondParticipant(leagueId)
+
+    const { data: participants } = await client
+      .from('league_participants')
+      .select('id')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+
+    assertExists(participants)
+
+    await client.functions.invoke('update-league', {
+      body: {
+        action: 'reorder_participants',
+        league_id: leagueId,
+        participant_order: participants.map((p: { id: string }) => p.id),
+      },
+    })
+
+    const { data: league } = await client
+      .from('leagues')
+      .select('custom_draft_order')
+      .eq('id', leagueId)
+      .single()
+
+    assertEquals(league?.custom_draft_order, true)
+  })
+
+  await t.step('reorder_participants: concurrent requests maintain contiguous order', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('reorder-concurrent'))
+    await factory.addSecondParticipant(leagueId)
+
+    const { data: participants } = await client
+      .from('league_participants')
+      .select('id')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+      .order('draft_order', { ascending: true })
+
+    assertExists(participants)
+    assertEquals(participants.length, 2)
+
+    const order1 = [participants[0].id, participants[1].id]
+    const order2 = [participants[1].id, participants[0].id]
+
+    // Fire two concurrent reorder requests
+    const [result1, result2] = await Promise.all([
+      client.functions.invoke('update-league', {
+        body: { action: 'reorder_participants', league_id: leagueId, participant_order: order1 },
+      }),
+      client.functions.invoke('update-league', {
+        body: { action: 'reorder_participants', league_id: leagueId, participant_order: order2 },
+      }),
+    ])
+
+    // Both should succeed (no partial failure)
+    assertEquals(result1.error, null)
+    assertEquals(result2.error, null)
+
+    // Final DB state should have contiguous 1..N draft_order
+    const { data: finalParticipants } = await client
+      .from('league_participants')
+      .select('draft_order')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+      .order('draft_order', { ascending: true })
+
+    assertExists(finalParticipants)
+    const orders = finalParticipants.map((p: { draft_order: number }) => p.draft_order)
+    assertEquals(orders, [1, 2])
+  })
+
+  // ============================================================================
   // Cleanup
   // ============================================================================
 
