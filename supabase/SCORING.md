@@ -53,46 +53,25 @@ Unlike a simple average, fantasy points reward excellence and penalize poor perf
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        LAYER 1: QUEUE (pgmq)                                │
+│                    TRIGGER: Vercel Cron / Manual Call                        │
 │                                                                             │
 │  ┌─────────────────┐         ┌──────────────────────────────────────────┐  │
-│  │ Daily pg_cron   │────────▶│  queue_movies_for_scoring()              │  │
-│  │ (midnight UTC)  │         │  - Find released movies needing updates  │  │
-│  └─────────────────┘         │  - pgmq.send() each movie_id to queue    │  │
-│                              └──────────────────────────────────────────┘  │
-│                                             │                               │
-│                                             ▼                               │
-│                              ┌──────────────────────────────────────────┐  │
-│                              │  pgmq.q_movie_scores                     │  │
-│                              │  [movie_id, movie_id, movie_id, ...]     │  │
+│  │ Vercel Cron     │────────▶│  POST /functions/v1/update-scores        │  │
+│  │ (nightly)       │         │  - Auth via X-Cron-Secret or Bearer key  │  │
+│  └─────────────────┘         │  - 3 modes: movie_ids, league_id, auto  │  │
 │                              └──────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
                                               │
                                               ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                      LAYER 2: SCHEDULER (pg_cron)                           │
-│                                                                             │
-│  ┌─────────────────┐         ┌──────────────────────────────────────────┐  │
-│  │ pg_cron         │────────▶│  process_score_queue()                   │  │
-│  │ (every minute)  │         │  - pgmq.read() batch of 5 messages       │  │
-│  └─────────────────┘         │  - pg_net.http_post() to Edge Function   │  │
-│                              │  - Pass movie_ids as payload             │  │
-│                              └──────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                              │
-                                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      LAYER 3: WORKER (Edge Function)                        │
+│                      WORKER (update-scores Edge Function)                   │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  process-movie-scores (lightweight)                                   │  │
-│  │                                                                       │  │
-│  │  For each movie_id in batch (max 5):                                  │  │
-│  │    1. If no imdb_id → fetch from TMDB /external_ids                   │  │
-│  │    2. Fetch scores from OMDB API                                      │  │
-│  │    3. INSERT/UPDATE reviews table                                     │  │
+│  │  For each movie (up to 30 per invocation):                            │  │
+│  │    1. Fetch ratings from MDBList API (by TMDb ID)                     │  │
+│  │    2. Filter to IMDb, RT, Metacritic (pre-normalized 0-100)           │  │
+│  │    3. UPSERT into reviews table                                       │  │
 │  │    4. Call calculate_movie_score(movie_id) ─────┐                     │  │
-│  │    5. pgmq.delete() the message                 │                     │  │
 │  └─────────────────────────────────────────────────│─────────────────────┘  │
 └────────────────────────────────────────────────────│────────────────────────┘
                                                      │
@@ -114,15 +93,13 @@ Unlike a simple average, fantasy points reward excellence and penalize poor perf
 
 ## Key Design Decisions
 
-### Why Three Layers?
+### Why MDBList?
 
-1. **Edge Function CPU Limits**: Supabase Edge Functions have a 2-second CPU time limit. Processing many movies in one call would exceed this.
+MDBList (`mdblist.com`) aggregates ratings from 9+ sources, returning pre-normalized 0-100 scores. It supports lookup by TMDb ID directly, eliminating the need for IMDb ID resolution. Free tier allows 1,000 requests/day (we use ~60/day).
 
-2. **Batch Processing**: By processing 5 movies at a time, we stay well within limits while making steady progress.
+### Architecture Simplification
 
-3. **Automatic Retry**: pgmq's visibility timeout ensures failed messages are automatically retried after 120 seconds.
-
-4. **Heavy Lifting in PostgreSQL**: All score calculations and team updates happen in the database, not the Edge Function.
+The original three-layer architecture (pgmq queue → pg_cron scheduler → Edge Function worker) was replaced with a simpler single Edge Function (`update-scores`) invoked directly by Vercel Cron. This is sufficient for our scale and easier to maintain.
 
 ### Why These Weights?
 
@@ -246,8 +223,8 @@ Processes batches of 5 movies from the queue.
 
 ```bash
 # Edge Function environment variables
-OMDB_API_KEY=your_omdb_api_key
-# Note: TMDB_API_KEY is used as a Bearer token (API Read Access Token)
+MDBLIST_API_KEY=your_mdblist_api_key   # Free at mdblist.com (1,000 req/day)
+# Note: TMDB_API_KEY is still used by browse-movies and search-movies (not scoring)
 TMDB_API_KEY=your_tmdb_api_key
 ```
 
@@ -365,12 +342,12 @@ ORDER BY ts.total_points DESC;
 
 ### Edge Function Errors
 
-Check Supabase Dashboard > Edge Functions > Logs for the `process-movie-scores` function.
+Check Supabase Dashboard > Edge Functions > Logs for the `update-scores` function.
 
 Common issues:
-- **Missing API keys**: Ensure `OMDB_API_KEY` and `TMDB_API_KEY` are set
-- **Rate limiting**: OMDB has daily limits; consider caching or upgrading
-- **Network errors**: Transient; messages will retry automatically
+- **Missing API key**: Ensure `MDBLIST_API_KEY` is set
+- **Rate limiting**: MDBList free tier allows 1,000 req/day
+- **Network errors**: Transient; re-invoke the function
 
 ### Cron Jobs Not Running
 
@@ -397,17 +374,15 @@ The scoring system can be tested locally with some manual steps since pg_cron's 
 
 ### Prerequisites
 
-1. **API Keys** - You need OMDB and TMDB API keys:
+1. **API Keys** - You need an MDBList API key:
    ```bash
-   # Get a free OMDB key at: https://www.omdbapi.com/apikey.aspx
-   # Get a free TMDB key at: https://www.themoviedb.org/settings/api
+   # Get a free MDBList key at: https://mdblist.com (1,000 req/day)
    ```
 
 2. **Set environment variables** for Edge Functions:
    ```bash
-   # In supabase/functions/.env.local (create if not exists)
-   OMDB_API_KEY=your_omdb_key
-   TMDB_API_KEY=your_tmdb_api_key
+   # In supabase/functions/.env
+   MDBLIST_API_KEY=your_mdblist_key
    ```
 
 ### Step-by-Step Local Testing
@@ -441,18 +416,17 @@ SELECT queue_movies_for_scoring();
 SELECT * FROM pgmq.q_movie_scores;
 ```
 
-**Test the Edge Function directly (Layer 3):**
+**Test the Edge Function directly:**
 ```bash
 # Get a released movie ID from seed data
 MOVIE_ID="f0000016-0000-0000-0000-000000000016"  # Oppenheimer
 
 # Call the Edge Function directly
-curl -X POST http://127.0.0.1:54321/functions/v1/process-movie-scores \
+curl -X POST http://127.0.0.1:54321/functions/v1/update-scores \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU" \
   -d '{
-    "movie_ids": ["'"$MOVIE_ID"'"],
-    "msg_ids": [1]
+    "movie_ids": ["'"$MOVIE_ID"'"]
   }'
 ```
 
@@ -520,14 +494,14 @@ The seed data includes these released movies with real IMDB IDs:
 | Killers of the Flower Moon | tt6166392 | released |
 | Wonka | tt6443346 | released |
 
-These should return real scores from OMDB.
+These should return real scores from MDBList.
 
 ### Troubleshooting Local Testing
 
 **Edge Function not receiving requests:**
 ```bash
 # Check function logs
-npx supabase functions logs process-movie-scores
+npx supabase functions logs update-scores
 ```
 
 **Queue not working:**
@@ -591,7 +565,7 @@ FROM movies WHERE combined_score IS NOT NULL;
 
 | Service | Limit | Notes |
 |---------|-------|-------|
-| OMDB | 1,000/day (free) | Consider paid tier for production |
-| TMDB | 40 req/10 sec | Rarely hit with batch processing |
+| MDBList | 1,000/day (free) | We use ~60/day; supports TMDb ID lookup |
+| TMDb | 40 req/10 sec | Used by browse-movies/search-movies, not scoring |
 
-The 100ms delay between movies in the Edge Function helps respect these limits.
+The 50ms delay between movies in the Edge Function helps respect these limits.

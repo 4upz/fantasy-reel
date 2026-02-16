@@ -122,7 +122,7 @@ Fantasy Reel automatically fetches and calculates movie scores using a three-lay
 
 1. **Queue (pgmq)** - Movies needing score updates are queued daily
 2. **Scheduler (pg_cron)** - Processes queue in batches every minute
-3. **Worker (Edge Function)** - Fetches scores from OMDB, stores in database
+3. **Worker (Edge Function)** - Fetches scores from MDBList, stores in database
 
 Scores are a weighted average of:
 - IMDb (35%) + Rotten Tomatoes (40%) + Metacritic (25%)

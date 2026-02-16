@@ -383,9 +383,6 @@ verify_jwt = false
 [functions.merge-accounts]
 verify_jwt = false
 
-[functions.process-movie-scores]
-verify_jwt = false
-
 [functions.resend-invitation]
 verify_jwt = false
 

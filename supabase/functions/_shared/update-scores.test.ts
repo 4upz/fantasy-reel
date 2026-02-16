@@ -8,8 +8,8 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { normalizeRating } from './scoring.ts'
-import type { MovieRecord, OMDbRating, OMDbResponse } from './scoring.ts'
+import { fetchMDBListRatings } from './scoring.ts'
+import type { MovieRecord, MDBListRating, MDBListResponse } from './scoring.ts'
 import { isValidUUID } from './utils.ts'
 
 // ============================================================================
@@ -55,7 +55,6 @@ interface MockSupabaseConfig {
 function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   const upsertCalls: unknown[] = []
   const rpcCalls: Array<{ fn: string; params: unknown }> = []
-  const updateCalls: Array<{ table: string; data: unknown; id: string }> = []
 
   function chainable(result: MockQueryResult) {
     const chain = {
@@ -74,7 +73,6 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   return {
     _upsertCalls: upsertCalls,
     _rpcCalls: rpcCalls,
-    _updateCalls: updateCalls,
     from(table: string) {
       const tableConfig = config[table as keyof MockSupabaseConfig]
       return {
@@ -83,10 +81,9 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
             { data: [], error: null }
           return chainable(result)
         },
-        update: (data: unknown) => {
+        update: () => {
           return {
-            eq: (_col: string, id: string) => {
-              updateCalls.push({ table, data, id })
+            eq: (_col: string, _id: string) => {
               const result = (tableConfig as { update?: MockQueryResult })?.update ??
                 { data: null, error: null }
               return Promise.resolve(result)
@@ -117,8 +114,7 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
 interface HandlerEnv {
   CRON_SECRET?: string
   SUPABASE_SERVICE_ROLE_KEY?: string
-  OMDB_API_KEY?: string
-  TMDB_API_KEY?: string
+  MDBLIST_API_KEY?: string
   SUPABASE_URL?: string
 }
 
@@ -155,17 +151,9 @@ function buildHandler(
         })
       }
 
-      // API key checks
-      const omdbApiKey = env.OMDB_API_KEY
-      if (!omdbApiKey) {
-        return new Response(JSON.stringify({ error: 'Score update service not configured' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      }
-
-      const tmdbApiKey = env.TMDB_API_KEY
-      if (!tmdbApiKey) {
+      // API key check
+      const mdblistApiKey = env.MDBLIST_API_KEY
+      if (!mdblistApiKey) {
         return new Response(JSON.stringify({ error: 'Score update service not configured' }), {
           status: 503,
           headers: { 'Content-Type': 'application/json' },
@@ -243,68 +231,40 @@ function buildHandler(
       }
 
       for (const movie of moviesToUpdate) {
-        let imdbId = movie.imdb_id
-        if (!imdbId && movie.tmdb_id) {
-          // Fetch IMDB ID from TMDb
-          try {
-            const tmdbRes = await fetchFn(
-              `https://api.themoviedb.org/3/movie/${movie.tmdb_id}/external_ids`,
-              {
-                headers: {
-                  Authorization: `Bearer ${tmdbApiKey}`,
-                  'Content-Type': 'application/json',
-                },
-              },
-            )
-            if (tmdbRes.ok) {
-              const tmdbData = await tmdbRes.json()
-              imdbId = tmdbData.imdb_id || null
-            }
-          } catch {
-            // TMDb fetch failed
-          }
-          if (imdbId) {
-            await supabaseClient.from('movies').update({ imdb_id: imdbId }).eq('id', movie.id)
-          }
-        }
-
-        if (!imdbId) {
+        if (!movie.tmdb_id) {
           results.errors.push({
             movie_id: movie.id,
             title: movie.title,
-            error: 'No IMDB ID available',
+            error: 'No TMDb ID available',
           })
           continue
         }
 
         try {
-          const omdbUrl = `https://www.omdbapi.com/?apikey=${omdbApiKey}&i=${imdbId}`
-          const omdbResponse = await fetchFn(omdbUrl)
+          // Use injected fetchFn to allow mocking MDBList API
+          const originalGlobalFetch = globalThis.fetch
+          globalThis.fetch = fetchFn
+          let fetchResult: { ratings: Array<{ source: string | null; score: number | null; raw: string }>; error?: string }
+          try {
+            fetchResult = await fetchMDBListRatings(movie.tmdb_id, mdblistApiKey)
+          } finally {
+            globalThis.fetch = originalGlobalFetch
+          }
 
-          if (!omdbResponse.ok) {
-            if (omdbResponse.status === 401) {
-              results.errors.push({
-                movie_id: movie.id,
-                title: movie.title,
-                error: 'OMDb API authentication failed',
-              })
-              continue
-            }
+          if (fetchResult.error) {
             results.errors.push({
               movie_id: movie.id,
               title: movie.title,
-              error: `OMDb API error: ${omdbResponse.status}`,
+              error: fetchResult.error,
             })
             continue
           }
 
-          const omdbData: OMDbResponse = await omdbResponse.json()
-
-          if (omdbData.Response === 'False') {
+          if (fetchResult.ratings.length === 0) {
             results.errors.push({
               movie_id: movie.id,
               title: movie.title,
-              error: omdbData.Error || 'Movie not found on OMDb',
+              error: 'No ratings available',
             })
             continue
           }
@@ -312,24 +272,21 @@ function buildHandler(
           results.movies_fetched++
 
           let ratingsStored = 0
-          if (omdbData.Ratings && omdbData.Ratings.length > 0) {
-            for (const rating of omdbData.Ratings) {
-              const { source, score } = normalizeRating(rating)
-              if (!source || score === null) continue
+          for (const rating of fetchResult.ratings) {
+            if (!rating.source || rating.score === null) continue
 
-              const { error: reviewError } = await supabaseClient
-                .from('reviews')
-                .upsert({
-                  movie_id: movie.id,
-                  source,
-                  score,
-                  raw_score: rating.Value,
-                  fetched_at: new Date().toISOString(),
-                }, { onConflict: 'movie_id,source' })
+            const { error: reviewError } = await supabaseClient
+              .from('reviews')
+              .upsert({
+                movie_id: movie.id,
+                source: rating.source,
+                score: rating.score,
+                raw_score: rating.raw,
+                fetched_at: new Date().toISOString(),
+              }, { onConflict: 'movie_id,source' })
 
-              if (!reviewError) {
-                ratingsStored++
-              }
+            if (!reviewError) {
+              ratingsStored++
             }
           }
 
@@ -381,8 +338,7 @@ const VALID_LEAGUE_ID = 'c3d4e5f6-a7b8-9012-cdef-123456789012'
 const DEFAULT_ENV: HandlerEnv = {
   CRON_SECRET: 'test-cron-secret',
   SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
-  OMDB_API_KEY: 'test-omdb-key',
-  TMDB_API_KEY: 'test-tmdb-key',
+  MDBLIST_API_KEY: 'test-mdblist-key',
   SUPABASE_URL: 'http://127.0.0.1:54321',
 }
 
@@ -422,12 +378,34 @@ function testMovie(overrides: Partial<MovieRecord> = {}): MovieRecord {
   }
 }
 
-function omdbSuccess(ratings: OMDbRating[] = [
-  { Source: 'Internet Movie Database', Value: '8.8/10' },
-  { Source: 'Rotten Tomatoes', Value: '79%' },
-  { Source: 'Metacritic', Value: '66/100' },
-]): OMDbResponse {
-  return { Response: 'True', Ratings: ratings }
+function mdblistSuccess(ratings: MDBListRating[] = [
+  { source: 'imdb', value: 8.8, score: 88, votes: 2000000 },
+  { source: 'tomatoes', value: 79, score: 79, votes: 300 },
+  { source: 'metacritic', value: 66, score: 66, votes: 50 },
+]): MDBListResponse {
+  return { title: 'Fight Club', ratings }
+}
+
+/** Create a fetch mock that returns the given MDBList response for MDBList URLs. */
+function mockMDBListFetch(response: MDBListResponse, status = 200): typeof globalThis.fetch {
+  return ((url: string | URL | Request) => {
+    const urlStr = typeof url === 'string' ? url : url.toString()
+    if (urlStr.includes('api.mdblist.com')) {
+      return Promise.resolve(new Response(JSON.stringify(response), { status }))
+    }
+    return Promise.resolve(new Response('', { status: 200 }))
+  }) as typeof globalThis.fetch
+}
+
+/** Create a fetch mock that returns an error status for MDBList URLs. */
+function mockMDBListErrorFetch(status: number, body = ''): typeof globalThis.fetch {
+  return ((url: string | URL | Request) => {
+    const urlStr = typeof url === 'string' ? url : url.toString()
+    if (urlStr.includes('api.mdblist.com')) {
+      return Promise.resolve(new Response(body, { status }))
+    }
+    return Promise.resolve(new Response('', { status: 200 }))
+  }) as typeof globalThis.fetch
 }
 
 // ============================================================================
@@ -491,25 +469,13 @@ Deno.test('update-scores auth', async (t) => {
 })
 
 // ============================================================================
-// Group 2: CONFIG (2 tests)
+// Group 2: CONFIG (1 test — only MDBLIST_API_KEY now)
 // ============================================================================
 
 Deno.test('update-scores config validation', async (t) => {
-  await t.step('returns 503 when OMDB_API_KEY not configured', async () => {
+  await t.step('returns 503 when MDBLIST_API_KEY not configured', async () => {
     const client = createMockSupabaseClient()
-    const env = { ...DEFAULT_ENV, OMDB_API_KEY: undefined }
-    const handler = buildHandler(env, client)
-    const req = makeRequest('POST')
-
-    const res = await handler(req)
-    assertEquals(res.status, 503)
-    const body = await res.json()
-    assertEquals(body.error, 'Score update service not configured')
-  })
-
-  await t.step('returns 503 when TMDB_API_KEY not configured', async () => {
-    const client = createMockSupabaseClient()
-    const env = { ...DEFAULT_ENV, TMDB_API_KEY: undefined }
+    const env = { ...DEFAULT_ENV, MDBLIST_API_KEY: undefined }
     const handler = buildHandler(env, client)
     const req = makeRequest('POST')
 
@@ -555,7 +521,6 @@ Deno.test('update-scores input validation', async (t) => {
     const req = makeRequest('POST', 'not valid json {{{')
 
     const res = await handler(req)
-    // Invalid JSON parses as {} → falls through to default movie fetch → empty result
     assertEquals(res.status, 200)
     const body: UpdateScoresResult = await res.json()
     assertEquals(body.movies_fetched, 0)
@@ -576,7 +541,7 @@ Deno.test('update-scores input validation', async (t) => {
 })
 
 // ============================================================================
-// Group 4: SCORING LOGIC (10 tests)
+// Group 4: SCORING LOGIC (11 tests)
 // ============================================================================
 
 Deno.test('update-scores scoring logic', async (t) => {
@@ -595,155 +560,30 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertEquals(body.errors.length, 0)
   })
 
-  await t.step('resolves IMDB ID from TMDb when movie has no imdb_id', async () => {
-    const movie = testMovie({ imdb_id: null, tmdb_id: 550 })
+  await t.step('reports error when movie has no tmdb_id', async () => {
+    const movie = testMovie({ tmdb_id: 0 })
     const client = createMockSupabaseClient({
       movies: { select: { data: [movie], error: null } },
     })
 
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('themoviedb.org')) {
-        return Promise.resolve(new Response(JSON.stringify({ imdb_id: 'tt0137523' }), { status: 200 }))
-      }
-      // OMDb response
-      return Promise.resolve(new Response(JSON.stringify(omdbSuccess()), { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
-    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
-
-    const res = await handler(req)
-    assertEquals(res.status, 200)
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.movies_fetched, 1)
-    assertEquals(body.errors.length, 0)
-  })
-
-  await t.step('stores resolved IMDB ID back to movies table', async () => {
-    const movie = testMovie({ imdb_id: null, tmdb_id: 550 })
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [movie], error: null } },
-    })
-
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('themoviedb.org')) {
-        return Promise.resolve(new Response(JSON.stringify({ imdb_id: 'tt0137523' }), { status: 200 }))
-      }
-      return Promise.resolve(new Response(JSON.stringify(omdbSuccess()), { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
-    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
-
-    await handler(req)
-
-    // Verify the update call was made to store the resolved IMDB ID
-    assertEquals(client._updateCalls.length, 1)
-    assertEquals(client._updateCalls[0].table, 'movies')
-    assertEquals((client._updateCalls[0].data as { imdb_id: string }).imdb_id, 'tt0137523')
-    assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
-  })
-
-  await t.step('reports error when movie has no IMDB ID and TMDb lookup fails', async () => {
-    const movie = testMovie({ imdb_id: null, tmdb_id: 999999 })
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [movie], error: null } },
-    })
-
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('themoviedb.org')) {
-        return Promise.resolve(new Response('', { status: 404 }))
-      }
-      return Promise.resolve(new Response('', { status: 500 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
+    const handler = buildHandler(DEFAULT_ENV, client)
     const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
 
     const res = await handler(req)
     assertEquals(res.status, 200)
     const body: UpdateScoresResult = await res.json()
     assertEquals(body.errors.length, 1)
-    assertEquals(body.errors[0].movie_id, VALID_MOVIE_ID)
-    assertEquals(body.errors[0].error, 'No IMDB ID available')
+    assertEquals(body.errors[0].error, 'No TMDb ID available')
   })
 
-  await t.step('reports OMDb 401 as authentication failure', async () => {
-    const movie = testMovie()
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [movie], error: null } },
-    })
-
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('omdbapi.com')) {
-        return Promise.resolve(new Response('Unauthorized', { status: 401 }))
-      }
-      return Promise.resolve(new Response('', { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
-    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
-
-    const res = await handler(req)
-    assertEquals(res.status, 200)
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.errors.length, 1)
-    assertEquals(body.errors[0].error, 'OMDb API authentication failed')
-  })
-
-  await t.step('reports error when OMDb Response is False', async () => {
-    const movie = testMovie()
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [movie], error: null } },
-    })
-
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('omdbapi.com')) {
-        return Promise.resolve(
-          new Response(JSON.stringify({ Response: 'False', Error: 'Movie not found!' }), { status: 200 }),
-        )
-      }
-      return Promise.resolve(new Response('', { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
-    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
-
-    const res = await handler(req)
-    assertEquals(res.status, 200)
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.errors.length, 1)
-    assertEquals(body.errors[0].error, 'Movie not found!')
-  })
-
-  await t.step('upserts ratings and calls calculate_movie_score RPC', async () => {
+  await t.step('fetches ratings from MDBList and upserts to reviews', async () => {
     const movie = testMovie()
     const client = createMockSupabaseClient({
       movies: { select: { data: [movie], error: null } },
       rpc: { calculate_movie_score: { data: 32, error: null } },
     })
 
-    const ratings = [
-      { Source: 'Internet Movie Database', Value: '8.8/10' },
-      { Source: 'Rotten Tomatoes', Value: '79%' },
-    ]
-
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('omdbapi.com')) {
-        return Promise.resolve(
-          new Response(JSON.stringify(omdbSuccess(ratings)), { status: 200 }),
-        )
-      }
-      return Promise.resolve(new Response('', { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
+    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))
     const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
 
     const res = await handler(req)
@@ -753,8 +593,8 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertEquals(body.scores_updated, 1)
     assertEquals(body.errors.length, 0)
 
-    // Verify ratings were upserted
-    assertEquals(client._upsertCalls.length, 2)
+    // Verify 3 ratings were upserted
+    assertEquals(client._upsertCalls.length, 3)
 
     // Verify RPC was called
     assertEquals(client._rpcCalls.length, 1)
@@ -765,6 +605,56 @@ Deno.test('update-scores scoring logic', async (t) => {
     )
   })
 
+  await t.step('maps MDBList source names correctly in upsert calls', async () => {
+    const movie = testMovie()
+    const client = createMockSupabaseClient({
+      movies: { select: { data: [movie], error: null } },
+      rpc: { calculate_movie_score: { data: 25, error: null } },
+    })
+
+    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))
+    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
+    await handler(req)
+
+    // Verify source names in upsert calls
+    const sources = client._upsertCalls.map((c: unknown) => (c as { source: string }).source)
+    assertEquals(sources.includes('imdb'), true)
+    assertEquals(sources.includes('rotten_tomatoes'), true)
+    assertEquals(sources.includes('metacritic'), true)
+  })
+
+  await t.step('reports MDBList API error for specific movie', async () => {
+    const movie = testMovie()
+    const client = createMockSupabaseClient({
+      movies: { select: { data: [movie], error: null } },
+    })
+
+    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListErrorFetch(401, 'Unauthorized'))
+    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
+
+    const res = await handler(req)
+    assertEquals(res.status, 200)
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.errors.length, 1)
+    assertEquals(body.errors[0].error, 'MDBList API authentication failed')
+  })
+
+  await t.step('reports error when MDBList returns no ratings', async () => {
+    const movie = testMovie()
+    const client = createMockSupabaseClient({
+      movies: { select: { data: [movie], error: null } },
+    })
+
+    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch({ title: 'Test', ratings: [] }))
+    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
+
+    const res = await handler(req)
+    assertEquals(res.status, 200)
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.errors.length, 1)
+    assertEquals(body.errors[0].error, 'No ratings available')
+  })
+
   await t.step('increments scores_updated only when RPC succeeds', async () => {
     const movie = testMovie()
     const client = createMockSupabaseClient({
@@ -772,15 +662,7 @@ Deno.test('update-scores scoring logic', async (t) => {
       rpc: { calculate_movie_score: { data: null, error: { message: 'RPC failed' } } },
     })
 
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('omdbapi.com')) {
-        return Promise.resolve(new Response(JSON.stringify(omdbSuccess()), { status: 200 }))
-      }
-      return Promise.resolve(new Response('', { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
+    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))
     const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
 
     const res = await handler(req)
@@ -799,15 +681,7 @@ Deno.test('update-scores scoring logic', async (t) => {
       rpc: { calculate_movie_score: { data: null, error: { message: 'function not found' } } },
     })
 
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('omdbapi.com')) {
-        return Promise.resolve(new Response(JSON.stringify(omdbSuccess()), { status: 200 }))
-      }
-      return Promise.resolve(new Response('', { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
+    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))
     const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
 
     const res = await handler(req)
@@ -826,15 +700,7 @@ Deno.test('update-scores scoring logic', async (t) => {
       rpc: { calculate_movie_score: { data: 25, error: null } },
     })
 
-    const fetchFn = (url: string | URL | Request) => {
-      const urlStr = typeof url === 'string' ? url : url.toString()
-      if (urlStr.includes('omdbapi.com')) {
-        return Promise.resolve(new Response(JSON.stringify(omdbSuccess()), { status: 200 }))
-      }
-      return Promise.resolve(new Response('', { status: 200 }))
-    }
-
-    const handler = buildHandler(DEFAULT_ENV, client, fetchFn as typeof globalThis.fetch)
+    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))
     const req = makeRequest('POST', { league_id: VALID_LEAGUE_ID })
 
     const res = await handler(req)
@@ -843,6 +709,23 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertEquals(body.movies_fetched, 2)
     assertEquals(body.scores_updated, 2)
     assertEquals(body.errors.length, 0)
+  })
+
+  await t.step('handles fetch exception gracefully', async () => {
+    const movie = testMovie()
+    const client = createMockSupabaseClient({
+      movies: { select: { data: [movie], error: null } },
+    })
+
+    const fetchFn = (() => Promise.reject(new Error('Network failure'))) as typeof globalThis.fetch
+    const handler = buildHandler(DEFAULT_ENV, client, fetchFn)
+    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
+
+    const res = await handler(req)
+    assertEquals(res.status, 200)
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.errors.length, 1)
+    assertEquals(body.errors[0].error, 'Failed to fetch ratings from MDBList')
   })
 
   await t.step('returns CORS headers for OPTIONS preflight', async () => {

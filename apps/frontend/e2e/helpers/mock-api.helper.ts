@@ -122,22 +122,14 @@ export async function mockTMDbAPI(page: Page): Promise<void> {
 }
 
 /**
- * Mock OMDb API responses for score updates
+ * Mock score update API responses (MDBList via update-scores Edge Function)
  */
-export async function mockOMDbAPI(page: Page): Promise<void> {
+export async function mockScoreUpdates(page: Page): Promise<void> {
   await page.route('**/functions/v1/update-scores**', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ movies_fetched: 5, scores_updated: 5, errors: [] }),
-    })
-  })
-
-  await page.route('**/functions/v1/process-movie-scores**', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ processed: 5, errors: [] }),
     })
   })
 }
@@ -147,7 +139,7 @@ export async function mockOMDbAPI(page: Page): Promise<void> {
  */
 export async function setupAllMocks(page: Page): Promise<void> {
   await mockTMDbAPI(page)
-  await mockOMDbAPI(page)
+  await mockScoreUpdates(page)
 }
 
 export { MOCK_MOVIES }
