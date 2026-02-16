@@ -1,0 +1,108 @@
+name: Deploy Supabase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/functions/**'
+      - 'supabase/config.toml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-deploy
+  cancel-in-progress: false
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      migrations: ${{ steps.filter.outputs.migrations }}
+      functions: ${{ steps.filter.outputs.functions }}
+      shared: ${{ steps.filter.outputs.shared }}
+      changed-functions: ${{ steps.filter.outputs.functions_files }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          list-files: json
+          filters: |
+            migrations:
+              - 'supabase/migrations/**'
+            functions:
+              - 'supabase/functions/*/**'
+              - '!supabase/functions/_shared/**'
+              - '!supabase/functions/_test_utils/**'
+              - '!supabase/functions/tests/**'
+              - '!supabase/functions/**/*.test.ts'
+              - '!supabase/functions/deno.json'
+            shared:
+              - 'supabase/functions/_shared/**'
+              - 'supabase/functions/deno.json'
+              - 'supabase/config.toml'
+
+  deploy-migrations:
+    name: Deploy migrations
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.migrations == 'true'
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51 # v1
+        with:
+          version: latest
+
+      - name: Link Supabase project
+        run: supabase link --project-ref "$PROJECT_REF"
+        env:
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      - name: Push migrations
+        run: supabase db push
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+  deploy-functions:
+    name: Deploy Edge Functions
+    runs-on: ubuntu-latest
+    needs: [changes, deploy-migrations]
+    if: |
+      always() && !cancelled() &&
+      (needs.changes.outputs.functions == 'true' || needs.changes.outputs.shared == 'true')
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51 # v1
+        with:
+          version: latest
+
+      - name: Deploy all functions (shared code changed)
+        if: needs.changes.outputs.shared == 'true'
+        run: supabase functions deploy --project-ref "$PROJECT_REF"
+        env:
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Deploy changed functions
+        if: needs.changes.outputs.shared != 'true' && needs.changes.outputs.functions == 'true'
+        run: |
+          # Extract unique function directory names from changed files
+          FUNCTIONS=$(echo "$CHANGED_FILES" | jq -r '.[]' | sed 's|supabase/functions/||' | cut -d'/' -f1 | sort -u)
+          for fn in $FUNCTIONS; do
+            echo "Deploying function: $fn"
+            supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
+          done
+        env:
+          CHANGED_FILES: ${{ needs.changes.outputs.changed-functions }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
