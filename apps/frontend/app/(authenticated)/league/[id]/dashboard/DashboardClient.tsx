@@ -38,7 +38,7 @@ export default function DashboardClient({
         .from('league_participants')
         .select('user_id, profiles!inner(wishlist_public)')
         .eq('league_id', league.id)
-        .eq('status', 'accepted')
+        .eq('status', 'active')
         .neq('user_id', user.id)
         .eq('profiles.wishlist_public', true)
 

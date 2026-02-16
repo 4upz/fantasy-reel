@@ -40,7 +40,7 @@ ALTER TABLE wishlisted_movies ENABLE ROW LEVEL SECURITY;
 -- ============================================================================
 -- PART 4: Security definer helper function
 -- Checks if the target user has wishlist_public = true AND the querying user
--- shares at least one league with them (both with status = 'accepted').
+-- shares at least one league with them (both with status = 'active').
 -- ============================================================================
 
 CREATE SCHEMA IF NOT EXISTS private;
@@ -62,9 +62,9 @@ AS $$
     JOIN public.league_participants lp2
       ON lp1.league_id = lp2.league_id
     WHERE lp1.user_id = target_user_id
-      AND lp1.status = 'accepted'
+      AND lp1.status = 'active'
       AND lp2.user_id = (SELECT auth.uid())
-      AND lp2.status = 'accepted'
+      AND lp2.status = 'active'
   )
 $$;
 
