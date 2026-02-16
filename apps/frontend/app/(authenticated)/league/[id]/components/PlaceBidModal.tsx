@@ -312,10 +312,19 @@ export default function PlaceBidModal({
                       {displayedResults.length} movies found
                     </p>
                     {displayedResults.map((movie, index) => (
-                      <button
+                      <div
                         key={movie.tmdb_id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelectedMovie(movie)}
-                        className="w-full card card-interactive p-3 flex gap-4 text-left group"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            setSelectedMovie(movie)
+                          }
+                        }}
+                        data-testid={`bid-movie-result-${movie.tmdb_id}`}
+                        className="w-full card card-interactive p-3 flex gap-4 text-left group cursor-pointer"
                         style={{ animationDelay: `${index * 30}ms` }}
                       >
                         <div className="relative w-14 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
@@ -355,7 +364,7 @@ export default function PlaceBidModal({
                         <div className="flex items-center text-foreground-muted group-hover:text-gold transition-colors">
                           <TrendingUp className="w-5 h-5" />
                         </div>
-                      </button>
+                      </div>
                     ))}
                   </>
                 )}

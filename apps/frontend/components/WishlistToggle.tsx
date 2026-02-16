@@ -98,7 +98,6 @@ export function WishlistToggle({
         fill={wishlisted ? 'currentColor' : 'none'}
         strokeWidth={wishlisted ? 0 : 2}
       />
-      <span className="sr-only">{movie.title}</span>
     </button>
   )
 }

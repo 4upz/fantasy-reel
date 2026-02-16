@@ -86,7 +86,7 @@ test.describe('Place Bid Flow @bidding', () => {
 
     // Wait for search results - mock should return "Test Movie Alpha"
     await expect(
-      authedPage.getByText(MOCK_MOVIES[0].title)
+      authedPage.getByTestId(`bid-movie-result-${MOCK_MOVIES[0].tmdb_id}`)
     ).toBeVisible({ timeout: 10000 })
   })
 
@@ -105,9 +105,9 @@ test.describe('Place Bid Flow @bidding', () => {
     await authedPage.getByTestId('bid-movie-search-input').fill('Alpha')
 
     // Wait for results and click the movie
-    const movieButton = authedPage.getByRole('button', { name: /Test Movie Alpha/i })
-    await expect(movieButton).toBeVisible({ timeout: 10000 })
-    await movieButton.click()
+    const movieResult = authedPage.getByTestId(`bid-movie-result-${MOCK_MOVIES[0].tmdb_id}`)
+    await expect(movieResult).toBeVisible({ timeout: 10000 })
+    await movieResult.click()
 
     // Verify bid amount input is visible
     await expect(authedPage.getByTestId('bid-amount-input')).toBeVisible()
@@ -128,9 +128,9 @@ test.describe('Place Bid Flow @bidding', () => {
     await waitForModalOpen(authedPage)
     await authedPage.getByTestId('bid-movie-search-input').fill('Alpha')
 
-    const movieButton = authedPage.getByRole('button', { name: /Test Movie Alpha/i })
-    await expect(movieButton).toBeVisible({ timeout: 10000 })
-    await movieButton.click()
+    const movieResult = authedPage.getByTestId(`bid-movie-result-${MOCK_MOVIES[0].tmdb_id}`)
+    await expect(movieResult).toBeVisible({ timeout: 10000 })
+    await movieResult.click()
 
     // Wait for bid input to be visible
     await expect(authedPage.getByTestId('bid-amount-input')).toBeVisible()
@@ -154,9 +154,9 @@ test.describe('Place Bid Flow @bidding', () => {
     await authedPage.getByTestId('bid-movie-search-input').fill('Alpha')
 
     // Wait for results and click the movie
-    const movieButton = authedPage.getByRole('button', { name: /Test Movie Alpha/i })
-    await expect(movieButton).toBeVisible({ timeout: 10000 })
-    await movieButton.click()
+    const movieResult = authedPage.getByTestId(`bid-movie-result-${MOCK_MOVIES[0].tmdb_id}`)
+    await expect(movieResult).toBeVisible({ timeout: 10000 })
+    await movieResult.click()
 
     // Enter a valid bid amount
     await authedPage.getByTestId('bid-amount-input').fill('10')

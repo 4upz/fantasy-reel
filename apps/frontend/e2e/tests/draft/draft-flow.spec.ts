@@ -66,20 +66,20 @@ test.describe('Draft Flow', () => {
     await expect(page.getByTestId('movie-picker')).toBeVisible({ timeout: 10000 })
 
     // Should show mock movies (loaded via mocked browse-movies)
-    await expect(page.getByText(MOCK_MOVIES[0].title)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByTestId(`movie-card-${MOCK_MOVIES[0].tmdb_id}`)).toBeVisible({ timeout: 10000 })
 
     // Test search - type "Alpha" to filter
     await page.getByTestId('movie-search-input').fill('Alpha')
 
     // Wait for the search mock to respond and filter results
-    await expect(page.getByText(MOCK_MOVIES[0].title)).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText(MOCK_MOVIES[1].title)).not.toBeVisible({ timeout: 5000 })
+    await expect(page.getByTestId(`movie-card-${MOCK_MOVIES[0].tmdb_id}`)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByTestId(`movie-card-${MOCK_MOVIES[1].tmdb_id}`)).not.toBeVisible({ timeout: 5000 })
 
     // Clear search
     await page.getByTestId('movie-search-input').fill('')
 
     // All movies should be visible again
-    await expect(page.getByText(MOCK_MOVIES[1].title)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByTestId(`movie-card-${MOCK_MOVIES[1].tmdb_id}`)).toBeVisible({ timeout: 10000 })
   })
 
   test('user can make a draft pick when it is their turn @critical', async ({
