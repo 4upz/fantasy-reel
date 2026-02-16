@@ -99,36 +99,11 @@ export default function DraftClient({
   const [startingCounterpick, setStartingCounterpick] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Local favorites state
-  const [favoriteMovieIds, setFavoriteMovieIds] = useState<Set<number>>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem(`draft-favorites-${initialLeague.id}`)
-      if (stored) {
-        try {
-          return new Set(JSON.parse(stored))
-        } catch {
-          return new Set()
-        }
-      }
-    }
-    return new Set()
-  })
-
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
   const supabase = useMemo(() => createClient(), [])
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const channelIdRef = useRef(0)
-
-  // Persist favorites
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(
-        `draft-favorites-${league.id}`,
-        JSON.stringify([...favoriteMovieIds])
-      )
-    }
-  }, [favoriteMovieIds, league.id])
 
   const fetchDraftPicks = useCallback(async () => {
     // Explicit FK required: draft_picks has two FKs to teams (team_id, counterpicked_by_team_id)
@@ -269,18 +244,6 @@ export default function DraftClient({
     await fetchDraftPicks() // Also refetch draft picks to get updated counterpicked_by_team_id
   }, [fetchCounterpicks, fetchDraftPicks])
 
-  const handleToggleFavorite = useCallback((tmdbId: number) => {
-    setFavoriteMovieIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(tmdbId)) {
-        next.delete(tmdbId)
-      } else {
-        next.add(tmdbId)
-      }
-      return next
-    })
-  }, [])
-
   async function handleStartDraft(): Promise<void> {
     if (participants.length < 2) {
       setError('Need at least 2 participants to start the draft')
@@ -393,10 +356,8 @@ export default function DraftClient({
             draftPicks={draftPicks}
             counterpicks={counterpicks}
             currentUserId={currentUserId}
-            favoriteMovieIds={favoriteMovieIds}
             onPickMade={handlePickMade}
             onCounterpickMade={handleCounterpickMade}
-            onToggleFavorite={handleToggleFavorite}
           />
         </div>
 

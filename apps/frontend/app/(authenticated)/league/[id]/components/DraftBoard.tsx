@@ -19,10 +19,8 @@ interface Props {
   draftPicks: DraftPickWithDetails[]
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
-  favoriteMovieIds?: Set<number>
   onPickMade: () => void | Promise<void>
   onCounterpickMade?: () => void | Promise<void>
-  onToggleFavorite?: (tmdbId: number) => void
 }
 
 export default function DraftBoard({
@@ -31,10 +29,8 @@ export default function DraftBoard({
   draftPicks,
   counterpicks,
   currentUserId,
-  favoriteMovieIds = new Set(),
   onPickMade,
   onCounterpickMade,
-  onToggleFavorite,
 }: Props): React.ReactElement {
   const totalParticipants = participants.length
   const totalPicks = totalParticipants * league.draft_slots
@@ -257,11 +253,9 @@ export default function DraftBoard({
       <div className="card p-6">
         <MoviePicker
           draftedTmdbIds={draftedTmdbIds}
-          favoriteMovieIds={favoriteMovieIds}
           isMyTurn={isMyTurn}
           picking={picking}
           onPick={handleDraftPick}
-          onToggleFavorite={onToggleFavorite}
         />
       </div>
     </div>

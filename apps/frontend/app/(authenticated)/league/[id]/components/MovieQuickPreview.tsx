@@ -4,7 +4,8 @@ import { useEffect, useState, useRef } from 'react'
 import Image from 'next/image'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
-import { CloseIcon, StarIcon, HeartIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
+import { WishlistToggle } from '@/components/WishlistToggle'
+import { CloseIcon, StarIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
 
 const DESCRIPTION_CHAR_THRESHOLD = 200
@@ -12,20 +13,16 @@ const DESCRIPTION_CHAR_THRESHOLD = 200
 interface Props {
   movie: TMDbSearchResult
   isMyTurn: boolean
-  isFavorite?: boolean
   onClose: () => void
   onDraft: (tmdbId: number) => void
-  onToggleFavorite?: (tmdbId: number) => void
   picking?: boolean
 }
 
 export default function MovieQuickPreview({
   movie,
   isMyTurn,
-  isFavorite,
   onClose,
   onDraft,
-  onToggleFavorite,
   picking,
 }: Props) {
   const [details, setDetails] = useState<TMDbMovieDetails | null>(null)
@@ -123,19 +120,8 @@ export default function MovieQuickPreview({
                     </div>
                   )}
 
-                  {/* Favorite Button */}
-                  {onToggleFavorite && (
-                    <button
-                      onClick={() => onToggleFavorite(movie.tmdb_id)}
-                      className={`absolute top-2 right-2 p-2 rounded-full transition-all ${
-                        isFavorite
-                          ? 'bg-crimson text-white'
-                          : 'bg-background/70 backdrop-blur-sm text-foreground-muted hover:text-crimson'
-                      }`}
-                    >
-                      <HeartIcon className="w-5 h-5" filled={isFavorite} />
-                    </button>
-                  )}
+                  {/* Wishlist Button */}
+                  <WishlistToggle movie={movie} size="md" variant="overlay" className="absolute top-2 right-2" />
                 </div>
               </div>
 

@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
+import { useWishlist } from '@/hooks/useWishlist'
 import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
 import DraftFilters from './DraftFilters'
 import DraftMovieCard from './DraftMovieCard'
@@ -11,20 +12,18 @@ import { SpinnerIcon, ClapperboardIcon, TrendingUpIcon, CalendarIcon, HeartIcon,
 
 interface Props {
   draftedTmdbIds: Set<number>
-  favoriteMovieIds?: Set<number>
   isMyTurn: boolean
   picking: boolean
   onPick: (tmdbId: number, movieData: TMDbSearchResult) => void
-  onToggleFavorite?: (tmdbId: number) => void
 }
 
-type TabType = 'all' | 'trending' | 'releasing-soon' | 'favorites'
+type TabType = 'all' | 'trending' | 'releasing-soon' | 'wishlist'
 
 const TAB_CONFIG: { id: TabType; label: string }[] = [
   { id: 'all', label: 'All Movies' },
   { id: 'trending', label: 'Trending' },
   { id: 'releasing-soon', label: 'Releasing Soon' },
-  { id: 'favorites', label: 'Favorites' },
+  { id: 'wishlist', label: 'Wishlist' },
 ]
 
 function getTabIcon(tabId: TabType, className: string = 'w-4 h-4'): React.ReactElement {
@@ -35,7 +34,7 @@ function getTabIcon(tabId: TabType, className: string = 'w-4 h-4'): React.ReactE
       return <TrendingUpIcon className={className} />
     case 'releasing-soon':
       return <CalendarIcon className={className} />
-    case 'favorites':
+    case 'wishlist':
       return <HeartIcon className={className} />
   }
 }
@@ -43,25 +42,24 @@ function getTabIcon(tabId: TabType, className: string = 'w-4 h-4'): React.ReactE
 function EmptyStateIcon({ activeTab, mode }: { activeTab: TabType; mode: string }): React.ReactElement {
   const className = 'w-10 h-10 text-foreground-muted'
 
-  if (activeTab === 'favorites') return <HeartIcon className={className} />
+  if (activeTab === 'wishlist') return <HeartIcon className={className} />
   if (mode === 'search') return <SearchIcon className={className} />
   return <ClapperboardIcon className={className} />
 }
 
 function EmptyStateMessage({ activeTab, mode }: { activeTab: TabType; mode: string }): string {
-  if (activeTab === 'favorites') return 'No favorites yet. Heart movies to add them here!'
+  if (activeTab === 'wishlist') return 'Your wishlist is empty. Heart movies to add them here!'
   if (mode === 'search') return 'No movies found for your search'
   return 'No movies match your filters'
 }
 
 export default function MoviePicker({
   draftedTmdbIds,
-  favoriteMovieIds = new Set(),
   isMyTurn,
   picking,
   onPick,
-  onToggleFavorite,
 }: Props): React.ReactElement {
+  const { wishlistedIds } = useWishlist()
   const [activeTab, setActiveTab] = useState<TabType>('all')
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [previewMovie, setPreviewMovie] = useState<TMDbSearchResult | null>(null)
@@ -74,6 +72,7 @@ export default function MoviePicker({
     mode,
     search,
     browse,
+    fetchTrending,
     loadMore,
   } = useDraftMovies({ draftedTmdbIds })
 
@@ -98,7 +97,8 @@ export default function MoviePicker({
   const filteredMovies = useMemo(() => {
     switch (activeTab) {
       case 'trending':
-        return movies.filter((m) => (m.popularity || 0) >= 50)
+        // Trending data comes from the server via fetchTrending — no client filter needed
+        return movies
       case 'releasing-soon':
         return movies.filter((m) => {
           if (!m.release_date) return false
@@ -107,17 +107,36 @@ export default function MoviePicker({
           const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
           return releaseDate >= now && releaseDate <= thirtyDaysFromNow
         })
-      case 'favorites':
-        return movies.filter((m) => favoriteMovieIds.has(m.tmdb_id))
+      case 'wishlist':
+        return movies.filter((m) => wishlistedIds.has(m.tmdb_id))
       default:
         return movies
     }
-  }, [movies, activeTab, favoriteMovieIds])
+  }, [movies, activeTab, wishlistedIds])
+
+  // Handle tab changes — fetch trending data server-side or restore browse
+  const handleTabChange = useCallback(
+    (tab: TabType) => {
+      setActiveTab(tab)
+      if (tab === 'trending') {
+        fetchTrending()
+      } else if (activeTab === 'trending') {
+        // Leaving trending tab — restore browse results
+        browse({ releaseWindow: 'year', genres: [], minRating: 0 })
+      }
+    },
+    [activeTab, fetchTrending, browse]
+  )
 
   // Handle filter changes - hook handles debouncing
   const handleFiltersChange = useCallback(
     (newFilters: BrowseFilters & { search: string }) => {
       const { search: searchValue, ...browseFilters } = newFilters
+
+      // Auto-switch away from trending when user searches or changes filters
+      if (activeTab === 'trending') {
+        setActiveTab('all')
+      }
 
       if (searchValue) {
         search(searchValue)
@@ -125,7 +144,7 @@ export default function MoviePicker({
         browse(browseFilters)
       }
     },
-    [browse, search]
+    [browse, search, activeTab]
   )
 
   const handleSelectMovie = (movie: TMDbSearchResult) => {
@@ -153,13 +172,6 @@ export default function MoviePicker({
     setSelectedMovie(null)
   }
 
-  const handleToggleFavorite = useCallback(
-    (tmdbId: number) => {
-      onToggleFavorite?.(tmdbId)
-    },
-    [onToggleFavorite]
-  )
-
   // Count available (non-drafted) movies
   const availableCount = filteredMovies.filter((m) => !draftedTmdbIds.has(m.tmdb_id)).length
 
@@ -182,7 +194,7 @@ export default function MoviePicker({
         {TAB_CONFIG.map((tab) => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
+            onClick={() => handleTabChange(tab.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               activeTab === tab.id
                 ? 'bg-gold text-background shadow-md'
@@ -191,13 +203,13 @@ export default function MoviePicker({
           >
             {getTabIcon(tab.id)}
             <span>{tab.label}</span>
-            {tab.id === 'favorites' && favoriteMovieIds.size > 0 && (
+            {tab.id === 'wishlist' && wishlistedIds.size > 0 && (
               <span
                 className={`px-1.5 py-0.5 rounded-full text-xs ${
                   activeTab === tab.id ? 'bg-background/20 text-background' : 'bg-crimson text-white'
                 }`}
               >
-                {favoriteMovieIds.size}
+                {wishlistedIds.size}
               </span>
             )}
           </button>
@@ -252,10 +264,8 @@ export default function MoviePicker({
                 key={movie.tmdb_id}
                 movie={movie}
                 isSelected={selectedMovie?.tmdb_id === movie.tmdb_id}
-                isFavorite={favoriteMovieIds.has(movie.tmdb_id)}
                 isDrafted={draftedTmdbIds.has(movie.tmdb_id)}
                 onSelect={handleSelectMovie}
-                onToggleFavorite={handleToggleFavorite}
                 onPreview={handlePreview}
               />
             ))}
@@ -343,10 +353,8 @@ export default function MoviePicker({
         <MovieQuickPreview
           movie={previewMovie}
           isMyTurn={isMyTurn}
-          isFavorite={favoriteMovieIds.has(previewMovie.tmdb_id)}
           onClose={() => setPreviewMovie(null)}
           onDraft={handleDraftFromPreview}
-          onToggleFavorite={handleToggleFavorite}
           picking={picking}
         />
       )}

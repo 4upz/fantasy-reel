@@ -3,16 +3,15 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import type { TMDbSearchResult } from '@/types'
-import { StarIcon, HeartIcon, CheckIcon, ClapperboardIcon, PlusIcon, EyeIcon } from './Icons'
+import { WishlistToggle } from '@/components/WishlistToggle'
+import { StarIcon, CheckIcon, ClapperboardIcon, PlusIcon, EyeIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
   movie: TMDbSearchResult
   isSelected?: boolean
-  isFavorite?: boolean
   isDrafted?: boolean
   onSelect: (movie: TMDbSearchResult) => void
-  onToggleFavorite?: (tmdbId: number) => void
   onPreview?: (movie: TMDbSearchResult) => void
 }
 
@@ -29,21 +28,14 @@ interface Props {
 export default function DraftMovieCard({
   movie,
   isSelected,
-  isFavorite,
   isDrafted,
   onSelect,
-  onToggleFavorite,
   onPreview,
 }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
   const popularityBadge = getPopularityBadge(movie.popularity)
-
-  function handleFavoriteClick(e: React.MouseEvent): void {
-    e.stopPropagation()
-    onToggleFavorite?.(movie.tmdb_id)
-  }
 
   function handleCardClick(): void {
     // Card click opens preview (most common user intent)
@@ -122,19 +114,9 @@ export default function DraftMovieCard({
             </span>
           )}
 
-          {/* Favorite Button */}
-          {onToggleFavorite && !isDrafted && (
-            <button
-              onClick={handleFavoriteClick}
-              className={cn(
-                'p-1.5 rounded-full transition-all',
-                isFavorite
-                  ? 'bg-crimson text-white'
-                  : 'bg-background/60 backdrop-blur-sm text-foreground-muted hover:text-crimson hover:bg-background/80'
-              )}
-            >
-              <HeartIcon className="w-4 h-4" filled={isFavorite} />
-            </button>
+          {/* Wishlist Button */}
+          {!isDrafted && (
+            <WishlistToggle movie={movie} size="sm" variant="overlay" />
           )}
         </div>
 
