@@ -196,12 +196,11 @@ Deno.test({
       })
 
       // ============================================================================
-      // Movie Without IMDB ID Tests
+      // Movie Without TMDb ID Test
       // ============================================================================
 
-      await t.step('reports error for movie without IMDB ID', async () => {
-        // fetchImdbId will try TMDb API with a fake tmdb_id and fail
-        const movieId = await seedTestMovie()
+      await t.step('reports error for movie without TMDb ID', async () => {
+        const movieId = await seedTestMovie({ tmdb_id: 0 })
 
         const { status, data } = await callUpdateScores({
           movie_ids: [movieId],
@@ -213,17 +212,18 @@ Deno.test({
           (e: { movie_id: string }) => e.movie_id === movieId
         )
         assertExists(movieError)
-        assertEquals(movieError.error, 'No IMDB ID available')
+        assertEquals(movieError.error, 'No TMDb ID available')
       })
 
       // ============================================================================
-      // Specific Movie Processing Tests
+      // Specific Movie Processing Tests (using real TMDb IDs for MDBList lookup)
       // ============================================================================
 
-      await t.step('processes a movie with a valid IMDB ID and stores reviews', async () => {
-        // tt0111161 = The Shawshank Redemption
+      await t.step('processes a movie with a real TMDb ID and stores reviews', async () => {
+        // TMDb ID 278 = The Shawshank Redemption
         const movieId = await seedTestMovie({
-          imdb_id: 'tt0111161',
+          tmdb_id: 278,
+          title: 'The Shawshank Redemption',
           release_date: '1994-09-23',
         })
 
@@ -249,9 +249,10 @@ Deno.test({
       })
 
       await t.step('filters valid UUIDs from mixed movie_ids array', async () => {
-        // tt0068646 = The Godfather
+        // TMDb ID 238 = The Godfather
         const movieId = await seedTestMovie({
-          imdb_id: 'tt0068646',
+          tmdb_id: 238,
+          title: 'The Godfather',
           release_date: '1972-03-24',
         })
 

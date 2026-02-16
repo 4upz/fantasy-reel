@@ -1,6 +1,6 @@
 /**
  * Shared test data constants for E2E tests
- * These match the mock responses from TMDb/OMDb APIs
+ * These match the mock responses from TMDb/MDBList APIs
  */
 
 /**

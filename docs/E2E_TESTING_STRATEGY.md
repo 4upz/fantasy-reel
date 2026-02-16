@@ -10,7 +10,7 @@ This document outlines a comprehensive end-to-end testing strategy for the Fanta
 
 **Solution:** Implement Playwright-based E2E tests that run against a local Supabase instance, testing real production flows with minimal mocking.
 
-**Philosophy:** Test the application as users experience it. Only mock external third-party APIs (TMDb, OMDb) that are outside our control. Never mock Supabase—let RLS policies, Edge Functions, and real-time subscriptions execute as they would in production.
+**Philosophy:** Test the application as users experience it. Only mock external third-party APIs (TMDb, MDBList) that are outside our control. Never mock Supabase—let RLS policies, Edge Functions, and real-time subscriptions execute as they would in production.
 
 ---
 
@@ -58,7 +58,7 @@ apps/frontend/
 │   ├── helpers/
 │   │   ├── supabase.helper.ts      # Direct DB setup/teardown
 │   │   ├── auth.helper.ts          # Auth utilities
-│   │   └── mock-api.helper.ts      # TMDb/OMDb mock setup
+│   │   └── mock-api.helper.ts      # TMDb/MDBList mock setup
 │   │
 │   ├── tests/
 │   │   ├── auth/
@@ -180,7 +180,7 @@ export default defineConfig({
 | Service | Mock? | Reason |
 |---------|-------|--------|
 | **TMDb API** | ✅ Yes | External rate limits, non-deterministic data |
-| **OMDb API** | ✅ Yes | External API, score data should be controlled |
+| **MDBList API** | ✅ Yes | External API, score data should be controlled |
 | **Resend Email** | ✅ Yes | Can't verify real emails in tests |
 | **Discord OAuth** | ✅ Yes | Requires real Discord account |
 | **Supabase Auth** | ❌ No | Test real auth flows |
@@ -268,7 +268,7 @@ export async function mockTMDbAPI(page: Page) {
   })
 }
 
-export async function mockOMDbAPI(page: Page) {
+export async function mockScoreUpdates(page: Page) {
   // Mock update-scores Edge Function responses
   await page.route('**/functions/v1/update-scores**', async (route) => {
     await route.fulfill({
@@ -1285,7 +1285,7 @@ test('outbid notification @realtime @bidding', async ({ page }) => { ... })
 
 1. Install and configure Playwright
 2. Create fixture infrastructure (auth, league)
-3. Implement mock helpers for TMDb/OMDb
+3. Implement mock helpers for TMDb/MDBList
 4. Write email helper for Inbucket
 5. Implement P0 auth tests (signup, login)
 

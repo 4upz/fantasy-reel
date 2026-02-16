@@ -1,7 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
-import { normalizeRating, fetchImdbId } from '../_shared/scoring.ts'
-import type { OMDbResponse, MovieRecord } from '../_shared/scoring.ts'
+import { fetchMDBListRatings } from '../_shared/scoring.ts'
+import type { MovieRecord } from '../_shared/scoring.ts'
 
 interface UpdateScoresRequest {
   movie_ids?: string[]
@@ -33,15 +33,9 @@ Deno.serve(async (req) => {
       return errorResponse('Forbidden', 403)
     }
 
-    const omdbApiKey = Deno.env.get('OMDB_API_KEY')
-    if (!omdbApiKey) {
-      console.error('OMDB_API_KEY not configured')
-      return errorResponse('Score update service not configured', 503)
-    }
-
-    const tmdbApiKey = Deno.env.get('TMDB_API_KEY')
-    if (!tmdbApiKey) {
-      console.error('TMDB_API_KEY not configured')
+    const mdblistApiKey = Deno.env.get('MDBLIST_API_KEY')
+    if (!mdblistApiKey) {
+      console.error('MDBLIST_API_KEY not configured')
       return errorResponse('Score update service not configured', 503)
     }
 
@@ -138,53 +132,32 @@ Deno.serve(async (req) => {
 
     // Process each movie
     for (const movie of moviesToUpdate) {
-      // Resolve IMDB ID if missing
-      let imdbId = movie.imdb_id
-      if (!imdbId && movie.tmdb_id) {
-        imdbId = await fetchImdbId(movie.tmdb_id, tmdbApiKey)
-        if (imdbId) {
-          await serviceClient.from('movies').update({ imdb_id: imdbId }).eq('id', movie.id)
-        }
-      }
-
-      if (!imdbId) {
+      if (!movie.tmdb_id) {
         results.errors.push({
           movie_id: movie.id,
           title: movie.title,
-          error: 'No IMDB ID available'
+          error: 'No TMDb ID available'
         })
         continue
       }
 
       try {
-        // Fetch from OMDb (HTTPS)
-        const omdbUrl = `https://www.omdbapi.com/?apikey=${omdbApiKey}&i=${imdbId}`
-        const omdbResponse = await fetch(omdbUrl)
+        const { ratings, error: fetchError } = await fetchMDBListRatings(movie.tmdb_id, mdblistApiKey)
 
-        if (!omdbResponse.ok) {
-          if (omdbResponse.status === 401) {
-            results.errors.push({
-              movie_id: movie.id,
-              title: movie.title,
-              error: 'OMDb API authentication failed'
-            })
-            continue
-          }
+        if (fetchError) {
           results.errors.push({
             movie_id: movie.id,
             title: movie.title,
-            error: `OMDb API error: ${omdbResponse.status}`
+            error: fetchError
           })
           continue
         }
 
-        const omdbData: OMDbResponse = await omdbResponse.json()
-
-        if (omdbData.Response === 'False') {
+        if (ratings.length === 0) {
           results.errors.push({
             movie_id: movie.id,
             title: movie.title,
-            error: omdbData.Error || 'Movie not found on OMDb'
+            error: 'No ratings available'
           })
           continue
         }
@@ -193,28 +166,25 @@ Deno.serve(async (req) => {
 
         // Process and store ratings
         let ratingsStored = 0
-        if (omdbData.Ratings && omdbData.Ratings.length > 0) {
-          for (const rating of omdbData.Ratings) {
-            const { source, score, raw } = normalizeRating(rating)
-            if (!source || score === null) continue
+        for (const rating of ratings) {
+          if (!rating.source || rating.score === null) continue
 
-            const { error: reviewError } = await serviceClient
-              .from('reviews')
-              .upsert({
-                movie_id: movie.id,
-                source,
-                score,
-                raw_score: raw,
-                fetched_at: new Date().toISOString()
-              }, {
-                onConflict: 'movie_id,source'
-              })
+          const { error: reviewError } = await serviceClient
+            .from('reviews')
+            .upsert({
+              movie_id: movie.id,
+              source: rating.source,
+              score: rating.score,
+              raw_score: rating.raw,
+              fetched_at: new Date().toISOString()
+            }, {
+              onConflict: 'movie_id,source'
+            })
 
-            if (reviewError) {
-              console.error(`Error upserting review for ${movie.title}:`, reviewError)
-            } else {
-              ratingsStored++
-            }
+          if (reviewError) {
+            console.error(`Error upserting review for ${movie.title}:`, reviewError)
+          } else {
+            ratingsStored++
           }
         }
 

@@ -4,84 +4,294 @@
  */
 
 import { assertEquals } from '@std/assert'
-import { normalizeRating, fetchImdbId } from './scoring.ts'
+import { fetchMDBListRatings, fetchImdbId, MDBLIST_SOURCE_MAP } from './scoring.ts'
+
+// --- Test helpers ---
+
+const originalFetch = globalThis.fetch
+
+/** Temporarily replace globalThis.fetch for the duration of `fn`, restoring it afterward. */
+async function withMockFetch<T>(
+  mockFetch: typeof globalThis.fetch,
+  fn: () => Promise<T>,
+): Promise<T> {
+  globalThis.fetch = mockFetch
+  try {
+    return await fn()
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+}
+
+/** Create a mock fetch that returns a JSON response with status 200. */
+function jsonFetch(body: unknown): typeof globalThis.fetch {
+  return () => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }))
+}
+
+/** Create a mock fetch that returns a plain-text response with the given status. */
+function statusFetch(status: number, body = ''): typeof globalThis.fetch {
+  return () => Promise.resolve(new Response(body, { status }))
+}
 
 // ============================================================================
-// normalizeRating Tests
+// fetchMDBListRatings Tests
 // ============================================================================
 
-Deno.test('normalizeRating', async (t) => {
-  // --- IMDb ratings ---
+Deno.test('fetchMDBListRatings', async (t) => {
+  // --- Happy path ---
 
-  await t.step('parses IMDb rating "8.5/10" to score 85', () => {
-    const result = normalizeRating({ Source: 'Internet Movie Database', Value: '8.5/10' })
-    assertEquals(result, { source: 'imdb', score: 85, raw: '8.5/10' })
+  await t.step('returns all 3 professional sources when present', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Oppenheimer',
+        ratings: [
+          { source: 'imdb', value: 8.2, score: 82, votes: 1001680 },
+          { source: 'metacritic', value: 90, score: 90, votes: 69 },
+          { source: 'tomatoes', value: 93, score: 93, votes: 513 },
+          { source: 'trakt', value: 80, score: 80, votes: 34016 },
+          { source: 'tmdb', value: 80, score: 80, votes: 11332 },
+        ],
+      }),
+      () => fetchMDBListRatings(872585, 'test-key'),
+    )
+    assertEquals(result.error, undefined)
+    assertEquals(result.ratings.length, 3)
   })
 
-  await t.step('parses IMDb "10.0/10" to score 100', () => {
-    const result = normalizeRating({ Source: 'Internet Movie Database', Value: '10.0/10' })
-    assertEquals(result, { source: 'imdb', score: 100, raw: '10.0/10' })
+  await t.step('maps "tomatoes" source to "rotten_tomatoes"', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'tomatoes', value: 85, score: 85, votes: 200 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings[0].source, 'rotten_tomatoes')
+    assertEquals(result.ratings[0].score, 85)
+    assertEquals(result.ratings[0].raw, '85%')
   })
 
-  await t.step('parses IMDb "0.0/10" to score 0', () => {
-    const result = normalizeRating({ Source: 'Internet Movie Database', Value: '0.0/10' })
-    assertEquals(result, { source: 'imdb', score: 0, raw: '0.0/10' })
+  await t.step('formats raw scores correctly per source', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'imdb', value: 7.0, score: 70, votes: 500 },
+          { source: 'tomatoes', value: 82, score: 82, votes: 300 },
+          { source: 'metacritic', value: 60, score: 60, votes: 40 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings[0].raw, '7/10')
+    assertEquals(result.ratings[1].raw, '82%')
+    assertEquals(result.ratings[2].raw, '60/100')
   })
 
-  await t.step('rounds IMDb "8.45/10" to 85', () => {
-    const result = normalizeRating({ Source: 'Internet Movie Database', Value: '8.45/10' })
-    assertEquals(result, { source: 'imdb', score: 85, raw: '8.45/10' })
+  // --- Filtering ---
+
+  await t.step('filters out non-professional sources', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'trakt', value: 80, score: 80, votes: 34016 },
+          { source: 'tmdb', value: 80, score: 80, votes: 11332 },
+          { source: 'letterboxd', value: 4.2, score: 84, votes: 3923809 },
+          { source: 'imdb', value: 8.0, score: 80, votes: 5000 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 1)
+    assertEquals(result.ratings[0].source, 'imdb')
   })
 
-  // --- Rotten Tomatoes ratings ---
-
-  await t.step('parses Rotten Tomatoes "85%" to score 85', () => {
-    const result = normalizeRating({ Source: 'Rotten Tomatoes', Value: '85%' })
-    assertEquals(result, { source: 'rotten_tomatoes', score: 85, raw: '85%' })
+  await t.step('skips ratings with null score', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'imdb', value: 8.0, score: null, votes: 0 },
+          { source: 'tomatoes', value: 85, score: 85, votes: 100 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 1)
+    assertEquals(result.ratings[0].source, 'rotten_tomatoes')
   })
 
-  await t.step('parses RT "100%" to score 100', () => {
-    const result = normalizeRating({ Source: 'Rotten Tomatoes', Value: '100%' })
-    assertEquals(result, { source: 'rotten_tomatoes', score: 100, raw: '100%' })
+  await t.step('skips ratings with zero votes', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'imdb', value: 8.0, score: 80, votes: 0 },
+          { source: 'metacritic', value: 75, score: 75, votes: 50 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 1)
+    assertEquals(result.ratings[0].source, 'metacritic')
   })
 
-  await t.step('parses RT "0%" to score 0', () => {
-    const result = normalizeRating({ Source: 'Rotten Tomatoes', Value: '0%' })
-    assertEquals(result, { source: 'rotten_tomatoes', score: 0, raw: '0%' })
+  await t.step('skips ratings with null votes', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'imdb', value: 8.0, score: 80, votes: null },
+          { source: 'tomatoes', value: 90, score: 90, votes: 100 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 1)
+    assertEquals(result.ratings[0].source, 'rotten_tomatoes')
   })
 
-  // --- Metacritic ratings ---
-
-  await t.step('parses Metacritic "78/100" to score 78', () => {
-    const result = normalizeRating({ Source: 'Metacritic', Value: '78/100' })
-    assertEquals(result, { source: 'metacritic', score: 78, raw: '78/100' })
+  await t.step('returns empty ratings when response has no ratings array', async () => {
+    const result = await withMockFetch(
+      jsonFetch({ title: 'Test' }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, undefined)
   })
 
-  await t.step('parses Metacritic "100/100" to score 100', () => {
-    const result = normalizeRating({ Source: 'Metacritic', Value: '100/100' })
-    assertEquals(result, { source: 'metacritic', score: 100, raw: '100/100' })
+  await t.step('returns empty ratings when all professional sources have null score', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'imdb', value: null, score: null, votes: null },
+          { source: 'tomatoes', value: null, score: null, votes: null },
+          { source: 'metacritic', value: null, score: null, votes: null },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 0)
   })
 
-  // --- Edge cases ---
+  // --- Score boundaries ---
 
-  await t.step('returns null source for unknown rating source', () => {
-    const result = normalizeRating({ Source: 'Unknown Source', Value: '5 stars' })
-    assertEquals(result, { source: null, score: null, raw: '5 stars' })
+  await t.step('handles score boundary of 0', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'metacritic', value: 0, score: 0, votes: 10 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 1)
+    assertEquals(result.ratings[0].score, 0)
+    assertEquals(result.ratings[0].raw, '0/100')
   })
 
-  await t.step('returns null score for N/A IMDb value', () => {
-    const result = normalizeRating({ Source: 'Internet Movie Database', Value: 'N/A' })
-    assertEquals(result, { source: 'imdb', score: null, raw: 'N/A' })
+  await t.step('handles score boundary of 100', async () => {
+    const result = await withMockFetch(
+      jsonFetch({
+        title: 'Test',
+        ratings: [
+          { source: 'tomatoes', value: 100, score: 100, votes: 50 },
+        ],
+      }),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 1)
+    assertEquals(result.ratings[0].score, 100)
+    assertEquals(result.ratings[0].raw, '100%')
   })
 
-  await t.step('returns null score for malformed IMDb value', () => {
-    const result = normalizeRating({ Source: 'Internet Movie Database', Value: 'not-a-number' })
-    assertEquals(result, { source: 'imdb', score: null, raw: 'not-a-number' })
+  // --- API errors ---
+
+  await t.step('returns error on 401 (auth failure)', async () => {
+    const result = await withMockFetch(
+      statusFetch(401, 'Unauthorized'),
+      () => fetchMDBListRatings(12345, 'bad-key'),
+    )
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, 'MDBList API authentication failed')
   })
 
-  await t.step('returns null score for N/A RT value', () => {
-    const result = normalizeRating({ Source: 'Rotten Tomatoes', Value: 'N/A' })
-    assertEquals(result, { source: 'rotten_tomatoes', score: null, raw: 'N/A' })
+  await t.step('returns error on 404 (not found)', async () => {
+    const result = await withMockFetch(
+      statusFetch(404, 'Not Found'),
+      () => fetchMDBListRatings(999999, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, 'Movie not found on MDBList')
+  })
+
+  await t.step('returns error on 429 (rate limited)', async () => {
+    const result = await withMockFetch(
+      statusFetch(429, 'Rate limited'),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, 'MDBList API rate limit exceeded')
+  })
+
+  await t.step('returns error on 500 (server error)', async () => {
+    const result = await withMockFetch(
+      statusFetch(500, 'Server Error'),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, 'MDBList API error: 500')
+  })
+
+  await t.step('returns error on network failure', async () => {
+    const result = await withMockFetch(
+      () => Promise.reject(new Error('Network error')),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, 'Failed to fetch ratings from MDBList')
+  })
+
+  await t.step('returns error when API key is empty', async () => {
+    const result = await fetchMDBListRatings(12345, '')
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, 'MDBList API key not configured')
+  })
+
+  await t.step('handles malformed JSON response', async () => {
+    const result = await withMockFetch(
+      statusFetch(200, 'not valid json {{{'),
+      () => fetchMDBListRatings(12345, 'test-key'),
+    )
+    assertEquals(result.ratings.length, 0)
+    assertEquals(result.error, 'Failed to fetch ratings from MDBList')
+  })
+})
+
+// ============================================================================
+// MDBLIST_SOURCE_MAP Tests
+// ============================================================================
+
+Deno.test('MDBLIST_SOURCE_MAP', async (t) => {
+  await t.step('maps imdb -> imdb', () => {
+    assertEquals(MDBLIST_SOURCE_MAP['imdb'], 'imdb')
+  })
+
+  await t.step('maps tomatoes -> rotten_tomatoes', () => {
+    assertEquals(MDBLIST_SOURCE_MAP['tomatoes'], 'rotten_tomatoes')
+  })
+
+  await t.step('maps metacritic -> metacritic', () => {
+    assertEquals(MDBLIST_SOURCE_MAP['metacritic'], 'metacritic')
+  })
+
+  await t.step('returns undefined for unmapped source', () => {
+    assertEquals(MDBLIST_SOURCE_MAP['letterboxd'], undefined)
   })
 })
 
@@ -90,51 +300,35 @@ Deno.test('normalizeRating', async (t) => {
 // ============================================================================
 
 Deno.test('fetchImdbId', async (t) => {
-  const originalFetch = globalThis.fetch
-
   await t.step('returns IMDB ID when TMDb API succeeds', async () => {
-    try {
-      globalThis.fetch = () =>
-        Promise.resolve(
-          new Response(JSON.stringify({ imdb_id: 'tt1234567' }), { status: 200 })
-        )
-      const result = await fetchImdbId(12345, 'test-key')
-      assertEquals(result, 'tt1234567')
-    } finally {
-      globalThis.fetch = originalFetch
-    }
+    const result = await withMockFetch(
+      jsonFetch({ imdb_id: 'tt1234567' }),
+      () => fetchImdbId(12345, 'test-key'),
+    )
+    assertEquals(result, 'tt1234567')
   })
 
   await t.step('returns null when TMDb returns no imdb_id', async () => {
-    try {
-      globalThis.fetch = () =>
-        Promise.resolve(
-          new Response(JSON.stringify({ imdb_id: null }), { status: 200 })
-        )
-      const result = await fetchImdbId(12345, 'test-key')
-      assertEquals(result, null)
-    } finally {
-      globalThis.fetch = originalFetch
-    }
+    const result = await withMockFetch(
+      jsonFetch({ imdb_id: null }),
+      () => fetchImdbId(12345, 'test-key'),
+    )
+    assertEquals(result, null)
   })
 
   await t.step('returns null when TMDb API returns error', async () => {
-    try {
-      globalThis.fetch = () => Promise.resolve(new Response('', { status: 500 }))
-      const result = await fetchImdbId(12345, 'test-key')
-      assertEquals(result, null)
-    } finally {
-      globalThis.fetch = originalFetch
-    }
+    const result = await withMockFetch(
+      statusFetch(500),
+      () => fetchImdbId(12345, 'test-key'),
+    )
+    assertEquals(result, null)
   })
 
   await t.step('returns null on network error', async () => {
-    try {
-      globalThis.fetch = () => Promise.reject(new Error('Network error'))
-      const result = await fetchImdbId(12345, 'test-key')
-      assertEquals(result, null)
-    } finally {
-      globalThis.fetch = originalFetch
-    }
+    const result = await withMockFetch(
+      () => Promise.reject(new Error('Network error')),
+      () => fetchImdbId(12345, 'test-key'),
+    )
+    assertEquals(result, null)
   })
 })

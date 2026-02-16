@@ -389,7 +389,7 @@ apps/frontend/app/
 | List leagues, teams, standings | Direct Supabase |
 | Real-time updates (draft board, leaderboard) | Supabase Realtime |
 | Complex validation (draft picks, bids, trades) | Edge Function |
-| External APIs (TMDb, OMDb) | Edge Function |
+| External APIs (TMDb, MDBList) | Edge Function |
 | Scheduled jobs (scoring, bid processing) | Vercel Cron → Edge Function |
 
 ---
@@ -428,7 +428,7 @@ apps/frontend/app/
 - **Storage:** Supabase Storage (avatars)
 - **Real-time:** Supabase Realtime subscriptions
 - **Jobs:** Vercel Cron → Edge Function for scoring and bid processing
-- **Movie Data:** TMDb (upcoming, search, details) + OMDb (reviews)
+- **Movie Data:** TMDb (upcoming, search, details) + MDBList (reviews/scores)
 - **Email:** Supabase (built-in email auth) + Resend (transactional, bid notifications)
 - **Deployment:** Vercel (frontend) + Supabase (backend/DB)
 
@@ -453,7 +453,7 @@ Environment variables for local development are in `.env.local`:
 - `NEXT_PUBLIC_SUPABASE_URL` - Local Supabase API URL
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Local anon key
 - `TMDB_API_KEY` - TMDb API key (required for movie search/browse)
-- `OMDB_API_KEY` - OMDb API key (required for score updates)
+- `MDBLIST_API_KEY` - MDBList API key (required for score updates)
 
 ### Supabase Database Commands
 
@@ -626,7 +626,7 @@ Movies earn fantasy points based on a **70-point baseline** system, not a simple
 - **Metacritic:** Metascore (25% weight)
 
 ### Score Sync
-- Nightly cron job fetches latest scores from OMDb
+- Nightly cron job fetches latest scores from MDBList
 - Only updates movies that have been released
 - Recalculates fantasy points and team totals after each sync
 - See `supabase/SCORING.md` for full architecture details
