@@ -60,21 +60,24 @@ export function WishlistToggle({
     [wishlisted, movie, toggleWishlist]
   )
 
-  const animationClass =
-    animation === 'pop'
-      ? 'animate-heart-pop'
-      : animation === 'shrink'
-        ? 'animate-heart-shrink'
-        : ''
+  function getAnimationClass(): string {
+    switch (animation) {
+      case 'pop': return 'animate-heart-pop'
+      case 'shrink': return 'animate-heart-shrink'
+      default: return ''
+    }
+  }
 
-  const variantClass =
-    variant === 'overlay'
-      ? wishlisted
+  function getVariantClass(): string {
+    if (variant === 'overlay') {
+      return wishlisted
         ? 'bg-crimson text-white'
         : 'bg-background/60 backdrop-blur-sm text-foreground-muted hover:text-crimson hover:bg-background/80'
-      : wishlisted
-        ? 'text-crimson'
-        : 'text-foreground-muted hover:text-crimson'
+    }
+    return wishlisted
+      ? 'text-crimson'
+      : 'text-foreground-muted hover:text-crimson'
+  }
 
   return (
     <button
@@ -85,8 +88,8 @@ export function WishlistToggle({
       className={cn(
         'rounded-full transition-colors cursor-pointer',
         sizeStyles[size].button,
-        variantClass,
-        animationClass,
+        getVariantClass(),
+        getAnimationClass(),
         className
       )}
     >

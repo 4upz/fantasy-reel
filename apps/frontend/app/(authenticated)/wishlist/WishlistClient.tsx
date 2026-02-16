@@ -9,7 +9,7 @@ import { getTmdbPosterUrl } from '@/app/(authenticated)/league/[id]/components/u
 import Avatar from '@/app/components/Avatar'
 import type { WishlistedMovie } from '@/types'
 
-type SortOption = 'added_at' | 'release_date' | 'title'
+type SortOption = 'added_at' | 'title'
 type DraftStatus = 'available' | 'yours' | 'drafted'
 type TabOption = 'my' | 'league'
 
@@ -34,11 +34,23 @@ interface LeagueMate {
 
 const SORT_LABELS: Record<SortOption, string> = {
   added_at: 'Date Added',
-  release_date: 'Release Date',
   title: 'Title A-Z',
 }
 
 const SESSION_KEY_LEAGUE = 'wishlist-selected-league'
+
+const MOVIE_GRID_CLASSES =
+  'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6'
+
+/**
+ * Unwrap a Supabase joined relation that may come back as an object or array.
+ * Returns the first element if array, the value itself if object, or null.
+ */
+function unwrapRelation<T>(raw: unknown): T | null {
+  const value = Array.isArray(raw) ? raw[0] : raw
+  if (value && typeof value === 'object') return value as T
+  return null
+}
 
 export default function WishlistClient({ userId }: { userId: string }) {
   const [movies, setMovies] = useState<WishlistedMovie[]>([])
@@ -113,11 +125,9 @@ export default function WishlistClient({ userId }: { userId: string }) {
       if (leagueResult.data) {
         const leagueOptions: LeagueOption[] = []
         for (const lp of leagueResult.data) {
-          // Supabase may return the joined relation as object or array depending on FK inference
-          const raw = lp.leagues as unknown
-          const league = Array.isArray(raw) ? raw[0] : raw
-          if (league && typeof league === 'object' && 'id' in league) {
-            leagueOptions.push(league as LeagueOption)
+          const league = unwrapRelation<LeagueOption>(lp.leagues)
+          if (league && 'id' in league) {
+            leagueOptions.push(league)
           }
         }
         setLeagues(leagueOptions)
@@ -166,22 +176,13 @@ export default function WishlistClient({ userId }: { userId: string }) {
       if (picksResult.data) {
         const map = new Map<number, DraftInfo>()
         for (const pick of picksResult.data) {
-          // Supabase may return joined relations as object or array
-          const rawMovie = pick.movies as unknown
-          const movie = Array.isArray(rawMovie) ? rawMovie[0] : rawMovie
-          const rawTeam = pick.teams as unknown
-          const team = Array.isArray(rawTeam) ? rawTeam[0] : rawTeam
-          const tmdbId = movie && typeof movie === 'object' && 'tmdb_id' in movie
-            ? (movie as { tmdb_id: number }).tmdb_id
-            : undefined
-          const teamName = team && typeof team === 'object' && 'name' in team
-            ? (team as { name: string }).name
-            : 'Unknown'
-          if (tmdbId) {
-            map.set(tmdbId, {
-              tmdbId,
+          const movie = unwrapRelation<{ tmdb_id: number }>(pick.movies)
+          const team = unwrapRelation<{ name: string }>(pick.teams)
+          if (movie?.tmdb_id) {
+            map.set(movie.tmdb_id, {
+              tmdbId: movie.tmdb_id,
               teamId: pick.team_id,
-              teamName,
+              teamName: team?.name ?? 'Unknown',
             })
           }
         }
@@ -189,10 +190,9 @@ export default function WishlistClient({ userId }: { userId: string }) {
       }
 
       if (teamResult.data?.teams) {
-        const rawTeams = teamResult.data.teams as unknown
-        const teamObj = Array.isArray(rawTeams) ? rawTeams[0] : rawTeams
-        if (teamObj && typeof teamObj === 'object' && 'id' in teamObj) {
-          setUserTeamId((teamObj as { id: string }).id)
+        const teamObj = unwrapRelation<{ id: string }>(teamResult.data.teams)
+        if (teamObj?.id) {
+          setUserTeamId(teamObj.id)
         }
       }
     }
@@ -332,7 +332,6 @@ export default function WishlistClient({ userId }: { userId: string }) {
     [movies]
   )
 
-  // Handlers
   const handleLeagueSelect = useCallback(
     (leagueId: string | null) => {
       setSelectedLeagueId(leagueId)
@@ -362,7 +361,6 @@ export default function WishlistClient({ userId }: { userId: string }) {
         .eq('id', movie.id)
 
       if (error) {
-        // Rollback
         setMovies((prev) => [...prev, movie].sort((a, b) =>
           new Date(b.added_at).getTime() - new Date(a.added_at).getTime()
         ))
@@ -385,7 +383,7 @@ export default function WishlistClient({ userId }: { userId: string }) {
         .eq('user_id', userId)
 
       if (error) {
-        setWishlistPublic(!value) // rollback
+        setWishlistPublic(!value)
         console.error('Failed to update wishlist visibility:', error.message)
       }
 
@@ -394,7 +392,6 @@ export default function WishlistClient({ userId }: { userId: string }) {
     [supabase, userId]
   )
 
-  // Derive draft status for a movie
   const getDraftStatus = useCallback(
     (tmdbId: number): { status: DraftStatus; label: string } | null => {
       if (!selectedLeagueId) return null
@@ -407,24 +404,12 @@ export default function WishlistClient({ userId }: { userId: string }) {
     [selectedLeagueId, draftMap, userTeamId]
   )
 
-  // Sort movies
   const sortedMovies = useMemo(() => {
     const sorted = [...movies]
-    switch (sortBy) {
-      case 'added_at':
-        sorted.sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime())
-        break
-      case 'release_date':
-        sorted.sort((a, b) => {
-          if (!a.poster_url && !b.poster_url) return 0
-          // Use a simple string comparison placeholder -- wishlisted_movies doesn't store release_date,
-          // so sort by title as fallback for now. The column isn't available in the type.
-          return a.title.localeCompare(b.title)
-        })
-        break
-      case 'title':
-        sorted.sort((a, b) => a.title.localeCompare(b.title))
-        break
+    if (sortBy === 'title') {
+      sorted.sort((a, b) => a.title.localeCompare(b.title))
+    } else {
+      sorted.sort((a, b) => new Date(b.added_at).getTime() - new Date(a.added_at).getTime())
     }
     return sorted
   }, [movies, sortBy])
@@ -439,15 +424,9 @@ export default function WishlistClient({ userId }: { userId: string }) {
         <div className="mb-8">
           <div className="h-9 w-48 bg-elevated rounded-lg animate-pulse" />
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+        <div className={MOVIE_GRID_CLASSES}>
           {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="rounded-xl overflow-hidden bg-surface border border-border">
-              <div className="aspect-[2/3] bg-elevated animate-pulse" />
-              <div className="p-3 space-y-2">
-                <div className="h-4 bg-elevated rounded animate-pulse w-3/4" />
-                <div className="h-3 bg-elevated rounded animate-pulse w-1/2" />
-              </div>
-            </div>
+            <MovieCardSkeleton key={i} />
           ))}
         </div>
       </div>
@@ -560,7 +539,7 @@ export default function WishlistClient({ userId }: { userId: string }) {
         </div>
       </div>
 
-      {/* Tab bar — only show when a league is selected */}
+      {/* Tab bar -- only show when a league is selected */}
       {selectedLeagueId && (
         <div className="flex gap-1 bg-elevated rounded-lg p-1 mb-6 w-fit">
           <button
@@ -589,7 +568,6 @@ export default function WishlistClient({ userId }: { userId: string }) {
       {/* My Wishlist tab content */}
       {activeTab === 'my' && (
         <>
-          {/* Empty state */}
           {movies.length === 0 && (
             <div className="text-center py-20 animate-fade-in">
               <div className="flex justify-center gap-3 mb-5">
@@ -608,25 +586,20 @@ export default function WishlistClient({ userId }: { userId: string }) {
             </div>
           )}
 
-          {/* Movie grid */}
           {sortedMovies.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+            <div className={MOVIE_GRID_CLASSES}>
               {sortedMovies.map((movie, index) => {
-                const draftStatus = getDraftStatus(movie.tmdb_id)
                 const isRemoving = removingId === movie.id
 
                 return (
-                  <div
+                  <WishlistMovieCard
                     key={movie.id}
-                    className={`group relative rounded-xl overflow-hidden bg-surface border border-border transition-all duration-300 hover:border-gold/50 hover:shadow-glow-gold hover:-translate-y-1 animate-slide-up ${
-                      isRemoving ? 'animate-slide-out-down' : ''
-                    }`}
-                    style={{
-                      animationDelay: isRemoving ? '0ms' : `${index * 50}ms`,
-                      animationFillMode: 'both',
-                    }}
+                    movie={movie}
+                    index={index}
+                    draftStatus={getDraftStatus(movie.tmdb_id)}
+                    className={isRemoving ? 'animate-slide-out-down' : ''}
+                    animationDelay={isRemoving ? '0ms' : `${index * 50}ms`}
                   >
-                    {/* Remove button */}
                     <button
                       onClick={() => handleRemove(movie)}
                       className="absolute top-2 right-2 z-10 p-1.5 rounded-full bg-background/70 backdrop-blur-sm border border-border text-foreground-muted hover:text-crimson hover:border-crimson/50 transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
@@ -634,48 +607,7 @@ export default function WishlistClient({ userId }: { userId: string }) {
                     >
                       <X className="w-4 h-4" />
                     </button>
-
-                    {/* Poster */}
-                    <div className="relative aspect-[2/3] bg-elevated overflow-hidden">
-                      {movie.poster_url ? (
-                        <Image
-                          src={getTmdbPosterUrl(movie.poster_url, 'w342') ?? movie.poster_url}
-                          alt={movie.title}
-                          fill
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                          className="object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted">
-                          <Film className="w-12 h-12 mb-2" />
-                          <span className="text-xs">No poster</span>
-                        </div>
-                      )}
-
-                      {/* Gradient overlay on hover */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                      {/* Draft status badge */}
-                      {draftStatus && (
-                        <div className="absolute bottom-2 left-2 right-2">
-                          <DraftStatusBadge status={draftStatus.status} label={draftStatus.label} />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Movie info */}
-                    <div className="p-3">
-                      <h3
-                        className="font-display font-semibold text-sm text-foreground truncate group-hover:text-gold transition-colors"
-                        title={movie.title}
-                      >
-                        {movie.title}
-                      </h3>
-                      <p className="text-xs text-foreground-muted mt-1">
-                        Added {formatRelativeDate(movie.added_at)}
-                      </p>
-                    </div>
-                  </div>
+                  </WishlistMovieCard>
                 )
               })}
             </div>
@@ -700,9 +632,106 @@ export default function WishlistClient({ userId }: { userId: string }) {
   )
 }
 
-// ---------- Sub-components ----------
+// ---------- Shared sub-components ----------
 
-function DraftStatusBadge({ status, label }: { status: DraftStatus; label: string }) {
+function MovieCardSkeleton(): React.ReactElement {
+  return (
+    <div className="rounded-xl overflow-hidden bg-surface border border-border">
+      <div className="aspect-[2/3] bg-elevated animate-pulse" />
+      <div className="p-3 space-y-2">
+        <div className="h-4 bg-elevated rounded animate-pulse w-3/4" />
+        <div className="h-3 bg-elevated rounded animate-pulse w-1/2" />
+      </div>
+    </div>
+  )
+}
+
+interface WishlistMovieCardProps {
+  movie: WishlistedMovie
+  index: number
+  draftStatus: { status: DraftStatus; label: string } | null
+  isOverlap?: boolean
+  className?: string
+  animationDelay?: string
+  children?: React.ReactNode
+}
+
+function WishlistMovieCard({
+  movie,
+  index,
+  draftStatus,
+  isOverlap,
+  className,
+  animationDelay,
+  children,
+}: WishlistMovieCardProps): React.ReactElement {
+  const borderClass = isOverlap
+    ? 'border-gold/40 ring-1 ring-gold/20'
+    : 'border-border hover:border-gold/50'
+
+  return (
+    <div
+      className={`group relative rounded-xl overflow-hidden bg-surface border transition-all duration-300 hover:shadow-glow-gold hover:-translate-y-1 animate-slide-up ${borderClass} ${className ?? ''}`}
+      style={{
+        animationDelay: animationDelay ?? `${index * 50}ms`,
+        animationFillMode: 'both',
+      }}
+    >
+      {children}
+
+      {/* Overlap indicator */}
+      {isOverlap && (
+        <div className="absolute top-2 right-2 z-10">
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold/20 text-gold border border-gold/30 backdrop-blur-sm">
+            <Heart className="w-3 h-3 fill-current" />
+            Both
+          </span>
+        </div>
+      )}
+
+      {/* Poster */}
+      <div className="relative aspect-[2/3] bg-elevated overflow-hidden">
+        {movie.poster_url ? (
+          <Image
+            src={getTmdbPosterUrl(movie.poster_url, 'w342') ?? movie.poster_url}
+            alt={movie.title}
+            fill
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+          />
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted">
+            <Film className="w-12 h-12 mb-2" />
+            <span className="text-xs">No poster</span>
+          </div>
+        )}
+
+        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+
+        {draftStatus && (
+          <div className="absolute bottom-2 left-2 right-2">
+            <DraftStatusBadge status={draftStatus.status} label={draftStatus.label} />
+          </div>
+        )}
+      </div>
+
+      {/* Movie info */}
+      <div className="p-3">
+        <h3
+          className="font-display font-semibold text-sm text-foreground truncate group-hover:text-gold transition-colors"
+          title={movie.title}
+        >
+          {movie.title}
+        </h3>
+        <p className="text-xs text-foreground-muted mt-1">
+          Added {formatCompactDate(movie.added_at)}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function DraftStatusBadge({ status, label }: { status: DraftStatus; label: string }): React.ReactElement {
   const colorClasses: Record<DraftStatus, string> = {
     available: 'bg-success-bg text-success border-success',
     yours: 'bg-gold-muted text-gold border-gold',
@@ -738,7 +767,7 @@ function LeagueMateWishlists({
   mateMoviesLoading: boolean
   myWishlistedIds: Set<number>
   getDraftStatus: (tmdbId: number) => { status: DraftStatus; label: string } | null
-}) {
+}): React.ReactElement {
   const selectedMate = leagueMates.find((m) => m.userId === selectedMateId)
 
   if (leagueMatesLoading) {
@@ -821,15 +850,9 @@ function LeagueMateWishlists({
           </h3>
 
           {mateMoviesLoading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
+            <div className={MOVIE_GRID_CLASSES}>
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-xl overflow-hidden bg-surface border border-border">
-                  <div className="aspect-[2/3] bg-elevated animate-pulse" />
-                  <div className="p-3 space-y-2">
-                    <div className="h-4 bg-elevated rounded animate-pulse w-3/4" />
-                    <div className="h-3 bg-elevated rounded animate-pulse w-1/2" />
-                  </div>
-                </div>
+                <MovieCardSkeleton key={i} />
               ))}
             </div>
           ) : mateMovies.length === 0 ? (
@@ -840,77 +863,16 @@ function LeagueMateWishlists({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-              {mateMovies.map((movie, index) => {
-                const draftStatus = getDraftStatus(movie.tmdb_id)
-                const isOverlap = myWishlistedIds.has(movie.tmdb_id)
-
-                return (
-                  <div
-                    key={movie.id}
-                    className={`group relative rounded-xl overflow-hidden bg-surface border transition-all duration-300 animate-slide-up ${
-                      isOverlap
-                        ? 'border-gold/40 ring-1 ring-gold/20'
-                        : 'border-border hover:border-gold/50'
-                    } hover:shadow-glow-gold hover:-translate-y-1`}
-                    style={{
-                      animationDelay: `${index * 50}ms`,
-                      animationFillMode: 'both',
-                    }}
-                  >
-                    {/* Overlap indicator */}
-                    {isOverlap && (
-                      <div className="absolute top-2 right-2 z-10">
-                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold/20 text-gold border border-gold/30 backdrop-blur-sm">
-                          <Heart className="w-3 h-3 fill-current" />
-                          Both
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Poster */}
-                    <div className="relative aspect-[2/3] bg-elevated overflow-hidden">
-                      {movie.poster_url ? (
-                        <Image
-                          src={getTmdbPosterUrl(movie.poster_url, 'w342') ?? movie.poster_url}
-                          alt={movie.title}
-                          fill
-                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                          className="object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted">
-                          <Film className="w-12 h-12 mb-2" />
-                          <span className="text-xs">No poster</span>
-                        </div>
-                      )}
-
-                      {/* Gradient overlay on hover */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                      {/* Draft status badge */}
-                      {draftStatus && (
-                        <div className="absolute bottom-2 left-2 right-2">
-                          <DraftStatusBadge status={draftStatus.status} label={draftStatus.label} />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Movie info */}
-                    <div className="p-3">
-                      <h3
-                        className="font-display font-semibold text-sm text-foreground truncate group-hover:text-gold transition-colors"
-                        title={movie.title}
-                      >
-                        {movie.title}
-                      </h3>
-                      <p className="text-xs text-foreground-muted mt-1">
-                        Added {formatRelativeDate(movie.added_at)}
-                      </p>
-                    </div>
-                  </div>
-                )
-              })}
+            <div className={MOVIE_GRID_CLASSES}>
+              {mateMovies.map((movie, index) => (
+                <WishlistMovieCard
+                  key={movie.id}
+                  movie={movie}
+                  index={index}
+                  draftStatus={getDraftStatus(movie.tmdb_id)}
+                  isOverlap={myWishlistedIds.has(movie.tmdb_id)}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -919,7 +881,11 @@ function LeagueMateWishlists({
   )
 }
 
-function formatRelativeDate(dateStr: string): string {
+/**
+ * Compact relative date for wishlist cards (e.g., "today", "3d ago", "2w ago").
+ * Distinct from utils/date.ts formatRelativeDate which uses full words.
+ */
+function formatCompactDate(dateStr: string): string {
   const date = new Date(dateStr)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()

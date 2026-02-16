@@ -47,7 +47,7 @@ function EmptyStateIcon({ activeTab, mode }: { activeTab: TabType; mode: string 
   return <ClapperboardIcon className={className} />
 }
 
-function EmptyStateMessage({ activeTab, mode }: { activeTab: TabType; mode: string }): string {
+function getEmptyStateMessage(activeTab: TabType, mode: string): string {
   if (activeTab === 'wishlist') return 'Your wishlist is empty. Heart movies to add them here!'
   if (mode === 'search') return 'No movies found for your search'
   return 'No movies match your filters'
@@ -117,15 +117,17 @@ export default function MoviePicker({
   // Handle tab changes — fetch trending data server-side or restore browse
   const handleTabChange = useCallback(
     (tab: TabType) => {
-      setActiveTab(tab)
-      if (tab === 'trending') {
-        fetchTrending()
-      } else if (activeTab === 'trending') {
-        // Leaving trending tab — restore browse results
-        browse({ releaseWindow: 'year', genres: [], minRating: 0 })
-      }
+      setActiveTab((prev) => {
+        if (tab === 'trending') {
+          fetchTrending()
+        } else if (prev === 'trending') {
+          // Leaving trending tab — restore browse results
+          browse({ releaseWindow: 'year', genres: [], minRating: 0 })
+        }
+        return tab
+      })
     },
-    [activeTab, fetchTrending, browse]
+    [fetchTrending, browse]
   )
 
   // Handle filter changes - hook handles debouncing
@@ -134,9 +136,7 @@ export default function MoviePicker({
       const { search: searchValue, ...browseFilters } = newFilters
 
       // Auto-switch away from trending when user searches or changes filters
-      if (activeTab === 'trending') {
-        setActiveTab('all')
-      }
+      setActiveTab((prev) => (prev === 'trending' ? 'all' : prev))
 
       if (searchValue) {
         search(searchValue)
@@ -144,7 +144,7 @@ export default function MoviePicker({
         browse(browseFilters)
       }
     },
-    [browse, search, activeTab]
+    [browse, search]
   )
 
   const handleSelectMovie = (movie: TMDbSearchResult) => {
@@ -245,7 +245,7 @@ export default function MoviePicker({
             <EmptyStateIcon activeTab={activeTab} mode={mode} />
           </div>
           <p className="text-foreground-secondary">
-            <EmptyStateMessage activeTab={activeTab} mode={mode} />
+            {getEmptyStateMessage(activeTab, mode)}
           </p>
           {activeTab !== 'all' && (
             <button
