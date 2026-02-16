@@ -110,6 +110,8 @@ Deno.serve(async (req) => {
     tmdbUrl.searchParams.set('region', 'US')
     tmdbUrl.searchParams.set('include_adult', 'false')
     tmdbUrl.searchParams.set('include_video', 'false')
+    tmdbUrl.searchParams.set('certification_country', 'US')
+    tmdbUrl.searchParams.set('certification.lte', 'R')
     tmdbUrl.searchParams.set('page', page.toString())
     tmdbUrl.searchParams.set('primary_release_date.gte', gte)
     tmdbUrl.searchParams.set('primary_release_date.lte', lte)
@@ -154,7 +156,9 @@ Deno.serve(async (req) => {
 
     const tmdbData: TMDbDiscoverResponse = await tmdbResponse.json()
 
-    const results: BrowseResult[] = tmdbData.results.map((movie) => ({
+    const results: BrowseResult[] = tmdbData.results
+      .filter((movie: TMDbMovie & { adult?: boolean }) => !movie.adult)
+      .map((movie) => ({
       tmdb_id: movie.id,
       title: movie.title,
       overview: movie.overview,

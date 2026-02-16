@@ -109,6 +109,8 @@ Deno.serve(async (req) => {
     tmdbUrl.searchParams.set('sort_by', 'popularity.desc')
     tmdbUrl.searchParams.set('include_adult', 'false')
     tmdbUrl.searchParams.set('include_video', 'false')
+    tmdbUrl.searchParams.set('certification_country', 'US')
+    tmdbUrl.searchParams.set('certification.lte', 'R')
     tmdbUrl.searchParams.set('page', page.toString())
     tmdbUrl.searchParams.set('primary_release_date.gte', today)
     tmdbUrl.searchParams.set('primary_release_date.lte', endOfYear)
@@ -147,12 +149,17 @@ Deno.serve(async (req) => {
       })
     }
 
+    // Filter out any movies flagged as adult
+    const safeResults = tmdbData.results.filter(
+      (movie: TMDbMovie & { adult?: boolean }) => !movie.adult
+    )
+
     // Fetch external IDs (including IMDb IDs) for each movie
     // Process in batches to respect TMDb rate limits (40 requests per 10 seconds)
-    console.log(`Fetching IMDb IDs for ${tmdbData.results.length} movies...`)
+    console.log(`Fetching IMDb IDs for ${safeResults.length} movies...`)
     const moviesWithImdbIds: Array<{ movie: TMDbMovie; imdb_id: string | null }> = []
 
-    for (const movie of tmdbData.results) {
+    for (const movie of safeResults) {
       const imdb_id = await fetchExternalIds(movie.id, tmdbToken)
       moviesWithImdbIds.push({ movie, imdb_id })
       // Small delay to respect rate limits

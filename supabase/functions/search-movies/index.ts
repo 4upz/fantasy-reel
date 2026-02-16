@@ -101,7 +101,9 @@ Deno.serve(async (req) => {
 
     const tmdbData: TMDbSearchResponse = await tmdbResponse.json()
 
-    const mappedResults: SearchResult[] = tmdbData.results.map((movie) => ({
+    const mappedResults: SearchResult[] = tmdbData.results
+      .filter((movie: TMDbMovie & { adult?: boolean }) => !movie.adult)
+      .map((movie) => ({
       tmdb_id: movie.id,
       title: movie.title,
       overview: movie.overview,

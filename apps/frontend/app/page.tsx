@@ -24,6 +24,8 @@ async function getUpcomingMovies(): Promise<TMDbSearchResult[]> {
     url.searchParams.set('language', 'en-US')
     url.searchParams.set('region', 'US')
     url.searchParams.set('include_adult', 'false')
+    url.searchParams.set('certification_country', 'US')
+    url.searchParams.set('certification.lte', 'R')
     url.searchParams.set('sort_by', 'popularity.desc')
     url.searchParams.set('primary_release_date.gte', today.toISOString().split('T')[0])
     url.searchParams.set('primary_release_date.lte', futureDate.toISOString().split('T')[0])
@@ -44,7 +46,10 @@ async function getUpcomingMovies(): Promise<TMDbSearchResult[]> {
 
     const data = await response.json()
 
-    return data.results.slice(0, 12).map(
+    return data.results
+      .filter((movie: { adult?: boolean }) => !movie.adult)
+      .slice(0, 12)
+      .map(
       (movie: {
         id: number
         title: string
