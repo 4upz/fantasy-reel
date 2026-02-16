@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   HelpCircle,
+  Heart,
 } from 'lucide-react'
 
 const SIDEBAR_COLLAPSED_WIDTH = 68
@@ -87,6 +88,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   const globalItems: NavItem[] = [
     { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { label: 'Movies', href: '/movies', icon: <Film className="w-5 h-5" /> },
+    { label: 'Wishlist', href: '/wishlist', icon: <Heart className="w-5 h-5" /> },
     { label: 'How to Play', href: '/help', icon: <HelpCircle className="w-5 h-5" /> },
   ]
 
