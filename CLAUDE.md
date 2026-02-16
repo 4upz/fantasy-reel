@@ -381,63 +381,16 @@ apps/frontend/app/
 
 ## 1. High-Level Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                         Clients                              │
-│                    (Web / Mobile)                            │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         │                 │                 │
-         ▼                 ▼                 ▼
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  Supabase   │    │  Supabase   │    │  Supabase   │
-│    Auth     │    │   Edge      │    │  Real-time  │
-│             │    │  Functions  │    │             │
-│ Login/JWT   │    │             │    │ Leaderboard │
-│ Signup      │    │ Draft picks │    │ Draft board │
-│ Sessions    │    │ Movie sync  │    │ Live scores │
-│             │    │ Scoring job │    │             │
-└─────────────┘    └──────┬──────┘    └──────┬──────┘
-                          │                  │
-                          ▼                  ▼
-                   ┌─────────────────────────────┐
-                   │     Supabase PostgreSQL     │
-                   │    + Row Level Security     │
-                   └─────────────────────────────┘
-                                 ▲
-                                 │
-                   ┌─────────────────────────────┐
-                   │    External Movie APIs      │
-                   │    (TMDb / OMDb)            │
-                   └─────────────────────────────┘
-```
-
-### Architecture Decision: Direct Supabase + Edge Functions
-
-**Why this approach over NestJS:**
-- Faster development velocity for POC
-- No separate backend service to host/deploy
-- Edge Functions handle complex logic (drafting, scoring, external APIs)
-- Direct Supabase calls for simple CRUD operations
-- Real-time subscriptions built-in for leaderboards
-- Can add NestJS later if complexity warrants it
-
-**When to use each approach:**
+**Direct Supabase + Edge Functions** — no separate backend service. Simple CRUD uses Supabase client directly (with RLS); complex operations (drafting, scoring, external APIs) use Edge Functions. Cron jobs run via Vercel Cron → Edge Function.
 
 | Use Case | Approach |
 |----------|----------|
 | Auth, session management | Direct Supabase |
 | List leagues, teams, standings | Direct Supabase |
 | Real-time updates (draft board, leaderboard) | Supabase Realtime |
-| Create/join league with validation | Edge Function |
-| Make a draft pick (atomic transaction) | Edge Function |
-| Place/cancel pickup bids | Edge Function |
-| Process bids (resolve winners) | Vercel Cron → Edge Function |
-| Sync movies from TMDb | Edge Function |
-| Nightly scoring job | Vercel Cron → Edge Function |
-| Fetch review scores from OMDb | Edge Function |
-| Account linking/merging | Edge Function |
+| Complex validation (draft picks, bids, trades) | Edge Function |
+| External APIs (TMDb, OMDb) | Edge Function |
+| Scheduled jobs (scoring, bid processing) | Vercel Cron → Edge Function |
 
 ---
 
@@ -460,108 +413,13 @@ apps/frontend/app/
 - **team_scores:** id, team_id, total_points, last_updated
 - **invitations:** id, league_id, invited_by, email, token, status, sent_at
 
-### Relationships
+### Key Relationships
 
-```
-auth.users (Supabase managed)
-    │
-    ├── profiles (1:1, includes Discord OAuth fields)
-    │
-    ├── leagues (1:N as owner)
-    │       │
-    │       └── league_bidding_config (1:1)
-    │
-    └── league_participants (1:N)
-            │
-            └── teams (1:1 per league)
-                    │
-                    ├── draft_picks (1:N)
-                    │       │
-                    │       └── movies (N:1)
-                    │               │
-                    │               └── reviews (1:N)
-                    │
-                    ├── pickup_bids (1:N)
-                    │
-                    ├── trades (1:N as proposer or recipient)
-                    │       │
-                    │       └── trade_items (1:N)
-                    │
-                    └── team_scores (1:1)
-```
+`auth.users` → `profiles` (1:1) → `league_participants` (1:N) → `teams` (1:1 per league) → `draft_picks`/`pickup_bids`/`trades`/`team_scores`. Movies have reviews (1:N). Leagues have bidding config (1:1).
 
 ---
 
-## 3. API Endpoint Sketch
-
-### Direct Supabase (via client SDK)
-```
-# Simple CRUD - use Supabase client directly
-GET    leagues (with RLS filtering)
-GET    teams (with RLS filtering)
-GET    movies
-GET    standings/leaderboard
-SUBSCRIBE  realtime:leagues, realtime:draft_picks
-```
-
-### Edge Functions (complex operations)
-```
-# League Management
-POST   /functions/v1/create-league      # Create league + add owner as participant
-POST   /functions/v1/update-league      # Update league configuration/settings
-POST   /functions/v1/join-league        # Validate + add participant
-GET    /functions/v1/get-leagues        # List user's leagues
-
-# Invitations
-POST   /functions/v1/send-invite        # Create invitation + send email
-POST   /functions/v1/resend-invitation  # Resend invitation email with new token
-POST   /functions/v1/cancel-invitation  # Cancel a pending invitation
-POST   /functions/v1/decline-invitation # Decline an invitation
-GET    /functions/v1/search-users       # Search users to invite
-
-# Draft
-POST   /functions/v1/start-draft        # Transition league status to 'drafting'
-POST   /functions/v1/draft-pick         # Atomic: validate turn, check availability, record pick
-POST   /functions/v1/drop-movie         # Team drops a drafted movie
-
-# Counterpick
-POST   /functions/v1/start-counterpick-round  # Start counterpick round after draft
-POST   /functions/v1/make-counterpick         # Make a counterpick selection
-
-# Bidding (Pickup Phase)
-POST   /functions/v1/place-bid          # Place or update a pickup bid
-POST   /functions/v1/cancel-bid         # Cancel an active bid
-POST   /functions/v1/process-bids       # Auto-process won/lost bids (cron job)
-
-# Trading
-POST   /functions/v1/propose-trade      # Create trade proposal
-POST   /functions/v1/respond-trade      # Accept/reject trade
-POST   /functions/v1/counter-trade      # Counter-offer on trade
-POST   /functions/v1/cancel-trade       # Cancel pending trade
-POST   /functions/v1/veto-trade         # League owner vetoes a trade
-GET    /functions/v1/get-trades         # List trades for league
-POST   /functions/v1/process-trades     # Process pending trades (cron)
-
-# Movies
-GET    /functions/v1/browse-movies      # Browse upcoming movies via TMDb discover
-GET    /functions/v1/search-movies      # Search movies via TMDb search API
-GET    /functions/v1/get-movie-details  # Get detailed movie info from TMDb
-POST   /functions/v1/sync-movies        # Fetch from TMDb, upsert to DB
-POST   /functions/v1/update-scores      # Fetch reviews, calculate points (cron job)
-POST   /functions/v1/process-movie-scores # Process queued movies for scoring
-
-# Account Management
-POST   /functions/v1/merge-accounts     # Merge OAuth account with existing account
-```
-
-### Frontend Auth (Supabase)
-- Login/Register: Handled by Supabase Auth
-- JWT Token: Automatically included in Supabase client requests
-- Email verification: Handled by Supabase
-
----
-
-## 4. Tech Stack
+## 3. Tech Stack & Local Development
 
 - **Frontend:** Next.js 15 + React 19 + Tailwind CSS 4
 - **Auth:** Supabase Auth (JWT tokens, email/password, Discord OAuth)
@@ -727,49 +585,15 @@ WHERE conrelid = 'draft_picks'::regclass AND contype = 'f';
 
 ---
 
-## 5. Implementation Progress
+## 4. Remaining Work
 
-### Completed
-1. ✅ Initialize Repo: monorepo with npm workspaces
-2. ✅ Configure Supabase Auth: client utilities, middleware, login/signup/dashboard pages
-3. ✅ Create leagues table with RLS policies
-4. ✅ Basic league creation and listing UI
-5. ✅ Define Database Schema: all tables (participants, teams, movies, drafts, reviews, scores, invitations)
-6. ✅ Implement Edge Functions for league operations
-7. ✅ Unit test suite for all Edge Functions (100+ tests, 100% pass)
-8. ✅ Build league detail page with draft board
-9. ✅ Connect frontend to Edge Functions
-10. ✅ Implement real-time subscriptions for draft board
-11. ✅ Join league flow via invitation token
-12. ✅ Resend confirmation email flow
-13. ✅ TMDb API-powered movie drafting
-14. ✅ Email integration with Resend
-15. ✅ Leaderboard/standings page
-16. ✅ Nightly score updates via Supabase pg_cron
-17. ✅ Discord OAuth integration
-18. ✅ Account linking and merging
-19. ✅ League settings/configuration UI
-20. ✅ Pickup bidding system (place/cancel/process bids, email notifications)
-21. ✅ League dashboard redesign (multi-tab layout)
-22. ✅ User settings and avatar upload
-23. ✅ Movie browsing and roster pages
-24. ✅ Integration test suite (14+ tests)
-25. ✅ RLS performance optimizations
-26. ✅ Trading system (propose/respond/counter/cancel/veto/get-trades, process-trades cron)
-27. ✅ Counterpick rounds (start-counterpick-round, make-counterpick)
-28. ✅ Drop movie functionality (drop-movie Edge Function)
-29. ✅ Notification logging system
-30. ✅ FAAB budget configuration for leagues
-31. ✅ Hybrid fantasy points scoring system
-
-### Next Up
-32. ⬜ Production deployment configuration
-33. ⬜ End-to-end tests (Playwright)
-34. ⬜ Mobile-responsive polish
+- ⬜ Production deployment configuration
+- ⬜ End-to-end tests (Playwright)
+- ⬜ Mobile-responsive polish
 
 ---
 
-## 6. Scoring System
+## 5. Scoring System
 
 ### Hybrid Fantasy Points
 
@@ -809,7 +633,7 @@ Movies earn fantasy points based on a **70-point baseline** system, not a simple
 
 ---
 
-## 7. Draft System
+## 6. Draft System
 
 ### Draft Configuration
 - **Draft Type:** Snake draft (1-2-3...3-2-1) or Linear (1-2-3...1-2-3)
@@ -861,7 +685,7 @@ Movies are discovered directly from TMDb API - **no pre-syncing required**.
 
 ---
 
-## 8. Bidding System (Pickup Phase)
+## 7. Bidding System (Pickup Phase)
 
 After the draft completes, leagues can enable a **bidding phase** where teams compete to pick up undrafted movies.
 
@@ -912,7 +736,7 @@ League owners configure bidding via `/league/[id]/settings`:
 
 ---
 
-## 9. Trading System
+## 8. Trading System
 
 Teams can trade movies with each other during the active season.
 
@@ -958,7 +782,7 @@ Teams can trade movies with each other during the active season.
 
 ---
 
-## 10. Testing Strategy
+## 9. Testing Strategy
 
 ### Edge Functions Testing (Deno)
 
@@ -1051,7 +875,7 @@ cd supabase/functions && deno test tests/create-league.test.ts
 
 ---
 
-## 11. Known Issues & Technical Debt
+## 10. Known Issues & Technical Debt
 
 ### Medium Priority
 1. **CORS:** Currently allows all origins (`*`). Should restrict in production.
@@ -1061,11 +885,11 @@ cd supabase/functions && deno test tests/create-league.test.ts
 ### Low Priority
 4. **Input validation:** Missing validation for draft dates, max_participants bounds.
 5. **Error messages:** Some are generic, could be more specific for debugging.
-6. **Frontend tests:** No unit or E2E tests yet.
+6. **Frontend tests:** No unit tests yet. E2E tests in progress.
 
 ---
 
-## 12. Additional Documentation
+## 11. Additional Documentation
 
 | File | Purpose |
 |------|---------|
