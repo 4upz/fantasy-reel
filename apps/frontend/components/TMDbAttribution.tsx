@@ -10,20 +10,26 @@
  * @see https://developer.themoviedb.org/docs/faq#what-are-the-attribution-requirements
  */
 
+import Image from 'next/image'
+
 interface Props {
   variant?: 'footer' | 'powered-by'
   className?: string
 }
 
+const LOGO_ASPECT_RATIO = 273.42 / 35.52
+
 function TMDbLogo({ size = 'medium' }: { size?: 'medium' | 'large' }) {
   const height = size === 'large' ? 28 : 20
+  const width = Math.round(height * LOGO_ASPECT_RATIO)
 
   return (
-    <img
+    <Image
       src="/images/tmdb-logo.svg"
       alt="TMDB"
+      width={width}
       height={height}
-      style={{ height }}
+      unoptimized
       aria-hidden="true"
     />
   )
