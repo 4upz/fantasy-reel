@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { X, DollarSign, Search, Film, Sparkles, TrendingUp, Calendar, ArrowLeft } from 'lucide-react'
+import { X, DollarSign, Search, Film, Sparkles, TrendingUp, Calendar, ArrowLeft, Heart } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
 import { getTmdbPosterUrl, formatReleaseDateFull } from './utils'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { WishlistToggle } from '@/components/WishlistToggle'
+import { useWishlist } from '@/hooks/useWishlist'
 
 interface PlaceBidModalProps {
   isOpen: boolean
@@ -44,6 +46,9 @@ export default function PlaceBidModal({
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [bidAmount, setBidAmount] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showWishlistedOnly, setShowWishlistedOnly] = useState(false)
+
+  const { isWishlisted } = useWishlist()
 
   const modalRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -175,6 +180,10 @@ export default function PlaceBidModal({
   const remainingBudget = budget?.remaining_budget ?? 0
   const isValidBid = bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100
 
+  const displayedResults = showWishlistedOnly
+    ? results.filter(m => isWishlisted(m.tmdb_id))
+    : results
+
   if (!isOpen) return null
 
   return (
@@ -254,6 +263,22 @@ export default function PlaceBidModal({
                 )}
               </div>
 
+              {/* Filter Toggle */}
+              <div className="flex items-center gap-2 mb-4">
+                <button
+                  onClick={() => setShowWishlistedOnly(prev => !prev)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all ${
+                    showWishlistedOnly
+                      ? 'bg-crimson/20 text-crimson border border-crimson/30'
+                      : 'bg-elevated text-foreground-muted border border-border hover:border-border-hover'
+                  }`}
+                  aria-pressed={showWishlistedOnly}
+                >
+                  <Heart className="w-3.5 h-3.5" fill={showWishlistedOnly ? 'currentColor' : 'none'} />
+                  Wishlisted
+                </button>
+              </div>
+
               {/* Results */}
               <div className="space-y-2">
                 {loading ? (
@@ -273,12 +298,20 @@ export default function PlaceBidModal({
                         : 'Type a movie title above to get started'}
                     </p>
                   </div>
+                ) : displayedResults.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Heart className="w-12 h-12 text-foreground-muted mb-4" />
+                    <p className="text-foreground-secondary font-medium">No wishlisted movies found</p>
+                    <p className="text-foreground-muted text-sm mt-1">
+                      Add movies to your wishlist first, then filter here
+                    </p>
+                  </div>
                 ) : (
                   <>
                     <p className="text-foreground-muted text-sm mb-3">
-                      {results.length} movies found
+                      {displayedResults.length} movies found
                     </p>
-                    {results.map((movie, index) => (
+                    {displayedResults.map((movie, index) => (
                       <button
                         key={movie.tmdb_id}
                         onClick={() => setSelectedMovie(movie)}
@@ -298,6 +331,7 @@ export default function PlaceBidModal({
                               <Film className="w-6 h-6 text-foreground-muted" />
                             </div>
                           )}
+                          <WishlistToggle movie={movie} size="sm" variant="overlay" className="absolute top-0.5 right-0.5" />
                         </div>
                         <div className="flex-1 min-w-0 py-0.5">
                           <h4 className="font-display font-semibold text-foreground truncate group-hover:text-gold transition-colors">
