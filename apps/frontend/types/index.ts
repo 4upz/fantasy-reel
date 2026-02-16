@@ -136,6 +136,7 @@ export interface Profile {
   user_id: string
   display_name: string | null
   avatar_url: string | null
+  wishlist_public: boolean
   created_at: string
   updated_at: string
 }
@@ -208,6 +209,15 @@ export interface TMDbSearchResult {
   vote_average: number
   popularity: number
   genre_ids: number[]
+}
+
+export interface WishlistedMovie {
+  id: string
+  user_id: string
+  tmdb_id: number
+  title: string
+  poster_url: string | null
+  added_at: string
 }
 
 export interface TMDbSearchResponse {
