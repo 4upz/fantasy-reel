@@ -7,6 +7,7 @@ import {
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, DiscordEmbed } from '../_shared/discord.ts'
 
 interface MovieData {
   title: string
@@ -249,6 +250,9 @@ Deno.serve(async (req) => {
       }, 201)
     }
 
+    // Track outbid email promise for parallel send with Discord
+    let outbidEmailPromise: Promise<unknown> | null = null
+
     // If there was a previous highest bid from another team, mark it as outbid
     if (highestBid && highestBid.team_id !== team.id) {
       const responseDeadline = new Date()
@@ -318,16 +322,55 @@ Deno.serve(async (req) => {
             leagueUrl: `${baseUrl}/league/${league_id}`,
           }
 
-          // Send email (non-blocking)
-          sendEmail({
+          // Send outbid email (collected for Promise.allSettled below)
+          outbidEmailPromise = sendEmail({
             to: outbidEmail,
             subject: `You've been outbid on ${movieTitle}`,
             html: getOutbidEmailHtml(emailData),
             text: getOutbidEmailText(emailData),
-          }).catch(err => console.error('Failed to send outbid email:', err))
+          })
         }
       }
     }
+
+    // Build movie title and poster for Discord embed
+    const movieTitle = movie_data?.title || highestBid?.movie_data?.title || `Movie #${tmdb_id}`
+    const posterPath = movie_data?.poster_url || highestBid?.movie_data?.poster_url
+
+    // Get bidder team name for Discord notification
+    const { data: bidderTeam } = await serviceClient
+      .from('teams')
+      .select('name')
+      .eq('id', team.id)
+      .single()
+
+    const bidEmbed: DiscordEmbed = {
+      author: buildEmbedAuthor(league.name, league_id),
+      title: `New bid on ${movieTitle}`,
+      description: `**${bidderTeam?.name ?? 'A team'}** -- $${amount}`,
+      thumbnail: posterPath ? { url: `https://image.tmdb.org/t/p/w92${posterPath}` } : undefined,
+      color: DISCORD_COLORS.gold,
+      footer: { text: `Bidding closes ${new Date(processingDeadline).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` },
+      url: buildLeagueUrl(league_id, '/bidding'),
+    }
+
+    // Add "Previous High" field only if outbidding someone
+    if (highestBid && highestBid.team_id !== team.id) {
+      const { data: previousTeam } = await serviceClient.from('teams').select('name').eq('id', highestBid.team_id).single()
+      bidEmbed.fields = [{ name: 'Previous High', value: `${previousTeam?.name ?? 'A team'} at $${highestBid.amount}`, inline: true }]
+    }
+
+    const discordPromise = sendDiscordNotification(serviceClient, {
+      leagueId: league_id,
+      category: 'bids',
+      embeds: [bidEmbed],
+      mentionRole: !!(highestBid && highestBid.team_id !== team.id),
+    })
+
+    // Send email + Discord in parallel (non-blocking)
+    const notificationPromises: Promise<unknown>[] = [discordPromise]
+    if (outbidEmailPromise) notificationPromises.push(outbidEmailPromise)
+    await Promise.allSettled(notificationPromises)
 
     return jsonResponse({
       bid: newBid,

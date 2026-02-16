@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isUpcomingMovie } from '../_shared/utils.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 
 interface MovieData {
   title: string
@@ -278,6 +279,89 @@ Deno.serve(async (req) => {
       }
     } else {
       upcomingPick = upcomingPickData[0]
+    }
+
+    // Discord notifications
+    const { data: pickerTeam } = await serviceClient.from('teams').select('name').eq('id', nextPick.team_id).single()
+    const pickerTeamName = pickerTeam?.name ?? 'A team'
+    const leagueName = league.name ?? 'Fantasy Reel League'
+
+    if (draftComplete) {
+      const totalPicks = pick.pick_number
+      await sendDiscordNotification(serviceClient, {
+        leagueId: league_id,
+        category: 'drafts',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, league_id),
+          title: `${pickerTeamName} selects ${movie.title}`,
+          description: `Round ${pick.round}, Pick ${pick.pick_number}`,
+          thumbnail: movie.poster_url ? { url: `https://image.tmdb.org/t/p/w92${movie.poster_url}` } : undefined,
+          color: DISCORD_COLORS.gold,
+          footer: { text: `${totalPicks}/${totalPicks} complete` },
+          url: buildLeagueUrl(league_id, '/draft'),
+        }],
+      })
+
+      await sendDiscordNotification(serviceClient, {
+        leagueId: league_id,
+        category: 'drafts',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, league_id),
+          title: 'Draft Complete',
+          description: `${totalPicks} selections across ${pick.round} rounds. The season is underway.`,
+          color: DISCORD_COLORS.green,
+          footer: { text: `${leagueName} is now active` },
+          url: buildLeagueUrl(league_id, '/standings'),
+        }],
+      })
+    } else {
+      // Regular pick notification
+      let nextTeamName = 'TBD'
+      let mentionContent: string | undefined
+      let pickColor: number = DISCORD_COLORS.gold
+
+      if (upcomingPick) {
+        const { data: nextTeam } = await serviceClient.from('teams').select('name').eq('id', upcomingPick.team_id).single()
+        nextTeamName = nextTeam?.name ?? 'TBD'
+
+        // Check if next picker has linked Discord account for @mention
+        const { data: nextProfile } = await serviceClient
+          .from('profiles')
+          .select('discord_id')
+          .eq('user_id', upcomingPick.user_id)
+          .single()
+
+        if (nextProfile?.discord_id) {
+          mentionContent = `<@${nextProfile.discord_id}>, you're on the clock.`
+          pickColor = DISCORD_COLORS.yellow
+        }
+      }
+
+      // Calculate total picks for progress
+      const { count: totalParticipants } = await serviceClient
+        .from('league_participants')
+        .select('*', { count: 'exact', head: true })
+        .eq('league_id', league_id)
+        .eq('status', 'active')
+      const totalPicks = (league.draft_rounds ?? 5) * (totalParticipants ?? 0)
+
+      const fields = upcomingPick ? [{ name: 'Up Next', value: nextTeamName, inline: true }] : []
+
+      await sendDiscordNotification(serviceClient, {
+        leagueId: league_id,
+        category: 'drafts',
+        content: mentionContent,
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, league_id),
+          title: `${pickerTeamName} selects ${movie.title}`,
+          description: `Round ${pick.round}, Pick ${pick.pick_number}`,
+          thumbnail: movie.poster_url ? { url: `https://image.tmdb.org/t/p/w92${movie.poster_url}` } : undefined,
+          fields,
+          color: pickColor,
+          footer: { text: `${pick.pick_number}/${totalPicks} complete` },
+          url: buildLeagueUrl(league_id, '/draft'),
+        }],
+      })
     }
 
     return jsonResponse({

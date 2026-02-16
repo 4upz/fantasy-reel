@@ -1,6 +1,17 @@
 import { createClient, SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, getCorsHeaders } from './cors.ts'
 
+/**
+ * Create a service role Supabase client for admin operations.
+ * Bypasses RLS — use only in Edge Functions for operations requiring elevated access.
+ */
+export function createServiceClient(): SupabaseClient {
+  return createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  )
+}
+
 let _currentRequest: Request | undefined
 
 export function setRequestContext(req: Request): void {

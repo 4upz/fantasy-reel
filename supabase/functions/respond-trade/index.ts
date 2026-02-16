@@ -8,11 +8,13 @@ import {
 import {
   validateTradeProposal,
   getTeamInfo,
+  getTeamName,
   getTradeOffer,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface RespondTradeRequest {
   trade_offer_id: string
@@ -97,12 +99,18 @@ Deno.serve(async (req) => {
     // Get league config for notification messages
     const { data: league } = await serviceClient
       .from('leagues')
-      .select('trade_veto_hours, trade_review_enabled')
+      .select('name, trade_veto_hours, trade_review_enabled')
       .eq('id', tradeOffer.league_id)
       .single()
 
+    const leagueName = league?.name ?? 'League'
     const vetoHours = league?.trade_veto_hours ?? 24
     const reviewEnabled = league?.trade_review_enabled ?? true
+
+    const [initiatorTeamName, recipientTeamName] = await Promise.all([
+      getTeamName(serviceClient, tradeOffer.initiator_team_id),
+      getTeamName(serviceClient, tradeOffer.recipient_team_id),
+    ])
 
     if (response === 'reject') {
       await notifyTradeParties(serviceClient, {
@@ -114,11 +122,28 @@ Deno.serve(async (req) => {
         },
       })
 
-      // Send email notification (non-blocking)
-      await sendTradeEmailNotifications(serviceClient, tradeOffer, 'rejected', {
-        notifyInitiator: true,
-        message: message?.trim(),
-      })
+      const rejectFields = message?.trim()
+        ? [{ name: 'Response', value: message.trim(), inline: false }]
+        : undefined
+
+      await Promise.allSettled([
+        sendTradeEmailNotifications(serviceClient, tradeOffer, 'rejected', {
+          notifyInitiator: true,
+          message: message?.trim(),
+        }),
+        sendDiscordNotification(serviceClient, {
+          leagueId: tradeOffer.league_id,
+          category: 'trades',
+          embeds: [{
+            author: buildEmbedAuthor(leagueName, tradeOffer.league_id),
+            title: `${recipientTeamName} declined the trade`,
+            color: DISCORD_COLORS.crimson,
+            fields: rejectFields,
+            footer: { text: `Trade #${tradeOffer.id.slice(0, 8)}` },
+            url: buildLeagueUrl(tradeOffer.league_id, '/trading'),
+          }],
+        }),
+      ])
 
       return jsonResponse({ message: 'Trade rejected', trade_offer_id })
     }
@@ -143,12 +168,30 @@ Deno.serve(async (req) => {
       },
     })
 
-    // Send email notification with updated trade offer data
+    // Send email + Discord notifications in parallel
     const tradeOfferWithReview = { ...tradeOffer, review_ends_at: result.review_ends_at ?? null }
-    await sendTradeEmailNotifications(serviceClient, tradeOfferWithReview, 'accepted', {
-      notifyInitiator: true,
-      message: message?.trim(),
-    })
+
+    const acceptFooter = reviewEnabled && result.review_ends_at
+      ? `Review period ends ${new Date(result.review_ends_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`
+      : `Trade #${tradeOffer.id.slice(0, 8)}`
+
+    await Promise.allSettled([
+      sendTradeEmailNotifications(serviceClient, tradeOfferWithReview, 'accepted', {
+        notifyInitiator: true,
+        message: message?.trim(),
+      }),
+      sendDiscordNotification(serviceClient, {
+        leagueId: tradeOffer.league_id,
+        category: 'trades',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, tradeOffer.league_id),
+          title: `${initiatorTeamName} and ${recipientTeamName} agreed to terms`,
+          color: DISCORD_COLORS.green,
+          footer: { text: acceptFooter },
+          url: buildLeagueUrl(tradeOffer.league_id, '/trading'),
+        }],
+      }),
+    ])
 
     return jsonResponse({
       message: reviewEnabled

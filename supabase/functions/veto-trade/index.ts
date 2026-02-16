@@ -8,11 +8,13 @@ import {
 } from '../_shared/utils.ts'
 import {
   getTeamInfo,
+  getTeamName,
   createServiceClient,
   TradeNotification,
   sendTradeEmailNotifications,
   TradeOffer,
 } from '../_shared/trade-validation.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface VetoTradeRequest {
   trade_offer_id: string
@@ -116,26 +118,39 @@ Deno.serve(async (req) => {
 
     // Send email notifications to both parties (non-blocking)
     const tradeOfferForEmail: TradeOffer = {
-      id: tradeOffer.id,
-      league_id: tradeOffer.league_id,
-      initiator_team_id: tradeOffer.initiator_team_id,
-      recipient_team_id: tradeOffer.recipient_team_id,
-      initiator_items: tradeOffer.initiator_items,
-      recipient_items: tradeOffer.recipient_items,
+      ...tradeOffer,
       status: 'vetoed',
-      proposed_at: tradeOffer.proposed_at,
-      responded_at: tradeOffer.responded_at,
-      accepted_at: tradeOffer.accepted_at,
-      review_ends_at: tradeOffer.review_ends_at,
-      initiator_message: tradeOffer.initiator_message,
-      response_message: tradeOffer.response_message,
       veto_reason: reason?.trim() || null,
     }
-    await sendTradeEmailNotifications(serviceClient, tradeOfferForEmail, 'vetoed', {
-      notifyInitiator: true,
-      notifyRecipient: true,
-      vetoReason: reason?.trim(),
-    })
+    const [initiatorTeamName, recipientTeamName, leagueName] = await Promise.all([
+      getTeamName(serviceClient, tradeOffer.initiator_team_id),
+      getTeamName(serviceClient, tradeOffer.recipient_team_id),
+      getLeagueName(serviceClient, tradeOffer.league_id),
+    ])
+
+    const vetoFields = reason?.trim()
+      ? [{ name: 'Reason', value: reason.trim(), inline: false }]
+      : undefined
+
+    await Promise.allSettled([
+      sendTradeEmailNotifications(serviceClient, tradeOfferForEmail, 'vetoed', {
+        notifyInitiator: true,
+        notifyRecipient: true,
+        vetoReason: reason?.trim(),
+      }),
+      sendDiscordNotification(serviceClient, {
+        leagueId: tradeOffer.league_id,
+        category: 'trades',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, tradeOffer.league_id),
+          title: `Commissioner vetoed trade between ${initiatorTeamName} and ${recipientTeamName}`,
+          color: DISCORD_COLORS.crimson,
+          fields: vetoFields,
+          footer: { text: `Trade #${tradeOffer.id.slice(0, 8)}` },
+          url: buildLeagueUrl(tradeOffer.league_id, '/trading'),
+        }],
+      }),
+    ])
 
     return jsonResponse({
       message: 'Trade vetoed successfully',

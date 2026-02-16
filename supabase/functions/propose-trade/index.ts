@@ -11,10 +11,12 @@ import {
   validateTradeProposal,
   enrichTradeItems,
   getTeamInfo,
+  getTeamName,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface ProposeTradeRequest {
   league_id: string
@@ -130,11 +132,45 @@ Deno.serve(async (req) => {
       },
     })
 
-    // Send email notification (non-blocking)
-    await sendTradeEmailNotifications(serviceClient, tradeOffer, 'proposed', {
-      notifyRecipient: true,
-      message: message?.trim(),
-    })
+    // Send email + Discord notifications in parallel
+    const recipientName = await getTeamName(serviceClient, tradeOffer.recipient_team_id)
+    const leagueName = await getLeagueName(serviceClient, league_id)
+
+    const initiatorMovies = enrichedOfferedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
+    const recipientMovies = enrichedRequestedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
+
+    const fields = [
+      { name: `${initiatorInfo?.name ?? 'Proposer'} offers`, value: initiatorMovies || 'Nothing', inline: true },
+      { name: `${recipientName} offers`, value: recipientMovies || 'Nothing', inline: true },
+    ]
+    if (enrichedOfferedItems.faab > 0 || enrichedRequestedItems.faab > 0) {
+      const faabParts = []
+      if (enrichedOfferedItems.faab > 0) faabParts.push(`${initiatorInfo?.name ?? 'Proposer'}: $${enrichedOfferedItems.faab}`)
+      if (enrichedRequestedItems.faab > 0) faabParts.push(`${recipientName}: $${enrichedRequestedItems.faab}`)
+      fields.push({ name: 'FAAB', value: faabParts.join(' / '), inline: true })
+    }
+    if (message?.trim()) {
+      fields.push({ name: 'Message', value: message.trim(), inline: false })
+    }
+
+    await Promise.allSettled([
+      sendTradeEmailNotifications(serviceClient, tradeOffer, 'proposed', {
+        notifyRecipient: true,
+        message: message?.trim(),
+      }),
+      sendDiscordNotification(serviceClient, {
+        leagueId: league_id,
+        category: 'trades',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, league_id),
+          title: `${initiatorInfo?.name ?? 'A team'} proposes a trade to ${recipientName}`,
+          color: DISCORD_COLORS.gold,
+          fields,
+          footer: { text: `Trade #${tradeOffer.id.slice(0, 8)}` },
+          url: buildLeagueUrl(league_id, '/trading'),
+        }],
+      }),
+    ])
 
     return jsonResponse(
       {

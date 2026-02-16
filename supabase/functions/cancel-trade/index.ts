@@ -7,11 +7,13 @@ import {
 } from '../_shared/utils.ts'
 import {
   getTeamInfo,
+  getTeamName,
   getTradeOffer,
   validateTradeStatus,
   createServiceClient,
   notifyTradeParties,
 } from '../_shared/trade-validation.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface CancelTradeRequest {
   trade_offer_id: string
@@ -57,14 +59,29 @@ Deno.serve(async (req) => {
       return errorResponse('Failed to cancel trade', 500)
     }
 
-    await notifyTradeParties(serviceClient, {
-      tradeOffer,
-      notifyRecipient: {
-        type: 'trade_cancelled',
-        title: 'Trade Cancelled',
-        bodyFn: (teamName) => `${teamName} has cancelled their trade proposal`,
-      },
-    })
+    const leagueName = await getLeagueName(serviceClient, tradeOffer.league_id)
+
+    await Promise.allSettled([
+      notifyTradeParties(serviceClient, {
+        tradeOffer,
+        notifyRecipient: {
+          type: 'trade_cancelled',
+          title: 'Trade Cancelled',
+          bodyFn: (teamName) => `${teamName} has cancelled their trade proposal`,
+        },
+      }),
+      sendDiscordNotification(serviceClient, {
+        leagueId: tradeOffer.league_id,
+        category: 'trades',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, tradeOffer.league_id),
+          title: `Trade cancelled by ${initiatorInfo?.name ?? 'a team'}`,
+          color: DISCORD_COLORS.crimson,
+          footer: { text: `Trade #${tradeOffer.id.slice(0, 8)}` },
+          url: buildLeagueUrl(tradeOffer.league_id, '/trading'),
+        }],
+      }),
+    ])
 
     return jsonResponse({
       message: 'Trade cancelled successfully',
