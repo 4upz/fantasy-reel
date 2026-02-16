@@ -1,23 +1,23 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import type { TMDbSearchResult } from '@/types'
 
-interface UseWishlistReturn {
+interface WishlistContextValue {
   wishlistedIds: Set<number>
   isLoading: boolean
   toggleWishlist: (movie: TMDbSearchResult) => void
   isWishlisted: (tmdbId: number) => boolean
 }
 
+const WishlistContext = createContext<WishlistContextValue | null>(null)
+
 /**
- * Hook for managing a user's movie wishlist with optimistic updates.
- *
- * Each component mount gets its own copy of the data (not a global singleton).
- * Uses a ref-based guard to prevent duplicate API calls for the same movie.
+ * Provider that manages wishlist state. Mount once in the authenticated layout
+ * so all consumers share the same data.
  */
-export function useWishlist(): UseWishlistReturn {
+export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [wishlistedIds, setWishlistedIds] = useState<Set<number>>(new Set())
   const [isLoading, setIsLoading] = useState(true)
   const inFlightRef = useRef<Set<number>>(new Set())
@@ -138,5 +138,25 @@ export function useWishlist(): UseWishlistReturn {
     [wishlistedIds]
   )
 
-  return { wishlistedIds, isLoading, toggleWishlist, isWishlisted }
+  const value = useMemo(
+    () => ({ wishlistedIds, isLoading, toggleWishlist, isWishlisted }),
+    [wishlistedIds, isLoading, toggleWishlist, isWishlisted]
+  )
+
+  return (
+    <WishlistContext.Provider value={value}>
+      {children}
+    </WishlistContext.Provider>
+  )
+}
+
+/**
+ * Access the shared wishlist state. Must be used within WishlistProvider.
+ */
+export function useWishlist(): WishlistContextValue {
+  const ctx = useContext(WishlistContext)
+  if (!ctx) {
+    throw new Error('useWishlist must be used within a WishlistProvider')
+  }
+  return ctx
 }
