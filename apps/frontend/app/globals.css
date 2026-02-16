@@ -882,38 +882,6 @@
     }
   }
 
-  /* Featured league card - hero-style card */
-  .card-featured {
-    background-color: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 0.75rem;
-    box-shadow: var(--shadow-soft);
-    transition: all 0.2s ease;
-  }
-
-  .card-featured:hover {
-    background-color: var(--color-surface-hover);
-    border-color: var(--color-gold);
-    box-shadow: var(--shadow-glow-gold);
-  }
-
-  /* Compact league list item */
-  .league-list-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 1rem 1.25rem;
-    border-bottom: 1px solid var(--color-border);
-    transition: background-color 0.2s ease;
-  }
-
-  .league-list-item:last-child {
-    border-bottom: none;
-  }
-
-  .league-list-item:hover {
-    background-color: var(--color-surface-hover);
-  }
 
   /* Sidebar action card */
   .sidebar-action-card {
@@ -931,16 +899,6 @@
     box-shadow: var(--shadow-medium);
   }
 
-  /* Your turn glow animation on featured card */
-  .card-featured.your-turn {
-    animation: featured-glow-pulse 2s ease-in-out infinite;
-    border-color: var(--color-success);
-  }
-
-  @keyframes featured-glow-pulse {
-    0%, 100% { box-shadow: 0 0 20px oklch(0.65 0.2 145 / 0.2); }
-    50% { box-shadow: 0 0 35px oklch(0.65 0.2 145 / 0.4); }
-  }
 
   /* Pending invitations banner */
   .invitation-banner {
