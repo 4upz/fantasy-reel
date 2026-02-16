@@ -96,8 +96,8 @@ jobs:
       - name: Deploy changed functions
         if: needs.changes.outputs.shared != 'true' && needs.changes.outputs.functions == 'true'
         run: |
-          # Extract unique function directory names from changed files
-          FUNCTIONS=$(echo "$CHANGED_FILES" | jq -r '.[]' | sed 's|supabase/functions/||' | cut -d'/' -f1 | sort -u)
+          # Extract unique function directory names from changed files (filter non-function paths)
+          FUNCTIONS=$(echo "$CHANGED_FILES" | jq -r '.[]' | grep '^supabase/functions/' | sed 's|supabase/functions/||' | cut -d'/' -f1 | sort -u)
           for fn in $FUNCTIONS; do
             echo "Deploying function: $fn"
             supabase functions deploy "$fn" --project-ref "$PROJECT_REF"
