@@ -45,6 +45,18 @@ export function useWishlist(): UseWishlistReturn {
         setWishlistedIds(new Set(data?.map((row) => row.tmdb_id) ?? []))
       }
       setIsLoading(false)
+
+      // Clean up legacy localStorage favorites
+      if (typeof window !== 'undefined') {
+        const keysToRemove: string[] = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key && key.startsWith('draft-favorites-')) {
+            keysToRemove.push(key)
+          }
+        }
+        keysToRemove.forEach(key => localStorage.removeItem(key))
+      }
     }
 
     fetchWishlist()
