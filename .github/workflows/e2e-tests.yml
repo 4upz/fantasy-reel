@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   e2e-tests:
     name: E2E Tests (Chromium)
@@ -14,10 +21,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -26,7 +33,7 @@ jobs:
         run: npm ci
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@b60b5899c73b63a2d2d651b1e90db8d4c9392f51 # v1
         with:
           version: latest
 
@@ -34,11 +41,13 @@ jobs:
         run: supabase start
 
       - name: Get Supabase keys and set environment
+        id: supabase-keys
         run: |
-          # Extract keys from supabase status
           echo "NEXT_PUBLIC_SUPABASE_URL=$(supabase status --output json | jq -r '.API_URL')" >> $GITHUB_ENV
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(supabase status --output json | jq -r '.ANON_KEY')" >> $GITHUB_ENV
-          echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status --output json | jq -r '.SERVICE_ROLE_KEY')" >> $GITHUB_ENV
+          SERVICE_KEY=$(supabase status --output json | jq -r '.SERVICE_ROLE_KEY')
+          echo "::add-mask::$SERVICE_KEY"
+          echo "service-role-key=$SERVICE_KEY" >> $GITHUB_OUTPUT
 
       - name: Reset database
         run: supabase db reset --no-seed
@@ -52,10 +61,12 @@ jobs:
       - name: Run E2E tests
         run: npm run test:e2e -- --project=chromium
         working-directory: apps/frontend
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase-keys.outputs.service-role-key }}
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
           path: apps/frontend/playwright-report/
@@ -63,7 +74,7 @@ jobs:
 
       - name: Upload test artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: test-artifacts
           path: apps/frontend/test-results/
