@@ -164,27 +164,28 @@ Deno.serve(async (req) => {
 
         results.movies_fetched++
 
-        // Process and store ratings
-        let ratingsStored = 0
-        for (const rating of ratings) {
-          if (!rating.source || rating.score === null) continue
+        // Batch all valid ratings into a single upsert
+        const now = new Date().toISOString()
+        const reviewRows = ratings
+          .filter((r) => r.source && r.score !== null)
+          .map((r) => ({
+            movie_id: movie.id,
+            source: r.source,
+            score: r.score,
+            raw_score: r.raw,
+            fetched_at: now,
+          }))
 
+        let ratingsStored = 0
+        if (reviewRows.length > 0) {
           const { error: reviewError } = await serviceClient
             .from('reviews')
-            .upsert({
-              movie_id: movie.id,
-              source: rating.source,
-              score: rating.score,
-              raw_score: rating.raw,
-              fetched_at: new Date().toISOString()
-            }, {
-              onConflict: 'movie_id,source'
-            })
+            .upsert(reviewRows, { onConflict: 'movie_id,source' })
 
           if (reviewError) {
-            console.error(`Error upserting review for ${movie.title}:`, reviewError)
+            console.error(`Error upserting reviews for ${movie.title}:`, reviewError)
           } else {
-            ratingsStored++
+            ratingsStored = reviewRows.length
           }
         }
 
