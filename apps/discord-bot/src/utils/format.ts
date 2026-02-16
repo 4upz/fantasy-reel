@@ -4,5 +4,5 @@ export function truncate(str: string, maxLength: number): string {
 }
 
 export function formatCurrency(amount: number): string {
-  return `$${amount}`
+  return `$${amount.toFixed(2)}`
 }

@@ -45,9 +45,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
 // Health check HTTP server
 const healthServer = http.createServer((_req, res) => {
-  const isConnected = client.ws.status === 0 // 0 = READY
-  res.writeHead(isConnected ? 200 : 503)
-  res.end(isConnected ? 'OK' : 'Not connected')
+  const ready = client.isReady()
+  res.writeHead(ready ? 200 : 503)
+  res.end(ready ? 'OK' : 'Not connected')
 })
 
 healthServer.listen(3001, () => {

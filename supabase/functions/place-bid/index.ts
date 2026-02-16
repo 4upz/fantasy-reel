@@ -345,7 +345,7 @@ Deno.serve(async (req) => {
       .single()
 
     const bidEmbed: DiscordEmbed = {
-      author: buildEmbedAuthor(league.name, league_id),
+      author: buildEmbedAuthor(league.name ?? 'League', league_id),
       title: `New bid on ${movieTitle}`,
       description: `**${bidderTeam?.name ?? 'A team'}** -- $${amount}`,
       thumbnail: posterPath ? { url: `https://image.tmdb.org/t/p/w92${posterPath}` } : undefined,

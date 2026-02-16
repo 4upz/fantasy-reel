@@ -18,7 +18,6 @@ export const roster: Command = {
         .setName('team')
         .setDescription('Team name')
         .setRequired(true)
-        .setAutocomplete(true)
     ) as SlashCommandBuilder,
 
   async execute(interaction: ChatInputCommandInteraction) {

@@ -23,7 +23,7 @@ import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_sha
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 
 interface ProcessBidsRequest {
   mode?: 'weekly' | 'extended'
@@ -429,21 +429,28 @@ Deno.serve(async (req) => {
         resultsByLeague.set(result.league_id, existing)
       }
 
-      // Batch-query all winning team names to avoid N+1
+      // Batch-query all winning team names and league names to avoid N+1
       const allTeamIds = [...new Set(results.map((r) => r.winner_team_id))]
-      const { data: teamsData } = await serviceClient
-        .from('teams')
-        .select('id, name')
-        .in('id', allTeamIds)
+      const allLeagueIds = [...resultsByLeague.keys()]
+
+      const [{ data: teamsData }, { data: leaguesData }] = await Promise.all([
+        serviceClient.from('teams').select('id, name').in('id', allTeamIds),
+        serviceClient.from('leagues').select('id, name').in('id', allLeagueIds),
+      ])
 
       const teamNameMap = new Map<string, string>()
       for (const t of teamsData ?? []) {
         teamNameMap.set(t.id, t.name)
       }
 
+      const leagueNameMap = new Map<string, string>()
+      for (const l of leaguesData ?? []) {
+        leagueNameMap.set(l.id, l.name)
+      }
+
       const discordPromises: Promise<void>[] = []
       for (const [leagueId, leagueResults] of resultsByLeague) {
-        const leagueName = await getLeagueName(serviceClient, leagueId)
+        const leagueName = leagueNameMap.get(leagueId) ?? 'League'
 
         const fields = leagueResults.slice(0, 10).map((r) => ({
           name: r.movie_title,
