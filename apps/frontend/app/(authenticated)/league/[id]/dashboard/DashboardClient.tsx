@@ -1,13 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { Heart } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import type { League, DashboardTeam } from '@/types'
 import TeamHeader from '../components/TeamHeader'
 import MovieGrid from '../components/MovieGrid'
 import EditTeamModal from '../components/EditTeamModal'
-import { Heart } from 'lucide-react'
-import Link from 'next/link'
 
 interface Props {
   league: League
@@ -19,13 +19,12 @@ export default function DashboardClient({
   league: initialLeague,
   userTeam,
   totalTeams,
-}: Props) {
+}: Props): React.ReactElement {
   const [league, setLeague] = useState(initialLeague)
   const [showEditTeamModal, setShowEditTeamModal] = useState(false)
   const [wishlistCount, setWishlistCount] = useState(0)
 
   const supabase = useMemo(() => createClient(), [])
-  const channelIdRef = useRef(0)
 
   // Fetch count of league-mates with public wishlists
   useEffect(() => {
@@ -50,35 +49,10 @@ export default function DashboardClient({
     return () => { cancelled = true }
   }, [league.id, supabase])
 
-  // Real-time subscription for score updates
+  // Real-time subscription for league updates
   useEffect(() => {
-    channelIdRef.current++
-    const channelId = channelIdRef.current
-
     const channel = supabase
-      .channel(`dashboard-${league.id}-${channelId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'team_scores',
-        },
-        () => {
-          // TODO: Implement data refetch when scores update (e.g., router.refresh())
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'movies',
-        },
-        () => {
-          // TODO: Implement data refetch when movie scores are calculated
-        }
-      )
+      .channel(`dashboard-${league.id}`)
       .on(
         'postgres_changes',
         {

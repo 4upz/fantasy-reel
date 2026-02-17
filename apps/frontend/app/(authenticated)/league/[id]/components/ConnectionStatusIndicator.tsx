@@ -1,8 +1,6 @@
-'use client'
-
 export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'error'
 
-const CONNECTION_STATUS_CONFIG = {
+const STATUS_CONFIG: Record<RealtimeStatus, { dot: string; text: string; textColor: string; title: string }> = {
   connecting: {
     dot: 'bg-warning animate-pulse',
     text: 'Connecting...',
@@ -25,16 +23,16 @@ const CONNECTION_STATUS_CONFIG = {
     dot: 'bg-error',
     text: 'Disconnected',
     textColor: 'text-error',
-    title: 'Connection lost - refresh to reconnect',
+    title: 'Connection lost - updates via polling',
   },
-} as const
+}
 
 interface Props {
   status: RealtimeStatus
 }
 
-export default function ConnectionStatusIndicator({ status }: Props) {
-  const config = CONNECTION_STATUS_CONFIG[status]
+export default function ConnectionStatusIndicator({ status }: Props): React.ReactElement {
+  const config = STATUS_CONFIG[status]
 
   return (
     <div

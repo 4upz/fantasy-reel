@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard, { PickHistory } from '../components/DraftBoard'
 import ConnectionStatusIndicator, { type RealtimeStatus } from '../components/ConnectionStatusIndicator'
@@ -19,9 +20,8 @@ const InviteModal = dynamic(() => import('../components/InviteModal'), {
   loading: () => <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4"><div className="animate-pulse h-64 w-full max-w-md bg-surface rounded-lg" /></div>,
 })
 
-const MAX_RECONNECT_ATTEMPTS = 5
-const BASE_DELAY_MS = 2000
 const POLL_INTERVAL_MS = 10_000
+const REALTIME_FALLBACK_MS = 60_000
 
 interface Props {
   league: League
@@ -47,16 +47,19 @@ export default function DraftClient({
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [startingDraft, setStartingDraft] = useState(false)
   const [startingCounterpick, setStartingCounterpick] = useState(false)
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting')
   const [pickHistoryExpanded, setPickHistoryExpanded] = useState(false)
 
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
   const supabase = useMemo(() => createClient(), [])
-  const reconnectAttemptsRef = useRef(0)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const channelIdRef = useRef(0)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const fetchDraftPicksRef = useRef<() => Promise<boolean>>(null!)
+  const fetchParticipantsRef = useRef<() => Promise<boolean>>(null!)
+  const fetchCounterpicksRef = useRef<() => Promise<boolean>>(null!)
+  const startPollingRef = useRef<() => void>(null!)
+  const stopPollingRef = useRef<() => void>(null!)
 
   /**
    * Wraps a Supabase query with consistent error handling and state update.
@@ -145,110 +148,103 @@ export default function DraftClient({
     }
   }, [])
 
-  // Real-time subscriptions
+  // Keep refs in sync with latest callbacks (avoids re-subscribing on callback changes)
   useEffect(() => {
-    let currentChannel: ReturnType<typeof supabase.channel> | null = null
-    let isCleaningUp = false
+    fetchDraftPicksRef.current = fetchDraftPicks
+    fetchParticipantsRef.current = fetchParticipants
+    fetchCounterpicksRef.current = fetchCounterpicks
+    startPollingRef.current = startPolling
+    stopPollingRef.current = stopPolling
+  }, [fetchDraftPicks, fetchParticipants, fetchCounterpicks, startPolling, stopPolling])
 
-    function setupChannel(isReconnect = false): void {
-      if (isCleaningUp) return
+  // Real-time subscription — supabase-js handles reconnect internally
+  useEffect(() => {
+    let fallbackTimer: NodeJS.Timeout | null = null
+    let hadSuccessfulConnection = false
 
-      setRealtimeStatus(isReconnect ? 'reconnecting' : 'connecting')
-
-      if (currentChannel) {
-        supabase.removeChannel(currentChannel)
-        currentChannel = null
-      }
-
-      channelIdRef.current++
-      const thisChannelId = channelIdRef.current
-
-      const channel = supabase
-        .channel(`draft-${league.id}-${thisChannelId}`)
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'draft_picks',
-            filter: `league_id=eq.${league.id}`,
-          },
-          fetchDraftPicks
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'leagues',
-            filter: `id=eq.${league.id}`,
-          },
-          (payload) => setLeague(payload.new as League)
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'league_participants',
-            filter: `league_id=eq.${league.id}`,
-          },
-          fetchParticipants
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'counterpicks',
-            filter: `league_id=eq.${league.id}`,
-          },
-          fetchCounterpicks
-        )
-        .subscribe((status) => {
-          if (isCleaningUp || thisChannelId !== channelIdRef.current) return
-
-          if (status === 'SUBSCRIBED') {
-            const wasReconnect = reconnectAttemptsRef.current > 0
-            reconnectAttemptsRef.current = 0
-            setRealtimeStatus('connected')
-            stopPolling()
-            if (wasReconnect) {
-              fetchDraftPicks()
-              fetchCounterpicks()
-            }
-            return
+    const channel = supabase
+      .channel(`draft-${league.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'draft_picks',
+          filter: `league_id=eq.${league.id}`,
+        },
+        () => fetchDraftPicksRef.current()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'leagues',
+          filter: `id=eq.${league.id}`,
+        },
+        (payload) => setLeague(payload.new as League)
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'league_participants',
+          filter: `league_id=eq.${league.id}`,
+        },
+        () => fetchParticipantsRef.current()
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'counterpicks',
+          filter: `league_id=eq.${league.id}`,
+        },
+        () => fetchCounterpicksRef.current()
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          if (fallbackTimer) {
+            clearTimeout(fallbackTimer)
+            fallbackTimer = null
           }
+          stopPollingRef.current()
+          // Refetch if recovering from a previous error
+          if (hadSuccessfulConnection) {
+            fetchDraftPicksRef.current()
+            fetchCounterpicksRef.current()
+          }
+          hadSuccessfulConnection = true
+          setRealtimeStatus('connected')
+          return
+        }
 
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-              reconnectAttemptsRef.current++
-              const delay = BASE_DELAY_MS * Math.pow(2, reconnectAttemptsRef.current - 1)
-              reconnectTimeoutRef.current = setTimeout(() => setupChannel(true), delay)
-            } else {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setRealtimeStatus('reconnecting')
+          // If supabase-js can't recover within 60s, fall back to polling
+          if (!fallbackTimer) {
+            fallbackTimer = setTimeout(() => {
               setRealtimeStatus('error')
-              startPolling()
-            }
+              startPollingRef.current()
+            }, REALTIME_FALLBACK_MS)
           }
-        })
+          return
+        }
 
-      currentChannel = channel
-    }
-
-    setupChannel()
+        if (status === 'CLOSED') {
+          setRealtimeStatus('error')
+          startPollingRef.current()
+        }
+      })
 
     return () => {
-      isCleaningUp = true
-      stopPolling()
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-      }
-      if (currentChannel) {
-        supabase.removeChannel(currentChannel)
-      }
-      reconnectAttemptsRef.current = 0
+      if (fallbackTimer) clearTimeout(fallbackTimer)
+      stopPollingRef.current()
+      supabase.removeChannel(channel)
     }
-  }, [league.id, supabase, fetchDraftPicks, fetchParticipants, fetchCounterpicks, startPolling, stopPolling])
+  }, [league.id, supabase])
 
   // Safety-net cleanup for polling interval
   useEffect(() => {
@@ -289,6 +285,18 @@ export default function DraftClient({
 
     setStartingDraft(false)
   }
+
+  const skipCounterpickAction = useCallback(async (): Promise<void> => {
+    const { error: skipError } = await callEdgeFunction('skip-counterpick-round', {
+      body: { league_id: league.id },
+    })
+    if (skipError) {
+      throw new Error(skipError)
+    }
+    setShowSkipConfirm(false)
+  }, [league.id])
+
+  const { execute: handleSkipCounterpick, isLoading: skipping, error: skipError } = useAsyncAction(skipCounterpickAction)
 
   const totalPicks = participants.length * league.draft_slots
   const isDraftComplete = league.status === 'drafting' && draftPicks.length >= totalPicks
@@ -348,25 +356,69 @@ export default function DraftClient({
                   </p>
                 </div>
               </div>
-              <button
-                onClick={handleStartCounterpickRound}
-                disabled={startingCounterpick}
-                className="btn btn-primary flex items-center gap-2"
-              >
-                {startingCounterpick ? (
-                  <>
-                    <SpinnerIcon className="w-4 h-4 animate-spin" />
-                    Starting...
-                  </>
-                ) : (
-                  <>
-                    <Target className="w-4 h-4" />
-                    Start Counterpick Round
-                  </>
+              <div className="flex flex-col items-end gap-2">
+                <button
+                  onClick={handleStartCounterpickRound}
+                  disabled={startingCounterpick || skipping}
+                  className="btn btn-primary flex items-center gap-2"
+                >
+                  {startingCounterpick ? (
+                    <>
+                      <SpinnerIcon className="w-4 h-4 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Target className="w-4 h-4" />
+                      Start Counterpick Round
+                    </>
+                  )}
+                </button>
+                {!showSkipConfirm && (
+                  <button
+                    onClick={() => setShowSkipConfirm(true)}
+                    disabled={startingCounterpick || skipping}
+                    className="text-sm text-foreground-muted hover:text-foreground-secondary transition-colors"
+                  >
+                    Skip &amp; activate league
+                  </button>
                 )}
-              </button>
+              </div>
             </div>
-            {error && <p className="mt-3 text-sm text-error">{error}</p>}
+
+            {/* Inline skip confirmation */}
+            {showSkipConfirm && (
+              <div className="mt-3 p-3 bg-elevated rounded-lg border border-border animate-fade-in">
+                <p className="text-sm text-foreground-secondary mb-3">
+                  Skip counterpick round? Teams won&apos;t be able to claim draft-phase counterpicks.
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleSkipCounterpick()}
+                    disabled={skipping}
+                    className="btn btn-danger text-sm py-1.5 px-4"
+                  >
+                    {skipping ? (
+                      <>
+                        <SpinnerIcon className="w-3 h-3 animate-spin mr-1" />
+                        Skipping...
+                      </>
+                    ) : (
+                      'Confirm Skip'
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setShowSkipConfirm(false)}
+                    disabled={skipping}
+                    className="btn btn-ghost text-sm py-1.5 px-4"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(error || skipError) && <p className="mt-3 text-sm text-error">{error || skipError}</p>}
           </div>
         </div>
       )}
