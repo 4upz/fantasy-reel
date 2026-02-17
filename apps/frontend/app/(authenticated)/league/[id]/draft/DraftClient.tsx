@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard, { PickHistory } from '../components/DraftBoard'
+import ConnectionStatusIndicator, { type RealtimeStatus } from '../components/ConnectionStatusIndicator'
 import { buildTeamInfoByTeamId, type TeamDisplayInfo } from '@/utils/league'
 import InvitationsList from '../components/InvitationsList'
 import JoinLinkCard from '../components/JoinLinkCard'
@@ -18,8 +19,9 @@ const InviteModal = dynamic(() => import('../components/InviteModal'), {
   loading: () => <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4"><div className="animate-pulse h-64 w-full max-w-md bg-surface rounded-lg" /></div>,
 })
 
-const MAX_RECONNECT_ATTEMPTS = 3
-const RECONNECT_DELAY_MS = 2000
+const MAX_RECONNECT_ATTEMPTS = 5
+const BASE_DELAY_MS = 2000
+const POLL_INTERVAL_MS = 10_000
 
 interface Props {
   league: League
@@ -98,60 +100,111 @@ export default function DraftClient({
   const [startingDraft, setStartingDraft] = useState(false)
   const [startingCounterpick, setStartingCounterpick] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting')
 
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
   const supabase = useMemo(() => createClient(), [])
   const reconnectAttemptsRef = useRef(0)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const channelIdRef = useRef(0)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  const fetchDraftPicks = useCallback(async () => {
-    // Explicit FK required: draft_picks has two FKs to teams (team_id, counterpicked_by_team_id)
-    // Without explicit FK, PostgREST returns PGRST201 ambiguous relationship error
-    const { data } = await supabase
-      .from('draft_picks')
-      .select(`*, movies (*), teams!draft_picks_team_id_fkey (*)`)
-      .eq('league_id', league.id)
-      .order('round', { ascending: true })
-      .order('pick_number', { ascending: true })
+  /**
+   * Wraps a Supabase query with consistent error handling and state update.
+   * Returns false on failure so callers can react to fetch outcomes.
+   */
+  const safeFetch = useCallback(
+    async <T,>(
+      label: string,
+      query: PromiseLike<{ data: T | null; error: { message: string } | null }>,
+      onSuccess: (data: T) => void,
+    ): Promise<boolean> => {
+      try {
+        const { data, error } = await query
+        if (error) {
+          console.warn(`[DraftClient] Failed to fetch ${label}:`, error.message)
+          return false
+        }
+        if (data) onSuccess(data)
+        return true
+      } catch (err) {
+        console.warn(`[DraftClient] Error fetching ${label}:`, err)
+        return false
+      }
+    },
+    [],
+  )
 
-    if (data) {
-      setDraftPicks(data as DraftPickWithDetails[])
+  // Explicit FK required: draft_picks has two FKs to teams (team_id, counterpicked_by_team_id)
+  // Without explicit FK, PostgREST returns PGRST201 ambiguous relationship error
+  const fetchDraftPicks = useCallback(
+    () =>
+      safeFetch(
+        'draft picks',
+        supabase
+          .from('draft_picks')
+          .select(`*, movies (*), teams!draft_picks_team_id_fkey (*)`)
+          .eq('league_id', league.id)
+          .order('round', { ascending: true })
+          .order('pick_number', { ascending: true }),
+        (data) => setDraftPicks(data as DraftPickWithDetails[]),
+      ),
+    [safeFetch, supabase, league.id],
+  )
+
+  const fetchParticipants = useCallback(
+    () =>
+      safeFetch(
+        'participants',
+        supabase
+          .from('league_participants')
+          .select(`*, teams (*), profiles (*)`)
+          .eq('league_id', league.id)
+          .eq('status', 'active')
+          .order('draft_order', { ascending: true }),
+        (data) => setParticipants(data as ParticipantWithProfile[]),
+      ),
+    [safeFetch, supabase, league.id],
+  )
+
+  const fetchCounterpicks = useCallback(
+    () =>
+      safeFetch(
+        'counterpicks',
+        supabase
+          .from('counterpicks')
+          .select('*, movies (*)')
+          .eq('league_id', league.id)
+          .order('pick_order', { ascending: true }),
+        (data) => setCounterpicks(data as CounterpickWithDetails[]),
+      ),
+    [safeFetch, supabase, league.id],
+  )
+
+  const startPolling = useCallback(() => {
+    if (pollingIntervalRef.current) return
+    pollingIntervalRef.current = setInterval(() => {
+      fetchDraftPicks()
+      fetchCounterpicks()
+    }, POLL_INTERVAL_MS)
+  }, [fetchDraftPicks, fetchCounterpicks])
+
+  const stopPolling = useCallback(() => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current)
+      pollingIntervalRef.current = null
     }
-  }, [supabase, league.id])
-
-  const fetchParticipants = useCallback(async () => {
-    const { data } = await supabase
-      .from('league_participants')
-      .select(`*, teams (*), profiles (*)`)
-      .eq('league_id', league.id)
-      .eq('status', 'active')
-      .order('draft_order', { ascending: true })
-
-    if (data) {
-      setParticipants(data as ParticipantWithProfile[])
-    }
-  }, [supabase, league.id])
-
-  const fetchCounterpicks = useCallback(async () => {
-    const { data } = await supabase
-      .from('counterpicks')
-      .select('*, movies (*)')
-      .eq('league_id', league.id)
-      .order('pick_order', { ascending: true })
-
-    if (data) {
-      setCounterpicks(data as CounterpickWithDetails[])
-    }
-  }, [supabase, league.id])
+  }, [])
 
   // Real-time subscriptions
   useEffect(() => {
     let currentChannel: ReturnType<typeof supabase.channel> | null = null
     let isCleaningUp = false
 
-    function setupChannel(): void {
+    function setupChannel(isReconnect = false): void {
       if (isCleaningUp) return
+
+      setRealtimeStatus(isReconnect ? 'reconnecting' : 'connecting')
 
       if (currentChannel) {
         supabase.removeChannel(currentChannel)
@@ -207,14 +260,25 @@ export default function DraftClient({
           if (isCleaningUp || thisChannelId !== channelIdRef.current) return
 
           if (status === 'SUBSCRIBED') {
+            const wasReconnect = reconnectAttemptsRef.current > 0
             reconnectAttemptsRef.current = 0
+            setRealtimeStatus('connected')
+            stopPolling()
+            if (wasReconnect) {
+              fetchDraftPicks()
+              fetchCounterpicks()
+            }
             return
           }
 
           if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
             if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
               reconnectAttemptsRef.current++
-              reconnectTimeoutRef.current = setTimeout(setupChannel, RECONNECT_DELAY_MS)
+              const delay = BASE_DELAY_MS * Math.pow(2, reconnectAttemptsRef.current - 1)
+              reconnectTimeoutRef.current = setTimeout(() => setupChannel(true), delay)
+            } else {
+              setRealtimeStatus('error')
+              startPolling()
             }
           }
         })
@@ -226,14 +290,25 @@ export default function DraftClient({
 
     return () => {
       isCleaningUp = true
+      stopPolling()
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
       }
       if (currentChannel) {
         supabase.removeChannel(currentChannel)
       }
+      reconnectAttemptsRef.current = 0
     }
-  }, [league.id, supabase, fetchDraftPicks, fetchParticipants, fetchCounterpicks])
+  }, [league.id, supabase, fetchDraftPicks, fetchParticipants, fetchCounterpicks, startPolling, stopPolling])
+
+  // Safety-net cleanup for polling interval
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [])
 
   const handlePickMade = useCallback(async () => {
     await fetchDraftPicks()
@@ -266,7 +341,6 @@ export default function DraftClient({
     setStartingDraft(false)
   }
 
-  // Check if draft is complete (all picks made)
   const totalPicks = participants.length * league.draft_slots
   const isDraftComplete = league.status === 'drafting' && draftPicks.length >= totalPicks
   const canStartCounterpick =
@@ -345,6 +419,15 @@ export default function DraftClient({
             </div>
             {error && <p className="mt-3 text-sm text-error">{error}</p>}
           </div>
+        </div>
+      )}
+
+      {(league.status === 'drafting' || league.status === 'counterpicking') && (
+        <div className="mb-4 flex items-center justify-between">
+          <ConnectionStatusIndicator status={realtimeStatus} />
+          {realtimeStatus === 'error' && (
+            <span className="text-xs text-foreground-muted">Updates every 10s</span>
+          )}
         </div>
       )}
 
