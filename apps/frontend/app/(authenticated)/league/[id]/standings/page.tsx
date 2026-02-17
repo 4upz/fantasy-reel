@@ -2,7 +2,6 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import StandingsClient from './StandingsClient'
 import type {
-  League,
   ParticipantWithTeamScore,
   DraftPickWithScores,
 } from '@/types'
@@ -106,7 +105,6 @@ export default async function StandingsPage({ params }: PageProps) {
 
   return (
     <StandingsClient
-      league={league as League}
       participants={participantsWithProfiles as ParticipantWithTeamScore[]}
       draftPicks={(draftPicks ?? []) as DraftPickWithScores[]}
       currentUserId={user.id}

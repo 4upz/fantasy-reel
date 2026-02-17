@@ -1,22 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createClient } from '@/utils/supabase/client'
+import { useMemo } from 'react'
 import type {
-  League,
   ParticipantWithTeamScore,
   DraftPickWithScores,
   RankedTeam,
 } from '@/types'
-import type { RealtimeStatus } from '../components/ConnectionStatusIndicator'
-import ConnectionStatusIndicator from '../components/ConnectionStatusIndicator'
 import TeamStandingCard from './TeamStandingCard'
 
-const MAX_RECONNECT_ATTEMPTS = 3
-const RECONNECT_DELAY_MS = 2000
-
 interface Props {
-  league: League
   participants: ParticipantWithTeamScore[]
   draftPicks: DraftPickWithScores[]
   currentUserId: string
@@ -77,179 +69,25 @@ function calculateRankings(
 }
 
 export default function StandingsClient({
-  league: initialLeague,
-  participants: initialParticipants,
-  draftPicks: initialDraftPicks,
+  participants,
+  draftPicks,
   currentUserId,
 }: Props) {
-  const [league, setLeague] = useState(initialLeague)
-  const [participants, setParticipants] = useState(initialParticipants)
-  const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
-  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting')
-
-  const supabase = useMemo(() => createClient(), [])
-
-  const reconnectAttemptsRef = useRef(0)
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const channelIdRef = useRef(0)
-
-  // Calculate rankings whenever data changes
   const rankedTeams = useMemo(
     () => calculateRankings(participants, draftPicks),
     [participants, draftPicks]
   )
 
-  // Calculate summary stats
   const summaryStats = useMemo(() => {
     const moviesScored = draftPicks.filter((pick) => pick.movies?.combined_score != null).length
     const moviesPending = draftPicks.length - moviesScored
     return { moviesScored, moviesPending, totalMovies: draftPicks.length }
   }, [draftPicks])
 
-  // Fetch functions for real-time updates
-  const fetchParticipants = useCallback(async () => {
-    const { data } = await supabase
-      .from('league_participants')
-      .select(`*, teams (*, team_scores (*)), profiles (*)`)
-      .eq('league_id', league.id)
-      .eq('status', 'active')
-      .order('draft_order', { ascending: true })
-
-    if (data) {
-      setParticipants(data as ParticipantWithTeamScore[])
-    }
-  }, [supabase, league.id])
-
-  const fetchDraftPicks = useCallback(async () => {
-    const { data } = await supabase
-      .from('draft_picks')
-      .select(`*, movies (*, reviews (*))`)
-      .eq('league_id', league.id)
-      .order('round', { ascending: true })
-      .order('pick_number', { ascending: true })
-
-    if (data) {
-      setDraftPicks(data as DraftPickWithScores[])
-    }
-  }, [supabase, league.id])
-
-  // Set up real-time subscriptions
-  useEffect(() => {
-    let currentChannel: ReturnType<typeof supabase.channel> | null = null
-    let isCleaningUp = false
-
-    function setupChannel(): void {
-      if (isCleaningUp) return
-
-      if (currentChannel) {
-        supabase.removeChannel(currentChannel)
-        currentChannel = null
-      }
-
-      const isReconnect = reconnectAttemptsRef.current > 0
-      setRealtimeStatus(isReconnect ? 'reconnecting' : 'connecting')
-
-      channelIdRef.current++
-      const thisChannelId = channelIdRef.current
-
-      // Get all team IDs for filtering
-      const teamIds = participants
-        .map((p) => p.teams?.id)
-        .filter((id): id is string => !!id)
-
-      // Get all movie IDs for filtering
-      const movieIds = draftPicks
-        .map((p) => p.movies?.id)
-        .filter((id): id is string => !!id)
-
-      const channel = supabase
-        .channel(`standings-${league.id}-${thisChannelId}`)
-        // Listen for team_scores updates
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'team_scores',
-          },
-          (payload) => {
-            // Check if this team is in our league
-            if (teamIds.includes(payload.new.team_id as string)) {
-              fetchParticipants()
-            }
-          }
-        )
-        // Listen for movie score updates
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'movies',
-          },
-          (payload) => {
-            // Check if this movie is drafted in our league
-            if (movieIds.includes(payload.new.id as string)) {
-              fetchDraftPicks()
-            }
-          }
-        )
-        // Listen for league status changes
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'leagues',
-            filter: `id=eq.${league.id}`,
-          },
-          (payload) => setLeague(payload.new as League)
-        )
-        .subscribe((status) => {
-          if (isCleaningUp || thisChannelId !== channelIdRef.current) return
-
-          if (status === 'SUBSCRIBED') {
-            reconnectAttemptsRef.current = 0
-            setRealtimeStatus('connected')
-            return
-          }
-
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-            if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
-              reconnectAttemptsRef.current++
-              setRealtimeStatus('reconnecting')
-              reconnectTimeoutRef.current = setTimeout(setupChannel, RECONNECT_DELAY_MS)
-            } else {
-              setRealtimeStatus('error')
-            }
-          }
-        })
-
-      currentChannel = channel
-    }
-
-    setupChannel()
-
-    return () => {
-      isCleaningUp = true
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
-      }
-      if (currentChannel) {
-        supabase.removeChannel(currentChannel)
-      }
-      reconnectAttemptsRef.current = 0
-    }
-  }, [league.id, supabase, fetchParticipants, fetchDraftPicks, participants, draftPicks])
-
   return (
     <div className="space-y-6 animate-fade-in" data-testid="standings-container">
       {/* Summary Stats Bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <ConnectionStatusIndicator status={realtimeStatus} />
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex gap-6 text-sm">
           <div className="text-center">
             <div className="text-xl font-bold font-display text-gold">{summaryStats.totalMovies}</div>
