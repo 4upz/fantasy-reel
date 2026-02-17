@@ -32,58 +32,6 @@ interface Props {
   isOwner: boolean
 }
 
-interface MobilePickHistoryProps {
-  draftPicks: DraftPickWithDetails[]
-  teamInfoById: Map<string, TeamDisplayInfo>
-}
-
-function MobilePickHistory({ draftPicks, teamInfoById }: MobilePickHistoryProps): React.ReactElement {
-  const [isOpen, setIsOpen] = useState(false)
-
-  return (
-    <div className="lg:hidden">
-      {/* Floating toggle button */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-16 right-4 z-30 bg-gold text-background rounded-full w-12 h-12 flex items-center justify-center shadow-heavy hover:bg-gold-hover transition-colors"
-        data-testid="pick-history-toggle"
-        aria-label={`Pick history (${draftPicks.length} picks)`}
-      >
-        <span className="text-sm font-bold">{draftPicks.length}</span>
-      </button>
-
-      {/* Slide-up panel */}
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setIsOpen(false)} />
-          <div
-            className="fixed bottom-0 left-0 right-0 z-50 bg-surface border-t border-border rounded-t-2xl animate-slide-up safe-area-bottom"
-            data-testid="pick-history-panel"
-          >
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-display font-semibold text-foreground">
-                  Pick History ({draftPicks.length})
-                </h3>
-                <button
-                  onClick={() => setIsOpen(false)}
-                  className="text-foreground-muted hover:text-foreground p-1"
-                  aria-label="Close pick history"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="max-h-[60vh] overflow-y-auto">
-                <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
 export default function DraftClient({
   league: initialLeague,
   participants: initialParticipants,
@@ -101,6 +49,7 @@ export default function DraftClient({
   const [startingCounterpick, setStartingCounterpick] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting')
+  const [pickHistoryExpanded, setPickHistoryExpanded] = useState(false)
 
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
   const supabase = useMemo(() => createClient(), [])
@@ -447,13 +396,32 @@ export default function DraftClient({
         <div className="order-1 lg:order-2 space-y-6 lg:sticky lg:top-6 lg:self-start">
           <ParticipantsList participants={participants} ownerId={league.owner_id} />
 
-          {/* Pick History in sidebar during drafting - desktop only */}
           {league.status === 'drafting' && draftPicks.length > 0 && (
-            <div className="hidden lg:block card p-6" data-testid="draft-history">
+            <div className="card p-4 lg:p-6" data-testid="draft-history">
               <h3 className="text-lg font-display font-semibold text-foreground mb-4">
                 Pick History
               </h3>
-              <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
+              <div className="hidden lg:block">
+                <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
+              </div>
+              <div className="lg:hidden">
+                <div className={pickHistoryExpanded ? 'max-h-[50vh] overflow-y-auto' : ''}>
+                  <PickHistory
+                    draftPicks={pickHistoryExpanded ? draftPicks : draftPicks.slice(-3)}
+                    teamInfoById={teamInfoById}
+                  />
+                </div>
+                {draftPicks.length > 3 && (
+                  <button
+                    onClick={() => setPickHistoryExpanded((prev) => !prev)}
+                    className="w-full mt-3 text-sm text-gold hover:text-gold-hover font-medium transition-colors"
+                    aria-expanded={pickHistoryExpanded}
+                    data-testid="pick-history-expand"
+                  >
+                    {pickHistoryExpanded ? 'Show less' : `Show all ${draftPicks.length} picks`}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -472,11 +440,6 @@ export default function DraftClient({
           )}
         </div>
       </div>
-
-      {/* Mobile Pick History Panel */}
-      {league.status === 'drafting' && draftPicks.length > 0 && (
-        <MobilePickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
-      )}
 
       {showInviteModal && (
         <InviteModal leagueId={league.id} onClose={() => setShowInviteModal(false)} />
