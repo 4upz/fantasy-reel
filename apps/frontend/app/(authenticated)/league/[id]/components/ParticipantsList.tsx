@@ -1,3 +1,7 @@
+'use client'
+
+import { useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import type { ParticipantWithProfile } from '@/types'
 
 interface Props {
@@ -5,42 +9,61 @@ interface Props {
   ownerId: string
 }
 
-export default function ParticipantsList({ participants, ownerId }: Props) {
+export default function ParticipantsList({ participants, ownerId }: Props): React.ReactElement {
+  const [isExpanded, setIsExpanded] = useState(false)
+
   return (
     <div className="card p-6">
-      <h2 className="text-xl font-semibold font-display text-foreground mb-4">Participants</h2>
-      {participants.length === 0 ? (
-        <p className="text-foreground-muted">No participants yet</p>
-      ) : (
-        <div className="space-y-3">
-          {participants.map((participant) => (
-            <div
-              key={participant.id}
-              className="flex items-center p-3 bg-elevated rounded-lg border border-border"
-            >
-              <div className="flex-1">
-                <p className="font-medium text-foreground">{participant.teams?.name || 'No Team'}</p>
-                {participant.profiles?.display_name && (
-                  <p className="text-xs text-foreground-muted">{participant.profiles.display_name}</p>
-                )}
-                <p className="text-sm text-foreground-muted">
-                  Draft Order: {participant.draft_order}
-                  {participant.user_id === ownerId && (
-                    <span className="ml-2 text-gold font-medium">(Owner)</span>
-                  )}
-                </p>
-              </div>
-              <span
-                className={`badge ${
-                  participant.role === 'owner' ? 'bg-gold-muted text-gold' : 'bg-elevated text-foreground-muted'
-                }`}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        aria-expanded={isExpanded}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <h2 className="text-xl font-semibold font-display text-foreground">
+          Participants ({participants.length})
+        </h2>
+        <ChevronDown
+          className={`h-5 w-5 text-foreground-muted transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      <div
+        className={`overflow-hidden transition-all duration-300 ease-in-out ${
+          isExpanded ? 'max-h-[1000px] opacity-100 mt-4' : 'max-h-0 opacity-0'
+        }`}
+      >
+        {participants.length === 0 ? (
+          <p className="text-foreground-muted">No participants yet</p>
+        ) : (
+          <div className="space-y-3">
+            {participants.map((participant) => (
+              <div
+                key={participant.id}
+                className="flex items-center p-3 bg-elevated rounded-lg border border-border"
               >
-                {participant.role}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+                <div className="flex-1">
+                  <p className="font-medium text-foreground">{participant.teams?.name || 'No Team'}</p>
+                  {participant.profiles?.display_name && (
+                    <p className="text-xs text-foreground-muted">{participant.profiles.display_name}</p>
+                  )}
+                  <p className="text-sm text-foreground-muted">
+                    Draft Order: {participant.draft_order}
+                    {participant.user_id === ownerId && (
+                      <span className="ml-2 text-gold font-medium">(Owner)</span>
+                    )}
+                  </p>
+                </div>
+                <span
+                  className={`badge ${
+                    participant.role === 'owner' ? 'bg-gold-muted text-gold' : 'bg-elevated text-foreground-muted'
+                  }`}
+                >
+                  {participant.role}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
