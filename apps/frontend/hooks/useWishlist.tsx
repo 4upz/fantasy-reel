@@ -2,10 +2,11 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
-import type { TMDbSearchResult } from '@/types'
+import type { TMDbSearchResult, WishlistedMovie } from '@/types'
 
 interface WishlistContextValue {
   wishlistedIds: Set<number>
+  wishlistMovies: WishlistedMovie[]
   isLoading: boolean
   toggleWishlist: (movie: TMDbSearchResult) => void
   isWishlisted: (tmdbId: number) => boolean
@@ -13,18 +14,32 @@ interface WishlistContextValue {
 
 const WishlistContext = createContext<WishlistContextValue | null>(null)
 
+function clearLegacyLocalStorageFavorites(): void {
+  if (typeof window === 'undefined') return
+  const keysToRemove: string[] = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key && key.startsWith('draft-favorites-')) {
+      keysToRemove.push(key)
+    }
+  }
+  keysToRemove.forEach((key) => localStorage.removeItem(key))
+}
+
 /**
  * Provider that manages wishlist state. Mount once in the authenticated layout
  * so all consumers share the same data.
  */
 export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [wishlistedIds, setWishlistedIds] = useState<Set<number>>(new Set())
+  const [wishlistMovies, setWishlistMovies] = useState<WishlistedMovie[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const inFlightRef = useRef<Set<number>>(new Set())
+  const wishlistedIdsRef = useRef(wishlistedIds)
+  wishlistedIdsRef.current = wishlistedIds
 
   const supabase = useMemo(() => createClient(), [])
 
-  // Fetch wishlist on mount
   useEffect(() => {
     let cancelled = false
 
@@ -34,29 +49,21 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
 
       const { data, error } = await supabase
         .from('wishlisted_movies')
-        .select('tmdb_id')
+        .select('*')
         .eq('user_id', user.id)
+        .order('added_at', { ascending: false })
 
       if (cancelled) return
 
       if (error) {
         console.error('Failed to fetch wishlist:', error.message)
       } else {
-        setWishlistedIds(new Set(data?.map((row) => row.tmdb_id) ?? []))
+        const rows = data ?? []
+        setWishlistedIds(new Set(rows.map((row) => row.tmdb_id)))
+        setWishlistMovies(rows)
       }
       setIsLoading(false)
-
-      // Clean up legacy localStorage favorites
-      if (typeof window !== 'undefined') {
-        const keysToRemove: string[] = []
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i)
-          if (key && key.startsWith('draft-favorites-')) {
-            keysToRemove.push(key)
-          }
-        }
-        keysToRemove.forEach(key => localStorage.removeItem(key))
-      }
+      clearLegacyLocalStorageFavorites()
     }
 
     fetchWishlist()
@@ -77,18 +84,39 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      const wasWishlisted = wishlistedIds.has(tmdbId)
+      const wasWishlisted = wishlistedIdsRef.current.has(tmdbId)
 
-      // Optimistic update
-      setWishlistedIds((prev) => {
+      function toggleIdSet(prev: Set<number>, adding: boolean): Set<number> {
         const next = new Set(prev)
-        if (wasWishlisted) {
-          next.delete(tmdbId)
-        } else {
+        if (adding) {
           next.add(tmdbId)
+        } else {
+          next.delete(tmdbId)
         }
         return next
-      })
+      }
+
+      function buildWishlistMovie(): WishlistedMovie {
+        return {
+          id: crypto.randomUUID(),
+          user_id: user!.id,
+          tmdb_id: tmdbId,
+          title: movie.title,
+          poster_url: movie.poster_url,
+          added_at: new Date().toISOString(),
+        }
+      }
+
+      function applyOptimisticUpdate(adding: boolean): void {
+        setWishlistedIds((prev) => toggleIdSet(prev, adding))
+        if (adding) {
+          setWishlistMovies((prev) => [buildWishlistMovie(), ...prev])
+        } else {
+          setWishlistMovies((prev) => prev.filter((wm) => wm.tmdb_id !== tmdbId))
+        }
+      }
+
+      applyOptimisticUpdate(!wasWishlisted)
 
       try {
         if (wasWishlisted) {
@@ -115,22 +143,13 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
           if (error) throw error
         }
       } catch (err) {
-        // Roll back optimistic update
-        setWishlistedIds((prev) => {
-          const next = new Set(prev)
-          if (wasWishlisted) {
-            next.add(tmdbId)
-          } else {
-            next.delete(tmdbId)
-          }
-          return next
-        })
+        applyOptimisticUpdate(wasWishlisted)
         console.error('Failed to toggle wishlist:', err)
       } finally {
         inFlightRef.current.delete(tmdbId)
       }
     },
-    [supabase, wishlistedIds]
+    [supabase]
   )
 
   const isWishlisted = useCallback(
@@ -139,8 +158,8 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   )
 
   const value = useMemo(
-    () => ({ wishlistedIds, isLoading, toggleWishlist, isWishlisted }),
-    [wishlistedIds, isLoading, toggleWishlist, isWishlisted]
+    () => ({ wishlistedIds, wishlistMovies, isLoading, toggleWishlist, isWishlisted }),
+    [wishlistedIds, wishlistMovies, isLoading, toggleWishlist, isWishlisted]
   )
 
   return (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useMemo } from 'react'
-import type { TMDbSearchResult } from '@/types'
+import type { TMDbSearchResult, WishlistedMovie } from '@/types'
 import { useWishlist } from '@/hooks/useWishlist'
 import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
 import DraftFilters from './DraftFilters'
@@ -53,13 +53,26 @@ function getEmptyStateMessage(activeTab: TabType, mode: string): string {
   return 'No movies match your filters'
 }
 
+function wishlistToTMDbResult(wm: WishlistedMovie): TMDbSearchResult {
+  return {
+    tmdb_id: wm.tmdb_id,
+    title: wm.title,
+    poster_url: wm.poster_url,
+    overview: null,
+    release_date: null,
+    vote_average: 0,
+    popularity: 0,
+    genre_ids: [],
+  }
+}
+
 export default function MoviePicker({
   draftedTmdbIds,
   isMyTurn,
   picking,
   onPick,
 }: Props): React.ReactElement {
-  const { wishlistedIds } = useWishlist()
+  const { wishlistedIds, wishlistMovies } = useWishlist()
   const [activeTab, setActiveTab] = useState<TabType>('all')
   const [previewMovie, setPreviewMovie] = useState<TMDbSearchResult | null>(null)
   const {
@@ -92,7 +105,6 @@ export default function MoviePicker({
     [loading, loadingMore, loadMore]
   )
 
-  // Memoize to prevent re-renders (rerender-memo optimization)
   const filteredMovies = useMemo(() => {
     switch (activeTab) {
       case 'trending':
@@ -100,30 +112,29 @@ export default function MoviePicker({
         return movies
       case 'releasing-soon':
         return movies.filter((m) => isWithinDays(m.release_date, 30))
-      case 'wishlist':
-        return movies.filter((m) => wishlistedIds.has(m.tmdb_id))
+      case 'wishlist': {
+        const loadedMap = new Map(movies.map((m) => [m.tmdb_id, m]))
+        return wishlistMovies.map((wm) =>
+          loadedMap.get(wm.tmdb_id) ?? wishlistToTMDbResult(wm)
+        )
+      }
       default:
         return movies
     }
-  }, [movies, activeTab, wishlistedIds])
+  }, [movies, activeTab, wishlistMovies])
 
-  // Handle tab changes — fetch trending data server-side or restore browse
   const handleTabChange = useCallback(
     (tab: TabType) => {
-      setActiveTab((prev) => {
-        if (tab === 'trending') {
-          fetchTrending()
-        } else if (prev === 'trending') {
-          // Leaving trending tab — restore browse results
-          browse({ releaseWindow: 'year', genres: [], minRating: 0 })
-        }
-        return tab
-      })
+      if (tab === 'trending') {
+        fetchTrending()
+      } else if (activeTab === 'trending') {
+        browse({ releaseWindow: 'year', genres: [], minRating: 0 })
+      }
+      setActiveTab(tab)
     },
-    [fetchTrending, browse]
+    [activeTab, fetchTrending, browse]
   )
 
-  // Handle filter changes - hook handles debouncing
   const handleFiltersChange = useCallback(
     (newFilters: BrowseFilters & { search: string }) => {
       const { search: searchValue, ...browseFilters } = newFilters
@@ -141,14 +152,14 @@ export default function MoviePicker({
   )
 
   function handleDraftFromPreview(tmdbId: number): void {
-    const movie = movies.find((m) => m.tmdb_id === tmdbId)
+    const movie = filteredMovies.find((m) => m.tmdb_id === tmdbId)
+      ?? movies.find((m) => m.tmdb_id === tmdbId)
     if (movie) {
       onPick(tmdbId, movie)
     }
     setPreviewMovie(null)
   }
 
-  // Count available (non-drafted) movies
   const availableCount = filteredMovies.filter((m) => !draftedTmdbIds.has(m.tmdb_id)).length
 
   return (
