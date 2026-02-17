@@ -106,16 +106,29 @@ export const setLeague: Command = {
 
     // Create webhook
     const channel = interaction.channel
-    if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
+    const allowedTypes = new Set([
+      ChannelType.GuildText,
+      ChannelType.GuildAnnouncement,
+      ChannelType.PublicThread,
+      ChannelType.PrivateThread,
+    ])
+    if (!channel || !allowedTypes.has(channel.type)) {
       await interaction.editReply(
-        'This command must be run in a text or announcement channel.'
+        'This command must be run in a text, announcement, or thread/post channel.'
       )
+      return
+    }
+
+    // Threads/forum posts can't create webhooks directly — use the parent channel
+    const webhookChannel = channel.isThread() ? channel.parent : channel
+    if (!webhookChannel || !('createWebhook' in webhookChannel)) {
+      await interaction.editReply('Could not access the parent channel to create a webhook.')
       return
     }
 
     let webhook
     try {
-      webhook = await channel.createWebhook({
+      webhook = await webhookChannel.createWebhook({
         name: 'Fantasy Reel',
         avatar: FANTASY_REEL_ICON,
       })
