@@ -128,7 +128,8 @@ export const configure: Command = {
 
     const reply = await interaction.editReply({
       embeds: [buildSettingsEmbed(settings, leagueName)],
-      components: [buildButtons(settings)],
+      // Type assertion: discord-api-types version mismatch between discord.js sub-packages
+      components: [buildButtons(settings) as never],
     })
 
     // Collect button interactions for 15 minutes
@@ -159,16 +160,19 @@ export const configure: Command = {
 
       await interaction.editReply({
         embeds: [buildSettingsEmbed(settings, leagueName)],
-        components: [buildButtons(settings)],
+        components: [buildButtons(settings) as never],
       })
     })
 
     collector.on('end', async () => {
       // Disable buttons when collector expires
+      const currentButtons = buildButtons(settings)
       const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        ...buildButtons(settings).components.map((b) => ButtonBuilder.from(b).setDisabled(true))
+        ...currentButtons.components.map((b) =>
+          ButtonBuilder.from(b.toJSON() as never).setDisabled(true)
+        )
       )
-      await interaction.editReply({ components: [disabledRow] }).catch(console.error)
+      await interaction.editReply({ components: [disabledRow as never] }).catch(console.error)
     })
   },
 }

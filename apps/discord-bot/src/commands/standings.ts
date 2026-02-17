@@ -85,7 +85,7 @@ export const standings: Command = {
           league_participants?: { user_id?: string }
         } | null
         if (team?.league_participants?.user_id === userId) {
-          invokerTeamId = team.id || null
+          invokerTeamId = team?.id || null
           break
         }
       }
