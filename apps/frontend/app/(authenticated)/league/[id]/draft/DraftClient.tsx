@@ -349,7 +349,7 @@ export default function DraftClient({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+        <div className="order-2 lg:order-1 lg:col-span-2">
           <DraftBoard
             league={league}
             participants={participants}
@@ -361,7 +361,7 @@ export default function DraftClient({
           />
         </div>
 
-        <div className="space-y-6 lg:sticky lg:top-6 lg:self-start">
+        <div className="order-1 lg:order-2 space-y-6 lg:sticky lg:top-6 lg:self-start">
           <ParticipantsList participants={participants} ownerId={league.owner_id} />
 
           {/* Pick History in sidebar during drafting - desktop only */}
