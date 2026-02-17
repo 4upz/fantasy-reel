@@ -122,7 +122,7 @@ export function useDraftMovies({ draftedTmdbIds }: UseDraftMoviesOptions): UseDr
 
       await fetchMovies<TMDbSearchResponse>(
         'search-movies',
-        { query: query.trim(), page: searchPage },
+        { query: query.trim(), page: searchPage, upcoming_only: true },
         'search',
         append
       )
