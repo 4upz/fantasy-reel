@@ -1,6 +1,15 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isUpcomingMovie } from '../_shared/utils.ts'
+import {
+  jsonResponse,
+  errorResponse,
+  handleCorsPreflightRequest,
+  authenticateRequest,
+  isAuthError,
+  isValidUUID,
+  isUpcomingMovie,
+  createServiceClient,
+} from '../_shared/utils.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
+import { activateLeague } from '../_shared/activation.ts'
 
 interface MovieData {
   title: string
@@ -28,42 +37,18 @@ interface NextPickInfo {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight requests
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
   try {
-    // Create user-authenticated client for auth validation
-    const userClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    )
+    const authResult = await authenticateRequest(req)
+    if (isAuthError(authResult)) return authResult
+    const { user } = authResult
 
-    // Validate the user
-    const {
-      data: { user },
-      error: authError,
-    } = await userClient.auth.getUser()
+    const serviceClient = createServiceClient()
 
-    if (authError || !user) {
-      return errorResponse('Unauthorized', 401)
-    }
-
-    // Create service role client for atomic operations
-    const serviceClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    // Parse request body
     const { league_id, tmdb_id, movie_data }: DraftPickRequest = await req.json()
 
-    // Validate required fields
     if (!league_id || !isValidUUID(league_id)) {
       return errorResponse('Valid league_id is required', 400)
     }
@@ -72,7 +57,6 @@ Deno.serve(async (req) => {
       return errorResponse('Valid tmdb_id is required', 400)
     }
 
-    // Fetch the league
     const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
       .select('*')
@@ -83,7 +67,6 @@ Deno.serve(async (req) => {
       return errorResponse('League not found', 404)
     }
 
-    // Validate league status
     if (league.status !== 'drafting') {
       if (league.status === 'setup') {
         return errorResponse('Draft has not started yet', 400)
@@ -91,7 +74,6 @@ Deno.serve(async (req) => {
       return errorResponse('Draft has already ended', 400)
     }
 
-    // Get next pick info using the database function
     const { data: nextPickData, error: nextPickError } = await serviceClient
       .rpc('get_next_draft_pick', { p_league_id: league_id })
 
@@ -107,12 +89,10 @@ Deno.serve(async (req) => {
 
     const nextPick: NextPickInfo = nextPickData[0]
 
-    // Verify it's the user's turn
     if (nextPick.user_id !== user.id) {
       return errorResponse('It is not your turn to pick', 403)
     }
 
-    // Find or create movie by tmdb_id
     let movie: { id: string; title: string; poster_url: string | null; release_date: string | null; status: string }
 
     const { data: existingMovie, error: movieError } = await serviceClient
@@ -166,18 +146,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Validate movie is eligible for drafting (upcoming, current year or later)
     const eligibility = isUpcomingMovie(movie.release_date)
     if (!eligibility.valid) {
       return errorResponse(`This movie cannot be drafted: ${eligibility.reason}`, 400)
     }
 
-    // Check movie status (belt and suspenders with the date check above)
+    // Belt-and-suspenders: also verify status field
     if (movie.status !== 'upcoming') {
       return errorResponse('This movie is not available for drafting', 400)
     }
 
-    // Check if movie already drafted in this league
     const { data: existingPick } = await serviceClient
       .from('draft_picks')
       .select('id')
@@ -189,7 +167,6 @@ Deno.serve(async (req) => {
       return errorResponse('This movie has already been drafted', 400)
     }
 
-    // Insert the draft pick
     const { data: pick, error: pickError } = await serviceClient
       .from('draft_picks')
       .insert({
@@ -211,7 +188,6 @@ Deno.serve(async (req) => {
       return errorResponse('Failed to record draft pick', 500)
     }
 
-    // Get the next pick (for the response)
     const { data: upcomingPickData } = await serviceClient
       .rpc('get_next_draft_pick', { p_league_id: league_id })
 
@@ -221,67 +197,17 @@ Deno.serve(async (req) => {
     if (!upcomingPickData || upcomingPickData.length === 0) {
       draftComplete = true
 
-      // Update league status to 'active'
-      const { error: statusError } = await serviceClient
-        .from('leagues')
-        .update({ status: 'active' })
-        .eq('id', league_id)
-
-      if (statusError) {
-        console.error('Failed to update league status:', statusError)
-        // Continue anyway - draft pick was recorded successfully
-      }
-
-      // Initialize team budgets for bidding
-      const { error: budgetError } = await serviceClient.rpc('initialize_team_budgets', { p_league_id: league_id })
-      if (budgetError) {
-        console.error('Failed to initialize team budgets:', budgetError)
-        // Log but don't fail - can be manually fixed if needed
-      }
-
-      // Create team_scores for all teams in the league
-      // First, get participant IDs for this league
-      const { data: participants } = await serviceClient
-        .from('league_participants')
-        .select('id')
-        .eq('league_id', league_id)
-
-      const participantIds = participants?.map(p => p.id) || []
-
-      const { data: teams } = participantIds.length > 0
-        ? await serviceClient
-            .from('teams')
-            .select('id, participant_id')
-            .in('participant_id', participantIds)
-        : { data: [] }
-
-      if (teams && teams.length > 0) {
-        // Use bulk upsert instead of loop for better performance
-        const teamScores = teams.map(team => ({
-          team_id: team.id,
-          total_points: 0,
-          draft_points: 0,
-          counterpick_points: 0,
-          movies_scored: 0,
-          movies_pending: 0,
-          counterpicks_made: 0,
-          counterpicks_scored: 0,
-        }))
-
-        const { error: scoresError } = await serviceClient
-          .from('team_scores')
-          .upsert(teamScores, { onConflict: 'team_id' })
-
-        if (scoresError) {
-          console.error('Failed to initialize team scores:', scoresError)
-          // Log but don't fail - can be manually fixed if needed
+      // Only activate if no counterpick slots configured
+      if ((league.draft_counterpick_slots ?? 0) === 0) {
+        const result = await activateLeague(serviceClient, league_id, 'drafting')
+        if (result.error) {
+          console.error('Failed to activate league:', result.error)
         }
       }
     } else {
       upcomingPick = upcomingPickData[0]
     }
 
-    // Discord notifications
     const { data: pickerTeam } = await serviceClient.from('teams').select('name').eq('id', nextPick.team_id).single()
     const pickerTeamName = pickerTeam?.name ?? 'A team'
     const leagueName = league.name ?? 'Fantasy Reel League'
@@ -302,16 +228,19 @@ Deno.serve(async (req) => {
         }],
       })
 
+      const hasCounterpicks = (league.draft_counterpick_slots ?? 0) > 0
       await sendDiscordNotification(serviceClient, {
         leagueId: league_id,
         category: 'drafts',
         embeds: [{
           author: buildEmbedAuthor(leagueName, league_id),
-          title: 'Draft Complete',
-          description: `${totalPicks} selections across ${pick.round} rounds. The season is underway.`,
-          color: DISCORD_COLORS.green,
-          footer: { text: `${leagueName} is now active` },
-          url: buildLeagueUrl(league_id, '/standings'),
+          title: hasCounterpicks ? 'Draft Picks Complete' : 'Draft Complete',
+          description: hasCounterpicks
+            ? `${totalPicks} selections across ${pick.round} rounds. Counterpick round available.`
+            : `${totalPicks} selections across ${pick.round} rounds. The season is underway.`,
+          color: hasCounterpicks ? DISCORD_COLORS.yellow : DISCORD_COLORS.green,
+          footer: { text: hasCounterpicks ? 'Counterpick round available' : `${leagueName} is now active` },
+          url: buildLeagueUrl(league_id, hasCounterpicks ? '/draft' : '/standings'),
         }],
       })
     } else {

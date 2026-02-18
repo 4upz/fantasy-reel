@@ -61,6 +61,129 @@ interface ProcessResult {
   movie_title: string
 }
 
+interface CounterpickBid {
+  id: string
+  league_id: string
+  team_id: string
+  movie_id: string
+  target_team_id: string
+  draft_pick_id: string
+  amount: number
+  status: string
+  created_at: string
+  countered_at: string | null
+  response_deadline: string | null
+  processing_deadline: string
+}
+
+interface CounterpickProcessResult {
+  movie_id: string
+  league_id: string
+  winner_team_id: string
+  amount: number
+  movie_title: string
+}
+
+interface BidResultSummary {
+  league_id: string
+  winner_team_id: string
+  amount: number
+  movie_title: string
+}
+
+// deno-lint-ignore no-explicit-any
+type ServiceClient = ReturnType<typeof createClient<any>>
+
+async function deductTeamBudget(
+  serviceClient: ServiceClient,
+  teamId: string,
+  amount: number,
+): Promise<void> {
+  const { data: currentBudget, error: budgetFetchError } = await serviceClient
+    .from('team_budgets')
+    .select('remaining_budget, total_spent')
+    .eq('team_id', teamId)
+    .single()
+
+  if (budgetFetchError || !currentBudget) {
+    console.error(`Failed to fetch budget for team ${teamId}:`, budgetFetchError)
+    return
+  }
+
+  const { error: budgetUpdateError } = await serviceClient
+    .from('team_budgets')
+    .update({
+      remaining_budget: currentBudget.remaining_budget - amount,
+      total_spent: currentBudget.total_spent + amount,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('team_id', teamId)
+
+  if (budgetUpdateError) {
+    console.error(`Failed to update budget for team ${teamId}:`, budgetUpdateError)
+  }
+}
+
+async function sendBidResultsDiscordNotifications(
+  serviceClient: ServiceClient,
+  results: BidResultSummary[],
+  embedTitle: string,
+  itemLabel: string,
+  fieldPrefix: string,
+): Promise<void> {
+  if (results.length === 0) return
+
+  const resultsByLeague = new Map<string, BidResultSummary[]>()
+  for (const result of results) {
+    const existing = resultsByLeague.get(result.league_id) ?? []
+    existing.push(result)
+    resultsByLeague.set(result.league_id, existing)
+  }
+
+  const allTeamIds = [...new Set(results.map((r) => r.winner_team_id))]
+  const allLeagueIds = [...resultsByLeague.keys()]
+
+  const [{ data: teamsData }, { data: leaguesData }] = await Promise.all([
+    serviceClient.from('teams').select('id, name').in('id', allTeamIds),
+    serviceClient.from('leagues').select('id, name').in('id', allLeagueIds),
+  ])
+
+  const teamNameMap = new Map<string, string>()
+  for (const t of teamsData ?? []) teamNameMap.set(t.id, t.name)
+
+  const leagueNameMap = new Map<string, string>()
+  for (const l of leaguesData ?? []) leagueNameMap.set(l.id, l.name)
+
+  const discordPromises: Promise<void>[] = []
+  for (const [leagueId, leagueResults] of resultsByLeague) {
+    const leagueName = leagueNameMap.get(leagueId) ?? 'League'
+
+    const fields = leagueResults.slice(0, 10).map((r) => ({
+      name: r.movie_title,
+      value: `${fieldPrefix} **${teamNameMap.get(r.winner_team_id) ?? 'A team'}** for $${r.amount}`,
+      inline: true,
+    }))
+
+    discordPromises.push(
+      sendDiscordNotification(serviceClient, {
+        leagueId,
+        category: 'bids',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, leagueId),
+          title: embedTitle,
+          description: `${leagueResults.length} ${itemLabel}${leagueResults.length === 1 ? '' : 's'} awarded`,
+          fields,
+          color: DISCORD_COLORS.green,
+          footer: { text: leagueName },
+          url: buildLeagueUrl(leagueId, '/bidding'),
+        }],
+      })
+    )
+  }
+
+  await Promise.allSettled(discordPromises)
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
@@ -245,30 +368,7 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // Deduct from team budget
-        const { data: currentBudget, error: budgetFetchError } = await serviceClient
-          .from('team_budgets')
-          .select('remaining_budget, total_spent')
-          .eq('team_id', winner.team_id)
-          .single()
-
-        if (budgetFetchError || !currentBudget) {
-          console.error(`Failed to fetch budget for team ${winner.team_id}:`, budgetFetchError)
-          // Continue anyway - the pickup was created
-        } else {
-          const { error: budgetUpdateError } = await serviceClient
-            .from('team_budgets')
-            .update({
-              remaining_budget: currentBudget.remaining_budget - winner.amount,
-              total_spent: currentBudget.total_spent + winner.amount,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('team_id', winner.team_id)
-
-          if (budgetUpdateError) {
-            console.error(`Failed to update budget for team ${winner.team_id}:`, budgetUpdateError)
-          }
-        }
+        await deductTeamBudget(serviceClient, winner.team_id, winner.amount)
 
         // Mark winner as won
         await serviceClient
@@ -420,69 +520,299 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Discord notifications: bid processing results (grouped by league)
-    if (results.length > 0) {
-      const resultsByLeague = new Map<string, ProcessResult[]>()
-      for (const result of results) {
-        const existing = resultsByLeague.get(result.league_id) ?? []
-        existing.push(result)
-        resultsByLeague.set(result.league_id, existing)
+    // ========================================================================
+    // COUNTERPICK BID PROCESSING
+    // Process counterpick bids after pickup bids
+    // ========================================================================
+
+    let counterpickBidsToProcess: CounterpickBid[]
+
+    if (mode === 'weekly') {
+      const { data, error } = await serviceClient
+        .from('counterpick_bids')
+        .select('*')
+        .eq('status', 'active')
+        .lte('processing_deadline', now.toISOString())
+
+      if (error) {
+        console.error('Failed to fetch weekly counterpick bids:', error)
+        // Continue with pickup results even if counterpick fetch fails
+        counterpickBidsToProcess = []
+      } else {
+        counterpickBidsToProcess = data || []
       }
+    } else {
+      const { data, error } = await serviceClient
+        .from('counterpick_bids')
+        .select('*')
+        .eq('status', 'active')
+        .not('response_deadline', 'is', null)
+        .lt('response_deadline', now.toISOString())
 
-      // Batch-query all winning team names and league names to avoid N+1
-      const allTeamIds = [...new Set(results.map((r) => r.winner_team_id))]
-      const allLeagueIds = [...resultsByLeague.keys()]
-
-      const [{ data: teamsData }, { data: leaguesData }] = await Promise.all([
-        serviceClient.from('teams').select('id, name').in('id', allTeamIds),
-        serviceClient.from('leagues').select('id, name').in('id', allLeagueIds),
-      ])
-
-      const teamNameMap = new Map<string, string>()
-      for (const t of teamsData ?? []) {
-        teamNameMap.set(t.id, t.name)
-      }
-
-      const leagueNameMap = new Map<string, string>()
-      for (const l of leaguesData ?? []) {
-        leagueNameMap.set(l.id, l.name)
-      }
-
-      const discordPromises: Promise<void>[] = []
-      for (const [leagueId, leagueResults] of resultsByLeague) {
-        const leagueName = leagueNameMap.get(leagueId) ?? 'League'
-
-        const fields = leagueResults.slice(0, 10).map((r) => ({
-          name: r.movie_title,
-          value: `Won by **${teamNameMap.get(r.winner_team_id) ?? 'A team'}** for $${r.amount}`,
-          inline: true,
-        }))
-
-        discordPromises.push(
-          sendDiscordNotification(serviceClient, {
-            leagueId,
-            category: 'bids',
-            embeds: [{
-              author: buildEmbedAuthor(leagueName, leagueId),
-              title: 'Bidding Results',
-              description: `${leagueResults.length} movie${leagueResults.length === 1 ? '' : 's'} awarded`,
-              fields,
-              color: DISCORD_COLORS.green,
-              footer: { text: leagueName },
-              url: buildLeagueUrl(leagueId, '/bidding'),
-            }],
-          })
+      if (error) {
+        console.error('Failed to fetch extended counterpick bids:', error)
+        counterpickBidsToProcess = []
+      } else {
+        // Filter to only those in extended time
+        counterpickBidsToProcess = (data || []).filter(
+          (bid) => new Date(bid.response_deadline!) > new Date(bid.processing_deadline)
         )
       }
-
-      await Promise.allSettled(discordPromises)
     }
 
+    const counterpickResults: CounterpickProcessResult[] = []
+
+    if (counterpickBidsToProcess.length > 0) {
+      // Group counterpick bids by movie (league_id:movie_id)
+      const cpBidsByMovie = new Map<string, CounterpickBid[]>()
+      for (const bid of counterpickBidsToProcess) {
+        const key = `${bid.league_id}:${bid.movie_id}`
+        if (!cpBidsByMovie.has(key)) {
+          cpBidsByMovie.set(key, [])
+        }
+        cpBidsByMovie.get(key)!.push(bid)
+      }
+
+      for (const [key, bids] of cpBidsByMovie) {
+        const [leagueId, movieId] = key.split(':')
+
+        try {
+          // Check if any bids for this movie still have open response windows
+          const { data: allBidsForMovie } = await serviceClient
+            .from('counterpick_bids')
+            .select('*')
+            .eq('league_id', leagueId)
+            .eq('movie_id', movieId)
+            .in('status', ['active', 'outbid'])
+
+          const hasOpenWindow = (allBidsForMovie || []).some(
+            (bid) => bid.response_deadline && new Date(bid.response_deadline) > now
+          )
+
+          if (hasOpenWindow) {
+            continue
+          }
+
+          // Find active bids only
+          const activeBids = (allBidsForMovie || []).filter((b) => b.status === 'active')
+          if (activeBids.length === 0) {
+            continue
+          }
+
+          // Find the winner: highest amount, earliest created_at for ties
+          activeBids.sort((a, b) => {
+            if (b.amount !== a.amount) return b.amount - a.amount
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          })
+
+          const winner = activeBids[0]
+
+          // Get movie title and fantasy_points from movies table
+          const { data: movie, error: movieError } = await serviceClient
+            .from('movies')
+            .select('id, title, fantasy_points')
+            .eq('id', movieId)
+            .single()
+
+          if (movieError || !movie) {
+            console.error(`Movie not found for counterpick bid: ${movieId}`)
+            errors.push({ movie_key: key, error: 'Movie not found for counterpick bid' })
+            continue
+          }
+
+          const movieTitle = movie.title || `Movie ${movieId}`
+
+          // Get pick_order: count existing counterpicks for this league with phase='bidding', add 1
+          const { count: existingPickOrderCount } = await serviceClient
+            .from('counterpicks')
+            .select('*', { count: 'exact', head: true })
+            .eq('league_id', leagueId)
+            .eq('phase', 'bidding')
+
+          const pickOrder = (existingPickOrderCount ?? 0) + 1
+
+          // Create counterpick record
+          const { error: counterpickError } = await serviceClient
+            .from('counterpicks')
+            .insert({
+              league_id: leagueId,
+              counterpicker_team_id: winner.team_id,
+              target_team_id: winner.target_team_id,
+              movie_id: winner.movie_id,
+              draft_pick_id: winner.draft_pick_id,
+              pick_order: pickOrder,
+              phase: 'bidding',
+              fantasy_points: movie.fantasy_points != null ? -movie.fantasy_points : null,
+            })
+
+          if (counterpickError) {
+            console.error(`Failed to create counterpick for ${movieTitle}:`, counterpickError)
+            errors.push({ movie_key: key, error: 'Failed to create counterpick record' })
+            continue
+          }
+
+          // Update draft_picks.counterpicked_by_team_id
+          await serviceClient
+            .from('draft_picks')
+            .update({ counterpicked_by_team_id: winner.team_id })
+            .eq('id', winner.draft_pick_id)
+
+          await deductTeamBudget(serviceClient, winner.team_id, winner.amount)
+
+          // Mark winner as won
+          await serviceClient
+            .from('counterpick_bids')
+            .update({ status: 'won' })
+            .eq('id', winner.id)
+
+          // Mark all other bids for this movie as lost
+          const loserBids = (allBidsForMovie || []).filter((b) => b.id !== winner.id)
+          const loserIds = loserBids.map((b) => b.id)
+
+          if (loserIds.length > 0) {
+            await serviceClient
+              .from('counterpick_bids')
+              .update({ status: 'lost' })
+              .in('id', loserIds)
+          }
+
+          // Send notification to winner
+          const { data: winnerTeam } = await serviceClient
+            .from('teams')
+            .select('league_participants(user_id)')
+            .eq('id', winner.team_id)
+            .single()
+
+          const winnerUserId = (winnerTeam?.league_participants as unknown as { user_id: string })?.user_id
+
+          if (winnerUserId) {
+            await serviceClient.from('notifications').insert({
+              user_id: winnerUserId,
+              league_id: winner.league_id,
+              type: 'bid_won',
+              title: `Counterpick won: ${movieTitle}!`,
+              body: `Your bid of $${winner.amount} won the counterpick on ${movieTitle}.`,
+              data: {
+                bid_id: winner.id,
+                movie_id: movieId,
+                amount: winner.amount,
+                bid_type: 'counterpick',
+              },
+            })
+
+            // Send email to winner
+            const [{ data: winnerProfile }, { data: winnerUserData }] = await Promise.all([
+              serviceClient.from('profiles').select('display_name').eq('user_id', winnerUserId).single(),
+              serviceClient.auth.admin.getUserById(winnerUserId),
+            ])
+
+            const winnerEmail = winnerUserData?.user?.email
+            if (winnerEmail) {
+              const baseUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
+              sendEmail({
+                to: winnerEmail,
+                subject: `Counterpick won: ${movieTitle}!`,
+                html: getBidWonEmailHtml({
+                  recipientName: winnerProfile?.display_name || 'Fantasy Manager',
+                  movieTitle: `${movieTitle} (counterpick)`,
+                  winningAmount: winner.amount,
+                  leagueUrl: `${baseUrl}/league/${winner.league_id}`,
+                }),
+                text: getBidWonEmailText({
+                  recipientName: winnerProfile?.display_name || 'Fantasy Manager',
+                  movieTitle: `${movieTitle} (counterpick)`,
+                  winningAmount: winner.amount,
+                  leagueUrl: `${baseUrl}/league/${winner.league_id}`,
+                }),
+              }).catch(err => console.error('Failed to send counterpick bid won email:', err))
+            }
+          }
+
+          // Send notifications to losers
+          for (const loserBid of loserBids) {
+            const { data: loserTeam } = await serviceClient
+              .from('teams')
+              .select('league_participants(user_id)')
+              .eq('id', loserBid.team_id)
+              .single()
+
+            const loserUserId = (loserTeam?.league_participants as unknown as { user_id: string })?.user_id
+
+            if (loserUserId) {
+              await serviceClient.from('notifications').insert({
+                user_id: loserUserId,
+                league_id: loserBid.league_id,
+                type: 'bid_lost',
+                title: `Counterpick bid unsuccessful for ${movieTitle}`,
+                body: `Your bid of $${loserBid.amount} was not enough. The winning bid was $${winner.amount}.`,
+                data: {
+                  bid_id: loserBid.id,
+                  movie_id: movieId,
+                  winning_amount: winner.amount,
+                  bid_type: 'counterpick',
+                },
+              })
+
+              // Send email to loser
+              const [{ data: loserProfile }, { data: loserUserData }] = await Promise.all([
+                serviceClient.from('profiles').select('display_name').eq('user_id', loserUserId).single(),
+                serviceClient.auth.admin.getUserById(loserUserId),
+              ])
+
+              const loserEmail = loserUserData?.user?.email
+              if (loserEmail) {
+                const baseUrl = Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
+                sendEmail({
+                  to: loserEmail,
+                  subject: `Counterpick bid unsuccessful for ${movieTitle}`,
+                  html: getBidLostEmailHtml({
+                    recipientName: loserProfile?.display_name || 'Fantasy Manager',
+                    movieTitle: `${movieTitle} (counterpick)`,
+                    yourBidAmount: loserBid.amount,
+                    winningAmount: winner.amount,
+                    leagueUrl: `${baseUrl}/league/${loserBid.league_id}`,
+                  }),
+                  text: getBidLostEmailText({
+                    recipientName: loserProfile?.display_name || 'Fantasy Manager',
+                    movieTitle: `${movieTitle} (counterpick)`,
+                    yourBidAmount: loserBid.amount,
+                    winningAmount: winner.amount,
+                    leagueUrl: `${baseUrl}/league/${loserBid.league_id}`,
+                  }),
+                }).catch(err => console.error('Failed to send counterpick bid lost email:', err))
+              }
+            }
+          }
+
+          counterpickResults.push({
+            movie_id: winner.movie_id,
+            league_id: winner.league_id,
+            winner_team_id: winner.team_id,
+            amount: winner.amount,
+            movie_title: movieTitle,
+          })
+
+          console.log(`Processed counterpick bid for ${movieTitle}: winner team ${winner.team_id} with $${winner.amount}`)
+        } catch (error) {
+          console.error(`Error processing counterpick bids for ${key}:`, error)
+          errors.push({
+            movie_key: key,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
+        }
+      }
+    }
+
+    await sendBidResultsDiscordNotifications(serviceClient, results, 'Bidding Results', 'movie', 'Won by')
+    await sendBidResultsDiscordNotifications(serviceClient, counterpickResults, 'Counterpick Bidding Results', 'counterpick', 'Counterpicked by')
+
     return jsonResponse({
-      message: `Processed ${results.length} movie(s)`,
+      message: `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)`,
       mode,
       processed: results.length,
       results,
+      counterpick_processed: counterpickResults.length,
+      counterpick_results: counterpickResults,
       errors: errors.length > 0 ? errors : undefined,
     })
   } catch (error) {

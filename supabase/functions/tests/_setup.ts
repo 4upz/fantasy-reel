@@ -384,7 +384,7 @@ export class TestDataFactory {
    */
   async createLeague(
     name: string,
-    options: { invite_only?: boolean; max_participants?: number } = {}
+    options: { invite_only?: boolean; max_participants?: number; draft_counterpick_slots?: number } = {}
   ): Promise<{ id: string; name: string }> {
     const result = await invokeFunction<{ league: { id: string; name: string } }>(
       this.client,
@@ -499,7 +499,8 @@ export class TestDataFactory {
     }
 
     // Create league with all participants BEFORE draft starts
-    const { id: leagueId } = await this.createLeague(name)
+    // Set draft_counterpick_slots=0 so draft completion auto-activates the league
+    const { id: leagueId } = await this.createLeague(name, { draft_counterpick_slots: 0 })
     await this.addSecondParticipant(leagueId)
 
     // Add third participant if requested

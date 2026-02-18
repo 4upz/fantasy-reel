@@ -2,10 +2,15 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Film, Trophy, ShoppingCart, Trash2 } from 'lucide-react'
+import { Film, Trophy, ShoppingCart, Trash2, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
-import type { League, Movie, TeamBudget, DraftPick, Pickup } from '@/types'
+import type { League, Movie, TeamBudget, DraftPick, Pickup, Counterpick } from '@/types'
+
+interface RosterCounterpick extends Counterpick {
+  movies: Movie
+  target_team: { name: string }
+}
 
 interface RosterClientProps {
   league: League
@@ -15,6 +20,7 @@ interface RosterClientProps {
   budget: TeamBudget | null
   dropCount: number
   userId: string
+  counterpicks: RosterCounterpick[]
 }
 
 export default function RosterClient({
@@ -26,6 +32,7 @@ export default function RosterClient({
   dropCount: initialDropCount,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   userId,
+  counterpicks,
 }: RosterClientProps) {
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
   const [pickups, setPickups] = useState(initialPickups)
@@ -145,6 +152,58 @@ export default function RosterClient({
                   : undefined}
                 isDropping={droppingId === pickup.id}
               />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Counterpicks Section */}
+      <div>
+        <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
+          <Target className="w-5 h-5 text-crimson" />
+          Counterpicks ({counterpicks.length})
+        </h2>
+
+        {counterpicks.length === 0 ? (
+          <p className="text-foreground-muted">No counterpicks claimed yet.</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {counterpicks.map((cp) => (
+              <div key={cp.id} className="card overflow-hidden">
+                {/* Poster */}
+                <div className="relative aspect-[2/3] bg-elevated">
+                  {cp.movies.poster_url ? (
+                    <Image
+                      src={`https://image.tmdb.org/t/p/w342${cp.movies.poster_url}`}
+                      alt={cp.movies.title}
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Film className="w-12 h-12 text-foreground-muted" />
+                    </div>
+                  )}
+                  {/* Counterpick badge */}
+                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-xs font-medium text-white flex items-center gap-1">
+                    <Target className="w-3 h-3" />
+                    Counterpick
+                  </div>
+                </div>
+
+                {/* Info */}
+                <div className="p-3">
+                  <h3 className="font-semibold text-foreground text-sm truncate">{cp.movies.title}</h3>
+                  <p className="text-foreground-muted text-xs">
+                    vs. {cp.target_team.name} ({cp.phase})
+                  </p>
+                  {cp.fantasy_points !== null && (
+                    <p className={`text-sm font-semibold mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}>
+                      {cp.fantasy_points >= 0 ? '+' : ''}{cp.fantasy_points} pts
+                    </p>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}

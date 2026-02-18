@@ -45,7 +45,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
   const team = participant.teams as unknown as { id: string; name: string }
 
   // Parallelize independent queries (async-parallel optimization)
-  const [draftPicksResult, pickupsResult, budgetResult, dropCountResult] =
+  const [draftPicksResult, pickupsResult, budgetResult, dropCountResult, counterpicksResult] =
     await Promise.all([
       supabase
         .from('draft_picks')
@@ -61,12 +61,18 @@ export default async function RosterPage({ params }: RosterPageProps) {
         .order('picked_up_at', { ascending: true }),
       supabase.from('team_budgets').select('*').eq('team_id', team.id).single(),
       supabase.rpc('get_team_drop_count', { p_team_id: team.id }),
+      supabase
+        .from('counterpicks')
+        .select('*, movies(*), target_team:teams!counterpicks_target_team_id_fkey(name)')
+        .eq('counterpicker_team_id', team.id)
+        .order('pick_order', { ascending: true }),
     ])
 
   const { data: draftPicks } = draftPicksResult
   const { data: pickups } = pickupsResult
   const { data: budget } = budgetResult
   const { data: dropCount } = dropCountResult
+  const { data: counterpicks } = counterpicksResult
 
   return (
     <RosterClient
@@ -77,6 +83,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
       budget={budget}
       dropCount={dropCount ?? 0}
       userId={user.id}
+      counterpicks={counterpicks || []}
     />
   )
 }

@@ -65,6 +65,7 @@ export default async function BiddingPage({ params }: PageProps) {
       league={league as League}
       teamId={team.id}
       draftedTmdbIds={draftedTmdbIds}
+      biddingCounterpickSlots={league.bidding_counterpick_slots ?? 0}
     />
   )
 }

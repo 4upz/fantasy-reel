@@ -564,6 +564,24 @@ export interface CounterpickWithDetails extends Counterpick {
   counterpicker_team: Team
 }
 
+export interface CounterpickBid {
+  id: string
+  league_id: string
+  team_id: string
+  movie_id: string
+  target_team_id: string
+  draft_pick_id: string
+  amount: number
+  status: BidStatus
+  created_at: string
+  countered_at: string | null
+  response_deadline: string | null
+  processing_deadline: string
+  // Joined fields (from query)
+  movies?: { title: string; poster_url: string | null; release_date: string | null; fantasy_points: number | null }
+  target_team?: { name: string }
+}
+
 // ============================================================================
 // API response types
 // ============================================================================

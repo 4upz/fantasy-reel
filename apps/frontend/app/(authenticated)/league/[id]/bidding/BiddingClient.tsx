@@ -8,15 +8,26 @@ interface Props {
   league: League
   teamId: string
   draftedTmdbIds: number[]
+  biddingCounterpickSlots: number
 }
 
-export default function BiddingClient({ league, teamId, draftedTmdbIds }: Props) {
+export default function BiddingClient({
+  league,
+  teamId,
+  draftedTmdbIds,
+  biddingCounterpickSlots,
+}: Props): React.ReactElement {
   const {
     bids,
     myBids,
     budget,
     placeBid,
     cancelBid,
+    counterpickBids,
+    myCounterpickBids,
+    biddingCounterpickCount,
+    placeCounterpickBid,
+    cancelCounterpickBid,
   } = useBidding({
     leagueId: league.id,
     teamId,
@@ -32,6 +43,12 @@ export default function BiddingClient({ league, teamId, draftedTmdbIds }: Props)
       draftedTmdbIds={draftedTmdbIds}
       onPlaceBid={placeBid}
       onCancelBid={cancelBid}
+      biddingCounterpickCount={biddingCounterpickCount}
+      biddingCounterpickSlots={biddingCounterpickSlots}
+      counterpickBids={counterpickBids}
+      myCounterpickBids={myCounterpickBids}
+      onPlaceCounterpickBid={placeCounterpickBid}
+      onCancelCounterpickBid={cancelCounterpickBid}
     />
   )
 }
