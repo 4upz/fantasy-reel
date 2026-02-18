@@ -4,33 +4,14 @@ import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { Clock, DollarSign, AlertTriangle, Film, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
-import { getTmdbPosterUrl } from './utils'
+import { getTmdbPosterUrl, formatTimeRemaining, getBidTypeClass } from './utils'
 
 interface BidCardProps {
   bid: PickupBid
   isOwner: boolean
   onCancel?: () => void
   onCounter?: () => void
-}
-
-function formatTimeRemaining(deadline: string | null): string {
-  if (!deadline) return 'Processing soon'
-
-  const now = new Date()
-  const end = new Date(deadline)
-  const diff = end.getTime() - now.getTime()
-
-  if (diff <= 0) return 'Processing soon'
-
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-
-  if (hours > 24) {
-    const days = Math.floor(hours / 24)
-    return `${days}d ${hours % 24}h`
-  }
-
-  return `${hours}h ${minutes}m`
+  bidType?: 'pickup' | 'counterpick'
 }
 
 interface CancelBidModalProps {
@@ -163,7 +144,7 @@ function CancelBidModal({
   )
 }
 
-export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardProps) {
+export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: BidCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false)
 
   const movieData = bid.movie_data as {
@@ -176,10 +157,12 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter }: BidCardPr
   const deadline = isOutbid ? bid.response_deadline : bid.processing_deadline
   const movieTitle = movieData?.title || `Movie #${bid.tmdb_id}`
 
+  const typeClass = getBidTypeClass(bidType)
+
   return (
     <>
       <div
-        className={`card bid-card-interactive p-4 ${
+        className={`card bid-card-interactive p-4 ${typeClass} ${
           isOutbid ? 'border-warning bg-warning-bg/20 outbid-pulse' : ''
         }`}
         data-testid={`bid-card-${bid.tmdb_id}`}

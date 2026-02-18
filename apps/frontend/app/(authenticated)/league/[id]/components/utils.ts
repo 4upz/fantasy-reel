@@ -2,6 +2,29 @@
 export { formatRuntime, getReleaseYear } from '@/utils/date'
 
 /**
+ * Format a countdown from now until a deadline (e.g., "2d 5h", "3h 42m", "Processing soon")
+ */
+export function formatTimeRemaining(deadline: string | null): string {
+  if (!deadline) return 'Processing soon'
+
+  const now = new Date()
+  const end = new Date(deadline)
+  const diff = end.getTime() - now.getTime()
+
+  if (diff <= 0) return 'Processing soon'
+
+  const hours = Math.floor(diff / (1000 * 60 * 60))
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+
+  if (hours > 24) {
+    const days = Math.floor(hours / 24)
+    return `${days}d ${hours % 24}h`
+  }
+
+  return `${hours}h ${minutes}m`
+}
+
+/**
  * Format a release date for short display (e.g., "Jan 15")
  */
 export function formatReleaseDateShort(date: string | null): string {
@@ -58,6 +81,15 @@ export function getPopularityBadge(popularity: number | null): { label: string; 
  */
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ')
+}
+
+/**
+ * Get the CSS class for a bid type's left-border color indicator
+ */
+export function getBidTypeClass(bidType: 'pickup' | 'counterpick' | undefined): string {
+  if (bidType === 'pickup') return 'bid-card-pickup'
+  if (bidType === 'counterpick') return 'bid-card-counterpick'
+  return ''
 }
 
 /**
