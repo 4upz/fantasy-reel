@@ -12,7 +12,7 @@
 -- PART 1: wishlisted_movies table
 -- ============================================================================
 
-CREATE TABLE wishlisted_movies (
+CREATE TABLE IF NOT EXISTS wishlisted_movies (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id    uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   tmdb_id    integer NOT NULL,
@@ -22,14 +22,14 @@ CREATE TABLE wishlisted_movies (
   UNIQUE (user_id, tmdb_id)
 );
 
-CREATE INDEX idx_wishlisted_movies_user_id ON wishlisted_movies(user_id);
-CREATE INDEX idx_wishlisted_movies_tmdb_id ON wishlisted_movies(tmdb_id);
+CREATE INDEX IF NOT EXISTS idx_wishlisted_movies_user_id ON wishlisted_movies(user_id);
+CREATE INDEX IF NOT EXISTS idx_wishlisted_movies_tmdb_id ON wishlisted_movies(tmdb_id);
 
 -- ============================================================================
 -- PART 2: Add wishlist_public column to profiles
 -- ============================================================================
 
-ALTER TABLE profiles ADD COLUMN wishlist_public boolean NOT NULL DEFAULT false;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS wishlist_public boolean NOT NULL DEFAULT false;
 
 -- ============================================================================
 -- PART 3: Enable RLS
@@ -73,16 +73,24 @@ $$;
 -- ============================================================================
 
 -- Users can manage (select, insert, update, delete) their own wishlist
-CREATE POLICY "Users can manage own wishlist"
-  ON wishlisted_movies
-  FOR ALL
-  TO authenticated
-  USING ((SELECT auth.uid()) = user_id)
-  WITH CHECK ((SELECT auth.uid()) = user_id);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can manage own wishlist' AND tablename = 'wishlisted_movies') THEN
+    CREATE POLICY "Users can manage own wishlist"
+      ON wishlisted_movies
+      FOR ALL
+      TO authenticated
+      USING ((SELECT auth.uid()) = user_id)
+      WITH CHECK ((SELECT auth.uid()) = user_id);
+  END IF;
+END $$;
 
 -- Users can view wishlists of league-mates who have opted in
-CREATE POLICY "Users can view shared wishlists"
-  ON wishlisted_movies
-  FOR SELECT
-  TO authenticated
-  USING (private.can_view_wishlist(user_id));
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Users can view shared wishlists' AND tablename = 'wishlisted_movies') THEN
+    CREATE POLICY "Users can view shared wishlists"
+      ON wishlisted_movies
+      FOR SELECT
+      TO authenticated
+      USING (private.can_view_wishlist(user_id));
+  END IF;
+END $$;
