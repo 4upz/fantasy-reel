@@ -25,6 +25,7 @@ export interface DiscordEmbed {
 interface DiscordChannel {
   id: string
   webhook_url: string
+  thread_id: string | null
   bid_alert_role_id: string | null
   notify_drafts: boolean
   notify_bids: boolean
@@ -93,7 +94,7 @@ export async function sendDiscordNotification(
     // Fetch enabled channels for this league
     const { data: channels, error: fetchError } = await supabase
       .from('discord_channels')
-      .select('id, webhook_url, bid_alert_role_id, notify_drafts, notify_bids, notify_trades, notify_scores, consecutive_failures')
+      .select('id, webhook_url, thread_id, bid_alert_role_id, notify_drafts, notify_bids, notify_trades, notify_scores, consecutive_failures')
       .eq('league_id', leagueId)
       .eq('enabled', true)
 
@@ -164,7 +165,10 @@ async function sendToWebhook(
   if (embeds && embeds.length > 0) body.embeds = embeds
 
   try {
-    const response = await fetch(channel.webhook_url, {
+    const webhookUrl = new URL(channel.webhook_url)
+    if (channel.thread_id) webhookUrl.searchParams.set('thread_id', channel.thread_id)
+
+    const response = await fetch(webhookUrl.toString(), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

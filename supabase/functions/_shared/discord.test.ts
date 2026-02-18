@@ -108,6 +108,7 @@ Deno.test('sendDiscordNotification - sends to channels with matching category', 
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 0,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -140,6 +141,7 @@ Deno.test('sendDiscordNotification - filters by category preference', async () =
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 0,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -170,6 +172,7 @@ Deno.test('sendDiscordNotification - prepends role mention when mentionRole is t
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 0,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -201,6 +204,7 @@ Deno.test('sendDiscordNotification - skips role mention when bid_alert_role_id i
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 0,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -233,6 +237,7 @@ Deno.test('sendDiscordNotification - tracks failures on webhook error', async ()
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 2,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -270,6 +275,7 @@ Deno.test('sendDiscordNotification - resets failures on success', async () => {
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 5,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -301,6 +307,7 @@ Deno.test('sendDiscordNotification - sends to multiple channels per league', asy
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 0,
+        thread_id: null,
       },
       {
         id: 'ch-2',
@@ -311,6 +318,7 @@ Deno.test('sendDiscordNotification - sends to multiple channels per league', asy
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 0,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -341,6 +349,7 @@ Deno.test('sendDiscordNotification - never throws on catastrophic failure', asyn
         notify_trades: true,
         notify_scores: true,
         consecutive_failures: 0,
+        thread_id: null,
       },
     ]
     const supabase = createMockSupabase(channels)
@@ -387,6 +396,72 @@ Deno.test('sendDiscordNotification - handles empty channels list', async () => {
     })
 
     assertEquals(fetchCalls.length, 0)
+  } finally {
+    restoreFetch()
+  }
+})
+
+Deno.test('sendDiscordNotification - appends thread_id as query parameter when present', async () => {
+  mockFetch()
+  try {
+    const channels = [
+      {
+        id: 'ch-1',
+        webhook_url: 'https://discord.com/api/webhooks/1/token1',
+        bid_alert_role_id: null,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        consecutive_failures: 0,
+        thread_id: '1234567890',
+      },
+    ]
+    const supabase = createMockSupabase(channels)
+
+    await sendDiscordNotification(supabase, {
+      leagueId: 'league-1',
+      category: 'drafts',
+      embeds: [{ title: 'Test' }],
+    })
+
+    assertEquals(fetchCalls.length, 1)
+    assertEquals(
+      fetchCalls[0].url,
+      'https://discord.com/api/webhooks/1/token1?thread_id=1234567890'
+    )
+  } finally {
+    restoreFetch()
+  }
+})
+
+Deno.test('sendDiscordNotification - does not append thread_id when null', async () => {
+  mockFetch()
+  try {
+    const channels = [
+      {
+        id: 'ch-1',
+        webhook_url: 'https://discord.com/api/webhooks/1/token1',
+        bid_alert_role_id: null,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        consecutive_failures: 0,
+        thread_id: null,
+      },
+    ]
+    const supabase = createMockSupabase(channels)
+
+    await sendDiscordNotification(supabase, {
+      leagueId: 'league-1',
+      category: 'drafts',
+      embeds: [{ title: 'Test' }],
+    })
+
+    assertEquals(fetchCalls.length, 1)
+    // URL should be unchanged -- no query parameters
+    assertEquals(fetchCalls[0].url, 'https://discord.com/api/webhooks/1/token1')
   } finally {
     restoreFetch()
   }

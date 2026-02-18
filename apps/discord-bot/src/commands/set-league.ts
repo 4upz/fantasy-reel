@@ -139,6 +139,9 @@ export const setLeague: Command = {
       return
     }
 
+    // For threads/forum posts, store the thread ID so webhook sends target it
+    const threadId = channel.isThread() ? interaction.channelId : null
+
     // Insert discord_channels record
     const { error: insertError } = await supabase
       .from('discord_channels')
@@ -148,6 +151,7 @@ export const setLeague: Command = {
         channel_id: interaction.channelId,
         webhook_id: webhook.id,
         webhook_url: webhook.url,
+        thread_id: threadId,
         created_by: userId,
       })
 
@@ -191,7 +195,7 @@ export const setLeague: Command = {
       .setFooter({ text: 'Use /configure to customize which notifications appear.' })
 
     try {
-      await webhook.send({ embeds: [welcomeEmbed] })
+      await webhook.send({ embeds: [welcomeEmbed], ...(threadId && { threadId }) })
     } catch (error) {
       console.error('Failed to send welcome webhook message:', error)
     }
