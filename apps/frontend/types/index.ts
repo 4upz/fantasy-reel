@@ -185,6 +185,23 @@ export interface RankedTeam {
   isTied: boolean
 }
 
+// Pickup with review scores for standings display
+export interface PickupWithScores extends Pickup {
+  movies: MovieWithScores
+}
+
+// Counterpick with review scores and team name for standings display
+export interface CounterpickWithScores extends Counterpick {
+  movies: MovieWithScores
+  target_team: { name: string }
+}
+
+// Full ranked team with all roster types
+export interface RankedTeamFull extends RankedTeam {
+  pickups: PickupWithScores[]
+  counterpicks: CounterpickWithScores[]
+}
+
 // Settings page types
 export interface ParticipantWithProfile extends LeagueParticipant {
   teams: Team | null
