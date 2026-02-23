@@ -12,6 +12,8 @@ import {
   setTeamScore,
   getTeamId,
   createPickupBid,
+  createPickup,
+  createCounterpick,
   createTradeOffer,
   createMovieReviews,
   setDraftOrder,
@@ -79,6 +81,17 @@ interface LeagueFixtures {
       movieId: string
       movieTitle: string
     }>
+  }
+  /** An active league with draft picks, pickups, and counterpicks (for full roster standings tests) */
+  scoredLeagueWithFullRoster: TestLeague & {
+    teams: Array<{
+      teamId: string
+      userId: string
+      score: number
+      name: string
+    }>
+    pickupMovieTitle: string
+    counterpickMovieTitle: string
   }
   /** Two leagues where testUser is a participant (for league switcher tests) */
   multiLeague: {
@@ -359,6 +372,66 @@ export const test = authTest.extend<LeagueFixtures>({
         ownerMovieId: movie1.id,
         testUserMovieId: movie2.id,
         tradeOfferId: tradeOffer.id,
+      })
+    } finally {
+      await deleteTestLeague(league.id)
+    }
+  },
+
+  /**
+   * Scored League With Full Roster Fixture
+   * An active league with draft picks, a pickup, and a counterpick.
+   * Use for testing full roster display in standings (section headers, badges).
+   */
+  scoredLeagueWithFullRoster: async ({ leagueOwner, testUser, secondUser }, use) => {
+    const league = await createTestLeague(leagueOwner.id, {
+      name: uniqueLeagueName('E2E Full Roster'),
+      status: 'active',
+      maxParticipants: 4,
+    })
+
+    try {
+      await addParticipant(league.id, testUser.id)
+      await addParticipant(league.id, secondUser.id)
+
+      const ownerTeam = await createTeam(league.id, leagueOwner.id, 'Owner Team')
+      const testUserTeam = await createTeam(league.id, testUser.id, 'Test Team')
+      const secondUserTeam = await createTeam(league.id, secondUser.id, 'Second Team')
+
+      // Create movies
+      const draftMovie = await createTestMovie(uniqueTmdbId(31), 'Roster Draft Movie', '2025-01-15', { status: 'released' })
+      const pickupMovie = await createTestMovie(uniqueTmdbId(32), 'Roster Pickup Movie', '2025-04-10', { status: 'released' })
+      const counterpickMovie = await createTestMovie(uniqueTmdbId(33), 'Roster Counterpick Target', '2025-02-20', { status: 'released' })
+
+      // Owner team: 1 draft pick
+      await createDraftPick(league.id, ownerTeam.id, draftMovie.id, 1, 1)
+
+      // Test user team: 1 draft pick (that gets counterpicked) + 1 pickup
+      const testDraftPick = await createDraftPick(league.id, testUserTeam.id, counterpickMovie.id, 2, 1)
+      await createPickup(league.id, testUserTeam.id, pickupMovie.id, 15)
+
+      // Second user team: counterpick on test user's draft pick
+      await createCounterpick(league.id, secondUserTeam.id, testUserTeam.id, counterpickMovie.id, testDraftPick.id, 1)
+
+      // Create reviews
+      await createMovieReviews(draftMovie.id, { imdb: 80, rottenTomatoes: 85, metacritic: 78 })
+      await createMovieReviews(pickupMovie.id, { imdb: 70, rottenTomatoes: 72, metacritic: 68 })
+      await createMovieReviews(counterpickMovie.id, { imdb: 90, rottenTomatoes: 92, metacritic: 88 })
+
+      // Set scores
+      await setTeamScore(ownerTeam.id, 100)
+      await setTeamScore(testUserTeam.id, 80)
+      await setTeamScore(secondUserTeam.id, 60)
+
+      await use({
+        ...league,
+        teams: [
+          { teamId: ownerTeam.id, userId: leagueOwner.id, score: 100, name: 'Owner Team' },
+          { teamId: testUserTeam.id, userId: testUser.id, score: 80, name: 'Test Team' },
+          { teamId: secondUserTeam.id, userId: secondUser.id, score: 60, name: 'Second Team' },
+        ],
+        pickupMovieTitle: 'Roster Pickup Movie',
+        counterpickMovieTitle: 'Roster Counterpick Target',
       })
     } finally {
       await deleteTestLeague(league.id)
