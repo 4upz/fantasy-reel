@@ -613,6 +613,97 @@ export async function createPickupBid(
 }
 
 /**
+ * Create a pickup (won bid result) for testing.
+ * Inserts directly into the pickups table, bypassing the bid→process flow.
+ */
+export async function createPickup(
+  leagueId: string,
+  teamId: string,
+  movieId: string,
+  amountPaid: number,
+): Promise<{ id: string }> {
+  const client = getAdminClient()
+
+  // Create a dummy won bid first (pickups requires a bid_id FK)
+  const { data: bid, error: bidError } = await client
+    .from('pickup_bids')
+    .insert({
+      league_id: leagueId,
+      team_id: teamId,
+      tmdb_id: 0,
+      amount: amountPaid,
+      status: 'won',
+      processing_deadline: new Date().toISOString(),
+      movie_data: { title: 'processed', poster_url: '', release_date: '' },
+    })
+    .select()
+    .single()
+
+  if (bidError || !bid) {
+    throw new Error(`Failed to create pickup bid for pickup: ${bidError?.message}`)
+  }
+
+  const { data, error } = await client
+    .from('pickups')
+    .insert({
+      league_id: leagueId,
+      team_id: teamId,
+      movie_id: movieId,
+      bid_id: bid.id,
+      amount_paid: amountPaid,
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create pickup: ${error?.message}`)
+  }
+
+  return { id: data.id }
+}
+
+/**
+ * Create a counterpick for testing.
+ * Inserts into counterpicks table and marks the draft pick as counterpicked.
+ */
+export async function createCounterpick(
+  leagueId: string,
+  counterpickerTeamId: string,
+  targetTeamId: string,
+  movieId: string,
+  draftPickId: string,
+  pickOrder: number,
+): Promise<{ id: string }> {
+  const client = getAdminClient()
+
+  // Mark the draft pick as counterpicked
+  await client
+    .from('draft_picks')
+    .update({ counterpicked_by_team_id: counterpickerTeamId })
+    .eq('id', draftPickId)
+
+  const { data, error } = await client
+    .from('counterpicks')
+    .insert({
+      league_id: leagueId,
+      counterpicker_team_id: counterpickerTeamId,
+      target_team_id: targetTeamId,
+      movie_id: movieId,
+      draft_pick_id: draftPickId,
+      pick_order: pickOrder,
+      phase: 'draft',
+    })
+    .select()
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Failed to create counterpick: ${error?.message}`)
+  }
+
+  return { id: data.id }
+}
+
+/**
  * Trade items structure for creating trade offers
  */
 interface TradeItems {

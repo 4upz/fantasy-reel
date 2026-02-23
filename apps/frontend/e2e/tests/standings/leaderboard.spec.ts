@@ -169,3 +169,91 @@ test.describe('Score Ordering @standings', () => {
     expect(thirdRowText).toContain('+80')
   })
 })
+
+test.describe('Full Roster Display @standings', () => {
+  test('expanded team shows Draft Picks section header', async ({
+    authedPage,
+    scoredLeagueWithFullRoster,
+  }) => {
+    await authedPage.goto(`/league/${scoredLeagueWithFullRoster.id}/standings`)
+
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
+
+    // Expand the first team
+    await teamRows.first().click()
+
+    const standingsContainer = authedPage.getByTestId('standings-container')
+    await expect(
+      standingsContainer.getByText(/Draft Picks \(\d+\)/)
+    ).toBeVisible({ timeout: 5000 })
+  })
+
+  test('expanded team with pickup shows Pickups section', async ({
+    authedPage,
+    scoredLeagueWithFullRoster,
+  }) => {
+    await authedPage.goto(`/league/${scoredLeagueWithFullRoster.id}/standings`)
+
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
+
+    // Find and expand the Test Team (rank #2 with score +80, has pickup)
+    const testTeamRow = teamRows.filter({ hasText: 'Test Team' })
+    await expect(testTeamRow).toBeVisible({ timeout: 5000 })
+    await testTeamRow.click()
+
+    const standingsContainer = authedPage.getByTestId('standings-container')
+
+    // Verify Pickups section header appears
+    await expect(
+      standingsContainer.getByText(/Pickups \(\d+\)/)
+    ).toBeVisible({ timeout: 5000 })
+
+    // Verify the pickup movie title is shown
+    await expect(
+      standingsContainer.getByText(scoredLeagueWithFullRoster.pickupMovieTitle)
+    ).toBeVisible()
+  })
+
+  test('expanded team with counterpick shows Counterpicks section', async ({
+    authedPage,
+    scoredLeagueWithFullRoster,
+  }) => {
+    await authedPage.goto(`/league/${scoredLeagueWithFullRoster.id}/standings`)
+
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
+
+    // Find and expand Second Team (rank #3 with score +60, has counterpick)
+    const secondTeamRow = teamRows.filter({ hasText: 'Second Team' })
+    await expect(secondTeamRow).toBeVisible({ timeout: 5000 })
+    await secondTeamRow.click()
+
+    const standingsContainer = authedPage.getByTestId('standings-container')
+
+    // Verify Counterpicks section header appears
+    await expect(
+      standingsContainer.getByText(/Counterpicks \(\d+\)/)
+    ).toBeVisible({ timeout: 5000 })
+
+    // Verify the counterpick movie title is shown
+    await expect(
+      standingsContainer.getByText(scoredLeagueWithFullRoster.counterpickMovieTitle)
+    ).toBeVisible()
+  })
+
+  test('team header shows combined movie count from drafts and pickups', async ({
+    authedPage,
+    scoredLeagueWithFullRoster,
+  }) => {
+    await authedPage.goto(`/league/${scoredLeagueWithFullRoster.id}/standings`)
+
+    const teamRows = authedPage.locator('[data-testid^="team-row-"]')
+    await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
+
+    // Test Team has 1 draft pick + 1 pickup = "2 movies"
+    const testTeamRow = teamRows.filter({ hasText: 'Test Team' })
+    await expect(testTeamRow.getByText('2 movies')).toBeVisible()
+  })
+})
