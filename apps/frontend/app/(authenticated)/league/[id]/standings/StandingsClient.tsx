@@ -4,20 +4,26 @@ import { useMemo } from 'react'
 import type {
   ParticipantWithTeamScore,
   DraftPickWithScores,
-  RankedTeam,
+  PickupWithScores,
+  CounterpickWithScores,
+  RankedTeamFull,
 } from '@/types'
 import TeamStandingCard from './TeamStandingCard'
 
 interface Props {
   participants: ParticipantWithTeamScore[]
   draftPicks: DraftPickWithScores[]
+  pickups: PickupWithScores[]
+  counterpicks: CounterpickWithScores[]
   currentUserId: string
 }
 
 function calculateRankings(
   participants: ParticipantWithTeamScore[],
-  draftPicks: DraftPickWithScores[]
-): RankedTeam[] {
+  draftPicks: DraftPickWithScores[],
+  pickups: PickupWithScores[],
+  counterpicks: CounterpickWithScores[],
+): RankedTeamFull[] {
   // Group draft picks by team_id
   const picksByTeam = new Map<string, DraftPickWithScores[]>()
   for (const pick of draftPicks) {
@@ -28,6 +34,26 @@ function calculateRankings(
     picksByTeam.get(teamId)!.push(pick)
   }
 
+  // Group pickups by team_id
+  const pickupsByTeam = new Map<string, PickupWithScores[]>()
+  for (const pickup of pickups) {
+    const teamId = pickup.team_id
+    if (!pickupsByTeam.has(teamId)) {
+      pickupsByTeam.set(teamId, [])
+    }
+    pickupsByTeam.get(teamId)!.push(pickup)
+  }
+
+  // Group counterpicks by counterpicker_team_id
+  const counterpicksByTeam = new Map<string, CounterpickWithScores[]>()
+  for (const cp of counterpicks) {
+    const teamId = cp.counterpicker_team_id
+    if (!counterpicksByTeam.has(teamId)) {
+      counterpicksByTeam.set(teamId, [])
+    }
+    counterpicksByTeam.get(teamId)!.push(cp)
+  }
+
   // Sort participants by total_points descending
   const sorted = [...participants].sort((a, b) => {
     const aPoints = a.teams?.team_scores?.total_points ?? 0
@@ -36,7 +62,7 @@ function calculateRankings(
   })
 
   // Calculate ranks with tie handling
-  const ranked: RankedTeam[] = []
+  const ranked: RankedTeamFull[] = []
   let currentRank = 1
   let previousPoints: number | null = null
 
@@ -59,6 +85,8 @@ function calculateRankings(
       rank: currentRank,
       participant,
       draftPicks: teamId ? picksByTeam.get(teamId) || [] : [],
+      pickups: teamId ? pickupsByTeam.get(teamId) || [] : [],
+      counterpicks: teamId ? counterpicksByTeam.get(teamId) || [] : [],
       isTied: hasTie,
     })
 
@@ -71,18 +99,24 @@ function calculateRankings(
 export default function StandingsClient({
   participants,
   draftPicks,
+  pickups,
+  counterpicks,
   currentUserId,
 }: Props) {
   const rankedTeams = useMemo(
-    () => calculateRankings(participants, draftPicks),
-    [participants, draftPicks]
+    () => calculateRankings(participants, draftPicks, pickups, counterpicks),
+    [participants, draftPicks, pickups, counterpicks]
   )
 
   const summaryStats = useMemo(() => {
-    const moviesScored = draftPicks.filter((pick) => pick.movies?.combined_score != null).length
-    const moviesPending = draftPicks.length - moviesScored
-    return { moviesScored, moviesPending, totalMovies: draftPicks.length }
-  }, [draftPicks])
+    const allMovies = [
+      ...draftPicks.map((p) => p.movies),
+      ...pickups.map((p) => p.movies),
+    ]
+    const moviesScored = allMovies.filter((m) => m?.combined_score != null).length
+    const moviesPending = allMovies.length - moviesScored
+    return { moviesScored, moviesPending, totalMovies: allMovies.length }
+  }, [draftPicks, pickups])
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="standings-container">
