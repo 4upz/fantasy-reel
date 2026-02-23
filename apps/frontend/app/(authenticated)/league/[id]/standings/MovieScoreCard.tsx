@@ -7,11 +7,17 @@ import { formatDate } from '@/utils/date'
 import type { MovieWithScores } from '@/types'
 import ScoreSourceBadge from './ScoreSourceBadge'
 
+type MovieBadge =
+  | { type: 'draft'; round: number; pick: number }
+  | { type: 'pickup'; amount: number }
+  | { type: 'counterpick'; targetTeam: string }
+
 interface Props {
   movie: MovieWithScores
-  pickNumber: number
-  round: number
+  badge: MovieBadge
   isCounterpicked?: boolean
+  /** For counterpicks, fantasy_points is stored on the counterpick row, not the movie */
+  overridePoints?: number | null
 }
 
 function formatFantasyPoints(points: number): string {
@@ -40,13 +46,14 @@ function BonusBadge({ type, active }: { type: 'fresh' | 'darling' | 'disaster'; 
   )
 }
 
-export default function MovieScoreCard({ movie, pickNumber, round, isCounterpicked = false }: Props) {
+export default function MovieScoreCard({ movie, badge, isCounterpicked = false, overridePoints }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
-  const hasScore = movie.fantasy_points != null
+  const displayPoints = overridePoints !== undefined ? overridePoints : movie.fantasy_points
+  const hasScore = displayPoints != null
   const isReleased = movie.status === 'released'
-  const isPositive = hasScore && movie.fantasy_points! >= 0
+  const isPositive = hasScore && displayPoints! >= 0
 
   // Get individual review scores
   const imdbReview = movie.reviews?.find((r) => r.source === 'imdb')
@@ -98,12 +105,26 @@ export default function MovieScoreCard({ movie, pickNumber, round, isCounterpick
             </div>
           )}
         </div>
-        {/* Round/Pick Badge */}
-        <div className="absolute -top-2 -left-2 w-6 h-6 bg-surface border border-border rounded-full flex items-center justify-center">
-          <span className="text-[10px] font-bold text-foreground-muted">
-            {round}.{pickNumber}
-          </span>
-        </div>
+        {/* Badge */}
+        {badge.type === 'draft' && (
+          <div className="absolute -top-2 -left-2 w-6 h-6 bg-surface border border-border rounded-full flex items-center justify-center">
+            <span className="text-[10px] font-bold text-foreground-muted">
+              {badge.round}.{badge.pick}
+            </span>
+          </div>
+        )}
+        {badge.type === 'pickup' && (
+          <div className="absolute -top-2 -left-2 h-6 px-1.5 bg-gold/20 border border-gold/40 rounded-full flex items-center justify-center">
+            <span className="text-[10px] font-bold text-gold">
+              ${badge.amount}
+            </span>
+          </div>
+        )}
+        {badge.type === 'counterpick' && (
+          <div className="absolute -top-2 -left-2 w-6 h-6 bg-crimson/20 border border-crimson/40 rounded-full flex items-center justify-center">
+            <Target className="w-3 h-3 text-crimson" />
+          </div>
+        )}
         {/* Counterpicked Indicator */}
         {isCounterpicked && (
           <div
@@ -122,6 +143,12 @@ export default function MovieScoreCard({ movie, pickNumber, round, isCounterpick
         </h4>
         <div className="flex items-center gap-2 mt-1 text-sm text-foreground-muted">
           <span>{releaseDate}</span>
+          {badge.type === 'counterpick' && (
+            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-crimson/10 text-crimson border border-crimson/20 rounded flex items-center gap-1">
+              <Target className="w-2.5 h-2.5" />
+              vs. {badge.targetTeam}
+            </span>
+          )}
           {!isReleased && (
             <span className="px-1.5 py-0.5 text-[10px] font-medium bg-warning/10 text-warning border border-warning/20 rounded">
               Upcoming
@@ -150,7 +177,7 @@ export default function MovieScoreCard({ movie, pickNumber, round, isCounterpick
         {hasScore ? (
           <>
             <div className={`text-3xl font-bold font-display ${isPositive ? 'text-gold' : 'text-crimson'}`}>
-              {formatFantasyPoints(movie.fantasy_points!)}
+              {formatFantasyPoints(displayPoints!)}
             </div>
             <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
               Points
