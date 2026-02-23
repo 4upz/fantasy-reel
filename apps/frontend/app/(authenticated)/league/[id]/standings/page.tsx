@@ -4,6 +4,8 @@ import StandingsClient from './StandingsClient'
 import type {
   ParticipantWithTeamScore,
   DraftPickWithScores,
+  PickupWithScores,
+  CounterpickWithScores,
 } from '@/types'
 
 interface PageProps {
@@ -51,7 +53,7 @@ export default async function StandingsPage({ params }: PageProps) {
   }
 
   // Parallelize independent queries (async-parallel optimization)
-  const [participantsResult, draftPicksResult] = await Promise.all([
+  const [participantsResult, draftPicksResult, pickupsResult, counterpicksResult] = await Promise.all([
     supabase
       .from('league_participants')
       .select(
@@ -80,10 +82,40 @@ export default async function StandingsPage({ params }: PageProps) {
       .eq('league_id', id)
       .order('round', { ascending: true })
       .order('pick_number', { ascending: true }),
+    supabase
+      .from('pickups')
+      .select(
+        `
+        *,
+        movies (
+          *,
+          reviews (*)
+        )
+      `
+      )
+      .eq('league_id', id)
+      .is('dropped_at', null)
+      .order('picked_up_at', { ascending: true }),
+    supabase
+      .from('counterpicks')
+      .select(
+        `
+        *,
+        movies (
+          *,
+          reviews (*)
+        ),
+        target_team:teams!counterpicks_target_team_id_fkey (name)
+      `
+      )
+      .eq('league_id', id)
+      .order('pick_order', { ascending: true }),
   ])
 
   const { data: participants } = participantsResult
   const { data: draftPicks } = draftPicksResult
+  const { data: pickups } = pickupsResult
+  const { data: counterpicks } = counterpicksResult
 
   // Fetch profiles separately (no direct FK from league_participants)
   const userIds = (participants ?? []).map((p) => p.user_id)
@@ -107,6 +139,8 @@ export default async function StandingsPage({ params }: PageProps) {
     <StandingsClient
       participants={participantsWithProfiles as ParticipantWithTeamScore[]}
       draftPicks={(draftPicks ?? []) as DraftPickWithScores[]}
+      pickups={(pickups ?? []) as PickupWithScores[]}
+      counterpicks={(counterpicks ?? []) as CounterpickWithScores[]}
       currentUserId={user.id}
     />
   )
