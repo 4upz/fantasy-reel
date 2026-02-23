@@ -98,11 +98,12 @@ export default function StandingsClient({
     const allMovies = [
       ...draftPicks.map((p) => p.movies),
       ...pickups.map((p) => p.movies),
+      ...counterpicks.map((cp) => cp.movies),
     ]
     const moviesScored = allMovies.filter((m) => m?.combined_score != null).length
     const moviesPending = allMovies.length - moviesScored
     return { moviesScored, moviesPending, totalMovies: allMovies.length }
-  }, [draftPicks, pickups])
+  }, [draftPicks, pickups, counterpicks])
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="standings-container">
