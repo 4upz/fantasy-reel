@@ -71,7 +71,6 @@ export default function TeamStandingCard({
   const draftPoints = teamScore?.draft_points ?? 0
   const counterpickPoints = teamScore?.counterpick_points ?? 0
   const counterpicksMade = teamScore?.counterpicks_made ?? 0
-  const counterpicksScored = teamScore?.counterpicks_scored ?? 0
   const moviesScored = teamScore?.movies_scored ?? 0
   const moviesPending = teamScore?.movies_pending ?? 0
   const averageScore = teamScore?.average_score ?? 0
@@ -177,7 +176,7 @@ export default function TeamStandingCard({
           {/* Points Breakdown */}
           <div className="text-xs text-foreground-muted mt-1 flex items-center justify-end gap-2">
             <span className={draftPoints >= 0 ? 'text-gold' : 'text-crimson'}>
-              Draft: {draftPoints >= 0 ? '+' : ''}{Math.round(draftPoints)}
+              Draft: {formatFantasyPoints(draftPoints)}
             </span>
             {counterpicksMade > 0 && (
               <>
@@ -185,7 +184,7 @@ export default function TeamStandingCard({
                 <span className="flex items-center gap-1">
                   <Target className="w-3 h-3 text-crimson" />
                   <span className={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}>
-                    {counterpickPoints >= 0 ? '+' : ''}{Math.round(counterpickPoints)}
+                    {formatFantasyPoints(counterpickPoints)}
                   </span>
                 </span>
               </>
