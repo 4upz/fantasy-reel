@@ -18,41 +18,27 @@ interface Props {
   currentUserId: string
 }
 
+function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
+  const map = new Map<string, T[]>()
+  for (const item of items) {
+    const key = keyFn(item)
+    if (!map.has(key)) {
+      map.set(key, [])
+    }
+    map.get(key)!.push(item)
+  }
+  return map
+}
+
 function calculateRankings(
   participants: ParticipantWithTeamScore[],
   draftPicks: DraftPickWithScores[],
   pickups: PickupWithScores[],
   counterpicks: CounterpickWithScores[],
 ): RankedTeamFull[] {
-  // Group draft picks by team_id
-  const picksByTeam = new Map<string, DraftPickWithScores[]>()
-  for (const pick of draftPicks) {
-    const teamId = pick.team_id
-    if (!picksByTeam.has(teamId)) {
-      picksByTeam.set(teamId, [])
-    }
-    picksByTeam.get(teamId)!.push(pick)
-  }
-
-  // Group pickups by team_id
-  const pickupsByTeam = new Map<string, PickupWithScores[]>()
-  for (const pickup of pickups) {
-    const teamId = pickup.team_id
-    if (!pickupsByTeam.has(teamId)) {
-      pickupsByTeam.set(teamId, [])
-    }
-    pickupsByTeam.get(teamId)!.push(pickup)
-  }
-
-  // Group counterpicks by counterpicker_team_id
-  const counterpicksByTeam = new Map<string, CounterpickWithScores[]>()
-  for (const cp of counterpicks) {
-    const teamId = cp.counterpicker_team_id
-    if (!counterpicksByTeam.has(teamId)) {
-      counterpicksByTeam.set(teamId, [])
-    }
-    counterpicksByTeam.get(teamId)!.push(cp)
-  }
+  const picksByTeam = groupBy(draftPicks, (p) => p.team_id)
+  const pickupsByTeam = groupBy(pickups, (p) => p.team_id)
+  const counterpicksByTeam = groupBy(counterpicks, (cp) => cp.counterpicker_team_id)
 
   // Sort participants by total_points descending
   const sorted = [...participants].sort((a, b) => {

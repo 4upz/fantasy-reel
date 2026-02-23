@@ -386,11 +386,6 @@ export interface ParticipantWithTeamBudget extends LeagueParticipant {
   profiles: Profile | null
 }
 
-// Extended ranked team type that includes pickups
-export interface RankedTeamWithPickups extends RankedTeam {
-  pickups: PickupWithMovie[]
-}
-
 // ============================================================================
 // Dashboard types
 // ============================================================================
