@@ -2,12 +2,12 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Target } from 'lucide-react'
-import type { RankedTeam } from '@/types'
+import { Target, Trophy, ShoppingCart } from 'lucide-react'
+import type { RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
 
 interface Props {
-  rankedTeam: RankedTeam
+  rankedTeam: RankedTeamFull
   isCurrentUser: boolean
   animationDelay?: number
 }
@@ -62,7 +62,7 @@ export default function TeamStandingCard({
 }: Props) {
   const [isExpanded, setIsExpanded] = useState(false)
 
-  const { rank, participant, draftPicks, isTied } = rankedTeam
+  const { rank, participant, draftPicks, pickups, counterpicks, isTied } = rankedTeam
   const team = participant.teams
   const teamScore = team?.team_scores
   const profile = participant.profiles
@@ -139,7 +139,16 @@ export default function TeamStandingCard({
             <p className="text-xs text-foreground-muted truncate">{profile.display_name}</p>
           )}
           <div className="flex items-center gap-3 mt-1 text-sm text-foreground-muted">
-            <span>{draftPicks.length} movies</span>
+            <span>{draftPicks.length + pickups.length} movies</span>
+            {counterpicks.length > 0 && (
+              <>
+                <span className="text-foreground-muted/50">|</span>
+                <span className="flex items-center gap-1">
+                  <Target className="w-3 h-3 text-crimson" />
+                  {counterpicks.length}
+                </span>
+              </>
+            )}
             <span className="text-foreground-muted/50">|</span>
             <span>
               {moviesScored} scored, {moviesPending} pending
@@ -207,42 +216,71 @@ export default function TeamStandingCard({
         }`}
       >
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-border">
-          <div className="pt-4 space-y-3">
-            {draftPicks.length > 0 ? (
-              draftPicks.map((pick) => (
-                <MovieScoreCard
-                  key={pick.id}
-                  movie={pick.movies}
-                  pickNumber={pick.pick_number}
-                  round={pick.round}
-                  isCounterpicked={!!pick.counterpicked_by_team_id}
-                />
-              ))
-            ) : (
-              <div className="py-8 text-center text-foreground-muted">
-                No movies drafted yet
-              </div>
-            )}
+          {/* Draft Picks Section */}
+          <div className="pt-4">
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground-secondary mb-3">
+              <Trophy className="w-4 h-4 text-gold" />
+              Draft Picks ({draftPicks.length})
+            </h4>
+            <div className="space-y-3">
+              {draftPicks.length > 0 ? (
+                draftPicks.map((pick) => (
+                  <MovieScoreCard
+                    key={pick.id}
+                    movie={pick.movies}
+                    badge={{ type: 'draft', round: pick.round, pick: pick.pick_number }}
+                    isCounterpicked={!!pick.counterpicked_by_team_id}
+                  />
+                ))
+              ) : (
+                <div className="py-4 text-center text-foreground-muted text-sm">
+                  No movies drafted yet
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Counterpicks Summary */}
-          {counterpicksMade > 0 && (
+          {/* Pickups Section */}
+          {pickups.length > 0 && (
             <div className="mt-4 pt-4 border-t border-border">
-              <div className="flex items-center justify-center gap-2 text-sm">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground-secondary mb-3">
+                <ShoppingCart className="w-4 h-4 text-gold" />
+                Pickups ({pickups.length})
+              </h4>
+              <div className="space-y-3">
+                {pickups.map((pickup) => (
+                  <MovieScoreCard
+                    key={pickup.id}
+                    movie={pickup.movies}
+                    badge={{ type: 'pickup', amount: pickup.amount_paid }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Counterpicks Section */}
+          {counterpicks.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground-secondary mb-3">
                 <Target className="w-4 h-4 text-crimson" />
-                <span className="text-foreground-secondary">
-                  {counterpicksMade} counterpick{counterpicksMade !== 1 ? 's' : ''}
-                  {counterpicksScored > 0 && ` (${counterpicksScored} scored)`}
-                </span>
-                <span className={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}>
-                  {counterpickPoints >= 0 ? '+' : ''}{Math.round(counterpickPoints)} pts
-                </span>
+                Counterpicks ({counterpicks.length})
+              </h4>
+              <div className="space-y-3">
+                {counterpicks.map((cp) => (
+                  <MovieScoreCard
+                    key={cp.id}
+                    movie={cp.movies}
+                    badge={{ type: 'counterpick', targetTeam: cp.target_team.name }}
+                    overridePoints={cp.fantasy_points}
+                  />
+                ))}
               </div>
             </div>
           )}
 
           {/* Scoring Formula Info */}
-          {draftPicks.length > 0 && (
+          {(draftPicks.length > 0 || pickups.length > 0) && (
             <div className="mt-4 pt-4 border-t border-border">
               <div className="text-center text-[11px] text-foreground-muted space-y-1">
                 <div>Fantasy points based on 70-point baseline</div>
