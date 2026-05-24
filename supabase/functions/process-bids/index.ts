@@ -27,6 +27,7 @@ import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuth
 
 interface ProcessBidsRequest {
   mode?: 'weekly' | 'extended'
+  league_id?: string
 }
 
 interface PickupBid {
@@ -186,14 +187,21 @@ async function sendBidResultsDiscordNotifications(
 
 async function sendNoBidsDiscordNotifications(
   serviceClient: ServiceClient,
-  excludeLeagueIds = new Set<string>()
+  excludeLeagueIds = new Set<string>(),
+  targetLeagueId?: string
 ): Promise<void> {
   try {
-    const { data: allChannels, error: channelsError } = await serviceClient
+    let query = serviceClient
       .from('discord_channels')
       .select('league_id')
       .eq('enabled', true)
       .eq('notify_bids', true)
+
+    if (targetLeagueId) {
+      query = query.eq('league_id', targetLeagueId)
+    }
+
+    const { data: allChannels, error: channelsError } = await query
 
     if (channelsError) {
       console.error('Error fetching discord channels:', channelsError)
@@ -255,7 +263,7 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { mode = 'weekly' }: ProcessBidsRequest = await req.json().catch(() => ({ mode: 'weekly' }))
+    const { mode = 'weekly', league_id }: ProcessBidsRequest = await req.json().catch(() => ({ mode: 'weekly' }))
 
     if (mode !== 'weekly' && mode !== 'extended') {
       return errorResponse('Mode must be "weekly" or "extended"', 400)
@@ -266,11 +274,17 @@ Deno.serve(async (req) => {
 
     if (mode === 'weekly') {
       // Weekly: process active bids where processing_deadline <= now
-      const { data, error } = await serviceClient
+      let query = serviceClient
         .from('pickup_bids')
         .select('*')
         .eq('status', 'active')
         .lte('processing_deadline', now.toISOString())
+
+      if (league_id) {
+        query = query.eq('league_id', league_id)
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.error('Failed to fetch weekly bids:', error)
@@ -280,12 +294,18 @@ Deno.serve(async (req) => {
     } else {
       // Extended: find active bids where response_deadline has passed
       // These are bids in extended time due to counter-bidding
-      const { data, error } = await serviceClient
+      let query = serviceClient
         .from('pickup_bids')
         .select('*')
         .eq('status', 'active')
         .not('response_deadline', 'is', null)
         .lt('response_deadline', now.toISOString())
+
+      if (league_id) {
+        query = query.eq('league_id', league_id)
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.error('Failed to fetch extended bids:', error)
@@ -301,7 +321,7 @@ Deno.serve(async (req) => {
 
     if (bidsToProcess.length === 0) {
       if (mode === 'weekly') {
-        await sendNoBidsDiscordNotifications(serviceClient)
+        await sendNoBidsDiscordNotifications(serviceClient, new Set(), league_id)
       }
       return jsonResponse({
         message: 'No bids to process',
@@ -575,11 +595,17 @@ Deno.serve(async (req) => {
     let counterpickBidsToProcess: CounterpickBid[]
 
     if (mode === 'weekly') {
-      const { data, error } = await serviceClient
+      let query = serviceClient
         .from('counterpick_bids')
         .select('*')
         .eq('status', 'active')
         .lte('processing_deadline', now.toISOString())
+
+      if (league_id) {
+        query = query.eq('league_id', league_id)
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.error('Failed to fetch weekly counterpick bids:', error)
@@ -589,12 +615,18 @@ Deno.serve(async (req) => {
         counterpickBidsToProcess = data || []
       }
     } else {
-      const { data, error } = await serviceClient
+      let query = serviceClient
         .from('counterpick_bids')
         .select('*')
         .eq('status', 'active')
         .not('response_deadline', 'is', null)
         .lt('response_deadline', now.toISOString())
+
+      if (league_id) {
+        query = query.eq('league_id', league_id)
+      }
+
+      const { data, error } = await query
 
       if (error) {
         console.error('Failed to fetch extended counterpick bids:', error)
@@ -859,7 +891,7 @@ Deno.serve(async (req) => {
         ...results.map(r => r.league_id),
         ...counterpickResults.map(cr => cr.league_id)
       ])
-      await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBids)
+      await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBids, league_id)
     }
 
     return jsonResponse({
