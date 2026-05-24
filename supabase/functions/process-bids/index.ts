@@ -23,7 +23,7 @@ import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_sha
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
 interface ProcessBidsRequest {
   mode?: 'weekly' | 'extended'
@@ -184,6 +184,50 @@ async function sendBidResultsDiscordNotifications(
   await Promise.allSettled(discordPromises)
 }
 
+async function sendNoBidsDiscordNotifications(
+  serviceClient: ServiceClient,
+  excludeLeagueIds = new Set<string>()
+): Promise<void> {
+  try {
+    const { data: allChannels, error: channelsError } = await serviceClient
+      .from('discord_channels')
+      .select('league_id')
+      .eq('enabled', true)
+      .eq('notify_bids', true)
+
+    if (channelsError) {
+      console.error('Error fetching discord channels:', channelsError)
+      return
+    }
+
+    if (!allChannels || allChannels.length === 0) return
+
+    const activeLeagueIds = [...new Set(allChannels.map(ch => (ch as { league_id: string }).league_id))]
+    const leaguesWithNoBids = activeLeagueIds.filter(id => !excludeLeagueIds.has(id))
+
+    const noBidsPromises = leaguesWithNoBids.map(async (leagueId) => {
+      const leagueName = await getLeagueName(serviceClient, leagueId)
+      return sendDiscordNotification(serviceClient, {
+        leagueId,
+        category: 'bids',
+        embeds: [{
+          author: buildEmbedAuthor(leagueName, leagueId),
+          title: 'Bidding Results',
+          description: 'Bidding has concluded for this week. No bids were placed.',
+          color: DISCORD_COLORS.blue,
+          footer: { text: leagueName },
+          url: buildLeagueUrl(leagueId, '/bidding'),
+        }]
+      })
+    })
+
+    await Promise.allSettled(noBidsPromises)
+  } catch (err) {
+    console.error('Failed to send "no bids" notifications:', err)
+  }
+}
+
+
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
@@ -256,6 +300,9 @@ Deno.serve(async (req) => {
     }
 
     if (bidsToProcess.length === 0) {
+      if (mode === 'weekly') {
+        await sendNoBidsDiscordNotifications(serviceClient)
+      }
       return jsonResponse({
         message: 'No bids to process',
         mode,
@@ -805,6 +852,15 @@ Deno.serve(async (req) => {
 
     await sendBidResultsDiscordNotifications(serviceClient, results, 'Bidding Results', 'movie', 'Won by')
     await sendBidResultsDiscordNotifications(serviceClient, counterpickResults, 'Counterpick Bidding Results', 'counterpick', 'Counterpicked by')
+
+    // If weekly run, check for leagues with no bids to send "no bids placed" notification
+    if (mode === 'weekly') {
+      const leaguesWithBids = new Set([
+        ...results.map(r => r.league_id),
+        ...counterpickResults.map(cr => cr.league_id)
+      ])
+      await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBids)
+    }
 
     return jsonResponse({
       message: `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)`,
