@@ -272,20 +272,25 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
-    // Authenticate cron requests using a secret header
-    // This prevents unauthorized triggering of bid processing
+    // Authenticate requests using either the X-Cron-Secret header or the Service Role key
     const cronSecret = Deno.env.get('CRON_SECRET')
     const providedSecret = req.headers.get('X-Cron-Secret')
-
-    // If CRON_SECRET is set, require it to match
-    if (cronSecret && providedSecret !== cronSecret) {
-      return errorResponse('Forbidden', 403)
-    }
-
-    // Also accept service role key in Authorization header as alternative auth
     const authHeader = req.headers.get('Authorization')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    if (!cronSecret && authHeader !== `Bearer ${serviceRoleKey}`) {
+
+    let isAuthenticated = false
+
+    // 1. Check if X-Cron-Secret matches CRON_SECRET (if configured)
+    if (cronSecret && providedSecret === cronSecret) {
+      isAuthenticated = true
+    }
+
+    // 2. Check if Authorization Bearer matches SUPABASE_SERVICE_ROLE_KEY
+    if (serviceRoleKey && authHeader === `Bearer ${serviceRoleKey}`) {
+      isAuthenticated = true
+    }
+
+    if (!isAuthenticated) {
       return errorResponse('Forbidden', 403)
     }
 
