@@ -17,7 +17,7 @@
  * 7. Mark winner as 'won', others as 'lost'
  * 8. Send notifications to winner and losers
  */
-
+// Trigger deploy
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
