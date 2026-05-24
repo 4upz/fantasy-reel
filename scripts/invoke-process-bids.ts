@@ -62,10 +62,17 @@ Options:
 let supabaseUrl = args.url
 if (!supabaseUrl) {
   if (args.prod) {
-    // If prod, try to find in env
-    supabaseUrl = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL") || Deno.env.get("SUPABASE_URL")
-    if (!supabaseUrl && Deno.env.get("SUPABASE_PROJECT_REF")) {
-      supabaseUrl = `https://${Deno.env.get("SUPABASE_PROJECT_REF")}.supabase.co`
+    // If prod, prioritize SUPABASE_PROJECT_REF
+    const projectRef = Deno.env.get("SUPABASE_PROJECT_REF")
+    if (projectRef) {
+      supabaseUrl = `https://${projectRef}.supabase.co`
+    } else {
+      supabaseUrl = Deno.env.get("NEXT_PUBLIC_SUPABASE_URL")
+      const envUrl = Deno.env.get("SUPABASE_URL")
+      // Only use SUPABASE_URL if it is a remote production URL (not local)
+      if (envUrl && !envUrl.includes("127.0.0.1") && !envUrl.includes("localhost")) {
+        supabaseUrl = envUrl
+      }
     }
   } else {
     // Local default
