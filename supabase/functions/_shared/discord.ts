@@ -103,7 +103,10 @@ export async function sendDiscordNotification(
       return
     }
 
-    if (!channels || channels.length === 0) return
+    if (!channels || channels.length === 0) {
+      console.log(`[discord] sendDiscordNotification: No enabled channels found for league ${leagueId}`)
+      return
+    }
 
     // Filter by category preference
     const column = CATEGORY_COLUMN[category]
@@ -111,7 +114,10 @@ export async function sendDiscordNotification(
       (ch: DiscordChannel) => ch[column] === true
     )
 
-    if (eligibleChannels.length === 0) return
+    if (eligibleChannels.length === 0) {
+      console.log(`[discord] sendDiscordNotification: No channels with category "${category}" enabled for league ${leagueId}`)
+      return
+    }
 
     // Send to each channel
     const results = await Promise.allSettled(

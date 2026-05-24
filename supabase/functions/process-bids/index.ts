@@ -185,11 +185,23 @@ async function sendBidResultsDiscordNotifications(
   await Promise.allSettled(discordPromises)
 }
 
+interface NotificationSummary {
+  leagues_attempted: string[]
+  channels_notified: number
+  channels_queried: number
+}
+
 async function sendNoBidsDiscordNotifications(
   serviceClient: ServiceClient,
   excludeLeagueIds = new Set<string>(),
   targetLeagueId?: string
-): Promise<void> {
+): Promise<NotificationSummary> {
+  const summary: NotificationSummary = {
+    leagues_attempted: [],
+    channels_notified: 0,
+    channels_queried: 0,
+  }
+
   try {
     let query = serviceClient
       .from('discord_channels')
@@ -205,13 +217,30 @@ async function sendNoBidsDiscordNotifications(
 
     if (channelsError) {
       console.error('Error fetching discord channels:', channelsError)
-      return
+      return summary
     }
 
-    if (!allChannels || allChannels.length === 0) return
+    if (!allChannels || allChannels.length === 0) {
+      console.log(`[process-bids] No enabled discord channels found for notify_bids`)
+      return summary
+    }
+
+    summary.channels_queried = allChannels.length
 
     const activeLeagueIds = [...new Set(allChannels.map(ch => (ch as { league_id: string }).league_id))]
     const leaguesWithNoBids = activeLeagueIds.filter(id => !excludeLeagueIds.has(id))
+
+    summary.leagues_attempted = leaguesWithNoBids
+
+    // Count how many channels will be notified
+    const { count } = await serviceClient
+      .from('discord_channels')
+      .select('*', { count: 'exact', head: true })
+      .in('league_id', leaguesWithNoBids)
+      .eq('enabled', true)
+      .eq('notify_bids', true)
+    
+    summary.channels_notified = count ?? 0
 
     const noBidsPromises = leaguesWithNoBids.map(async (leagueId) => {
       const leagueName = await getLeagueName(serviceClient, leagueId)
@@ -233,6 +262,8 @@ async function sendNoBidsDiscordNotifications(
   } catch (err) {
     console.error('Failed to send "no bids" notifications:', err)
   }
+
+  return summary
 }
 
 
@@ -320,14 +351,16 @@ Deno.serve(async (req) => {
     }
 
     if (bidsToProcess.length === 0) {
+      let notificationSummary: NotificationSummary | undefined
       if (mode === 'weekly') {
-        await sendNoBidsDiscordNotifications(serviceClient, new Set(), league_id)
+        notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, new Set(), league_id)
       }
       return jsonResponse({
         message: 'No bids to process',
         mode,
         processed: 0,
         results: [],
+        notifications: notificationSummary,
       })
     }
 
@@ -886,12 +919,13 @@ Deno.serve(async (req) => {
     await sendBidResultsDiscordNotifications(serviceClient, counterpickResults, 'Counterpick Bidding Results', 'counterpick', 'Counterpicked by')
 
     // If weekly run, check for leagues with no bids to send "no bids placed" notification
+    let notificationSummary: NotificationSummary | undefined
     if (mode === 'weekly') {
       const leaguesWithBids = new Set([
         ...results.map(r => r.league_id),
         ...counterpickResults.map(cr => cr.league_id)
       ])
-      await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBids, league_id)
+      notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBids, league_id)
     }
 
     return jsonResponse({
@@ -902,6 +936,7 @@ Deno.serve(async (req) => {
       counterpick_processed: counterpickResults.length,
       counterpick_results: counterpickResults,
       errors: errors.length > 0 ? errors : undefined,
+      notifications: notificationSummary,
     })
   } catch (error) {
     console.error('Unexpected error in process-bids:', error)
