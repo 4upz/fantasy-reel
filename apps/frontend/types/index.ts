@@ -106,6 +106,7 @@ export interface TeamScore {
   team_id: string
   total_points: number
   draft_points: number
+  pickup_points: number
   counterpick_points: number
   counterpicks_made: number
   counterpicks_scored: number
