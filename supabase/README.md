@@ -116,6 +116,32 @@ frank@fantasyreel.test  → Empty dashboard state
 | `npx supabase db reset` | Drop all, re-run migrations + seed | Yes |
 | `npx supabase db reset --no-seed` | Reset without seed data | Yes |
 
+### Migration file naming
+
+**New migrations must use the full 14-digit timestamp** (`YYYYMMDDHHMMSS_name.sql`),
+which is what `npx supabase migration new <name>` generates. Always use that
+command rather than hand-naming the file.
+
+Older migrations here use an 8-digit date prefix (`20260203_name.sql`). That
+works on its own, but if an 8-digit and a 14-digit migration share the same
+date, the CLI sorts them differently from the way it sorts the recorded
+history, then fails every `db push` with:
+
+```
+Remote migration versions not found in local migrations directory.
+```
+
+Three files hit this (`20260202`, `20260216`, `20260218`) and were renamed to
+`...000000_` to resolve it. Do not follow the error's suggestion to
+`migration repair --status reverted` on its own — that marks a migration
+un-applied, so the next push re-runs it. For a rename, pair the two forms so
+the migration is recorded but never re-executed:
+
+```bash
+supabase migration repair --status applied  20260202000000   # records, does NOT run it
+supabase migration repair --status reverted 20260202         # drops the stale row
+```
+
 ## Movie Scoring System
 
 Fantasy Reel automatically fetches and calculates movie scores using a three-layer architecture:
