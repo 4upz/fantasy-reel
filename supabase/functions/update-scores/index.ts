@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
 import { fetchMDBListRatings } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
+import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
 
 interface UpdateScoresRequest {
   movie_ids?: string[]
@@ -132,6 +133,13 @@ Deno.serve(async (req) => {
       errors: [] as Array<{ movie_id: string; title: string; error: string }>
     }
 
+    // Snapshot scores and standings before recalculation so we can report
+    // exactly what moved once the run finishes
+    const scoreContext = await captureScoreContext(
+      serviceClient,
+      moviesToUpdate.map(m => m.id)
+    )
+
     // Process each movie
     for (const movie of moviesToUpdate) {
       if (!movie.tmdb_id) {
@@ -225,7 +233,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    return jsonResponse(results)
+    // Must be awaited -- the runtime may abort in-flight fetches after we respond
+    const notifications = await sendScoreNotifications(serviceClient, scoreContext)
+
+    return jsonResponse({ ...results, notifications })
 
   } catch (error) {
     console.error('Unexpected error:', error)

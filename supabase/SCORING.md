@@ -189,6 +189,49 @@ fantasy_points = base_pts + bonuses
                = +17.1
 ```
 
+## Score Notifications
+
+Every `update-scores` run reports what moved to each league's Discord channels.
+Notifications go out under the `scores` category, so they respect the
+`notify_scores` toggle on `discord_channels` (set via the bot's `/configure`).
+
+Implemented in `_shared/score-notifications.ts` as a before/after sandwich
+around the recalculation:
+
+```ts
+const context = await captureScoreContext(client, movieIds)  // snapshot
+// ...recalculate movie + team scores...
+await sendScoreNotifications(client, context)                 // diff and post
+```
+
+`captureScoreContext` records each movie's `fantasy_points` plus the full
+standings of every league holding those movies. Snapshotting *all* teams in a
+league — rather than only the ones whose movies scored — is what makes rank
+movement detectable for teams that were passed without scoring themselves.
+
+Three events are reported:
+
+| Event | Message |
+|-------|---------|
+| Movie scores for the first time | `Now has a score of **80.3**` |
+| Movie's score moves | `Score has gone **UP** from **81.2** to **82.7**` |
+| Team's score and/or rank changes | `Standings Update` embed, one field per team |
+
+Each changed movie gets its own message (titled with the movie, attributing the
+owning team and any counterpicker). Each league then gets a single
+`Standings Update` roundup listing every team whose score or rank moved.
+
+Notes:
+
+- Scores are compared at **display precision** (one decimal), so a change too
+  small to render never triggers a notification.
+- Ranks use competition ordering — ties share a rank (1, 2, 2, 4).
+- Messages within a league are spaced ~300ms apart to stay under Discord's
+  per-webhook rate limit; leagues are notified concurrently.
+- The `notifications` object in the `update-scores` response counts *changes
+  detected*, not messages delivered — a league with no enabled channel still
+  counts. Delivery success is logged by `_shared/discord.ts`.
+
 ## Cron Jobs
 
 Two pg_cron jobs manage the scoring system:
