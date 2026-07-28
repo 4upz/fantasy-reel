@@ -50,6 +50,8 @@ export interface MoviePlacement {
 /** Snapshot taken before scores are recalculated. */
 export interface ScoreNotificationContext {
   movieIds: string[]
+  /** Leagues holding these movies, including via dropped roster slots. */
+  leagueIds: string[]
   /** movieId -> fantasy_points before the update (null = unscored). */
   previousMoviePoints: Map<string, number | null>
   /** leagueId -> league name. */
@@ -268,6 +270,37 @@ export function buildStandingsEmbed(
   }
 }
 
+/**
+ * Condenses the movies past the per-league cap into a single embed, so a busy
+ * run stays informative without flooding the channel.
+ */
+export function buildMovieRollupEmbed(
+  changes: MovieScoreChange[],
+  leagueName: string,
+  leagueId: string
+): DiscordEmbed {
+  const shown = changes.slice(0, MAX_EMBED_FIELDS)
+
+  const fields = shown.map((change) => ({
+    name: change.title,
+    value: change.isNewScore
+      ? `Now has a score of **${formatPoints(change.newPoints)}**`
+      : describeScoreMovement(change.previousPoints as number, change.newPoints),
+    inline: false,
+  }))
+
+  const omitted = changes.length - shown.length
+
+  return {
+    author: buildEmbedAuthor(leagueName, leagueId),
+    title: `${changes.length} more ${plural(changes.length, 'movie')} scored`,
+    fields,
+    color: DISCORD_COLORS.blue,
+    footer: { text: omitted > 0 ? `${leagueName} -- ${omitted} more not shown` : leagueName },
+    url: buildLeagueUrl(leagueId, '/standings'),
+  }
+}
+
 function plural(count: number, word: string): string {
   return count === 1 ? word : `${word}s`
 }
@@ -362,11 +395,15 @@ export async function snapshotStandings(
   return standings
 }
 
-/** Shape shared by the draft_picks and counterpicks lookups. */
+/** Shape shared by the draft_picks, pickups and counterpicks lookups. */
 interface MovieTeamRow {
   movie_id: string
   league_id: string
   teams: { name: string } | { name: string }[] | null
+}
+
+interface HoldingRow extends MovieTeamRow {
+  dropped_at: string | null
 }
 
 /** Normalizes PostgREST embeds, which type single rows as arrays. */
@@ -385,6 +422,7 @@ export async function captureScoreContext(
 ): Promise<ScoreNotificationContext> {
   const empty: ScoreNotificationContext = {
     movieIds: [],
+    leagueIds: [],
     previousMoviePoints: new Map(),
     leagueNames: new Map(),
     previousStandings: new Map(),
@@ -411,30 +449,19 @@ export async function captureScoreContext(
       ])
     )
 
-    // Which leagues hold these movies, and who owns them there
-    const { data: picks, error: picksError } = await supabase
-      .from('draft_picks')
-      .select('movie_id, league_id, teams!draft_picks_team_id_fkey(name)')
-      .in('movie_id', movieIds)
-      .is('dropped_at', null)
+    const holdings = await loadHoldings(supabase, movieIds)
 
-    if (picksError) {
-      console.error('Failed to load draft picks for score notifications:', picksError.message)
-      return empty
-    }
+    // League discovery is deliberately kept separate from movie attribution.
+    // A dropped movie still counts toward its old owner's total_points (the
+    // scoring RPC applies no dropped_at filter), so its league can legitimately
+    // move in the standings even though we won't post a movie embed for it.
+    // Keying the early return on placements instead of leagues would black out
+    // the whole run's notifications in that case.
+    const leagueIds = [...new Set(holdings.map((h) => h.placement.leagueId))]
+    if (leagueIds.length === 0) return empty
 
-    const placements: MoviePlacement[] = (picks ?? []).map((pick: MovieTeamRow) => ({
-      movieId: pick.movie_id,
-      leagueId: pick.league_id,
-      ownerTeamName: firstOf(pick.teams)?.name ?? 'A team',
-      counterpickerTeamName: null,
-    }))
-
-    if (placements.length === 0) return empty
-
+    const placements = holdings.filter((h) => h.isActive).map((h) => h.placement)
     await attachCounterpickers(supabase, placements, movieIds)
-
-    const leagueIds = [...new Set(placements.map((p) => p.leagueId))]
 
     const [leagueNames, previousStandings] = await Promise.all([
       loadLeagueNames(supabase, leagueIds),
@@ -443,6 +470,7 @@ export async function captureScoreContext(
 
     return {
       movieIds,
+      leagueIds,
       previousMoviePoints,
       leagueNames,
       previousStandings,
@@ -452,6 +480,67 @@ export async function captureScoreContext(
     console.error('Unexpected error capturing score context:', error)
     return empty
   }
+}
+
+interface Holding {
+  placement: MoviePlacement
+  /** False once dropped -- still scores for the owner, but isn't news. */
+  isActive: boolean
+}
+
+/**
+ * Loads every roster slot holding these movies, across both acquisition
+ * paths: the draft (`draft_picks`) and the auction (`pickups`). The standings
+ * page treats both as first-class roster entries, so notifications must too.
+ *
+ * Dropped rows are included but flagged inactive -- see captureScoreContext.
+ */
+async function loadHoldings(
+  supabase: SupabaseClient,
+  movieIds: string[]
+): Promise<Holding[]> {
+  const [picks, pickups] = await Promise.all([
+    supabase
+      .from('draft_picks')
+      .select('movie_id, league_id, dropped_at, teams!draft_picks_team_id_fkey(name)')
+      .in('movie_id', movieIds),
+    supabase
+      .from('pickups')
+      .select('movie_id, league_id, dropped_at, teams!pickups_team_id_fkey(name)')
+      .in('movie_id', movieIds),
+  ])
+
+  if (picks.error) {
+    console.error('Failed to load draft picks for score notifications:', picks.error.message)
+  }
+  if (pickups.error) {
+    console.error('Failed to load pickups for score notifications:', pickups.error.message)
+  }
+
+  const rows = [...(picks.data ?? []), ...(pickups.data ?? [])] as HoldingRow[]
+
+  // A movie occupies at most one roster slot per league, but guard against
+  // overlap between the two sources so a league can't be notified twice.
+  const seen = new Set<string>()
+  const holdings: Holding[] = []
+
+  for (const row of rows) {
+    const key = `${row.movie_id}:${row.league_id}`
+    if (seen.has(key)) continue
+    seen.add(key)
+
+    holdings.push({
+      isActive: row.dropped_at === null,
+      placement: {
+        movieId: row.movie_id,
+        leagueId: row.league_id,
+        ownerTeamName: firstOf(row.teams)?.name ?? 'A team',
+        counterpickerTeamName: null,
+      },
+    })
+  }
+
+  return holdings
 }
 
 async function attachCounterpickers(
@@ -503,8 +592,20 @@ async function loadLeagueNames(
 // Notification Dispatch
 // ============================================================================
 
-/** Spacing between messages to the same webhook (Discord allows ~5 per 2s). */
-const WEBHOOK_SEND_DELAY_MS = 300
+/**
+ * Spacing between messages to the same webhook. Discord's per-webhook bucket
+ * is 5 requests per 2s (400ms); this leaves a margin on top. Overrunning it
+ * loses messages outright -- discord.ts treats a 429 as a plain failure and
+ * does not honour retry_after.
+ */
+const WEBHOOK_SEND_DELAY_MS = 450
+
+/**
+ * Per-league ceiling on individual movie messages in one run. Beyond this the
+ * remainder is folded into a single rollup, so a heavy release weekend can't
+ * dominate a channel.
+ */
+const MAX_MOVIE_EMBEDS_PER_LEAGUE = 8
 
 /**
  * Counts what changed, not what was delivered -- a league with no enabled
@@ -532,23 +633,37 @@ export async function sendScoreNotifications(
     leagues_with_changes: 0,
   }
 
-  if (context.placements.length === 0) return summary
+  if (context.leagueIds.length === 0) return summary
 
   try {
     const movieChanges = await loadMovieScoreChanges(supabase, context)
 
-    const leagueIds = [...new Set(context.placements.map((p) => p.leagueId))]
+    const leagueIds = context.leagueIds
     const currentStandings = await snapshotStandings(supabase, leagueIds)
 
     // Build the per-league work list before sending so the summary is accurate
     const perLeague = leagueIds.map((leagueId) => {
       const leagueName = context.leagueNames.get(leagueId) ?? 'League'
 
-      const movieEmbeds = context.placements
-        .filter((p) => p.leagueId === leagueId && movieChanges.has(p.movieId))
-        .map((p) =>
-          buildMovieScoreEmbed(movieChanges.get(p.movieId)!, p, leagueName)
+      const changed = context.placements.filter(
+        (p) => p.leagueId === leagueId && movieChanges.has(p.movieId)
+      )
+
+      const movieEmbeds = changed
+        .slice(0, MAX_MOVIE_EMBEDS_PER_LEAGUE)
+        .map((p) => buildMovieScoreEmbed(movieChanges.get(p.movieId)!, p, leagueName))
+
+      // Fold anything past the cap into one rollup rather than dropping it
+      const overflow = changed.slice(MAX_MOVIE_EMBEDS_PER_LEAGUE)
+      if (overflow.length > 0) {
+        movieEmbeds.push(
+          buildMovieRollupEmbed(
+            overflow.map((p) => movieChanges.get(p.movieId)!),
+            leagueName,
+            leagueId
+          )
         )
+      }
 
       const standingChanges = diffStandings(
         context.previousStandings.get(leagueId) ?? [],
