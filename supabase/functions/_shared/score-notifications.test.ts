@@ -6,6 +6,7 @@
 
 import { assertEquals, assertExists, assertStringIncludes } from '@std/assert'
 import {
+  captureScoreContext,
   formatPoints,
   ordinal,
   rankStandings,
@@ -338,7 +339,7 @@ Deno.test('buildStandingsEmbed - caps at Discord 25-field limit and notes the re
 })
 
 // ============================================================================
-// Dispatch
+// Mock infrastructure
 // ============================================================================
 
 interface MockResult {
@@ -432,6 +433,101 @@ function baseContext(): ScoreNotificationContext {
     ],
   }
 }
+
+// ============================================================================
+// Holding resolution (draft_picks + pickups)
+// ============================================================================
+
+/** Minimal fixtures for the two league/standings lookups every capture makes. */
+const CAPTURE_LEAGUE_TABLES = {
+  counterpicks: [{ data: [], error: null }],
+  leagues: [{ data: [{ id: 'league-1', name: 'MoC Fantasy League' }], error: null }],
+  league_participants: [{ data: [{ id: 'p-a', league_id: 'league-1' }], error: null }],
+  teams: [{ data: [{ id: 'team-a', name: 'Alpha', participant_id: 'p-a' }], error: null }],
+  team_scores: [{ data: [{ team_id: 'team-a', total_points: 10 }], error: null }],
+}
+
+Deno.test('captureScoreContext - active pickup wins over a dropped draft pick', async () => {
+  // A movie dropped from the draft becomes eligible for re-acquisition at
+  // auction in the same league, so both rows coexist. Taking the dropped one
+  // would suppress the movie embed for the team that actually holds it.
+  const { client } = createMockSupabase({
+    movies: [{ data: [{ id: 'movie-1', fantasy_points: null }], error: null }],
+    draft_picks: [{
+      data: [{
+        movie_id: 'movie-1',
+        league_id: 'league-1',
+        dropped_at: '2026-01-01T00:00:00Z',
+        teams: { name: 'Former Owner' },
+      }],
+      error: null,
+    }],
+    pickups: [{
+      data: [{
+        movie_id: 'movie-1',
+        league_id: 'league-1',
+        dropped_at: null,
+        teams: { name: 'Current Owner' },
+      }],
+      error: null,
+    }],
+    ...CAPTURE_LEAGUE_TABLES,
+  })
+
+  const context = await captureScoreContext(client, ['movie-1'])
+
+  assertEquals(context.leagueIds, ['league-1'])
+  assertEquals(context.placements.length, 1)
+  assertEquals(context.placements[0].ownerTeamName, 'Current Owner')
+})
+
+Deno.test('captureScoreContext - dropped-only holding marks the league without a placement', async () => {
+  // Dropped movies still count toward the old owner's total (the scoring RPC
+  // applies no dropped_at filter), so the league must still be notified.
+  const { client } = createMockSupabase({
+    movies: [{ data: [{ id: 'movie-1', fantasy_points: 20 }], error: null }],
+    draft_picks: [{
+      data: [{
+        movie_id: 'movie-1',
+        league_id: 'league-1',
+        dropped_at: '2026-01-01T00:00:00Z',
+        teams: { name: 'Former Owner' },
+      }],
+      error: null,
+    }],
+    pickups: [{ data: [], error: null }],
+    ...CAPTURE_LEAGUE_TABLES,
+  })
+
+  const context = await captureScoreContext(client, ['movie-1'])
+
+  assertEquals(context.leagueIds, ['league-1'])
+  assertEquals(context.placements.length, 0)
+})
+
+Deno.test('captureScoreContext - a movie held in two leagues yields one placement each', async () => {
+  const { client } = createMockSupabase({
+    movies: [{ data: [{ id: 'movie-1', fantasy_points: null }], error: null }],
+    draft_picks: [{
+      data: [{ movie_id: 'movie-1', league_id: 'league-1', dropped_at: null, teams: { name: 'Alpha' } }],
+      error: null,
+    }],
+    pickups: [{
+      data: [{ movie_id: 'movie-1', league_id: 'league-2', dropped_at: null, teams: { name: 'Bravo' } }],
+      error: null,
+    }],
+    ...CAPTURE_LEAGUE_TABLES,
+  })
+
+  const context = await captureScoreContext(client, ['movie-1'])
+
+  assertEquals(context.leagueIds.sort(), ['league-1', 'league-2'])
+  assertEquals(context.placements.length, 2)
+})
+
+// ============================================================================
+// Dispatch
+// ============================================================================
 
 Deno.test('sendScoreNotifications - posts a movie embed and a standings embed', async () => {
   const calls = mockWebhookFetch()
