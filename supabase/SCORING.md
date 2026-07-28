@@ -335,8 +335,36 @@ SELECT process_score_queue();
 ### Recalculate a Team's Score
 
 ```sql
+-- Read-only preview
 SELECT * FROM calculate_team_score('team-uuid-here');
+
+-- Write the result to team_scores
+SELECT recalculate_team_score_with_counterpicks('team-uuid-here');
 ```
+
+## What Counts Toward a Team Score
+
+A team's `total_points` is the sum of three legs:
+
+| Leg | Source | Column | Sign |
+|-----|--------|--------|------|
+| Draft | `draft_picks` where `dropped_at IS NULL` | `draft_points` | As scored |
+| Pickup | `pickups` where `dropped_at IS NULL` | `pickup_points` | As scored |
+| Counterpick | `counterpicks` | `counterpick_points` | **Inverted** (`-fantasy_points`) |
+
+`movies_scored`, `movies_pending`, and `average_score` cover the active roster
+(draft picks + pickups) and exclude counterpicks, which are reported separately
+via `counterpicks_made` / `counterpicks_scored`.
+
+Dropping a movie stops it scoring immediately — the row is soft-deleted via
+`dropped_at` and both legs filter on it. Because a dropped movie becomes
+eligible for pickup again, the same movie can appear in both tables for a
+league; only the active row counts, and `idx_pickups_league_movie_active`
+(UNIQUE on `(league_id, movie_id) WHERE dropped_at IS NULL`) guarantees at most
+one active holder.
+
+`recalculate_teams_for_movie(movie_id)` fans out to every team affected by a
+movie: its current holder (whether by draft or pickup) and any counterpickers.
 
 ### View Queue Status
 

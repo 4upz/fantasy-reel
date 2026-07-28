@@ -69,6 +69,7 @@ export default function TeamStandingCard({
 
   const totalPoints = teamScore?.total_points ?? 0
   const draftPoints = teamScore?.draft_points ?? 0
+  const pickupPoints = teamScore?.pickup_points ?? 0
   const counterpickPoints = teamScore?.counterpick_points ?? 0
   const counterpicksMade = teamScore?.counterpicks_made ?? 0
   const moviesScored = teamScore?.movies_scored ?? 0
@@ -178,6 +179,17 @@ export default function TeamStandingCard({
             <span className={draftPoints >= 0 ? 'text-gold' : 'text-crimson'}>
               Draft: {formatFantasyPoints(draftPoints)}
             </span>
+            {pickups.length > 0 && (
+              <>
+                <span className="text-foreground-muted/50">|</span>
+                <span className="flex items-center gap-1">
+                  <ShoppingCart className="w-3 h-3 text-gold" />
+                  <span className={pickupPoints >= 0 ? 'text-gold' : 'text-crimson'}>
+                    {formatFantasyPoints(pickupPoints)}
+                  </span>
+                </span>
+              </>
+            )}
             {counterpicksMade > 0 && (
               <>
                 <span className="text-foreground-muted/50">|</span>
