@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     // Get user's participant and team
     const { data: participant, error: participantError } = await serviceClient
       .from('league_participants')
-      .select('id, teams(id, name)')
+      .select('id, teams(id)')
       .eq('league_id', league_id)
       .eq('user_id', user.id)
       .eq('status', 'active')
@@ -89,7 +89,7 @@ Deno.serve(async (req) => {
       return errorResponse('You are not a member of this league', 403)
     }
 
-    const team = participant.teams as unknown as { id: string; name: string }
+    const team = participant.teams as unknown as { id: string }
     if (!team) {
       return errorResponse('Team not found', 404)
     }
@@ -273,14 +273,16 @@ Deno.serve(async (req) => {
       }, 201)
     }
 
-    // Fetch movie info and target team name (used for notifications and Discord)
-    const [{ data: movieInfo }, { data: targetTeam }] = await Promise.all([
-      serviceClient.from('movies').select('title, poster_url').eq('id', movie_id).single(),
-      serviceClient.from('teams').select('name').eq('id', draftPick.team_id).single(),
-    ])
+    // Fetch movie info (used for notifications and Discord)
+    const { data: movieInfo } = await serviceClient
+      .from('movies')
+      .select('title, poster_url, release_date')
+      .eq('id', movie_id)
+      .single()
 
     const movieTitle = movieInfo?.title || 'Unknown Movie'
     const posterUrl = movieInfo?.poster_url
+    const releaseDate = movieInfo?.release_date
 
     let outbidEmailPromise: Promise<unknown> | null = null
 
@@ -355,20 +357,15 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Intentionally anonymous: movie only, no bidder name, target team, or bid amount
     const bidEmbed: DiscordEmbed = {
       author: buildEmbedAuthor(league.name ?? 'League', league_id),
-      title: `New counterpick bid on ${movieTitle}`,
-      description: `**${team.name}** bid $${amount} to counterpick **${targetTeam?.name ?? 'a team'}**'s movie`,
+      title: `${movieTitle} (🎯 Counter Pick Bid)`,
       thumbnail: posterUrl ? { url: `https://image.tmdb.org/t/p/w92${posterUrl}` } : undefined,
       color: DISCORD_COLORS.gold,
+      fields: releaseDate ? [{ name: 'Release Date', value: releaseDate, inline: true }] : undefined,
       footer: { text: `Bidding closes ${new Date(processingDeadline).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` },
       url: buildLeagueUrl(league_id, '/bidding'),
-    }
-
-    // Add "Previous High" field only if outbidding someone
-    if (highestBid && highestBid.team_id !== team.id) {
-      const { data: previousTeam } = await serviceClient.from('teams').select('name').eq('id', highestBid.team_id).single()
-      bidEmbed.fields = [{ name: 'Previous High', value: `${previousTeam?.name ?? 'A team'} at $${highestBid.amount}`, inline: true }]
     }
 
     const discordPromise = sendDiscordNotification(serviceClient, {

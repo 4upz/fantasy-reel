@@ -250,6 +250,11 @@ Deno.serve(async (req) => {
       }, 201)
     }
 
+    // Movie details (used for notifications and Discord)
+    const movieTitle = movie_data?.title || highestBid?.movie_data?.title || `Movie #${tmdb_id}`
+    const posterPath = movie_data?.poster_url || highestBid?.movie_data?.poster_url
+    const releaseDate = movie_data?.release_date || highestBid?.movie_data?.release_date
+
     // Track outbid email promise for parallel send with Discord
     let outbidEmailPromise: Promise<unknown> | null = null
 
@@ -276,7 +281,6 @@ Deno.serve(async (req) => {
 
       if (outbidTeam) {
         const outbidUserId = (outbidTeam.league_participants as unknown as { user_id: string })?.user_id
-        const movieTitle = movie_data?.title || highestBid.movie_data?.title || `Movie #${tmdb_id}`
 
         // Create notification
         await serviceClient.from('notifications').insert({
@@ -333,31 +337,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build movie title and poster for Discord embed
-    const movieTitle = movie_data?.title || highestBid?.movie_data?.title || `Movie #${tmdb_id}`
-    const posterPath = movie_data?.poster_url || highestBid?.movie_data?.poster_url
-
-    // Get bidder team name for Discord notification
-    const { data: bidderTeam } = await serviceClient
-      .from('teams')
-      .select('name')
-      .eq('id', team.id)
-      .single()
-
+    // Intentionally anonymous: movie only, no bidder name or bid amount
     const bidEmbed: DiscordEmbed = {
       author: buildEmbedAuthor(league.name ?? 'League', league_id),
-      title: `New bid on ${movieTitle}`,
-      description: `**${bidderTeam?.name ?? 'A team'}** -- $${amount}`,
+      title: movieTitle,
       thumbnail: posterPath ? { url: `https://image.tmdb.org/t/p/w92${posterPath}` } : undefined,
       color: DISCORD_COLORS.gold,
+      fields: releaseDate ? [{ name: 'Release Date', value: releaseDate, inline: true }] : undefined,
       footer: { text: `Bidding closes ${new Date(processingDeadline).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` },
       url: buildLeagueUrl(league_id, '/bidding'),
-    }
-
-    // Add "Previous High" field only if outbidding someone
-    if (highestBid && highestBid.team_id !== team.id) {
-      const { data: previousTeam } = await serviceClient.from('teams').select('name').eq('id', highestBid.team_id).single()
-      bidEmbed.fields = [{ name: 'Previous High', value: `${previousTeam?.name ?? 'A team'} at $${highestBid.amount}`, inline: true }]
     }
 
     const discordPromise = sendDiscordNotification(serviceClient, {
