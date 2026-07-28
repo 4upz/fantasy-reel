@@ -205,9 +205,23 @@ await sendScoreNotifications(client, context)                 // diff and post
 ```
 
 `captureScoreContext` records each movie's `fantasy_points` plus the full
-standings of every league holding those movies. Snapshotting *all* teams in a
-league — rather than only the ones whose movies scored — is what makes rank
-movement detectable for teams that were passed without scoring themselves.
+standings of every league holding those movies. Snapshotting *all* active
+participants' teams in a league — rather than only the ones whose movies
+scored — is what makes rank movement detectable for teams that were passed
+without scoring themselves. (The same `status = 'active'` filter the standings
+page uses, so Discord ranks agree with the site.)
+
+**Both acquisition paths count.** A league "holds" a movie through either
+`draft_picks` (drafted) or `pickups` (won at auction). Reading only
+`draft_picks` silently suppresses every notification for auction-won movies.
+
+**League discovery is deliberately separate from movie attribution.** A dropped
+roster slot produces no movie embed — a movie the team no longer holds isn't
+news — but its league is still considered affected, because
+`recalculate_team_score_with_counterpicks` applies no `dropped_at` filter and
+so a dropped movie's points still move its old owner's total. Keying the early
+return on placements rather than leagues would black out an entire run's
+notifications whenever the only affected slot was a dropped one.
 
 Three events are reported:
 
@@ -223,11 +237,22 @@ owning team and any counterpicker). Each league then gets a single
 
 Notes:
 
-- Scores are compared at **display precision** (one decimal), so a change too
-  small to render never triggers a notification.
-- Ranks use competition ordering — ties share a rank (1, 2, 2, 4).
-- Messages within a league are spaced ~300ms apart to stay under Discord's
-  per-webhook rate limit; leagues are notified concurrently.
+- **Scores** are compared at **display precision** (one decimal), so a change
+  too small to render never triggers a notification. **Ranks** are computed
+  from exact points, matching the standings page. The asymmetry is
+  intentional but visible: if a rival slips 10.01 → 10.00 you can be told you
+  "moved from 2nd to 1st" with no score line, because the change that caused
+  it rounds away at one decimal. Discord and the site agree; only the
+  explanation is invisible.
+- Ranks use competition ordering — ties share a rank (1, 2, 2, 4). Tied teams
+  get the same rank regardless of array order, so tie-break ordering can never
+  manufacture a phantom rank change.
+- Messages within a league are spaced 450ms apart. Discord's per-webhook bucket
+  is 5 requests per 2s (400ms) and `discord.ts` treats a 429 as a plain failure
+  without honouring `retry_after`, so overrunning drops messages outright.
+  Leagues use separate webhooks and are notified concurrently.
+- At most 8 individual movie messages per league per run; the remainder folds
+  into one "N more movies scored" rollup.
 - The `notifications` object in the `update-scores` response counts *changes
   detected*, not messages delivered — a league with no enabled channel still
   counts. Delivery success is logged by `_shared/discord.ts`.

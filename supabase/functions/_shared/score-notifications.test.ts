@@ -68,13 +68,30 @@ Deno.test('rankStandings - ties share a rank and skip the next (1,2,2,4)', () =>
   assertEquals(ranked.map((t) => t.rank), [1, 2, 2, 4])
 })
 
-Deno.test('rankStandings - treats teams with no score as zero', () => {
+Deno.test('rankStandings - ranks a zero above a negative score', () => {
   const ranked = rankStandings([
     { teamId: 'a', teamName: 'Alpha', points: 0 },
     { teamId: 'b', teamName: 'Bravo', points: -5 },
   ])
 
   assertEquals(ranked.map((t) => t.teamId), ['a', 'b'])
+})
+
+Deno.test('rankStandings - tie order is stable across snapshots', () => {
+  // Guards against a phantom "moved from 2nd to 1st" when two teams are level:
+  // tied teams must receive the same rank, whatever order they arrive in.
+  const teams = [
+    { teamId: 'a', teamName: 'Alpha', points: 40 },
+    { teamId: 'b', teamName: 'Bravo', points: 40 },
+  ]
+
+  const forward = rankStandings(teams)
+  const reversed = rankStandings([...teams].reverse())
+
+  const rankOf = (r: TeamStanding[], id: string) => r.find((t) => t.teamId === id)!.rank
+  assertEquals(rankOf(forward, 'a'), rankOf(reversed, 'a'))
+  assertEquals(rankOf(forward, 'b'), rankOf(reversed, 'b'))
+  assertEquals(diffStandings(forward, reversed).length, 0)
 })
 
 // ============================================================================
@@ -378,9 +395,25 @@ function mockWebhookFetch() {
   return calls
 }
 
+function enabledChannel(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'ch-1',
+    webhook_url: 'https://discord.com/api/webhooks/1/abc',
+    thread_id: null,
+    bid_alert_role_id: null,
+    notify_drafts: true,
+    notify_bids: true,
+    notify_trades: true,
+    notify_scores: true,
+    consecutive_failures: 0,
+    ...overrides,
+  }
+}
+
 function baseContext(): ScoreNotificationContext {
   return {
     movieIds: ['movie-1'],
+    leagueIds: ['league-1'],
     previousMoviePoints: new Map([['movie-1', 20.0]]),
     leagueNames: new Map([['league-1', 'MoC Fantasy League']]),
     previousStandings: new Map([
@@ -494,12 +527,86 @@ Deno.test('sendScoreNotifications - no-ops when the movie is in no league', asyn
   const calls = mockWebhookFetch()
   try {
     const { client } = createMockSupabase({})
-    const context = { ...baseContext(), placements: [] }
+    const context = { ...baseContext(), leagueIds: [], placements: [] }
 
     const summary = await sendScoreNotifications(client, context)
 
     assertEquals(summary.movie_updates, 0)
     assertEquals(calls.length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - still posts standings when a dropped movie moves the score', async () => {
+  // A dropped pick yields no placement, but its points still count toward the
+  // owner's total, so the league must not be blacked out for the whole run.
+  const calls = mockWebhookFetch()
+  try {
+    const { client } = createMockSupabase({
+      movies: [
+        { data: [{ id: 'movie-1', title: 'Dropped Film', poster_url: null, fantasy_points: 35.0 }], error: null },
+      ],
+      league_participants: [{ data: [{ id: 'p-b', league_id: 'league-1' }], error: null }],
+      teams: [{ data: [{ id: 'team-b', name: 'Bravo', participant_id: 'p-b' }], error: null }],
+      team_scores: [{ data: [{ team_id: 'team-b', total_points: 58.6 }], error: null }],
+      discord_channels: [{ data: [enabledChannel()], error: null }],
+    })
+
+    const context = baseContext()
+    context.placements = []
+    context.previousStandings = new Map([['league-1', [standing('team-b', 'Bravo', 30.0, 1)]]])
+
+    const summary = await sendScoreNotifications(client, context)
+
+    assertEquals(summary.movie_updates, 0)
+    assertEquals(summary.standings_updates, 1)
+    assertEquals(calls.length, 1)
+    const embed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(embed.title, 'Standings Update')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - folds movies past the cap into a rollup', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const movieCount = 11
+    const movies = Array.from({ length: movieCount }, (_, i) => ({
+      id: `movie-${i}`,
+      title: `Movie ${i}`,
+      poster_url: null,
+      fantasy_points: 50 + i,
+    }))
+
+    const { client } = createMockSupabase({
+      movies: [{ data: movies, error: null }],
+      league_participants: [{ data: [{ id: 'p-b', league_id: 'league-1' }], error: null }],
+      teams: [{ data: [{ id: 'team-b', name: 'Bravo', participant_id: 'p-b' }], error: null }],
+      team_scores: [{ data: [{ team_id: 'team-b', total_points: 30.0 }], error: null }],
+      discord_channels: [{ data: [enabledChannel()], error: null }],
+    })
+
+    const context = baseContext()
+    context.movieIds = movies.map((m) => m.id)
+    context.previousMoviePoints = new Map(movies.map((m) => [m.id, null]))
+    context.placements = movies.map((m) => ({
+      movieId: m.id,
+      leagueId: 'league-1',
+      ownerTeamName: 'Bravo',
+      counterpickerTeamName: null,
+    }))
+    // No standings movement, so every message is a movie message
+    context.previousStandings = new Map([['league-1', [standing('team-b', 'Bravo', 30.0, 1)]]])
+
+    await sendScoreNotifications(client, context)
+
+    // 8 individual + 1 rollup for the remaining 3
+    assertEquals(calls.length, 9)
+    const rollup = (calls[8].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(rollup.title, '3 more movies scored')
+    assertEquals((rollup.fields as unknown[]).length, 3)
   } finally {
     globalThis.fetch = originalFetch
   }
