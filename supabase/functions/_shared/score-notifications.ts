@@ -519,18 +519,23 @@ async function loadHoldings(
 
   const rows = [...(picks.data ?? []), ...(pickups.data ?? [])] as HoldingRow[]
 
-  // A movie occupies at most one roster slot per league, but guard against
-  // overlap between the two sources so a league can't be notified twice.
-  const seen = new Set<string>()
-  const holdings: Holding[] = []
+  // One movie can occupy a slot in *both* tables for the same league: a movie
+  // dropped from the draft becomes eligible for re-acquisition at auction
+  // (is_movie_eligible_for_pickup excludes dropped draft picks), and drops are
+  // soft, so the stale row lives on. Collapse to one holding per league,
+  // always preferring the active row -- taking the dropped one would suppress
+  // the movie embed for the team that actually holds the movie.
+  const byKey = new Map<string, Holding>()
 
   for (const row of rows) {
     const key = `${row.movie_id}:${row.league_id}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    const isActive = row.dropped_at === null
 
-    holdings.push({
-      isActive: row.dropped_at === null,
+    const existing = byKey.get(key)
+    if (existing && (existing.isActive || !isActive)) continue
+
+    byKey.set(key, {
+      isActive,
       placement: {
         movieId: row.movie_id,
         leagueId: row.league_id,
@@ -540,7 +545,7 @@ async function loadHoldings(
     })
   }
 
-  return holdings
+  return [...byKey.values()]
 }
 
 async function attachCounterpickers(
@@ -670,12 +675,13 @@ export async function sendScoreNotifications(
         currentStandings.get(leagueId) ?? []
       )
 
-      return { leagueId, leagueName, movieEmbeds, standingChanges }
+      // Count movies, not messages -- the rollup stands in for many of them
+      return { leagueId, leagueName, movieEmbeds, standingChanges, movieCount: changed.length }
     })
 
-    for (const { movieEmbeds, standingChanges } of perLeague) {
+    for (const { movieCount, movieEmbeds, standingChanges } of perLeague) {
       if (movieEmbeds.length === 0 && standingChanges.length === 0) continue
-      summary.movie_updates += movieEmbeds.length
+      summary.movie_updates += movieCount
       if (standingChanges.length > 0) summary.standings_updates++
       summary.leagues_with_changes++
     }

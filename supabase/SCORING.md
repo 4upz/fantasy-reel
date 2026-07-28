@@ -214,6 +214,12 @@ page uses, so Discord ranks agree with the site.)
 **Both acquisition paths count.** A league "holds" a movie through either
 `draft_picks` (drafted) or `pickups` (won at auction). Reading only
 `draft_picks` silently suppresses every notification for auction-won movies.
+The two can collide: `is_movie_eligible_for_pickup` excludes dropped draft
+picks, so a movie dropped from the draft can be re-acquired at auction in the
+same league, leaving a stale `draft_picks` row alongside a live `pickups` row.
+Holdings are collapsed one-per-league preferring the **active** row — taking
+the dropped one would attribute the movie to its former owner and suppress the
+embed for the team that actually holds it.
 
 **League discovery is deliberately separate from movie attribution.** A dropped
 roster slot produces no movie embed — a movie the team no longer holds isn't
