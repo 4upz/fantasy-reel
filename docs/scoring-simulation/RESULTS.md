@@ -92,11 +92,78 @@ full per-movie output is in `results.txt`.
   implementation needs a documented fallback (e.g., a fixed RT→MC-equivalent
   mapping) for movies without a metascore.
 
-## Recommendation
+## Part 1 recommendation (superseded — see Part 2)
 
-**Metacritic-only, baseline 60, 2× at 85, Fantasy Critic diminishing curve
-below 50, no threshold bonuses** (`mc_b60`). It matches the current system's
-positive/negative feel, revives the gem-hunting accelerator at the right
-rarity (3 movies/season), doubles skill separation at the top versus RT, and
-reduces the game to one predictable public number. If Tomatometer familiarity
-is judged worth the skill-separation cost, `rt75_t90` is the best RT variant.
+**Metacritic-only, baseline 60, 2× at 85** (`mc_b60`) maximizes top-end skill
+separation. Part 2 revises this: separation turns out not to be a property of
+the Fantasy Critic experience, which is the stated design target.
+
+---
+
+# Part 2 — Matching Fantasy Critic's actual distribution
+
+Benchmark: the 2024 "draftable" games season (50 anticipated/notable titles
+with settled OpenCritic scores) run through Fantasy Critic's exact
+`StandardScoringSystem` (baseline 70, 2× at 90, halving slopes below 60).
+
+## What Fantasy Critic's season actually looks like
+
+| Metric | FC benchmark (OpenCritic 2024) |
+|---|---:|
+| Mean / median points | +10.2 / +10.5 |
+| % of slate positive | **86%** |
+| % of slate in the 2× tier | **18%** (9 of 50 games hit 90+) |
+| #1 vs #10 gap | 11.0 |
+| Std of top 15 | 3.8 |
+| Max single score | +30 |
+
+Two properties define the FC feel:
+
+1. **The 90+ jackpot is genuinely frequent** — 18% of the slate, roughly 1–2
+   per 10-slot roster per season. (2024 was a strong games year; 10–15% is
+   more typical.)
+2. **The top is compressed, not spread.** FC's #1-to-#10 gap is 11 points and
+   its top-15 std is 3.8 — nearly identical to RT-only movie variants and
+   completely unlike MC-only (gap 25–28, std 9–11). FC is won by accumulating
+   many good picks, not by landing one monster score.
+
+Point 2 invalidates the Part 1 tiebreaker: the "skill separation" that favored
+Metacritic is a property FC does not have and FC players do not miss.
+
+## Calibration sweep vs FC targets (movies, 2024 slate)
+
+Best matches (full table in `results.txt`):
+
+| Config | %pos | 2× tier | #1–#10 gap | std top15 | max | verdict |
+|---|---:|---:|---:|---:|---:|---|
+| FC benchmark | 86% | 18% | 11.0 | 3.8 | 30 | target |
+| **RT b60 / 2× at 90** | 66% | 16% | 13.0 | 4.8 | 42 | **closest overall shape** |
+| RT b65 / 2× at 90 | 62% | 16% | 13.0 | 4.8 | 37 | slightly stingier |
+| MC b50 / 2× at 78 | 76% | 18% | 27.0 | 10.2 | 54 | right frequencies, wrong shape — one movie (Anora, +54) dominates a season |
+
+The Tomatometer's distribution over a draftable slate is nearly isomorphic to
+OpenCritic's (similar median, similar 85–95 mass); Metacritic movie scores sit
+~15 points lower with a thin top tail, so forcing FC frequencies onto MC
+requires constants (baseline 50, 2× at 78) that blow the top open instead.
+
+**The one unmatchable gap:** movies genuinely fail more often than draftable
+games. FC's 86% positive rate can't be reached honestly — matching it would
+require a baseline near RT 50, i.e. rewarding rotten movies. RT baseline 60
+(Rotten Tomatoes' own Fresh line — "fresh = positive points, rotten =
+negative") gets to 66% positive and is the most explainable rule available.
+The extra downside depth is arguably a feature: this app has counterpicks,
+and at baseline 60 a 2024 season offers ~19 viable counterpick targets vs ~6
+in FC's game season.
+
+## Revised recommendation
+
+**Rotten Tomatoes only · baseline 60 (the Fresh line) · 2× accelerator at 90 ·
+Fantasy Critic diminishing curve below 50 · no threshold bonuses.**
+
+- Mean +11.0 vs FC's +10.2; 2× tier 16% vs FC's 18% (~1–2 jackpot movies per
+  10-slot roster); top gap 13.0 vs FC's 11.0; top-15 std 4.8 vs FC's 3.8.
+- Maximally predictable: one number everyone already knows, pivots on RT's own
+  Fresh branding, "the 90% club" as the jackpot tier.
+- If the ~66% positive rate feels too harsh in play, soften the downside by
+  starting the slope-halving immediately below the baseline (busts land
+  −5..−12 instead of −15..−19) rather than by moving the baseline.
