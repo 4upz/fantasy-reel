@@ -105,3 +105,33 @@ Rosters (snake order by hype):
   Team C: Joker: Folie a Deux, Godzilla x Kong: The New Empire, Venom: The Last Dance, Bad Boys: Ride or Die, Kraven the Hunter, The Garfield Movie, The Crow, Nosferatu, Longlegs, The Brutalist
   Team D: Inside Out 2, Despicable Me 4, Kung Fu Panda 4, Twisters, Borderlands, IF, Trap, Challengers, Speak No Evil, Saturday Night
   Team E: Wicked, Gladiator II, Beetlejuice Beetlejuice, A Quiet Place: Day One, The Fall Guy, Civil War, MaXXXine, The Bikeriders, The Substance, Conclave
+
+====================================================================================================
+FANTASY CRITIC BENCHMARK: 2024 OPENCRITIC SLATE, EXACT FC STANDARD FORMULA
+====================================================================================================
+System                       mean  median   %pos  2x tier  top1-10 gap  std(top15)    max
+FC (OpenCritic, b70/t90)     10.2    10.5    86%      18%         11.0         3.8   30.0
+
+CALIBRATION SWEEP: movie curves vs FC targets (%pos=86%, 2x tier=18%)
+System                       mean  median   %pos  2x tier  top1-10 gap  std(top15)    max  FC-dist
+MC b50/t78                   11.9    13.5    76%      18%         27.0        10.2   54.0     10.0
+MC b50/t75                   12.4    13.5    76%      22%         28.0        11.1   57.0     18.0
+MC b55/t78                    7.3     8.5    64%      18%         27.0        10.2   49.0     22.0
+RT b60/t90                   11.0    17.5    66%      16%         13.0         4.8   42.0     24.0
+RT b65/t90                    7.0    12.5    62%      16%         13.0         4.8   37.0     28.0
+MC b60/t78                    3.0     3.5    56%      18%         27.0        10.2   44.0     30.0
+MC b50/t80                   11.6    13.5    76%       8%         25.0         9.4   52.0     30.0
+MC b55/t75                    7.9     8.5    64%      22%         28.0        11.1   52.0     30.0
+RT b60/t88                   11.4    17.5    66%      24%         14.0         5.5   44.0     32.0
+RT b60/t92                   10.8    17.5    66%      12%         11.0         3.9   40.0     32.0
+RT b70/t90                    3.3     7.5    58%      16%         13.0         4.8   32.0     32.0
+RT b65/t88                    7.4    12.5    62%      24%         14.0         5.5   39.0     36.0
+RT b65/t92                    6.8    12.5    62%      12%         11.0         3.9   35.0     36.0
+RT b75/t90                   -0.3     2.5    54%      16%         13.0         4.8   27.0     36.0
+MC b60/t75                    3.6     3.5    56%      22%         28.0        11.1   47.0     38.0
+RT b70/t88                    3.6     7.5    58%      24%         14.0         5.5   34.0     40.0
+RT b70/t92                    3.0     7.5    58%      12%         11.0         3.9   30.0     40.0
+MC b55/t80                    7.1     8.5    64%       8%         25.0         9.4   47.0     42.0
+RT b75/t88                    0.0     2.5    54%      24%         14.0         5.5   29.0     44.0
+RT b75/t92                   -0.6     2.5    54%      12%         11.0         3.9   25.0     44.0
+MC b60/t80                    2.8     3.5    56%       8%         25.0         9.4   42.0     50.0

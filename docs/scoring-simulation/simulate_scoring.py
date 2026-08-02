@@ -69,6 +69,38 @@ MOVIES = [
 ]
 
 
+# 2024 "draftable" games season with settled OpenCritic scores, as the
+# Fantasy Critic benchmark (title, opencritic). Same construction as MOVIES:
+# pre-season anticipated titles plus notable breakouts, accurate to ~+/-2.
+GAMES = [
+    ("Astro Bot", 95), ("Final Fantasy VII Rebirth", 93),
+    ("Elden Ring: Shadow of the Erdtree", 92), ("Metaphor: ReFantazio", 92),
+    ("Balatro", 91), ("Satisfactory", 91), ("UFO 50", 90),
+    ("Like a Dragon: Infinite Wealth", 90), ("Tekken 8", 90),
+    ("Animal Well", 89), ("Persona 3 Reload", 88),
+    ("Paper Mario: The Thousand-Year Door", 88),
+    ("Shin Megami Tensei V: Vengeance", 87), ("Zelda: Echoes of Wisdom", 86),
+    ("Indiana Jones and the Great Circle", 86), ("Silent Hill 2", 86),
+    ("Prince of Persia: The Lost Crown", 86),
+    ("Sonic X Shadow Generations", 85), ("Frostpunk 2", 84),
+    ("Helldivers 2", 83), ("Call of Duty: Black Ops 6", 83),
+    ("Warhammer 40K: Space Marine 2", 82), ("Stellar Blade", 81),
+    ("Black Myth: Wukong", 81), ("Senua's Saga: Hellblade II", 81),
+    ("Super Mario Party Jamboree", 80), ("Pacific Drive", 80),
+    ("WWE 2K24", 80), ("Granblue Fantasy: Relink", 80),
+    ("Dragon's Dogma 2", 79), ("Dragon Age: The Veilguard", 78),
+    ("NBA 2K25", 78), ("Mario & Luigi: Brothership", 77),
+    ("Visions of Mana", 77), ("Rise of the Ronin", 76),
+    ("Star Wars Outlaws", 76), ("Luigi's Mansion 2 HD", 76),
+    ("EA Sports FC 25", 75), ("STALKER 2", 74),
+    ("Princess Peach: Showtime!", 74), ("Madden NFL 25", 73),
+    ("XDefiant", 72), ("Homeworld 3", 71), ("MultiVersus", 70),
+    ("Outcast: A New Beginning", 66), ("Alone in the Dark", 63),
+    ("Concord", 62), ("Suicide Squad: Kill the Justice League", 60),
+    ("Skull and Bones", 59), ("South Park: Snow Day", 54),
+]
+
+
 # ---------------------------------------------------------------------------
 # Scoring systems
 # ---------------------------------------------------------------------------
@@ -272,6 +304,58 @@ def main():
     print("\nRosters (snake order by hype):")
     for t, roster in teams.items():
         print(f"  {names[t]}: " + ", ".join(m[0] for m in roster))
+
+    # -----------------------------------------------------------------------
+    # Part 2: Fantasy Critic benchmark + calibration sweep to match its feel
+    # -----------------------------------------------------------------------
+    def dist_stats(pts, accel_count):
+        s = sorted(pts, reverse=True)
+        n = len(pts)
+        med = (s[n // 2] + s[(n - 1) // 2]) / 2
+        pos = sum(1 for p in pts if p > 0) / n * 100
+        top15 = s[:15]
+        mean15 = sum(top15) / 15
+        std15 = (sum((p - mean15) ** 2 for p in top15) / 15) ** 0.5
+        return {
+            "mean": sum(pts) / n, "median": med, "pos": pos,
+            "accel_pct": accel_count / n * 100,
+            "gap": s[0] - s[9], "std15": std15,
+            "min": min(pts), "max": max(pts),
+        }
+
+    print()
+    print("=" * 100)
+    print("FANTASY CRITIC BENCHMARK: 2024 OPENCRITIC SLATE, EXACT FC STANDARD FORMULA")
+    print("=" * 100)
+    fc_pts = [fc_curve(s, 70, 90) for _, s in GAMES]
+    fc = dist_stats(fc_pts, sum(1 for _, s in GAMES if s >= 90))
+    hdr = (f"{'System':<26}{'mean':>7}{'median':>8}{'%pos':>7}{'2x tier':>9}"
+           f"{'top1-10 gap':>13}{'std(top15)':>12}{'max':>7}")
+    print(hdr)
+    print(f"{'FC (OpenCritic, b70/t90)':<26}{fc['mean']:>7.1f}{fc['median']:>8.1f}"
+          f"{fc['pos']:>6.0f}%{fc['accel_pct']:>8.0f}%{fc['gap']:>13.1f}"
+          f"{fc['std15']:>12.1f}{fc['max']:>7.1f}")
+
+    print()
+    print("CALIBRATION SWEEP: movie curves vs FC targets "
+          f"(%pos={fc['pos']:.0f}%, 2x tier={fc['accel_pct']:.0f}%)")
+    print(hdr + f"{'FC-dist':>9}")
+    sweeps = []
+    for src, idx, baselines, accels in [
+        ("RT", 1, [60, 65, 70, 75], [88, 90, 92]),
+        ("MC", 2, [50, 55, 60], [75, 78, 80]),
+    ]:
+        for b in baselines:
+            for t in accels:
+                pts = [fc_curve(m[idx], b, t) for m in MOVIES]
+                st = dist_stats(pts, sum(1 for m in MOVIES if m[idx] >= t))
+                d = abs(st["pos"] - fc["pos"]) + 2 * abs(st["accel_pct"] - fc["accel_pct"])
+                sweeps.append((d, src, b, t, st))
+    for d, src, b, t, st in sorted(sweeps):
+        name = f"{src} b{b}/t{t}"
+        print(f"{name:<26}{st['mean']:>7.1f}{st['median']:>8.1f}"
+              f"{st['pos']:>6.0f}%{st['accel_pct']:>8.0f}%{st['gap']:>13.1f}"
+              f"{st['std15']:>12.1f}{st['max']:>7.1f}{d:>9.1f}")
 
 
 if __name__ == "__main__":
