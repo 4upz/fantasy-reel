@@ -1,0 +1,107 @@
+====================================================================================================
+PER-MOVIE POINTS UNDER EACH SYSTEM (sorted by Metacritic)
+====================================================================================================
+Movie                                 RT  MC IMDb |   current   mc_b60   mc_b65   rt_b75   rt_b80 rt75_t90
+----------------------------------------------------------------------------------------------------------
+Anora                                 93  91   75 |      19.2     37.0     32.0     18.0     13.0     21.0
+The Brutalist                         93  90   75 |      18.9     35.0     30.0     18.0     13.0     21.0
+The Wild Robot                        96  85   82 |      26.4     25.0     20.0     24.0     17.0     27.0
+Challengers                           88  82   71 |      13.6     22.0     17.0     13.0      8.0     13.0
+Dune: Part Two                        92  79   85 |      19.3     19.0     14.0     17.0     12.0     19.0
+Furiosa: A Mad Max Saga               90  79   75 |      15.0     19.0     14.0     15.0     10.0     15.0
+Conclave                              93  79   74 |      15.8     19.0     14.0     18.0     13.0     21.0
+Nosferatu                             85  78   72 |      11.7     18.0     13.0     10.0      5.0     10.0
+The Substance                         89  78   73 |      13.7     18.0     13.0     14.0      9.0     14.0
+Longlegs                              86  77   67 |      10.1     17.0     12.0     11.0      6.0     11.0
+Civil War                             81  75   70 |       8.7     15.0     10.0      6.0      1.0      6.0
+Inside Out 2                          91  73   75 |      13.9     13.0      8.0     16.0     11.0     17.0
+Wicked                                88  73   74 |      12.3     13.0      8.0     13.0      8.0     13.0
+The Fall Guy                          81  73   68 |       7.5     13.0      8.0      6.0      1.0      6.0
+The Bikeriders                        80  68   68 |       5.8      8.0      3.0      5.0      0.0      5.0
+A Quiet Place: Day One                85  67   66 |       6.8      7.0      2.0     10.0      5.0     10.0
+Kingdom of the Planet of the Apes     80  66   71 |       6.3      6.0      1.0      5.0      0.0      5.0
+Smile 2                               84  66   69 |       7.2      6.0      1.0      9.0      4.0      9.0
+Paddington in Peru                    93  66   69 |      10.8      6.0      1.0     18.0     13.0     21.0
+Twisters                              75  65   65 |       2.5      5.0      0.0      0.0     -5.0      0.0
+Transformers One                      89  65   76 |      11.4      5.0      0.0     14.0      9.0     14.0
+Speak No Evil                         84  65   67 |       6.3      5.0      0.0      9.0      4.0      9.0
+Gladiator II                          70  64   65 |      -1.6      4.0     -1.0     -5.0    -10.0     -5.0
+Alien: Romulus                        80  64   71 |       5.8      4.0     -1.0      5.0      0.0      5.0
+Saturday Night                        80  64   70 |       5.5      4.0     -1.0      5.0      0.0      5.0
+MaXXXine                              74  63   62 |      -1.5      3.0     -2.0     -1.0     -6.0     -1.0
+Beetlejuice Beetlejuice               77  62   67 |       2.9      2.0     -3.0      2.0     -3.0      2.0
+Terrifier 3                           77  61   64 |       2.2      1.0     -4.0      2.0     -3.0      2.0
+Sonic the Hedgehog 3                  86  60   69 |       6.5      0.0     -5.0     11.0      6.0     11.0
+Moana 2                               61  58   67 |      -3.8     -2.0     -7.0    -12.0    -14.5    -12.0
+Deadpool & Wolverine                  78  56   76 |       4.8     -4.0     -9.0      3.0     -2.0      3.0
+Megalopolis                           46  56   48 |     -10.4     -4.0     -9.0    -17.2    -18.0    -17.2
+Kung Fu Panda 4                       70  55   63 |      -3.1     -5.0    -10.0     -5.0    -10.0     -5.0
+Trap                                  57  55   59 |      -6.4     -5.0    -10.0    -14.0    -15.8    -14.0
+Bad Boys: Ride or Die                 64  54   65 |      -4.1     -6.0    -10.5    -10.5    -13.0    -10.5
+Despicable Me 4                       56  53   62 |      -6.3     -7.0    -11.0    -14.5    -16.0    -14.5
+Horizon: An American Saga Ch. 1       50  52   66 |      -7.0     -8.0    -11.5    -16.2    -17.5    -16.2
+Mufasa: The Lion King                 56  51   66 |      -5.9     -9.0    -12.0    -14.5    -16.0    -14.5
+Godzilla x Kong: The New Empire       54  47   62 |      -7.5    -11.5    -14.0    -15.2    -16.5    -15.2
+Ghostbusters: Frozen Empire           43  46   61 |     -10.0    -12.0    -14.5    -17.8    -18.4    -17.8
+IF                                    47  46   65 |      -8.5    -12.0    -14.5    -17.0    -17.9    -17.0
+Joker: Folie a Deux                   32  45   52 |     -18.9    -12.5    -15.0    -18.9    -19.2    -18.9
+The Garfield Movie                    36  42   58 |     -17.4    -14.0    -15.8    -18.6    -19.0    -18.6
+Venom: The Last Dance                 41  41   60 |     -11.2    -14.5    -16.0    -18.0    -18.6    -18.0
+Red One                               31  41   65 |     -17.3    -14.5    -16.0    -19.0    -19.3    -19.0
+Kraven the Hunter                     15  35   54 |     -20.0    -16.2    -17.5    -19.7    -19.8    -19.7
+Argylle                               33  35   57 |     -19.1    -16.2    -17.5    -18.9    -19.2    -18.9
+The Crow                              22  30   46 |     -20.0    -17.5    -18.1    -19.5    -19.6    -19.5
+Borderlands                           10  27   46 |     -20.0    -17.9    -18.5    -19.8    -19.8    -19.8
+Madame Web                            11  26   39 |     -20.0    -18.0    -18.6    -19.8    -19.8    -19.8
+
+====================================================================================================
+DISTRIBUTION STATS
+====================================================================================================
+System        mean  median     min     max   %pos  2x tier  top1-10 gap  std(top15)
+current        1.0     3.8   -20.0    26.4    56%        0         14.0         4.5
+mc_b60         2.4     3.5   -18.0    37.0    56%        3         20.0         7.6
+mc_b65        -1.6    -1.5   -18.6    32.0    38%        3         20.0         7.6
+rt_b75        -0.7     2.5   -19.8    24.0    54%        5         10.0         3.5
+rt_b80        -4.2    -2.5   -19.8    17.0    40%        1          8.0         3.2
+rt75_t90      -0.3     2.5   -19.8    27.0    54%        8         13.0         4.8
+
+====================================================================================================
+BONUS TRIGGER COUNTS UNDER CURRENT SYSTEM (n=50)
+====================================================================================================
+  CF        : 28 movies (56% of slate)
+  Darling   : 1 movies (2% of slate)
+  Disaster  : 8 movies (16% of slate)
+
+====================================================================================================
+RANK AGREEMENT (Spearman) AND BIGGEST MC-vs-RT DISAGREEMENTS
+====================================================================================================
+  mc_b60 vs rt_b75: rho = 0.940
+  current vs mc_b60: rho = 0.966
+  current vs rt_b75: rho = 0.987
+
+  Movie                                MC-rank  RT-rank   delta
+  Sonic the Hedgehog 3                     29       13     -16
+  Paddington in Peru                       19        5     -14
+  Transformers One                         21        9     -12
+  Civil War                                11       20      +9
+  Twisters                                 20       28      +8
+  Megalopolis                              32       40      +8
+  The Bikeriders                           15       23      +8
+  Challengers                               4       12      +8
+
+====================================================================================================
+SIMULATED 5-TEAM SNAKE DRAFT (by pre-season hype), FINAL STANDINGS
+====================================================================================================
+current    | Team E:    70.4  Team B:    27.4  Team A:    14.4  Team D:    -2.5  Team C:   -58.2
+mc_b60     | Team E:   102.0  Team B:    40.8  Team D:     2.1  Team A:    -0.5  Team C:   -22.2
+mc_b65     | Team E:    52.0  Team B:     2.4  Team D:   -40.0  Team A:   -44.5  Team C:   -51.9
+rt_b75     | Team E:    68.0  Team A:     4.0  Team B:     1.6  Team D:   -27.3  Team C:   -81.5
+rt_b80     | Team E:    18.0  Team A:   -30.2  Team B:   -33.5  Team D:   -61.5  Team C:  -101.8
+rt75_t90   | Team E:    71.0  Team B:     9.6  Team A:     7.0  Team D:   -26.3  Team C:   -78.5
+
+Rosters (snake order by hype):
+  Team A: Deadpool & Wolverine, Furiosa: A Mad Max Saga, Moana 2, Ghostbusters: Frozen Empire, Sonic the Hedgehog 3, Red One, Megalopolis, Transformers One, Smile 2, Paddington in Peru
+  Team B: Dune: Part Two, Kingdom of the Planet of the Apes, Mufasa: The Lion King, Alien: Romulus, Madame Web, Argylle, Horizon: An American Saga Ch. 1, The Wild Robot, Terrifier 3, Anora
+  Team C: Joker: Folie a Deux, Godzilla x Kong: The New Empire, Venom: The Last Dance, Bad Boys: Ride or Die, Kraven the Hunter, The Garfield Movie, The Crow, Nosferatu, Longlegs, The Brutalist
+  Team D: Inside Out 2, Despicable Me 4, Kung Fu Panda 4, Twisters, Borderlands, IF, Trap, Challengers, Speak No Evil, Saturday Night
+  Team E: Wicked, Gladiator II, Beetlejuice Beetlejuice, A Quiet Place: Day One, The Fall Guy, Civil War, MaXXXine, The Bikeriders, The Substance, Conclave
