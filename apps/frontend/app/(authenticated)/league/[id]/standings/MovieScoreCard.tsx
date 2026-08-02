@@ -25,27 +25,6 @@ function formatFantasyPoints(points: number): string {
   return rounded >= 0 ? `+${rounded}` : `${rounded}`
 }
 
-function BonusBadge({ type, active }: { type: 'fresh' | 'darling' | 'disaster'; active: boolean }) {
-  if (!active) return null
-
-  const config = {
-    fresh: { label: 'CF', title: 'Certified Fresh (+3)', className: 'bg-[#fa320a]/20 text-[#fa320a] border-[#fa320a]/30' },
-    darling: { label: '★', title: 'Critical Darling (+5)', className: 'bg-gold/20 text-gold border-gold/30' },
-    disaster: { label: '💀', title: 'Critical Disaster (-5)', className: 'bg-crimson/20 text-crimson border-crimson/30' },
-  }
-
-  const { label, title, className } = config[type]
-
-  return (
-    <span
-      className={`px-1.5 py-0.5 text-[10px] font-bold border rounded ${className}`}
-      title={title}
-    >
-      {label}
-    </span>
-  )
-}
-
 export default function MovieScoreCard({ movie, badge, isCounterpicked = false, overridePoints }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -61,9 +40,6 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
   const mcReview = movie.reviews?.find((r) => r.source === 'metacritic')
 
   const releaseDate = movie.release_date ? formatDate(movie.release_date) : 'TBA'
-
-  // Get scoring bonuses
-  const bonuses = movie.scoring_bonuses
 
   return (
     <div className="flex gap-4 p-4 bg-elevated/50 rounded-xl border border-border hover:border-border-hover transition-colors">
@@ -154,14 +130,6 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
               Upcoming
             </span>
           )}
-          {/* Bonus Badges */}
-          {bonuses && (
-            <>
-              <BonusBadge type="fresh" active={bonuses.certified_fresh} />
-              <BonusBadge type="darling" active={bonuses.critical_darling} />
-              <BonusBadge type="disaster" active={bonuses.critical_disaster} />
-            </>
-          )}
         </div>
 
         {/* Score Sources */}
@@ -185,7 +153,7 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
             {/* Show raw critic score for context */}
             {movie.combined_score != null && (
               <div className="text-[10px] text-foreground-muted mt-1">
-                {Math.round(movie.combined_score)} avg
+                {Math.round(movie.combined_score)}% RT
               </div>
             )}
           </>

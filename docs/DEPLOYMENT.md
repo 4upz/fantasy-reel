@@ -41,7 +41,7 @@ Before deploying, gather these API keys:
 | Service | Purpose | Get Key From |
 |---------|---------|--------------|
 | **TMDb** | Movie discovery, search, posters | https://www.themoviedb.org/settings/api |
-| **MDBList** | Movie scores (IMDb, RT, Metacritic) | https://mdblist.com/preferences/ |
+| **MDBList** | Movie ratings (RT drives scoring; IMDb/Metacritic display-only) | https://mdblist.com/preferences/ |
 | **Resend** | Email notifications | https://resend.com/api-keys |
 | **Discord** | OAuth authentication | https://discord.com/developers/applications |
 

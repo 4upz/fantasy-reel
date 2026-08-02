@@ -595,40 +595,38 @@ WHERE conrelid = 'draft_picks'::regclass AND contype = 'f';
 
 ## 5. Scoring System
 
-### Hybrid Fantasy Points
+### Fantasy Points Curve
 
-Movies earn fantasy points based on a **70-point baseline** system, not a simple average:
+Movies earn fantasy points from their Rotten Tomatoes Tomatometer score alone, using a baseline-relative curve (baseline 60 = RT's own "Fresh" line):
 
-**Base Points:**
-| Critic Score | Calculation |
-|--------------|-------------|
-| 90+ | +20 base + 2 pts per point above 90 |
-| 70-89 | +1 pt per point above 70 |
-| Below 70 | -0.5 pts per point below 70 (floor: -15) |
+**Formula Tiers:**
+| RT Score | Calculation |
+|----------|-------------|
+| 90+ | 30 + 2 pts per point above 90 ("The 90% Club") |
+| 50-89 | RT − 60 |
+| 40-49 | −10 − 0.5 pts per point below 50 |
+| 30-39 | −15 − 0.25 pts per point below 40 |
+| 20-29 | −17.5 − 0.125 pts per point below 30 |
+| 10-19 | −18.75 − 0.0625 pts per point below 20 |
+| Below 10 | −19.375 − 0.03125 pts per point below 10 |
 
-**Bonus Multipliers:**
-| Bonus | Condition | Points |
-|-------|-----------|--------|
-| Certified Fresh | RT ≥ 75% | +3 |
-| Critical Darling | All 3 sources ≥ 80 | +5 |
-| Critical Disaster | Any source < 40 | -5 |
+Below 50, the slope halves every 10 points, so penalties approach an asymptote around -20 with no hard floor.
 
 **Examples:**
-- 92 avg, all ≥80 → +24 base + 3 CF + 5 Darling = **+32 pts**
-- 82 avg, RT=78 → +12 base + 3 CF = **+15 pts**
-- 70 avg → **0 pts**
-- 55 avg → -7.5 base = **-8 pts**
-- 32 avg, IMDb=25 → -15 floor - 5 Disaster = **-20 pts**
+- 96% → **+42 pts** (30 + 2×6)
+- 84% → **+24 pts** (84−60)
+- 60% → **0 pts** (baseline)
+- 35% → **-16.25 pts** (-15 − 0.25×5)
 
 ### Data Sources
-- **IMDb:** Score out of 10, normalized to 100-point scale (35% weight)
-- **Rotten Tomatoes:** Tomatometer percentage (40% weight)
-- **Metacritic:** Metascore (25% weight)
+- **Rotten Tomatoes (Tomatometer):** The only source that drives `fantasy_points`. Stored as `movies.combined_score`.
+- **IMDb / Metacritic:** Still fetched from MDBList and stored in `reviews` for display context; they no longer affect scoring.
 
 ### Score Sync
 - Nightly cron job fetches latest scores from MDBList
 - Only updates movies that have been released
 - Recalculates fantasy points and team totals after each sync
+- A movie with no RT score yet is unscored (`combined_score` and `fantasy_points` are `NULL`, shown as "Pending")
 - See `supabase/SCORING.md` for full architecture details
 
 ---

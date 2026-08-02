@@ -81,26 +81,6 @@ function MovieCard({ movie, variant }: MovieCardProps) {
               <h4 className="font-display font-semibold text-foreground truncate group-hover:text-gold transition-colors">
                 {movie.title}
               </h4>
-              {/* Bonus badges */}
-              {movie.scoring_bonuses && (
-                <div className="flex gap-1 flex-shrink-0">
-                  {movie.scoring_bonuses.certified_fresh && (
-                    <span className="px-1 py-0.5 text-[10px] font-bold bg-[#fa320a]/20 text-[#fa320a] border border-[#fa320a]/30 rounded" title="Certified Fresh +3">
-                      CF
-                    </span>
-                  )}
-                  {movie.scoring_bonuses.critical_darling && (
-                    <span className="px-1 py-0.5 text-[10px] font-bold bg-gold/20 text-gold border border-gold/30 rounded" title="Critical Darling +5">
-                      ★
-                    </span>
-                  )}
-                  {movie.scoring_bonuses.critical_disaster && (
-                    <span className="px-1 py-0.5 text-[10px] font-bold bg-crimson/20 text-crimson border border-crimson/30 rounded" title="Critical Disaster -5">
-                      💀
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
             <p className="text-sm text-foreground-muted mt-1">
               {isScored ? 'Released' : formatReleaseDate(movie.release_date)}

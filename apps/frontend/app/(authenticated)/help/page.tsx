@@ -9,8 +9,6 @@ import {
   Film,
   TrendingUp,
   TrendingDown,
-  Award,
-  AlertTriangle,
   ChevronRight,
 } from 'lucide-react'
 import Link from 'next/link'
@@ -66,7 +64,7 @@ function ScoreExample({
         </span>
       </div>
       <div className="text-sm space-y-1">
-        <div className="text-foreground-muted">Avg: {avgScore}</div>
+        <div className="text-foreground-muted">{avgScore}</div>
         {bonuses.map((bonus, i) => (
           <div key={i} className="text-foreground-muted">{bonus}</div>
         ))}
@@ -153,7 +151,7 @@ export default function HelpPage() {
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse text-sm font-bold flex-shrink-0">
                     4
                   </span>
-                  <span>Earn fantasy points based on critic scores (IMDb, Rotten Tomatoes, Metacritic)</span>
+                  <span>Earn fantasy points based on the Rotten Tomatoes Tomatometer</span>
                 </li>
                 <li className="flex items-start gap-3">
                   <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse text-sm font-bold flex-shrink-0">
@@ -294,9 +292,9 @@ export default function HelpPage() {
           {/* Scoring */}
           <Section id="scoring" icon={<Trophy className="w-5 h-5" />} title="Scoring System">
             <p>
-              Fantasy points are calculated using a hybrid system based on critic reviews from IMDb,
-              Rotten Tomatoes, and Metacritic. The system uses a <strong>70-point baseline</strong> -
-              movies scoring above 70 earn positive points, while those below can cost you points.
+              Fantasy points come from a single number: the <strong>Rotten Tomatoes Tomatometer</strong>.
+              The baseline is <strong>60%</strong> - RT&apos;s own &ldquo;Fresh&rdquo; line. Fresh movies earn
+              points, rotten movies cost you points, and the 90% Club pays double.
             </p>
 
             <div className="card p-6 mb-6">
@@ -308,8 +306,8 @@ export default function HelpPage() {
                     <TrendingUp className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-semibold text-foreground">90+ Average Score</div>
-                    <div className="text-sm">+20 base points + 2 points for each point above 90</div>
+                    <div className="font-semibold text-foreground">90%+ - The 90% Club</div>
+                    <div className="text-sm">+30 base points + 2 points for each point above 90</div>
                   </div>
                 </div>
 
@@ -318,8 +316,8 @@ export default function HelpPage() {
                     <TrendingUp className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-semibold text-foreground">70-89 Average Score</div>
-                    <div className="text-sm">+1 point for each point above 70</div>
+                    <div className="font-semibold text-foreground">60-89% - Fresh</div>
+                    <div className="text-sm">+1 point for each point above 60</div>
                   </div>
                 </div>
 
@@ -328,41 +326,10 @@ export default function HelpPage() {
                     <TrendingDown className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-semibold text-foreground">Below 70 Average Score</div>
-                    <div className="text-sm">-0.5 points for each point below 70 (minimum: -15 points)</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="card p-6 mb-6">
-              <h4 className="font-semibold text-foreground mb-4">Bonus & Penalty Modifiers</h4>
-
-              <div className="grid md:grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <h5 className="text-sm font-semibold text-success flex items-center gap-2">
-                    <Award className="w-4 h-4" /> Bonuses
-                  </h5>
-                  <div className="text-sm space-y-2">
-                    <div className="flex justify-between">
-                      <span>Certified Fresh (RT 75%+)</span>
-                      <span className="text-success font-semibold">+3 pts</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Critical Darling (all sources 80+)</span>
-                      <span className="text-success font-semibold">+5 pts</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h5 className="text-sm font-semibold text-crimson flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" /> Penalties
-                  </h5>
-                  <div className="text-sm space-y-2">
-                    <div className="flex justify-between">
-                      <span>Critical Disaster (any source below 40)</span>
-                      <span className="text-crimson font-semibold">-5 pts</span>
+                    <div className="font-semibold text-foreground">Below 60% - Rotten</div>
+                    <div className="text-sm">
+                      -1 point for each point below 60. Below 50%, the losses taper off - each 10
+                      points deeper costs half as much - bottoming out near -20 points.
                     </div>
                   </div>
                 </div>
@@ -372,39 +339,41 @@ export default function HelpPage() {
             <h4 className="font-semibold text-foreground mb-4">Example Scores</h4>
             <div className="grid md:grid-cols-2 gap-4">
               <ScoreExample
-                title="Critically Acclaimed Film"
-                avgScore="92 (IMDb: 8.5, RT: 95%, MC: 88)"
-                bonuses={['+24 base (20 + 2x2)', '+3 Certified Fresh', '+5 Critical Darling']}
-                total="+32 pts"
+                title="The 90% Club"
+                avgScore="RT 96%"
+                bonuses={['+30 base (90% Club)', '+12 (2 x 6 points above 90)']}
+                total="+42 pts"
                 isPositive={true}
               />
               <ScoreExample
-                title="Solid Performer"
-                avgScore="82 (IMDb: 7.8, RT: 85%, MC: 80)"
-                bonuses={['+12 base', '+3 Certified Fresh']}
-                total="+15 pts"
+                title="Certified Crowd-Pleaser"
+                avgScore="RT 84%"
+                bonuses={['+24 (24 points above the 60% line)']}
+                total="+24 pts"
                 isPositive={true}
               />
               <ScoreExample
-                title="Average Film"
-                avgScore="70 (IMDb: 6.8, RT: 72%, MC: 68)"
-                bonuses={['No bonuses']}
+                title="Right at the Line"
+                avgScore="RT 60%"
+                bonuses={['Exactly at the Fresh baseline']}
                 total="0 pts"
                 isPositive={true}
               />
               <ScoreExample
-                title="Critical Flop"
-                avgScore="32 (IMDb: 2.5, RT: 15%, MC: 28)"
-                bonuses={['-15 base (capped)', '-5 Critical Disaster']}
-                total="-20 pts"
+                title="Rotten"
+                avgScore="RT 35%"
+                bonuses={['-15 at 40%, tapering below', 'Losses cap out near -20']}
+                total="-16 pts"
                 isPositive={false}
               />
             </div>
 
             <div className="alert alert-warning mt-6">
               <p>
-                <strong>Score Sources:</strong> We use a weighted average - Rotten Tomatoes (40%),
-                IMDb (35%), and Metacritic (25%). Scores are updated nightly after movie releases.
+                <strong>Score Sources:</strong> Points are driven entirely by the Rotten Tomatoes
+                Tomatometer. IMDb and Metacritic scores are still shown on movie cards for context,
+                but don&apos;t affect your points. Scores update nightly once a movie is released -
+                a movie without an RT score yet shows as Pending.
               </p>
             </div>
           </Section>

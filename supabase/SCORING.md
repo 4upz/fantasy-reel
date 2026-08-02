@@ -4,50 +4,47 @@ Fantasy Reel uses a three-layer architecture to automatically fetch and calculat
 
 ## Overview
 
-When movies are released, their scores are fetched from:
-- **IMDb** (35% weight) - Broad audience ratings
-- **Rotten Tomatoes** (40% weight) - Critic consensus (Tomatometer)
-- **Metacritic** (25% weight) - Weighted critic average
+When movies are released, ratings are fetched from three sources via MDBList:
+- **Rotten Tomatoes** (Tomatometer, 0-100 scale) - Critic consensus, and the **only source that drives fantasy points**
+- **IMDb** - Broad audience ratings, stored for display only
+- **Metacritic** - Weighted critic average, stored for display only
 
-These are combined into a weighted average (`combined_score`, 0-100 scale) which is then converted to **fantasy points** using a baseline-relative formula.
+The Rotten Tomatoes score is copied directly into `combined_score` (0-100 scale), which is then converted to **fantasy points** using a baseline-relative curve. If a movie has no Rotten Tomatoes review yet, it is unscored: `combined_score` and `fantasy_points` stay `NULL` until one is fetched.
 
 ## Fantasy Points Formula
 
-Unlike a simple average, fantasy points reward excellence and penalize poor performance relative to a 70-point baseline:
+Fantasy points are not the raw Tomatometer score — they reward excellence and penalize poor performance relative to a 60-point baseline (Rotten Tomatoes' own "Fresh" line):
 
-### Base Points
+### Formula
 
-| Weighted Average | Calculation | Example |
-|------------------|-------------|---------|
-| 90+ | +20 base + 2 pts per point above 90 | 95 avg → +20 + (5×2) = **+30** |
-| 70-89 | +1 pt per point above 70 | 82 avg → **+12** |
-| Below 70 | -0.5 pts per point below 70 (floor: -15) | 55 avg → (55-70)×-0.5 = **-7.5** |
+| RT Score | Calculation | Example |
+|----------|-------------|---------|
+| 90+ | 30 + 2 × (RT − 90) | 96% → 30 + 2×6 = **+42** |
+| 50-89 | RT − 60 | 84% → **+24**; 60% → **0** |
+| 40-49 | −10 − 0.5 × (50 − RT) | 40% → **-15** |
+| 30-39 | −15 − 0.25 × (40 − RT) | 30% → **-17.5** |
+| 20-29 | −17.5 − 0.125 × (30 − RT) | 20% → **-18.75** |
+| 10-19 | −18.75 − 0.0625 × (20 − RT) | 10% → **-19.375** |
+| Below 10 | −19.375 − 0.03125 × (10 − RT) | 0% → **-19.6875** |
 
-### Bonus Multipliers
-
-| Bonus | Condition | Points |
-|-------|-----------|--------|
-| **Certified Fresh** | RT ≥ 75% | +3 |
-| **Critical Darling** | All 3 sources ≥ 80 | +5 |
-| **Critical Disaster** | Any source < 40 | -5 (doesn't stack) |
+Below the 50-point baseline the penalty slope halves every 10 points (0.5 → 0.25 → 0.125 → 0.0625 → 0.03125 …), so the curve approaches an asymptote around -20 but never hits a hard floor — a true bomb costs a little more than a merely bad movie, but the gap keeps shrinking.
 
 ### Example Calculations
 
-| Movie | Avg | Base | Bonuses | Fantasy Pts |
-|-------|-----|------|---------|-------------|
-| Excellent (92 avg, all ≥80) | 92 | +24 | +3 CF, +5 Darling | **+32** |
-| Good (82 avg, RT=78) | 82 | +12 | +3 CF | **+15** |
-| Average (70 avg) | 70 | 0 | - | **0** |
-| Poor (55 avg) | 55 | -7.5 | - | **-8** |
-| Disaster (32 avg, IMDb=25) | 32 | -15 | -5 Disaster | **-20** |
+| Movie | RT | Fantasy Pts |
+|-------|-----|-------------|
+| The 90% Club (96%) | 96 | **+42** |
+| Great (84%) | 84 | **+24** |
+| Exactly Fresh (60%) | 60 | **0** |
+| Underwater (35%) | 35 | **-16.25** |
 
 ### Key Design Decisions
 
-1. **70 as baseline**: The average movie scores around 70. Above = positive points, below = negative.
-2. **Accelerated rewards**: 90+ movies get disproportionately more points to reward finding gems.
-3. **Capped penalties**: The -15 floor prevents one terrible movie from destroying a team.
-4. **Bonuses encourage quality**: Certified Fresh and Critical Darling reward consistent excellence.
-5. **Counter-pick ready**: `fantasy_points` is stored separately from raw scores for future features.
+1. **60 as baseline**: Matches Rotten Tomatoes' own "Fresh" cutoff — fresh earns points, rotten costs points.
+2. **The 90% Club doubles points**: Movies at 90+ earn 2 points per point above 90, on top of a +30 head start, rewarding teams who find genuine gems.
+3. **Diminishing penalties, no hard floor**: The slope below 50 halves every 10 points, so the worst-case penalty approaches roughly -20 but never bottoms out at a fixed floor — one disaster can't destroy a team's season, and it makes counterpicking a richer strategic choice (the worse a movie can plausibly get, the more a counterpick against it is worth).
+4. **Single source keeps scores predictable**: Players can reason directly about "what RT score does my movie need to be worth drafting?" without weighing three sources.
+5. **Counter-pick ready**: `fantasy_points` is stored separately from `combined_score` so counterpicks can invert it (`-fantasy_points`).
 
 ## Architecture
 
@@ -81,11 +78,10 @@ Unlike a simple average, fantasy points reward excellence and penalize poor perf
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
 │  │  calculate_movie_score(movie_id)                                      │  │
-│  │  - Read IMDb, RT, Metacritic from reviews table                       │  │
-│  │  - Calculate weighted average (combined_score)                        │  │
-│  │  - Apply hybrid formula → fantasy_points                              │  │
-│  │  - Check bonuses (CF, Darling, Disaster)                              │  │
-│  │  - Update movies.fantasy_points + scoring_bonuses                     │  │
+│  │  - Read RT score from reviews table (IMDb/Metacritic stored, unused)  │  │
+│  │  - combined_score = RT Tomatometer score                              │  │
+│  │  - Apply baseline-relative curve → fantasy_points                     │  │
+│  │  - Update movies.fantasy_points (scoring_bonuses always NULL)         │  │
 │  │  - Trigger recalculate_teams_for_movie()                               │  │
 │  └──────────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -101,24 +97,23 @@ MDBList (`mdblist.com`) aggregates ratings from 9+ sources, returning pre-normal
 
 The original three-layer architecture (pgmq queue → pg_cron scheduler → Edge Function worker) was replaced with a simpler single Edge Function (`update-scores`) invoked directly by Vercel Cron. This is sufficient for our scale and easier to maintain.
 
-### Why These Weights?
+### Why Rotten Tomatoes only?
 
-| Source | Weight | Rationale |
-|--------|--------|-----------|
-| Rotten Tomatoes | 40% | Most recognized critic aggregator, binary "fresh/rotten" is clear |
-| IMDb | 35% | Largest audience database, good for mainstream appeal |
-| Metacritic | 25% | More selective critic pool, weighted reviews |
+- **One predictable number**: Players already know what a Tomatometer score means; scoring off a single source lets them reason directly about "what RT score do I need?" instead of weighing three inputs.
+- **Matches the target distribution**: Calibrated against Fantasy Critic's season distribution — a simulated 2024 season using RT-only scoring produced ~66% of draftable movies scoring positive and ~16% reaching the 90+ tier (~1-2 per 10-slot roster). See `docs/scoring-simulation/RESULTS.md` for the full analysis.
+- **Stability**: The Tomatometer freezes shortly after a wide release, so scores (and therefore team standings) don't keep drifting weeks later.
+- **IMDb was vulnerable to review-bombing and long-term drift**, and the old three-source weighted blend diluted the top end enough that the 90+ tier was effectively unreachable — RT alone lets a genuine critical hit pay off.
 
-Weights can be adjusted in the `calculate_movie_score()` function.
+The curve's constants (baseline, tier thresholds, slopes) live in the `calculate_movie_score()` function; there are no per-source weights anymore.
 
 ## Database Schema
 
 ### Movies Table (scoring columns)
 
 ```sql
-ALTER TABLE movies ADD COLUMN combined_score DECIMAL(5, 2);   -- Weighted average (0-100)
-ALTER TABLE movies ADD COLUMN fantasy_points DECIMAL(6, 2);    -- Hybrid formula result (can be negative)
-ALTER TABLE movies ADD COLUMN scoring_bonuses JSONB;           -- { certified_fresh, critical_darling, critical_disaster }
+ALTER TABLE movies ADD COLUMN combined_score DECIMAL(5, 2);   -- RT Tomatometer score (0-100)
+ALTER TABLE movies ADD COLUMN fantasy_points DECIMAL(6, 2);    -- Baseline-relative curve result (can be negative)
+ALTER TABLE movies ADD COLUMN scoring_bonuses JSONB;           -- Unused; always NULL, retained for compatibility
 ALTER TABLE movies ADD COLUMN scores_updated_at TIMESTAMPTZ;
 ```
 
@@ -139,54 +134,47 @@ CREATE TABLE reviews (
 
 ## Score Calculation
 
-### Step 1: Weighted Average (combined_score)
+### Step 1: combined_score (Rotten Tomatoes only)
 
 ```
-combined_score = (IMDb * 0.35 + RT * 0.40 + Metacritic * 0.25) / sum_of_available_weights
+combined_score = RT Tomatometer score (reviews.source = 'rotten_tomatoes')
 ```
 
-If only some sources are available, the weights are normalized:
+If no Rotten Tomatoes review exists for the movie yet, it is unscored: `combined_score`, `fantasy_points`, and `scores_updated_at` all stay `NULL` (the UI shows "Pending"). IMDb and Metacritic reviews may exist and are still stored, but they do not affect this step.
 
-| Available Sources | Calculation |
-|-------------------|-------------|
-| All three | `(imdb*0.35 + rt*0.40 + mc*0.25) / 1.0` |
-| IMDb + RT | `(imdb*0.35 + rt*0.40) / 0.75` |
-| RT + Metacritic | `(rt*0.40 + mc*0.25) / 0.65` |
-| IMDb only | `imdb` (no weighting) |
-
-### Step 2: Fantasy Points (hybrid formula)
+### Step 2: Fantasy Points (baseline-relative curve)
 
 ```sql
--- Base points from combined_score
 IF combined_score >= 90 THEN
-    base_pts = 20 + (combined_score - 90) * 2
-ELSIF combined_score >= 70 THEN
-    base_pts = combined_score - 70
+    fantasy_pts = 30 + (combined_score - 90) * 2
+ELSIF combined_score >= 50 THEN
+    fantasy_pts = combined_score - 60
+ELSIF combined_score >= 40 THEN
+    fantasy_pts = -10 - (50 - combined_score) * 0.5
+ELSIF combined_score >= 30 THEN
+    fantasy_pts = -15 - (40 - combined_score) * 0.25
+ELSIF combined_score >= 20 THEN
+    fantasy_pts = -17.5 - (30 - combined_score) * 0.125
+ELSIF combined_score >= 10 THEN
+    fantasy_pts = -18.75 - (20 - combined_score) * 0.0625
 ELSE
-    base_pts = GREATEST((70 - combined_score) * -0.5, -15)  -- Floor at -15
+    fantasy_pts = -19.375 - (10 - combined_score) * 0.03125
 END IF
-
--- Apply bonuses
-IF rt >= 75 THEN fantasy_pts += 3                              -- Certified Fresh
-IF imdb >= 80 AND rt >= 80 AND mc >= 80 THEN fantasy_pts += 5  -- Critical Darling
-IF imdb < 40 OR rt < 40 OR mc < 40 THEN fantasy_pts -= 5       -- Critical Disaster
 ```
+
+`scoring_bonuses` is always `NULL` under this system — the column is retained for backward compatibility, but no bonuses (Certified Fresh, Critical Darling, Critical Disaster) exist anymore.
 
 ### Example
 
 Movie: "Inception"
-- IMDb: 8.8/10 → 88
-- RT: 87% → 87
-- Metacritic: 74/100 → 74
+- Rotten Tomatoes: 87%
 
 ```
-combined_score = (88 * 0.35 + 87 * 0.40 + 74 * 0.25) / 1.0
-               = (30.8 + 34.8 + 18.5) / 1.0
-               = 84.1
+combined_score = 87
 
-fantasy_points = base_pts + bonuses
-               = (84.1 - 70) + 3     -- 14.1 base + Certified Fresh (RT >= 75)
-               = +17.1
+fantasy_points = combined_score - 60   -- in the 50-89 tier
+               = 87 - 60
+               = +27
 ```
 
 ## Score Notifications
@@ -634,22 +622,18 @@ SELECT id, title, imdb_id FROM movies WHERE imdb_id IS NOT NULL;
 
 2. Update the Edge Function to parse the new source format
 
-3. Update `calculate_movie_score()` to include the new weight:
-   ```sql
-   -- Add new weight constant
-   W_NEW CONSTANT DECIMAL := 0.10;
-   -- Adjust other weights to sum to 1.0
-   ```
+3. The new source is **display-only** unless `calculate_movie_score()` is also changed — scoring reads only the `rotten_tomatoes` row. Wiring a new source into the score itself means changing the curve logic, not just adding a weight.
 
-### Changing Score Weights
+### Changing the Curve Constants
 
-Edit the constants in `calculate_movie_score()`:
+There are no per-source weights anymore. The curve's constants (60-point baseline, the 90+ accelerator, and the halving slopes below 50) live directly in `calculate_movie_score()`. Edit them there, e.g.:
 
 ```sql
 CREATE OR REPLACE FUNCTION calculate_movie_score(p_movie_id UUID) ...
-    W_IMDB CONSTANT DECIMAL := 0.30;  -- Was 0.35
-    W_RT CONSTANT DECIMAL := 0.45;    -- Was 0.40
-    W_MC CONSTANT DECIMAL := 0.25;    -- Unchanged
+    BASELINE CONSTANT DECIMAL := 60;   -- Tuned to RT's "Fresh" cutoff
+    -- 90+ tier:   30 + (rt - 90) * 2
+    -- 50-89 tier: rt - BASELINE
+    -- below 50:   halving-slope tiers, see formula above
 ```
 
 Then recalculate all existing scores:

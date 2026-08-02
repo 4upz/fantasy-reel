@@ -251,8 +251,8 @@ e2e/tests/
 #### `score-breakdown.spec.ts`
 | Test | Description | Edge Functions |
 |------|-------------|----------------|
-| `shows score sources` | IMDb, RT, Metacritic visible | - |
-| `shows bonuses/penalties` | Critical Darling, etc. | - |
+| `shows score sources` | IMDb, RT, Metacritic visible (RT drives scoring) | - |
+| `shows fantasy points` | RT-based points with 90% Club accelerator | - |
 
 ### 4. League Settings - `league/league-settings.spec.ts`
 

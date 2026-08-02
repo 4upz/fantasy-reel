@@ -64,7 +64,7 @@ export default function ScoringReveal(): React.ReactElement {
           The Critics Have Spoken
         </h2>
         <p className="text-foreground-secondary text-center mb-16 max-w-2xl mx-auto">
-          Your score comes from Rotten Tomatoes, IMDb, and Metacritic. Pick
+          Your score comes straight from the Rotten Tomatoes Tomatometer. Pick
           acclaimed hits, you win. Pick confident flops, you get roasted in the
           group chat.
         </p>
