@@ -294,16 +294,11 @@ export default function TeamStandingCard({
           {(draftPicks.length > 0 || pickups.length > 0) && (
             <div className="mt-4 pt-4 border-t border-border">
               <div className="text-center text-[11px] text-foreground-muted space-y-1">
-                <div>Fantasy points based on 70-point baseline</div>
+                <div>Fantasy points based on the Rotten Tomatoes Tomatometer</div>
                 <div className="flex items-center justify-center gap-4">
-                  <span className="text-gold">90+: +20 base +2/pt</span>
-                  <span className="text-foreground-secondary">70-89: +1/pt</span>
-                  <span className="text-crimson">&lt;70: -0.5/pt</span>
-                </div>
-                <div className="flex items-center justify-center gap-4">
-                  <span className="text-[#fa320a]">CF +3</span>
-                  <span className="text-gold">★ +5</span>
-                  <span className="text-crimson">💀 -5</span>
+                  <span className="text-gold">90%+: +30 base +2/pt</span>
+                  <span className="text-foreground-secondary">60-89%: +1/pt above 60</span>
+                  <span className="text-crimson">&lt;60%: -1/pt, tapering</span>
                 </div>
               </div>
             </div>

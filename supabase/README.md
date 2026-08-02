@@ -150,8 +150,8 @@ Fantasy Reel automatically fetches and calculates movie scores using a three-lay
 2. **Scheduler (pg_cron)** - Processes queue in batches every minute
 3. **Worker (Edge Function)** - Fetches scores from MDBList, stores in database
 
-Scores are a weighted average of:
-- IMDb (35%) + Rotten Tomatoes (40%) + Metacritic (25%)
+Scoring uses the Rotten Tomatoes Tomatometer only (baseline 60, doubled above 90);
+IMDb and Metacritic are stored for display only and don't affect points.
 
 See **[SCORING.md](./SCORING.md)** for complete documentation including:
 - Architecture diagrams

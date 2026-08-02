@@ -32,7 +32,7 @@ export default function UiPreview(): React.ReactElement {
               </h3>
               <p className="text-foreground-secondary leading-relaxed">
                 Movies release. Critics review. Scores update automatically from
-                Rotten Tomatoes, IMDb, and Metacritic. Your &ldquo;risky Blumhouse
+                the Rotten Tomatoes Tomatometer. Your &ldquo;risky Blumhouse
                 pick&rdquo; either pays off or becomes a running joke.
               </p>
             </div>

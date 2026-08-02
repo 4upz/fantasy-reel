@@ -96,20 +96,6 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
                 </div>
               )}
             </div>
-            {/* Show bonuses in overlay */}
-            {movie.scoring_bonuses && (
-              <div className="flex gap-1 mt-1">
-                {movie.scoring_bonuses.certified_fresh && (
-                  <span className="text-[10px] text-[#fa320a]" title="Certified Fresh +3">CF</span>
-                )}
-                {movie.scoring_bonuses.critical_darling && (
-                  <span className="text-[10px] text-gold" title="Critical Darling +5">★</span>
-                )}
-                {movie.scoring_bonuses.critical_disaster && (
-                  <span className="text-[10px] text-crimson" title="Critical Disaster -5">💀</span>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>

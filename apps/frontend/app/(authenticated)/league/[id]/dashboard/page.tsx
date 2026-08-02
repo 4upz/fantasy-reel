@@ -104,7 +104,6 @@ export default async function DashboardPage({ params }: PageProps) {
         release_date: string | null
         combined_score: number | null
         fantasy_points: number | null
-        scoring_bonuses: { certified_fresh: boolean; critical_darling: boolean; critical_disaster: boolean } | null
         reviews: Review[]
       }
 
@@ -117,7 +116,6 @@ export default async function DashboardPage({ params }: PageProps) {
         status: getMovieStatus(movie.release_date, movie.combined_score),
         combined_score: movie.combined_score,
         fantasy_points: movie.fantasy_points,
-        scoring_bonuses: movie.scoring_bonuses,
         scores: extractScores(movie.reviews || []),
       }
     })
