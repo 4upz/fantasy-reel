@@ -214,6 +214,11 @@ Deno.serve(async (req) => {
               title: movie.title,
               error: 'Score calculation failed'
             })
+          } else if (fantasyPts === null) {
+            // Ratings were stored, but none of them was a Tomatometer score, so
+            // the movie stays unscored under RT-only scoring. Not an error - it
+            // just must not be counted as a score update.
+            console.log(`No Rotten Tomatoes score for ${movie.title}; left unscored`)
           } else {
             console.log(`Calculated score for ${movie.title}: ${fantasyPts}`)
             results.scores_updated++

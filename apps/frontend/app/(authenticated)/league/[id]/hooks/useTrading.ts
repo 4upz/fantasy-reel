@@ -111,14 +111,14 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       // Fetch draft picks
       const { data: draftPicks } = await supabase
         .from('draft_picks')
-        .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score)')
+        .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
         .eq('team_id', teamId)
         .is('dropped_at', null)
 
       // Fetch pickups
       const { data: pickups } = await supabase
         .from('pickups')
-        .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score)')
+        .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
         .eq('team_id', teamId)
         .is('dropped_at', null)
 
@@ -130,6 +130,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         poster_url: string | null
         release_date: string | null
         combined_score: number | null
+        fantasy_points: number | null
       }
 
       if (draftPicks) {
@@ -144,6 +145,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
               poster_url: movie.poster_url,
               release_date: movie.release_date,
               combined_score: movie.combined_score,
+              fantasy_points: movie.fantasy_points,
             })
           }
         }
@@ -161,6 +163,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
               poster_url: movie.poster_url,
               release_date: movie.release_date,
               combined_score: movie.combined_score,
+              fantasy_points: movie.fantasy_points,
             })
           }
         }

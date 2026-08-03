@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
+import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import type { Team, TradeItems, TradeableMovie, TeamBudget, TradeMovieItem } from '@/types'
 import { createClient } from '@/utils/supabase/client'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
@@ -108,14 +109,14 @@ export default function ProposeTradeModal({
         // Fetch draft picks
         const { data: draftPicks } = await supabase
           .from('draft_picks')
-          .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score)')
+          .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
           .eq('team_id', selectedTeamId)
           .is('dropped_at', null)
 
         // Fetch pickups
         const { data: pickups } = await supabase
           .from('pickups')
-          .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score)')
+          .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
           .eq('team_id', selectedTeamId)
           .is('dropped_at', null)
 
@@ -127,6 +128,7 @@ export default function ProposeTradeModal({
           poster_url: string | null
           release_date: string | null
           combined_score: number | null
+          fantasy_points: number | null
         }
 
         if (draftPicks) {
@@ -141,6 +143,7 @@ export default function ProposeTradeModal({
                 poster_url: movie.poster_url,
                 release_date: movie.release_date,
                 combined_score: movie.combined_score,
+                fantasy_points: movie.fantasy_points,
               })
             }
           }
@@ -158,6 +161,7 @@ export default function ProposeTradeModal({
                 poster_url: movie.poster_url,
                 release_date: movie.release_date,
                 combined_score: movie.combined_score,
+                fantasy_points: movie.fantasy_points,
               })
             }
           }
@@ -611,8 +615,17 @@ function MovieSelector({
                 {movie.release_date && (
                   <span>{new Date(movie.release_date).getFullYear()}</span>
                 )}
-                {movie.combined_score !== null && (
-                  <span className="text-gold">{movie.combined_score.toFixed(0)} pts</span>
+                {movie.fantasy_points !== null ? (
+                  <>
+                    <span className={movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}>
+                      {formatFantasyPoints(movie.fantasy_points)} pts
+                    </span>
+                    {movie.combined_score !== null && (
+                      <span>{formatCriticScore(movie.combined_score)}</span>
+                    )}
+                  </>
+                ) : (
+                  <span>Pending</span>
                 )}
               </div>
             </div>
