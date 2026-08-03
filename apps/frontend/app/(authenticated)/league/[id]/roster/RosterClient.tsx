@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { Film, Trophy, ShoppingCart, Trash2, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import type { League, Movie, TeamBudget, DraftPick, Pickup, Counterpick } from '@/types'
 
 interface RosterCounterpick extends Counterpick {
@@ -199,7 +200,7 @@ export default function RosterClient({
                   </p>
                   {cp.fantasy_points !== null && (
                     <p className={`text-sm font-semibold mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}>
-                      {cp.fantasy_points >= 0 ? '+' : ''}{cp.fantasy_points} pts
+                      {formatFantasyPoints(cp.fantasy_points)} pts
                     </p>
                   )}
                 </div>
@@ -279,10 +280,19 @@ function MovieCard({ movie, label, onDrop, isDropping }: MovieCardProps) {
       <div className="p-3">
         <h3 className="font-semibold text-foreground text-sm truncate">{movie.title}</h3>
         <p className="text-foreground-muted text-xs">{label}</p>
-        {movie.combined_score !== null && (
-          <p className="text-gold text-sm font-semibold mt-1">
-            {movie.combined_score.toFixed(1)} pts
+        {movie.fantasy_points !== null ? (
+          <p className="text-sm font-semibold mt-1 flex items-baseline gap-1.5">
+            <span className={movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}>
+              {formatFantasyPoints(movie.fantasy_points)} pts
+            </span>
+            {movie.combined_score !== null && (
+              <span className="text-foreground-muted text-xs font-normal">
+                {formatCriticScore(movie.combined_score)}
+              </span>
+            )}
           </p>
+        ) : (
+          <p className="text-foreground-muted text-xs mt-1">Pending</p>
         )}
       </div>
     </div>

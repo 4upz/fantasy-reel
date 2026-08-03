@@ -81,6 +81,12 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- ============================================================================
 -- DATA MIGRATION: Recalculate every movie that has reviews or a stale score
+--
+-- Every scoring column is checked independently, not just combined_score: a row
+-- can carry fantasy_points with combined_score NULL (integration tests write
+-- fantasy_points directly, and older scoring functions were not required to set
+-- both together). Filtering on combined_score alone would leave those rows with
+-- stale points that the new system says should be NULL.
 -- ============================================================================
 DO $$
 DECLARE
@@ -90,7 +96,10 @@ BEGIN
         SELECT DISTINCT m.id
         FROM movies m
         LEFT JOIN reviews r ON r.movie_id = m.id
-        WHERE m.combined_score IS NOT NULL OR r.id IS NOT NULL
+        WHERE m.combined_score IS NOT NULL
+           OR m.fantasy_points IS NOT NULL
+           OR m.scoring_bonuses IS NOT NULL
+           OR r.id IS NOT NULL
     LOOP
         PERFORM calculate_movie_score(v_movie.id);
     END LOOP;

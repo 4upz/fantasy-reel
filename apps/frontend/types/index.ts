@@ -506,7 +506,10 @@ export interface TradeableMovie {
   title: string
   poster_url: string | null
   release_date: string | null
+  /** Tomatometer score (0-100), for context only - not a points value. */
   combined_score: number | null
+  /** Fantasy points the movie is actually worth; null until it has an RT score. */
+  fantasy_points: number | null
 }
 
 // ============================================================================

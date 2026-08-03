@@ -498,6 +498,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
     poster_url: m.poster_url || null,
     release_date: m.release_date || null,
     combined_score: null,
+    fantasy_points: null,
   }))
 
   const initiatorTeam = trade.initiator_team as { id: string; name: string }
