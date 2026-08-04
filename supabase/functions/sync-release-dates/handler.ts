@@ -94,12 +94,12 @@ export async function runSyncReleaseDates(
     return { movies_checked: 0, dates_changed: 0, leagues_notified: 0 }
   }
 
-  const candidateIds = (movies as MovieRow[]).map((m) => m.id)
-
   // Restrict to movies that are actually rostered somewhere -- this is what
   // makes the job small; sync-movies' discover feed populates far more
-  // movies than any league ever drafts or picks up.
-  const holdingsByMovie = groupHoldingsByMovie(await fetchRosterHoldings(serviceClient, candidateIds))
+  // movies than any league ever drafts or picks up. Holdings are fetched
+  // unfiltered (rosters are inherently small) rather than passing thousands
+  // of candidate IDs through a URI-length-limited `in` filter.
+  const holdingsByMovie = groupHoldingsByMovie(await fetchRosterHoldings(serviceClient))
 
   const rosteredMovies = (movies as MovieRow[]).filter((m) => holdingsByMovie.has(m.id))
 
