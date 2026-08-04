@@ -1,8 +1,9 @@
-import type { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js'
+import type { AutocompleteInteraction, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js'
 
 export interface Command {
   data: SlashCommandBuilder
   execute: (interaction: ChatInputCommandInteraction) => Promise<void>
+  autocomplete?: (interaction: AutocompleteInteraction) => Promise<void>
 }
 
 const commands = new Map<string, Command>()

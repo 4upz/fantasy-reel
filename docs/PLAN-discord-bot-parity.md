@@ -12,6 +12,30 @@ Public Bidding → FAAB pickup bids · Conference → *no equivalent*.
 
 ---
 
+## 0. Schema Corrections (verified against migrations, 2026-08-04)
+
+CLAUDE.md §2 and the first draft of this plan describe tables that do not exist. Epic
+implementers must build against these **actual** facts:
+
+- **No `league_bidding_config` table.** All league config lives as columns on `leagues`:
+  `draft_slots` (rounds), `total_slots`, `drop_limit`, `counterbid_hours`,
+  `draft_counterpick_slots`, `bidding_counterpick_slots`, `counterpicks_block_drops`,
+  `faab_budget`, `trades_enabled`, `trade_review_enabled`, `trade_veto_hours`, `trade_deadline`.
+  There is no bidding window, no `min_bid`/`max_bid` (per-bid cap of 100 is a CHECK constraint on
+  `pickup_bids`), and no `draft_type` — drafts are always snake.
+- **`bid_status` enum:** `active | outbid | won | lost | cancelled` (no `pending`). "Pending"
+  bids = `status IN ('active','outbid')`. There is no `pickup_bids.processed_at`.
+- **`pickup_bids` has `tmdb_id` + `movie_data` JSONB, not a `movie_id` FK** (a bid can precede
+  the movie existing locally — fall back to `movie_data->>'title'`). Won pickups land in the
+  separate `pickups` table, which *does* have `movie_id` and `picked_up_at`.
+- **Active roster** = `draft_picks` rows with `dropped_at IS NULL` **plus** `pickups` rows with
+  `dropped_at IS NULL`.
+- **FAAB balance** lives in `team_budgets.remaining_budget`, not on `teams`.
+- **League-scoped `team_scores` queries** must filter server-side:
+  `.select('..., teams!inner(..., league_participants!inner(league_id))')` +
+  `.eq('teams.league_participants.league_id', leagueId)` — never fetch-all-then-filter.
+- `draft_picks` has two FKs to `teams`; joins need `teams!draft_picks_team_id_fkey(...)`.
+
 ## 1. Where We Already Have Parity
 
 Do **not** re-implement these. Verified present and wired up:
