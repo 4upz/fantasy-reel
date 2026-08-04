@@ -124,11 +124,7 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
         </div>
 
         {/* Tomatometer - the only score that drives points */}
-        <TomatometerScore
-          score={movie.combined_score}
-          showMeter={movie.combined_score != null}
-          className="mt-3"
-        />
+        <TomatometerScore score={movie.combined_score} size="lg" className="mt-3" />
       </div>
 
       {/* Fantasy Points */}
