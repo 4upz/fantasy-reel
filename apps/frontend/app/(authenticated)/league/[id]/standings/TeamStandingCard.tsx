@@ -38,7 +38,7 @@ function RankBadge({ rank, isTied }: { rank: number; isTied: boolean }): React.R
 
   if (podiumStyle) {
     return (
-      <div className={`w-12 h-12 rounded-xl ${podiumStyle.gradient} flex items-center justify-center ${podiumStyle.shadow}`}>
+      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex-shrink-0 ${podiumStyle.gradient} flex items-center justify-center ${podiumStyle.shadow}`}>
         <span className="text-lg font-bold font-display text-background">
           {prefix}{rank}
         </span>
@@ -47,7 +47,7 @@ function RankBadge({ rank, isTied }: { rank: number; isTied: boolean }): React.R
   }
 
   return (
-    <div className="w-12 h-12 rounded-xl bg-elevated border border-border flex items-center justify-center">
+    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex-shrink-0 bg-elevated border border-border flex items-center justify-center">
       <span className="text-lg font-bold font-display text-foreground-secondary">
         {prefix}{rank}
       </span>
@@ -100,7 +100,7 @@ export default function TeamStandingCard({
         onClick={() => setIsExpanded(!isExpanded)}
         aria-expanded={isExpanded}
         aria-controls={`team-movies-${team?.id}`}
-        className="w-full p-4 sm:p-5 flex items-center gap-4 hover:bg-surface-hover transition-colors text-left"
+        className="w-full p-4 sm:p-5 flex items-center gap-3 sm:gap-4 hover:bg-surface-hover transition-colors text-left"
       >
         {/* Rank Badge */}
         <RankBadge rank={rank} isTied={isTied} />
@@ -125,8 +125,9 @@ export default function TeamStandingCard({
 
         {/* Team Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold font-display text-foreground truncate">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Narrow screens have the vertical room to wrap rather than truncate */}
+            <h3 className="font-semibold font-display text-foreground line-clamp-2 sm:line-clamp-none sm:truncate">
               {displayName}
             </h3>
             {isCurrentUser && (
@@ -138,7 +139,7 @@ export default function TeamStandingCard({
           {profile?.display_name && team?.name && (
             <p className="text-xs text-foreground-muted truncate">{profile.display_name}</p>
           )}
-          <div className="flex items-center gap-3 mt-1 text-sm text-foreground-muted">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-sm text-foreground-muted">
             <span>{draftPicks.length + pickups.length} movies</span>
             {counterpicks.length > 0 && (
               <>
@@ -167,15 +168,15 @@ export default function TeamStandingCard({
         </div>
 
         {/* Total Points */}
-        <div className="text-right">
+        <div className="text-right flex-shrink-0">
           <div className={`text-3xl sm:text-4xl font-bold font-display ${isPositive ? 'text-gold' : 'text-crimson'}`}>
             {formatFantasyPoints(totalPoints)}
           </div>
           <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
             Points
           </div>
-          {/* Points Breakdown */}
-          <div className="text-xs text-foreground-muted mt-1 flex items-center justify-end gap-2">
+          {/* Points Breakdown - too wide for mobile, where the team name needs the room */}
+          <div className="hidden sm:flex text-xs text-foreground-muted mt-1 items-center justify-end gap-2">
             <span className={draftPoints >= 0 ? 'text-gold' : 'text-crimson'}>
               Draft: {formatFantasyPoints(draftPoints)}
             </span>
@@ -205,7 +206,7 @@ export default function TeamStandingCard({
         </div>
 
         {/* Expand Arrow */}
-        <div className="ml-2">
+        <div className="ml-0 sm:ml-2 flex-shrink-0">
           <svg
             className={`w-5 h-5 text-foreground-muted transition-transform duration-300 ${
               isExpanded ? 'rotate-180' : ''
@@ -227,6 +228,42 @@ export default function TeamStandingCard({
         }`}
       >
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-border">
+          {/* Points breakdown, which the header hides on mobile for space */}
+          <div className="sm:hidden pt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground-muted">
+            <span>
+              Avg{' '}
+              <span className={moviesScored > 0 && averageScore < 0 ? 'text-crimson' : 'text-foreground-secondary'}>
+                {moviesScored > 0 ? (averageScore >= 0 ? '+' : '') + averageScore.toFixed(1) : '--'}
+              </span>
+            </span>
+            <span className="text-foreground-muted/50">|</span>
+            <span className={draftPoints >= 0 ? 'text-gold' : 'text-crimson'}>
+              Draft: {formatFantasyPoints(draftPoints)}
+            </span>
+            {pickups.length > 0 && (
+              <>
+                <span className="text-foreground-muted/50">|</span>
+                <span className="flex items-center gap-1">
+                  <ShoppingCart className="w-3 h-3 text-gold" />
+                  <span className={pickupPoints >= 0 ? 'text-gold' : 'text-crimson'}>
+                    {formatFantasyPoints(pickupPoints)}
+                  </span>
+                </span>
+              </>
+            )}
+            {counterpicksMade > 0 && (
+              <>
+                <span className="text-foreground-muted/50">|</span>
+                <span className="flex items-center gap-1">
+                  <Target className="w-3 h-3 text-crimson" />
+                  <span className={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}>
+                    {formatFantasyPoints(counterpickPoints)}
+                  </span>
+                </span>
+              </>
+            )}
+          </div>
+
           {/* Draft Picks Section */}
           <div className="pt-4">
             <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground-secondary mb-3">
