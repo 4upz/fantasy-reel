@@ -9,7 +9,19 @@ import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 // Types
 // ============================================================================
 
-export type NotificationCategory = 'drafts' | 'bids' | 'trades' | 'scores'
+export type NotificationCategory =
+  | 'drafts'
+  | 'bids'
+  | 'trades'
+  | 'scores'
+  /** Release-day announcements and release-date change alerts. */
+  | 'movie_news'
+  /** Monday "releasing this week" digest. */
+  | 'weekly_digest'
+  /** No per-channel toggle -- always eligible (any enabled channel). Used for
+   * rare, benign, or owner-initiated sends where gating would just be friction:
+   * new-member notices and commissioner announcements. */
+  | 'general'
 
 export interface DiscordEmbed {
   title?: string
@@ -31,6 +43,8 @@ interface DiscordChannel {
   notify_bids: boolean
   notify_trades: boolean
   notify_scores: boolean
+  notify_weekly_digest: boolean
+  notify_movie_news: boolean
   consecutive_failures: number
 }
 
@@ -58,11 +72,14 @@ export const FANTASY_REEL_ICON = 'https://fantasy-reel.vercel.app/icon-128.png'
 // Category → Column Mapping
 // ============================================================================
 
-const CATEGORY_COLUMN: Record<NotificationCategory, keyof DiscordChannel> = {
+/** 'general' has no entry -- it bypasses per-channel category filtering entirely. */
+const CATEGORY_COLUMN: Partial<Record<NotificationCategory, keyof DiscordChannel>> = {
   drafts: 'notify_drafts',
   bids: 'notify_bids',
   trades: 'notify_trades',
   scores: 'notify_scores',
+  movie_news: 'notify_movie_news',
+  weekly_digest: 'notify_weekly_digest',
 }
 
 // ============================================================================
@@ -94,7 +111,7 @@ export async function sendDiscordNotification(
     // Fetch enabled channels for this league
     const { data: channels, error: fetchError } = await supabase
       .from('discord_channels')
-      .select('id, webhook_url, thread_id, bid_alert_role_id, notify_drafts, notify_bids, notify_trades, notify_scores, consecutive_failures')
+      .select('id, webhook_url, thread_id, bid_alert_role_id, notify_drafts, notify_bids, notify_trades, notify_scores, notify_weekly_digest, notify_movie_news, consecutive_failures')
       .eq('league_id', leagueId)
       .eq('enabled', true)
 
@@ -108,11 +125,12 @@ export async function sendDiscordNotification(
       return
     }
 
-    // Filter by category preference
+    // Filter by category preference. 'general' has no CATEGORY_COLUMN entry,
+    // so every enabled channel is eligible regardless of toggle state.
     const column = CATEGORY_COLUMN[category]
-    const eligibleChannels = channels.filter(
-      (ch: DiscordChannel) => ch[column] === true
-    )
+    const eligibleChannels = column
+      ? channels.filter((ch: DiscordChannel) => ch[column] === true)
+      : channels
 
     if (eligibleChannels.length === 0) {
       console.log(`[discord] sendDiscordNotification: No channels with category "${category}" enabled for league ${leagueId}`)

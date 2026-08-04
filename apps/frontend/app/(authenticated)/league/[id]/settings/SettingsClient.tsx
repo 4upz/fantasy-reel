@@ -10,6 +10,7 @@ import DraftOrderSection from './components/DraftOrderSection'
 import CounterpickConfigSection from './components/CounterpickConfigSection'
 import BiddingConfigSection from './components/BiddingConfigSection'
 import ParticipantsSection from './components/ParticipantsSection'
+import DiscordAnnouncementSection from './components/DiscordAnnouncementSection'
 import DangerZoneSection from './components/DangerZoneSection'
 
 interface Props {
@@ -103,6 +104,8 @@ export default function SettingsClient({
           isLocked={!isSetup}
           onKick={handleParticipantKicked}
         />
+
+        <DiscordAnnouncementSection leagueId={league.id} />
 
         <DangerZoneSection
           league={league}

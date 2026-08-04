@@ -461,3 +461,16 @@ verify_jwt = false
 # Join link functions
 [functions.generate-join-link]
 verify_jwt = false
+
+# Discord scheduled notification functions
+[functions.release-day-announcements]
+verify_jwt = false
+
+[functions.weekly-releases-digest]
+verify_jwt = false
+
+[functions.sync-release-dates]
+verify_jwt = false
+
+[functions.send-announcement]
+verify_jwt = false

@@ -238,3 +238,63 @@ Per-task checklist for implementers (from CLAUDE.md): code-simplifier after impl
 tests (`npm run test:functions`) / bot vitest → browser or Discord verification → commit. New Edge
 Functions **must** get a `config.toml` entry with `verify_jwt = false` or they 401 in production.
 DB changes via `npx supabase migration new` + `migration up`, never `db reset`.
+
+---
+
+## Epic C implementation notes (appended by the Epic C implementer)
+
+### Cron schedules and invocation paths (proposed, not wired)
+
+Mirrors the existing `apps/frontend/vercel.json` → `apps/frontend/app/api/cron/<name>/route.ts` →
+Edge Function pattern (see `process-bids`/`update-scores`): a Vercel Cron GET hits a thin Next.js
+route that validates `Authorization: Bearer $CRON_SECRET`, then POSTs to the Edge Function with
+`X-Cron-Secret`. None of this was wired in this pass -- no `vercel.json` entries or
+`app/api/cron/*` routes were added. To activate:
+
+| Function | Proposed schedule | Vercel Cron path (to create) | Edge Function |
+|---|---|---|---|
+| `release-day-announcements` | `0 13 * * *` (~9am ET) | `/api/cron/release-day-announcements` | `POST /functions/v1/release-day-announcements` |
+| `weekly-releases-digest` | `0 13 * * 1` (Mondays, ~9am ET) | `/api/cron/weekly-releases-digest` | `POST /functions/v1/weekly-releases-digest` |
+| `sync-release-dates` | `0 8 * * *` (nightly, ~3-4am ET) | `/api/cron/sync-release-dates` | `POST /functions/v1/sync-release-dates` |
+
+`send-announcement` (C5) is not a cron function -- it's invoked directly from the frontend via
+`supabase.functions.invoke`, JWT-authenticated, owner-only. C4 (season wrap-up) and C6 (new-member
+notice) are not standalone functions either; see below.
+
+### C3: extend-vs-new decision
+
+Built `sync-release-dates` as a **new** function rather than extending `sync-movies`.
+`sync-movies` is a broad TMDb *discovery* pass (paginated `discover/movie` by popularity, filtered
+by year/region) that upserts movies nobody may ever roster -- its contract is "sync the catalog."
+C3 needs a small nightly *diff* over exactly the movies some league has rostered (draft_picks or
+pickups, `dropped_at IS NULL`), re-fetching each by `tmdb_id` from the single-movie TMDb endpoint
+and comparing `release_date`. Folding that into `sync-movies` would mean threading
+roster-awareness and notification side effects into a function whose existing callers (manual
+catalog refresh) don't want either. A new function keeps both contracts single-purpose, matching
+how `update-scores` and `process-bids` are already split by concern rather than merged.
+
+### C6: gating approach
+
+`sendDiscordNotification` requires a `NotificationCategory`, and every existing category maps to a
+per-channel `notify_*` boolean column via `CATEGORY_COLUMN`. Rather than add a sixth `/configure`
+toggle for an event a team sees once per season, `_shared/discord.ts` gained a `'general'`
+category with **no** `CATEGORY_COLUMN` entry -- `sendDiscordNotification` treats a category with no
+mapped column as ungated (every enabled channel is eligible). This is the least invasive option:
+no schema change, no new toggle, and it's reused by C5's commissioner announcement for the same
+reason ("the owner posted on purpose, every linked channel should see it").
+
+### C4: trigger point
+
+No code path transitioned `leagues.status` to `'completed'` before this change (verified: no
+migration, Edge Function, or trigger sets it). Added a `complete_league` action to `update-league`
+(owner-only, requires `status = 'active'`) rather than a polling cron, since the transition is
+naturally a settings-page action ("end my season") and an event hook is strictly simpler than
+detecting "a league has had no activity in N days." Sends a final-standings embed (🥇🥈🥉, via the
+existing `snapshotStandings` from `_shared/score-notifications.ts`) on success, category `'scores'`.
+
+### New table: `discord_notification_log`
+
+Added for C1's idempotency requirement: `(league_id, movie_id, notification_type)` unique rows,
+service-role-only (RLS enabled, no policies). Chosen over a flag column on `draft_picks`/`pickups`
+because a movie can be rostered via either table (or both, per §0's dropped-row overlap note), and
+the log needs to key off the movie+league pair regardless of which table currently holds it.

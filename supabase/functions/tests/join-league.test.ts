@@ -206,6 +206,24 @@ Deno.test({
   })
 
   // ============================================================================
+  // New-member notification (C6) -- ungated Discord send, best-effort
+  // ============================================================================
+
+  await t.step('succeeds even with no Discord channel linked (notification is best-effort)', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('join-no-discord'))
+    const { token } = await factory.createInvitation(leagueId, TEST_USER_2.email)
+
+    const { data, error } = await secondClient.functions.invoke('join-league', {
+      body: { invitation_token: token },
+    })
+
+    // No discord_channels row exists for this league -- sendDiscordNotification
+    // must no-op silently rather than fail the join.
+    assertEquals(error, null)
+    assertExists(data.team)
+  })
+
+  // ============================================================================
   // Cleanup
   // ============================================================================
 

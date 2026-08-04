@@ -1054,6 +1054,68 @@ Deno.test({
   })
 
   // ============================================================================
+  // complete_league (C4: season wrap-up)
+  // ============================================================================
+
+  await t.step('complete_league: returns 400 when league is not active', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('complete-setup'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'complete_league',
+      league_id: leagueId,
+    })
+
+    assertEquals(result.error, 'Only an active league can be marked completed')
+  })
+
+  await t.step('complete_league: returns 403 for a non-owner', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('complete-403'))
+
+    const result = await invokeFunction(secondClient, 'update-league', {
+      action: 'complete_league',
+      league_id: leagueId,
+    })
+
+    assertEquals(result.error, 'Only the league owner can modify settings')
+  })
+
+  await t.step('complete_league: transitions an active league to completed and returns top teams', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('complete-active'))
+
+    const result = await invokeFunction<{
+      league: { status: string }
+      top_teams: Array<{ teamName: string; points: number }>
+    }>(client, 'update-league', { action: 'complete_league', league_id: leagueId })
+
+    assertEquals(result.error, null)
+    assertEquals(result.data?.league.status, 'completed')
+    assertExists(result.data?.top_teams)
+
+    const { data: updatedLeague } = await client
+      .from('leagues')
+      .select('status')
+      .eq('id', leagueId)
+      .single()
+    assertEquals(updatedLeague?.status, 'completed')
+  })
+
+  await t.step('complete_league: cannot be completed twice', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('complete-twice'))
+
+    const first = await invokeFunction(client, 'update-league', {
+      action: 'complete_league',
+      league_id: leagueId,
+    })
+    assertEquals(first.error, null)
+
+    const second = await invokeFunction(client, 'update-league', {
+      action: 'complete_league',
+      league_id: leagueId,
+    })
+    assertEquals(second.error, 'Only an active league can be marked completed')
+  })
+
+  // ============================================================================
   // Cleanup
   // ============================================================================
 
