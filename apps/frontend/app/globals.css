@@ -1168,39 +1168,47 @@
     transform: scale(1.02);
   }
 
-  .scoring-badges {
-    display: flex;
-    justify-content: center;
-    gap: 1.5rem;
-    margin-top: 1.5rem;
-    padding: 1rem;
-    background: var(--color-elevated);
-    border-radius: 0.5rem;
-  }
-
-  .score-badge {
+  .scoring-tomatometer {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.25rem;
+    margin-top: 1.5rem;
+    padding: 1rem 2rem;
+    background: var(--color-elevated);
+    border-radius: 0.5rem;
   }
 
-  .score-badge-icon {
-    font-size: 1.25rem;
+  .tomatometer-reading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
-  .score-badge-value {
+  .tomatometer-icon {
+    font-size: 1.75rem;
+  }
+
+  .tomatometer-value {
     font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 1.125rem;
+    font-weight: 800;
+    font-size: 2.5rem;
+    line-height: 1;
   }
 
-  .score-badge-value.good {
+  .tomatometer-value.good {
     color: var(--color-success);
   }
 
-  .score-badge-value.bad {
+  .tomatometer-value.bad {
     color: var(--color-crimson);
+  }
+
+  .tomatometer-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-foreground-muted);
   }
 
   .scoring-result {

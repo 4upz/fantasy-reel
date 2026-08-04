@@ -370,10 +370,10 @@ export default function HelpPage() {
 
             <div className="alert alert-warning mt-6">
               <p>
-                <strong>Score Sources:</strong> Points are driven entirely by the Rotten Tomatoes
-                Tomatometer. IMDb and Metacritic scores are still shown on movie cards for context,
-                but don&apos;t affect your points. Scores update nightly once a movie is released -
-                a movie without an RT score yet shows as Pending.
+                <strong>Score Source:</strong> Points come from one number, the Rotten Tomatoes
+                Tomatometer. 60% is break-even: above it a movie earns points, below it a movie
+                loses them. Scores update nightly once a movie is released - a movie without a
+                Tomatometer yet shows as Pending.
               </p>
             </div>
           </Section>

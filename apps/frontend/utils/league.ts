@@ -1,4 +1,4 @@
-import type { League, ParticipantWithProfile, MovieTimelineItem, Review } from '@/types'
+import type { League, ParticipantWithProfile, MovieTimelineItem } from '@/types'
 
 /**
  * CSS classes for league status badges
@@ -95,21 +95,3 @@ export function getMovieStatus(
   return 'upcoming'
 }
 
-/**
- * Extract individual review scores from an array of reviews
- */
-export function extractScores(reviews: Review[]): MovieTimelineItem['scores'] {
-  const scores: MovieTimelineItem['scores'] = {
-    imdb: null,
-    rotten_tomatoes: null,
-    metacritic: null,
-  }
-
-  for (const review of reviews) {
-    if (review.source === 'imdb') scores.imdb = review.score
-    if (review.source === 'rotten_tomatoes') scores.rotten_tomatoes = review.score
-    if (review.source === 'metacritic') scores.metacritic = review.score
-  }
-
-  return scores
-}

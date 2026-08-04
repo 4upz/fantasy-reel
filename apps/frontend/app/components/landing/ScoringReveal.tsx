@@ -22,21 +22,14 @@ function ScoringCard({ example, variant, className = '' }: ScoringCardProps): Re
         className="scoring-poster"
       />
 
-      <div className="scoring-badges">
-        <div className="score-badge">
-          <span className="score-badge-icon">🍅</span>
-          <span className={`score-badge-value ${valueClass}`}>{example.scores.rt}%</span>
+      <div className="scoring-tomatometer">
+        <div className="tomatometer-reading">
+          <span className="tomatometer-icon" aria-hidden="true">🍅</span>
+          <span className={`tomatometer-value ${valueClass}`}>{example.tomatometer}%</span>
         </div>
-        <div className="score-badge">
-          <span className="score-badge-icon">⭐</span>
-          <span className={`score-badge-value ${valueClass}`}>
-            {(example.scores.imdb / 10).toFixed(1)}
-          </span>
-        </div>
-        <div className="score-badge">
-          <span className="score-badge-icon">Ⓜ️</span>
-          <span className={`score-badge-value ${valueClass}`}>{example.scores.metacritic}</span>
-        </div>
+        <span className="tomatometer-label">
+          Tomatometer &middot; {example.tomatometer >= 60 ? 'Fresh' : 'Rotten'}
+        </span>
       </div>
 
       <div className="scoring-result">

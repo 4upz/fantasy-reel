@@ -1,8 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DashboardClient from './DashboardClient'
-import { getMovieStatus, extractScores } from '@/utils/league'
-import type { League, DashboardTeam, MovieTimelineItem, Review } from '@/types'
+import { getMovieStatus } from '@/utils/league'
+import type { League, DashboardTeam, MovieTimelineItem } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -41,15 +41,12 @@ export default async function DashboardPage({ params }: PageProps) {
     .eq('league_id', id)
     .eq('status', 'active')
 
-  // Fetch all draft picks with movies and reviews
+  // Fetch all draft picks with movies
   const { data: draftPicks } = await supabase
     .from('draft_picks')
     .select(`
       *,
-      movies (
-        *,
-        reviews (*)
-      )
+      movies (*)
     `)
     .eq('league_id', id)
 
@@ -104,7 +101,6 @@ export default async function DashboardPage({ params }: PageProps) {
         release_date: string | null
         combined_score: number | null
         fantasy_points: number | null
-        reviews: Review[]
       }
 
       return {
@@ -116,7 +112,6 @@ export default async function DashboardPage({ params }: PageProps) {
         status: getMovieStatus(movie.release_date, movie.combined_score),
         combined_score: movie.combined_score,
         fantasy_points: movie.fantasy_points,
-        scores: extractScores(movie.reviews || []),
       }
     })
 
