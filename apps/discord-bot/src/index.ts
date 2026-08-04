@@ -15,6 +15,8 @@ import { bidResults } from './commands/bid-results.js'
 import { currentBids } from './commands/current-bids.js'
 import { topAvailable } from './commands/top-available.js'
 import { myTeam } from './commands/my-team.js'
+import { setBotAdminRole } from './commands/set-bot-admin-role.js'
+import { setBidAlertRole } from './commands/set-bid-alert-role.js'
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 
@@ -32,6 +34,8 @@ registerCommand(bidResults)
 registerCommand(currentBids)
 registerCommand(topAvailable)
 registerCommand(myTeam)
+registerCommand(setBotAdminRole)
+registerCommand(setBidAlertRole)
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`)

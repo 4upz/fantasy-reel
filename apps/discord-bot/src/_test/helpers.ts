@@ -28,6 +28,7 @@ function createQueryBuilder(response: TableResponse): any {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const builder: any = {
     select: vi.fn(() => builder),
+    update: vi.fn(() => builder),
     eq: vi.fn(() => builder),
     neq: vi.fn(() => builder),
     is: vi.fn(() => builder),
@@ -75,22 +76,35 @@ export function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   }
 }
 
+export interface MockRole {
+  id: string
+  name?: string
+}
+
 export interface InteractionOverrides {
   channelId?: string
   guildId?: string
   userId?: string
   stringOptions?: Record<string, string | null>
+  roleOptions?: Record<string, MockRole | null>
   focused?: string
+  /** Whether `memberPermissions.has(...)` reports Manage Server. */
+  hasManageGuild?: boolean
+  /** Role IDs the invoking member has, for bot-admin-role checks. */
+  memberRoleIds?: string[]
 }
 
 export function makeInteraction(overrides: InteractionOverrides = {}) {
   const stringOptions = overrides.stringOptions || {}
+  const roleOptions = overrides.roleOptions || {}
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const interaction: any = {
     channelId: overrides.channelId ?? 'channel-1',
     guildId: overrides.guildId ?? 'guild-1',
     user: { id: overrides.userId ?? 'discord-user-1' },
+    member: { roles: overrides.memberRoleIds ?? [] },
+    memberPermissions: { has: vi.fn(() => overrides.hasManageGuild ?? false) },
     replied: false,
     deferred: false,
     deferReply: vi.fn().mockResolvedValue(undefined),
@@ -104,6 +118,7 @@ export function makeInteraction(overrides: InteractionOverrides = {}) {
         if (value === undefined) return required ? '' : null
         return value
       }),
+      getRole: vi.fn((name: string) => roleOptions[name] ?? null),
       getFocused: vi.fn(() => overrides.focused ?? ''),
     },
   }

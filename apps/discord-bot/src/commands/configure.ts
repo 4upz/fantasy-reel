@@ -8,7 +8,16 @@ import {
 } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { createBaseEmbed, DISCORD_COLORS } from '../utils/embeds.js'
+import { canAdministerBot, ADMIN_DENIED_MESSAGE } from '../utils/permissions.js'
 import type { Command } from './index.js'
+
+type ToggleField =
+  | 'notify_drafts'
+  | 'notify_bids'
+  | 'notify_trades'
+  | 'notify_scores'
+  | 'notify_weekly_digest'
+  | 'notify_movie_news'
 
 interface ChannelSettings {
   id: string
@@ -17,8 +26,20 @@ interface ChannelSettings {
   notify_bids: boolean
   notify_trades: boolean
   notify_scores: boolean
+  notify_weekly_digest: boolean
+  notify_movie_news: boolean
+  bot_admin_role_id: string | null
   created_by: string
   leagues?: { name?: string; owner_id?: string }
+}
+
+const TOGGLE_MAP: Record<string, ToggleField> = {
+  toggle_drafts: 'notify_drafts',
+  toggle_bids: 'notify_bids',
+  toggle_trades: 'notify_trades',
+  toggle_scores: 'notify_scores',
+  toggle_weekly_digest: 'notify_weekly_digest',
+  toggle_movie_news: 'notify_movie_news',
 }
 
 function buildSettingsEmbed(settings: ChannelSettings, leagueName: string) {
@@ -32,37 +53,33 @@ function buildSettingsEmbed(settings: ChannelSettings, leagueName: string) {
       `**Drafts:** ${settings.notify_drafts ? on : off}\n` +
       `**Bids:** ${settings.notify_bids ? on : off}\n` +
       `**Trades:** ${settings.notify_trades ? on : off}\n` +
-      `**Scores:** ${settings.notify_scores ? on : off}`
+      `**Scores:** ${settings.notify_scores ? on : off}\n` +
+      `**Weekly Digest:** ${settings.notify_weekly_digest ? on : off}\n` +
+      `**Movie News:** ${settings.notify_movie_news ? on : off}`
     )
     .setColor(DISCORD_COLORS.gold)
 }
 
-function buildButtons(settings: ChannelSettings) {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId('toggle_drafts')
-      .setLabel(`Drafts: ${settings.notify_drafts ? 'On' : 'Off'}`)
-      .setStyle(settings.notify_drafts ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('toggle_bids')
-      .setLabel(`Bids: ${settings.notify_bids ? 'On' : 'Off'}`)
-      .setStyle(settings.notify_bids ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('toggle_trades')
-      .setLabel(`Trades: ${settings.notify_trades ? 'On' : 'Off'}`)
-      .setStyle(settings.notify_trades ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('toggle_scores')
-      .setLabel(`Scores: ${settings.notify_scores ? 'On' : 'Off'}`)
-      .setStyle(settings.notify_scores ? ButtonStyle.Success : ButtonStyle.Secondary),
-  )
+function toggleButton(customId: string, label: string, enabled: boolean) {
+  return new ButtonBuilder()
+    .setCustomId(customId)
+    .setLabel(`${label}: ${enabled ? 'On' : 'Off'}`)
+    .setStyle(enabled ? ButtonStyle.Success : ButtonStyle.Secondary)
 }
 
-const TOGGLE_MAP: Record<string, keyof Pick<ChannelSettings, 'notify_drafts' | 'notify_bids' | 'notify_trades' | 'notify_scores'>> = {
-  toggle_drafts: 'notify_drafts',
-  toggle_bids: 'notify_bids',
-  toggle_trades: 'notify_trades',
-  toggle_scores: 'notify_scores',
+function buildButtonRows(settings: ChannelSettings) {
+  return [
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      toggleButton('toggle_drafts', 'Drafts', settings.notify_drafts),
+      toggleButton('toggle_bids', 'Bids', settings.notify_bids),
+      toggleButton('toggle_trades', 'Trades', settings.notify_trades),
+      toggleButton('toggle_scores', 'Scores', settings.notify_scores)
+    ),
+    new ActionRowBuilder<ButtonBuilder>().addComponents(
+      toggleButton('toggle_weekly_digest', 'Weekly Digest', settings.notify_weekly_digest),
+      toggleButton('toggle_movie_news', 'Movie News', settings.notify_movie_news)
+    ),
+  ]
 }
 
 export const configure: Command = {
@@ -78,7 +95,9 @@ export const configure: Command = {
     // Find channel link
     const { data: channelLink, error: findError } = await supabase
       .from('discord_channels')
-      .select('id, league_id, notify_drafts, notify_bids, notify_trades, notify_scores, created_by, leagues(name, owner_id)')
+      .select(
+        'id, league_id, notify_drafts, notify_bids, notify_trades, notify_scores, notify_weekly_digest, notify_movie_news, bot_admin_role_id, created_by, leagues(name, owner_id)'
+      )
       .eq('channel_id', interaction.channelId)
       .maybeSingle()
 
@@ -102,16 +121,21 @@ export const configure: Command = {
       return
     }
 
-    // Verify the user is the linker or league owner
+    // Verify the user linked it, or can otherwise administer the bot here
+    // (Manage Server, the bot-admin role, or the league owner).
     const league = (channelLink as { leagues?: { name?: string; owner_id?: string } }).leagues
     const isLinker = channelLink.created_by === userId
-    const isOwner = league?.owner_id === userId
 
-    if (!isLinker && !isOwner) {
-      await interaction.editReply(
-        'Only the person who linked this channel or the league owner can configure settings.'
-      )
-      return
+    if (!isLinker) {
+      const allowed = await canAdministerBot(interaction, {
+        bot_admin_role_id: channelLink.bot_admin_role_id,
+        league_owner_id: league?.owner_id,
+      })
+
+      if (!allowed) {
+        await interaction.editReply(ADMIN_DENIED_MESSAGE)
+        return
+      }
     }
 
     const settings: ChannelSettings = {
@@ -121,6 +145,9 @@ export const configure: Command = {
       notify_bids: channelLink.notify_bids,
       notify_trades: channelLink.notify_trades,
       notify_scores: channelLink.notify_scores,
+      notify_weekly_digest: channelLink.notify_weekly_digest,
+      notify_movie_news: channelLink.notify_movie_news,
+      bot_admin_role_id: channelLink.bot_admin_role_id,
       created_by: channelLink.created_by,
       leagues: league,
     }
@@ -129,7 +156,7 @@ export const configure: Command = {
     const reply = await interaction.editReply({
       embeds: [buildSettingsEmbed(settings, leagueName)],
       // Type assertion: discord-api-types version mismatch between discord.js sub-packages
-      components: [buildButtons(settings) as never],
+      components: buildButtonRows(settings) as never,
     })
 
     // Collect button interactions for 15 minutes
@@ -160,19 +187,18 @@ export const configure: Command = {
 
       await interaction.editReply({
         embeds: [buildSettingsEmbed(settings, leagueName)],
-        components: [buildButtons(settings) as never],
+        components: buildButtonRows(settings) as never,
       })
     })
 
     collector.on('end', async () => {
       // Disable buttons when collector expires
-      const currentButtons = buildButtons(settings)
-      const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        ...currentButtons.components.map((b) =>
-          ButtonBuilder.from(b.toJSON() as never).setDisabled(true)
+      const disabledRows = buildButtonRows(settings).map((row) =>
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          ...row.components.map((b) => ButtonBuilder.from(b.toJSON() as never).setDisabled(true))
         )
       )
-      await interaction.editReply({ components: [disabledRow as never] }).catch(console.error)
+      await interaction.editReply({ components: disabledRows as never }).catch(console.error)
     })
   },
 }

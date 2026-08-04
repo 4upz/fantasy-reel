@@ -169,6 +169,7 @@ async function sendBidResultsDiscordNotifications(
       sendDiscordNotification(serviceClient, {
         leagueId,
         category: 'bids',
+        mentionRole: true,
         embeds: [{
           author: buildEmbedAuthor(leagueName, leagueId),
           title: embedTitle,

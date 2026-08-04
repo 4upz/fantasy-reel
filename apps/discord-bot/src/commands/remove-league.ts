@@ -4,6 +4,7 @@ import {
 } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { createBaseEmbed, DISCORD_COLORS } from '../utils/embeds.js'
+import { canAdministerBot, ADMIN_DENIED_MESSAGE } from '../utils/permissions.js'
 import type { Command } from './index.js'
 
 export const removeLeague: Command = {
@@ -19,7 +20,7 @@ export const removeLeague: Command = {
     // Find the channel link
     const { data: channelLink, error: findError } = await supabase
       .from('discord_channels')
-      .select('id, league_id, webhook_id, created_by, leagues(name, owner_id)')
+      .select('id, league_id, webhook_id, created_by, bot_admin_role_id, leagues(name, owner_id)')
       .eq('channel_id', interaction.channelId)
       .maybeSingle()
 
@@ -39,16 +40,21 @@ export const removeLeague: Command = {
       return
     }
 
-    // Verify the user is the one who linked it or the league owner
+    // Verify the user linked it, or can otherwise administer the bot here
+    // (Manage Server, the bot-admin role, or the league owner).
     const league = (channelLink as { leagues?: { name?: string; owner_id?: string } }).leagues
     const isLinker = channelLink.created_by === userId
-    const isOwner = league?.owner_id === userId
 
-    if (!isLinker && !isOwner) {
-      await interaction.editReply(
-        'Only the person who linked this channel or the league owner can remove it.'
-      )
-      return
+    if (!isLinker) {
+      const allowed = await canAdministerBot(interaction, {
+        bot_admin_role_id: channelLink.bot_admin_role_id,
+        league_owner_id: league?.owner_id,
+      })
+
+      if (!allowed) {
+        await interaction.editReply(ADMIN_DENIED_MESSAGE)
+        return
+      }
     }
 
     // Delete the webhook
