@@ -7,6 +7,14 @@ import { removeLeague } from './commands/remove-league.js'
 import { standings } from './commands/standings.js'
 import { roster } from './commands/roster.js'
 import { configure } from './commands/configure.js'
+import { league } from './commands/league.js'
+import { leagueOptions } from './commands/league-options.js'
+import { movie } from './commands/movie.js'
+import { upcoming } from './commands/upcoming.js'
+import { bidResults } from './commands/bid-results.js'
+import { currentBids } from './commands/current-bids.js'
+import { topAvailable } from './commands/top-available.js'
+import { myTeam } from './commands/my-team.js'
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 
@@ -16,12 +24,33 @@ registerCommand(removeLeague)
 registerCommand(standings)
 registerCommand(roster)
 registerCommand(configure)
+registerCommand(league)
+registerCommand(leagueOptions)
+registerCommand(movie)
+registerCommand(upcoming)
+registerCommand(bidResults)
+registerCommand(currentBids)
+registerCommand(topAvailable)
+registerCommand(myTeam)
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`)
 })
 
 client.on(Events.InteractionCreate, async (interaction) => {
+  if (interaction.isAutocomplete()) {
+    const command = getCommand(interaction.commandName)
+    if (!command?.autocomplete) return
+
+    try {
+      await command.autocomplete(interaction)
+    } catch (error) {
+      console.error(`Error in autocomplete for /${interaction.commandName}:`, error)
+      await interaction.respond([]).catch(() => {})
+    }
+    return
+  }
+
   if (!interaction.isChatInputCommand()) return
 
   const command = getCommand(interaction.commandName)
