@@ -76,7 +76,7 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
         {isScored && movie.combined_score != null && (
           <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
             <div className="text-xs text-foreground-muted">Tomatometer</div>
-            <TomatometerScore score={movie.combined_score} size="sm" showTier={false} />
+            <TomatometerScore score={movie.combined_score} size="sm" showAccolade={false} />
           </div>
         )}
       </div>
