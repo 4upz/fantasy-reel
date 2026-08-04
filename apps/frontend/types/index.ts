@@ -391,13 +391,9 @@ export interface MovieTimelineItem {
   poster_url: string | null
   release_date: string | null
   status: 'scored' | 'releasing_soon' | 'upcoming'
+  /** The Tomatometer - the only critic score that affects fantasy points. */
   combined_score: number | null
   fantasy_points: number | null
-  scores: {
-    imdb: number | null
-    rotten_tomatoes: number | null
-    metacritic: number | null
-  }
 }
 
 export interface DashboardTeam {

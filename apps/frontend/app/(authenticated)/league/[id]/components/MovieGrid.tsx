@@ -4,6 +4,8 @@ import { useMemo } from 'react'
 import Image from 'next/image'
 import { Flame, Calendar, CheckCircle2 } from 'lucide-react'
 import type { MovieTimelineItem, League } from '@/types'
+import TomatometerScore from '@/app/components/TomatometerScore'
+import { formatFantasyPoints } from '@/utils/scoring'
 
 interface Props {
   movies: MovieTimelineItem[]
@@ -35,11 +37,6 @@ function formatCountdown(releaseDate: string | null): string {
   if (diffDays <= 7) return `${diffDays} days`
   if (diffDays <= 30) return `${Math.ceil(diffDays / 7)} weeks`
   return formatReleaseDate(releaseDate)
-}
-
-function formatFantasyPoints(points: number): string {
-  const rounded = Math.round(points)
-  return rounded >= 0 ? `+${rounded}` : `${rounded}`
 }
 
 function MovieCard({ movie, variant }: MovieCardProps) {
@@ -95,23 +92,7 @@ function MovieCard({ movie, variant }: MovieCardProps) {
                   {formatFantasyPoints(movie.fantasy_points!)}
                   <span className="text-sm font-normal text-foreground-muted ml-1">pts</span>
                 </span>
-                <div className="flex gap-2 text-xs">
-                  {movie.scores?.imdb && (
-                    <span className={`px-1.5 py-0.5 rounded ${movie.scores.imdb < 40 ? 'bg-crimson/20 text-crimson' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                      IMDb {movie.scores.imdb}
-                    </span>
-                  )}
-                  {movie.scores?.rotten_tomatoes && (
-                    <span className={`px-1.5 py-0.5 rounded ${movie.scores.rotten_tomatoes < 40 ? 'bg-crimson/20 text-crimson' : 'bg-red-500/20 text-red-400'}`}>
-                      RT {movie.scores.rotten_tomatoes}%
-                    </span>
-                  )}
-                  {movie.scores?.metacritic && (
-                    <span className={`px-1.5 py-0.5 rounded ${movie.scores.metacritic < 40 ? 'bg-crimson/20 text-crimson' : 'bg-green-500/20 text-green-400'}`}>
-                      MC {movie.scores.metacritic}
-                    </span>
-                  )}
-                </div>
+                <TomatometerScore score={movie.combined_score} size="sm" />
               </div>
             ) : isScored ? (
               <span className="text-sm text-foreground-muted">Pending scores</span>

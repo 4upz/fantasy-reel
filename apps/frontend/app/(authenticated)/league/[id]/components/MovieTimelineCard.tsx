@@ -1,5 +1,7 @@
 import Image from 'next/image'
 import type { MovieTimelineItem } from '@/types'
+import TomatometerScore from '@/app/components/TomatometerScore'
+import { formatFantasyPoints } from '@/utils/scoring'
 
 interface Props {
   movie: MovieTimelineItem
@@ -32,11 +34,6 @@ function formatCountdown(releaseDate: string | null): string {
   if (diffDays <= 60) return '1 mo'
   if (diffDays <= 365) return `${Math.round(diffDays / 30)} mo`
   return 'TBD'
-}
-
-function formatFantasyPoints(points: number): string {
-  const rounded = Math.round(points)
-  return rounded >= 0 ? `+${rounded}` : `${rounded}`
 }
 
 export default function MovieTimelineCard({ movie, onClick }: Props) {
@@ -75,27 +72,11 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
           </div>
         )}
 
-        {/* Hover Overlay with Scores */}
-        {isScored && movie.scores && (
-          <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-2">
-            <div className="text-xs text-foreground-muted mb-1">Scores</div>
-            <div className="text-xs space-y-0.5">
-              {movie.scores.imdb && (
-                <div className={movie.scores.imdb < 40 ? 'text-crimson' : 'text-yellow-400'}>
-                  IMDb: {movie.scores.imdb}
-                </div>
-              )}
-              {movie.scores.rotten_tomatoes && (
-                <div className={movie.scores.rotten_tomatoes < 40 ? 'text-crimson' : 'text-red-400'}>
-                  RT: {movie.scores.rotten_tomatoes}%
-                </div>
-              )}
-              {movie.scores.metacritic && (
-                <div className={movie.scores.metacritic < 40 ? 'text-crimson' : 'text-green-400'}>
-                  MC: {movie.scores.metacritic}
-                </div>
-              )}
-            </div>
+        {/* Hover Overlay with the Tomatometer */}
+        {isScored && movie.combined_score != null && (
+          <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
+            <div className="text-xs text-foreground-muted">Tomatometer</div>
+            <TomatometerScore score={movie.combined_score} size="sm" showTier={false} />
           </div>
         )}
       </div>

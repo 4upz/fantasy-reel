@@ -92,11 +92,8 @@ export const SNARKY_COMMENTS: Record<string, string[]> = {
 export interface ScoringExample {
   title: string
   posterUrl: string
-  scores: {
-    rt: number
-    imdb: number
-    metacritic: number
-  }
+  /** The Tomatometer - the only critic score that affects fantasy points. */
+  tomatometer: number
   draftPrice: number
   fantasyPoints: number
   quote: string
@@ -109,9 +106,9 @@ export const SCORING_EXAMPLES: ScoringExample[] = [
   {
     title: 'Dune: Part Two',
     posterUrl: 'https://image.tmdb.org/t/p/w500/8b8R8l88Qje9dn9OE8PY05Nxl1X.jpg',
-    scores: { rt: 92, imdb: 84, metacritic: 79 },
+    tomatometer: 92,
     draftPrice: 8,
-    fantasyPoints: 28,
+    fantasyPoints: 34,
     quote: 'Called it.',
     quoter: '@SleepersOnly',
     isWinner: true,
@@ -119,9 +116,9 @@ export const SCORING_EXAMPLES: ScoringExample[] = [
   {
     title: 'Madame Web',
     posterUrl: 'https://image.tmdb.org/t/p/w500/rULWuutDcN5NvtiZi4FRPzRYWSh.jpg',
-    scores: { rt: 12, imdb: 38, metacritic: 26 },
+    tomatometer: 12,
     draftPrice: 15,
-    fantasyPoints: -20,
+    fantasyPoints: -19,
     quote: "We don't talk about this one.",
     quoter: '@NobodyAskedMe',
     isWinner: false,

@@ -4,8 +4,9 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { formatDate } from '@/utils/date'
+import { formatFantasyPoints } from '@/utils/scoring'
 import type { MovieWithScores } from '@/types'
-import ScoreSourceBadge from './ScoreSourceBadge'
+import TomatometerScore from '@/app/components/TomatometerScore'
 
 type MovieBadge =
   | { type: 'draft'; round: number; pick: number }
@@ -20,11 +21,6 @@ interface Props {
   overridePoints?: number | null
 }
 
-function formatFantasyPoints(points: number): string {
-  const rounded = Math.round(points)
-  return rounded >= 0 ? `+${rounded}` : `${rounded}`
-}
-
 export default function MovieScoreCard({ movie, badge, isCounterpicked = false, overridePoints }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -33,11 +29,6 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
   const hasScore = displayPoints != null
   const isReleased = movie.status === 'released'
   const isPositive = hasScore && displayPoints! >= 0
-
-  // Get individual review scores
-  const imdbReview = movie.reviews?.find((r) => r.source === 'imdb')
-  const rtReview = movie.reviews?.find((r) => r.source === 'rotten_tomatoes')
-  const mcReview = movie.reviews?.find((r) => r.source === 'metacritic')
 
   const releaseDate = movie.release_date ? formatDate(movie.release_date) : 'TBA'
 
@@ -132,12 +123,12 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
           )}
         </div>
 
-        {/* Score Sources */}
-        <div className="flex items-center gap-3 mt-3">
-          <ScoreSourceBadge source="imdb" score={imdbReview?.score ?? null} />
-          <ScoreSourceBadge source="rotten_tomatoes" score={rtReview?.score ?? null} />
-          <ScoreSourceBadge source="metacritic" score={mcReview?.score ?? null} />
-        </div>
+        {/* Tomatometer - the only score that drives points */}
+        <TomatometerScore
+          score={movie.combined_score}
+          showMeter={movie.combined_score != null}
+          className="mt-3"
+        />
       </div>
 
       {/* Fantasy Points */}
@@ -150,12 +141,6 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
             <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
               Points
             </div>
-            {/* Show raw critic score for context */}
-            {movie.combined_score != null && (
-              <div className="text-[10px] text-foreground-muted mt-1">
-                {Math.round(movie.combined_score)}% RT
-              </div>
-            )}
           </>
         ) : (
           <>
