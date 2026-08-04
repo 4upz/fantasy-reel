@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidJoinCode } from '../_shared/utils.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 
 interface JoinLeagueRequest {
   league_id?: string
@@ -214,6 +215,23 @@ Deno.serve(async (req) => {
         warning: 'Joined league but failed to create team'
       }, 201)
     }
+
+    // New-member notice: no existing notify category fits (rare, benign), so
+    // it's sent ungated via the 'general' category rather than adding a
+    // sixth /configure toggle for something teams see once per season. Must
+    // be awaited -- the runtime may abort in-flight fetches after we respond.
+    await sendDiscordNotification(serviceClient, {
+      leagueId: league.id,
+      category: 'general',
+      embeds: [{
+        author: buildEmbedAuthor(league.name, league.id),
+        title: 'New team joined',
+        description: `**${team.name}** has joined the league.`,
+        color: DISCORD_COLORS.gold,
+        footer: { text: league.name },
+        url: buildLeagueUrl(league.id),
+      }],
+    })
 
     return jsonResponse({
       participant,

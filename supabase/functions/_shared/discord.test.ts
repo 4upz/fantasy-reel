@@ -466,3 +466,101 @@ Deno.test('sendDiscordNotification - does not append thread_id when null', async
     restoreFetch()
   }
 })
+
+Deno.test('sendDiscordNotification - movie_news category filters by notify_movie_news', async () => {
+  mockFetch()
+  try {
+    const channels = [
+      {
+        id: 'ch-1',
+        webhook_url: 'https://discord.com/api/webhooks/1/token1',
+        bid_alert_role_id: null,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        notify_weekly_digest: true,
+        notify_movie_news: false,
+        consecutive_failures: 0,
+        thread_id: null,
+      },
+    ]
+    const supabase = createMockSupabase(channels)
+
+    await sendDiscordNotification(supabase, {
+      leagueId: 'league-1',
+      category: 'movie_news',
+      embeds: [{ title: 'Releasing today' }],
+    })
+
+    // Should not send -- notify_movie_news disabled for this channel
+    assertEquals(fetchCalls.length, 0)
+  } finally {
+    restoreFetch()
+  }
+})
+
+Deno.test('sendDiscordNotification - weekly_digest category filters by notify_weekly_digest', async () => {
+  mockFetch()
+  try {
+    const channels = [
+      {
+        id: 'ch-1',
+        webhook_url: 'https://discord.com/api/webhooks/1/token1',
+        bid_alert_role_id: null,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        notify_weekly_digest: true,
+        notify_movie_news: true,
+        consecutive_failures: 0,
+        thread_id: null,
+      },
+    ]
+    const supabase = createMockSupabase(channels)
+
+    await sendDiscordNotification(supabase, {
+      leagueId: 'league-1',
+      category: 'weekly_digest',
+      embeds: [{ title: 'This week' }],
+    })
+
+    assertEquals(fetchCalls.length, 1)
+  } finally {
+    restoreFetch()
+  }
+})
+
+Deno.test('sendDiscordNotification - general category bypasses all per-channel toggles', async () => {
+  mockFetch()
+  try {
+    const channels = [
+      {
+        id: 'ch-1',
+        webhook_url: 'https://discord.com/api/webhooks/1/token1',
+        bid_alert_role_id: null,
+        notify_drafts: false,
+        notify_bids: false,
+        notify_trades: false,
+        notify_scores: false,
+        notify_weekly_digest: false,
+        notify_movie_news: false,
+        consecutive_failures: 0,
+        thread_id: null,
+      },
+    ]
+    const supabase = createMockSupabase(channels)
+
+    await sendDiscordNotification(supabase, {
+      leagueId: 'league-1',
+      category: 'general',
+      embeds: [{ title: 'New team joined' }],
+    })
+
+    // Every toggle is off, but 'general' has no gating column -- still sends
+    assertEquals(fetchCalls.length, 1)
+  } finally {
+    restoreFetch()
+  }
+})

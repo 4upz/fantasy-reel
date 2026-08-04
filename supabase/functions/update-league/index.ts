@@ -1,3 +1,4 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   jsonResponse,
   errorResponse,
@@ -6,8 +7,10 @@ import {
   isAuthError,
   isValidUUID,
 } from '../_shared/utils.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
+import { snapshotStandings, formatPoints } from '../_shared/score-notifications.ts'
 
-type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league'
+type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
 
 interface UpdateInfoRequest {
   action: 'update_info'
@@ -42,6 +45,11 @@ interface DeleteLeagueRequest {
   league_id: string
 }
 
+interface CompleteLeagueRequest {
+  action: 'complete_league'
+  league_id: string
+}
+
 interface UpdateCounterpickConfigRequest {
   action: 'update_counterpick_config'
   league_id: string
@@ -70,6 +78,7 @@ type UpdateLeagueRequest =
   | ReorderParticipantsRequest
   | KickParticipantRequest
   | DeleteLeagueRequest
+  | CompleteLeagueRequest
 
 const MAX_NAME_LENGTH = 255
 const MIN_PARTICIPANTS = 2
@@ -145,6 +154,9 @@ Deno.serve(async (req) => {
 
       case 'delete_league':
         return await handleDeleteLeague(supabase, league)
+
+      case 'complete_league':
+        return await handleCompleteLeague(supabase, league)
 
       default:
         return errorResponse('Invalid action', 400)
@@ -583,4 +595,69 @@ async function handleDeleteLeague(
   }
 
   return jsonResponse({ message: `League "${league.name}" has been deleted` })
+}
+
+const STANDING_MEDALS = ['🥇', '🥈', '🥉']
+
+async function handleCompleteLeague(
+  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  league: { id: string; name: string; status: string }
+): Promise<Response> {
+  // C4: season wrap-up. This is the only place leagues.status transitions to
+  // 'completed' today, so this settings action doubles as the trigger point
+  // an automated hook would otherwise need.
+  if (league.status !== 'active') {
+    return errorResponse('Only an active league can be marked completed', 400)
+  }
+
+  const { data: updatedLeague, error } = await supabase
+    .from('leagues')
+    .update({ status: 'completed' })
+    .eq('id', league.id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error completing league:', error)
+    return errorResponse('Failed to complete league', 500)
+  }
+
+  // Discord delivery needs the service role client -- discord_channels.webhook_url
+  // is a credential column, matching every other notification-sending function.
+  const serviceClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  )
+
+  const standingsByLeague = await snapshotStandings(serviceClient, [league.id])
+  const standings = standingsByLeague.get(league.id) ?? []
+  const topTeams = standings.slice(0, 3)
+
+  if (topTeams.length > 0) {
+    const fields = topTeams.map((team, i) => ({
+      name: `${STANDING_MEDALS[i]} ${team.teamName}`,
+      value: `${formatPoints(team.points)} pts`,
+      inline: true,
+    }))
+
+    await sendDiscordNotification(serviceClient, {
+      leagueId: league.id,
+      category: 'scores',
+      embeds: [{
+        author: buildEmbedAuthor(league.name, league.id),
+        title: '🏆 Season Final Standings',
+        description: `${league.name} has wrapped up! Final standings:`,
+        fields,
+        color: DISCORD_COLORS.green,
+        footer: { text: league.name },
+        url: buildLeagueUrl(league.id, '/standings'),
+      }],
+    })
+  }
+
+  return jsonResponse({
+    league: updatedLeague,
+    message: 'League marked as completed',
+    top_teams: topTeams,
+  })
 }
