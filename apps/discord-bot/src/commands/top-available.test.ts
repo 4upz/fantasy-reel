@@ -1,14 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { topAvailable } from './top-available.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  ;(getSupabase as unknown as Mock).mockReturnValue(createMockSupabaseClient(config))
-}
 
 function mockFetchOk(results: unknown[]) {
   vi.stubGlobal(
@@ -31,7 +26,7 @@ describe('/top-available', () => {
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
 
     await topAvailable.execute(interaction)
@@ -40,7 +35,7 @@ describe('/top-available', () => {
   })
 
   it('excludes rostered movies and shows the top available ones', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         draft_picks: { data: [{ movies: { tmdb_id: 100 } }] },
@@ -61,7 +56,7 @@ describe('/top-available', () => {
   })
 
   it('shows an empty state when nothing is available', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel, draft_picks: { data: [] }, pickups: { data: [] } },
     })
     mockFetchOk([])
@@ -74,7 +69,7 @@ describe('/top-available', () => {
   })
 
   it('replies with a friendly error when the movie data fetch fails', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel, draft_picks: { data: [] }, pickups: { data: [] } },
     })
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))

@@ -2,40 +2,11 @@ import { Client, Events, GatewayIntentBits } from 'discord.js'
 import http from 'node:http'
 import { config } from './config.js'
 import { getCommand, registerCommand } from './commands/index.js'
-import { setLeague } from './commands/set-league.js'
-import { removeLeague } from './commands/remove-league.js'
-import { standings } from './commands/standings.js'
-import { roster } from './commands/roster.js'
-import { configure } from './commands/configure.js'
-import { league } from './commands/league.js'
-import { leagueOptions } from './commands/league-options.js'
-import { movie } from './commands/movie.js'
-import { upcoming } from './commands/upcoming.js'
-import { bidResults } from './commands/bid-results.js'
-import { currentBids } from './commands/current-bids.js'
-import { topAvailable } from './commands/top-available.js'
-import { myTeam } from './commands/my-team.js'
-import { setBotAdminRole } from './commands/set-bot-admin-role.js'
-import { setBidAlertRole } from './commands/set-bid-alert-role.js'
+import { ALL_COMMANDS } from './commands/all.js'
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 
-// Register all commands
-registerCommand(setLeague)
-registerCommand(removeLeague)
-registerCommand(standings)
-registerCommand(roster)
-registerCommand(configure)
-registerCommand(league)
-registerCommand(leagueOptions)
-registerCommand(movie)
-registerCommand(upcoming)
-registerCommand(bidResults)
-registerCommand(currentBids)
-registerCommand(topAvailable)
-registerCommand(myTeam)
-registerCommand(setBotAdminRole)
-registerCommand(setBidAlertRole)
+ALL_COMMANDS.forEach(registerCommand)
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`Logged in as ${readyClient.user.tag}`)

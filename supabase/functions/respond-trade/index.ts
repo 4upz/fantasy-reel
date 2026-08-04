@@ -112,10 +112,10 @@ Deno.serve(async (req) => {
     const initiatorInfo = await getTeamInfo(serviceClient, tradeOffer.initiator_team_id)
     const initiatorTeamName = initiatorInfo?.name ?? 'A team'
     const recipientTeamName = recipientInfo?.name ?? 'A team'
-    const mentionContent = await getTradeMentionContent(
-      serviceClient,
-      [initiatorInfo?.user_id, recipientInfo?.user_id].filter((id): id is string => Boolean(id))
-    )
+    const mentionContent = await getTradeMentionContent(serviceClient, [
+      initiatorInfo?.user_id,
+      recipientInfo?.user_id,
+    ])
 
     if (response === 'reject') {
       await notifyTradeParties(serviceClient, {

@@ -2,7 +2,7 @@ import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { config } from '../config.js'
 import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
-import { resolveLinkedLeague, UNLINKED_CHANNEL_MESSAGE } from '../utils/channel-league.js'
+import { requireLinkedLeague } from '../utils/channel-league.js'
 import { truncate } from '../utils/format.js'
 import type { Command } from './index.js'
 
@@ -24,12 +24,8 @@ export const myTeam: Command = {
     await interaction.deferReply({ ephemeral: true })
 
     const supabase = getSupabase()
-    const linked = await resolveLinkedLeague(supabase, interaction.channelId)
-
-    if (!linked) {
-      await interaction.editReply(UNLINKED_CHANNEL_MESSAGE)
-      return
-    }
+    const linked = await requireLinkedLeague(interaction, supabase)
+    if (!linked) return
 
     const { leagueId, leagueName } = linked
 

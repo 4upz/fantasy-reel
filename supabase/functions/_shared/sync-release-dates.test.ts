@@ -10,7 +10,7 @@
  */
 import { assertEquals } from '@std/assert'
 import { runSyncReleaseDates } from '../sync-release-dates/handler.ts'
-import { createMockDbClient, type MockDb } from './_mock-client.ts'
+import { createMockDbClient, stubFetch, type MockDb } from './_mock-client.ts'
 
 const LEAGUE_ID = 'league-1'
 const MOVIE_ID = 'movie-1'
@@ -49,37 +49,16 @@ function baseDb(): MockDb {
   }
 }
 
-interface RecordedCall {
-  url: string
-}
-
-const originalFetch = globalThis.fetch
-
 /**
- * Stubs globalThis.fetch (not just an injected fetchImpl) because
- * sendDiscordNotification's webhook POST always goes through the real
- * global fetch, not the fetchImpl parameter passed to runSyncReleaseDates.
- * Without this, the Discord branch would hit the real network.
+ * Answers TMDb movie lookups with `releaseDate`, or a 404 when it is null.
+ * Everything else (the Discord webhook) falls through to stubFetch's 204.
  */
-function mockFetch(tmdbReleaseDate: string | null, calls: RecordedCall[]): void {
-  globalThis.fetch = ((input: string | URL | Request, _init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    calls.push({ url })
-    if (url.includes('api.themoviedb.org')) {
-      if (tmdbReleaseDate === null) {
-        return Promise.resolve(new Response('Not Found', { status: 404 }))
-      }
-      return Promise.resolve(
-        new Response(JSON.stringify({ release_date: tmdbReleaseDate }), { status: 200 })
-      )
-    }
-    // Discord webhook
-    return Promise.resolve(new Response(null, { status: 204 }))
-  }) as typeof fetch
-}
-
-function restoreFetch(): void {
-  globalThis.fetch = originalFetch
+function tmdbResponder(releaseDate: string | null): (url: string) => Response | undefined {
+  return (url) => {
+    if (!url.includes('api.themoviedb.org')) return undefined
+    if (releaseDate === null) return new Response('Not Found', { status: 404 })
+    return new Response(JSON.stringify({ release_date: releaseDate }), { status: 200 })
+  }
 }
 
 Deno.test('sync-release-dates', async (t) => {
@@ -87,23 +66,21 @@ Deno.test('sync-release-dates', async (t) => {
     const db = baseDb()
     db.movies = []
     const client = createMockDbClient(db)
-    const calls: RecordedCall[] = []
-    mockFetch(today, calls)
+    const { calls, restore } = stubFetch(tmdbResponder(today))
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
       assertEquals(result, { movies_checked: 0, dates_changed: 0, leagues_notified: 0 })
       assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('no-op when TMDb date matches stored date (no write, no send)', async () => {
     const db = baseDb()
     const client = createMockDbClient(db)
-    const calls: RecordedCall[] = []
-    mockFetch(today, calls)
+    const { calls, restore } = stubFetch(tmdbResponder(today))
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
@@ -112,16 +89,15 @@ Deno.test('sync-release-dates', async (t) => {
       // Only the TMDb lookup happened, no Discord webhook call
       assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('updates the stored date and notifies when TMDb reports a change', async () => {
     const db = baseDb()
     const client = createMockDbClient(db)
-    const calls: RecordedCall[] = []
     const newDate = '2027-01-15'
-    mockFetch(newDate, calls)
+    const { calls, restore } = stubFetch(tmdbResponder(newDate))
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
@@ -129,7 +105,7 @@ Deno.test('sync-release-dates', async (t) => {
       assertEquals(db.movies[0].release_date, newDate)
       assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 1)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
@@ -137,8 +113,7 @@ Deno.test('sync-release-dates', async (t) => {
     const db = baseDb()
     db.draft_picks = []
     const client = createMockDbClient(db)
-    const calls: RecordedCall[] = []
-    mockFetch('2027-01-15', calls)
+    const { calls, restore } = stubFetch(tmdbResponder('2027-01-15'))
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
@@ -146,22 +121,21 @@ Deno.test('sync-release-dates', async (t) => {
       // Never even reaches out to TMDb for a movie nobody rosters
       assertEquals(calls.filter((c) => c.url.includes('api.themoviedb.org')).length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('does not write or notify when the TMDb lookup fails', async () => {
     const db = baseDb()
     const client = createMockDbClient(db)
-    const calls: RecordedCall[] = []
-    mockFetch(null, calls)
+    const { calls, restore } = stubFetch(tmdbResponder(null))
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
       assertEquals(result, { movies_checked: 1, dates_changed: 0, leagues_notified: 0 })
       assertEquals(db.movies[0].release_date, today)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 })

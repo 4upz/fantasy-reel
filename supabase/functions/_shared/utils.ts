@@ -66,6 +66,19 @@ export function isInvitationExpired(expiresAt: string): boolean {
   return new Date(expiresAt) < new Date()
 }
 
+/**
+ * Whether a scheduled-job request may run: the X-Cron-Secret header matches
+ * CRON_SECRET, or the caller presents the service role key. An unset secret
+ * never authorizes -- a missing CRON_SECRET must not open the endpoint up.
+ */
+export function isAuthorizedCronRequest(req: Request): boolean {
+  const cronSecret = Deno.env.get('CRON_SECRET')
+  if (cronSecret && req.headers.get('X-Cron-Secret') === cronSecret) return true
+
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  return Boolean(serviceRoleKey) && req.headers.get('Authorization') === `Bearer ${serviceRoleKey}`
+}
+
 export function errorResponse(message: string, status = 500): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,

@@ -1,7 +1,7 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
-import { resolveLinkedLeague, UNLINKED_CHANNEL_MESSAGE } from '../utils/channel-league.js'
+import { requireLinkedLeague } from '../utils/channel-league.js'
 import { truncate } from '../utils/format.js'
 import type { Command } from './index.js'
 
@@ -37,12 +37,8 @@ export const upcoming: Command = {
 
     const scope = interaction.options.getString('scope') || 'upcoming'
     const supabase = getSupabase()
-    const linked = await resolveLinkedLeague(supabase, interaction.channelId)
-
-    if (!linked) {
-      await interaction.editReply(UNLINKED_CHANNEL_MESSAGE)
-      return
-    }
+    const linked = await requireLinkedLeague(interaction, supabase)
+    if (!linked) return
 
     const { leagueId, leagueName } = linked
 

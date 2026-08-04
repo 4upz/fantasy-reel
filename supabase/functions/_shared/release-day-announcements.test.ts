@@ -10,30 +10,7 @@
  */
 import { assertEquals } from '@std/assert'
 import { runReleaseDayAnnouncements } from '../release-day-announcements/handler.ts'
-import { createMockDbClient, type MockDb } from './_mock-client.ts'
-
-const originalFetch = globalThis.fetch
-
-interface FetchCall {
-  url: string
-  body: Record<string, unknown>
-}
-
-let fetchCalls: FetchCall[] = []
-
-function mockFetch() {
-  fetchCalls = []
-  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    const body = init?.body ? JSON.parse(init.body as string) : {}
-    fetchCalls.push({ url, body })
-    return Promise.resolve(new Response(null, { status: 204 }))
-  }) as typeof fetch
-}
-
-function restoreFetch() {
-  globalThis.fetch = originalFetch
-}
+import { createMockDbClient, stubFetch, type MockDb } from './_mock-client.ts'
 
 const LEAGUE_ID = 'league-1'
 const MOVIE_ID = 'movie-1'
@@ -70,7 +47,7 @@ function baseDb(): MockDb {
 
 Deno.test('release-day-announcements', async (t) => {
   await t.step('no-op when nothing releases today', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.movies[0].release_date = '2000-01-01'
@@ -79,14 +56,14 @@ Deno.test('release-day-announcements', async (t) => {
       const result = await runReleaseDayAnnouncements(client)
 
       assertEquals(result, { leagues_notified: 0, movies_announced: 0 })
-      assertEquals(fetchCalls.length, 0)
+      assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('announces a rostered movie releasing today and logs it', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       const client = createMockDbClient(db)
@@ -94,17 +71,17 @@ Deno.test('release-day-announcements', async (t) => {
       const result = await runReleaseDayAnnouncements(client)
 
       assertEquals(result, { leagues_notified: 1, movies_announced: 1 })
-      assertEquals(fetchCalls.length, 1)
+      assertEquals(calls.length, 1)
       assertEquals(db.discord_notification_log.length, 1)
       assertEquals(db.discord_notification_log[0].movie_id, MOVIE_ID)
       assertEquals(db.discord_notification_log[0].notification_type, 'release_day')
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('ignores movies with no active roster holder', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.draft_picks = []
@@ -113,14 +90,14 @@ Deno.test('release-day-announcements', async (t) => {
       const result = await runReleaseDayAnnouncements(client)
 
       assertEquals(result, { leagues_notified: 0, movies_announced: 0 })
-      assertEquals(fetchCalls.length, 0)
+      assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('skips dropped roster slots', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.draft_picks[0].dropped_at = new Date().toISOString()
@@ -130,33 +107,33 @@ Deno.test('release-day-announcements', async (t) => {
 
       assertEquals(result, { leagues_notified: 0, movies_announced: 0 })
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('double-run protection: a second run does not re-announce', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       const client = createMockDbClient(db)
 
       const first = await runReleaseDayAnnouncements(client)
       assertEquals(first, { leagues_notified: 1, movies_announced: 1 })
-      assertEquals(fetchCalls.length, 1)
+      assertEquals(calls.length, 1)
 
       const second = await runReleaseDayAnnouncements(client)
       assertEquals(second, { leagues_notified: 0, movies_announced: 0 })
       // Still just the one webhook call from the first run
-      assertEquals(fetchCalls.length, 1)
+      assertEquals(calls.length, 1)
       // Log wasn't duplicated
       assertEquals(db.discord_notification_log.length, 1)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('picks up movies via pickups as well as draft_picks', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.draft_picks = []
@@ -168,14 +145,14 @@ Deno.test('release-day-announcements', async (t) => {
       const result = await runReleaseDayAnnouncements(client)
 
       assertEquals(result, { leagues_notified: 1, movies_announced: 1 })
-      assertEquals(fetchCalls.length, 1)
+      assertEquals(calls.length, 1)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('respects notify_movie_news per channel', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.discord_channels[0].notify_movie_news = false
@@ -186,9 +163,9 @@ Deno.test('release-day-announcements', async (t) => {
       // Still "notified" from the function's point of view (it logged + attempted
       // dispatch); the channel itself just filters it out inside sendDiscordNotification.
       assertEquals(result.movies_announced, 1)
-      assertEquals(fetchCalls.length, 0)
+      assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 })

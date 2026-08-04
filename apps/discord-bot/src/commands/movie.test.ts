@@ -1,14 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { movie } from './movie.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  ;(getSupabase as unknown as Mock).mockReturnValue(createMockSupabaseClient(config))
-}
 
 function mockFetchOk(body: unknown) {
   vi.stubGlobal(
@@ -38,7 +33,7 @@ describe('/movie', () => {
   })
 
   it('looks up a movie by name and shows league roster context', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         movies: {
@@ -68,7 +63,7 @@ describe('/movie', () => {
   })
 
   it('still resolves the movie when the channel is not linked, without roster context', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     mockFetchOk(searchResponse)
     const interaction = makeInteraction({ stringOptions: { name: 'Movie One' } })
 
@@ -80,7 +75,7 @@ describe('/movie', () => {
   })
 
   it('shows an empty state when no movies match', async () => {
-    setSupabase({ tables: { discord_channels: linkedChannel } })
+    mockSupabase({ tables: { discord_channels: linkedChannel } })
     mockFetchOk({ page: 1, total_pages: 1, total_results: 0, results: [] })
     const interaction = makeInteraction({ stringOptions: { name: 'Nonexistent Movie' } })
 
@@ -90,7 +85,7 @@ describe('/movie', () => {
   })
 
   it('replies with a friendly error when the search fetch fails', async () => {
-    setSupabase({ tables: { discord_channels: linkedChannel } })
+    mockSupabase({ tables: { discord_channels: linkedChannel } })
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
     const interaction = makeInteraction({ stringOptions: { name: 'Movie One' } })
 

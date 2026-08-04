@@ -10,28 +10,7 @@
  */
 import { assertEquals } from '@std/assert'
 import { runSendAnnouncement, MAX_MESSAGE_LENGTH } from '../send-announcement/handler.ts'
-import { createMockDbClient, type MockDb } from './_mock-client.ts'
-
-const originalFetch = globalThis.fetch
-
-interface FetchCall {
-  url: string
-}
-
-let fetchCalls: FetchCall[] = []
-
-function mockFetch() {
-  fetchCalls = []
-  globalThis.fetch = ((input: string | URL | Request) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    fetchCalls.push({ url })
-    return Promise.resolve(new Response(null, { status: 204 }))
-  }) as typeof fetch
-}
-
-function restoreFetch() {
-  globalThis.fetch = originalFetch
-}
+import { createMockDbClient, stubFetch, type MockDb } from './_mock-client.ts'
 
 const LEAGUE_ID = 'league-1'
 const OWNER_ID = 'user-owner'
@@ -130,7 +109,7 @@ Deno.test('send-announcement', async (t) => {
   })
 
   await t.step('403 when caller is not the league owner', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.leagues[0].id = VALID_LEAGUE_ID
@@ -143,14 +122,14 @@ Deno.test('send-announcement', async (t) => {
 
       assertEquals(status, 403)
       assertEquals('error' in result && result.error, 'Only the league owner can post announcements')
-      assertEquals(fetchCalls.length, 0)
+      assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('200: posts to every enabled channel regardless of category toggles', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.leagues[0].id = VALID_LEAGUE_ID
@@ -168,14 +147,14 @@ Deno.test('send-announcement', async (t) => {
         assertEquals(result.channels_notified, 1)
       }
       // Every notify_* toggle is false in the fixture, but 'general' bypasses them
-      assertEquals(fetchCalls.length, 1)
+      assertEquals(calls.length, 1)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('200 with channels_notified: 0 when no Discord channels are linked', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.leagues[0].id = VALID_LEAGUE_ID
@@ -191,9 +170,9 @@ Deno.test('send-announcement', async (t) => {
       if (!('error' in result)) {
         assertEquals(result.channels_notified, 0)
       }
-      assertEquals(fetchCalls.length, 0)
+      assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 })

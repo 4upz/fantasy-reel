@@ -21,9 +21,11 @@
  */
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { fetchRosterHoldings, groupHoldingsByMovie } from '../_shared/roster-holdings.ts'
 
 /** How far in the past a release date can be and still get re-checked. */
 const RECENT_DAYS = 14
+const MAX_FIELDS = 25
 
 export interface SyncReleaseDatesResult {
   movies_checked: number
@@ -36,18 +38,6 @@ interface MovieRow {
   tmdb_id: number
   title: string
   release_date: string
-}
-
-interface HoldingRow {
-  movie_id: string
-  league_id: string
-  teams: { name: string } | { name: string }[] | null
-}
-
-/** Normalizes PostgREST embeds, which type single rows as arrays. */
-function firstOf<T>(value: T | T[] | null): T | null {
-  if (value === null) return null
-  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 function formatDate(isoDate: string): string {
@@ -109,30 +99,7 @@ export async function runSyncReleaseDates(
   // Restrict to movies that are actually rostered somewhere -- this is what
   // makes the job small; sync-movies' discover feed populates far more
   // movies than any league ever drafts or picks up.
-  const [picks, pickups] = await Promise.all([
-    serviceClient
-      .from('draft_picks')
-      .select('movie_id, league_id, teams!draft_picks_team_id_fkey(name)')
-      .in('movie_id', candidateIds)
-      .is('dropped_at', null),
-    serviceClient
-      .from('pickups')
-      .select('movie_id, league_id, teams!pickups_team_id_fkey(name)')
-      .in('movie_id', candidateIds)
-      .is('dropped_at', null),
-  ])
-
-  if (picks.error) console.error('Failed to load draft picks:', picks.error)
-  if (pickups.error) console.error('Failed to load pickups:', pickups.error)
-
-  const rows = [...(picks.data ?? []), ...(pickups.data ?? [])] as HoldingRow[]
-
-  const holdingsByMovie = new Map<string, Array<{ leagueId: string; teamName: string }>>()
-  for (const row of rows) {
-    const bucket = holdingsByMovie.get(row.movie_id) ?? []
-    bucket.push({ leagueId: row.league_id, teamName: firstOf(row.teams)?.name ?? 'A team' })
-    holdingsByMovie.set(row.movie_id, bucket)
-  }
+  const holdingsByMovie = groupHoldingsByMovie(await fetchRosterHoldings(serviceClient, candidateIds))
 
   const rosteredMovies = (movies as MovieRow[]).filter((m) => holdingsByMovie.has(m.id))
 
@@ -180,7 +147,7 @@ export async function runSyncReleaseDates(
 
   for (const [leagueId, changes] of changesByLeague) {
     const leagueName = await getLeagueName(serviceClient, leagueId)
-    const fields = changes.slice(0, 25).map((c) => ({
+    const fields = changes.slice(0, MAX_FIELDS).map((c) => ({
       name: c.title,
       value: `Moved from **${formatDate(c.previousDate)}** to **${formatDate(c.newDate)}** -- picked by **${c.teamName}**`,
       inline: false,

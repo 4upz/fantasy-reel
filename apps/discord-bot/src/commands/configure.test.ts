@@ -1,16 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { configure } from './configure.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  const client = createMockSupabaseClient(config)
-  ;(getSupabase as unknown as Mock).mockReturnValue(client)
-  return client
-}
 
 /** A fake `Message`-like reply that supports the button collector API used by /configure. */
 function fakeReplyMessage() {
@@ -47,7 +40,7 @@ describe('/configure', () => {
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
     interaction.editReply = vi.fn().mockResolvedValue(undefined)
 
@@ -57,7 +50,7 @@ describe('/configure', () => {
   })
 
   it('replies with a friendly error when the Discord account is not linked', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: null } },
     })
@@ -70,7 +63,7 @@ describe('/configure', () => {
   })
 
   it('denies members who are not the linker, an admin-role holder, Manage Server, or the owner', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: 'someone-else' } },
     })
@@ -83,7 +76,7 @@ describe('/configure', () => {
   })
 
   it('shows all six toggles, including the new Weekly Digest and Movie News buttons, for the linker', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: 'linker-user' } },
     })
@@ -105,7 +98,7 @@ describe('/configure', () => {
   })
 
   it('allows Manage Server holders even when they are not the linker or owner', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: 'someone-else' } },
     })
@@ -119,7 +112,7 @@ describe('/configure', () => {
   })
 
   it('toggles Movie News on button click and persists the change', async () => {
-    const client = setSupabase({
+    const client = mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: 'linker-user' } },
     })

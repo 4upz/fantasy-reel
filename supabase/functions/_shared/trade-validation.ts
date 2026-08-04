@@ -220,11 +220,15 @@ export function buildTradeMentions(
  * for a trade notification. profiles has no discord_id column -- the link
  * lives only in auth.identities, which requires the get_discord_ids_by_user_ids
  * SECURITY DEFINER RPC (PostgREST cannot query the auth schema directly).
+ *
+ * Accepts missing user IDs so callers can pass team lookups straight through
+ * without pre-filtering; a team whose row didn't resolve is simply skipped.
  */
 export async function getTradeMentionContent(
   supabase: SupabaseClient,
-  userIds: string[]
+  maybeUserIds: Array<string | null | undefined>
 ): Promise<string | undefined> {
+  const userIds = maybeUserIds.filter((id): id is string => Boolean(id))
   if (userIds.length === 0) return undefined
 
   const { data, error } = await supabase.rpc('get_discord_ids_by_user_ids', {
