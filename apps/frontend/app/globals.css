@@ -71,6 +71,7 @@
   --animate-heart-pop: heart-pop 0.3s ease-out;
   --animate-heart-shrink: heart-shrink 0.2s ease-out;
   --animate-slide-out-down: slide-out-down 0.25s ease-out forwards;
+  --animate-accolade-sweep: accolade-sweep 5s ease-in-out infinite;
 }
 
 /* === KEYFRAMES === */
@@ -92,6 +93,12 @@
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* Sweeps once, then rests for most of the cycle */
+@keyframes accolade-sweep {
+  0%, 72% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
 }
 
 @keyframes heart-pop {
@@ -262,6 +269,38 @@
   .badge-completed {
     background-color: var(--color-status-completed-bg);
     color: var(--color-status-completed);
+  }
+
+  /*
+   * Accolade shine - a sheen that crosses the badge and then rests. Used only
+   * on the 90% Club, which is rare enough that the movement stays an accent
+   * rather than becoming page-wide noise.
+   */
+  .accolade-shine {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .accolade-shine::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      rgba(255, 246, 220, 0.7) 50%,
+      transparent 70%
+    );
+    transform: translateX(-120%);
+    animation: var(--animate-accolade-sweep);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .accolade-shine::after {
+      animation: none;
+      opacity: 0;
+    }
   }
 
   /* Bid type card borders */

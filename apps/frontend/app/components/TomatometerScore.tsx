@@ -15,18 +15,18 @@ import { useId } from 'react'
  * Fresh line and the scoring baseline (points = RT - 60), so gold means the
  * movie is earning points and crimson means it is losing them.
  *
- * The tier rides in its own badge beside the score - the score is a measurement
- * and the tier is a verdict, so they do not share a container. Only the 90% Club
- * is an accolade, so only it gets laurels; Fresh and Rotten are classifications
- * and stay quiet. Tiers match the scoring curve documented on the help page.
+ * Only the 90% Club gets a badge. It is the one tier that is an award, so it
+ * earns laurels and a sheen; Fresh and Rotten are already carried by the colour
+ * of the score and the sign of the points, and badging them would make the
+ * accolade just another label. Tiers match the curve documented on the help page.
  */
 
 interface Props {
   /** The Tomatometer, 0-100. Null when the movie has no RT score yet. */
   score: number | null
   size?: 'sm' | 'md' | 'lg'
-  /** Show the Fresh/Rotten tier. Drop it where the surface is too narrow to fit it. */
-  showTier?: boolean
+  /** Show the 90% Club badge. Drop it where the surface is too narrow to fit it. */
+  showAccolade?: boolean
   className?: string
 }
 
@@ -40,12 +40,8 @@ const SCORE_STYLES = {
   pending: 'bg-elevated border-border text-foreground-muted',
 } as const
 
-/** The 90% Club is the one tier that is an award, so it is the one tier with laurels. */
-const BADGE_STYLES = {
-  club: 'bg-gradient-to-b from-gold/25 to-gold/5 border-gold/50 text-gold',
-  fresh: 'bg-gold/[0.07] border-gold/20 text-gold/75',
-  rotten: 'bg-crimson/10 border-crimson/30 text-crimson/85',
-} as const
+const ACCOLADE_STYLE =
+  'bg-gradient-to-b from-gold/25 to-gold/5 border-gold/50 text-gold shadow-[0_0_10px_rgba(201,162,39,0.15)]'
 
 const SIZE_STYLES = {
   sm: {
@@ -160,7 +156,7 @@ function TomatoMark({ fill, className }: { fill: number | null; className?: stri
 export default function TomatometerScore({
   score,
   size = 'md',
-  showTier = true,
+  showAccolade = true,
   className = '',
 }: Props) {
   const sizing = SIZE_STYLES[size]
@@ -192,13 +188,13 @@ export default function TomatometerScore({
         {rounded}%
       </span>
 
-      {showTier && (
+      {isAccolade && showAccolade && (
         <span
-          className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border font-semibold uppercase tracking-[0.12em] ${BADGE_STYLES[tier.key]} ${sizing.badge}`}
+          className={`accolade-shine inline-flex items-center gap-1 whitespace-nowrap rounded-md border font-semibold uppercase tracking-[0.12em] ${ACCOLADE_STYLE} ${sizing.badge}`}
         >
-          {isAccolade && <LaurelSprig className={sizing.laurel} />}
+          <LaurelSprig className={sizing.laurel} />
           {tier.label}
-          {isAccolade && <LaurelSprig className={sizing.laurel} flip />}
+          <LaurelSprig className={sizing.laurel} flip />
         </span>
       )}
     </span>
