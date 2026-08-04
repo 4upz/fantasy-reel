@@ -13,6 +13,8 @@ import { bidResults } from './commands/bid-results.js'
 import { currentBids } from './commands/current-bids.js'
 import { topAvailable } from './commands/top-available.js'
 import { myTeam } from './commands/my-team.js'
+import { setBotAdminRole } from './commands/set-bot-admin-role.js'
+import { setBidAlertRole } from './commands/set-bid-alert-role.js'
 
 const commands = [
   setLeague.data.toJSON(),
@@ -28,6 +30,8 @@ const commands = [
   currentBids.data.toJSON(),
   topAvailable.data.toJSON(),
   myTeam.data.toJSON(),
+  setBotAdminRole.data.toJSON(),
+  setBidAlertRole.data.toJSON(),
 ]
 
 const rest = new REST().setToken(config.discordToken)

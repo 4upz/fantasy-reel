@@ -7,6 +7,7 @@ import {
 import { getSupabase } from '../supabase.js'
 import { config } from '../config.js'
 import { createBaseEmbed, DISCORD_COLORS, FANTASY_REEL_ICON } from '../utils/embeds.js'
+import { canAdministerBot, ADMIN_DENIED_MESSAGE } from '../utils/permissions.js'
 import type { Command } from './index.js'
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -92,15 +93,28 @@ export const setLeague: Command = {
       return
     }
 
-    // Get league name
+    // Get league name and owner
     const { data: league, error: leagueError } = await supabase
       .from('leagues')
-      .select('name')
+      .select('name, owner_id')
       .eq('id', leagueId)
       .single()
 
     if (leagueError || !league) {
       await interaction.editReply('League not found.')
+      return
+    }
+
+    // Only bot admins (Manage Server, the bot-admin role, or the league owner)
+    // may link a channel -- there's no discord_channels row yet, so the
+    // per-channel role grant doesn't apply here.
+    const allowed = await canAdministerBot(interaction, {
+      bot_admin_role_id: null,
+      league_owner_id: league.owner_id,
+    })
+
+    if (!allowed) {
+      await interaction.editReply(ADMIN_DENIED_MESSAGE)
       return
     }
 
