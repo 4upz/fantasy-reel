@@ -6,7 +6,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
 
 // Test movie data for bidding
 const currentYear = new Date().getFullYear()
@@ -386,11 +386,19 @@ Deno.test({
       // This test requires a movie that was drafted during the draft phase
       const leagueId = await factory.createActiveLeague(uniqueName('bid-drafted'))
 
-      // Get a tmdb_id that was drafted during the active league creation
-      // The factory.createActiveLeague drafts movies with tmdb_ids starting at 200001
+      // Look up a tmdb_id that was actually drafted during league creation
+      // rather than hardcoding the factory's counter base.
+      const { data: draftedPick } = await getServiceClient()
+        .from('draft_picks')
+        .select('movies(tmdb_id)')
+        .eq('league_id', leagueId)
+        .limit(1)
+        .single()
+      const draftedTmdbId = (draftedPick as unknown as { movies: { tmdb_id: number } }).movies.tmdb_id
+
       const result = await invokeFunction(client, 'place-bid', {
         league_id: leagueId,
-        tmdb_id: 200001, // This was drafted during createActiveLeague
+        tmdb_id: draftedTmdbId,
         amount: 10,
       })
 

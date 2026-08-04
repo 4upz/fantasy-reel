@@ -486,7 +486,8 @@ export class TestDataFactory {
   /**
    * Create an active league (draft completed, budgets initialized)
    * This completes the full draft with all participants making picks.
-   * Draft movies start at tmdb_id 200001 and increment.
+   * Draft movies start at tmdb_id 900100001 (a range with no real TMDb
+   * entries) and increment.
    * @param name League name
    * @param numParticipants Number of participants (default: 2, max: 3 for test support)
    */
@@ -550,7 +551,11 @@ export class TestDataFactory {
 
     // Make all required draft picks to complete the draft
     // Snake draft: e.g. with 3 players: 1,2,3,3,2,1,1,2,3...
-    let tmdbIdCounter = 200001
+    // The counter must sit in a range with NO real TMDb movies: IDs like
+    // 200001 exist on TMDb, so sync-release-dates would "correct" the pool
+    // movies' fake future dates to the real films' past dates, breaking
+    // every later draft with "Movie was released in a previous year".
+    let tmdbIdCounter = 900_100_001
     const currentYear = new Date().getFullYear()
 
     for (let pickNum = 1; pickNum <= totalPicks; pickNum++) {
