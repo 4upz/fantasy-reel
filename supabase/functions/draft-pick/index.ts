@@ -253,15 +253,15 @@ Deno.serve(async (req) => {
         const { data: nextTeam } = await serviceClient.from('teams').select('name').eq('id', upcomingPick.team_id).single()
         nextTeamName = nextTeam?.name ?? 'TBD'
 
-        // Check if next picker has linked Discord account for @mention
-        const { data: nextProfile } = await serviceClient
-          .from('profiles')
-          .select('discord_id')
-          .eq('user_id', upcomingPick.user_id)
-          .single()
+        // Check if next picker has linked Discord account for @mention.
+        // The link lives in auth.identities, not profiles -- reachable only
+        // via this service-role RPC.
+        const { data: discordLinks } = await serviceClient
+          .rpc('get_discord_ids_by_user_ids', { p_user_ids: [upcomingPick.user_id] })
 
-        if (nextProfile?.discord_id) {
-          mentionContent = `<@${nextProfile.discord_id}>, you're on the clock.`
+        const nextDiscordId = discordLinks?.[0]?.discord_id
+        if (nextDiscordId) {
+          mentionContent = `<@${nextDiscordId}>, you're on the clock.`
           pickColor = DISCORD_COLORS.yellow
         }
       }

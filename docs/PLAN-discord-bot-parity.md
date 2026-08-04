@@ -48,7 +48,7 @@ Do **not** re-implement these. Verified present and wired up:
 | `/league` (standings portion) | `/standings` | `standings.ts` |
 | `/publisher` (roster portion) | `/roster` | `roster.ts` |
 | Draft pick announcements | `draft-pick` fn: pick embed, poster thumbnail, progress footer | `supabase/functions/draft-pick` |
-| Next-drafter ping w/ Discord @mention | Already in `draft-pick` (mentions `profiles.discord_id`, "you're on the clock") | same |
+| Next-drafter ping w/ Discord @mention | In `draft-pick` — was dead code (queried nonexistent `profiles.discord_id`); fixed in Epic D to use `get_discord_ids_by_user_ids` RPC | same |
 | Draft start/end messages | `start-draft` + draft-complete embeds in `draft-pick` | same |
 | Bid placed / counterpick bid / bid results | `place-bid`, `place-counterpick-bid`, `process-bids` | same |
 | Trade lifecycle messages | `propose-trade`, `respond-trade`, `counter-trade`, `cancel-trade`, `veto-trade`, `process-trades` | same |

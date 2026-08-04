@@ -199,6 +199,47 @@ export async function getTeamName(
 }
 
 // ============================================================================
+// Discord Mention Helpers
+// ============================================================================
+
+/**
+ * Builds Discord mention content from a list of possibly-linked discord_ids.
+ * Unlinked parties (null/undefined) are silently omitted -- a trade with one
+ * or both sides not connected to Discord still gets a clean notification
+ * with no mention text, rather than a broken `<@null>`.
+ */
+export function buildTradeMentions(
+  discordIds: Array<string | null | undefined>
+): string | undefined {
+  const mentions = discordIds.filter((id): id is string => Boolean(id)).map((id) => `<@${id}>`)
+  return mentions.length > 0 ? mentions.join(' ') : undefined
+}
+
+/**
+ * Resolves the given users' linked Discord IDs and builds mention content
+ * for a trade notification. profiles has no discord_id column -- the link
+ * lives only in auth.identities, which requires the get_discord_ids_by_user_ids
+ * SECURITY DEFINER RPC (PostgREST cannot query the auth schema directly).
+ */
+export async function getTradeMentionContent(
+  supabase: SupabaseClient,
+  userIds: string[]
+): Promise<string | undefined> {
+  if (userIds.length === 0) return undefined
+
+  const { data, error } = await supabase.rpc('get_discord_ids_by_user_ids', {
+    p_user_ids: userIds,
+  })
+
+  if (error) {
+    console.error('Failed to resolve trade party Discord IDs:', error.message)
+    return undefined
+  }
+
+  return buildTradeMentions((data ?? []).map((row: { discord_id: string | null }) => row.discord_id))
+}
+
+// ============================================================================
 // Validation Functions
 // ============================================================================
 

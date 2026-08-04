@@ -47,6 +47,13 @@ export interface MoviePlacement {
   counterpickerTeamName: string | null
 }
 
+/** A movie a team dropped, still tracked for "notable miss" detection. */
+export interface DroppedMoviePlacement {
+  movieId: string
+  leagueId: string
+  droppedByTeamName: string
+}
+
 /** Snapshot taken before scores are recalculated. */
 export interface ScoreNotificationContext {
   movieIds: string[]
@@ -59,6 +66,8 @@ export interface ScoreNotificationContext {
   /** leagueId -> standings before the update. */
   previousStandings: Map<string, TeamStanding[]>
   placements: MoviePlacement[]
+  /** Movies with no active roster holder in a league, for notable-miss detection. */
+  droppedPlacements: DroppedMoviePlacement[]
 }
 
 /** A movie whose displayed score changed. */
@@ -301,6 +310,37 @@ export function buildMovieRollupEmbed(
   }
 }
 
+/**
+ * "Notable miss" (D2): a movie a team dropped that went on to score well.
+ * Scoped to dropped movies only -- a never-drafted movie clearing this bar
+ * would fire for every good release in every league, which isn't news.
+ */
+export const NOTABLE_MISS_THRESHOLD = 15
+const NOTABLE_MISS_NOTIFICATION_TYPE = 'notable_miss'
+
+/** True when points cross the notable-miss threshold from below. Unscored (null) counts as below. */
+export function crossesNotableMissThreshold(previousPoints: number | null, newPoints: number): boolean {
+  const previous = previousPoints ?? -Infinity
+  return previous < NOTABLE_MISS_THRESHOLD && newPoints >= NOTABLE_MISS_THRESHOLD
+}
+
+export function buildNotableMissEmbed(
+  change: MovieScoreChange,
+  droppedByTeamName: string,
+  leagueName: string,
+  leagueId: string
+): DiscordEmbed {
+  return {
+    author: buildEmbedAuthor(leagueName, leagueId),
+    title: '👀 The one that got away',
+    description: `**${change.title}** hit **${formatPoints(change.newPoints)}** pts after **${droppedByTeamName}** dropped it`,
+    thumbnail: change.posterUrl ? { url: `https://image.tmdb.org/t/p/w92${change.posterUrl}` } : undefined,
+    color: DISCORD_COLORS.crimson,
+    footer: { text: leagueName },
+    url: buildLeagueUrl(leagueId, '/standings'),
+  }
+}
+
 function plural(count: number, word: string): string {
   return count === 1 ? word : `${word}s`
 }
@@ -427,6 +467,7 @@ export async function captureScoreContext(
     leagueNames: new Map(),
     previousStandings: new Map(),
     placements: [],
+    droppedPlacements: [],
   }
 
   if (movieIds.length === 0) return empty
@@ -463,6 +504,17 @@ export async function captureScoreContext(
     const placements = holdings.filter((h) => h.isActive).map((h) => h.placement)
     await attachCounterpickers(supabase, placements, movieIds)
 
+    // Movies with no active holder in a league -- either genuinely dropped, or
+    // superseded by an active row elsewhere in loadHoldings' dedup (see the
+    // comment there). Candidates for the D2 "notable miss" notification.
+    const droppedPlacements = holdings
+      .filter((h) => !h.isActive)
+      .map((h) => ({
+        movieId: h.placement.movieId,
+        leagueId: h.placement.leagueId,
+        droppedByTeamName: h.placement.ownerTeamName,
+      }))
+
     const [leagueNames, previousStandings] = await Promise.all([
       loadLeagueNames(supabase, leagueIds),
       snapshotStandings(supabase, leagueIds),
@@ -475,6 +527,7 @@ export async function captureScoreContext(
       leagueNames,
       previousStandings,
       placements,
+      droppedPlacements,
     }
   } catch (error) {
     console.error('Unexpected error capturing score context:', error)
@@ -620,6 +673,80 @@ export interface ScoreNotificationSummary {
   movie_updates: number
   standings_updates: number
   leagues_with_changes: number
+  notable_misses: number
+}
+
+/**
+ * Sends "the one that got away" embeds for dropped movies that crossed the
+ * notable-miss threshold this run. Idempotent per (league, movie) via
+ * discord_notification_log, the same mechanism release-day-announcements
+ * uses -- a rerun (or the movie scoring further past the threshold next
+ * time) never resends. Never throws.
+ */
+async function sendNotableMissNotifications(
+  supabase: SupabaseClient,
+  context: ScoreNotificationContext,
+  movieChanges: Map<string, MovieScoreChange>
+): Promise<number> {
+  const candidates = context.droppedPlacements
+    .map((dropped) => ({ dropped, change: movieChanges.get(dropped.movieId) }))
+    .filter(
+      (c): c is { dropped: DroppedMoviePlacement; change: MovieScoreChange } =>
+        c.change !== undefined && crossesNotableMissThreshold(c.change.previousPoints, c.change.newPoints)
+    )
+
+  if (candidates.length === 0) return 0
+
+  try {
+    const { data: alreadyLogged, error: logError } = await supabase
+      .from('discord_notification_log')
+      .select('league_id, movie_id')
+      .eq('notification_type', NOTABLE_MISS_NOTIFICATION_TYPE)
+      .in('movie_id', candidates.map((c) => c.dropped.movieId))
+
+    if (logError) {
+      console.error('Failed to check notable-miss notification log:', logError.message)
+      return 0
+    }
+
+    const loggedKeys = new Set(
+      (alreadyLogged ?? []).map((r: { league_id: string; movie_id: string }) => `${r.league_id}:${r.movie_id}`)
+    )
+    const unsent = candidates.filter((c) => !loggedKeys.has(`${c.dropped.leagueId}:${c.dropped.movieId}`))
+    if (unsent.length === 0) return 0
+
+    // Record before dispatching -- a rerun must not re-announce even if the
+    // webhook delivery itself fails.
+    const { error: insertError } = await supabase
+      .from('discord_notification_log')
+      .insert(
+        unsent.map((c) => ({
+          league_id: c.dropped.leagueId,
+          movie_id: c.dropped.movieId,
+          notification_type: NOTABLE_MISS_NOTIFICATION_TYPE,
+        }))
+      )
+
+    if (insertError) {
+      console.error('Failed to record notable-miss notification log:', insertError.message)
+      return 0
+    }
+
+    for (const { dropped, change } of unsent) {
+      const leagueName = context.leagueNames.get(dropped.leagueId) ?? 'League'
+      await sendDiscordNotification(supabase, {
+        leagueId: dropped.leagueId,
+        category: 'movie_news',
+        embeds: [buildNotableMissEmbed(change, dropped.droppedByTeamName, leagueName, dropped.leagueId)],
+      })
+      await delay(WEBHOOK_SEND_DELAY_MS)
+    }
+
+    return unsent.length
+  } catch (error) {
+    console.error('Unexpected error sending notable-miss notifications:', error)
+    return 0
+  }
 }
 
 /**
@@ -636,12 +763,15 @@ export async function sendScoreNotifications(
     movie_updates: 0,
     standings_updates: 0,
     leagues_with_changes: 0,
+    notable_misses: 0,
   }
 
   if (context.leagueIds.length === 0) return summary
 
   try {
     const movieChanges = await loadMovieScoreChanges(supabase, context)
+
+    summary.notable_misses = await sendNotableMissNotifications(supabase, context, movieChanges)
 
     const leagueIds = context.leagueIds
     const currentStandings = await snapshotStandings(supabase, leagueIds)
