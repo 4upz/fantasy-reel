@@ -1,4 +1,5 @@
-import { vi } from 'vitest'
+import { vi, type Mock } from 'vitest'
+import { getSupabase } from '../supabase.js'
 
 /**
  * Test harness for bot commands: a fake interaction object and a chainable
@@ -74,6 +75,39 @@ export function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
       return buildersByTable[table]?.[callIndex]
     },
   }
+}
+
+/**
+ * Builds a mock client and points `getSupabase` at it. The test file must
+ * still declare `vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))`
+ * itself -- vi.mock only applies to the file that calls it.
+ */
+export function mockSupabase(config: MockSupabaseConfig = {}) {
+  const client = createMockSupabaseClient(config)
+  ;(getSupabase as unknown as Mock).mockReturnValue(client)
+  return client
+}
+
+/**
+ * Makes the Nth (1-based) query against `table` fail on `.eq(...)`, for
+ * testing how a command reports a failed write. Later queries against the
+ * same table are unaffected.
+ */
+export function failNthQuery(
+  client: ReturnType<typeof mockSupabase>,
+  table: string,
+  n: number,
+  error: unknown = { message: 'db down' }
+): void {
+  let calls = 0
+  const originalFrom = client.from
+  client.from = vi.fn((requested: string) => {
+    const builder = originalFrom(requested)
+    if (requested === table && ++calls === n) {
+      builder.eq = vi.fn(() => Promise.resolve({ error }))
+    }
+    return builder
+  })
 }
 
 export interface MockRole {

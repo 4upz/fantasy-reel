@@ -1,16 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { league } from './league.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  const client = createMockSupabaseClient(config)
-  ;(getSupabase as unknown as Mock).mockReturnValue(client)
-  return client
-}
 
 describe('/league', () => {
   beforeEach(() => {
@@ -18,7 +11,7 @@ describe('/league', () => {
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {
-    setSupabase({ tables: { discord_channels: { data: null, error: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null, error: null } } })
     const interaction = makeInteraction()
 
     await league.execute(interaction)
@@ -27,7 +20,7 @@ describe('/league', () => {
   })
 
   it('shows the league overview with config and standings, scoped to this league server-side', async () => {
-    const client = setSupabase({
+    const client = mockSupabase({
       tables: {
         discord_channels: {
           data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status: 'active' } },
@@ -73,7 +66,7 @@ describe('/league', () => {
   })
 
   it('shows an empty state when there are no standings yet', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: {
           data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status: 'setup' } },
@@ -101,7 +94,7 @@ describe('/league', () => {
   })
 
   it('replies with a friendly error when Supabase fails', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: {
           data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status: 'active' } },

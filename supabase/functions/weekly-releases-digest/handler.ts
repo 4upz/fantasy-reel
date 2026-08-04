@@ -15,6 +15,7 @@
  */
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { fetchRosterHoldings, groupHoldingsByLeague } from '../_shared/roster-holdings.ts'
 
 const MAX_FIELDS = 25
 
@@ -29,18 +30,6 @@ interface MovieRow {
   id: string
   title: string
   release_date: string
-}
-
-interface HoldingRow {
-  movie_id: string
-  league_id: string
-  teams: { name: string } | { name: string }[] | null
-}
-
-/** Normalizes PostgREST embeds, which type single rows as arrays. */
-function firstOf<T>(value: T | T[] | null): T | null {
-  if (value === null) return null
-  return Array.isArray(value) ? value[0] ?? null : value
 }
 
 /** Monday..Sunday (UTC) of the week containing `date`. */
@@ -87,32 +76,7 @@ export async function runWeeklyReleasesDigest(serviceClient: SupabaseClient): Pr
   const movieById = new Map((movies as MovieRow[]).map((m) => [m.id, m]))
   const movieIds = [...movieById.keys()]
 
-  // Active roster = draft_picks with dropped_at IS NULL, plus pickups with
-  // dropped_at IS NULL. See docs/PLAN-discord-bot-parity.md §0.
-  const [picks, pickups] = await Promise.all([
-    serviceClient
-      .from('draft_picks')
-      .select('movie_id, league_id, teams!draft_picks_team_id_fkey(name)')
-      .in('movie_id', movieIds)
-      .is('dropped_at', null),
-    serviceClient
-      .from('pickups')
-      .select('movie_id, league_id, teams!pickups_team_id_fkey(name)')
-      .in('movie_id', movieIds)
-      .is('dropped_at', null),
-  ])
-
-  if (picks.error) console.error('Failed to load draft picks:', picks.error)
-  if (pickups.error) console.error('Failed to load pickups:', pickups.error)
-
-  const rows = [...(picks.data ?? []), ...(pickups.data ?? [])] as HoldingRow[]
-
-  const byLeague = new Map<string, Array<{ movieId: string; teamName: string }>>()
-  for (const row of rows) {
-    const bucket = byLeague.get(row.league_id) ?? []
-    bucket.push({ movieId: row.movie_id, teamName: firstOf(row.teams)?.name ?? 'A team' })
-    byLeague.set(row.league_id, bucket)
-  }
+  const byLeague = groupHoldingsByLeague(await fetchRosterHoldings(serviceClient, movieIds))
 
   let leaguesNotified = 0
   let moviesIncluded = 0

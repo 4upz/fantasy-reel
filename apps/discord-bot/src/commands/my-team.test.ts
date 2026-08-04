@@ -1,16 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { myTeam } from './my-team.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  const client = createMockSupabaseClient(config)
-  ;(getSupabase as unknown as Mock).mockReturnValue(client)
-  return client
-}
 
 const linkedChannel = {
   data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status: 'active' } },
@@ -22,7 +15,7 @@ describe('/my-team', () => {
   })
 
   it('defers ephemerally', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
 
     await myTeam.execute(interaction)
@@ -31,7 +24,7 @@ describe('/my-team', () => {
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
 
     await myTeam.execute(interaction)
@@ -40,7 +33,7 @@ describe('/my-team', () => {
   })
 
   it('points to account settings when the Discord account is not linked', async () => {
-    setSupabase({ tables: { discord_channels: linkedChannel }, rpc: { get_user_by_discord_id: { data: null } } })
+    mockSupabase({ tables: { discord_channels: linkedChannel }, rpc: { get_user_by_discord_id: { data: null } } })
     const interaction = makeInteraction()
 
     await myTeam.execute(interaction)
@@ -49,7 +42,7 @@ describe('/my-team', () => {
   })
 
   it('shows the roster, points, and rank for the linked user, scoped to this league server-side', async () => {
-    const client = setSupabase({
+    const client = mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         teams: { data: { id: 'team-1', name: 'My Team' } },
@@ -87,7 +80,7 @@ describe('/my-team', () => {
   })
 
   it('replies with a friendly error when Supabase fails', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: null, error: { message: 'db down' } } },
     })

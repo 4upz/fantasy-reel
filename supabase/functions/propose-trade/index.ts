@@ -136,10 +136,10 @@ Deno.serve(async (req) => {
     const recipientInfo = await getTeamInfo(serviceClient, tradeOffer.recipient_team_id)
     const recipientName = recipientInfo?.name ?? 'A team'
     const leagueName = await getLeagueName(serviceClient, league_id)
-    const mentionContent = await getTradeMentionContent(
-      serviceClient,
-      [initiatorInfo?.user_id, recipientInfo?.user_id].filter((id): id is string => Boolean(id))
-    )
+    const mentionContent = await getTradeMentionContent(serviceClient, [
+      initiatorInfo?.user_id,
+      recipientInfo?.user_id,
+    ])
 
     const initiatorMovies = enrichedOfferedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
     const recipientMovies = enrichedRequestedItems.movies.map(m => m.title ?? 'Unknown').join(', ')

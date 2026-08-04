@@ -1,3 +1,4 @@
+import type { ChatInputCommandInteraction } from 'discord.js'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const UNLINKED_CHANNEL_MESSAGE =
@@ -31,4 +32,18 @@ export async function resolveLinkedLeague(
     leagueName: league?.name || 'League',
     leagueStatus: league?.status || 'unknown',
   }
+}
+
+/**
+ * Resolves the league linked to the interaction's channel, replying with the
+ * "not linked" message and returning null when there is none. Callers must
+ * have deferred the reply first.
+ */
+export async function requireLinkedLeague(
+  interaction: ChatInputCommandInteraction,
+  supabase: SupabaseClient
+): Promise<LinkedLeague | null> {
+  const linked = await resolveLinkedLeague(supabase, interaction.channelId)
+  if (!linked) await interaction.editReply(UNLINKED_CHANNEL_MESSAGE)
+  return linked
 }

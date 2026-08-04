@@ -6,7 +6,7 @@
  * ../_shared/release-day-announcements.test.ts).
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest } from '../_shared/utils.ts'
 import { runReleaseDayAnnouncements } from './handler.ts'
 
 Deno.serve(async (req) => {
@@ -14,20 +14,13 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
-    // Verify caller is authorized (cron secret OR service role key) --
-    // mirrors update-scores / process-bids.
-    const cronSecret = Deno.env.get('CRON_SECRET')
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    const isAuthorizedByCron = cronSecret && req.headers.get('X-Cron-Secret') === cronSecret
-    const isAuthorizedByServiceRole =
-      serviceRoleKey && req.headers.get('Authorization') === `Bearer ${serviceRoleKey}`
-
-    if (!isAuthorizedByCron && !isAuthorizedByServiceRole) {
+    // Cron secret OR service role key -- mirrors update-scores / process-bids.
+    if (!isAuthorizedCronRequest(req)) {
       return errorResponse('Forbidden', 403)
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     if (!supabaseUrl || !serviceRoleKey) {
       console.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
       return errorResponse('Release announcement service not configured', 503)

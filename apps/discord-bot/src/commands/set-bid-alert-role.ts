@@ -1,16 +1,8 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { createBaseEmbed, DISCORD_COLORS } from '../utils/embeds.js'
-import { UNLINKED_CHANNEL_MESSAGE } from '../utils/channel-league.js'
-import { canAdministerBot, ADMIN_DENIED_MESSAGE } from '../utils/permissions.js'
+import { requireAdministrableChannel } from '../utils/permissions.js'
 import type { Command } from './index.js'
-
-interface ChannelLinkRow {
-  id: string
-  league_id: string
-  bot_admin_role_id: string | null
-  leagues?: { name?: string; owner_id?: string }
-}
 
 export const setBidAlertRole: Command = {
   data: new SlashCommandBuilder()
@@ -27,37 +19,16 @@ export const setBidAlertRole: Command = {
     await interaction.deferReply({ ephemeral: true })
 
     const supabase = getSupabase()
+    const administrable = await requireAdministrableChannel(interaction, supabase)
+    if (!administrable) return
 
-    const { data: channelLink, error: findError } = await supabase
-      .from('discord_channels')
-      .select('id, league_id, bot_admin_role_id, leagues(name, owner_id)')
-      .eq('channel_id', interaction.channelId)
-      .maybeSingle<ChannelLinkRow>()
-
-    if (findError || !channelLink) {
-      await interaction.editReply(UNLINKED_CHANNEL_MESSAGE)
-      return
-    }
-
-    const league = channelLink.leagues
-    const leagueName = league?.name || 'League'
-
-    const allowed = await canAdministerBot(interaction, {
-      bot_admin_role_id: channelLink.bot_admin_role_id,
-      league_owner_id: league?.owner_id,
-    })
-
-    if (!allowed) {
-      await interaction.editReply(ADMIN_DENIED_MESSAGE)
-      return
-    }
-
+    const { channel, leagueName } = administrable
     const role = interaction.options.getRole('role')
 
     const { error: updateError } = await supabase
       .from('discord_channels')
       .update({ bid_alert_role_id: role?.id ?? null })
-      .eq('id', channelLink.id)
+      .eq('id', channel.id)
 
     if (updateError) {
       console.error('Failed to update bid alert role:', updateError)
@@ -65,7 +36,7 @@ export const setBidAlertRole: Command = {
       return
     }
 
-    const embed = createBaseEmbed(leagueName, channelLink.league_id)
+    const embed = createBaseEmbed(leagueName, channel.league_id)
       .setTitle('Bid Alert Role Updated')
       .setDescription(
         role

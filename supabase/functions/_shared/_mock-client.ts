@@ -55,6 +55,42 @@ function chain(rows: Row[]) {
   return result
 }
 
+export interface FetchCall {
+  url: string
+  body: Record<string, unknown>
+}
+
+/**
+ * Records every request made through `globalThis.fetch` and answers it,
+ * returning the recorded calls and a restore function.
+ *
+ * Stubs the global rather than an injected fetchImpl because
+ * sendDiscordNotification's webhook POST always goes through the real global
+ * fetch -- without this, the Discord branch of every handler would hit the
+ * network. `respond` handles URLs a test cares about (e.g. TMDb); anything it
+ * returns undefined for answers 204, like a successful webhook delivery.
+ */
+export function stubFetch(respond?: (url: string) => Response | undefined): {
+  calls: FetchCall[]
+  restore: () => void
+} {
+  const calls: FetchCall[] = []
+  const originalFetch = globalThis.fetch
+
+  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString()
+    calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : {} })
+    return Promise.resolve(respond?.(url) ?? new Response(null, { status: 204 }))
+  }) as typeof fetch
+
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = originalFetch
+    },
+  }
+}
+
 /** Creates a mock Supabase client backed by `db`, mutated in place by inserts/updates. */
 export function createMockDbClient(db: MockDb) {
   return {

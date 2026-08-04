@@ -1,16 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction, failNthQuery } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { setBidAlertRole } from './set-bid-alert-role.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  const client = createMockSupabaseClient(config)
-  ;(getSupabase as unknown as Mock).mockReturnValue(client)
-  return client
-}
 
 const linkedChannel = {
   data: {
@@ -27,7 +20,7 @@ describe('/set-bid-alert-role', () => {
   })
 
   it('defers ephemerally', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
 
     await setBidAlertRole.execute(interaction)
@@ -36,7 +29,7 @@ describe('/set-bid-alert-role', () => {
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
 
     await setBidAlertRole.execute(interaction)
@@ -45,7 +38,7 @@ describe('/set-bid-alert-role', () => {
   })
 
   it('denies members without Manage Server, the admin role, or league ownership', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: 'someone-else' } },
     })
@@ -57,7 +50,7 @@ describe('/set-bid-alert-role', () => {
   })
 
   it('allows a bot-admin-role holder to set the alert role', async () => {
-    const client = setSupabase({ tables: { discord_channels: linkedChannel } })
+    const client = mockSupabase({ tables: { discord_channels: linkedChannel } })
     const interaction = makeInteraction({
       memberRoleIds: ['role-admin'],
       roleOptions: { role: { id: 'role-hype', name: 'Bid Alerts' } },
@@ -71,7 +64,7 @@ describe('/set-bid-alert-role', () => {
   })
 
   it('allows the league owner to clear the alert role', async () => {
-    const client = setSupabase({
+    const client = mockSupabase({
       tables: { discord_channels: linkedChannel },
       rpc: { get_user_by_discord_id: { data: 'user-1' } },
     })
@@ -85,19 +78,9 @@ describe('/set-bid-alert-role', () => {
   })
 
   it('replies with a friendly error when the update fails', async () => {
-    const client = setSupabase({ tables: { discord_channels: linkedChannel } })
-    let discordChannelsCalls = 0
-    const originalFrom = client.from
-    client.from = vi.fn((table: string) => {
-      const builder = originalFrom(table)
-      if (table === 'discord_channels') {
-        discordChannelsCalls++
-        if (discordChannelsCalls === 2) {
-          builder.eq = vi.fn(() => Promise.resolve({ error: { message: 'db down' } }))
-        }
-      }
-      return builder
-    })
+    const client = mockSupabase({ tables: { discord_channels: linkedChannel } })
+    // Second discord_channels query is the update; make it fail.
+    failNthQuery(client, 'discord_channels', 2)
 
     const interaction = makeInteraction({ hasManageGuild: true })
 

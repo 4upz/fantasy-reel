@@ -10,30 +10,7 @@
  */
 import { assertEquals } from '@std/assert'
 import { runWeeklyReleasesDigest, weekBounds } from '../weekly-releases-digest/handler.ts'
-import { createMockDbClient, type MockDb } from './_mock-client.ts'
-
-const originalFetch = globalThis.fetch
-
-interface FetchCall {
-  url: string
-  body: Record<string, unknown>
-}
-
-let fetchCalls: FetchCall[] = []
-
-function mockFetch() {
-  fetchCalls = []
-  globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString()
-    const body = init?.body ? JSON.parse(init.body as string) : {}
-    fetchCalls.push({ url, body })
-    return Promise.resolve(new Response(null, { status: 204 }))
-  }) as typeof fetch
-}
-
-function restoreFetch() {
-  globalThis.fetch = originalFetch
-}
+import { createMockDbClient, stubFetch, type MockDb } from './_mock-client.ts'
 
 const LEAGUE_ID = 'league-1'
 const MOVIE_ID = 'movie-1'
@@ -77,7 +54,7 @@ Deno.test('weekly-releases-digest', async (t) => {
   })
 
   await t.step('no-op when nothing releases this week', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.movies[0].release_date = '2000-01-01'
@@ -87,14 +64,14 @@ Deno.test('weekly-releases-digest', async (t) => {
 
       assertEquals(result.leagues_notified, 0)
       assertEquals(result.movies_included, 0)
-      assertEquals(fetchCalls.length, 0)
+      assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('sends a digest for a league with a release this week', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       const client = createMockDbClient(db)
@@ -103,14 +80,14 @@ Deno.test('weekly-releases-digest', async (t) => {
 
       assertEquals(result.leagues_notified, 1)
       assertEquals(result.movies_included, 1)
-      assertEquals(fetchCalls.length, 1)
+      assertEquals(calls.length, 1)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('skips leagues with no rostered releases this week (no message, not an error)', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.draft_picks = []
@@ -119,14 +96,14 @@ Deno.test('weekly-releases-digest', async (t) => {
       const result = await runWeeklyReleasesDigest(client)
 
       assertEquals(result.leagues_notified, 0)
-      assertEquals(fetchCalls.length, 0)
+      assertEquals(calls.length, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('skips dropped roster slots', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.draft_picks[0].dropped_at = new Date().toISOString()
@@ -136,12 +113,12 @@ Deno.test('weekly-releases-digest', async (t) => {
 
       assertEquals(result.leagues_notified, 0)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('respects notify_weekly_digest per channel', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       db.discord_channels[0].notify_weekly_digest = false
@@ -150,14 +127,14 @@ Deno.test('weekly-releases-digest', async (t) => {
       const result = await runWeeklyReleasesDigest(client)
 
       assertEquals(result.leagues_notified, 1) // function still "notified" (attempted)
-      assertEquals(fetchCalls.length, 0) // but the channel filtered it out
+      assertEquals(calls.length, 0) // but the channel filtered it out
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 
   await t.step('rerunning does not error and reports consistent results (no idempotency guard by design)', async () => {
-    mockFetch()
+    const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
       const client = createMockDbClient(db)
@@ -166,9 +143,9 @@ Deno.test('weekly-releases-digest', async (t) => {
       const second = await runWeeklyReleasesDigest(client)
 
       assertEquals(first, second)
-      assertEquals(fetchCalls.length, 2)
+      assertEquals(calls.length, 2)
     } finally {
-      restoreFetch()
+      restore()
     }
   })
 })

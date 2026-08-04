@@ -1,14 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { upcoming } from './upcoming.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  ;(getSupabase as unknown as Mock).mockReturnValue(createMockSupabaseClient(config))
-}
 
 const linkedChannel = {
   data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status: 'active' } },
@@ -20,7 +15,7 @@ describe('/upcoming', () => {
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
 
     await upcoming.execute(interaction)
@@ -29,7 +24,7 @@ describe('/upcoming', () => {
   })
 
   it('lists rostered movies releasing soon, grouped with team names', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         draft_picks: {
@@ -56,7 +51,7 @@ describe('/upcoming', () => {
   })
 
   it('shows an empty state when nothing is releasing in the window', async () => {
-    setSupabase({
+    mockSupabase({
       tables: { discord_channels: linkedChannel, draft_picks: { data: [] }, pickups: { data: [] } },
     })
     const interaction = makeInteraction()
@@ -68,7 +63,7 @@ describe('/upcoming', () => {
   })
 
   it('replies with a friendly error when Supabase fails', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         draft_picks: { data: null, error: { message: 'db down' } },

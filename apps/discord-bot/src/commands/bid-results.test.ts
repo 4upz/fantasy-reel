@@ -1,14 +1,9 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
-import { createMockSupabaseClient, makeInteraction } from '../_test/helpers.js'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
-import { getSupabase } from '../supabase.js'
 import { bidResults } from './bid-results.js'
-
-function setSupabase(config: Parameters<typeof createMockSupabaseClient>[0]) {
-  ;(getSupabase as unknown as Mock).mockReturnValue(createMockSupabaseClient(config))
-}
 
 const linkedChannel = {
   data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status: 'active' } },
@@ -20,7 +15,7 @@ describe('/bid-results', () => {
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {
-    setSupabase({ tables: { discord_channels: { data: null } } })
+    mockSupabase({ tables: { discord_channels: { data: null } } })
     const interaction = makeInteraction()
 
     await bidResults.execute(interaction)
@@ -29,7 +24,7 @@ describe('/bid-results', () => {
   })
 
   it('shows winning and losing bids', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         pickups: {
@@ -57,7 +52,7 @@ describe('/bid-results', () => {
   })
 
   it('shows an empty state when no bids have processed', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         pickups: { data: [] },
@@ -73,7 +68,7 @@ describe('/bid-results', () => {
   })
 
   it('replies with a friendly error when Supabase fails', async () => {
-    setSupabase({
+    mockSupabase({
       tables: {
         discord_channels: linkedChannel,
         pickups: { data: null, error: { message: 'db down' } },

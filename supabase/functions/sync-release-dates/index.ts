@@ -6,7 +6,7 @@
  * ../_shared/sync-release-dates.test.ts).
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest } from '../_shared/utils.ts'
 import { runSyncReleaseDates } from './handler.ts'
 
 Deno.serve(async (req) => {
@@ -14,18 +14,12 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
-    const cronSecret = Deno.env.get('CRON_SECRET')
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    const isAuthorizedByCron = cronSecret && req.headers.get('X-Cron-Secret') === cronSecret
-    const isAuthorizedByServiceRole =
-      serviceRoleKey && req.headers.get('Authorization') === `Bearer ${serviceRoleKey}`
-
-    if (!isAuthorizedByCron && !isAuthorizedByServiceRole) {
+    if (!isAuthorizedCronRequest(req)) {
       return errorResponse('Forbidden', 403)
     }
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!supabaseUrl || !serviceRoleKey) {
       console.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
