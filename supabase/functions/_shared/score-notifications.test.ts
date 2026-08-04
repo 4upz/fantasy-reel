@@ -13,6 +13,7 @@ import {
   diffStandings,
   buildMovieScoreEmbed,
   buildStandingsEmbed,
+  crossesNotableMissThreshold,
   sendScoreNotifications,
   type MoviePlacement,
   type ScoreNotificationContext,
@@ -20,6 +21,7 @@ import {
   type TeamStanding,
 } from './score-notifications.ts'
 import { DISCORD_COLORS } from './discord.ts'
+import { createMockDbClient, type MockDb } from './_mock-client.ts'
 
 // ============================================================================
 // Formatting
@@ -431,6 +433,7 @@ function baseContext(): ScoreNotificationContext {
         counterpickerTeamName: null,
       },
     ],
+    droppedPlacements: [],
   }
 }
 
@@ -784,6 +787,126 @@ Deno.test('sendScoreNotifications - respects the notify_scores channel preferenc
     await sendScoreNotifications(client, context)
 
     assertEquals(calls.length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+// ============================================================================
+// Notable miss (D2)
+// ============================================================================
+
+Deno.test('crossesNotableMissThreshold - true only when crossing from below 15 to at/above 15', () => {
+  assertEquals(crossesNotableMissThreshold(5, 20), true)
+  assertEquals(crossesNotableMissThreshold(null, 15), true, 'unscored counts as below the bar')
+  assertEquals(crossesNotableMissThreshold(5, 15), true, 'exactly at the threshold counts')
+  assertEquals(crossesNotableMissThreshold(20, 25), false, 'already above -- no resend')
+  assertEquals(crossesNotableMissThreshold(10, 14), false, 'still below the bar')
+})
+
+/** Minimal fixture for the notable-miss dispatch tests below, using the
+ * filtering mock client (_mock-client.ts) rather than createMockSupabase --
+ * these need real insert-then-check dedup against discord_notification_log. */
+function notableMissDb(fantasyPoints: number): MockDb {
+  return {
+    movies: [{ id: 'movie-1', title: 'Sequel Nobody Wanted', poster_url: null, fantasy_points: fantasyPoints }],
+    discord_notification_log: [],
+    discord_channels: [
+      {
+        id: 'ch-1',
+        league_id: 'league-1',
+        webhook_url: 'https://discord.com/api/webhooks/1/token1',
+        thread_id: null,
+        bid_alert_role_id: null,
+        enabled: true,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        notify_weekly_digest: true,
+        notify_movie_news: true,
+        consecutive_failures: 0,
+      },
+    ],
+  }
+}
+
+function notableMissContext(overrides: Partial<ScoreNotificationContext> = {}): ScoreNotificationContext {
+  return {
+    movieIds: ['movie-1'],
+    leagueIds: ['league-1'],
+    previousMoviePoints: new Map([['movie-1', 5]]),
+    leagueNames: new Map([['league-1', 'The League']]),
+    previousStandings: new Map(),
+    placements: [],
+    droppedPlacements: [{ movieId: 'movie-1', leagueId: 'league-1', droppedByTeamName: 'Dropper' }],
+    ...overrides,
+  }
+}
+
+Deno.test('sendScoreNotifications - notable miss: crosses threshold sends once, rerun does not resend', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const db = notableMissDb(20)
+    const client = createMockDbClient(db)
+    const context = notableMissContext()
+
+    const first = await sendScoreNotifications(client, context)
+    assertEquals(first.notable_misses, 1)
+    assertEquals(calls.length, 1)
+    const embed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(embed.title, '👀 The one that got away')
+    assertEquals(db.discord_notification_log.length, 1)
+    assertEquals(db.discord_notification_log[0].notification_type, 'notable_miss')
+    assertEquals(db.discord_notification_log[0].movie_id, 'movie-1')
+
+    const second = await sendScoreNotifications(client, context)
+    assertEquals(second.notable_misses, 0)
+    assertEquals(calls.length, 1, 'rerun must not resend')
+    assertEquals(db.discord_notification_log.length, 1, 'log is not duplicated')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - notable miss: below threshold sends nothing', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const db = notableMissDb(10)
+    const client = createMockDbClient(db)
+    const context = notableMissContext()
+
+    const summary = await sendScoreNotifications(client, context)
+
+    assertEquals(summary.notable_misses, 0)
+    assertEquals(calls.length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - notable miss: only dropped placements qualify, not active ones', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const db = notableMissDb(20)
+    const client = createMockDbClient(db)
+    // Same crossing score, but the movie is actively rostered (not dropped) --
+    // per the scope decision, this must never fire "the one that got away".
+    const context = notableMissContext({
+      droppedPlacements: [],
+      placements: [
+        { movieId: 'movie-1', leagueId: 'league-1', ownerTeamName: 'Current Holder', counterpickerTeamName: null },
+      ],
+    })
+
+    const summary = await sendScoreNotifications(client, context)
+
+    assertEquals(summary.notable_misses, 0)
+    // The crossing score still posts as a normal movie update, just never as
+    // a "got away" roast.
+    assertEquals(calls.length, 1)
+    const embed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(embed.title, 'Sequel Nobody Wanted')
   } finally {
     globalThis.fetch = originalFetch
   }

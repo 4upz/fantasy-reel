@@ -8,11 +8,11 @@ import {
 import {
   validateTradeProposal,
   getTeamInfo,
-  getTeamName,
   getTradeOffer,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
+  getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
@@ -107,10 +107,15 @@ Deno.serve(async (req) => {
     const vetoHours = league?.trade_veto_hours ?? 24
     const reviewEnabled = league?.trade_review_enabled ?? true
 
-    const [initiatorTeamName, recipientTeamName] = await Promise.all([
-      getTeamName(serviceClient, tradeOffer.initiator_team_id),
-      getTeamName(serviceClient, tradeOffer.recipient_team_id),
-    ])
+    // recipientInfo was already fetched above for the ownership check; its
+    // name/user_id don't change once the RPC resolves the trade.
+    const initiatorInfo = await getTeamInfo(serviceClient, tradeOffer.initiator_team_id)
+    const initiatorTeamName = initiatorInfo?.name ?? 'A team'
+    const recipientTeamName = recipientInfo?.name ?? 'A team'
+    const mentionContent = await getTradeMentionContent(
+      serviceClient,
+      [initiatorInfo?.user_id, recipientInfo?.user_id].filter((id): id is string => Boolean(id))
+    )
 
     if (response === 'reject') {
       await notifyTradeParties(serviceClient, {
@@ -134,6 +139,7 @@ Deno.serve(async (req) => {
         sendDiscordNotification(serviceClient, {
           leagueId: tradeOffer.league_id,
           category: 'trades',
+          content: mentionContent,
           embeds: [{
             author: buildEmbedAuthor(leagueName, tradeOffer.league_id),
             title: `${recipientTeamName} declined the trade`,
@@ -183,6 +189,7 @@ Deno.serve(async (req) => {
       sendDiscordNotification(serviceClient, {
         leagueId: tradeOffer.league_id,
         category: 'trades',
+        content: mentionContent,
         embeds: [{
           author: buildEmbedAuthor(leagueName, tradeOffer.league_id),
           title: `${initiatorTeamName} and ${recipientTeamName} agreed to terms`,

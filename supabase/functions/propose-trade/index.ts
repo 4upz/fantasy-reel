@@ -11,10 +11,10 @@ import {
   validateTradeProposal,
   enrichTradeItems,
   getTeamInfo,
-  getTeamName,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
+  getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 
@@ -133,8 +133,13 @@ Deno.serve(async (req) => {
     })
 
     // Send email + Discord notifications in parallel
-    const recipientName = await getTeamName(serviceClient, tradeOffer.recipient_team_id)
+    const recipientInfo = await getTeamInfo(serviceClient, tradeOffer.recipient_team_id)
+    const recipientName = recipientInfo?.name ?? 'A team'
     const leagueName = await getLeagueName(serviceClient, league_id)
+    const mentionContent = await getTradeMentionContent(
+      serviceClient,
+      [initiatorInfo?.user_id, recipientInfo?.user_id].filter((id): id is string => Boolean(id))
+    )
 
     const initiatorMovies = enrichedOfferedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
     const recipientMovies = enrichedRequestedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
@@ -161,6 +166,7 @@ Deno.serve(async (req) => {
       sendDiscordNotification(serviceClient, {
         leagueId: league_id,
         category: 'trades',
+        content: mentionContent,
         embeds: [{
           author: buildEmbedAuthor(leagueName, league_id),
           title: `${initiatorInfo?.name ?? 'A team'} proposes a trade to ${recipientName}`,
