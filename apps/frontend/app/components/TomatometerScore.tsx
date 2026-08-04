@@ -13,8 +13,12 @@ import { useId } from 'react'
  *
  * Colour encodes the fantasy consequence, not the RT brand: 60% is both RT's
  * Fresh line and the scoring baseline (points = RT - 60), so gold means the
- * movie is earning points and crimson means it is losing them. The tier labels
- * match the scoring curve documented on the help page.
+ * movie is earning points and crimson means it is losing them.
+ *
+ * The tier rides in its own badge beside the score - the score is a measurement
+ * and the tier is a verdict, so they do not share a container. Only the 90% Club
+ * is an accolade, so only it gets laurels; Fresh and Rotten are classifications
+ * and stay quiet. Tiers match the scoring curve documented on the help page.
  */
 
 interface Props {
@@ -29,23 +33,77 @@ interface Props {
 /** Points are RT - 60, so 60 is where a movie starts earning instead of losing. */
 const BREAK_EVEN = 60
 
-const TIER_STYLES = {
+const SCORE_STYLES = {
   club: 'bg-gold/15 border-gold/40 text-gold',
   fresh: 'bg-gold/10 border-gold/25 text-gold/90',
   rotten: 'bg-crimson/15 border-crimson/40 text-crimson',
   pending: 'bg-elevated border-border text-foreground-muted',
 } as const
 
+/** The 90% Club is the one tier that is an award, so it is the one tier with laurels. */
+const BADGE_STYLES = {
+  club: 'bg-gradient-to-b from-gold/25 to-gold/5 border-gold/50 text-gold',
+  fresh: 'bg-gold/[0.07] border-gold/20 text-gold/75',
+  rotten: 'bg-crimson/10 border-crimson/30 text-crimson/85',
+} as const
+
 const SIZE_STYLES = {
-  sm: { pill: 'gap-1 px-1.5 py-0.5 text-xs', mark: 'w-3.5 h-3.5', label: 'text-[10px]' },
-  md: { pill: 'gap-1.5 px-2.5 py-1 text-sm', mark: 'w-4 h-4', label: 'text-[11px]' },
-  lg: { pill: 'gap-2 px-3 py-1.5 text-base', mark: 'w-6 h-6', label: 'text-[11px]' },
+  sm: {
+    pill: 'gap-1 px-1.5 py-0.5 text-xs',
+    mark: 'w-3.5 h-3.5',
+    badge: 'px-1.5 py-0.5 text-[9px]',
+    laurel: 'w-2.5 h-3',
+    gap: 'gap-1.5',
+  },
+  md: {
+    pill: 'gap-1.5 px-2.5 py-1 text-sm',
+    mark: 'w-4 h-4',
+    badge: 'px-2 py-0.5 text-[10px]',
+    laurel: 'w-3 h-3.5',
+    gap: 'gap-2',
+  },
+  lg: {
+    pill: 'gap-2 px-3 py-1.5 text-base',
+    mark: 'w-6 h-6',
+    badge: 'px-2.5 py-1 text-[11px]',
+    laurel: 'w-4 h-[18px]',
+    gap: 'gap-2',
+  },
 } as const
 
 function getTier(score: number) {
   if (score >= 90) return { key: 'club' as const, label: '90% Club' }
   if (score >= BREAK_EVEN) return { key: 'fresh' as const, label: 'Fresh' }
   return { key: 'rotten' as const, label: 'Rotten' }
+}
+
+/**
+ * One half of a festival laurel. Kept to three chunky leaves - at badge size
+ * anything finer collapses into a squiggle. Mirrored for the other side.
+ */
+function LaurelSprig({ className, flip = false }: { className?: string; flip?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 12 16"
+      className={className}
+      aria-hidden="true"
+      style={flip ? { transform: 'scaleX(-1)' } : undefined}
+    >
+      <path
+        d="M9.4 15C5.4 13.1 3.4 9.2 4.6 2.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        opacity="0.85"
+      />
+      <g fill="currentColor">
+        <ellipse cx="6.7" cy="12.3" rx="3" ry="1.5" transform="rotate(30 6.7 12.3)" />
+        <ellipse cx="4.7" cy="8.4" rx="3.1" ry="1.5" transform="rotate(2 4.7 8.4)" />
+        <ellipse cx="4.9" cy="4.6" rx="2.8" ry="1.4" transform="rotate(-22 4.9 4.6)" />
+      </g>
+    </svg>
+  )
 }
 
 // Body of the tomato in viewBox units, used to map a score onto the fill line.
@@ -110,7 +168,7 @@ export default function TomatometerScore({
   if (score == null) {
     return (
       <span
-        className={`inline-flex items-center rounded-lg border font-semibold ${TIER_STYLES.pending} ${sizing.pill} ${className}`}
+        className={`inline-flex items-center rounded-lg border font-semibold ${SCORE_STYLES.pending} ${sizing.pill} ${className}`}
       >
         <TomatoMark fill={null} className={sizing.mark} />
         Not rated yet
@@ -120,16 +178,28 @@ export default function TomatometerScore({
 
   const rounded = Math.round(score)
   const tier = getTier(rounded)
+  const isAccolade = tier.key === 'club'
 
   return (
     <span
-      className={`inline-flex items-center rounded-lg border font-semibold ${TIER_STYLES[tier.key]} ${sizing.pill} ${className}`}
+      className={`inline-flex flex-wrap items-center ${sizing.gap} ${className}`}
       aria-label={`Tomatometer ${rounded} percent, ${tier.label}`}
     >
-      <TomatoMark fill={rounded} className={sizing.mark} />
-      {rounded}%
+      <span
+        className={`inline-flex items-center rounded-lg border font-semibold ${SCORE_STYLES[tier.key]} ${sizing.pill}`}
+      >
+        <TomatoMark fill={rounded} className={sizing.mark} />
+        {rounded}%
+      </span>
+
       {showTier && (
-        <span className={`font-medium uppercase tracking-wide ${sizing.label}`}>{tier.label}</span>
+        <span
+          className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md border font-semibold uppercase tracking-[0.12em] ${BADGE_STYLES[tier.key]} ${sizing.badge}`}
+        >
+          {isAccolade && <LaurelSprig className={sizing.laurel} />}
+          {tier.label}
+          {isAccolade && <LaurelSprig className={sizing.laurel} flip />}
+        </span>
       )}
     </span>
   )
