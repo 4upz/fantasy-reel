@@ -43,6 +43,42 @@ supabase/functions/
 - Test actual Edge Functions via `client.functions.invoke()`
 - Require local Supabase running
 - Test authentication, validation, and business logic
+- Never call third-party APIs — see below
+
+### External API Tests (opt-in)
+A few steps in `tests/update-scores.test.ts` and `tests/sync-release-dates.test.ts`
+call the **live MDBList and TMDb APIs**. They are skipped by default and run only
+under `RUN_EXTERNAL_API_TESTS=1`:
+
+```bash
+npm run test:functions:external   # from project root
+deno task test:external           # from supabase/functions
+```
+
+**Why they are opt-in.** MDBList allows 1000 requests/day on the same account the
+production nightly score sync uses, so a few full-suite runs could starve the
+cron job. Worse, an exhausted quota surfaces as `movies_fetched: 0` — identical
+to a real regression. The cost also scaled with the local database: `update-scores`
+default mode processes every stale released movie (up to 30, one call each), and
+`sync-release-dates` fans out across the entire rostered set, so the bill grew
+silently as test data accumulated.
+
+**What is left in the gate.** Only contract tests — the one thing mocks can't do
+is catch MDBList or TMDb changing response shape, auth, or field names. Everything
+else is asserted against mocks in `_shared/update-scores.test.ts` and
+`_shared/sync-release-dates.test.ts`.
+
+When adding a test that would hit a third-party API, gate it the same way:
+
+```typescript
+import { RUN_EXTERNAL_API_TESTS } from './_setup.ts'
+
+await t.step({
+  name: 'describes the real-API contract',
+  ignore: !RUN_EXTERNAL_API_TESTS,
+  fn: async () => { /* ... */ },
+})
+```
 
 ## Running Tests
 
@@ -64,12 +100,14 @@ npx supabase start
 # From project root (RECOMMENDED)
 npm run test:functions           # Run integration tests
 npm run test:functions:watch     # Run in watch mode
+npm run test:functions:external  # Opt-in: also hits live MDBList/TMDb
 
 # From supabase/functions directory
 deno task test                   # Integration tests only
 deno task test:unit              # Unit tests only
 deno task test:all               # All tests
 deno task test:watch             # Integration tests with watch mode
+deno task test:external          # Opt-in: also hits live MDBList/TMDb
 ```
 
 > **Warning:** Do NOT run `deno test` directly - it won't load the `.env.test` file. Always use `deno task test` or `npm run test:functions`.

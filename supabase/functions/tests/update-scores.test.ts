@@ -6,44 +6,27 @@
  * instead of Supabase user JWT, so we call it directly rather than
  * using client.functions.invoke().
  *
- * The service role key used by the Edge Function runtime may differ from
- * the key in .env.test (keys rotate on each `supabase start`). We resolve
- * the correct key from the Docker container's environment at test startup.
+ * Most steps here exercise paths that never reach MDBList (auth, validation,
+ * empty results). The handful that do call the live API are gated behind
+ * RUN_EXTERNAL_API_TESTS -- see `RUN_EXTERNAL_API_TESTS` in ./_setup.ts for
+ * why, and `deno task test:external` to run them. The scoring logic itself is
+ * covered against mocks in ../_shared/update-scores.test.ts.
  *
  * Requires: npx supabase start && npx supabase functions serve
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { getServiceClient } from './_setup.ts'
+import {
+  getServiceClient,
+  getEdgeFunctionServiceRoleKey,
+  RUN_EXTERNAL_API_TESTS,
+} from './_setup.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/update-scores`
 
-/**
- * Get the service role key that the Edge Function runtime actually uses.
- *
- * The .env.test key may not match the Docker container's key if Supabase
- * has been restarted. We query the container directly to get the correct key.
- * Falls back to the .env.test key if Docker query fails.
- */
-async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
-  }
-  // Fallback to .env.test value
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-}
+/** A syntactically valid UUID that never matches a row. */
+const NONEXISTENT_UUID = '00000000-0000-0000-0000-000000000001'
 
 Deno.test({
   name: 'update-scores',
@@ -140,11 +123,14 @@ Deno.test({
       })
 
       // ============================================================================
-      // Service Role Auth - Success (default mode with no body)
+      // Service Role Auth - Success
+      //
+      // Scoped to a movie_ids request that matches nothing, so the service role
+      // key is exercised end to end without triggering any MDBList lookups.
       // ============================================================================
 
       await t.step('succeeds with service role Bearer token', async () => {
-        const { status, data } = await callUpdateScores()
+        const { status, data } = await callUpdateScores({ movie_ids: [NONEXISTENT_UUID] })
         assertEquals(status, 200)
         assertExists(data.movies_fetched)
         assertExists(data.scores_updated)
@@ -171,13 +157,23 @@ Deno.test({
         assertEquals(data.error, 'Invalid league_id')
       })
 
+      await t.step('filters valid UUIDs from mixed movie_ids array', async () => {
+        // Reaching 200 rather than 'No valid movie_ids provided' is the signal
+        // that the invalid entries were filtered rather than rejecting the
+        // whole request. A non-existent UUID keeps this off the MDBList path.
+        const { status } = await callUpdateScores({
+          movie_ids: ['not-valid', NONEXISTENT_UUID, 'also-invalid'],
+        })
+        assertEquals(status, 200)
+      })
+
       // ============================================================================
       // Empty Results Tests
       // ============================================================================
 
       await t.step('returns empty results for non-existent movie_ids', async () => {
         const { status, data } = await callUpdateScores({
-          movie_ids: ['00000000-0000-0000-0000-000000000001'],
+          movie_ids: [NONEXISTENT_UUID],
         })
         assertEquals(status, 200)
         assertEquals(data.movies_fetched, 0)
@@ -187,7 +183,7 @@ Deno.test({
 
       await t.step('returns empty results for non-existent league_id', async () => {
         const { status, data } = await callUpdateScores({
-          league_id: '00000000-0000-0000-0000-000000000001',
+          league_id: NONEXISTENT_UUID,
         })
         assertEquals(status, 200)
         assertEquals(data.movies_fetched, 0)
@@ -197,6 +193,8 @@ Deno.test({
 
       // ============================================================================
       // Movie Without TMDb ID Test
+      //
+      // tmdb_id 0 short-circuits before any MDBList lookup.
       // ============================================================================
 
       await t.step('reports error for movie without TMDb ID', async () => {
@@ -216,80 +214,58 @@ Deno.test({
       })
 
       // ============================================================================
-      // Specific Movie Processing Tests (using real TMDb IDs for MDBList lookup)
+      // Live MDBList Contract Tests (opt-in)
+      //
+      // The only coverage that catches MDBList changing response shape, auth, or
+      // field names. Kept to a single movie so one run costs one API call.
       // ============================================================================
 
-      await t.step('processes a movie with a real TMDb ID and stores reviews', async () => {
-        // TMDb ID 278 = The Shawshank Redemption
-        const movieId = await seedTestMovie({
-          tmdb_id: 278,
-          title: 'The Shawshank Redemption',
-          release_date: '1994-09-23',
-        })
+      await t.step({
+        name: 'processes a movie with a real TMDb ID and stores reviews',
+        ignore: !RUN_EXTERNAL_API_TESTS,
+        fn: async () => {
+          // TMDb ID 278 = The Shawshank Redemption
+          const movieId = await seedTestMovie({
+            tmdb_id: 278,
+            title: 'The Shawshank Redemption',
+            release_date: '1994-09-23',
+          })
 
-        const { status, data } = await callUpdateScores({
-          movie_ids: [movieId],
-        })
+          const { status, data } = await callUpdateScores({
+            movie_ids: [movieId],
+          })
 
-        assertEquals(status, 200)
-        assertEquals(data.movies_fetched, 1)
-        assertEquals(data.scores_updated, 1)
+          assertEquals(status, 200)
+          assertEquals(data.movies_fetched, 1)
+          assertEquals(data.scores_updated, 1)
 
-        // Verify reviews were stored in the database
-        const { data: reviews } = await serviceClient
-          .from('reviews')
-          .select('source, score, raw_score')
-          .eq('movie_id', movieId)
+          // Verify reviews were stored in the database
+          const { data: reviews } = await serviceClient
+            .from('reviews')
+            .select('source, score, raw_score')
+            .eq('movie_id', movieId)
 
-        assertExists(reviews)
-        assertEquals(reviews!.length > 0, true)
+          assertExists(reviews)
+          assertEquals(reviews!.length > 0, true)
 
-        const sources = reviews!.map((r: { source: string }) => r.source)
-        assertEquals(sources.includes('imdb'), true)
+          const sources = reviews!.map((r: { source: string }) => r.source)
+          assertEquals(sources.includes('imdb'), true)
+        },
       })
 
-      await t.step('filters valid UUIDs from mixed movie_ids array', async () => {
-        // TMDb ID 238 = The Godfather
-        const movieId = await seedTestMovie({
-          tmdb_id: 238,
-          title: 'The Godfather',
-          release_date: '1972-03-24',
-        })
-
-        const { status, data } = await callUpdateScores({
-          movie_ids: ['not-valid', movieId, 'also-invalid'],
-        })
-
-        assertEquals(status, 200)
-        assertEquals(data.movies_fetched >= 1, true)
-      })
-
-      // ============================================================================
-      // Default Mode Tests
-      // ============================================================================
-
-      await t.step('default mode processes stale released movies', async () => {
-        const { status, data } = await callUpdateScores()
-        assertEquals(status, 200)
-        assertEquals(typeof data.movies_fetched, 'number')
-        assertEquals(typeof data.scores_updated, 'number')
-        assertEquals(Array.isArray(data.errors), true)
-      })
-
-      // ============================================================================
-      // Empty Body / Edge Cases
-      // ============================================================================
-
-      await t.step('handles empty body gracefully', async () => {
-        const { status, data } = await callUpdateScores()
-        assertEquals(status, 200)
-        assertExists(data.movies_fetched)
-      })
-
-      await t.step('handles empty movie_ids array as default mode', async () => {
-        const { status, data } = await callUpdateScores({ movie_ids: [] })
-        assertEquals(status, 200)
-        assertExists(data.movies_fetched)
+      // Default mode is the one unbounded path: it processes every stale
+      // released movie in the database (up to the function's limit of 30), one
+      // MDBList call each. Exercised once, and only when opted in.
+      await t.step({
+        name: 'default mode processes stale released movies',
+        ignore: !RUN_EXTERNAL_API_TESTS,
+        fn: async () => {
+          const { status, data } = await callUpdateScores()
+          assertEquals(status, 200)
+          assertEquals(typeof data.movies_fetched, 'number')
+          assertEquals(typeof data.scores_updated, 'number')
+          assertEquals(Array.isArray(data.errors), true)
+        },
       })
 
     } finally {

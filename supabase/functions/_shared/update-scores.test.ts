@@ -542,6 +542,19 @@ Deno.test('update-scores input validation', async (t) => {
     const body: UpdateScoresResult = await res.json()
     assertEquals(body.movies_fetched, 0)
   })
+
+  await t.step('handles empty movie_ids array as default mode (not a 400)', async () => {
+    const client = createMockSupabaseClient({
+      movies: { select: { data: [], error: null } },
+    })
+    const handler = buildHandler(DEFAULT_ENV, client)
+    const req = makeRequest('POST', { movie_ids: [] })
+
+    const res = await handler(req)
+    assertEquals(res.status, 200)
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.movies_fetched, 0)
+  })
 })
 
 // ============================================================================
