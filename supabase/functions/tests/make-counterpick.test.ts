@@ -444,6 +444,116 @@ Deno.test({
     })
 
     // ============================================================================
+    // Release-Date Validation Tests
+    //
+    // A movie whose release_date has already passed has a known outcome -
+    // counterpicking it during the draft round is a risk-free exploit.
+    // ============================================================================
+
+    await t.step('returns 400 when the targeted movie has already been released', async () => {
+      const leagueId = await factory.createDraftingLeague(uniqueName('counterpick-released'))
+      const serviceClient = getServiceClient()
+
+      await serviceClient.from('leagues').update({ status: 'counterpicking' }).eq('id', leagueId)
+
+      // Dedicated movie row for team 1 (owner), not a shared pool fixture,
+      // so setting a past release date can't break other tests.
+      const tmdbId = 980_000_000 + Math.floor(Math.random() * 1_000_000)
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: tmdbId,
+        title: `Released Counterpick Movie ${tmdbId}`,
+        release_date: '2020-01-01',
+      })
+      const { data: draftPick } = await serviceClient
+        .from('draft_picks')
+        .select('movie_id')
+        .eq('id', draftPickId)
+        .single()
+      if (!draftPick) throw new Error('Draft pick not found')
+
+      // draft_order=2 (secondClient) goes first in round 1 of the reverse
+      // counterpick order, so it is their turn to counterpick team 1's movie.
+      const result = await invokeFunction(secondClient, 'make-counterpick', {
+        league_id: leagueId,
+        movie_id: draftPick.movie_id,
+      })
+
+      assertEquals(result.status, 400)
+      assertEquals(result.error, 'Cannot counterpick this movie: Movie was released in a previous year')
+
+      const { data: counterpicks } = await serviceClient
+        .from('counterpicks')
+        .select('id')
+        .eq('league_id', leagueId)
+        .eq('movie_id', draftPick.movie_id)
+      assertEquals(counterpicks?.length ?? 0, 0)
+    })
+
+    // ============================================================================
+    // Pickup-Sourced Targets
+    //
+    // A movie an opponent acquired via pickup (not draft) must be a valid
+    // counterpick target: the pick should succeed and record pickup_id with
+    // draft_pick_id left null, and mark pickups.counterpicked_by_team_id.
+    // ============================================================================
+
+    await t.step('succeeds against an opponent movie acquired via pickup', async () => {
+      const leagueId = await factory.createDraftingLeague(uniqueName('counterpick-pickup'))
+      const serviceClient = getServiceClient()
+
+      await serviceClient.from('leagues').update({ status: 'counterpicking' }).eq('id', leagueId)
+
+      const team1 = await factory.getTeamForUser(leagueId, client)
+      const team2 = await factory.getTeamForUser(leagueId, secondClient)
+      if (!team1 || !team2) throw new Error('Team not found')
+
+      const tmdbId = 980_000_000 + Math.floor(Math.random() * 1_000_000)
+      const pickupId = await factory.createPickupForUser(leagueId, client, {
+        tmdb_id: tmdbId,
+        title: `Pickup Counterpick Movie ${tmdbId}`,
+        release_date: '2099-01-01',
+      })
+      const { data: pickup } = await serviceClient
+        .from('pickups')
+        .select('movie_id')
+        .eq('id', pickupId)
+        .single()
+      if (!pickup) throw new Error('Pickup not found')
+
+      // draft_order=2 (secondClient) goes first in round 1 of the reverse
+      // counterpick order, so it is their turn to counterpick team 1's movie.
+      const { data, error } = await secondClient.functions.invoke('make-counterpick', {
+        body: {
+          league_id: leagueId,
+          movie_id: pickup.movie_id,
+        },
+      })
+
+      assertEquals(error, null)
+      assertEquals(data.counterpick.movie_id, pickup.movie_id)
+      assertEquals(data.counterpick.target_team_id, team1.teamId)
+      assertEquals(data.counterpick.draft_pick_id, null)
+
+      const { data: counterpickRow } = await serviceClient
+        .from('counterpicks')
+        .select('pickup_id, draft_pick_id, counterpicker_team_id, target_team_id')
+        .eq('id', data.counterpick.id)
+        .single()
+
+      assertEquals(counterpickRow?.pickup_id, pickupId)
+      assertEquals(counterpickRow?.draft_pick_id, null)
+      assertEquals(counterpickRow?.counterpicker_team_id, team2.teamId)
+      assertEquals(counterpickRow?.target_team_id, team1.teamId)
+
+      const { data: pickupAfter } = await serviceClient
+        .from('pickups')
+        .select('counterpicked_by_team_id')
+        .eq('id', pickupId)
+        .single()
+      assertEquals(pickupAfter?.counterpicked_by_team_id, team2.teamId)
+    })
+
+    // ============================================================================
     // Cleanup
     // ============================================================================
 
