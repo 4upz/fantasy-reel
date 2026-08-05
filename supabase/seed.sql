@@ -126,6 +126,10 @@ INSERT INTO movies (id, tmdb_id, imdb_id, title, overview, release_date, poster_
   ('f0000013-0000-0000-0000-000000000013', 634649, 'tt10872600', 'Spider-Man 4', 'Peter Parker faces his greatest challenge yet.', '2026-07-24', '/spiderman4poster.jpg', 'upcoming', 105.6, 0),
   ('f0000014-0000-0000-0000-000000000014', 508943, 'tt9362722', 'Luca 2', 'The sea monsters return for another adventure.', '2025-06-13', '/luca2poster.jpg', 'upcoming', 48.3, 0),
   ('f0000015-0000-0000-0000-000000000015', 385687, 'tt1630029', 'Fast X Part 2', 'The family faces their final ride.', '2025-04-04', '/fastx2poster.jpg', 'upcoming', 72.1, 0),
+  -- Future-dated (relative to working date 2026-08-05) roster movies, so the counterpick
+  -- picker has opponent options from both sources in Oscar Contenders. See section 6/12.
+  ('f0000031-0000-0000-0000-000000000031', 999001, 'tt9990001', 'Avengers: Doomsday', 'Earth''s mightiest heroes reassemble to face their greatest threat.', '2026-09-18', '/doomsdayposter.jpg', 'upcoming', 150.0, 0),
+  ('f0000032-0000-0000-0000-000000000032', 999002, 'tt9990002', 'The Batman Part II', 'Batman continues his war on crime in Gotham City.', '2026-11-13', '/batman2poster.jpg', 'upcoming', 130.0, 0),
   -- Released (with scores)
   ('f0000016-0000-0000-0000-000000000016', 872585, 'tt15398776', 'Oppenheimer', 'The story of J. Robert Oppenheimer and the atomic bomb.', '2023-07-21', '/oppenheimerposter.jpg', 'released', 145.2, 8.4),
   ('f0000017-0000-0000-0000-000000000017', 346698, 'tt1517268', 'Barbie', 'Barbie and Ken leave Barbieland for the real world.', '2023-07-21', '/barbieposter.jpg', 'released', 135.8, 7.0),
@@ -182,6 +186,11 @@ INSERT INTO draft_picks (id, league_id, team_id, movie_id, round, pick_number, p
   ('d0222222-0013-0013-0013-000000000013', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0001-0001-0001-000000000001', 'f0000028-0000-0000-0000-000000000028', 5, 13, NOW() - INTERVAL '21 days'),
   ('d0222222-0014-0014-0014-000000000014', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0002-0002-0002-000000000002', 'f0000029-0000-0000-0000-000000000029', 5, 14, NOW() - INTERVAL '21 days'),
   ('d0222222-0015-0015-0015-000000000015', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003', 'f0000030-0000-0000-0000-000000000030', 5, 15, NOW() - INTERVAL '21 days');
+
+-- Extra pick for Oscar Contenders: Bob's roster gets a future-dated (2026-09-18) movie so
+-- opponents have a draft-sourced counterpick option (see f0000031 above).
+INSERT INTO draft_picks (id, league_id, team_id, movie_id, round, pick_number, picked_at) VALUES
+  ('d0222222-0016-0016-0016-000000000016', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0002-0002-0002-000000000002', 'f0000031-0000-0000-0000-000000000031', 6, 16, NOW() - INTERVAL '20 days');
 
 -- Completed Season 2024: 10 picks (5 rounds, 2 teams)
 INSERT INTO draft_picks (id, league_id, team_id, movie_id, round, pick_number, picked_at) VALUES
@@ -340,7 +349,13 @@ INSERT INTO pickup_bids (id, league_id, team_id, tmdb_id, movie_data, amount, st
   -- CANCELLED: Carol cancelled her Luca 2 bid
   ('0b000004-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003',
    508943, '{"title": "Luca 2", "poster_url": "/luca2poster.jpg", "release_date": "2025-06-13"}'::jsonb,
-   5, 'cancelled', NOW() - INTERVAL '3 days', NULL, NULL, (date_trunc('week', NOW()) + INTERVAL '5 days 20 hours'));
+   5, 'cancelled', NOW() - INTERVAL '3 days', NULL, NULL, (date_trunc('week', NOW()) + INTERVAL '5 days 20 hours')),
+
+  -- HISTORICAL: Carol won The Batman Part II for $20 -- future-dated (2026-11-13) pickup so
+  -- opponents have a pickup-sourced counterpick option (see f0000032 above).
+  ('0b000005-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003',
+   999002, '{"title": "The Batman Part II", "poster_url": "/batman2poster.jpg", "release_date": "2026-11-13"}'::jsonb,
+   20, 'won', NOW() - INTERVAL '4 days', NULL, NULL, NOW() - INTERVAL '1 day');
 
 -- ============================================================
 -- 12. PICKUPS (completed acquisitions via bidding)
@@ -349,7 +364,10 @@ INSERT INTO pickup_bids (id, league_id, team_id, tmdb_id, movie_data, amount, st
 INSERT INTO pickups (id, league_id, team_id, movie_id, bid_id, amount_paid, picked_up_at) VALUES
   -- Bob won Fast X Part 2 for $13 (using existing movie f0000015)
   ('0a000001-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0002-0002-0002-000000000002',
-   'f0000015-0000-0000-0000-000000000015', '0b000003-0001-0001-0001-000000000001', 13, NOW() - INTERVAL '2 days');
+   'f0000015-0000-0000-0000-000000000015', '0b000003-0001-0001-0001-000000000001', 13, NOW() - INTERVAL '2 days'),
+  -- Carol won The Batman Part II for $20 (future-dated, see 0b000005 above)
+  ('0a000002-0002-0002-0002-000000000002', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003',
+   'f0000032-0000-0000-0000-000000000032', '0b000005-0001-0001-0001-000000000001', 20, NOW() - INTERVAL '1 day');
 
 -- ============================================================
 -- 13. NOTIFICATIONS (for testing notification bell)
@@ -386,6 +404,6 @@ INSERT INTO notifications (id, user_id, league_id, type, title, body, data, read
 
 -- ============================================================
 -- SUMMARY: 6 users, 4 leagues, 10 participants, 10 teams,
---          30 movies, 37 picks, 45 reviews, 5 scores, 4 invites,
---          3 team_budgets, 6 bids, 1 pickup, 4 notifications
+--          32 movies, 38 picks, 45 reviews, 5 scores, 4 invites,
+--          3 team_budgets, 7 bids, 2 pickups, 4 notifications
 -- ============================================================
