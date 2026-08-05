@@ -107,12 +107,13 @@ Deno.test({
         },
       })
 
-      // Second user outbids
+      // Second user outbids. The real client always resupplies movie_data.
       await secondClient.functions.invoke('place-bid', {
         body: {
           league_id: leagueId,
           tmdb_id: 400002,
           amount: 20,
+          movie_data: { ...testMovieData, title: 'Outbid Cancel Movie' },
         },
       })
 
@@ -163,12 +164,13 @@ Deno.test({
         },
       })
 
-      // Second user outbids with $20
+      // Second user outbids with $20. The real client always resupplies movie_data.
       const { data: secondBidData } = await secondClient.functions.invoke('place-bid', {
         body: {
           league_id: leagueId,
           tmdb_id: 400004,
           amount: 20,
+          movie_data: { ...testMovieData, title: 'Restore Bid Movie' },
         },
       })
 
@@ -200,12 +202,13 @@ Deno.test({
         },
       })
 
-      // Second user bids $20
+      // Second user bids $20. The real client always resupplies movie_data.
       await secondClient.functions.invoke('place-bid', {
         body: {
           league_id: leagueId,
           tmdb_id: 400005,
           amount: 20,
+          movie_data: { ...testMovieData, title: 'Multi Restore Movie' },
         },
       })
 
@@ -215,6 +218,7 @@ Deno.test({
           league_id: leagueId,
           tmdb_id: 400005,
           amount: 30,
+          movie_data: { ...testMovieData, title: 'Multi Restore Movie' },
         },
       })
 

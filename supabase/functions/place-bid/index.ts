@@ -140,26 +140,13 @@ Deno.serve(async (req) => {
 
     // movie_data is client-supplied and only trusted when no `movies` row
     // exists yet for this tmdb_id -- the authoritative recheck happens in
-    // process-bids. If this request omitted movie_data (e.g. raising an
-    // existing bid), fall back to whatever movie_data an earlier bid on this
-    // movie in this league already captured.
-    let candidateReleaseDate = movie_data?.release_date
-    if (!candidateReleaseDate) {
-      const { data: priorBid } = await serviceClient
-        .from('pickup_bids')
-        .select('movie_data')
-        .eq('league_id', league_id)
-        .eq('tmdb_id', tmdb_id)
-        .not('movie_data', 'is', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      candidateReleaseDate = (priorBid?.movie_data as MovieData | null)?.release_date
-    }
-
-    // Prefer the DB row's release_date once the movie exists; only fall back
-    // to client-supplied data when it doesn't.
-    const releaseDateToCheck = existingMovie ? existingMovie.release_date : candidateReleaseDate
+    // process-bids. Prefer the DB row's release_date once the movie exists;
+    // only fall back to this request's own movie_data when it doesn't. We do
+    // NOT fall back to movie_data captured by an earlier/other bid: that data
+    // could be stale (the movie may have since released) and isn't scoped to
+    // this caller, so trusting it would reopen the release-date exploit this
+    // guard exists to close.
+    const releaseDateToCheck = existingMovie ? existingMovie.release_date : movie_data?.release_date
     const releaseCheck = isUpcomingMovie(releaseDateToCheck)
     if (!releaseCheck.valid) {
       return errorResponse(`Cannot bid on this movie: ${releaseCheck.reason}`, 400)

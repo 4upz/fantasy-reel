@@ -298,11 +298,13 @@ Deno.test({
         },
       })
 
-      // Second user tries to bid $25 (equal, not higher)
+      // Second user tries to bid $25 (equal, not higher). The real client
+      // always resupplies movie_data, including on a counter-bid.
       const result = await invokeFunction(secondClient, 'place-bid', {
         league_id: leagueId,
         tmdb_id: 300007,
         amount: 25,
+        movie_data: { ...testMovieData, title: 'Equal Bid Movie' },
       })
 
       assertEquals(result.error, 'There is already a bid of $25. You must bid higher.')
@@ -325,12 +327,13 @@ Deno.test({
         },
       })
 
-      // Update bid
+      // Update bid. The real client always resupplies movie_data.
       const { data, error } = await client.functions.invoke('place-bid', {
         body: {
           league_id: leagueId,
           tmdb_id: 300008,
           amount: 20,
+          movie_data: { ...testMovieData, title: 'Update Bid Movie' },
         },
       })
 
@@ -353,12 +356,14 @@ Deno.test({
         },
       })
 
-      // Second user outbids with $15
+      // Second user outbids with $15. The real client always resupplies
+      // movie_data, including on a counter-bid.
       await secondClient.functions.invoke('place-bid', {
         body: {
           league_id: leagueId,
           tmdb_id: 300009,
           amount: 15,
+          movie_data: { ...testMovieData, title: 'Counter Bid Movie' },
         },
       })
 
@@ -368,6 +373,7 @@ Deno.test({
           league_id: leagueId,
           tmdb_id: 300009,
           amount: 20,
+          movie_data: { ...testMovieData, title: 'Counter Bid Movie' },
         },
       })
 
