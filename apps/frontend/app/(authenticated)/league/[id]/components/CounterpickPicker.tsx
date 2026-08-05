@@ -127,7 +127,8 @@ export default function CounterpickPicker({
         </div>
         <p className="text-foreground-secondary">No movies available to counterpick</p>
         <p className="text-sm text-foreground-muted mt-1">
-          All opponent movies have already been counterpicked
+          Opponent movies drop off this list once they&apos;re released or already targeted —
+          nothing is left to counterpick right now
         </p>
       </div>
     )
@@ -182,9 +183,9 @@ export default function CounterpickPicker({
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {group.movies.map((option) => (
                 <CounterpickMovieCard
-                  key={option.draft_pick_id}
+                  key={option.movie_id}
                   option={option}
-                  isSelected={selectedOption?.draft_pick_id === option.draft_pick_id}
+                  isSelected={selectedOption?.movie_id === option.movie_id}
                   isSelectable={isMyTurn && !isPicking}
                   onSelect={handleSelectOption}
                 />
