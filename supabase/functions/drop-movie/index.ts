@@ -64,12 +64,14 @@ Deno.serve(async (req) => {
 
     if (hasPickupId) {
       // ========== PICKUP DROP FLOW ==========
+      // Note: Must specify !pickups_team_id_fkey because pickups has two FKs to
+      // teams: team_id (the owner) and counterpicked_by_team_id (the counterpicker)
       const { data: pickup, error: pickupError } = await serviceClient
         .from('pickups')
         .select(`
           *,
           movies(id, title, tmdb_id, release_date),
-          teams(
+          teams!pickups_team_id_fkey(
             id,
             participant_id,
             league_participants(user_id, league_id)
