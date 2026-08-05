@@ -19,7 +19,7 @@ import {
 // Seeded fixtures (supabase/seed.sql)
 const OSCAR_LEAGUE = '22222222-bbbb-bbbb-bbbb-222222222222'
 const DRAFTED_MOVIE = 'f0000016-0000-0000-0000-000000000016' // Oppenheimer, drafted
-const PICKUP_MOVIE = 'f0000012-0000-0000-0000-000000000012' // Tron: Ares, won at auction
+const PICKUP_MOVIE = 'f0000015-0000-0000-0000-000000000015' // Fast X Part 2, won at auction by Bob's team
 
 Deno.test('score-notifications snapshots', async (t) => {
   const supabase = getServiceClient()
@@ -40,7 +40,7 @@ Deno.test('score-notifications snapshots', async (t) => {
 
     const placement = context.placements.find((p) => p.leagueId === OSCAR_LEAGUE)
     assertExists(placement, 'pickup movie should produce a placement')
-    assertEquals(placement.ownerTeamName, 'Award Hunters')
+    assertEquals(placement.ownerTeamName, 'Golden Globe Gang')
   })
 
   await t.step('captureScoreContext reports the leagues holding a movie', async () => {
