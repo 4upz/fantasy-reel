@@ -98,6 +98,49 @@ export function getServiceClient(): SupabaseClient {
 }
 
 /**
+ * Whether steps that call the live MDBList / TMDb APIs should run.
+ *
+ * Those calls draw down a shared daily quota -- MDBList allows 1000 req/day on
+ * the same account the production nightly score sync uses -- and an exhausted
+ * quota surfaces as `movies_fetched: 0`, which is indistinguishable from a real
+ * regression. They also scale with however many movies have accumulated in the
+ * local database, so their cost grows silently run over run.
+ *
+ * So they are opt-in: skipped unless RUN_EXTERNAL_API_TESTS=1, which
+ * `deno task test:external` sets. The behaviour they cover is otherwise
+ * asserted against mocks in `_shared/*.test.ts`; what stays here is a small
+ * number of contract tests, the only thing that catches MDBList or TMDb
+ * changing response shape, auth, or field names.
+ */
+export const RUN_EXTERNAL_API_TESTS = Deno.env.get('RUN_EXTERNAL_API_TESTS') === '1'
+
+/**
+ * Get the service role key that the Edge Function runtime actually uses.
+ *
+ * Functions with custom auth (X-Cron-Secret OR Bearer service_role) are called
+ * via direct fetch() rather than client.functions.invoke(). The .env.test key
+ * may not match the Docker container's key if Supabase has been restarted, so
+ * query the container directly, falling back to .env.test.
+ */
+export async function getEdgeFunctionServiceRoleKey(): Promise<string> {
+  try {
+    const cmd = new Deno.Command('docker', {
+      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
+      stdout: 'piped',
+      stderr: 'piped',
+    })
+    const output = await cmd.output()
+    if (output.success) {
+      const key = new TextDecoder().decode(output.stdout).trim()
+      if (key) return key
+    }
+  } catch {
+    // Docker not available or container not found
+  }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+}
+
+/**
  * Authenticate a user, creating them if necessary.
  * Uses admin API to create users with email pre-confirmed for testing.
  */
