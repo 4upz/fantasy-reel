@@ -109,24 +109,18 @@ Deno.serve(async (req) => {
       return errorResponse(`Insufficient budget. You have $${budget.remaining_budget} remaining`, 400)
     }
 
-    // Slot check: count existing WON counterpick bids + existing counterpicks with phase='bidding'
-    const [{ count: wonBidCount }, { count: existingCounterpickCount }] = await Promise.all([
-      serviceClient
-        .from('counterpick_bids')
-        .select('*', { count: 'exact', head: true })
-        .eq('team_id', team.id)
-        .eq('league_id', league_id)
-        .eq('status', 'won'),
-      serviceClient
-        .from('counterpicks')
-        .select('*', { count: 'exact', head: true })
-        .eq('counterpicker_team_id', team.id)
-        .eq('league_id', league_id)
-        .eq('phase', 'bidding'),
-    ])
+    // Slot check: count counterpicks the team already holds in the bidding phase.
+    // A won bid produces BOTH a counterpicks row and a counterpick_bids row with
+    // status='won' (see process-bids), so counting either alone is correct but
+    // summing them double-counts every used slot.
+    const { count: usedSlots } = await serviceClient
+      .from('counterpicks')
+      .select('*', { count: 'exact', head: true })
+      .eq('counterpicker_team_id', team.id)
+      .eq('league_id', league_id)
+      .eq('phase', 'bidding')
 
-    const usedSlots = (wonBidCount ?? 0) + (existingCounterpickCount ?? 0)
-    if (usedSlots >= biddingSlots) {
+    if ((usedSlots ?? 0) >= biddingSlots) {
       return errorResponse('You have used all your bidding counterpick slots', 400)
     }
 
