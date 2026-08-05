@@ -534,7 +534,8 @@ export interface Counterpick {
   counterpicker_team_id: string
   target_team_id: string
   movie_id: string
-  draft_pick_id: string
+  draft_pick_id: string | null
+  pickup_id: string | null
   pick_order: number
   phase: 'draft' | 'bidding'
   fantasy_points: number | null
@@ -577,7 +578,8 @@ export interface CounterpickBid {
   team_id: string
   movie_id: string
   target_team_id: string
-  draft_pick_id: string
+  draft_pick_id: string | null
+  pickup_id: string | null
   amount: number
   status: BidStatus
   created_at: string
