@@ -28,6 +28,7 @@ export default function BiddingClient({
     biddingCounterpickCount,
     placeCounterpickBid,
     cancelCounterpickBid,
+    setCounterpickBidPriorities,
   } = useBidding({
     leagueId: league.id,
     teamId,
@@ -49,6 +50,7 @@ export default function BiddingClient({
       myCounterpickBids={myCounterpickBids}
       onPlaceCounterpickBid={placeCounterpickBid}
       onCancelCounterpickBid={cancelCounterpickBid}
+      onReorderCounterpickBids={setCounterpickBidPriorities}
     />
   )
 }

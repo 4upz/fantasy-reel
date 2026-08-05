@@ -210,7 +210,17 @@ Deno.serve(async (req) => {
       }
       newBid = updatedBid
     } else {
-      // Create new bid
+      // New bids join at the back of the team's priority order. Promoting one is
+      // a deliberate act, done from the bidding page, not a side effect of
+      // bidding again. Gaps left by cancelled bids are harmless: process-bids
+      // normalizes to a dense 1..N ranking before resolving.
+      const { count: pendingBidCount } = await serviceClient
+        .from('counterpick_bids')
+        .select('*', { count: 'exact', head: true })
+        .eq('league_id', league_id)
+        .eq('team_id', team.id)
+        .in('status', ['active', 'outbid'])
+
       const { data: insertedBid, error: insertError } = await serviceClient
         .from('counterpick_bids')
         .insert({
@@ -220,6 +230,7 @@ Deno.serve(async (req) => {
           target_team_id: draftPick.team_id,
           draft_pick_id: draftPick.id,
           amount,
+          priority: (pendingBidCount ?? 0) + 1,
           status: 'active',
           processing_deadline: processingDeadline,
         })
