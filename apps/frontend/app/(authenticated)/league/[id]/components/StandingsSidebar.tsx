@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { formatFantasyPoints } from '@/utils/scoring'
 import type { StandingEntry } from '@/types'
 
 interface Props {
@@ -10,11 +11,6 @@ const RANK_COLORS: Record<number, string> = {
   1: 'text-gold',
   2: 'text-[#a8a8a8]',
   3: 'text-[#cd7f32]',
-}
-
-function formatFantasyPoints(points: number): string {
-  const rounded = Math.round(points)
-  return rounded >= 0 ? `+${rounded}` : `${rounded}`
 }
 
 export default function StandingsSidebar({ leagueId, standings }: Props) {
