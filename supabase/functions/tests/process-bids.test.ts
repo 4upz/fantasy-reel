@@ -662,6 +662,98 @@ Deno.test({
         assertEquals((notification?.data as Record<string, unknown>)?.bid_type, 'counterpick')
       })
 
+      // Guards the interaction between release voiding and the slot caps from
+      // issue #24: a contest on a released movie is dropped BEFORE winners are
+      // resolved, so it never consumes one of the bidder's slots. Were the two
+      // ordered the other way, the team's priority-1 bid would take its only
+      // slot and then be voided, leaving it with nothing.
+      await t.step('a voided counterpick contest does not consume the bidder\'s slot', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('void-cp-slot'), 2)
+        await serviceClient.from('leagues').update({ bidding_counterpick_slots: 1 }).eq('id', leagueId)
+
+        const targetTeam = await factory.getTeamForUser(leagueId, secondClient)
+        const bidderTeam = await factory.getTeamForUser(leagueId, client)
+        if (!targetTeam || !bidderTeam) throw new Error('Team not found')
+
+        // Two movies owned by the target team: one that releases before
+        // processing, one still upcoming.
+        const releasedTmdbId = uniqueVoidTestTmdbId()
+        const upcomingTmdbId = uniqueVoidTestTmdbId()
+
+        const releasedPickId = await factory.createDraftPickForUser(leagueId, secondClient, {
+          tmdb_id: releasedTmdbId,
+          title: `Void Slot Released ${releasedTmdbId}`,
+          release_date: '2099-01-01',
+        })
+        const upcomingPickId = await factory.createDraftPickForUser(leagueId, secondClient, {
+          tmdb_id: upcomingTmdbId,
+          title: `Void Slot Upcoming ${upcomingTmdbId}`,
+          release_date: '2099-01-01',
+        })
+
+        const { data: picks } = await serviceClient
+          .from('draft_picks')
+          .select('id, movie_id')
+          .in('id', [releasedPickId, upcomingPickId])
+        assertExists(picks)
+
+        const releasedMovieId = picks!.find((p) => p.id === releasedPickId)!.movie_id
+        const upcomingMovieId = picks!.find((p) => p.id === upcomingPickId)!.movie_id
+
+        const seedBid = async (movieId: string, draftPickId: string, priority: number) => {
+          const { data, error } = await serviceClient
+            .from('counterpick_bids')
+            .insert({
+              league_id: leagueId,
+              team_id: bidderTeam.teamId,
+              movie_id: movieId,
+              target_team_id: targetTeam.teamId,
+              draft_pick_id: draftPickId,
+              amount: 5,
+              priority,
+              status: 'active',
+              processing_deadline: new Date(Date.now() - 60_000).toISOString(),
+            })
+            .select('id')
+            .single()
+          assertEquals(error, null)
+          assertExists(data)
+          return data!.id
+        }
+
+        // Priority 1 is the doomed one: without the fix it wins the single slot.
+        const releasedBidId = await seedBid(releasedMovieId, releasedPickId, 1)
+        await seedBid(upcomingMovieId, upcomingPickId, 2)
+
+        await serviceClient
+          .from('movies')
+          .update({ release_date: '2020-01-01' })
+          .eq('id', releasedMovieId)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+
+        const { data: voidedBid } = await serviceClient
+          .from('counterpick_bids')
+          .select('status')
+          .eq('id', releasedBidId)
+          .single()
+        assertEquals(voidedBid?.status, 'cancelled')
+
+        // The slot survived the void and went to the upcoming movie.
+        assertEquals(data.counterpick_processed, 1)
+
+        const { data: awarded } = await serviceClient
+          .from('counterpicks')
+          .select('movie_id')
+          .eq('league_id', leagueId)
+          .eq('counterpicker_team_id', bidderTeam.teamId)
+          .eq('phase', 'bidding')
+        assertExists(awarded)
+        assertEquals(awarded!.length, 1)
+        assertEquals(awarded![0].movie_id, upcomingMovieId)
+      })
+
       // ============================================================================
       // Pickup-sourced counterpicks (3c)
       //
