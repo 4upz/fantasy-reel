@@ -521,32 +521,48 @@ Deno.serve(async (req) => {
         // Revalidate release date against the authoritative movies row. Bids can
         // sit pending for up to a week (see get_next_processing_deadline), so a
         // movie that was upcoming when the bid was placed may have released by
-        // now. This is also the only place that can catch a forged
-        // client-supplied release date, since the real movies row exists here.
+        // now. This recheck is authoritative for any movie that already had a
+        // `movies` row. For a movie first seen at processing time (no prior row),
+        // the row above was just created from the same client-supplied movie_data
+        // that came with the bid, so this only re-validates that data against
+        // itself - it does not independently verify it. Closing that gap would
+        // need a TMDb round-trip at movie-creation time (draft-pick has the same
+        // trust model); out of scope here.
         const releaseCheck = isUpcomingMovie(movieReleaseDate)
         if (!releaseCheck.valid) {
+          const reason = releaseCheck.reason ?? 'Movie has already been released'
+
+          // The movie has released, so no bid on it - winner or otherwise - can
+          // ever be honored. Void the entire group, not just the winner, or the
+          // losing bids strand as 'active' forever (they'd only surface again if
+          // some other bid on the same released movie were ever re-evaluated).
+          const bidsToVoid = allBidsForMovie || []
+          const bidIdsToVoid = bidsToVoid.map((b) => b.id)
+
           await serviceClient
             .from('pickup_bids')
             .update({ status: 'cancelled' })
-            .eq('id', winner.id)
+            .in('id', bidIdsToVoid)
 
-          await notifyVoidedBidder(serviceClient, winner, movieTitle, releaseCheck.reason ?? 'Movie has already been released', {
-            tmdb_id: winner.tmdb_id,
-            movie_id: movieId,
-          })
+          for (const bid of bidsToVoid) {
+            await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, {
+              tmdb_id: bid.tmdb_id,
+              movie_id: movieId,
+            })
 
-          voidedPickupResults.push({
-            bid_id: winner.id,
-            league_id: winner.league_id,
-            team_id: winner.team_id,
-            amount: winner.amount,
-            movie_title: movieTitle,
-            reason: releaseCheck.reason ?? 'Movie has already been released',
-            tmdb_id: winner.tmdb_id,
-            movie_id: movieId,
-          })
+            voidedPickupResults.push({
+              bid_id: bid.id,
+              league_id: bid.league_id,
+              team_id: bid.team_id,
+              amount: bid.amount,
+              movie_title: movieTitle,
+              reason,
+              tmdb_id: bid.tmdb_id,
+              movie_id: movieId,
+            })
+          }
 
-          console.log(`Voided pickup bid ${winner.id} for ${movieTitle}: movie released before processing`)
+          console.log(`Voided ${bidIdsToVoid.length} pickup bid(s) for ${movieTitle}: movie released before processing`)
           continue
         }
 
@@ -836,27 +852,37 @@ Deno.serve(async (req) => {
           // rationale as the pickup path above.
           const releaseCheck = isUpcomingMovie(movie.release_date)
           if (!releaseCheck.valid) {
+            const reason = releaseCheck.reason ?? 'Movie has already been released'
+
+            // Same rationale as the pickup path above: once the target movie has
+            // released, no bid in this group can ever be honored, so void all of
+            // them rather than leaving the losers stranded as 'active'.
+            const bidsToVoid = allBidsForMovie || []
+            const bidIdsToVoid = bidsToVoid.map((b) => b.id)
+
             await serviceClient
               .from('counterpick_bids')
               .update({ status: 'cancelled' })
-              .eq('id', winner.id)
+              .in('id', bidIdsToVoid)
 
-            await notifyVoidedBidder(serviceClient, winner, movieTitle, releaseCheck.reason ?? 'Movie has already been released', {
-              movie_id: movieId,
-              bid_type: 'counterpick',
-            })
+            for (const bid of bidsToVoid) {
+              await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, {
+                movie_id: movieId,
+                bid_type: 'counterpick',
+              })
 
-            voidedCounterpickResults.push({
-              bid_id: winner.id,
-              league_id: winner.league_id,
-              team_id: winner.team_id,
-              amount: winner.amount,
-              movie_title: movieTitle,
-              reason: releaseCheck.reason ?? 'Movie has already been released',
-              movie_id: movieId,
-            })
+              voidedCounterpickResults.push({
+                bid_id: bid.id,
+                league_id: bid.league_id,
+                team_id: bid.team_id,
+                amount: bid.amount,
+                movie_title: movieTitle,
+                reason,
+                movie_id: movieId,
+              })
+            }
 
-            console.log(`Voided counterpick bid ${winner.id} for ${movieTitle}: movie released before processing`)
+            console.log(`Voided ${bidIdsToVoid.length} counterpick bid(s) for ${movieTitle}: movie released before processing`)
             continue
           }
 

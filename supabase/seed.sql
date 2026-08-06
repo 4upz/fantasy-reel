@@ -59,11 +59,14 @@ INSERT INTO auth.identities (id, user_id, identity_data, provider, provider_id, 
 -- 2. LEAGUES
 -- ============================================================
 
-INSERT INTO leagues (id, name, owner_id, invite_only, status, max_participants, draft_start_date, draft_end_date) VALUES
-  ('11111111-aaaa-aaaa-aaaa-111111111111', 'Blockbuster League', 'a1111111-1111-1111-1111-111111111111', true, 'drafting', 8, NOW() - INTERVAL '1 day', NOW() + INTERVAL '6 days'),
-  ('22222222-bbbb-bbbb-bbbb-222222222222', 'Oscar Contenders', 'a1111111-1111-1111-1111-111111111111', true, 'active', 6, NOW() - INTERVAL '30 days', NOW() - INTERVAL '23 days'),
-  ('33333333-cccc-cccc-cccc-333333333333', 'Summer Blockbusters', 'b2222222-2222-2222-2222-222222222222', false, 'setup', 6, NOW() + INTERVAL '7 days', NOW() + INTERVAL '14 days'),
-  ('44444444-dddd-dddd-dddd-444444444444', 'Completed Season 2024', 'c3333333-3333-3333-3333-333333333333', true, 'completed', 4, NOW() - INTERVAL '180 days', NOW() - INTERVAL '173 days');
+INSERT INTO leagues (id, name, owner_id, invite_only, status, max_participants, draft_start_date, draft_end_date, bidding_counterpick_slots) VALUES
+  ('11111111-aaaa-aaaa-aaaa-111111111111', 'Blockbuster League', 'a1111111-1111-1111-1111-111111111111', true, 'drafting', 8, NOW() - INTERVAL '1 day', NOW() + INTERVAL '6 days', 0),
+  -- bidding_counterpick_slots = 2 so the counterpick picker (which requires > 0, see
+  -- BiddingPanel.tsx) is reachable in a browser against the draft- and pickup-sourced
+  -- options seeded below (f0000031 / f0000032, see sections 6/12).
+  ('22222222-bbbb-bbbb-bbbb-222222222222', 'Oscar Contenders', 'a1111111-1111-1111-1111-111111111111', true, 'active', 6, NOW() - INTERVAL '30 days', NOW() - INTERVAL '23 days', 2),
+  ('33333333-cccc-cccc-cccc-333333333333', 'Summer Blockbusters', 'b2222222-2222-2222-2222-222222222222', false, 'setup', 6, NOW() + INTERVAL '7 days', NOW() + INTERVAL '14 days', 0),
+  ('44444444-dddd-dddd-dddd-444444444444', 'Completed Season 2024', 'c3333333-3333-3333-3333-333333333333', true, 'completed', 4, NOW() - INTERVAL '180 days', NOW() - INTERVAL '173 days', 0);
 
 -- ============================================================
 -- 3. LEAGUE PARTICIPANTS
@@ -314,7 +317,7 @@ INSERT INTO team_budgets (id, team_id, remaining_budget, total_spent) VALUES
   -- Oscar Contenders (active league)
   ('bb222222-0001-0001-0001-000000000001', 'e2222222-0001-0001-0001-000000000001', 85, 15),  -- Alice: spent $15
   ('bb222222-0002-0002-0002-000000000002', 'e2222222-0002-0002-0002-000000000002', 72, 28),  -- Bob: spent $28
-  ('bb222222-0003-0003-0003-000000000003', 'e2222222-0003-0003-0003-000000000003', 91, 9);   -- Carol: spent $9
+  ('bb222222-0003-0003-0003-000000000003', 'e2222222-0003-0003-0003-000000000003', 71, 29);  -- Carol: spent $9 + $20 (Batman Part II pickup, see section 12)
 
 -- ============================================================
 -- 11. PICKUP BIDS (various states for testing)

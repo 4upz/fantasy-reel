@@ -357,6 +357,127 @@ Deno.test({
         assertEquals((notification?.data as Record<string, unknown>)?.reason, 'movie_released')
       })
 
+      await t.step('cancels every pickup bid on a movie, not just the winner, when it released before processing', async () => {
+        // Regression test: voiding only the winning bid left every other bid on
+        // the same released movie stuck at status='active' forever (they'd only
+        // ever surface again if some future run re-selected one of them as the
+        // new "winner" and voided it too, draining the group one bid per week).
+        // Both the would-be winner and the loser must be cancelled and notified
+        // in the same processing run.
+        const leagueId = await factory.createActiveLeague(uniqueName('void-multi-league'), 2)
+        const winnerTeam = await factory.getTeamForUser(leagueId, client)
+        const loserTeam = await factory.getTeamForUser(leagueId, secondClient)
+        if (!winnerTeam || !loserTeam) throw new Error('Team not found')
+
+        const tmdbId = uniqueVoidTestTmdbId()
+        const movieTitle = `Void Multi Test Movie ${tmdbId}`
+
+        const { data: movieRow, error: movieInsertError } = await serviceClient
+          .from('movies')
+          .insert({
+            tmdb_id: tmdbId,
+            title: movieTitle,
+            overview: 'Test movie for multi-bid release-date revalidation',
+            poster_url: null,
+            release_date: '2099-01-01',
+            vote_average: 5,
+            popularity: 10,
+            status: 'upcoming',
+          })
+          .select('id')
+          .single()
+
+        assertEquals(movieInsertError, null)
+        assertExists(movieRow)
+
+        const movieData = { title: movieTitle, release_date: '2099-01-01', vote_average: 5, popularity: 10 }
+
+        // Higher bid would win if the movie hadn't released
+        const { data: winnerBidRow, error: winnerBidError } = await serviceClient
+          .from('pickup_bids')
+          .insert({
+            league_id: leagueId,
+            team_id: winnerTeam.teamId,
+            tmdb_id: tmdbId,
+            movie_data: movieData,
+            amount: 12,
+            status: 'active',
+            processing_deadline: new Date(Date.now() - 60_000).toISOString(),
+          })
+          .select('id')
+          .single()
+        assertEquals(winnerBidError, null)
+        assertExists(winnerBidRow)
+
+        // Lower bid would lose to the one above if the movie hadn't released
+        const { data: loserBidRow, error: loserBidError } = await serviceClient
+          .from('pickup_bids')
+          .insert({
+            league_id: leagueId,
+            team_id: loserTeam.teamId,
+            tmdb_id: tmdbId,
+            movie_data: movieData,
+            amount: 8,
+            status: 'active',
+            processing_deadline: new Date(Date.now() - 60_000).toISOString(),
+          })
+          .select('id')
+          .single()
+        assertEquals(loserBidError, null)
+        assertExists(loserBidRow)
+
+        const { data: loserBudgetBefore } = await serviceClient
+          .from('team_budgets')
+          .select('remaining_budget')
+          .eq('team_id', loserTeam.teamId)
+          .single()
+
+        // Simulate the movie releasing after both bids were placed but before processing ran
+        await serviceClient.from('movies').update({ release_date: '2020-01-01' }).eq('id', movieRow!.id)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.processed, 0)
+        assertExists(data.voided_pickup_bids)
+        assertEquals(data.voided_pickup_bids.length, 2)
+
+        const voidedBidIds = data.voided_pickup_bids.map((v: { bid_id: string }) => v.bid_id).sort()
+        assertEquals(voidedBidIds, [winnerBidRow!.id, loserBidRow!.id].sort())
+
+        const { data: bidsAfter } = await serviceClient
+          .from('pickup_bids')
+          .select('id, status')
+          .in('id', [winnerBidRow!.id, loserBidRow!.id])
+
+        for (const bid of bidsAfter ?? []) {
+          assertEquals(bid.status, 'cancelled')
+        }
+
+        // The loser's budget must be untouched - it was never a winner, so no
+        // charge should ever have applied to it in the first place.
+        const { data: loserBudgetAfter } = await serviceClient
+          .from('team_budgets')
+          .select('remaining_budget')
+          .eq('team_id', loserTeam.teamId)
+          .single()
+        assertEquals(loserBudgetAfter?.remaining_budget, loserBudgetBefore?.remaining_budget)
+
+        const loserUserId = await getUserId(secondClient)
+        const { data: loserNotification } = await serviceClient
+          .from('notifications')
+          .select('type, data')
+          .eq('user_id', loserUserId)
+          .eq('league_id', leagueId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        assertExists(loserNotification)
+        assertEquals(loserNotification?.type, 'bid_lost')
+        assertEquals((loserNotification?.data as Record<string, unknown>)?.bid_id, loserBidRow!.id)
+        assertEquals((loserNotification?.data as Record<string, unknown>)?.reason, 'movie_released')
+      })
+
       await t.step('cancels a counterpick bid on a movie that released before processing (3b, 3d)', async () => {
         const leagueId = await factory.createActiveLeague(uniqueName('void-cp-league'), 2)
         await serviceClient.from('leagues').update({ bidding_counterpick_slots: 2 }).eq('id', leagueId)
