@@ -1291,6 +1291,16 @@
     overflow: hidden;
   }
 
+  /* Horizontal shelves scroll by swipe; the bar just eats a row of the poster. */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
   .showcase-scroll {
     display: flex;
     gap: 1.5rem;

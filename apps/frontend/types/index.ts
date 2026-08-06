@@ -395,6 +395,9 @@ export interface MovieTimelineItem {
   /** The Tomatometer - the only critic score that affects fantasy points. */
   combined_score: number | null
   fantasy_points: number | null
+  /** Where the movie was drafted, shown on the dashboard's "next up" hero. */
+  round: number
+  pick_number: number
 }
 
 export interface DashboardTeam {

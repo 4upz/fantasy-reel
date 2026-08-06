@@ -112,6 +112,8 @@ export default async function DashboardPage({ params }: PageProps) {
         status: getMovieStatus(movie.release_date, movie.combined_score),
         combined_score: movie.combined_score,
         fantasy_points: movie.fantasy_points,
+        round: pick.round,
+        pick_number: pick.pick_number,
       }
     })
 

@@ -87,17 +87,20 @@ export default function DashboardClient({
     )
   }
 
+  // Cancels the layout's gutter so the Upcoming shelf can scroll to the screen
+  // edge. Every section below owns its own 16px padding instead.
   return (
-    <div className="space-y-6">
+    <div className="-mx-4 pt-1.5 sm:-mx-6 lg:-mx-8">
       <TeamHeader
         team={userTeam}
         totalTeams={totalTeams}
+        leagueName={league.name}
         onEditTeam={() => setShowEditTeamModal(true)}
       />
       <MovieGrid movies={userTeam.movies} leagueStatus={league.status} />
 
       {wishlistCount > 0 && (
-        <div className="card p-4 flex items-center gap-3">
+        <div className="card mx-4 mt-[18px] flex items-center gap-3 p-4">
           <Heart className="w-5 h-5 text-crimson flex-shrink-0" />
           <p className="flex-1 text-sm text-foreground-secondary">
             {wishlistCount} league-mate{wishlistCount !== 1 ? 's have' : ' has'} shared their wishlist{wishlistCount !== 1 ? 's' : ''}
