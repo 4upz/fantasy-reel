@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type {
   ParticipantWithTeamScore,
   DraftPickWithScores,
@@ -82,6 +82,15 @@ function calculateRankings(
   return ranked
 }
 
+function SummaryCard({ value, label, tone }: { value: number; label: string; tone: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-surface px-2 py-2.5 text-center">
+      <div className={`font-display text-xl font-bold ${tone}`}>{value}</div>
+      <div className="mt-px text-[11px] text-foreground-muted">{label}</div>
+    </div>
+  )
+}
+
 export default function StandingsClient({
   participants,
   draftPicks,
@@ -89,6 +98,8 @@ export default function StandingsClient({
   counterpicks,
   currentUserId,
 }: Props) {
+  const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null)
+
   const rankedTeams = useMemo(
     () => calculateRankings(participants, draftPicks, pickups, counterpicks),
     [participants, draftPicks, pickups, counterpicks]
@@ -105,29 +116,20 @@ export default function StandingsClient({
     return { moviesScored, moviesPending, totalMovies: allMovies.length }
   }, [draftPicks, pickups, counterpicks])
 
+  // The page is a flex column, so every direct child needs flex-none or it gets
+  // squashed instead of adding to the scroll length.
   return (
-    <div className="space-y-6 animate-fade-in" data-testid="standings-container">
-      {/* Summary Stats Bar */}
-      <div className="flex items-center justify-end">
-        <div className="flex gap-6 text-sm">
-          <div className="text-center">
-            <div className="text-xl font-bold font-display text-gold">{summaryStats.totalMovies}</div>
-            <div className="text-foreground-muted text-xs">Total</div>
-          </div>
-          <div className="text-center">
-            <div className="text-xl font-bold font-display text-success">{summaryStats.moviesScored}</div>
-            <div className="text-foreground-muted text-xs">Scored</div>
-          </div>
-          <div className="text-center">
-            <div className="text-xl font-bold font-display text-foreground-secondary">{summaryStats.moviesPending}</div>
-            <div className="text-foreground-muted text-xs">Pending</div>
-          </div>
-        </div>
+    <div className="flex animate-fade-in flex-col gap-3" data-testid="standings-container">
+      {/* Summary strip */}
+      <div className="grid flex-none grid-cols-3 gap-2">
+        <SummaryCard value={summaryStats.totalMovies} label="Movies" tone="text-gold" />
+        <SummaryCard value={summaryStats.moviesScored} label="Scored" tone="text-success" />
+        <SummaryCard value={summaryStats.moviesPending} label="Pending" tone="text-foreground-secondary" />
       </div>
 
       {/* No Scores Yet Alert */}
       {summaryStats.moviesScored === 0 && (
-        <div className="alert alert-info">
+        <div className="alert alert-info flex-none">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -143,20 +145,23 @@ export default function StandingsClient({
       )}
 
       {/* Leaderboard */}
-      <div className="space-y-4">
-        {rankedTeams.map((rankedTeam, index) => (
+      {rankedTeams.map((rankedTeam, index) => {
+        const teamId = rankedTeam.participant.teams?.id ?? rankedTeam.participant.id
+        return (
           <TeamStandingCard
             key={rankedTeam.participant.id}
             rankedTeam={rankedTeam}
             isCurrentUser={rankedTeam.participant.user_id === currentUserId}
+            isExpanded={expandedTeamId === teamId}
+            onToggle={() => setExpandedTeamId((current) => (current === teamId ? null : teamId))}
             animationDelay={index * 100}
           />
-        ))}
-      </div>
+        )
+      })}
 
       {/* Empty State */}
       {rankedTeams.length === 0 && (
-        <div className="card p-12 text-center">
+        <div className="card flex-none p-12 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-elevated flex items-center justify-center">
             <svg className="w-8 h-8 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />

@@ -93,15 +93,15 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
     <div className="relative" ref={menuRef}>
       <button
         onClick={() => setIsOpen(prev => !prev)}
-        className="flex items-center gap-1.5 group text-left"
+        className="flex w-full items-center gap-1.5 group text-left"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
-        <h1 className="text-lg font-display font-semibold text-foreground group-hover:text-gold transition-colors">
+        <h1 className="min-w-0 truncate text-lg font-display font-semibold text-foreground group-hover:text-gold transition-colors">
           {currentLeagueName}
         </h1>
         <ChevronDown
-          className={`w-4 h-4 text-foreground-muted group-hover:text-gold transition-all duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          className={`w-4 h-4 flex-none text-foreground-muted group-hover:text-gold transition-all duration-200 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 

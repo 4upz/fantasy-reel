@@ -21,6 +21,11 @@ interface Props {
   overridePoints?: number | null
 }
 
+/**
+ * A roster row inside an expanded standings team. The badge on the poster is the
+ * only thing that says how the movie was acquired, so the row itself carries no
+ * section heading - the three of them read as one list.
+ */
 export default function MovieScoreCard({ movie, badge, isCounterpicked = false, overridePoints }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
@@ -31,23 +36,25 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
   const isPositive = hasScore && displayPoints! >= 0
 
   const releaseDate = movie.release_date ? formatDate(movie.release_date) : 'TBA'
+  const pointsLabel = hasScore ? 'Points' : isReleased ? 'Pending' : 'Upcoming'
 
   return (
-    <div className="flex gap-4 p-4 bg-elevated/50 rounded-xl border border-border hover:border-border-hover transition-colors">
-      {/* Movie Poster */}
-      <div className="relative w-16 sm:w-20 flex-shrink-0">
-        <div className="aspect-[2/3] rounded-lg overflow-hidden bg-surface">
+    <div
+      className="flex flex-none items-center gap-3 rounded-xl border border-border bg-background p-2.5"
+      data-testid={`movie-score-card-${badge.type}`}
+    >
+      {/* Poster */}
+      <div className="relative h-[66px] w-11 flex-none">
+        <div className="h-full w-full overflow-hidden rounded-lg bg-elevated">
           {movie.poster_url && !imageError ? (
             <>
-              {!imageLoaded && (
-                <div className="absolute inset-0 bg-surface animate-shimmer" />
-              )}
+              {!imageLoaded && <div className="absolute inset-0 animate-shimmer rounded-lg bg-elevated" />}
               <Image
                 src={movie.poster_url}
                 alt={movie.title}
                 fill
-                sizes="80px"
-                className={`object-cover transition-opacity duration-300 ${
+                sizes="44px"
+                className={`rounded-lg object-cover transition-opacity duration-300 ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 }`}
                 onLoad={() => setImageLoaded(true)}
@@ -55,9 +62,9 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
               />
             </>
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="flex h-full w-full items-center justify-center">
               <svg
-                className="w-6 h-6 text-foreground-muted"
+                className="h-[18px] w-[18px] text-foreground-muted"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
@@ -72,80 +79,58 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
             </div>
           )}
         </div>
-        {/* Badge */}
+
+        {/* Acquisition badge */}
         {badge.type === 'draft' && (
-          <div className="absolute -top-2 -left-2 w-6 h-6 bg-surface border border-border rounded-full flex items-center justify-center">
-            <span className="text-[10px] font-bold text-foreground-muted">
-              {badge.round}.{badge.pick}
-            </span>
+          <div className="absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-border bg-surface px-[5px] text-[10px] font-bold text-foreground-muted">
+            {badge.round}.{badge.pick}
           </div>
         )}
         {badge.type === 'pickup' && (
-          <div className="absolute -top-2 -left-2 h-6 px-1.5 bg-gold/20 border border-gold/40 rounded-full flex items-center justify-center">
-            <span className="text-[10px] font-bold text-gold">
-              ${badge.amount}
-            </span>
+          <div className="absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-gold/40 bg-gold/20 px-[5px] text-[10px] font-bold text-gold">
+            ${badge.amount}
           </div>
         )}
         {badge.type === 'counterpick' && (
-          <div className="absolute -top-2 -left-2 w-6 h-6 bg-crimson/20 border border-crimson/40 rounded-full flex items-center justify-center">
-            <Target className="w-3 h-3 text-crimson" />
+          <div className="absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-crimson/40 bg-crimson/20 px-[5px] text-crimson">
+            <Target className="h-3 w-3" />
           </div>
         )}
-        {/* Counterpicked Indicator */}
+
+        {/* Taken by an opponent's counterpick */}
         {isCounterpicked && (
           <div
-            className="absolute -top-2 -right-2 w-6 h-6 bg-crimson/90 border border-crimson rounded-full flex items-center justify-center"
+            className="absolute -top-[7px] -right-[7px] flex h-[22px] w-[22px] items-center justify-center rounded-full border border-crimson bg-crimson/90 text-foreground"
             title="Counterpicked by opponent"
           >
-            <Target className="w-3.5 h-3.5 text-white" />
+            <Target className="h-3 w-3" />
           </div>
         )}
       </div>
 
-      {/* Movie Info */}
-      <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-foreground truncate" title={movie.title}>
+      {/* Title, date, Tomatometer */}
+      <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
+        <div className="truncate text-sm font-semibold text-foreground" title={movie.title}>
           {movie.title}
-        </h4>
-        <div className="flex items-center gap-2 mt-1 text-sm text-foreground-muted">
-          <span>{releaseDate}</span>
-          {badge.type === 'counterpick' && (
-            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-crimson/10 text-crimson border border-crimson/20 rounded flex items-center gap-1">
-              <Target className="w-2.5 h-2.5" />
-              vs. {badge.targetTeam}
-            </span>
-          )}
-          {!isReleased && (
-            <span className="px-1.5 py-0.5 text-[10px] font-medium bg-warning/10 text-warning border border-warning/20 rounded">
-              Upcoming
-            </span>
-          )}
         </div>
-
-        {/* Tomatometer - the only score that drives points */}
-        <TomatometerScore score={movie.combined_score} size="lg" className="mt-3" />
+        <div className="truncate text-xs text-foreground-muted">
+          {releaseDate}
+          {badge.type === 'counterpick' && ` · vs. ${badge.targetTeam}`}
+        </div>
+        {/* The accolade is too wide for this column; the gold pill still marks the tier */}
+        <TomatometerScore score={movie.combined_score} size="md" showAccolade={false} className="self-start" />
       </div>
 
-      {/* Fantasy Points */}
-      <div className="flex flex-col items-center justify-center pl-4 border-l border-border">
-        {hasScore ? (
-          <>
-            <div className={`text-3xl font-bold font-display ${isPositive ? 'text-gold' : 'text-crimson'}`}>
-              {formatFantasyPoints(displayPoints!)}
-            </div>
-            <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
-              Points
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="text-2xl font-bold font-display text-foreground-muted">--</div>
-            <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
-              {isReleased ? 'Pending' : 'Upcoming'}
-            </div>
-          </>
-        )}
+      {/* Fantasy points */}
+      <div className="flex-none border-l border-border pl-2.5 text-right">
+        <div
+          className={`font-display text-xl font-bold ${
+            !hasScore ? 'text-foreground-muted' : isPositive ? 'text-gold' : 'text-crimson'
+          }`}
+        >
+          {formatFantasyPoints(displayPoints)}
+        </div>
+        <div className="text-[9px] uppercase tracking-[0.08em] text-foreground-muted">{pointsLabel}</div>
       </div>
     </div>
   )

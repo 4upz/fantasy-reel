@@ -1,67 +1,49 @@
 'use client'
 
-import { useState } from 'react'
 import Image from 'next/image'
-import { Target, Trophy, ShoppingCart } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
+import { formatFantasyPoints } from '@/utils/scoring'
 import type { RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
 
 interface Props {
   rankedTeam: RankedTeamFull
   isCurrentUser: boolean
+  isExpanded: boolean
+  onToggle: () => void
   animationDelay?: number
 }
 
-const PODIUM_STYLES: Record<number, { gradient: string; shadow: string }> = {
-  1: {
-    gradient: 'bg-gradient-to-br from-[#ffd700] via-[#c9a227] to-[#a88c1f]',
-    shadow: 'shadow-lg shadow-gold/20',
-  },
-  2: {
-    gradient: 'bg-gradient-to-br from-[#e8e8e8] via-[#c0c0c0] to-[#a8a8a8]',
-    shadow: 'shadow-lg shadow-white/10',
-  },
-  3: {
-    gradient: 'bg-gradient-to-br from-[#cd9b61] via-[#cd7f32] to-[#a56b2d]',
-    shadow: 'shadow-lg shadow-orange-900/20',
-  },
+/**
+ * Ranks 1-3 get the medal gradient. Everything below is a plain elevated chip -
+ * a podium that includes eighth place isn't a podium.
+ */
+const PODIUM_CHIP: Record<number, string> = {
+  1: 'bg-[linear-gradient(135deg,#ffd700,#a88c1f)] text-background',
+  2: 'bg-[linear-gradient(135deg,#e8e8e8,#a8a8a8)] text-background',
+  3: 'bg-[linear-gradient(135deg,#cd9b61,#a56b2d)] text-background',
 }
 
-function formatFantasyPoints(points: number): string {
-  const rounded = Math.round(points)
-  return rounded >= 0 ? `+${rounded}` : `${rounded}`
+function pointsTone(points: number): string {
+  return points >= 0 ? 'text-gold' : 'text-crimson'
 }
 
-function RankBadge({ rank, isTied }: { rank: number; isTied: boolean }): React.ReactElement {
-  const prefix = isTied ? 'T' : '#'
-  const podiumStyle = PODIUM_STYLES[rank]
-
-  if (podiumStyle) {
-    return (
-      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex-shrink-0 ${podiumStyle.gradient} flex items-center justify-center ${podiumStyle.shadow}`}>
-        <span className="text-lg font-bold font-display text-background">
-          {prefix}{rank}
-        </span>
-      </div>
-    )
-  }
-
+/** One segment of the points total. Value colour tells you which way it pulled. */
+function BreakdownChip({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex-shrink-0 bg-elevated border border-border flex items-center justify-center">
-      <span className="text-lg font-bold font-display text-foreground-secondary">
-        {prefix}{rank}
-      </span>
-    </div>
+    <span className="rounded-lg bg-elevated px-2 py-[3px] text-[11px] text-foreground-secondary">
+      {label} <span className={`font-semibold ${tone}`}>{formatFantasyPoints(value)}</span>
+    </span>
   )
 }
 
 export default function TeamStandingCard({
   rankedTeam,
   isCurrentUser,
+  isExpanded,
+  onToggle,
   animationDelay = 0,
 }: Props) {
-  const [isExpanded, setIsExpanded] = useState(false)
-
   const { rank, participant, draftPicks, pickups, counterpicks, isTied } = rankedTeam
   const team = participant.teams
   const teamScore = team?.team_scores
@@ -71,15 +53,13 @@ export default function TeamStandingCard({
   const draftPoints = teamScore?.draft_points ?? 0
   const pickupPoints = teamScore?.pickup_points ?? 0
   const counterpickPoints = teamScore?.counterpick_points ?? 0
-  const counterpicksMade = teamScore?.counterpicks_made ?? 0
   const moviesScored = teamScore?.movies_scored ?? 0
   const moviesPending = teamScore?.movies_pending ?? 0
-  const averageScore = teamScore?.average_score ?? 0
-  const isPositive = totalPoints >= 0
+  const movieCount = draftPicks.length + pickups.length
 
   const displayName = team?.name || profile?.display_name || 'Unnamed Team'
+  const ownerHandle = team?.name ? profile?.display_name : null
 
-  // Get initials for avatar fallback
   const initials = displayName
     .split(' ')
     .map((word) => word[0])
@@ -87,261 +67,127 @@ export default function TeamStandingCard({
     .slice(0, 2)
     .toUpperCase()
 
+  const panelId = `team-movies-${team?.id}`
+
   return (
     <div
-      className={`card overflow-hidden transition-all duration-300 animate-slide-up ${
-        isCurrentUser ? 'ring-1 ring-gold/30' : ''
+      className={`flex-none animate-slide-up overflow-hidden rounded-2xl border bg-surface ${
+        isCurrentUser ? 'border-gold/35' : 'border-border'
       }`}
       style={{ animationDelay: `${animationDelay}ms` }}
       data-testid={`team-row-${team?.id}`}
     >
-      {/* Main Card Header */}
       <button
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={onToggle}
         aria-expanded={isExpanded}
-        aria-controls={`team-movies-${team?.id}`}
-        className="w-full p-4 sm:p-5 flex items-center gap-3 sm:gap-4 hover:bg-surface-hover transition-colors text-left"
+        aria-controls={panelId}
+        className="flex w-full flex-col gap-2.5 p-3.5 text-left transition-colors hover:bg-surface-hover"
       >
-        {/* Rank Badge */}
-        <RankBadge rank={rank} isTied={isTied} />
+        {/* Line 1 - identity and the one big number */}
+        <div className="flex items-center gap-2.5">
+          <div
+            className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] font-display text-sm font-bold ${
+              PODIUM_CHIP[rank] ?? 'border border-border bg-elevated text-foreground-secondary'
+            }`}
+          >
+            {isTied ? 'T' : '#'}
+            {rank}
+          </div>
 
-        {/* Team Avatar */}
-        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full overflow-hidden bg-gold-muted border-2 border-gold flex-shrink-0 relative">
-          {team?.avatar_url ? (
-            <Image
-              src={team.avatar_url}
-              alt={displayName}
-              fill
-              sizes="48px"
-              className="object-cover"
-              unoptimized
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <span className="text-sm font-display font-bold text-gold">{initials}</span>
+          <div className="relative h-[34px] w-[34px] flex-none overflow-hidden rounded-full border-[1.5px] border-gold bg-gold-muted">
+            {team?.avatar_url ? (
+              <Image src={team.avatar_url} alt={displayName} fill sizes="34px" className="object-cover" unoptimized />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center font-display text-xs font-bold text-gold">
+                {initials}
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-display text-[15px] font-semibold text-foreground">{displayName}</span>
+              {isCurrentUser && (
+                <span className="flex-none rounded-full bg-gold-muted px-1.5 py-px text-[10px] font-semibold text-gold">
+                  You
+                </span>
+              )}
             </div>
-          )}
-        </div>
-
-        {/* Team Info */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 min-w-0">
-            {/* Narrow screens have the vertical room to wrap rather than truncate */}
-            <h3 className="font-semibold font-display text-foreground line-clamp-2 sm:line-clamp-none sm:truncate">
-              {displayName}
-            </h3>
-            {isCurrentUser && (
-              <span className="px-2 py-0.5 text-[10px] font-medium bg-gold-muted text-gold rounded-full">
-                You
-              </span>
-            )}
+            {ownerHandle && <div className="truncate text-xs text-foreground-muted">{ownerHandle}</div>}
           </div>
-          {profile?.display_name && team?.name && (
-            <p className="text-xs text-foreground-muted truncate">{profile.display_name}</p>
-          )}
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-sm text-foreground-muted">
-            <span>{draftPicks.length + pickups.length} movies</span>
-            {counterpicks.length > 0 && (
-              <>
-                <span className="text-foreground-muted/50">|</span>
-                <span className="flex items-center gap-1">
-                  <Target className="w-3 h-3 text-crimson" />
-                  {counterpicks.length}
-                </span>
-              </>
-            )}
-            <span className="text-foreground-muted/50">|</span>
-            <span>
-              {moviesScored} scored, {moviesPending} pending
-            </span>
-          </div>
-        </div>
 
-        {/* Stats */}
-        <div className="hidden sm:flex items-center gap-6 text-center">
-          <div>
-            <div className="text-sm text-foreground-muted">Avg</div>
-            <div className={`text-lg font-semibold ${moviesScored > 0 && averageScore < 0 ? 'text-crimson' : 'text-foreground-secondary'}`}>
-              {moviesScored > 0 ? (averageScore >= 0 ? '+' : '') + averageScore.toFixed(1) : '--'}
+          <div className="flex-none text-right">
+            <div className={`font-display text-[28px] font-bold leading-none ${pointsTone(totalPoints)}`}>
+              {formatFantasyPoints(totalPoints)}
             </div>
+            <div className="mt-0.5 text-[9px] uppercase tracking-[0.1em] text-foreground-muted">Points</div>
           </div>
         </div>
 
-        {/* Total Points */}
-        <div className="text-right flex-shrink-0">
-          <div className={`text-3xl sm:text-4xl font-bold font-display ${isPositive ? 'text-gold' : 'text-crimson'}`}>
-            {formatFantasyPoints(totalPoints)}
-          </div>
-          <div className="text-[10px] text-foreground-muted uppercase tracking-wide">
-            Points
-          </div>
-          {/* Points Breakdown - too wide for mobile, where the team name needs the room */}
-          <div className="hidden sm:flex text-xs text-foreground-muted mt-1 items-center justify-end gap-2">
-            <span className={draftPoints >= 0 ? 'text-gold' : 'text-crimson'}>
-              Draft: {formatFantasyPoints(draftPoints)}
-            </span>
-            {pickups.length > 0 && (
-              <>
-                <span className="text-foreground-muted/50">|</span>
-                <span className="flex items-center gap-1">
-                  <ShoppingCart className="w-3 h-3 text-gold" />
-                  <span className={pickupPoints >= 0 ? 'text-gold' : 'text-crimson'}>
-                    {formatFantasyPoints(pickupPoints)}
-                  </span>
-                </span>
-              </>
-            )}
-            {counterpicksMade > 0 && (
-              <>
-                <span className="text-foreground-muted/50">|</span>
-                <span className="flex items-center gap-1">
-                  <Target className="w-3 h-3 text-crimson" />
-                  <span className={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}>
-                    {formatFantasyPoints(counterpickPoints)}
-                  </span>
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Expand Arrow */}
-        <div className="ml-0 sm:ml-2 flex-shrink-0">
-          <svg
-            className={`w-5 h-5 text-foreground-muted transition-transform duration-300 ${
+        {/* Line 2 - stat strip, on its own line so nothing collides with the points */}
+        <div className="flex items-center gap-2 border-t border-border pt-[9px]">
+          <span className="text-xs text-foreground-secondary">{movieCount} movies</span>
+          <span className="h-[3px] w-[3px] flex-none rounded-full bg-border-hover" />
+          <span className="truncate text-xs text-foreground-muted">
+            {moviesScored} scored · {moviesPending} pending
+          </span>
+          <span className="flex-1" />
+          <ChevronDown
+            className={`h-4 w-4 flex-none text-foreground-muted transition-transform duration-300 ${
               isExpanded ? 'rotate-180' : ''
             }`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          />
         </div>
       </button>
 
-      {/* Expanded Movies List */}
-      <div
-        id={`team-movies-${team?.id}`}
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${
-          isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
-        }`}
-      >
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 border-t border-border">
-          {/* Points breakdown, which the header hides on mobile for space */}
-          <div className="sm:hidden pt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground-muted">
-            <span>
-              Avg{' '}
-              <span className={moviesScored > 0 && averageScore < 0 ? 'text-crimson' : 'text-foreground-secondary'}>
-                {moviesScored > 0 ? (averageScore >= 0 ? '+' : '') + averageScore.toFixed(1) : '--'}
-              </span>
-            </span>
-            <span className="text-foreground-muted/50">|</span>
-            <span className={draftPoints >= 0 ? 'text-gold' : 'text-crimson'}>
-              Draft: {formatFantasyPoints(draftPoints)}
-            </span>
-            {pickups.length > 0 && (
-              <>
-                <span className="text-foreground-muted/50">|</span>
-                <span className="flex items-center gap-1">
-                  <ShoppingCart className="w-3 h-3 text-gold" />
-                  <span className={pickupPoints >= 0 ? 'text-gold' : 'text-crimson'}>
-                    {formatFantasyPoints(pickupPoints)}
-                  </span>
-                </span>
-              </>
-            )}
-            {counterpicksMade > 0 && (
-              <>
-                <span className="text-foreground-muted/50">|</span>
-                <span className="flex items-center gap-1">
-                  <Target className="w-3 h-3 text-crimson" />
-                  <span className={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}>
-                    {formatFantasyPoints(counterpickPoints)}
-                  </span>
-                </span>
-              </>
-            )}
+      {isExpanded && (
+        <div
+          id={panelId}
+          className="flex animate-fade-in flex-col gap-2.5 border-t border-border px-3.5 pt-3 pb-3.5"
+        >
+          {/* The breakdown lives here rather than in the collapsed row - it is
+              detail you go looking for, not something to scan the table by. */}
+          <div className="flex flex-wrap gap-1.5">
+            <BreakdownChip label="Draft" value={draftPoints} tone={pointsTone(draftPoints)} />
+            <BreakdownChip label="Pickups" value={pickupPoints} tone={pointsTone(pickupPoints)} />
+            <BreakdownChip
+              label="Counterpicks"
+              value={counterpickPoints}
+              tone={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}
+            />
           </div>
 
-          {/* Draft Picks Section */}
-          <div className="pt-4">
-            <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground-secondary mb-3">
-              <Trophy className="w-4 h-4 text-gold" />
-              Draft Picks ({draftPicks.length})
-            </h4>
-            <div className="space-y-3">
-              {draftPicks.length > 0 ? (
-                draftPicks.map((pick) => (
-                  <MovieScoreCard
-                    key={pick.id}
-                    movie={pick.movies}
-                    badge={{ type: 'draft', round: pick.round, pick: pick.pick_number }}
-                    isCounterpicked={!!pick.counterpicked_by_team_id}
-                  />
-                ))
-              ) : (
-                <div className="py-4 text-center text-foreground-muted text-sm">
-                  No movies drafted yet
-                </div>
-              )}
-            </div>
-          </div>
+          {draftPicks.map((pick) => (
+            <MovieScoreCard
+              key={pick.id}
+              movie={pick.movies}
+              badge={{ type: 'draft', round: pick.round, pick: pick.pick_number }}
+              isCounterpicked={!!pick.counterpicked_by_team_id}
+            />
+          ))}
 
-          {/* Pickups Section */}
-          {pickups.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground-secondary mb-3">
-                <ShoppingCart className="w-4 h-4 text-gold" />
-                Pickups ({pickups.length})
-              </h4>
-              <div className="space-y-3">
-                {pickups.map((pickup) => (
-                  <MovieScoreCard
-                    key={pickup.id}
-                    movie={pickup.movies}
-                    badge={{ type: 'pickup', amount: pickup.amount_paid }}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          {pickups.map((pickup) => (
+            <MovieScoreCard
+              key={pickup.id}
+              movie={pickup.movies}
+              badge={{ type: 'pickup', amount: pickup.amount_paid }}
+            />
+          ))}
 
-          {/* Counterpicks Section */}
-          {counterpicks.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <h4 className="flex items-center gap-2 text-sm font-semibold text-foreground-secondary mb-3">
-                <Target className="w-4 h-4 text-crimson" />
-                Counterpicks ({counterpicks.length})
-              </h4>
-              <div className="space-y-3">
-                {counterpicks.map((cp) => (
-                  <MovieScoreCard
-                    key={cp.id}
-                    movie={cp.movies}
-                    badge={{ type: 'counterpick', targetTeam: cp.target_team.name }}
-                    overridePoints={cp.fantasy_points}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+          {counterpicks.map((cp) => (
+            <MovieScoreCard
+              key={cp.id}
+              movie={cp.movies}
+              badge={{ type: 'counterpick', targetTeam: cp.target_team.name }}
+              overridePoints={cp.fantasy_points}
+            />
+          ))}
 
-          {/* Scoring Formula Info */}
-          {(draftPicks.length > 0 || pickups.length > 0) && (
-            <div className="mt-4 pt-4 border-t border-border">
-              <div className="text-center text-[11px] text-foreground-muted space-y-1">
-                <div>Fantasy points based on the Rotten Tomatoes Tomatometer</div>
-                <div className="flex items-center justify-center gap-4">
-                  <span className="text-gold">90%+: +30 base +2/pt</span>
-                  <span className="text-foreground-secondary">60-89%: +1/pt above 60</span>
-                  <span className="text-crimson">&lt;60%: -1/pt, tapering</span>
-                </div>
-              </div>
-            </div>
+          {movieCount === 0 && counterpicks.length === 0 && (
+            <p className="py-3 text-center text-sm text-foreground-muted">No movies drafted yet</p>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

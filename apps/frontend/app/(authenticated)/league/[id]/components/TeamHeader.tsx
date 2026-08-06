@@ -1,4 +1,5 @@
 import { Trophy, Pencil } from 'lucide-react'
+import { formatFantasyPoints } from '@/utils/scoring'
 import type { DashboardTeam } from '@/types'
 
 interface Props {
@@ -11,11 +12,6 @@ const RANK_STYLES: Record<number, { bg: string; text: string; icon: boolean }> =
   1: { bg: 'bg-gold/20', text: 'text-gold', icon: true },
   2: { bg: 'bg-[#a8a8a8]/20', text: 'text-[#a8a8a8]', icon: true },
   3: { bg: 'bg-[#cd7f32]/20', text: 'text-[#cd7f32]', icon: true },
-}
-
-function formatFantasyPoints(points: number): string {
-  const rounded = Math.round(points)
-  return rounded >= 0 ? `+${rounded}` : `${rounded}`
 }
 
 export default function TeamHeader({ team, totalTeams, onEditTeam }: Props) {

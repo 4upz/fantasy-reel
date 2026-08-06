@@ -10,13 +10,13 @@ import { test, expect } from '../../fixtures/league.fixture'
  * Key UI elements:
  * - team-row-{id}: Individual team standing cards (TeamStandingCard)
  *
- * IMPORTANT: Scores are displayed with formatFantasyPoints() which adds a "+"
- * prefix for positive values. So score 150 displays as "+150".
+ * IMPORTANT: formatFantasyPoints() renders positives unsigned - 150 displays as
+ * "150". Only negatives keep a sign; colour carries it otherwise.
  *
  * Fixture scores:
- * - Owner Team: 150 (displays as "+150")
- * - Test Team: 120 (displays as "+120")
- * - Second Team: 80 (displays as "+80")
+ * - Owner Team: 150
+ * - Test Team: 120
+ * - Second Team: 80
  */
 
 test.describe('Leaderboard Page @standings', () => {
@@ -46,13 +46,12 @@ test.describe('Leaderboard Page @standings', () => {
     expect(count).toBeGreaterThanOrEqual(2)
 
     // Verify ordering: first team should have higher score than second
-    // Scores are displayed with + prefix: "+150", "+120", "+80"
     const firstTeamText = await teamElements.nth(0).textContent()
     const secondTeamText = await teamElements.nth(1).textContent()
 
-    // The highest score team (Owner Team, +150) should be first
-    expect(firstTeamText).toContain('+150')
-    expect(secondTeamText).toContain('+120')
+    // The highest score team (Owner Team, 150) should be first
+    expect(firstTeamText).toContain('150')
+    expect(secondTeamText).toContain('120')
   })
 
   test('displays team scores', async ({ authedPage, scoredLeague }) => {
@@ -62,10 +61,10 @@ test.describe('Leaderboard Page @standings', () => {
     const teamRows = authedPage.locator('[data-testid^="team-row-"]')
     await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
 
-    // Verify scores are displayed (with + prefix from formatFantasyPoints)
-    await expect(authedPage.getByText('+150')).toBeVisible()
-    await expect(authedPage.getByText('+120')).toBeVisible()
-    await expect(authedPage.getByText('+80')).toBeVisible()
+    // Verify scores are displayed (unsigned, per formatFantasyPoints)
+    await expect(authedPage.getByText('150', { exact: true })).toBeVisible()
+    await expect(authedPage.getByText('120', { exact: true })).toBeVisible()
+    await expect(authedPage.getByText('80', { exact: true })).toBeVisible()
   })
 
   test('current user team is identifiable', async ({
@@ -150,10 +149,10 @@ test.describe('Score Ordering @standings', () => {
     const teamRows = authedPage.locator('[data-testid^="team-row-"]')
     await expect(teamRows.first()).toBeVisible({ timeout: 10000 })
 
-    // Verify all three scores are displayed (with + prefix)
-    await expect(authedPage.getByText('+150')).toBeVisible()
-    await expect(authedPage.getByText('+120')).toBeVisible()
-    await expect(authedPage.getByText('+80')).toBeVisible()
+    // Verify all three scores are displayed (unsigned, per formatFantasyPoints)
+    await expect(authedPage.getByText('150', { exact: true })).toBeVisible()
+    await expect(authedPage.getByText('120', { exact: true })).toBeVisible()
+    await expect(authedPage.getByText('80', { exact: true })).toBeVisible()
 
     // Verify teams are in correct order by checking team-row DOM order
     const count = await teamRows.count()
@@ -164,14 +163,16 @@ test.describe('Score Ordering @standings', () => {
     const thirdRowText = await teamRows.nth(2).textContent()
 
     // Higher scores should appear first
-    expect(firstRowText).toContain('+150')
-    expect(secondRowText).toContain('+120')
-    expect(thirdRowText).toContain('+80')
+    expect(firstRowText).toContain('150')
+    expect(secondRowText).toContain('120')
+    expect(thirdRowText).toContain('80')
   })
 })
 
 test.describe('Full Roster Display @standings', () => {
-  test('expanded team shows Draft Picks section header', async ({
+  // The expanded panel is a flat list - how a movie was acquired is carried by the
+  // poster badge (and its data-testid), not by a section header.
+  test('expanded team shows its draft picks and points breakdown', async ({
     authedPage,
     scoredLeagueWithFullRoster,
   }) => {
@@ -183,10 +184,11 @@ test.describe('Full Roster Display @standings', () => {
     // Expand the first team
     await teamRows.first().click()
 
-    // Scope to the expanded team row to avoid matching hidden sections in other cards
+    // Scope to the expanded team row to avoid matching other cards
     await expect(
-      teamRows.first().getByText(/Draft Picks \(\d+\)/)
+      teamRows.first().getByTestId('movie-score-card-draft').first()
     ).toBeVisible({ timeout: 5000 })
+    await expect(teamRows.first().getByText('Draft', { exact: false }).first()).toBeVisible()
   })
 
   test('expanded team with pickup shows Pickups section', async ({
@@ -205,9 +207,9 @@ test.describe('Full Roster Display @standings', () => {
     await expect(testTeamRow).toBeVisible({ timeout: 5000 })
     await testTeamRow.click()
 
-    // Verify Pickups section header appears within this team's card
+    // Verify a pickup-badged movie row appears within this team's card
     await expect(
-      testTeamRow.getByText(/Pickups \(\d+\)/)
+      testTeamRow.getByTestId('movie-score-card-pickup').first()
     ).toBeVisible({ timeout: 5000 })
 
     // Verify the pickup movie title is shown within this team's card
@@ -231,9 +233,9 @@ test.describe('Full Roster Display @standings', () => {
     await expect(secondTeamRow).toBeVisible({ timeout: 5000 })
     await secondTeamRow.click()
 
-    // Verify Counterpicks section header appears within this team's card
+    // Verify a counterpick-badged movie row appears within this team's card
     await expect(
-      secondTeamRow.getByText(/Counterpicks \(\d+\)/)
+      secondTeamRow.getByTestId('movie-score-card-counterpick').first()
     ).toBeVisible({ timeout: 5000 })
 
     // Verify the counterpick movie title is shown within this team's card
