@@ -117,7 +117,7 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
           {releaseDate}
           {badge.type === 'counterpick' && ` · vs. ${badge.targetTeam}`}
         </div>
-        {/* The accolade is too wide for this column; the gold pill still marks the tier */}
+        {/* The laurels are too wide for this column, so the pill shimmers instead */}
         <TomatometerScore score={movie.combined_score} size="md" showAccolade={false} className="self-start" />
       </div>
 
