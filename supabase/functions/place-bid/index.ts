@@ -4,6 +4,7 @@ import {
   errorResponse,
   handleCorsPreflightRequest,
   isValidUUID,
+  isUpcomingMovie,
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
@@ -128,12 +129,39 @@ Deno.serve(async (req) => {
       return errorResponse('No pickup slots available', 400)
     }
 
+    // Look up the movie by tmdb_id in case it's already in our DB (e.g. drafted,
+    // or bid on before), so the release-date and eligibility checks below can
+    // use the authoritative row instead of client-supplied data.
+    const { data: existingMovie } = await serviceClient
+      .from('movies')
+      .select('id, release_date')
+      .eq('tmdb_id', tmdb_id)
+      .maybeSingle()
+
+    // movie_data is client-supplied and only trusted when no `movies` row
+    // exists yet for this tmdb_id. process-bids rechecks before awarding, but
+    // that recheck is only authoritative for a movie that already has a `movies`
+    // row -- for one first seen at processing time it re-validates this same
+    // client data against itself (see the note there). So a forged release_date
+    // on a movie we have never seen is not caught by either layer today.
+    // Prefer the DB row's release_date once the movie exists;
+    // only fall back to this request's own movie_data when it doesn't. We do
+    // NOT fall back to movie_data captured by an earlier/other bid: that data
+    // could be stale (the movie may have since released) and isn't scoped to
+    // this caller, so trusting it would reopen the release-date exploit this
+    // guard exists to close.
+    const releaseDateToCheck = existingMovie ? existingMovie.release_date : movie_data?.release_date
+    const releaseCheck = isUpcomingMovie(releaseDateToCheck)
+    if (!releaseCheck.valid) {
+      return errorResponse(`Cannot bid on this movie: ${releaseCheck.reason}`, 400)
+    }
+
     // Check movie eligibility
     const { data: isEligible } = await serviceClient
       .rpc('is_movie_eligible_for_pickup', {
         p_league_id: league_id,
         p_tmdb_id: tmdb_id,
-        p_movie_id: null,
+        p_movie_id: existingMovie?.id ?? null,
       })
 
     if (!isEligible) {

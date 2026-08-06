@@ -56,6 +56,18 @@ export function isWithinDays(date: string | null, days: number): boolean {
 }
 
 /**
+ * Check if a movie is still eligible to bid or counterpick on: it must have a
+ * known release date that has not yet passed. Mirrors the server-side release
+ * guard (`isUpcomingMovie` in supabase/functions/_shared/utils.ts) so a stale
+ * client-side movie list can't submit an already-released title.
+ */
+export function isMovieBiddable(releaseDate: string | null): boolean {
+  if (!releaseDate) return false
+  const today = new Date().toISOString().split('T')[0]
+  return releaseDate >= today
+}
+
+/**
  * Check if a date is before end of current year
  */
 export function isThisYear(date: string | null): boolean {

@@ -19,7 +19,7 @@
  */
 // Trigger deploy
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
@@ -77,7 +77,8 @@ interface CounterpickBid {
   team_id: string
   movie_id: string
   target_team_id: string
-  draft_pick_id: string
+  draft_pick_id: string | null
+  pickup_id: string | null
   amount: number
   /** Team-chosen rank among its own pending bids; 1 is the one it wants most. */
   priority: number
@@ -107,6 +108,21 @@ interface BidResultSummary {
   winner_team_id: string
   amount: number
   movie_title: string
+}
+
+// A winning bid that was voided at processing time because the movie released
+// while the bid was pending (bids can sit for up to a week - see
+// get_next_processing_deadline). Placement-time checks can't catch this since
+// the movie may not have released yet when the bid was placed.
+interface VoidedBidResult {
+  bid_id: string
+  league_id: string
+  team_id: string
+  amount: number
+  movie_title: string
+  reason: string
+  tmdb_id?: number
+  movie_id?: string
 }
 
 // deno-lint-ignore no-explicit-any
@@ -304,6 +320,38 @@ async function getTeamUserId(
     .single()
 
   return (team?.league_participants as unknown as { user_id: string })?.user_id ?? null
+}
+
+/**
+ * Notify a team's owner that their bid was voided at processing time because the
+ * movie released while the bid was pending. Reuses the 'bid_lost' notification
+ * type since no dedicated type exists for this case; `data.reason` is set to
+ * 'movie_released' so the frontend can special-case the copy later.
+ */
+async function notifyVoidedBidder(
+  serviceClient: ServiceClient,
+  bid: { id: string; league_id: string; team_id: string; amount: number },
+  movieTitle: string,
+  reason: string,
+  extraData: Record<string, unknown>,
+): Promise<void> {
+  const bidderUserId = await getTeamUserId(serviceClient, bid.team_id)
+  if (!bidderUserId) return
+
+  await serviceClient.from('notifications').insert({
+    user_id: bidderUserId,
+    league_id: bid.league_id,
+    type: 'bid_lost',
+    title: `Bid cancelled for ${movieTitle}`,
+    body: `${movieTitle} was released before your bid of $${bid.amount} could be processed. Your bid was cancelled and your budget was not charged.`,
+    data: {
+      bid_id: bid.id,
+      amount: bid.amount,
+      reason: 'movie_released',
+      release_check_reason: reason,
+      ...extraData,
+    },
+  })
 }
 
 async function getRecipient(
@@ -509,6 +557,96 @@ async function loadSettledCounterpickContests(
 }
 
 /**
+ * Drop every contest whose target movie has already released, cancelling all of
+ * that contest's bids.
+ *
+ * Bids can sit pending for up to a week, so a movie that was legitimately
+ * upcoming at placement time may have released by now. The `movies` row is the
+ * authoritative release date here -- unlike the client-supplied `movie_data` a
+ * pickup bid carries.
+ *
+ * This runs before slot resolution on purpose: a contest that can never be
+ * awarded must not consume one of the bidder's scarce counterpick slots, which
+ * is exactly what would happen if it were resolved first and voided after.
+ */
+async function voidReleasedCounterpickContests(
+  serviceClient: ServiceClient,
+  contests: CounterpickContest[],
+  bidsByContest: Map<string, CounterpickBid[]>,
+  voided: VoidedBidResult[],
+): Promise<CounterpickContest[]> {
+  const movieIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
+
+  const { rows: movies } = await selectByIdBatches<
+    { id: string; title: string; release_date: string | null }
+  >(
+    movieIds,
+    'Failed to read movies for the counterpick release check:',
+    (batch) => serviceClient.from('movies').select('id, title, release_date').in('id', batch),
+  )
+  const moviesById = new Map(movies.map((movie) => [movie.id, movie]))
+
+  const surviving: CounterpickContest[] = []
+
+  for (const contest of contests) {
+    const [, movieId] = contest.key.split(':')
+    const movie = moviesById.get(movieId)
+
+    // A movie we could not read is left in place so the awarding loop reports it
+    // as an error, rather than voiding real bids on the strength of a failed read.
+    if (!movie) {
+      surviving.push(contest)
+      continue
+    }
+
+    const releaseCheck = isUpcomingMovie(movie.release_date)
+    if (releaseCheck.valid) {
+      surviving.push(contest)
+      continue
+    }
+
+    const movieTitle = movie.title || `Movie ${movieId}`
+    const reason = releaseCheck.reason ?? 'Movie has already been released'
+
+    // Void every bid in the group, not just the leader: once the target has
+    // released none of them can ever be honored, and a bid left 'active' with an
+    // expired deadline would be reconsidered on every later run and would keep
+    // rendering as live in the UI.
+    const bidsToVoid = bidsByContest.get(contest.key) ?? []
+
+    if (bidsToVoid.length > 0) {
+      await serviceClient
+        .from('counterpick_bids')
+        .update({ status: 'cancelled' })
+        .in('id', bidsToVoid.map((bid) => bid.id))
+    }
+
+    for (const bid of bidsToVoid) {
+      await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, {
+        movie_id: movieId,
+        bid_type: 'counterpick',
+      })
+
+      voided.push({
+        bid_id: bid.id,
+        league_id: bid.league_id,
+        team_id: bid.team_id,
+        amount: bid.amount,
+        movie_title: movieTitle,
+        reason,
+        movie_id: movieId,
+      })
+    }
+
+    console.log(
+      `Voided ${bidsToVoid.length} counterpick bid(s) for ${movieTitle}: movie released before processing`
+    )
+  }
+
+  return surviving
+}
+
+/**
  * Award every counterpick contest that is due and tell each losing bidder why.
  *
  * Contests are resolved together rather than one movie at a time. A team can
@@ -520,15 +658,24 @@ async function processCounterpickBids(
   dueBids: CounterpickBid[],
   now: Date,
   errors: ProcessingError[],
+  voided: VoidedBidResult[],
 ): Promise<CounterpickProcessResult[]> {
   const results: CounterpickProcessResult[] = []
   if (dueBids.length === 0) return results
 
-  const { contests, bidsByContest } = await loadSettledCounterpickContests(
+  const { contests: settledContests, bidsByContest } = await loadSettledCounterpickContests(
     serviceClient,
     dueBids,
     now,
     errors
+  )
+  if (settledContests.length === 0) return results
+
+  const contests = await voidReleasedCounterpickContests(
+    serviceClient,
+    settledContests,
+    bidsByContest,
+    voided
   )
   if (contests.length === 0) return results
 
@@ -571,7 +718,11 @@ async function processCounterpickBids(
             counterpicker_team_id: winner.team_id,
             target_team_id: winner.target_team_id,
             movie_id: winner.movie_id,
+            // The winning bid carries exactly one of these (enforced by
+            // counterpick_bids_exactly_one_source), so copying both across
+            // satisfies the matching CHECK on `counterpicks`.
             draft_pick_id: winner.draft_pick_id,
+            pickup_id: winner.pickup_id,
             pick_order: (existingPickOrderCount ?? 0) + 1,
             phase: 'bidding',
             fantasy_points: movie.fantasy_points != null ? -movie.fantasy_points : null,
@@ -583,11 +734,14 @@ async function processCounterpickBids(
           continue
         }
 
-        // Update draft_picks.counterpicked_by_team_id
+        // Flag the source record as counterpicked. A counterpick target is held
+        // either through the draft or through a pickup, and both tables carry a
+        // counterpicked_by_team_id column.
+        const sourceTable = winner.draft_pick_id ? 'draft_picks' : 'pickups'
         await serviceClient
-          .from('draft_picks')
+          .from(sourceTable)
           .update({ counterpicked_by_team_id: winner.team_id })
-          .eq('id', winner.draft_pick_id)
+          .eq('id', winner.draft_pick_id ?? winner.pickup_id)
 
         await deductTeamBudget(serviceClient, winner.team_id, winner.amount)
 
@@ -862,6 +1016,7 @@ Deno.serve(async (req) => {
 
     const results: ProcessResult[] = []
     const errors: ProcessingError[] = []
+    const voidedPickupResults: VoidedBidResult[] = []
 
     for (const key of contestedKeys) {
       const [leagueId, tmdbIdStr] = key.split(':')
@@ -903,14 +1058,16 @@ Deno.serve(async (req) => {
 
         // Create movie if it doesn't exist
         let movieId: string
+        let movieReleaseDate: string | null
         const { data: existingMovie } = await serviceClient
           .from('movies')
-          .select('id')
+          .select('id, release_date')
           .eq('tmdb_id', winner.tmdb_id)
           .single()
 
         if (existingMovie) {
           movieId = existingMovie.id
+          movieReleaseDate = existingMovie.release_date
         } else if (winner.movie_data) {
           const { data: newMovie, error: movieError } = await serviceClient
             .from('movies')
@@ -924,7 +1081,7 @@ Deno.serve(async (req) => {
               vote_average: winner.movie_data.vote_average,
               status: 'upcoming',
             })
-            .select('id')
+            .select('id, release_date')
             .single()
 
           if (movieError || !newMovie) {
@@ -933,9 +1090,58 @@ Deno.serve(async (req) => {
             continue
           }
           movieId = newMovie.id
+          movieReleaseDate = newMovie.release_date
         } else {
           console.error(`No movie data for bid ${winner.id}`)
           errors.push({ movie_key: key, error: 'No movie data available' })
+          continue
+        }
+
+        // Revalidate release date against the authoritative movies row. Bids can
+        // sit pending for up to a week (see get_next_processing_deadline), so a
+        // movie that was upcoming when the bid was placed may have released by
+        // now. This recheck is authoritative for any movie that already had a
+        // `movies` row. For a movie first seen at processing time (no prior row),
+        // the row above was just created from the same client-supplied movie_data
+        // that came with the bid, so this only re-validates that data against
+        // itself - it does not independently verify it. Closing that gap would
+        // need a TMDb round-trip at movie-creation time (draft-pick has the same
+        // trust model); out of scope here.
+        const releaseCheck = isUpcomingMovie(movieReleaseDate)
+        if (!releaseCheck.valid) {
+          const reason = releaseCheck.reason ?? 'Movie has already been released'
+
+          // The movie has released, so no bid on it - winner or otherwise - can
+          // ever be honored. Void the entire group, not just the winner, or the
+          // losing bids strand as 'active' forever (they'd only surface again if
+          // some other bid on the same released movie were ever re-evaluated).
+          const bidsToVoid = allBidsForMovie || []
+          const bidIdsToVoid = bidsToVoid.map((b) => b.id)
+
+          await serviceClient
+            .from('pickup_bids')
+            .update({ status: 'cancelled' })
+            .in('id', bidIdsToVoid)
+
+          for (const bid of bidsToVoid) {
+            await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, {
+              tmdb_id: bid.tmdb_id,
+              movie_id: movieId,
+            })
+
+            voidedPickupResults.push({
+              bid_id: bid.id,
+              league_id: bid.league_id,
+              team_id: bid.team_id,
+              amount: bid.amount,
+              movie_title: movieTitle,
+              reason,
+              tmdb_id: bid.tmdb_id,
+              movie_id: movieId,
+            })
+          }
+
+          console.log(`Voided ${bidIdsToVoid.length} pickup bid(s) for ${movieTitle}: movie released before processing`)
           continue
         }
 
@@ -1082,11 +1288,14 @@ Deno.serve(async (req) => {
       console.error(`Failed to fetch ${mode} counterpick bids:`, counterpickBidsError)
     }
 
+    const voidedCounterpickResults: VoidedBidResult[] = []
+
     const counterpickResults = await processCounterpickBids(
       serviceClient,
       counterpickBidsToProcess,
       now,
-      errors
+      errors,
+      voidedCounterpickResults
     )
 
     await sendBidResultsDiscordNotifications(serviceClient, results, 'Bidding Results', 'movie', 'Won by')
@@ -1102,17 +1311,25 @@ Deno.serve(async (req) => {
       notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBids, league_id)
     }
 
+    // A run that awarded nothing but voided something did do work, so it must not
+    // report "No bids to process" -- that message is reserved for a truly idle run.
+    const voidedCount = voidedPickupResults.length + voidedCounterpickResults.length
     const nothingProcessed = results.length === 0 && counterpickResults.length === 0
+    const voidedSuffix = voidedCount > 0
+      ? `; voided ${voidedCount} bid(s) for movies that released before processing`
+      : ''
 
     return jsonResponse({
-      message: nothingProcessed
+      message: nothingProcessed && voidedCount === 0
         ? 'No bids to process'
-        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)`,
+        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)${voidedSuffix}`,
       mode,
       processed: results.length,
       results,
       counterpick_processed: counterpickResults.length,
       counterpick_results: counterpickResults,
+      voided_pickup_bids: voidedPickupResults.length > 0 ? voidedPickupResults : undefined,
+      voided_counterpick_bids: voidedCounterpickResults.length > 0 ? voidedCounterpickResults : undefined,
       errors: errors.length > 0 ? errors : undefined,
       notifications: notificationSummary,
     })

@@ -20,6 +20,17 @@ const testMovieData = {
   genre_ids: [28, 12],
 }
 
+/**
+ * Generate a tmdb_id well outside the real TMDb ID range and the shared
+ * draft-movie pool (factory picks start at 900_100_001 - see
+ * createActiveLeague) and outside other test files' void ranges (e.g.
+ * process-bids.test.ts uses 950_000_000+). Release-date tests need a movie
+ * nobody else touches so they don't corrupt the shared pool.
+ */
+function uniqueVoidTestTmdbId(): number {
+  return 960_000_000 + Math.floor(Math.random() * 1_000_000)
+}
+
 Deno.test({
   name: 'place-bid',
   sanitizeResources: false,
@@ -298,11 +309,13 @@ Deno.test({
         },
       })
 
-      // Second user tries to bid $25 (equal, not higher)
+      // Second user tries to bid $25 (equal, not higher). The real client
+      // always resupplies movie_data, including on a counter-bid.
       const result = await invokeFunction(secondClient, 'place-bid', {
         league_id: leagueId,
         tmdb_id: 300007,
         amount: 25,
+        movie_data: { ...testMovieData, title: 'Equal Bid Movie' },
       })
 
       assertEquals(result.error, 'There is already a bid of $25. You must bid higher.')
@@ -325,12 +338,13 @@ Deno.test({
         },
       })
 
-      // Update bid
+      // Update bid. The real client always resupplies movie_data.
       const { data, error } = await client.functions.invoke('place-bid', {
         body: {
           league_id: leagueId,
           tmdb_id: 300008,
           amount: 20,
+          movie_data: { ...testMovieData, title: 'Update Bid Movie' },
         },
       })
 
@@ -353,12 +367,14 @@ Deno.test({
         },
       })
 
-      // Second user outbids with $15
+      // Second user outbids with $15. The real client always resupplies
+      // movie_data, including on a counter-bid.
       await secondClient.functions.invoke('place-bid', {
         body: {
           league_id: leagueId,
           tmdb_id: 300009,
           amount: 15,
+          movie_data: { ...testMovieData, title: 'Counter Bid Movie' },
         },
       })
 
@@ -368,6 +384,7 @@ Deno.test({
           league_id: leagueId,
           tmdb_id: 300009,
           amount: 20,
+          movie_data: { ...testMovieData, title: 'Counter Bid Movie' },
         },
       })
 
@@ -403,6 +420,37 @@ Deno.test({
       })
 
       assertEquals(result.error, 'Movie is not eligible for pickup (already owned or scored)')
+    })
+
+    // ============================================================================
+    // Release-Date Validation Tests
+    //
+    // A movie whose release_date has already passed has a known outcome -
+    // bidding on it is a risk-free exploit. place-bid must reject it before
+    // ever creating a pickup_bids row.
+    // ============================================================================
+
+    await t.step('returns 400 when movie has already been released', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-released'))
+      const tmdbId = uniqueVoidTestTmdbId()
+
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: tmdbId,
+        amount: 10,
+        movie_data: { ...testMovieData, title: 'Released Movie', release_date: '2020-01-01' },
+      })
+
+      assertEquals(result.status, 400)
+      assertEquals(result.error, 'Cannot bid on this movie: Movie was released in a previous year')
+
+      // No bid should have been created for the rejected movie
+      const { data: bids } = await getServiceClient()
+        .from('pickup_bids')
+        .select('id')
+        .eq('league_id', leagueId)
+        .eq('tmdb_id', tmdbId)
+      assertEquals(bids?.length ?? 0, 0)
     })
 
     // ============================================================================

@@ -324,6 +324,7 @@ export interface Pickup {
   amount_paid: number
   picked_up_at: string
   dropped_at: string | null
+  counterpicked_by_team_id: string | null
   created_at: string
 }
 
@@ -533,7 +534,8 @@ export interface Counterpick {
   counterpicker_team_id: string
   target_team_id: string
   movie_id: string
-  draft_pick_id: string
+  draft_pick_id: string | null
+  pickup_id: string | null
   pick_order: number
   phase: 'draft' | 'bidding'
   fantasy_points: number | null
@@ -542,7 +544,7 @@ export interface Counterpick {
 }
 
 export interface CounterpickOption {
-  draft_pick_id: string
+  draft_pick_id: string | null
   movie_id: string
   movie_title: string
   poster_url: string | null
@@ -550,6 +552,8 @@ export interface CounterpickOption {
   owner_team_id: string
   owner_team_name: string
   fantasy_points: number | null
+  source: 'draft' | 'pickup'
+  pickup_id: string | null
 }
 
 export interface CounterpickTurnInfo {
@@ -574,7 +578,8 @@ export interface CounterpickBid {
   team_id: string
   movie_id: string
   target_team_id: string
-  draft_pick_id: string
+  draft_pick_id: string | null
+  pickup_id: string | null
   amount: number
   /**
    * The team's own ranking of its pending counterpick bids, 1 first. Decides

@@ -6,12 +6,21 @@ import {
   isAuthError,
   isValidUUID,
   createServiceClient,
+  isUpcomingMovie,
 } from '../_shared/utils.ts'
 import { activateLeague } from '../_shared/activation.ts'
 
 interface MakeCounterpickRequest {
   league_id: string
   movie_id: string
+}
+
+/** The draft pick or pickup that owns the targeted movie, source-agnostic. */
+interface CounterpickTarget {
+  source: 'draft' | 'pickup'
+  id: string
+  team_id: string
+  counterpicked_by_team_id: string | null
 }
 
 interface CounterpickTurnInfo {
@@ -105,23 +114,42 @@ Deno.serve(async (req) => {
       return errorResponse('It is not your turn to counterpick', 403)
     }
 
-    const { data: draftPick, error: draftPickError } = await serviceClient
+    // Movie validation: must exist in this league's draft picks or pickups
+    const { data: draftPick } = await serviceClient
       .from('draft_picks')
-      .select('id, team_id, movie_id, dropped_at, counterpicked_by_team_id')
+      .select('id, team_id, counterpicked_by_team_id')
       .eq('league_id', league_id)
       .eq('movie_id', movie_id)
       .is('dropped_at', null)
       .single()
 
-    if (draftPickError || !draftPick) {
+    let target: CounterpickTarget | null = draftPick
+      ? { source: 'draft', id: draftPick.id, team_id: draftPick.team_id, counterpicked_by_team_id: draftPick.counterpicked_by_team_id }
+      : null
+
+    if (!target) {
+      const { data: pickup } = await serviceClient
+        .from('pickups')
+        .select('id, team_id, counterpicked_by_team_id')
+        .eq('league_id', league_id)
+        .eq('movie_id', movie_id)
+        .is('dropped_at', null)
+        .single()
+
+      if (pickup) {
+        target = { source: 'pickup', id: pickup.id, team_id: pickup.team_id, counterpicked_by_team_id: pickup.counterpicked_by_team_id }
+      }
+    }
+
+    if (!target) {
       return errorResponse('Movie not found in this league draft', 404)
     }
 
-    if (draftPick.team_id === team.id) {
+    if (target.team_id === team.id) {
       return errorResponse('Cannot counterpick your own movie', 400)
     }
 
-    if (draftPick.counterpicked_by_team_id) {
+    if (target.counterpicked_by_team_id) {
       return errorResponse('This movie has already been counterpicked', 400)
     }
 
@@ -137,6 +165,23 @@ Deno.serve(async (req) => {
       return errorResponse('This movie has already been counterpicked', 400)
     }
 
+    // Fetch the movie row up front: reused for the release-date guard below
+    // and again for the response/fantasy_points inversion.
+    const { data: movie, error: movieError } = await serviceClient
+      .from('movies')
+      .select('id, title, poster_url, release_date, fantasy_points')
+      .eq('id', movie_id)
+      .single()
+
+    if (movieError || !movie) {
+      return errorResponse('Movie not found', 404)
+    }
+
+    const releaseCheck = isUpcomingMovie(movie.release_date)
+    if (!releaseCheck.valid) {
+      return errorResponse(`Cannot counterpick this movie: ${releaseCheck.reason}`, 400)
+    }
+
     const { count: pickOrderCount, error: pickOrderError } = await serviceClient
       .from('counterpicks')
       .select('*', { count: 'exact', head: true })
@@ -150,24 +195,15 @@ Deno.serve(async (req) => {
 
     const pickOrder = (pickOrderCount ?? 0) + 1
 
-    const { data: movie, error: movieError } = await serviceClient
-      .from('movies')
-      .select('id, title, poster_url, release_date, fantasy_points')
-      .eq('id', movie_id)
-      .single()
-
-    if (movieError || !movie) {
-      return errorResponse('Movie not found', 404)
-    }
-
     const { data: counterpick, error: counterpickError } = await serviceClient
       .from('counterpicks')
       .insert({
         league_id,
         counterpicker_team_id: team.id,
-        target_team_id: draftPick.team_id,
+        target_team_id: target.team_id,
         movie_id,
-        draft_pick_id: draftPick.id,
+        draft_pick_id: target.source === 'draft' ? target.id : null,
+        pickup_id: target.source === 'pickup' ? target.id : null,
         pick_order: pickOrder,
         phase: 'draft',
         fantasy_points: movie.fantasy_points ? -movie.fantasy_points : null,
@@ -185,12 +221,12 @@ Deno.serve(async (req) => {
     }
 
     const { error: updateError } = await serviceClient
-      .from('draft_picks')
+      .from(target.source === 'draft' ? 'draft_picks' : 'pickups')
       .update({ counterpicked_by_team_id: team.id })
-      .eq('id', draftPick.id)
+      .eq('id', target.id)
 
     if (updateError) {
-      console.error('Error updating draft pick:', updateError)
+      console.error(`Error updating ${target.source}:`, updateError)
       // Continue anyway - counterpick was recorded
     }
 
@@ -215,7 +251,7 @@ Deno.serve(async (req) => {
     const { data: targetTeam } = await serviceClient
       .from('teams')
       .select('name')
-      .eq('id', draftPick.team_id)
+      .eq('id', target.team_id)
       .single()
 
     return jsonResponse({
@@ -239,7 +275,7 @@ Deno.serve(async (req) => {
         fantasy_points: movie.fantasy_points,
       },
       target_team: {
-        id: draftPick.team_id,
+        id: target.team_id,
         name: targetTeam?.name ?? 'Unknown Team',
       },
       next_turn: nextTurnAfterPick ? {

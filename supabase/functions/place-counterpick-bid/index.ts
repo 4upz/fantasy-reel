@@ -17,6 +17,7 @@ import {
   isAuthError,
   isValidUUID,
   createServiceClient,
+  isUpcomingMovie,
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
@@ -26,6 +27,14 @@ interface PlaceCounterpickBidRequest {
   league_id: string
   movie_id: string
   amount: number
+}
+
+/** The draft pick or pickup that owns the targeted movie, source-agnostic. */
+interface CounterpickTarget {
+  source: 'draft' | 'pickup'
+  id: string
+  team_id: string
+  counterpicked_by_team_id: string | null
 }
 
 Deno.serve(async (req) => {
@@ -124,24 +133,43 @@ Deno.serve(async (req) => {
       return errorResponse('You have used all your bidding counterpick slots', 400)
     }
 
-    // Movie validation: must exist in league draft, not dropped, not own team's, not already counterpicked
-    const { data: draftPick, error: draftPickError } = await serviceClient
+    // Movie validation: must exist in this league's draft picks or pickups,
+    // not dropped, not own team's, not already counterpicked
+    const { data: draftPick } = await serviceClient
       .from('draft_picks')
-      .select('id, team_id, movie_id, dropped_at, counterpicked_by_team_id')
+      .select('id, team_id, counterpicked_by_team_id')
       .eq('league_id', league_id)
       .eq('movie_id', movie_id)
       .is('dropped_at', null)
       .single()
 
-    if (draftPickError || !draftPick) {
+    let target: CounterpickTarget | null = draftPick
+      ? { source: 'draft', id: draftPick.id, team_id: draftPick.team_id, counterpicked_by_team_id: draftPick.counterpicked_by_team_id }
+      : null
+
+    if (!target) {
+      const { data: pickup } = await serviceClient
+        .from('pickups')
+        .select('id, team_id, counterpicked_by_team_id')
+        .eq('league_id', league_id)
+        .eq('movie_id', movie_id)
+        .is('dropped_at', null)
+        .single()
+
+      if (pickup) {
+        target = { source: 'pickup', id: pickup.id, team_id: pickup.team_id, counterpicked_by_team_id: pickup.counterpicked_by_team_id }
+      }
+    }
+
+    if (!target) {
       return errorResponse('Movie not found in this league draft', 404)
     }
 
-    if (draftPick.team_id === team.id) {
+    if (target.team_id === team.id) {
       return errorResponse('Cannot counterpick your own movie', 400)
     }
 
-    if (draftPick.counterpicked_by_team_id) {
+    if (target.counterpicked_by_team_id) {
       return errorResponse('This movie has already been counterpicked', 400)
     }
 
@@ -155,6 +183,18 @@ Deno.serve(async (req) => {
 
     if (existingCounterpick) {
       return errorResponse('This movie has already been counterpicked', 400)
+    }
+
+    // Fetch movie info (used for the release-date guard below and, later, notifications)
+    const { data: movieInfo } = await serviceClient
+      .from('movies')
+      .select('title, poster_url, release_date')
+      .eq('id', movie_id)
+      .single()
+
+    const releaseCheck = isUpcomingMovie(movieInfo?.release_date)
+    if (!releaseCheck.valid) {
+      return errorResponse(`Cannot counterpick this movie: ${releaseCheck.reason}`, 400)
     }
 
     // Get processing deadline (next Saturday 8pm UTC)
@@ -227,8 +267,9 @@ Deno.serve(async (req) => {
           league_id,
           team_id: team.id,
           movie_id,
-          target_team_id: draftPick.team_id,
-          draft_pick_id: draftPick.id,
+          target_team_id: target.team_id,
+          draft_pick_id: target.source === 'draft' ? target.id : null,
+          pickup_id: target.source === 'pickup' ? target.id : null,
           amount,
           priority: (pendingBidCount ?? 0) + 1,
           status: 'active',
@@ -278,13 +319,7 @@ Deno.serve(async (req) => {
       }, 201)
     }
 
-    // Fetch movie info (used for notifications and Discord)
-    const { data: movieInfo } = await serviceClient
-      .from('movies')
-      .select('title, poster_url, release_date')
-      .eq('id', movie_id)
-      .single()
-
+    // movieInfo was fetched above for the release-date guard; reuse it for notifications
     const movieTitle = movieInfo?.title || 'Unknown Movie'
     const posterUrl = movieInfo?.poster_url
     const releaseDate = movieInfo?.release_date

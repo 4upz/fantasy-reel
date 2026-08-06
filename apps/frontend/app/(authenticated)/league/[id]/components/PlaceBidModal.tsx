@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
-import { getTmdbPosterUrl, formatReleaseDateFull } from './utils'
+import { getTmdbPosterUrl, formatReleaseDateFull, isMovieBiddable } from './utils'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import { useWishlist } from '@/hooks/useWishlist'
@@ -153,6 +153,13 @@ export default function PlaceBidModal({
 
   const submitBidAction = useCallback(async () => {
     if (!selectedMovie) return
+
+    // Guard against a stale movie list: the search results were fetched when the
+    // modal opened, so a movie can release while it's still sitting on screen.
+    if (!isMovieBiddable(selectedMovie.release_date)) {
+      toast.error(`${selectedMovie.title} has already released and can no longer be bid on`)
+      return
+    }
 
     const movieData = {
       title: selectedMovie.title,
