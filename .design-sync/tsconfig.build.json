@@ -1,0 +1,16 @@
+{
+  "_comment": "Resolution map for the design-sync bundle only. Never used by the app build. The exact-match entries swap Next.js framework hosts and the Supabase data seam for the inert shims in ./shims/, so components render statically in the design renderer. ORDER MATTERS: the resolver takes the first matching rule, so every exact alias must precede the `@/*` wildcard that would otherwise swallow it.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "jsx": "react-jsx",
+    "paths": {
+      "@/types": ["../apps/frontend/types/index.ts"],
+      "@/utils/supabase/client": ["./shims/supabase-client.ts"],
+      "@/utils/supabase/functions": ["./shims/supabase-functions.ts"],
+      "next/link": ["./shims/next-link.tsx"],
+      "next/image": ["./shims/next-image.tsx"],
+      "next/navigation": ["./shims/next-navigation.ts"],
+      "@/*": ["../apps/frontend/*"]
+    }
+  }
+}

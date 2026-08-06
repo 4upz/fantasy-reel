@@ -2,6 +2,8 @@
   "name": "fantasy-reel",
   "version": "1.0.0",
   "private": true,
+  "_comment_types": "Consumed only by design-sync: it points the type extractor at the design-system barrel so emitted component prop contracts are real. Inert for the app build and for npm (this root package is private and never published).",
+  "types": ".design-sync/entry.tsx",
   "workspaces": [
     "apps/*",
     "packages/*"
