@@ -1,0 +1,39 @@
+<!--
+  Preview layout vocabulary — a safelist, not a component.
+
+  Tailwind compiles utilities by scanning source files, and the compile runs
+  BEFORE preview .tsx files are authored (and before parallel authoring waves
+  add new ones). Any utility a preview uses that appears nowhere else in the
+  app would silently compile to nothing, and the card would render unstyled.
+
+  Listing the allowed preview-layout vocabulary here guarantees every class in
+  it exists in styles.css no matter when a preview starts using it. Preview
+  authors: use these for card layout glue, plus any class that already appears
+  in the app's own components. Add to this file rather than inventing new ones.
+-->
+<div class="flex inline-flex grid hidden block relative absolute">
+  <div class="flex-col flex-row flex-wrap items-start items-center items-end items-stretch"></div>
+  <div class="justify-start justify-center justify-end justify-between"></div>
+  <div class="grid-cols-1 grid-cols-2 grid-cols-3 grid-cols-4 grid-cols-5"></div>
+  <div class="gap-0 gap-1 gap-1.5 gap-2 gap-2.5 gap-3 gap-4 gap-5 gap-6 gap-8"></div>
+  <div class="p-0 p-1 p-2 p-3 p-4 p-5 p-6 p-8"></div>
+  <div class="px-2 px-3 px-4 px-6 py-1 py-2 py-3 py-4 py-6"></div>
+  <div class="m-0 mt-1 mt-2 mt-3 mt-4 mt-6 mb-1 mb-2 mb-3 mb-4 mb-6 ml-2 mr-2"></div>
+  <div class="space-y-1 space-y-2 space-y-3 space-y-4 space-y-6"></div>
+  <div class="w-full w-auto w-8 w-10 w-12 w-16 w-24 w-32 w-40 w-48 w-52 w-56 w-64 w-72 w-80 w-96"></div>
+  <div class="h-full h-auto h-8 h-10 h-12 h-16 h-24 h-32 h-40 h-48 h-64"></div>
+  <div class="max-w-xs max-w-sm max-w-md max-w-lg max-w-xl max-w-2xl max-w-full min-w-0"></div>
+  <div class="text-xs text-sm text-base text-lg text-xl text-2xl text-3xl"></div>
+  <div class="font-display font-body font-mono font-normal font-medium font-semibold font-bold"></div>
+  <div class="text-left text-center text-right truncate uppercase tracking-wide leading-snug leading-relaxed"></div>
+  <div class="text-foreground text-foreground-secondary text-foreground-muted text-gold text-crimson"></div>
+  <div class="text-success text-error text-warning text-info"></div>
+  <div class="bg-background bg-surface bg-surface-hover bg-elevated bg-gold bg-crimson bg-transparent"></div>
+  <div class="border border-t border-b border-0 border-border border-border-hover border-gold border-crimson"></div>
+  <div class="rounded rounded-md rounded-lg rounded-xl rounded-full overflow-hidden"></div>
+  <div class="shadow-soft shadow-medium shadow-heavy shadow-glow-gold"></div>
+  <div class="opacity-50 opacity-75 opacity-100 cursor-pointer select-none"></div>
+  <div class="card card-interactive btn btn-primary btn-secondary btn-danger btn-ghost input"></div>
+  <div class="badge badge-setup badge-drafting badge-active badge-completed"></div>
+  <div class="alert alert-error alert-success alert-warning alert-info glass modal-overlay"></div>
+</div>

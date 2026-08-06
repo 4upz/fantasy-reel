@@ -1,0 +1,25 @@
+/* Tailwind entry for the design-sync bundle.
+   Pulls in the app's real globals.css (the @theme token block and every
+   @layer components class) and declares the source files Tailwind must scan
+   for utility classes: the app components that ship in the bundle, plus the
+   authored preview cards so their layout glue compiles too. */
+@import "../apps/frontend/app/globals.css";
+
+@source "../apps/frontend/app";
+@source "../apps/frontend/components";
+@source "./previews";
+@source "./preview-vocab.html";
+@source "./shims";
+
+/* Cinematic Dark is a dark-canvas system: every component is drawn to sit on
+   `background` (#0f0f0f). globals.css already says so, but it says it inside
+   `@layer base`, and any unlayered `body { background: #fff }` in a host page
+   — the preview harness has one, and so can a design canvas — beats a layered
+   rule no matter the order. Re-assert the same tokens unlayered at `html body`
+   specificity so the canvas is dark wherever this stylesheet is loaded.
+   Values are identical to globals.css; this adds no new design decision. */
+html body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-body);
+}
