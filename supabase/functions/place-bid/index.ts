@@ -139,8 +139,12 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     // movie_data is client-supplied and only trusted when no `movies` row
-    // exists yet for this tmdb_id -- the authoritative recheck happens in
-    // process-bids. Prefer the DB row's release_date once the movie exists;
+    // exists yet for this tmdb_id. process-bids rechecks before awarding, but
+    // that recheck is only authoritative for a movie that already has a `movies`
+    // row -- for one first seen at processing time it re-validates this same
+    // client data against itself (see the note there). So a forged release_date
+    // on a movie we have never seen is not caught by either layer today.
+    // Prefer the DB row's release_date once the movie exists;
     // only fall back to this request's own movie_data when it doesn't. We do
     // NOT fall back to movie_data captured by an earlier/other bid: that data
     // could be stale (the movie may have since released) and isn't scoped to
