@@ -111,9 +111,13 @@ test.describe('Draft Flow', () => {
     await expect(page.getByTestId('draft-movie-button')).toBeVisible({ timeout: 5000 })
     await page.getByTestId('draft-movie-button').click()
 
-    // After successful pick, the movie should appear in pick history
+    // After successful pick, the movie should appear in pick history.
+    // draft-history renders PickHistory twice (desktop + mobile collapsible),
+    // so filter to the copy visible at the current viewport.
     await expect(page.getByTestId('draft-history')).toBeVisible({ timeout: 15000 })
-    await expect(page.getByTestId('draft-history').getByText(MOCK_MOVIES[0].title)).toBeVisible()
+    await expect(
+      page.getByTestId('draft-history').getByText(MOCK_MOVIES[0].title).filter({ visible: true })
+    ).toBeVisible()
   })
 
   test('shows waiting state when not your turn', async ({

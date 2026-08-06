@@ -20,6 +20,7 @@ import {
   TestLeague,
 } from '../helpers/supabase.helper'
 import { uniqueTmdbId, uniqueLeagueName } from '../helpers/test-ids.helper'
+import { daysFromNow } from './test-data'
 
 /**
  * Extended test with league fixtures
@@ -311,7 +312,7 @@ export const test = authTest.extend<LeagueFixtures>({
         15, // $15 bid
         {
           title: bidMovieTitle,
-          releaseDate: '2025-08-15',
+          releaseDate: daysFromNow(45),
         }
       )
 

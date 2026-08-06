@@ -1,6 +1,7 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from '@playwright/test'
 import { uniqueEmail, uniqueLeagueName } from './test-ids.helper'
+import { daysFromNow } from '../fixtures/test-data'
 
 /**
  * Supabase helper for E2E test database operations
@@ -599,7 +600,7 @@ export async function createPickupBid(
       movie_data: {
         title: movieData.title,
         poster_url: movieData.posterUrl || `/test-poster-${tmdbId}.jpg`,
-        release_date: movieData.releaseDate || '2025-12-01',
+        release_date: movieData.releaseDate || daysFromNow(45),
       },
     })
     .select()
