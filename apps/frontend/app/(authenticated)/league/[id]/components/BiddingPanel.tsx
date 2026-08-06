@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import type { League, PickupBid, TeamBudget, CounterpickBid } from '@/types'
 import BidCard from './BidCard'
 import CounterpickBidCard from './CounterpickBidCard'
+import CounterpickPriorityList from './CounterpickPriorityList'
 
 function ModalLoadingFallback(): React.ReactElement {
   return (
@@ -78,6 +79,7 @@ interface BiddingPanelProps {
   myCounterpickBids: CounterpickBid[]
   onPlaceCounterpickBid: (movieId: string, amount: number) => Promise<{ success: boolean; error?: string }>
   onCancelCounterpickBid: (bidId: string) => Promise<{ success: boolean; error?: string }>
+  onReorderCounterpickBids: (bidIds: string[]) => Promise<{ success: boolean; error?: string }>
 }
 
 export default function BiddingPanel({
@@ -95,6 +97,7 @@ export default function BiddingPanel({
   myCounterpickBids,
   onPlaceCounterpickBid,
   onCancelCounterpickBid,
+  onReorderCounterpickBids,
 }: BiddingPanelProps): React.ReactElement {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [counterBidTarget, setCounterBidTarget] = useState<PickupBid | null>(null)
@@ -293,6 +296,18 @@ export default function BiddingPanel({
             </div>
           ))}
         </UnifiedBidSection>
+      )}
+
+      {/* Counterpick priority: which counterpicks the team keeps if more of its
+          bids win than it has slots for. Only meaningful once counterpicks are
+          enabled and more than one bid is pending. */}
+      {hasCounterpicks && (
+        <CounterpickPriorityList
+          bids={myCounterpickBids}
+          slots={biddingCounterpickSlots}
+          used={biddingCounterpickCount}
+          onReorder={onReorderCounterpickBids}
+        />
       )}
 
       {/* My Active Bids Section (unified) */}

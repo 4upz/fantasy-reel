@@ -4,6 +4,18 @@
  */
 
 /**
+ * Returns a YYYY-MM-DD date string `days` from today (UTC).
+ * Release dates must always be computed relative to now: the draft-pick and
+ * place-bid Edge Functions reject movies whose release_date is in the past
+ * (isUpcomingMovie), so hardcoded dates silently expire and break tests.
+ */
+export function daysFromNow(days: number): string {
+  const date = new Date()
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().split('T')[0]
+}
+
+/**
  * Mock movie data matching TMDbSearchResult interface
  * Used by mock-api.helper.ts to mock Edge Function responses
  */
@@ -12,7 +24,7 @@ export const MOCK_MOVIES = [
     id: 12345, // kept for backward compatibility with some tests
     tmdb_id: 12345,
     title: 'Test Movie Alpha',
-    release_date: '2026-06-15',
+    release_date: daysFromNow(30),
     poster_path: '/test-poster-alpha.jpg',
     poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-alpha.jpg',
     overview: 'A test movie for E2E testing - action thriller',
@@ -25,7 +37,7 @@ export const MOCK_MOVIES = [
     id: 12346,
     tmdb_id: 12346,
     title: 'Test Movie Beta',
-    release_date: '2026-07-20',
+    release_date: daysFromNow(60),
     poster_path: '/test-poster-beta.jpg',
     poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-beta.jpg',
     overview: 'Another test movie - drama',
@@ -38,7 +50,7 @@ export const MOCK_MOVIES = [
     id: 12347,
     tmdb_id: 12347,
     title: 'Test Movie Gamma',
-    release_date: '2026-08-10',
+    release_date: daysFromNow(90),
     poster_path: '/test-poster-gamma.jpg',
     poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-gamma.jpg',
     overview: 'Third test movie - comedy',
@@ -51,7 +63,7 @@ export const MOCK_MOVIES = [
     id: 12348,
     tmdb_id: 12348,
     title: 'Test Movie Delta',
-    release_date: '2026-09-05',
+    release_date: daysFromNow(120),
     poster_path: '/test-poster-delta.jpg',
     poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-delta.jpg',
     overview: 'Fourth test movie - sci-fi',
@@ -64,7 +76,7 @@ export const MOCK_MOVIES = [
     id: 12349,
     tmdb_id: 12349,
     title: 'Test Movie Epsilon',
-    release_date: '2026-10-15',
+    release_date: daysFromNow(180),
     poster_path: '/test-poster-epsilon.jpg',
     poster_url: 'https://image.tmdb.org/t/p/w500/test-poster-epsilon.jpg',
     overview: 'Fifth test movie - horror',

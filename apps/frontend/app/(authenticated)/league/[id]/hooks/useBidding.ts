@@ -24,6 +24,8 @@ interface UseBiddingReturn {
   biddingCounterpickCount: number
   placeCounterpickBid: (movieId: string, amount: number) => Promise<{ success: boolean; error?: string }>
   cancelCounterpickBid: (bidId: string) => Promise<{ success: boolean; error?: string }>
+  /** Rewrites the team's counterpick bid priorities to the given order, most wanted first. */
+  setCounterpickBidPriorities: (bidIds: string[]) => Promise<{ success: boolean; error?: string }>
 }
 
 export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingReturn {
@@ -210,9 +212,30 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
     return { success: true }
   }, [refetch])
 
+  const setCounterpickBidPriorities = useCallback(async (
+    bidIds: string[]
+  ): Promise<{ success: boolean; error?: string }> => {
+    const { error: priorityError } = await callEdgeFunction('set-counterpick-bid-priorities', {
+      body: { league_id: leagueId, bid_ids: bidIds },
+    })
+
+    if (priorityError) {
+      return { success: false, error: priorityError }
+    }
+
+    await refetch()
+    return { success: true }
+  }, [leagueId, refetch])
+
   // Memoize to prevent re-renders (rerender-memo optimization)
   const myBids = useMemo(() => bids.filter(bid => bid.team_id === teamId), [bids, teamId])
-  const myCounterpickBids = useMemo(() => counterpickBids.filter(bid => bid.team_id === teamId), [counterpickBids, teamId])
+  // Priority order is the order the team chose, so surface it that way everywhere.
+  const myCounterpickBids = useMemo(
+    () => counterpickBids
+      .filter(bid => bid.team_id === teamId)
+      .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at)),
+    [counterpickBids, teamId]
+  )
 
   return {
     bids,
@@ -228,5 +251,6 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
     biddingCounterpickCount,
     placeCounterpickBid,
     cancelCounterpickBid,
+    setCounterpickBidPriorities,
   }
 }

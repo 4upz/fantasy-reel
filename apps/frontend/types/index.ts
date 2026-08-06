@@ -581,6 +581,11 @@ export interface CounterpickBid {
   draft_pick_id: string | null
   pickup_id: string | null
   amount: number
+  /**
+   * The team's own ranking of its pending counterpick bids, 1 first. Decides
+   * which counterpicks it keeps when more bids win than it has slots for.
+   */
+  priority: number
   status: BidStatus
   created_at: string
   countered_at: string | null
