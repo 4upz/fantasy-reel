@@ -1,10 +1,10 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Image from 'next/image'
-import { Flame, Calendar, CheckCircle2 } from 'lucide-react'
+import { Flame } from 'lucide-react'
 import type { MovieTimelineItem, League } from '@/types'
-import TomatometerScore from '@/app/components/TomatometerScore'
+import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
 
 interface Props {
@@ -12,190 +12,236 @@ interface Props {
   leagueStatus: League['status']
 }
 
-interface MovieCardProps {
+/** The film-strip placeholder shown wherever a poster is missing. */
+function PosterFallback({ className }: { className: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={1.5}
+        d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+      />
+    </svg>
+  )
+}
+
+function Poster({
+  movie,
+  sizes,
+  className,
+  iconClassName,
+}: {
   movie: MovieTimelineItem
-  variant: 'releasing_soon' | 'upcoming' | 'scored'
-}
-
-function formatReleaseDate(releaseDate: string | null): string {
-  if (!releaseDate) return 'TBD'
-  const date = new Date(releaseDate)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function formatCountdown(releaseDate: string | null): string {
-  if (!releaseDate) return 'TBD'
-
-  const release = new Date(releaseDate)
-  const now = new Date()
-  const diffMs = release.getTime() - now.getTime()
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-
-  if (diffDays < 0) return 'Released'
-  if (diffDays === 0) return 'Today!'
-  if (diffDays === 1) return 'Tomorrow'
-  if (diffDays <= 7) return `${diffDays} days`
-  if (diffDays <= 30) return `${Math.ceil(diffDays / 7)} weeks`
-  return formatReleaseDate(releaseDate)
-}
-
-function MovieCard({ movie, variant }: MovieCardProps) {
-  const isReleasingSoon = variant === 'releasing_soon'
-  const isScored = variant === 'scored'
-  const hasFantasyPoints = movie.fantasy_points != null
-  const isPositive = hasFantasyPoints && movie.fantasy_points! >= 0
+  sizes: string
+  className: string
+  iconClassName: string
+}) {
+  const [failed, setFailed] = useState(false)
 
   return (
-    <div
-      className={`group relative rounded-xl overflow-hidden transition-all duration-300 ${
-        isReleasingSoon
-          ? 'bg-gradient-to-br from-gold/10 to-surface border border-gold/30 hover:border-gold/50 hover:shadow-glow-gold'
-          : 'bg-surface border border-border hover:border-border-hover hover:shadow-medium'
-      }`}
-    >
-      <div className="flex gap-4 p-4">
-        {/* Poster */}
-        <div className="relative w-20 h-30 flex-shrink-0 rounded-lg overflow-hidden bg-elevated">
-          {movie.poster_url ? (
-            <Image
-              src={movie.poster_url}
-              alt={movie.title}
-              width={80}
-              height={120}
-              className="object-cover w-full h-full"
-            />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-foreground-muted text-xs">
-              No Poster
-            </div>
-          )}
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="font-display font-semibold text-foreground truncate group-hover:text-gold transition-colors">
-                {movie.title}
-              </h4>
-            </div>
-            <p className="text-sm text-foreground-muted mt-1">
-              {isScored ? 'Released' : formatReleaseDate(movie.release_date)}
-            </p>
-          </div>
-
-          {/* Score or Countdown */}
-          <div className="mt-2">
-            {isScored && hasFantasyPoints ? (
-              <div className="flex items-center gap-3">
-                <span className={`text-xl font-display font-bold ${isPositive ? 'text-gold' : 'text-crimson'}`}>
-                  {formatFantasyPoints(movie.fantasy_points!)}
-                  <span className="text-sm font-normal text-foreground-muted ml-1">pts</span>
-                </span>
-                <TomatometerScore score={movie.combined_score} size="sm" />
-              </div>
-            ) : isScored ? (
-              <span className="text-sm text-foreground-muted">Pending scores</span>
-            ) : (
-              <span
-                className={`inline-flex items-center gap-1.5 text-sm font-medium ${
-                  isReleasingSoon ? 'text-gold' : 'text-foreground-secondary'
-                }`}
-              >
-                {isReleasingSoon && <Flame className="w-4 h-4" />}
-                {formatCountdown(movie.release_date)}
-              </span>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Releasing Soon Pulse Effect */}
-      {isReleasingSoon && (
-        <div className="absolute top-3 right-3">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gold opacity-75" />
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-gold" />
-          </span>
-        </div>
+    <div className={`relative flex flex-none items-center justify-center overflow-hidden bg-elevated ${className}`}>
+      {movie.poster_url && !failed ? (
+        <Image
+          src={movie.poster_url}
+          alt={movie.title}
+          fill
+          sizes={sizes}
+          className="object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <PosterFallback className={`${iconClassName} text-foreground-muted`} />
       )}
     </div>
   )
 }
 
-interface SectionProps {
-  title: string
-  icon: React.ReactNode
-  count: number
-  children: React.ReactNode
-  variant?: 'default' | 'highlight'
+function sortByDate(a: MovieTimelineItem, b: MovieTimelineItem) {
+  if (!a.release_date) return 1
+  if (!b.release_date) return -1
+  return new Date(a.release_date).getTime() - new Date(b.release_date).getTime()
 }
 
-function Section({ title, icon, count, children, variant = 'default' }: SectionProps) {
-  const isHighlight = variant === 'highlight'
+function daysUntil(releaseDate: string | null): number | null {
+  if (!releaseDate) return null
+  const diffMs = new Date(releaseDate).getTime() - Date.now()
+  return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+}
 
+/** The hero's eyebrow. Only a genuinely imminent release earns the countdown. */
+function heroEyebrow(movie: MovieTimelineItem, isImminent: boolean): string {
+  if (!isImminent) return 'Next up'
+  const days = daysUntil(movie.release_date)
+  if (days == null) return 'Releasing soon'
+  if (days <= 0) return 'Releasing today'
+  if (days === 1) return 'Releasing tomorrow'
+  if (days <= 14) return `Releasing in ${days} days`
+  return `Releasing in ${Math.ceil(days / 7)} weeks`
+}
+
+function shortDate(releaseDate: string | null): string {
+  return releaseDate ? formatDate(releaseDate) : 'TBA'
+}
+
+/**
+ * The movie that decides your week, given the whole width. Gold when it is
+ * actually imminent; the fallback next-upcoming gets a neutral surface so the
+ * treatment keeps meaning something.
+ */
+function NextUpHero({ movie, isImminent }: { movie: MovieTimelineItem; isImminent: boolean }) {
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-4">
-        <span className={isHighlight ? 'text-gold' : 'text-foreground-muted'}>{icon}</span>
-        <h3 className={`font-display font-semibold ${isHighlight ? 'text-gold' : 'text-foreground'}`}>
-          {title}
-        </h3>
-        <span className="text-sm text-foreground-muted">({count})</span>
+    <section
+      className={`mx-4 mb-[18px] overflow-hidden rounded-[18px] p-3.5 ${
+        isImminent
+          ? 'border border-gold/30 bg-[linear-gradient(160deg,rgba(201,162,39,0.12),var(--color-surface)_60%)]'
+          : 'border border-border bg-surface'
+      }`}
+      data-testid="next-up-hero"
+    >
+      <div
+        className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] ${
+          isImminent ? 'text-gold' : 'text-foreground-secondary'
+        }`}
+      >
+        {isImminent && <Flame className="h-3.5 w-3.5" aria-hidden="true" />}
+        {heroEyebrow(movie, isImminent)}
       </div>
-      {children}
+
+      <div className="mt-3 flex items-center gap-3.5">
+        <Poster
+          movie={movie}
+          sizes="76px"
+          className="h-[114px] w-[76px] rounded-[10px]"
+          iconClassName="h-[22px] w-[22px]"
+        />
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-[19px] font-bold leading-[1.25] text-foreground">{movie.title}</h3>
+          <p className="mt-1 text-[13px] text-foreground-secondary">
+            {shortDate(movie.release_date)} · Round {movie.round}, pick {movie.pick_number}
+          </p>
+          <p className="mt-2 text-xs leading-[1.5] text-foreground-muted">
+            Not rated yet. Scores land the night after release.
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function SectionHeader({ title, count }: { title: string; count: number }) {
+  return (
+    <div className="flex items-baseline gap-2 px-4 pb-2">
+      <h3 className="font-display text-[15px] font-semibold text-foreground">{title}</h3>
+      <span className="text-xs text-foreground-muted">{count}</span>
     </div>
   )
 }
 
+function UpcomingShelf({ movies }: { movies: MovieTimelineItem[] }) {
+  return (
+    <>
+      <SectionHeader title="Upcoming" count={movies.length} />
+      {/* Native horizontal scroll - no arrows on touch */}
+      <div className="scrollbar-none flex gap-3 overflow-x-auto px-4 pb-[18px]" data-testid="upcoming-shelf">
+        {movies.map((movie) => (
+          <div key={movie.id} className="flex w-[118px] flex-none flex-col gap-[7px]">
+            <Poster
+              movie={movie}
+              sizes="118px"
+              className="h-[177px] w-[118px] rounded-xl border border-border"
+              iconClassName="h-[22px] w-[22px]"
+            />
+            <div className="truncate text-[13px] font-semibold text-foreground" title={movie.title}>
+              {movie.title}
+            </div>
+            <div className="text-[11px] text-foreground-muted">{shortDate(movie.release_date)}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+function ScoredList({ movies }: { movies: MovieTimelineItem[] }) {
+  return (
+    <>
+      <SectionHeader title="Scored" count={movies.length} />
+      <div className="flex flex-col gap-2 px-4" data-testid="scored-list">
+        {movies.map((movie) => (
+          <div
+            key={movie.id}
+            className="flex flex-none items-center gap-3 rounded-[14px] border border-border bg-surface px-3 py-[11px]"
+          >
+            <Poster
+              movie={movie}
+              sizes="38px"
+              className="h-[57px] w-[38px] rounded-[7px]"
+              iconClassName="h-[15px] w-[15px]"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold text-foreground" title={movie.title}>
+                {movie.title}
+              </div>
+              <div className="mt-[3px] text-xs text-foreground-muted">
+                {movie.combined_score != null ? `${Math.round(movie.combined_score)}% Tomatometer` : 'Not rated yet'}
+              </div>
+            </div>
+            <div
+              className={`flex-none font-display text-xl font-bold ${
+                movie.fantasy_points == null
+                  ? 'text-foreground-muted'
+                  : movie.fantasy_points >= 0
+                    ? 'text-gold'
+                    : 'text-crimson'
+              }`}
+            >
+              {formatFantasyPoints(movie.fantasy_points)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
 export default function MovieGrid({ movies, leagueStatus }: Props) {
-  // Memoize to prevent re-renders (rerender-memo optimization)
-  // Must be called before any early returns to satisfy React hooks rules
-  const { releasingSoon, upcoming, scored } = useMemo(() => {
-    if (movies.length === 0) {
-      return { releasingSoon: [], upcoming: [], scored: [] }
+  const { hero, heroIsImminent, upcoming, scored } = useMemo(() => {
+    const scoredMovies = movies
+      .filter((m) => m.status === 'scored')
+      .sort((a, b) => (b.fantasy_points || 0) - (a.fantasy_points || 0))
+
+    const unreleased = movies.filter((m) => m.status !== 'scored').sort(sortByDate)
+
+    // Prefer a genuinely imminent release; otherwise lead with whatever is next.
+    const imminent = unreleased.find((m) => m.status === 'releasing_soon')
+    const heroMovie = imminent ?? unreleased[0] ?? null
+
+    return {
+      hero: heroMovie,
+      heroIsImminent: imminent != null,
+      // Everything still unreleased that is not already the hero
+      upcoming: unreleased.filter((m) => m.id !== heroMovie?.id),
+      scored: scoredMovies,
     }
-
-    const sortByDate = (a: MovieTimelineItem, b: MovieTimelineItem) => {
-      if (!a.release_date) return 1
-      if (!b.release_date) return -1
-      return new Date(a.release_date).getTime() - new Date(b.release_date).getTime()
-    }
-
-    const sortByScore = (a: MovieTimelineItem, b: MovieTimelineItem) => {
-      return (b.fantasy_points || 0) - (a.fantasy_points || 0)
-    }
-
-    const releasing = movies.filter((m) => m.status === 'releasing_soon').sort(sortByDate)
-    const upcomingMovies = movies.filter((m) => m.status === 'upcoming').sort(sortByDate)
-    const scoredMovies = movies.filter((m) => m.status === 'scored').sort(sortByScore)
-
-    return { releasingSoon: releasing, upcoming: upcomingMovies, scored: scoredMovies }
   }, [movies])
 
-  // Empty state for setup phase
   if (leagueStatus === 'setup') {
     return (
-      <div className="card p-8 text-center">
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-4 mb-6 max-w-md mx-auto">
+      <div className="card mx-4 p-8 text-center">
+        <div className="mx-auto mb-6 grid max-w-md grid-cols-3 gap-4 sm:grid-cols-5">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="aspect-[2/3] rounded-lg bg-elevated border border-border animate-pulse"
-            />
+            <div key={i} className="aspect-[2/3] animate-pulse rounded-lg border border-border bg-elevated" />
           ))}
         </div>
-        <p className="text-foreground-muted">
-          Your movies will appear here after the draft
-        </p>
+        <p className="text-foreground-muted">Your movies will appear here after the draft</p>
       </div>
     )
   }
 
-  // Empty state for drafting phase with no picks yet
   if (movies.length === 0) {
     return (
-      <div className="card p-8 text-center">
+      <div className="card mx-4 p-8 text-center">
         <p className="text-foreground-muted">
           {leagueStatus === 'drafting'
             ? 'Draft your first movie to see it here'
@@ -206,52 +252,10 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Releasing Soon - Highlighted */}
-      {releasingSoon.length > 0 && (
-        <Section
-          title="Releasing Soon"
-          icon={<Flame className="w-5 h-5" />}
-          count={releasingSoon.length}
-          variant="highlight"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {releasingSoon.map((movie) => (
-              <MovieCard key={movie.id} movie={movie} variant="releasing_soon" />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Upcoming */}
-      {upcoming.length > 0 && (
-        <Section
-          title="Upcoming"
-          icon={<Calendar className="w-5 h-5" />}
-          count={upcoming.length}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {upcoming.map((movie) => (
-              <MovieCard key={movie.id} movie={movie} variant="upcoming" />
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Scored */}
-      {scored.length > 0 && (
-        <Section
-          title="Scored"
-          icon={<CheckCircle2 className="w-5 h-5" />}
-          count={scored.length}
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {scored.map((movie) => (
-              <MovieCard key={movie.id} movie={movie} variant="scored" />
-            ))}
-          </div>
-        </Section>
-      )}
+    <div className="animate-fade-in">
+      {hero && <NextUpHero movie={hero} isImminent={heroIsImminent} />}
+      {upcoming.length > 0 && <UpcomingShelf movies={upcoming} />}
+      {scored.length > 0 && <ScoredList movies={scored} />}
     </div>
   )
 }
