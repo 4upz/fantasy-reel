@@ -4,7 +4,5 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function GET(request: Request): Promise<Response> {
-  const { searchParams } = new URL(request.url)
-  const mode = searchParams.get('mode') || 'weekly'
-  return proxyCronRequest(request, 'process-bids', { mode })
+  return proxyCronRequest(request, 'release-day-announcements')
 }

@@ -36,8 +36,33 @@ setup('global setup', async () => {
   console.log('  Seeding test movies...')
   await seedTestMovies()
 
+  // Pre-compile the hottest routes so the first tests don't pay the dev
+  // server's on-demand compile cost (early specs were timing out on the
+  // cold /login → /dashboard path in CI).
+  console.log('  Warming up dev server routes...')
+  await warmUpRoutes()
+
   console.log('✅ E2E test setup complete')
 })
+
+/**
+ * Hit the most-used routes once so Next.js dev compiles them before tests run.
+ * Failures are non-fatal: tests will just pay the compile cost themselves.
+ */
+async function warmUpRoutes(): Promise<void> {
+  const baseURL = 'http://localhost:3000'
+  const routes = ['/login', '/signup', '/dashboard', '/settings']
+
+  await Promise.all(
+    routes.map(async (route) => {
+      try {
+        await fetch(`${baseURL}${route}`, { redirect: 'manual' })
+      } catch {
+        console.warn(`  Warning: warm-up request to ${route} failed`)
+      }
+    })
+  )
+}
 
 /**
  * Verify Supabase is running and accessible
