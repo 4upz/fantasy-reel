@@ -15,6 +15,18 @@
     {
       "path": "/api/cron/update-scores",
       "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/cron/release-day-announcements",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/cron/weekly-releases-digest",
+      "schedule": "0 13 * * 1"
+    },
+    {
+      "path": "/api/cron/sync-release-dates",
+      "schedule": "0 8 * * *"
     }
   ]
 }
