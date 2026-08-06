@@ -212,6 +212,34 @@ These fire on every run and are **not** regressions:
 
 A warn **not** in this list is new — look at it before recording it.
 
+## The drift check (CI)
+
+`.github/workflows/design-sync-drift.yml` runs `.design-sync/check-drift.mjs`
+on every PR and push to main. Dependency-free, so it needs no install step.
+
+It **cannot** tell you whether the design project is current — that state is in
+the uploaded `_ds_sync.json`, not in git, and a correct re-sync after a markup
+change commits nothing. Anything built on "did `.design-sync/` change?" would
+be a false signal. What it does catch:
+
+| Check | Severity | Why |
+|---|---|---|
+| `componentSrcMap` pin points at a missing file | **fails** | the sync build dies on this |
+| Component in a synced dir, in neither barrel nor ignore list | **fails** | the *silent* failure — it would just never reach the design system |
+| Synced sources touched in this PR | notice only | re-sync reminder |
+
+`.design-sync/drift-ignore.txt` holds the deliberate exclusions (page-level
+containers, the `Icons.tsx` set, settings form sections, TMDbAttribution,
+SiteFooter). **A new component fails the check until you either sync it or add
+it to that file** — which is the whole point. Reseed the list from current
+state with `node .design-sync/check-drift.mjs --write-ignore`.
+
+Run it locally the same way CI does:
+
+```sh
+node .design-sync/check-drift.mjs --since origin/main
+```
+
 ## Re-sync runbook
 
 From the repo root, after the fresh-clone setup above:
