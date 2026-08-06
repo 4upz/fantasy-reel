@@ -1,10 +1,49 @@
 import {
   ChatInputCommandInteraction,
+  EmbedBuilder,
   SlashCommandBuilder,
 } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
+import { requireLinkedLeague } from '../utils/channel-league.js'
 import type { Command } from './index.js'
+
+interface StandingsRow {
+  user_id: string | null
+  profiles: { display_name?: string | null } | null
+  teams: {
+    id: string
+    name: string
+    team_scores: {
+      total_points: number | null
+      movies_scored: number | null
+      movies_pending: number | null
+      last_calculated_at: string | null
+    } | null
+  } | null
+}
+
+const PRE_STANDINGS_STATUS_LABELS: Record<string, string> = {
+  setup: 'Setup',
+  drafting: 'Drafting',
+  counterpicking: 'Counterpicking',
+}
+
+function formatPoints(points: number): string {
+  return `${Math.round(points * 10) / 10}`
+}
+
+function totalPoints(participant: StandingsRow): number {
+  return participant.teams?.team_scores?.total_points ?? 0
+}
+
+/** Standings shell used for the info-only replies (pre-draft, no teams). */
+function noticeEmbed(leagueName: string, leagueId: string, description: string): EmbedBuilder {
+  return createBaseEmbed(leagueName, leagueId)
+    .setTitle('Standings')
+    .setDescription(description)
+    .setColor(DISCORD_COLORS.blue)
+}
 
 export const standings: Command = {
   data: new SlashCommandBuilder()
@@ -15,114 +54,115 @@ export const standings: Command = {
     await interaction.deferReply()
 
     const supabase = getSupabase()
+    const linked = await requireLinkedLeague(interaction, supabase)
+    if (!linked) return
 
-    // Look up league from channel
-    const { data: channelLink, error: findError } = await supabase
-      .from('discord_channels')
-      .select('league_id, leagues(name, status)')
-      .eq('channel_id', interaction.channelId)
-      .maybeSingle()
+    const { leagueId, leagueName, leagueStatus } = linked
 
-    if (findError || !channelLink) {
-      await interaction.editReply(
-        'This channel is not linked to a league. Use /set-league first.'
+    // Standings only exist once the draft is done (mirrors the web app)
+    const preStandingsLabel = PRE_STANDINGS_STATUS_LABELS[leagueStatus]
+    if (preStandingsLabel) {
+      const embed = noticeEmbed(
+        leagueName,
+        leagueId,
+        `Standings will be available once the draft completes.\n\nLeague status: **${preStandingsLabel}**`
       )
-      return
-    }
-
-    const league = (channelLink as { leagues?: { name?: string; status?: string } }).leagues
-    const leagueId = channelLink.league_id
-    const leagueName = league?.name || 'League'
-
-    // Resolve invoker's user ID for "(you)" indicator
-    const { data: userId } = await supabase.rpc(
-      'get_user_by_discord_id',
-      { p_discord_id: interaction.user.id }
-    )
-
-    // Get standings: team_scores joined with teams, participants, and profiles
-    const { data: scores, error: scoresError } = await supabase
-      .from('team_scores')
-      .select(`
-        total_points,
-        last_updated,
-        teams(
-          id,
-          name,
-          league_participants(
-            user_id,
-            profiles(display_name)
-          )
-        )
-      `)
-      .eq('teams.league_participants.league_id', leagueId)
-      .order('total_points', { ascending: false })
-
-    // Filter to only scores for teams in this league
-    const leagueScores = (scores || []).filter((s) => {
-      const team = s.teams as { id?: string; league_participants?: { user_id?: string } } | null
-      return team?.league_participants != null
-    })
-
-    if (scoresError || leagueScores.length === 0) {
-      const embed = createBaseEmbed(leagueName, leagueId)
-        .setTitle('Standings')
-        .setDescription(
-          `No standings yet.\n\nLeague status: **${league?.status || 'unknown'}**`
-        )
-        .setColor(DISCORD_COLORS.blue)
 
       await interaction.editReply({ embeds: [embed] })
       return
     }
 
-    // Find the invoker's team ID
-    let invokerTeamId: string | null = null
-    if (userId) {
-      for (const score of leagueScores) {
-        const team = score.teams as {
-          id?: string
-          league_participants?: { user_id?: string }
-        } | null
-        if (team?.league_participants?.user_id === userId) {
-          invokerTeamId = team?.id || null
-          break
-        }
-      }
+    // All active teams in the league, with their score row if one exists yet
+    const { data: participants, error: participantsError } = await supabase
+      .from('league_participants')
+      .select(`
+        user_id,
+        profiles(display_name),
+        teams(
+          id,
+          name,
+          team_scores(total_points, movies_scored, movies_pending, last_calculated_at)
+        )
+      `)
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+      .returns<StandingsRow[]>()
+
+    if (participantsError) {
+      console.error('Failed to fetch standings:', participantsError)
+      await interaction.editReply('Failed to load standings. Please try again.')
+      return
     }
 
-    // Format standings lines
-    const lines = leagueScores.map((score, index) => {
-      const rank = index + 1
-      const team = score.teams as {
-        id?: string
-        name?: string
-        league_participants?: {
-          user_id?: string
-          profiles?: { display_name?: string }
-        }
-      } | null
+    const sorted = (participants || [])
+      .filter((p) => p.teams != null)
+      .sort((a, b) => totalPoints(b) - totalPoints(a))
 
-      const teamName = team?.name || 'Unknown Team'
-      const ownerName = team?.league_participants?.profiles?.display_name || ''
-      const points = score.total_points ?? 0
-      const isYou = team?.id === invokerTeamId ? ' (you)' : ''
+    if (sorted.length === 0) {
+      const embed = noticeEmbed(leagueName, leagueId, 'No teams in this league yet.')
 
-      const nameDisplay = ownerName ? `${teamName} -- ${ownerName}` : teamName
-      const line = `${rank}. ${nameDisplay}${isYou} -- ${points} pts`
+      await interaction.editReply({ embeds: [embed] })
+      return
+    }
 
-      // Bold top 3
-      return rank <= 3 ? `**${line}**` : line
+    // Resolve invoker's user ID for the "(you)" indicator; a failure here
+    // should never block showing standings.
+    const { data: invokerUserId } = await supabase.rpc('get_user_by_discord_id', {
+      p_discord_id: interaction.user.id,
     })
 
-    const lastUpdated = leagueScores[0]?.last_updated
-    const footerTimestamp = lastUpdated
-      ? `Last updated ${new Date(lastUpdated).toLocaleDateString()}`
+    const isFinal = leagueStatus === 'completed'
+
+    // Tied teams share a rank (1, 1, 3 -- like the web standings page)
+    let currentRank = 0
+    let previousPoints: number | null = null
+    const lines = sorted.map((participant, index) => {
+      const scores = participant.teams!.team_scores
+      const points = totalPoints(participant)
+      if (points !== previousPoints) {
+        currentRank = index + 1
+        previousPoints = points
+      }
+
+      const teamName = participant.teams!.name || 'Unknown Team'
+      const ownerName = participant.profiles?.display_name
+      const nameDisplay = ownerName ? `${teamName} (${ownerName})` : teamName
+
+      const isChampion = isFinal && currentRank === 1
+      const emphasizedName = isChampion ? `__**${nameDisplay}**__` : `**${nameDisplay}**`
+      const youMarker =
+        invokerUserId && participant.user_id === invokerUserId ? ' *(you)*' : ''
+      const trophy = isChampion ? ' 🏆' : ''
+
+      const moviesScored = scores?.movies_scored ?? 0
+      const moviesTotal = moviesScored + (scores?.movies_pending ?? 0)
+      const moviesSummary =
+        moviesTotal > 0
+          ? `${moviesScored}/${moviesTotal} movies scored`
+          : 'no movies scored yet'
+
+      return (
+        `**${currentRank}.** ${emphasizedName}${youMarker}${trophy}\n` +
+        `> **${formatPoints(points)} pts** -- ${moviesSummary}`
+      )
+    })
+
+    const lastCalculatedAt = sorted
+      .map((p) => p.teams!.team_scores?.last_calculated_at)
+      .filter((d): d is string => d != null)
+      .sort()
+      .pop()
+    const footerTimestamp = lastCalculatedAt
+      ? `Scores updated ${new Date(lastCalculatedAt).toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        })}`
       : 'Scores not yet calculated'
 
     const embed = createBaseEmbed(leagueName, leagueId)
-      .setTitle('Standings')
-      .setDescription(lines.join('\n'))
+      .setTitle(isFinal ? 'Final Standings' : 'Standings')
+      .setDescription(lines.join('\n').slice(0, 4096))
       .setColor(DISCORD_COLORS.blue)
       .setURL(leagueUrl(leagueId, '/standings'))
       .setFooter({ text: `${footerTimestamp} -- ${leagueName}` })
