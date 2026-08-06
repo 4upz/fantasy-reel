@@ -1,0 +1,59 @@
+name: Design Sync Drift
+
+# Guards the curated component list behind .design-sync/ against silent drift.
+#
+# It does NOT verify the design project is up to date — that state lives in the
+# uploaded _ds_sync.json, not in git, and a correct re-sync commits nothing. It
+# catches what IS visible from the repo: a componentSrcMap pin pointing at a
+# moved/deleted file (breaks the sync build), and a component added to an
+# already-synced directory that reaches neither the barrel nor the ignore list
+# (silently missing from the design system). It also lists synced sources
+# touched by the PR, as a re-sync reminder that never fails the build.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: design-sync-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Design system drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Need the base commit so --since can diff against it.
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+
+      # No install step: check-drift.mjs is dependency-free by design, so this
+      # job stays fast and cannot be broken by an unrelated dependency change.
+      #
+      # base_ref goes through env and is quoted in the shell rather than
+      # interpolated into the command string — the standard guard against
+      # workflow command injection via ref names.
+      - name: Check for design-sync drift
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            node .design-sync/check-drift.mjs --since "origin/$BASE_REF"
+          else
+            node .design-sync/check-drift.mjs
+          fi
