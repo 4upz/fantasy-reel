@@ -18,14 +18,17 @@ import { useId } from 'react'
  * Only the 90% Club gets a badge. It is the one tier that is an award, so it
  * earns laurels and a sheen; Fresh and Rotten are already carried by the colour
  * of the score and the sign of the points, and badging them would make the
- * accolade just another label. Tiers match the curve documented on the help page.
+ * accolade just another label. Where the surface is too narrow for the laurels,
+ * the sheen moves onto the score pill so the award is not lost entirely.
+ * Tiers match the curve documented on the help page.
  */
 
 interface Props {
   /** The Tomatometer, 0-100. Null when the movie has no RT score yet. */
   score: number | null
   size?: 'sm' | 'md' | 'lg'
-  /** Show the 90% Club badge. Drop it where the surface is too narrow to fit it. */
+  /** Show the 90% Club laurels. Drop them where the surface is too narrow; the
+   *  score pill then shimmers instead so the tier still reads as an award. */
   showAccolade?: boolean
   className?: string
 }
@@ -175,6 +178,9 @@ export default function TomatometerScore({
   const rounded = Math.round(score)
   const tier = getTier(rounded)
   const isAccolade = tier.key === 'club'
+  // Where the laurel badge does not fit, the score itself carries the sheen so
+  // the 90% Club still reads as an award rather than just another gold pill.
+  const shineOnPill = isAccolade && !showAccolade
 
   return (
     <span
@@ -182,7 +188,9 @@ export default function TomatometerScore({
       aria-label={`Tomatometer ${rounded} percent, ${tier.label}`}
     >
       <span
-        className={`inline-flex items-center rounded-lg border font-semibold ${SCORE_STYLES[tier.key]} ${sizing.pill}`}
+        className={`inline-flex items-center rounded-lg border font-semibold ${SCORE_STYLES[tier.key]} ${sizing.pill} ${
+          shineOnPill ? 'accolade-shine' : ''
+        }`}
       >
         <TomatoMark fill={rounded} className={sizing.mark} />
         {rounded}%
