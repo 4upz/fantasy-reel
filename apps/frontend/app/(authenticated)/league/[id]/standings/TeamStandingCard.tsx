@@ -9,8 +9,11 @@ import MovieScoreCard from './MovieScoreCard'
 interface Props {
   rankedTeam: RankedTeamFull
   isCurrentUser: boolean
+  /** Mobile only - above lg the roster lives in the detail rail instead. */
   isExpanded: boolean
-  onToggle: () => void
+  /** Desktop only - which team the detail rail is showing. */
+  isSelected: boolean
+  onActivate: () => void
   animationDelay?: number
 }
 
@@ -41,7 +44,8 @@ export default function TeamStandingCard({
   rankedTeam,
   isCurrentUser,
   isExpanded,
-  onToggle,
+  isSelected,
+  onActivate,
   animationDelay = 0,
 }: Props) {
   const { rank, participant, draftPicks, pickups, counterpicks, isTied } = rankedTeam
@@ -69,24 +73,26 @@ export default function TeamStandingCard({
 
   const panelId = `team-movies-${team?.id}`
 
+  // Your own team keeps a faint gold edge; the row feeding the rail is brighter
+  // and tinted, so the two never read as the same state.
   return (
     <div
-      className={`flex-none animate-slide-up overflow-hidden rounded-2xl border bg-surface ${
-        isCurrentUser ? 'border-gold/35' : 'border-border'
-      }`}
+      className={`flex-none animate-slide-up overflow-hidden rounded-2xl border bg-surface lg:rounded-[14px] ${
+        isSelected ? 'lg:border-gold lg:bg-surface-hover' : ''
+      } ${isCurrentUser ? 'border-gold/35' : 'border-border'}`}
       style={{ animationDelay: `${animationDelay}ms` }}
       data-testid={`team-row-${team?.id}`}
     >
       <button
-        onClick={onToggle}
+        onClick={onActivate}
         aria-expanded={isExpanded}
         aria-controls={panelId}
-        className="flex w-full flex-col gap-2.5 p-3.5 text-left transition-colors hover:bg-surface-hover"
+        className="flex w-full flex-col gap-2.5 p-3.5 text-left transition-colors hover:bg-surface-hover lg:gap-0 lg:px-4"
       >
-        {/* Line 1 - identity and the one big number */}
-        <div className="flex items-center gap-2.5">
+        {/* Line 1 on mobile; the whole row above lg, where the stats move inline */}
+        <div className="flex items-center gap-2.5 lg:gap-3.5">
           <div
-            className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] font-display text-sm font-bold ${
+            className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] font-display text-sm font-bold lg:h-[38px] lg:w-[38px] lg:rounded-[11px] ${
               PODIUM_CHIP[rank] ?? 'border border-border bg-elevated text-foreground-secondary'
             }`}
           >
@@ -94,11 +100,11 @@ export default function TeamStandingCard({
             {rank}
           </div>
 
-          <div className="relative h-[34px] w-[34px] flex-none overflow-hidden rounded-full border-[1.5px] border-gold bg-gold-muted">
+          <div className="relative h-[34px] w-[34px] flex-none overflow-hidden rounded-full border-[1.5px] border-gold bg-gold-muted lg:h-[38px] lg:w-[38px]">
             {team?.avatar_url ? (
-              <Image src={team.avatar_url} alt={displayName} fill sizes="34px" className="object-cover" unoptimized />
+              <Image src={team.avatar_url} alt={displayName} fill sizes="38px" className="object-cover" unoptimized />
             ) : (
-              <div className="flex h-full w-full items-center justify-center font-display text-xs font-bold text-gold">
+              <div className="flex h-full w-full items-center justify-center font-display text-xs font-bold text-gold lg:text-[13px]">
                 {initials}
               </div>
             )}
@@ -116,8 +122,16 @@ export default function TeamStandingCard({
             {ownerHandle && <div className="truncate text-xs text-foreground-muted">{ownerHandle}</div>}
           </div>
 
-          <div className="flex-none text-right">
-            <div className={`font-display text-[28px] font-bold leading-none ${pointsTone(totalPoints)}`}>
+          {/* Above lg there is room for the stat strip to become a column */}
+          <div className="hidden flex-none text-center lg:block lg:w-[110px]">
+            <div className="text-[11px] text-foreground-muted">Movies</div>
+            <div className="text-[15px] font-semibold text-foreground-secondary">{movieCount}</div>
+          </div>
+
+          <div className="flex-none text-right lg:w-[86px]">
+            <div
+              className={`font-display text-[28px] font-bold leading-none lg:text-[26px] ${pointsTone(totalPoints)}`}
+            >
               {formatFantasyPoints(totalPoints)}
             </div>
             <div className="mt-0.5 text-[9px] uppercase tracking-[0.1em] text-foreground-muted">Points</div>
@@ -125,7 +139,7 @@ export default function TeamStandingCard({
         </div>
 
         {/* Line 2 - stat strip, on its own line so nothing collides with the points */}
-        <div className="flex items-center gap-2 border-t border-border pt-[9px]">
+        <div className="flex items-center gap-2 border-t border-border pt-[9px] lg:hidden">
           <span className="text-xs text-foreground-secondary">{movieCount} movies</span>
           <span className="h-[3px] w-[3px] flex-none rounded-full bg-border-hover" />
           <span className="truncate text-xs text-foreground-muted">
@@ -143,7 +157,7 @@ export default function TeamStandingCard({
       {isExpanded && (
         <div
           id={panelId}
-          className="flex animate-fade-in flex-col gap-2.5 border-t border-border px-3.5 pt-3 pb-3.5"
+          className="flex animate-fade-in flex-col gap-2.5 border-t border-border px-3.5 pt-3 pb-3.5 lg:hidden"
         >
           {/* The breakdown lives here rather than in the collapsed row - it is
               detail you go looking for, not something to scan the table by. */}
