@@ -80,20 +80,21 @@ test.describe('Leaderboard Page @standings', () => {
     )
 
     if (testUserTeam) {
-      // The team name should be visible
-      await expect(
-        authedPage.getByText(testUserTeam.name)
-      ).toBeVisible({ timeout: 10000 })
-
-      // The team row should have a "You" indicator for the current user
+      // The team row should have a "You" indicator for the current user.
+      // Scope the name to the row - the desktop detail rail names it too.
       const teamRow = authedPage.getByTestId(`team-row-${testUserTeam.teamId}`)
-      await expect(teamRow).toBeVisible()
+      await expect(teamRow).toBeVisible({ timeout: 10000 })
+      await expect(teamRow.getByText(testUserTeam.name)).toBeVisible()
       await expect(teamRow.getByText('You')).toBeVisible()
     }
   })
 })
 
 test.describe('Score Details @standings', () => {
+  // Tapping a row to reveal its roster is the mobile shape. Above lg the same
+  // detail opens in the sticky rail instead - covered separately below.
+  test.use({ viewport: { width: 390, height: 844 } })
+
   test('can view team details from standings', async ({
     authedPage,
     scoredLeagueWithReviews,
@@ -170,6 +171,9 @@ test.describe('Score Ordering @standings', () => {
 })
 
 test.describe('Full Roster Display @standings', () => {
+  // The accordion only exists below lg; desktop puts the roster in the rail.
+  test.use({ viewport: { width: 390, height: 844 } })
+
   // The expanded panel is a flat list - how a movie was acquired is carried by the
   // poster badge (and its data-testid), not by a section header.
   test('expanded team shows its draft picks and points breakdown', async ({
@@ -257,5 +261,49 @@ test.describe('Full Roster Display @standings', () => {
     const testTeamId = scoredLeagueWithFullRoster.teams[1].teamId
     const testTeamRow = authedPage.getByTestId(`team-row-${testTeamId}`)
     await expect(testTeamRow.getByText('2 movies')).toBeVisible()
+  })
+})
+
+test.describe('Detail Rail @standings', () => {
+  // Above lg the roster opens beside the table instead of inside the row.
+  test.use({ viewport: { width: 1280, height: 900 } })
+
+  test('rail defaults to the current user team and follows selection', async ({
+    authedPage,
+    scoredLeagueWithFullRoster,
+    testUser,
+  }) => {
+    await authedPage.goto(`/league/${scoredLeagueWithFullRoster.id}/standings`)
+
+    const rail = authedPage.getByTestId('team-detail-rail')
+    await expect(rail).toBeVisible({ timeout: 10000 })
+
+    // Defaults to your own team - the one you came to check
+    const ownTeam = scoredLeagueWithFullRoster.teams.find((t) => t.userId === testUser.id)
+    if (ownTeam) {
+      await expect(rail.getByText(ownTeam.name)).toBeVisible()
+    }
+
+    // Selecting another row refills the rail
+    const otherTeam = scoredLeagueWithFullRoster.teams.find((t) => t.userId !== testUser.id)
+    if (otherTeam) {
+      await authedPage.getByTestId(`team-row-${otherTeam.teamId}`).click()
+      await expect(rail.getByText(otherTeam.name)).toBeVisible({ timeout: 5000 })
+    }
+  })
+
+  test('rail lists the selected team roster', async ({
+    authedPage,
+    scoredLeagueWithFullRoster,
+  }) => {
+    await authedPage.goto(`/league/${scoredLeagueWithFullRoster.id}/standings`)
+
+    const testTeamId = scoredLeagueWithFullRoster.teams[1].teamId
+    await authedPage.getByTestId(`team-row-${testTeamId}`).click()
+
+    const rail = authedPage.getByTestId('team-detail-rail')
+    await expect(
+      rail.getByText(scoredLeagueWithFullRoster.pickupMovieTitle)
+    ).toBeVisible({ timeout: 5000 })
   })
 })

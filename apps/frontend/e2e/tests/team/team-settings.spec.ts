@@ -150,9 +150,12 @@ test.describe('Update Team Name @team', () => {
     await authedPage.getByTestId('save-team-button').click()
     await waitForModalClose(authedPage)
 
-    // Navigate to standings
+    // Navigate to standings. The name shows in both the row and the desktop
+    // detail rail, so assert on the row specifically.
     await authedPage.goto(`/league/${activeLeague.id}/standings`)
-    await expect(authedPage.getByText('Standings Stars')).toBeVisible({ timeout: 10000 })
+    await expect(
+      authedPage.locator('[data-testid^="team-row-"]').getByText('Standings Stars')
+    ).toBeVisible({ timeout: 10000 })
   })
 
   test('updated name appears on roster @critical', async ({

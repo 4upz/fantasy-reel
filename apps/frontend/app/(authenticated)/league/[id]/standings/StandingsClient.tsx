@@ -9,6 +9,7 @@ import type {
   RankedTeamFull,
 } from '@/types'
 import TeamStandingCard from './TeamStandingCard'
+import TeamDetailRail from './TeamDetailRail'
 
 interface Props {
   participants: ParticipantWithTeamScore[]
@@ -82,6 +83,11 @@ function calculateRankings(
   return ranked
 }
 
+/** Teams normally have a row in `teams`; fall back to the participant if not. */
+function teamKey(rankedTeam: RankedTeamFull): string {
+  return rankedTeam.participant.teams?.id ?? rankedTeam.participant.id
+}
+
 function SummaryCard({ value, label, tone }: { value: number; label: string; tone: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface px-2 py-2.5 text-center">
@@ -99,11 +105,19 @@ export default function StandingsClient({
   currentUserId,
 }: Props) {
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null)
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
 
   const rankedTeams = useMemo(
     () => calculateRankings(participants, draftPicks, pickups, counterpicks),
     [participants, draftPicks, pickups, counterpicks]
   )
+
+  // The rail opens on your own team - the one you came to the page to check.
+  const railTeam = useMemo(() => {
+    const own = rankedTeams.find((t) => t.participant.user_id === currentUserId)
+    if (!selectedTeamId) return own ?? rankedTeams[0] ?? null
+    return rankedTeams.find((t) => teamKey(t) === selectedTeamId) ?? own ?? rankedTeams[0] ?? null
+  }, [rankedTeams, selectedTeamId, currentUserId])
 
   const summaryStats = useMemo(() => {
     const allMovies = [
@@ -116,10 +130,12 @@ export default function StandingsClient({
     return { moviesScored, moviesPending, totalMovies: allMovies.length }
   }, [draftPicks, pickups, counterpicks])
 
-  // The page is a flex column, so every direct child needs flex-none or it gets
+  // Above lg the list keeps its own column and the detail rail sits beside it.
+  // The list is a flex column, so every direct child needs flex-none or it gets
   // squashed instead of adding to the scroll length.
   return (
-    <div className="flex animate-fade-in flex-col gap-3" data-testid="standings-container">
+    <div className="animate-fade-in lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-5">
+      <div className="flex flex-col gap-3" data-testid="standings-container">
       {/* Summary strip */}
       <div className="grid flex-none grid-cols-3 gap-2">
         <SummaryCard value={summaryStats.totalMovies} label="Movies" tone="text-gold" />
@@ -146,14 +162,19 @@ export default function StandingsClient({
 
       {/* Leaderboard */}
       {rankedTeams.map((rankedTeam, index) => {
-        const teamId = rankedTeam.participant.teams?.id ?? rankedTeam.participant.id
+        const teamId = teamKey(rankedTeam)
         return (
           <TeamStandingCard
             key={rankedTeam.participant.id}
             rankedTeam={rankedTeam}
             isCurrentUser={rankedTeam.participant.user_id === currentUserId}
             isExpanded={expandedTeamId === teamId}
-            onToggle={() => setExpandedTeamId((current) => (current === teamId ? null : teamId))}
+            isSelected={railTeam != null && teamKey(railTeam) === teamId}
+            onActivate={() => {
+              // One tap serves both shapes: the accordion below lg, the rail above it.
+              setExpandedTeamId((current) => (current === teamId ? null : teamId))
+              setSelectedTeamId(teamId)
+            }}
             animationDelay={index * 100}
           />
         )
@@ -171,6 +192,9 @@ export default function StandingsClient({
           <p className="mt-2 text-foreground-muted">Teams will appear here once the draft begins.</p>
         </div>
       )}
+      </div>
+
+      {railTeam && <TeamDetailRail rankedTeam={railTeam} />}
     </div>
   )
 }
