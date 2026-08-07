@@ -58,11 +58,15 @@ claude.local.md
 # Git worktrees
 .worktrees/
 
+# Claude worktrees
+.claude/worktrees/
+
 # Drafts and notes
 .drafts/
 
 # SuperDesign
 .superdesign/
+
 # design-sync (staged converter, build output, machine state)
 .ds-sync/
 ds-bundle/
