@@ -16,7 +16,7 @@ interface PlaceBidModalProps {
   onClose: () => void
   budget: TeamBudget | null
   existingBids: PickupBid[]
-  draftedTmdbIds: number[]
+  ownedTmdbIds: number[]
   onPlaceBid: (tmdbId: number, amount: number, movieData: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
   counterBidTarget?: PickupBid | null
 }
@@ -39,7 +39,7 @@ export default function PlaceBidModal({
   onClose,
   budget,
   existingBids,
-  draftedTmdbIds,
+  ownedTmdbIds,
   onPlaceBid,
   counterBidTarget,
 }: PlaceBidModalProps) {
@@ -53,11 +53,12 @@ export default function PlaceBidModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Memoize excluded IDs to prevent infinite re-renders
+  // Movies already on someone's roster (drafted or picked up) or already bid on
+  // are not offerable. Memoized to prevent infinite re-renders.
   const excludedTmdbIds = useMemo(() => {
     const biddedTmdbIds = existingBids.map(b => b.tmdb_id)
-    return new Set([...draftedTmdbIds, ...biddedTmdbIds])
-  }, [draftedTmdbIds, existingBids])
+    return new Set([...ownedTmdbIds, ...biddedTmdbIds])
+  }, [ownedTmdbIds, existingBids])
 
   const {
     movies: results,

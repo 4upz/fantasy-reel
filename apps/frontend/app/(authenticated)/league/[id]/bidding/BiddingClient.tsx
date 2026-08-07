@@ -7,14 +7,16 @@ import { useBidding } from '../hooks/useBidding'
 interface Props {
   league: League
   teamId: string
-  draftedTmdbIds: number[]
+  ownedTmdbIds: number[]
+  usedPickupSlots: number
   biddingCounterpickSlots: number
 }
 
 export default function BiddingClient({
   league,
   teamId,
-  draftedTmdbIds,
+  ownedTmdbIds,
+  usedPickupSlots,
   biddingCounterpickSlots,
 }: Props): React.ReactElement {
   const {
@@ -41,7 +43,8 @@ export default function BiddingClient({
       bids={bids}
       myBids={myBids}
       budget={budget}
-      draftedTmdbIds={draftedTmdbIds}
+      ownedTmdbIds={ownedTmdbIds}
+      usedPickupSlots={usedPickupSlots}
       onPlaceBid={placeBid}
       onCancelBid={cancelBid}
       biddingCounterpickCount={biddingCounterpickCount}
