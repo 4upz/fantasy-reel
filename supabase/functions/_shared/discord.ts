@@ -4,6 +4,7 @@
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { fetchWithTimeout } from './http.ts'
 
 // ============================================================================
 // Types
@@ -192,11 +193,21 @@ async function sendToWebhook(
     const webhookUrl = new URL(channel.webhook_url)
     if (channel.thread_id) webhookUrl.searchParams.set('thread_id', channel.thread_id)
 
-    const response = await fetch(webhookUrl.toString(), {
+    const requestInit: RequestInit = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-    })
+    }
+
+    let response = await fetchWithTimeout(webhookUrl.toString(), requestInit, 10_000)
+
+    // Discord rate limits are expected under load, not exceptional -- honour
+    // retry_after and retry once before treating it as a plain failure.
+    if (response.status === 429) {
+      const retryAfterMs = await parseDiscordRetryAfterMs(response)
+      await new Promise((resolve) => setTimeout(resolve, Math.min(retryAfterMs, 5000)))
+      response = await fetchWithTimeout(webhookUrl.toString(), requestInit, 10_000)
+    }
 
     if (response.ok) {
       // Reset failure tracking on success
@@ -216,6 +227,19 @@ async function sendToWebhook(
     console.error(`Discord webhook network error for channel ${channel.id}:`, error)
     await trackFailure(supabase, channel.id)
   }
+}
+
+/** Reads Discord's rate-limit wait time off a 429: the JSON body's `retry_after` (seconds), falling back to the `Retry-After` header. */
+async function parseDiscordRetryAfterMs(response: Response): Promise<number> {
+  try {
+    const body = await response.json()
+    if (typeof body?.retry_after === 'number') return body.retry_after * 1000
+  } catch {
+    // Not JSON -- fall back to the header below
+  }
+  const header = response.headers.get('Retry-After')
+  const seconds = header ? Number(header) : NaN
+  return Number.isFinite(seconds) ? seconds * 1000 : 0
 }
 
 async function trackFailure(supabase: SupabaseClient, channelId: string): Promise<void> {

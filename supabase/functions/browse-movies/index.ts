@@ -1,4 +1,5 @@
 import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { fetchWithRetry } from '../_shared/http.ts'
 
 interface BrowseMoviesRequest {
   page?: number
@@ -88,12 +89,12 @@ function getReleaseDateRange(releaseWindow: BrowseMoviesRequest['release_window'
 }
 
 async function fetchTMDbPage(url: string, token: string): Promise<TMDbResponse> {
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-  })
+  }, { timeoutMs: 10_000, retries: 1 })
 
   if (!response.ok) {
     throw new TMDbApiError(response.status, await response.text())

@@ -4,6 +4,8 @@
  * Used by: update-scores
  */
 
+import { fetchWithRetry } from './http.ts'
+
 // --- Types ---
 
 export interface MDBListRating {
@@ -67,8 +69,10 @@ export async function fetchMDBListRatings(
   }
 
   try {
-    const res = await fetch(
-      `https://api.mdblist.com/tmdb/movie/${tmdbId}?apikey=${apiKey}`
+    const res = await fetchWithRetry(
+      `https://api.mdblist.com/tmdb/movie/${tmdbId}?apikey=${apiKey}`,
+      undefined,
+      { timeoutMs: 10_000 }
     )
 
     if (!res.ok) {
@@ -116,14 +120,15 @@ export async function fetchImdbId(
   tmdbApiKey: string
 ): Promise<string | null> {
   try {
-    const res = await fetch(
+    const res = await fetchWithRetry(
       `https://api.themoviedb.org/3/movie/${tmdbId}/external_ids`,
       {
         headers: {
           Authorization: `Bearer ${tmdbApiKey}`,
           'Content-Type': 'application/json',
         },
-      }
+      },
+      { timeoutMs: 10_000 }
     )
     if (!res.ok) return null
     const data: TMDbExternalIds = await res.json()

@@ -22,6 +22,7 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { fetchRosterHoldings, groupHoldingsByMovie } from '../_shared/roster-holdings.ts'
+import { fetchWithRetry } from '../_shared/http.ts'
 
 /** How far in the past a release date can be and still get re-checked. */
 const RECENT_DAYS = 14
@@ -53,12 +54,17 @@ async function fetchTmdbReleaseDate(
   fetchImpl: typeof fetch
 ): Promise<string | null> {
   try {
-    const response = await fetchImpl(`https://api.themoviedb.org/3/movie/${tmdbId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+    const response = await fetchWithRetry(
+      `https://api.themoviedb.org/3/movie/${tmdbId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
       },
-    })
+      { timeoutMs: 10_000, retries: 1 },
+      fetchImpl
+    )
     if (!response.ok) {
       console.warn(`TMDb lookup failed for movie ${tmdbId}: ${response.status}`)
       return null

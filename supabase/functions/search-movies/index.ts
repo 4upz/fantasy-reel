@@ -1,4 +1,5 @@
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie } from '../_shared/utils.ts'
+import { fetchWithRetry } from '../_shared/http.ts'
 
 interface SearchMoviesRequest {
   query: string
@@ -82,12 +83,12 @@ Deno.serve(async (req) => {
 
     console.log(`Searching TMDb: ${tmdbUrl.toString()}`)
 
-    const tmdbResponse = await fetch(tmdbUrl.toString(), {
+    const tmdbResponse = await fetchWithRetry(tmdbUrl.toString(), {
       headers: {
         'Authorization': `Bearer ${tmdbToken}`,
         'Content-Type': 'application/json',
       },
-    })
+    }, { timeoutMs: 10_000, retries: 1 })
 
     if (!tmdbResponse.ok) {
       if (tmdbResponse.status === 401) {

@@ -37,6 +37,7 @@ async function getUpcomingMovies(): Promise<TMDbSearchResult[]> {
         'Content-Type': 'application/json',
       },
       next: { revalidate: 86400 }, // Revalidate once per day
+      signal: AbortSignal.timeout(5_000),
     })
 
     if (!response.ok) {

@@ -1,4 +1,5 @@
 import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { fetchWithRetry } from '../_shared/http.ts'
 
 interface GetMovieDetailsRequest {
   tmdb_id: number
@@ -96,7 +97,7 @@ Deno.serve(async (req) => {
 
     // Fetch movie details
     const detailsUrl = `https://api.themoviedb.org/3/movie/${tmdb_id}?language=en-US`
-    const detailsResponse = await fetch(detailsUrl, { headers: authHeaders })
+    const detailsResponse = await fetchWithRetry(detailsUrl, { headers: authHeaders }, { timeoutMs: 10_000, retries: 1 })
 
     if (!detailsResponse.ok) {
       if (detailsResponse.status === 401) {
@@ -116,7 +117,7 @@ Deno.serve(async (req) => {
 
     // Fetch credits
     const creditsUrl = `https://api.themoviedb.org/3/movie/${tmdb_id}/credits?language=en-US`
-    const creditsResponse = await fetch(creditsUrl, { headers: authHeaders })
+    const creditsResponse = await fetchWithRetry(creditsUrl, { headers: authHeaders }, { timeoutMs: 10_000, retries: 1 })
 
     let credits: TMDbCredits | null = null
     if (creditsResponse.ok) {

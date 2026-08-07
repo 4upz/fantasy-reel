@@ -3,6 +3,7 @@
  */
 
 import { isValidEmail } from './utils.ts'
+import { fetchWithTimeout } from './http.ts'
 
 // Types
 export interface InvitationEmailData {
@@ -209,7 +210,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   const sanitizedSubject = sanitizeEmailHeader(params.subject)
 
   try {
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -222,7 +223,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         html: params.html,
         text: params.text,
       }),
-    })
+    }, 10_000)
 
     if (!response.ok) {
       console.error('Resend API error', { status: response.status })
@@ -270,7 +271,7 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Se
   const textContent = buildInvitationEmailText(data)
 
   try {
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await fetchWithTimeout('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
@@ -283,7 +284,7 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Se
         html: htmlContent,
         text: textContent,
       }),
-    })
+    }, 10_000)
 
     if (!response.ok) {
       // Log only status code, not full response body (may contain sensitive info)

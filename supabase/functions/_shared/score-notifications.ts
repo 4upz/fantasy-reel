@@ -653,8 +653,9 @@ async function loadLeagueNames(
 /**
  * Spacing between messages to the same webhook. Discord's per-webhook bucket
  * is 5 requests per 2s (400ms); this leaves a margin on top. Overrunning it
- * loses messages outright -- discord.ts treats a 429 as a plain failure and
- * does not honour retry_after.
+ * can still cost a message -- discord.ts retries a 429 once, honouring
+ * retry_after (capped at 5s), but a failure on that retry is dropped like
+ * any other webhook error.
  */
 const WEBHOOK_SEND_DELAY_MS = 450
 
