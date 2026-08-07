@@ -13,7 +13,7 @@
  * `fetchImpl` defaults to the global fetch; only sync-release-dates/handler.ts
  * passes an injected one, for testability.
  */
-export async function fetchWithTimeout(
+export function fetchWithTimeout(
   url: string | URL,
   init: RequestInit = {},
   timeoutMs = 10_000,

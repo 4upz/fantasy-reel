@@ -193,6 +193,21 @@ npm run build
 
 ---
 
+## Observability Conventions
+
+Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives — do not add ad-hoc `console.*` logging or raw `fetch` calls in Edge Functions:
+
+- **Structured logs:** `createLogger('<function-name>')` from `_shared/logger.ts` — one JSON line per event with `level`, `fn`, `request_id`, `msg`, plus fields. Serialize caught errors with `serializeError(err)` (includes Postgrest `code`/`details`/`hint`).
+- **Request IDs:** every response carries `X-Request-Id`; 5xx bodies include `request_id`. Set automatically via `handleCorsPreflightRequest` → `setRequestContext`. An inbound `x-request-id` header is honored (for future frontend correlation).
+- **Outer catches:** end every function's outer catch with `return internalErrorResponse(error, log)` (logs + Sentry + opaque 500). Sentry in Edge Functions activates only when the `SENTRY_DSN` secret is set.
+- **Outbound HTTP:** use `fetchWithTimeout` / `fetchWithRetry` from `_shared/http.ts` — never bare `fetch`. Retries are for idempotent GETs only.
+- **Cron functions:** record outcomes with `startJobRun(name)` → `run.finish(client, { processed, failed, errors, metadata })` (or `run.fail` in the catch) into the `job_runs` table, and include `job_status` in the response JSON. `proxyCronRequest` turns non-`ok` job_status into HTTP 500 so Vercel's cron dashboard shows degraded runs. All scheduled jobs (including process-trades) run via Vercel Cron → `/api/cron/*` — do not add pg_cron jobs.
+- **Email sends:** log every delivery outcome through `logNotificationDelivery` (`_shared/notification-log.ts`, service-role client required) with a stable snake_case `notification_type`. Query the `failed_notifications` view for failures.
+- **Ops alerts:** `alertOps(title, fields)` from `_shared/ops-alerts.ts` posts to the private ops Discord channel (`OPS_DISCORD_WEBHOOK_URL` secret; no-op when unset). Fires automatically on non-ok job runs and webhook health threshold crossings — reserve manual calls for genuinely actionable conditions.
+- **Frontend errors:** `@sentry/nextjs` is wired via `instrumentation.ts` / `instrumentation-client.ts`, active only when `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_DSN` are set. `app/error.tsx` and `app/global-error.tsx` are the error boundaries — keep them in sync with design-system changes.
+
+---
+
 ## Design System: Cinematic Dark
 
 The app uses a **Cinematic Dark** theme inspired by premium streaming services and awards show aesthetics. All UI should feel like a high-end cinema experience.
