@@ -35,6 +35,7 @@ import {
 } from '../_shared/email-templates/counterpick-no-slots.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
+import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('process-bids')
 
@@ -415,7 +416,27 @@ async function notifyCounterpickWinner(
     subject: `Counterpick won: ${movieTitle}!`,
     html: getBidWonEmailHtml(emailData),
     text: getBidWonEmailText(emailData),
-  }).catch((err) => log.error('Failed to send counterpick bid won email', { error: serializeError(err) }))
+  }).then((result) => {
+    logNotificationDelivery(serviceClient, {
+      notificationType: 'counterpick_won',
+      recipientEmail: email,
+      recipientUserId: userId,
+      status: statusFromEmailResult(result),
+      messageId: result.messageId,
+      errorMessage: result.error,
+      metadata: { league_id: winner.league_id, movie_id: movieId, movie_title: movieTitle, amount: winner.amount },
+    })
+  }).catch((err) => {
+    log.error('Failed to send counterpick bid won email', { error: serializeError(err) })
+    logNotificationDelivery(serviceClient, {
+      notificationType: 'counterpick_won',
+      recipientEmail: email,
+      recipientUserId: userId,
+      status: 'failed',
+      errorMessage: err instanceof Error ? err.message : String(err),
+      metadata: { league_id: winner.league_id, movie_id: movieId, movie_title: movieTitle, amount: winner.amount },
+    })
+  })
 }
 
 /**
@@ -479,7 +500,27 @@ async function notifyCounterpickLoser(
       subject: `Counterpick slots full: ${movieTitle}`,
       html: getCounterpickNoSlotsEmailHtml(emailData),
       text: getCounterpickNoSlotsEmailText(emailData),
-    }).catch((err) => log.error('Failed to send counterpick no-slots email', { error: serializeError(err) }))
+    }).then((result) => {
+      logNotificationDelivery(serviceClient, {
+        notificationType: 'counterpick_no_slots',
+        recipientEmail: email,
+        recipientUserId: userId,
+        status: statusFromEmailResult(result),
+        messageId: result.messageId,
+        errorMessage: result.error,
+        metadata: { league_id: loserBid.league_id, movie_id: movieId, movie_title: movieTitle, amount: loserBid.amount, slots },
+      })
+    }).catch((err) => {
+      log.error('Failed to send counterpick no-slots email', { error: serializeError(err) })
+      logNotificationDelivery(serviceClient, {
+        notificationType: 'counterpick_no_slots',
+        recipientEmail: email,
+        recipientUserId: userId,
+        status: 'failed',
+        errorMessage: err instanceof Error ? err.message : String(err),
+        metadata: { league_id: loserBid.league_id, movie_id: movieId, movie_title: movieTitle, amount: loserBid.amount, slots },
+      })
+    })
     return
   }
 
@@ -499,7 +540,27 @@ async function notifyCounterpickLoser(
     subject: `Counterpick bid unsuccessful for ${movieTitle}`,
     html: getBidLostEmailHtml(emailData),
     text: getBidLostEmailText(emailData),
-  }).catch((err) => log.error('Failed to send counterpick bid lost email', { error: serializeError(err) }))
+  }).then((result) => {
+    logNotificationDelivery(serviceClient, {
+      notificationType: 'counterpick_lost',
+      recipientEmail: email,
+      recipientUserId: userId,
+      status: statusFromEmailResult(result),
+      messageId: result.messageId,
+      errorMessage: result.error,
+      metadata: { league_id: loserBid.league_id, movie_id: movieId, movie_title: movieTitle, amount: loserBid.amount, winning_amount: winner.amount },
+    })
+  }).catch((err) => {
+    log.error('Failed to send counterpick bid lost email', { error: serializeError(err) })
+    logNotificationDelivery(serviceClient, {
+      notificationType: 'counterpick_lost',
+      recipientEmail: email,
+      recipientUserId: userId,
+      status: 'failed',
+      errorMessage: err instanceof Error ? err.message : String(err),
+      metadata: { league_id: loserBid.league_id, movie_id: movieId, movie_title: movieTitle, amount: loserBid.amount, winning_amount: winner.amount },
+    })
+  })
 }
 
 /**
@@ -1228,7 +1289,27 @@ Deno.serve(async (req) => {
               subject: `You won ${movieTitle}!`,
               html: getBidWonEmailHtml(emailData),
               text: getBidWonEmailText(emailData),
-            }).catch(err => log.error('Failed to send bid won email', { error: serializeError(err) }))
+            }).then((result) => {
+              logNotificationDelivery(serviceClient, {
+                notificationType: 'bid_won',
+                recipientEmail: email,
+                recipientUserId: winnerUserId,
+                status: statusFromEmailResult(result),
+                messageId: result.messageId,
+                errorMessage: result.error,
+                metadata: { league_id: winner.league_id, movie_id: movieId, movie_title: movieTitle, tmdb_id: winner.tmdb_id, amount: winner.amount },
+              })
+            }).catch(err => {
+              log.error('Failed to send bid won email', { error: serializeError(err) })
+              logNotificationDelivery(serviceClient, {
+                notificationType: 'bid_won',
+                recipientEmail: email,
+                recipientUserId: winnerUserId,
+                status: 'failed',
+                errorMessage: err instanceof Error ? err.message : String(err),
+                metadata: { league_id: winner.league_id, movie_id: movieId, movie_title: movieTitle, tmdb_id: winner.tmdb_id, amount: winner.amount },
+              })
+            })
           }
         }
 
@@ -1266,7 +1347,27 @@ Deno.serve(async (req) => {
                 subject: `Bid unsuccessful for ${movieTitle}`,
                 html: getBidLostEmailHtml(emailData),
                 text: getBidLostEmailText(emailData),
-              }).catch(err => log.error('Failed to send bid lost email', { error: serializeError(err) }))
+              }).then((result) => {
+                logNotificationDelivery(serviceClient, {
+                  notificationType: 'bid_lost',
+                  recipientEmail: email,
+                  recipientUserId: loserUserId,
+                  status: statusFromEmailResult(result),
+                  messageId: result.messageId,
+                  errorMessage: result.error,
+                  metadata: { league_id: loserBid.league_id, movie_id: movieId, movie_title: movieTitle, tmdb_id: loserBid.tmdb_id, amount: loserBid.amount, winning_amount: winner.amount },
+                })
+              }).catch(err => {
+                log.error('Failed to send bid lost email', { error: serializeError(err) })
+                logNotificationDelivery(serviceClient, {
+                  notificationType: 'bid_lost',
+                  recipientEmail: email,
+                  recipientUserId: loserUserId,
+                  status: 'failed',
+                  errorMessage: err instanceof Error ? err.message : String(err),
+                  metadata: { league_id: loserBid.league_id, movie_id: movieId, movie_title: movieTitle, tmdb_id: loserBid.tmdb_id, amount: loserBid.amount, winning_amount: winner.amount },
+                })
+              })
             }
           }
         }

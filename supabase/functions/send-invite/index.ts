@@ -1,7 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError, internalErrorResponse } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError, internalErrorResponse, createServiceClient } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('send-invite')
 
@@ -179,6 +180,16 @@ Deno.serve(async (req) => {
     if (!emailResult.success) {
       console.warn('Failed to send invitation email:', emailResult.error)
     }
+
+    await logNotificationDelivery(createServiceClient(), {
+      notificationType: 'invitation',
+      recipientEmail: normalizedEmail,
+      recipientUserId: user_id ?? null,
+      status: statusFromEmailResult(emailResult),
+      messageId: emailResult.messageId,
+      errorMessage: emailResult.error,
+      metadata: { league_id, league_name: league.name, invitation_id: invitation.id },
+    })
 
     return jsonResponse({
       invitation: {
