@@ -28,6 +28,11 @@ export type JobStatus = 'ok' | 'partial' | 'failed'
 export interface JobRunsClient {
   from(table: string): {
     insert(values: Record<string, unknown>): PromiseLike<{ error: unknown }>
+    delete(): {
+      lt(column: string, value: string): {
+        select(columns: string): PromiseLike<{ data: unknown[] | null; error: unknown }>
+      }
+    }
   }
 }
 
@@ -161,5 +166,36 @@ export function startJobRun(jobName: string): JobRun {
 
       return 'failed'
     },
+  }
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/**
+ * Delete job_runs rows older than `retentionDays` (default 90). Every
+ * scheduled job records a run here -- process-trades alone adds one every 5
+ * minutes, roughly 105k rows/year -- so this keeps the table bounded.
+ *
+ * Best-effort like `finish`/`fail`: never throws, so a purge failure can
+ * never break the caller's own job outcome. Returns the number of rows
+ * deleted, or null if the delete failed (logged either way).
+ */
+export async function purgeOldJobRuns(supabase: JobRunsClient, retentionDays = 90): Promise<number | null> {
+  try {
+    const cutoff = new Date(Date.now() - retentionDays * MS_PER_DAY).toISOString()
+
+    // .select('id') on the delete return gives back the deleted rows so the
+    // count can be reported without a separate count-only query.
+    const { data, error } = await supabase.from('job_runs').delete().lt('started_at', cutoff).select('id')
+
+    if (error) {
+      log.error('Failed to purge old job runs', { retention_days: retentionDays, error: serializeError(error) })
+      return null
+    }
+
+    return data?.length ?? null
+  } catch (err) {
+    log.error('Failed to purge old job runs', { retention_days: retentionDays, error: serializeError(err) })
+    return null
   }
 }

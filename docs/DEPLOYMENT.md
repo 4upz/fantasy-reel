@@ -254,6 +254,16 @@ npx supabase functions logs --project-ref <your-project-ref>
 **Vercel Logs:**
 - Dashboard → Project → Deployments → Select deployment → Functions tab
 
+### Log Retention & Drains
+
+Supabase's dashboard log retention is short — roughly 1 day on the Free plan, 7 days on Pro. Edge Function logs are already structured JSON (one object per line, with `level`/`fn`/`request_id`/`msg` — see `_shared/logger.ts`), so they're machine-shippable the moment the 7-day window starts hurting (e.g. chasing a `request_id` from a user report filed a week later).
+
+Two options when that day comes:
+- **Option A — Supabase Log Drains** (Team plan): dashboard-configured, ships everything with no code changes.
+- **Option B — third-party shipper** (e.g. [Axiom](https://axiom.co), [Better Stack Logs](https://betterstack.com/logs)): generous free tiers, but needs a small forwarding hook plus an API-key secret; not currently wired up.
+
+**Recommendation:** stick with dashboard logs until debugging regularly needs a lookback beyond 7 days, or cross-referencing `request_id`s older than the retention window becomes a recurring pain — then revisit.
+
 ### Uptime Monitoring
 
 The frontend exposes `/api/health` — an unauthenticated, uncached endpoint that checks Supabase reachability and returns `200` (`{"status":"ok"}`) or `503` (`{"status":"degraded"}`). Point an external monitor (e.g. [UptimeRobot](https://uptimerobot.com), [Better Stack](https://betterstack.com)) at `https://<your-production-domain>/api/health` on a short interval (1-5 min), plus the landing page (`https://<your-production-domain>/`) as a sanity check that the app itself is serving traffic.

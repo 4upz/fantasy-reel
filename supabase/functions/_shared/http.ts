@@ -3,6 +3,22 @@
  * retry for idempotent GETs.
  */
 
+import { createLogger } from './logger.ts'
+
+const log = createLogger('shared/http')
+
+/**
+ * Host only -- never the full URL. Query strings carry API keys for TMDb/
+ * MDBList, so logging anything beyond `host` would leak secrets into logs.
+ */
+function hostOf(url: string | URL): string {
+  try {
+    return new URL(url).host
+  } catch {
+    return 'unknown'
+  }
+}
+
 /**
  * Fetch with a bounded timeout via AbortSignal.timeout. If `init` already
  * carries a signal, both it and the timeout can abort the request
@@ -12,8 +28,12 @@
  *
  * `fetchImpl` defaults to the global fetch; only sync-release-dates/handler.ts
  * passes an injected one, for testability.
+ *
+ * Every call is logged once as a single structured line -- success/4xx at
+ * info, 5xx or a thrown error (including timeout) at warn -- so outbound
+ * latency/error rates per host are answerable from logs alone.
  */
-export function fetchWithTimeout(
+export async function fetchWithTimeout(
   url: string | URL,
   init: RequestInit = {},
   timeoutMs = 10_000,
@@ -21,7 +41,30 @@ export function fetchWithTimeout(
 ): Promise<Response> {
   const timeoutSignal = AbortSignal.timeout(timeoutMs)
   const signal = init.signal ? AbortSignal.any([init.signal, timeoutSignal]) : timeoutSignal
-  return fetchImpl(url, { ...init, signal })
+  const host = hostOf(url)
+  const method = init.method ?? 'GET'
+  const start = performance.now()
+
+  try {
+    const response = await fetchImpl(url, { ...init, signal })
+    const duration_ms = Math.round(performance.now() - start)
+    const fields = { host, method, status: response.status, duration_ms }
+    if (response.status >= 500) {
+      log.warn('outbound', fields)
+    } else {
+      log.info('outbound', fields)
+    }
+    return response
+  } catch (error) {
+    const duration_ms = Math.round(performance.now() - start)
+    log.warn('outbound failed', {
+      host,
+      method,
+      duration_ms,
+      error_name: error instanceof Error ? error.name : 'Unknown',
+    })
+    throw error
+  }
 }
 
 /**
@@ -38,6 +81,7 @@ export async function fetchWithRetry(
   fetchImpl: typeof fetch = fetch
 ): Promise<Response> {
   const { timeoutMs = 10_000, retries = 1, backoffMs = 500 } = opts
+  const host = hostOf(url)
 
   let lastError: unknown
   let lastResponse: Response | undefined
@@ -52,6 +96,11 @@ export async function fetchWithRetry(
     }
 
     if (attempt < retries) {
+      log.warn('outbound retry', {
+        host,
+        attempt: attempt + 1,
+        reason: lastResponse ? `status_${lastResponse.status}` : lastError instanceof Error ? lastError.name : 'unknown',
+      })
       await new Promise((resolve) => setTimeout(resolve, backoffMs))
     }
   }
