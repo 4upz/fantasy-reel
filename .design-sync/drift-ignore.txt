@@ -41,6 +41,7 @@ InvitationsList
 InviteModal
 JoinLinkCard
 JoinLinkSection
+LeagueBottomNav
 LeagueInfoSection
 LeagueManager
 LeagueSwitcher
