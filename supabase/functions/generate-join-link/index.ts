@@ -5,7 +5,11 @@ import {
   handleCorsPreflightRequest,
   isValidUUID,
   generateJoinCode,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('generate-join-link')
 
 interface GenerateJoinLinkRequest {
   league_id: string
@@ -101,7 +105,6 @@ Deno.serve(async (req) => {
       league_name: league.name,
     })
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

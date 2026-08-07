@@ -6,8 +6,12 @@ import {
   isAuthError,
   isValidUUID,
   createServiceClient,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { activateLeague } from '../_shared/activation.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('skip-counterpick-round')
 
 interface SkipCounterpickRoundRequest {
   league_id: string
@@ -69,7 +73,6 @@ Deno.serve(async (req) => {
     }, 200)
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

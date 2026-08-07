@@ -5,10 +5,14 @@ import {
   handleCorsPreflightRequest,
   isValidUUID,
   isUpcomingMovie,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, DiscordEmbed } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('place-bid')
 
 interface MovieData {
   title: string
@@ -394,7 +398,6 @@ Deno.serve(async (req) => {
       was_update: !!existingTeamBid,
     }, 201)
   } catch (error) {
-    console.error('Error placing bid:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

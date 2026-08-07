@@ -23,6 +23,9 @@ import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { fetchRosterHoldings, groupHoldingsByMovie } from '../_shared/roster-holdings.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
+
+const log = createLogger('sync-release-dates')
 
 /** How far in the past a release date can be and still get re-checked. */
 const RECENT_DAYS = 14
@@ -66,13 +69,13 @@ async function fetchTmdbReleaseDate(
       fetchImpl
     )
     if (!response.ok) {
-      console.warn(`TMDb lookup failed for movie ${tmdbId}: ${response.status}`)
+      log.warn('TMDb lookup failed', { tmdb_id: tmdbId, status: response.status })
       return null
     }
     const data: { release_date?: string } = await response.json()
     return data.release_date || null
   } catch (error) {
-    console.warn(`TMDb lookup error for movie ${tmdbId}:`, error)
+    log.warn('TMDb lookup error', { tmdb_id: tmdbId, error: serializeError(error) })
     return null
   }
 }
@@ -132,7 +135,7 @@ export async function runSyncReleaseDates(
       .eq('id', movie.id)
 
     if (updateError) {
-      console.error(`Failed to update release_date for ${movie.title}:`, updateError)
+      log.error('Failed to update release_date', { movie_title: movie.title, error: serializeError(updateError) })
       continue
     }
 

@@ -1,6 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidJoinCode } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidJoinCode, internalErrorResponse } from '../_shared/utils.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('join-league')
 
 interface JoinLeagueRequest {
   league_id?: string
@@ -240,7 +243,6 @@ Deno.serve(async (req) => {
     }, 201)
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

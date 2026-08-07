@@ -2,6 +2,7 @@ import {
   jsonResponse,
   errorResponse,
   handleCorsPreflightRequest,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import {
   validateTradeProposal,
@@ -14,6 +15,9 @@ import {
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
+
+const log = createLogger('process-trades')
 
 interface TradeRecord {
   id: string
@@ -79,7 +83,7 @@ Deno.serve(async (req) => {
       .limit(10)
 
     if (fetchError) {
-      console.error('Failed to fetch trades:', fetchError)
+      log.error('Failed to fetch trades', { error: serializeError(fetchError) })
       return errorResponse('Failed to fetch trades', 500)
     }
 
@@ -122,7 +126,7 @@ Deno.serve(async (req) => {
         })
 
         if (executeError) {
-          console.error(`Failed to execute trade ${trade.id}:`, executeError)
+          log.error('Failed to execute trade', { trade_id: trade.id, error: serializeError(executeError) })
           results.failed++
           results.errors.push(`Trade ${trade.id}: ${executeError.message}`)
           continue
@@ -131,7 +135,7 @@ Deno.serve(async (req) => {
         await notifyTradeCompleted(serviceClient, trade)
         results.completed++
       } catch (error) {
-        console.error(`Error processing trade ${trade.id}:`, error)
+        log.error('Error processing trade', { trade_id: trade.id, error: serializeError(error) })
         results.failed++
         results.errors.push(`Trade ${trade.id}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
@@ -142,8 +146,7 @@ Deno.serve(async (req) => {
       ...results,
     })
   } catch (error) {
-    console.error('Error in process-trades:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })
 

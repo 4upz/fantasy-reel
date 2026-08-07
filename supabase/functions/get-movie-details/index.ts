@@ -1,5 +1,8 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('get-movie-details')
 
 interface GetMovieDetailsRequest {
   tmdb_id: number
@@ -165,7 +168,6 @@ Deno.serve(async (req) => {
 
     return jsonResponse(response)
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

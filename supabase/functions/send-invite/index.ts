@@ -1,6 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError, internalErrorResponse } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('send-invite')
 
 interface SendInviteRequest {
   league_id: string
@@ -194,7 +197,6 @@ Deno.serve(async (req) => {
     }, 201)
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

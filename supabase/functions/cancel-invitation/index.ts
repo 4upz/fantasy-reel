@@ -5,7 +5,11 @@ import {
   isValidUUID,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('cancel-invitation')
 
 interface CancelInvitationRequest {
   invitation_id: string
@@ -67,7 +71,6 @@ Deno.serve(async (req) => {
       message: 'Invitation cancelled successfully',
     })
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

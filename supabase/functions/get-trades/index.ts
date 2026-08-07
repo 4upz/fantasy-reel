@@ -5,8 +5,12 @@ import {
   isValidUUID,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { createServiceClient } from '../_shared/trade-validation.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('get-trades')
 
 interface GetTradesParams {
   league_id: string
@@ -114,7 +118,6 @@ Deno.serve(async (req) => {
       },
     })
   } catch (error) {
-    console.error('Error fetching trades:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

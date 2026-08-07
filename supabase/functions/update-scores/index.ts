@@ -1,8 +1,11 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse } from '../_shared/utils.ts'
 import { fetchMDBListRatings } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
 import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
+
+const log = createLogger('update-scores')
 
 interface UpdateScoresRequest {
   movie_ids?: string[]
@@ -36,7 +39,7 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     if (!supabaseUrl || !serviceRoleKey) {
-      console.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+      log.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
       return errorResponse('Score update service not configured', 503)
     }
 
@@ -61,7 +64,7 @@ Deno.serve(async (req) => {
         .in('id', validIds)
 
       if (error) {
-        console.error('Error fetching movies:', error)
+        log.error('Error fetching movies', { error: serializeError(error) })
         return errorResponse('Failed to fetch movies', 500)
       }
 
@@ -81,7 +84,7 @@ Deno.serve(async (req) => {
         .eq('league_id', params.league_id)
 
       if (error) {
-        console.error('Error fetching draft picks:', error)
+        log.error('Error fetching draft picks', { error: serializeError(error) })
         return errorResponse('Failed to fetch drafted movies', 500)
       }
 
@@ -104,7 +107,7 @@ Deno.serve(async (req) => {
         .limit(30)
 
       if (error) {
-        console.error('Error fetching movies:', error)
+        log.error('Error fetching movies', { error: serializeError(error) })
         return errorResponse('Failed to fetch movies', 500)
       }
 
@@ -123,7 +126,7 @@ Deno.serve(async (req) => {
     const mdblistApiKey = Deno.env.get('MDBLIST_API_KEY')
     const needsApiKey = moviesToUpdate.some(m => m.tmdb_id > 0)
     if (needsApiKey && !mdblistApiKey) {
-      console.error('MDBLIST_API_KEY not configured')
+      log.error('MDBLIST_API_KEY not configured')
       return errorResponse('Score update service not configured', 503)
     }
 
@@ -193,7 +196,7 @@ Deno.serve(async (req) => {
             .upsert(reviewRows, { onConflict: 'movie_id,source' })
 
           if (reviewError) {
-            console.error(`Error upserting reviews for ${movie.title}:`, reviewError)
+            log.error('Error upserting reviews', { movie_title: movie.title, error: serializeError(reviewError) })
           } else {
             ratingsStored = reviewRows.length
           }
@@ -208,7 +211,7 @@ Deno.serve(async (req) => {
           )
 
           if (calcError) {
-            console.error(`Score calculation failed for ${movie.title}:`, calcError)
+            log.error('Score calculation failed', { movie_title: movie.title, error: serializeError(calcError) })
             results.errors.push({
               movie_id: movie.id,
               title: movie.title,
@@ -218,9 +221,9 @@ Deno.serve(async (req) => {
             // Ratings were stored, but none of them was a Tomatometer score, so
             // the movie stays unscored under RT-only scoring. Not an error - it
             // just must not be counted as a score update.
-            console.log(`No Rotten Tomatoes score for ${movie.title}; left unscored`)
+            log.info('No Rotten Tomatoes score; left unscored', { movie_title: movie.title })
           } else {
-            console.log(`Calculated score for ${movie.title}: ${fantasyPts}`)
+            log.info('Calculated score', { movie_title: movie.title, fantasy_points: fantasyPts })
             results.scores_updated++
           }
         }
@@ -229,7 +232,7 @@ Deno.serve(async (req) => {
         await new Promise(resolve => setTimeout(resolve, 50))
 
       } catch (error) {
-        console.error(`Error processing movie ${movie.title}:`, error)
+        log.error('Error processing movie', { movie_title: movie.title, error: serializeError(error) })
         results.errors.push({
           movie_id: movie.id,
           title: movie.title,
@@ -244,7 +247,6 @@ Deno.serve(async (req) => {
     return jsonResponse({ ...results, notifications })
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

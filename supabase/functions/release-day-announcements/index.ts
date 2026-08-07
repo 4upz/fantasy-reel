@@ -6,8 +6,11 @@
  * ../_shared/release-day-announcements.test.ts).
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { runReleaseDayAnnouncements } from './handler.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('release-day-announcements')
 
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
@@ -22,7 +25,7 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     if (!supabaseUrl || !serviceRoleKey) {
-      console.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+      log.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
       return errorResponse('Release announcement service not configured', 503)
     }
 
@@ -30,7 +33,6 @@ Deno.serve(async (req) => {
     const result = await runReleaseDayAnnouncements(serviceClient)
     return jsonResponse(result)
   } catch (error) {
-    console.error('Unexpected error in release-day-announcements:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

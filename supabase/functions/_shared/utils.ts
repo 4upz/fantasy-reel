@@ -1,5 +1,10 @@
 import { createClient, SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, getCorsHeaders } from './cors.ts'
+import { getCurrentRequest, getRequestId, setRequestContext } from './request-context.ts'
+import { createLogger, serializeError, type Logger } from './logger.ts'
+import { captureException } from './monitoring.ts'
+
+export { setRequestContext }
 
 /**
  * Create a service role Supabase client for admin operations.
@@ -13,15 +18,10 @@ export function createServiceClient(): SupabaseClient {
   return createClient(url, key)
 }
 
-let _currentRequest: Request | undefined
-
-export function setRequestContext(req: Request): void {
-  _currentRequest = req
-}
-
 function getCurrentCorsHeaders(): Record<string, string> {
-  if (_currentRequest) {
-    return getCorsHeaders(_currentRequest)
+  const currentRequest = getCurrentRequest()
+  if (currentRequest) {
+    return getCorsHeaders(currentRequest)
   }
   return corsHeaders
 }
@@ -29,7 +29,7 @@ function getCurrentCorsHeaders(): Record<string, string> {
 export function jsonResponse(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...getCurrentCorsHeaders(), 'Content-Type': 'application/json' }
+    headers: { ...getCurrentCorsHeaders(), 'Content-Type': 'application/json', 'X-Request-Id': getRequestId() }
   })
 }
 
@@ -80,10 +80,33 @@ export function isAuthorizedCronRequest(req: Request): boolean {
 }
 
 export function errorResponse(message: string, status = 500): Response {
-  return new Response(JSON.stringify({ error: message }), {
+  const body = status >= 500 ? { error: message, request_id: getRequestId() } : { error: message }
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { ...getCurrentCorsHeaders(), 'Content-Type': 'application/json' }
+    headers: { ...getCurrentCorsHeaders(), 'Content-Type': 'application/json', 'X-Request-Id': getRequestId() }
   })
+}
+
+/**
+ * Standard handler for an outer catch: logs the error, fires (but does not
+ * await) error tracking, and returns the opaque 500 response. Monitoring
+ * runs via EdgeRuntime.waitUntil when available so it can finish after the
+ * response is sent without delaying it; otherwise it's fire-and-forget,
+ * since the isolate may be torn down before an unawaited promise settles.
+ */
+export function internalErrorResponse(err: unknown, log?: Logger): Response {
+  const logger = log ?? createLogger('edge')
+  logger.error('Unhandled error', { error: serializeError(err) })
+
+  const capture = captureException(err)
+  const g = globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }
+  if (g.EdgeRuntime?.waitUntil) {
+    g.EdgeRuntime.waitUntil(capture)
+  } else {
+    void capture
+  }
+
+  return errorResponse('Internal server error', 500)
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

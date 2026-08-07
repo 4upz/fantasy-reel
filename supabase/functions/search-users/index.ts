@@ -1,5 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, authenticateRequest, isAuthError } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, authenticateRequest, isAuthError, internalErrorResponse } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('search-users')
 
 interface SearchUsersRequest {
   query: string
@@ -155,7 +158,6 @@ Deno.serve(async (req) => {
     return jsonResponse({ users: results })
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

@@ -12,8 +12,12 @@ import {
   handleCorsPreflightRequest,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { runSendAnnouncement, type SendAnnouncementRequest } from './handler.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('send-announcement')
 
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
@@ -40,7 +44,6 @@ Deno.serve(async (req) => {
     }
     return jsonResponse(result, status)
   } catch (error) {
-    console.error('Unexpected error in send-announcement:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

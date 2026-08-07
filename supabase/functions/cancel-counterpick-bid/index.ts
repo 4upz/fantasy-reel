@@ -17,7 +17,11 @@ import {
   isAuthError,
   isValidUUID,
   createServiceClient,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('cancel-counterpick-bid')
 
 interface CancelCounterpickBidRequest {
   bid_id: string
@@ -136,7 +140,6 @@ Deno.serve(async (req) => {
       restored_bid: nextHighestBid ? { id: nextHighestBid.id, amount: nextHighestBid.amount } : null,
     })
   } catch (error) {
-    console.error('Error cancelling counterpick bid:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

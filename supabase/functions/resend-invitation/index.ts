@@ -5,8 +5,12 @@ import {
   isValidUUID,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('resend-invitation')
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -119,7 +123,6 @@ Deno.serve(async (req) => {
         : `Invitation refreshed for ${updated.email} (email delivery pending)`,
     })
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

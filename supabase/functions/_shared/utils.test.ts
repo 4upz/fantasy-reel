@@ -160,7 +160,9 @@ Deno.test('errorResponse', async (t) => {
 
     assertEquals(response.status, 500)
     assertEquals(response.headers.get('Content-Type'), 'application/json')
-    assertEquals(await response.json(), { error: 'Something went wrong' })
+    const body = await response.json()
+    assertEquals(body.error, 'Something went wrong')
+    assertEquals(typeof body.request_id, 'string')
   })
 
   await t.step('creates error response with custom status', async () => {

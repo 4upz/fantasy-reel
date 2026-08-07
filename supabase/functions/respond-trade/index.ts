@@ -4,6 +4,7 @@ import {
   handleCorsPreflightRequest,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import {
   validateTradeProposal,
@@ -15,6 +16,9 @@ import {
   getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('respond-trade')
 
 interface RespondTradeRequest {
   trade_offer_id: string
@@ -207,7 +211,6 @@ Deno.serve(async (req) => {
       trade_offer: updatedOffer,
     })
   } catch (error) {
-    console.error('Error responding to trade:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

@@ -19,7 +19,7 @@
  */
 // Trigger deploy
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie, internalErrorResponse } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
@@ -33,6 +33,9 @@ import {
   getCounterpickNoSlotsEmailHtml,
   getCounterpickNoSlotsEmailText,
 } from '../_shared/email-templates/counterpick-no-slots.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
+
+const log = createLogger('process-bids')
 
 interface ProcessBidsRequest {
   mode?: 'weekly' | 'extended'
@@ -185,7 +188,7 @@ async function deductTeamBudget(
     .single()
 
   if (budgetFetchError || !currentBudget) {
-    console.error(`Failed to fetch budget for team ${teamId}:`, budgetFetchError)
+    log.error('Failed to fetch budget', { team_id: teamId, error: serializeError(budgetFetchError) })
     return
   }
 
@@ -199,7 +202,7 @@ async function deductTeamBudget(
     .eq('team_id', teamId)
 
   if (budgetUpdateError) {
-    console.error(`Failed to update budget for team ${teamId}:`, budgetUpdateError)
+    log.error('Failed to update budget', { team_id: teamId, error: serializeError(budgetUpdateError) })
   }
 }
 
@@ -226,7 +229,7 @@ async function selectByIdBatches<T>(
     const batch = ids.slice(i, i + ID_BATCH_SIZE)
     const { data, error } = await selectBatch(batch)
     if (error) {
-      console.error(failureMessage, error)
+      log.error(failureMessage, { error: serializeError(error) })
       for (const id of batch) unreadIds.add(id)
       continue
     }
@@ -411,7 +414,7 @@ async function notifyCounterpickWinner(
     subject: `Counterpick won: ${movieTitle}!`,
     html: getBidWonEmailHtml(emailData),
     text: getBidWonEmailText(emailData),
-  }).catch((err) => console.error('Failed to send counterpick bid won email:', err))
+  }).catch((err) => log.error('Failed to send counterpick bid won email', { error: serializeError(err) }))
 }
 
 /**
@@ -475,7 +478,7 @@ async function notifyCounterpickLoser(
       subject: `Counterpick slots full: ${movieTitle}`,
       html: getCounterpickNoSlotsEmailHtml(emailData),
       text: getCounterpickNoSlotsEmailText(emailData),
-    }).catch((err) => console.error('Failed to send counterpick no-slots email:', err))
+    }).catch((err) => log.error('Failed to send counterpick no-slots email', { error: serializeError(err) }))
     return
   }
 
@@ -495,7 +498,7 @@ async function notifyCounterpickLoser(
     subject: `Counterpick bid unsuccessful for ${movieTitle}`,
     html: getBidLostEmailHtml(emailData),
     text: getBidLostEmailText(emailData),
-  }).catch((err) => console.error('Failed to send counterpick bid lost email:', err))
+  }).catch((err) => log.error('Failed to send counterpick bid lost email', { error: serializeError(err) }))
 }
 
 /**
@@ -545,7 +548,7 @@ async function loadSettledCounterpickContests(
       contests.push({ key, activeBids })
       bidsByContest.set(key, bids)
     } catch (error) {
-      console.error(`Error loading counterpick bids for ${key}:`, error)
+      log.error('Error loading counterpick bids', { movie_key: key, error: serializeError(error) })
       errors.push({
         movie_key: key,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -638,9 +641,10 @@ async function voidReleasedCounterpickContests(
       })
     }
 
-    console.log(
-      `Voided ${bidsToVoid.length} counterpick bid(s) for ${movieTitle}: movie released before processing`
-    )
+    log.info('Voided counterpick bid(s): movie released before processing', {
+      voided_count: bidsToVoid.length,
+      movie_title: movieTitle,
+    })
   }
 
   return surviving
@@ -695,7 +699,7 @@ async function processCounterpickBids(
         .single()
 
       if (movieError || !movie) {
-        console.error(`Movie not found for counterpick bid: ${movieId}`)
+        log.error('Movie not found for counterpick bid', { movie_id: movieId })
         errors.push({ movie_key: key, error: 'Movie not found for counterpick bid' })
         continue
       }
@@ -729,7 +733,7 @@ async function processCounterpickBids(
           })
 
         if (counterpickError) {
-          console.error(`Failed to create counterpick for ${movieTitle}:`, counterpickError)
+          log.error('Failed to create counterpick', { movie_title: movieTitle, error: serializeError(counterpickError) })
           errors.push({ movie_key: key, error: 'Failed to create counterpick record' })
           continue
         }
@@ -761,11 +765,13 @@ async function processCounterpickBids(
           movie_title: movieTitle,
         })
 
-        console.log(
-          `Processed counterpick bid for ${movieTitle}: winner team ${winner.team_id} with $${winner.amount}`
-        )
+        log.info('Processed counterpick bid', {
+          movie_title: movieTitle,
+          winner_team_id: winner.team_id,
+          amount: winner.amount,
+        })
       } else {
-        console.log(`No counterpick awarded for ${movieTitle}: every bidder had filled its slots`)
+        log.info('No counterpick awarded: every bidder had filled its slots', { movie_title: movieTitle })
       }
 
       // Mark all other bids for this movie as lost
@@ -794,7 +800,7 @@ async function processCounterpickBids(
         })
       }
     } catch (error) {
-      console.error(`Error processing counterpick bids for ${key}:`, error)
+      log.error('Error processing counterpick bids', { movie_key: key, error: serializeError(error) })
       errors.push({
         movie_key: key,
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -897,12 +903,12 @@ async function sendNoBidsDiscordNotifications(
     const { data: allChannels, error: channelsError } = await query
 
     if (channelsError) {
-      console.error('Error fetching discord channels:', channelsError)
+      log.error('Error fetching discord channels', { error: serializeError(channelsError) })
       return summary
     }
 
     if (!allChannels || allChannels.length === 0) {
-      console.log(`[process-bids] No enabled discord channels found for notify_bids`)
+      log.info('No enabled discord channels found for notify_bids')
       return summary
     }
 
@@ -941,7 +947,7 @@ async function sendNoBidsDiscordNotifications(
 
     await Promise.allSettled(noBidsPromises)
   } catch (err) {
-    console.error('Failed to send "no bids" notifications:', err)
+    log.error('Failed to send "no bids" notifications', { error: serializeError(err) })
   }
 
   return summary
@@ -997,7 +1003,7 @@ Deno.serve(async (req) => {
     )
 
     if (bidsError) {
-      console.error(`Failed to fetch ${mode} bids:`, bidsError)
+      log.error('Failed to fetch bids', { mode, error: serializeError(bidsError) })
       return errorResponse(
         mode === 'weekly' ? 'Failed to fetch bids' : 'Failed to fetch extended bids',
         500
@@ -1085,14 +1091,14 @@ Deno.serve(async (req) => {
             .single()
 
           if (movieError || !newMovie) {
-            console.error(`Failed to create movie for ${movieTitle}:`, movieError)
+            log.error('Failed to create movie', { movie_title: movieTitle, error: serializeError(movieError) })
             errors.push({ movie_key: key, error: 'Failed to create movie record' })
             continue
           }
           movieId = newMovie.id
           movieReleaseDate = newMovie.release_date
         } else {
-          console.error(`No movie data for bid ${winner.id}`)
+          log.error('No movie data for bid', { bid_id: winner.id })
           errors.push({ movie_key: key, error: 'No movie data available' })
           continue
         }
@@ -1141,7 +1147,10 @@ Deno.serve(async (req) => {
             })
           }
 
-          console.log(`Voided ${bidIdsToVoid.length} pickup bid(s) for ${movieTitle}: movie released before processing`)
+          log.info('Voided pickup bid(s): movie released before processing', {
+            voided_count: bidIdsToVoid.length,
+            movie_title: movieTitle,
+          })
           continue
         }
 
@@ -1155,7 +1164,7 @@ Deno.serve(async (req) => {
         })
 
         if (pickupError) {
-          console.error(`Failed to create pickup for ${movieTitle}:`, pickupError)
+          log.error('Failed to create pickup', { movie_title: movieTitle, error: serializeError(pickupError) })
           errors.push({ movie_key: key, error: 'Failed to create pickup record' })
           continue
         }
@@ -1212,7 +1221,7 @@ Deno.serve(async (req) => {
               subject: `You won ${movieTitle}!`,
               html: getBidWonEmailHtml(emailData),
               text: getBidWonEmailText(emailData),
-            }).catch(err => console.error('Failed to send bid won email:', err))
+            }).catch(err => log.error('Failed to send bid won email', { error: serializeError(err) }))
           }
         }
 
@@ -1250,7 +1259,7 @@ Deno.serve(async (req) => {
                 subject: `Bid unsuccessful for ${movieTitle}`,
                 html: getBidLostEmailHtml(emailData),
                 text: getBidLostEmailText(emailData),
-              }).catch(err => console.error('Failed to send bid lost email:', err))
+              }).catch(err => log.error('Failed to send bid lost email', { error: serializeError(err) }))
             }
           }
         }
@@ -1263,9 +1272,9 @@ Deno.serve(async (req) => {
           movie_title: movieTitle,
         })
 
-        console.log(`Processed bid for ${movieTitle}: winner team ${winner.team_id} with $${winner.amount}`)
+        log.info('Processed bid', { movie_title: movieTitle, winner_team_id: winner.team_id, amount: winner.amount })
       } catch (error) {
-        console.error(`Error processing bids for ${key}:`, error)
+        log.error('Error processing bids', { movie_key: key, error: serializeError(error) })
         errors.push({
           movie_key: key,
           error: error instanceof Error ? error.message : 'Unknown error',
@@ -1285,7 +1294,7 @@ Deno.serve(async (req) => {
 
     if (counterpickBidsError) {
       // Continue with pickup results even if counterpick fetch fails
-      console.error(`Failed to fetch ${mode} counterpick bids:`, counterpickBidsError)
+      log.error('Failed to fetch counterpick bids', { mode, error: serializeError(counterpickBidsError) })
     }
 
     const voidedCounterpickResults: VoidedBidResult[] = []
@@ -1334,7 +1343,6 @@ Deno.serve(async (req) => {
       notifications: notificationSummary,
     })
   } catch (error) {
-    console.error('Unexpected error in process-bids:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

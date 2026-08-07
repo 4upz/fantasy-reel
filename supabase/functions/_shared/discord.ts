@@ -5,6 +5,9 @@
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { fetchWithTimeout } from './http.ts'
+import { createLogger, serializeError } from './logger.ts'
+
+const log = createLogger('shared/discord')
 
 // ============================================================================
 // Types
@@ -91,7 +94,7 @@ const CATEGORY_COLUMN: Partial<Record<NotificationCategory, keyof DiscordChannel
  * Send a Discord notification to all enabled channels for a league.
  *
  * Uses the service role client (bypasses RLS) to read webhook URLs.
- * Never throws -- catches all errors internally and logs with console.error.
+ * Never throws -- catches all errors internally and logs them via the shared logger.
  *
  * IMPORTANT: Must be awaited, not fire-and-forget. Supabase Edge Functions
  * may terminate after sending the response, aborting in-flight fetch() calls.
@@ -117,12 +120,12 @@ export async function sendDiscordNotification(
       .eq('enabled', true)
 
     if (fetchError) {
-      console.error('Failed to fetch discord channels:', fetchError.message)
+      log.error('Failed to fetch discord channels', { league_id: leagueId, error: fetchError.message })
       return
     }
 
     if (!channels || channels.length === 0) {
-      console.log(`[discord] sendDiscordNotification: No enabled channels found for league ${leagueId}`)
+      log.info('No enabled channels found for league', { league_id: leagueId })
       return
     }
 
@@ -134,7 +137,7 @@ export async function sendDiscordNotification(
       : channels
 
     if (eligibleChannels.length === 0) {
-      console.log(`[discord] sendDiscordNotification: No channels with category "${category}" enabled for league ${leagueId}`)
+      log.info('No channels with category enabled for league', { category, league_id: leagueId })
       return
     }
 
@@ -148,14 +151,14 @@ export async function sendDiscordNotification(
     // Log any failures (don't throw)
     for (let i = 0; i < results.length; i++) {
       if (results[i].status === 'rejected') {
-        console.error(
-          `Discord webhook failed for channel ${eligibleChannels[i].id}:`,
-          (results[i] as PromiseRejectedResult).reason
-        )
+        log.error('Discord webhook failed', {
+          channel_id: eligibleChannels[i].id,
+          error: serializeError((results[i] as PromiseRejectedResult).reason),
+        })
       }
     }
   } catch (error) {
-    console.error('Unexpected error in sendDiscordNotification:', error)
+    log.error('Unexpected error in sendDiscordNotification', { error: serializeError(error) })
   }
 }
 
@@ -218,13 +221,11 @@ async function sendToWebhook(
           .eq('id', channel.id)
       }
     } else {
-      console.error(
-        `Discord webhook returned ${response.status} for channel ${channel.id}`
-      )
+      log.error('Discord webhook returned non-OK status', { channel_id: channel.id, status: response.status })
       await trackFailure(supabase, channel.id)
     }
   } catch (error) {
-    console.error(`Discord webhook network error for channel ${channel.id}:`, error)
+    log.error('Discord webhook network error', { channel_id: channel.id, error: serializeError(error) })
     await trackFailure(supabase, channel.id)
   }
 }
@@ -262,7 +263,7 @@ async function trackFailure(supabase: SupabaseClient, channelId: string): Promis
       .eq('id', channelId)
   } catch (error) {
     // Don't let failure tracking break the main flow
-    console.error('Failed to track webhook failure:', error)
+    log.error('Failed to track webhook failure', { channel_id: channelId, error: serializeError(error) })
   }
 }
 

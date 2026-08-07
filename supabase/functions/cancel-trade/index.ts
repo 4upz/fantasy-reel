@@ -4,6 +4,7 @@ import {
   handleCorsPreflightRequest,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import {
   getTeamInfo,
@@ -14,6 +15,9 @@ import {
   notifyTradeParties,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('cancel-trade')
 
 interface CancelTradeRequest {
   trade_offer_id: string
@@ -88,7 +92,6 @@ Deno.serve(async (req) => {
       trade_offer_id,
     })
   } catch (error) {
-    console.error('Error cancelling trade:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

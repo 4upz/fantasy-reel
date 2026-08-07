@@ -7,8 +7,12 @@ import {
   isValidUUID,
   createServiceClient,
   isUpcomingMovie,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { activateLeague } from '../_shared/activation.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('make-counterpick')
 
 interface MakeCounterpickRequest {
   league_id: string
@@ -289,7 +293,6 @@ Deno.serve(async (req) => {
     }, 201)
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })
