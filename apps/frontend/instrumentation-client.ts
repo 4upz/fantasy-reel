@@ -1,11 +1,8 @@
-import * as Sentry from '@sentry/nextjs'
+// Client-side Sentry bootstrap. The SDK is loaded lazily via the DSN-gated
+// facade in utils/sentry.ts — no DSN (local dev, E2E/CI) means the SDK is
+// never compiled into route loads or downloaded by the browser.
+import { initSentryClient, captureRouterTransition } from '@/utils/sentry'
 
-// No-op unless NEXT_PUBLIC_SENTRY_DSN is set (e.g. local dev, PR previews).
-Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  enabled: !!process.env.NEXT_PUBLIC_SENTRY_DSN,
-  tracesSampleRate: 0.1,
-  sendDefaultPii: false,
-})
+initSentryClient()
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart
+export const onRouterTransitionStart = captureRouterTransition
