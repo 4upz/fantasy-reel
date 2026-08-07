@@ -136,7 +136,12 @@ export default defineConfig({
    * Locally: Reuse existing server (faster iteration)
    */
   webServer: {
-    command: 'npm run dev',
+    // Plain `next dev` (webpack), not `npm run dev` (--turbopack): the Sentry
+    // SDK doesn't support Turbopack until Next 15.4.1, and running the E2E
+    // suite against that combination degrades the dev server app-wide.
+    // Production builds use webpack, so this also matches prod more closely.
+    // Revert to `npm run dev` after upgrading Next past 15.4.1.
+    command: 'npx next dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000, // 2 minutes to start
