@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { trackEvent } from '@/utils/analytics'
 import { buildTeamInfoByUserId, buildTeamInfoByTeamId, type TeamDisplayInfo } from '@/utils/league'
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
@@ -105,8 +106,9 @@ export default function DraftBoard({
       }
 
       await onPickMade()
+      trackEvent('draft_pick_made', { league_id: league.id, round: nextPick?.round ?? 0 })
     },
-    [league.id, onPickMade]
+    [league.id, onPickMade, nextPick]
   )
 
   const { execute: handleDraftPick, isLoading: picking, error } = useAsyncAction(draftPickAction)

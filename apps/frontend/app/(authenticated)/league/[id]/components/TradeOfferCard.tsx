@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import Image from 'next/image'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { trackEvent } from '@/utils/analytics'
 import type {
   TeamWithOwner,
   TradeOfferWithTeams,
@@ -139,10 +140,14 @@ export default function TradeOfferCard(props: Props) {
         if (result.error) {
           setError(result.error)
         }
+      } else if (action === 'accept') {
+        trackEvent('trade_accepted', { league_id: trade.league_id })
+      } else if (action === 'reject') {
+        trackEvent('trade_rejected', { league_id: trade.league_id })
       }
       // If successful, the real-time subscription will update the trade
     },
-    [trade.id, onRespond, onCancel, onVeto]
+    [trade.id, trade.league_id, onRespond, onCancel, onVeto]
   )
 
   const { execute: handleAction, isLoading } = useAsyncAction(tradeAction)

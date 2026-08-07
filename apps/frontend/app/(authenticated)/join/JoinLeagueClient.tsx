@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Clapperboard, Link2 } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { trackEvent } from '@/utils/analytics'
 
 interface Props {
   token?: string
@@ -64,6 +65,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
       }
 
       if (data?.league) {
+        trackEvent('league_joined', { league_id: data.league.id })
         router.push(`/league/${data.league.id}`)
       }
 

@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import type { League, Team, TeamWithOwner, TradeItems } from '@/types'
 import { useTrading } from '../hooks/useTrading'
 import TradingPanel from '../components/TradingPanel'
+import { trackEvent } from '@/utils/analytics'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const ProposeTradeModal = dynamic(() => import('../components/ProposeTradeModal'), {
@@ -86,6 +87,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
           onPropose={async (recipientTeamId: string, offeredItems: TradeItems, requestedItems: TradeItems, message?: string) => {
             const result = await proposeTrade(recipientTeamId, offeredItems, requestedItems, message)
             if (result.success) {
+              trackEvent('trade_proposed', { league_id: league.id })
               setShowProposeModal(false)
             }
             return result

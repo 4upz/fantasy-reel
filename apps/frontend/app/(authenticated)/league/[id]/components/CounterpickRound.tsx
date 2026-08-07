@@ -5,6 +5,7 @@ import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { trackEvent } from '@/utils/analytics'
 import { buildTeamInfoByUserId, buildTeamInfoByTeamId } from '@/utils/league'
 import CounterpickPicker from './CounterpickPicker'
 import DraftProgressRing from './DraftProgressRing'
@@ -115,6 +116,7 @@ export default function CounterpickRound({
       }
 
       onCounterpickMade()
+      trackEvent('counterpick_made', { league_id: league.id })
       // If round complete, turn will be null on next fetch
       if (data?.round_complete) {
         setCurrentTurn(null)
