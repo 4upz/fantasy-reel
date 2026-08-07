@@ -34,6 +34,10 @@ export interface SendEmailResult {
   success: boolean
   messageId?: string
   error?: string
+  /** True when the send was intentionally skipped (no RESEND_API_KEY configured),
+   *  as opposed to an actual delivery failure. Lets callers log 'skipped' vs
+   *  'failed' to notification_log without string-matching `error`. */
+  skipped?: boolean
 }
 
 /**
@@ -199,7 +203,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 
   if (!apiKey) {
     log.warn('RESEND_API_KEY not configured - skipping email send')
-    return { success: false, error: 'RESEND_API_KEY not configured' }
+    return { success: false, error: 'RESEND_API_KEY not configured', skipped: true }
   }
 
   // Validate recipient email
@@ -256,7 +260,7 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Se
 
   if (!apiKey) {
     log.warn('RESEND_API_KEY not configured - skipping email send')
-    return { success: false, error: 'RESEND_API_KEY not configured' }
+    return { success: false, error: 'RESEND_API_KEY not configured', skipped: true }
   }
 
   // Validate recipient email

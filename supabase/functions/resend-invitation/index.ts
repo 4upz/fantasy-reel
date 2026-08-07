@@ -6,9 +6,11 @@ import {
   authenticateRequest,
   isAuthError,
   internalErrorResponse,
+  createServiceClient,
 } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('resend-invitation')
 
@@ -113,6 +115,15 @@ Deno.serve(async (req) => {
     if (!emailResult.success) {
       console.warn('Failed to send invitation email:', emailResult.error)
     }
+
+    await logNotificationDelivery(createServiceClient(), {
+      notificationType: 'invitation',
+      recipientEmail: updated.email,
+      status: statusFromEmailResult(emailResult),
+      messageId: emailResult.messageId,
+      errorMessage: emailResult.error,
+      metadata: { league_id: updated.league_id, league_name: league.name, invitation_id: updated.id },
+    })
 
     return jsonResponse({
       invitation: updated,

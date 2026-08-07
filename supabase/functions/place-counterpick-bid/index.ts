@@ -24,6 +24,7 @@ import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, DiscordEmbed } from '../_shared/discord.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('place-counterpick-bid')
 
@@ -396,6 +397,26 @@ Deno.serve(async (req) => {
             subject: `You've been outbid on counterpick: ${movieTitle}`,
             html: getOutbidEmailHtml(emailData),
             text: getOutbidEmailText(emailData),
+          }).then((result) => {
+            logNotificationDelivery(serviceClient, {
+              notificationType: 'counterpick_outbid',
+              recipientEmail: outbidEmail,
+              recipientUserId: outbidUserId,
+              status: statusFromEmailResult(result),
+              messageId: result.messageId,
+              errorMessage: result.error,
+              metadata: { league_id, movie_id, movie_title: movieTitle, new_amount: amount },
+            })
+            return result
+          }).catch((err) => {
+            logNotificationDelivery(serviceClient, {
+              notificationType: 'counterpick_outbid',
+              recipientEmail: outbidEmail,
+              recipientUserId: outbidUserId,
+              status: 'failed',
+              errorMessage: err instanceof Error ? err.message : String(err),
+              metadata: { league_id, movie_id, movie_title: movieTitle, new_amount: amount },
+            })
           })
         }
       }
