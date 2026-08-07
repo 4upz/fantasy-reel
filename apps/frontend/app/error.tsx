@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect } from 'react'
-import * as Sentry from '@sentry/nextjs'
 import { AlertTriangle } from 'lucide-react'
+import { captureException } from '@/utils/sentry'
 
 export default function ErrorBoundary({
   error,
@@ -12,7 +12,7 @@ export default function ErrorBoundary({
   reset: () => void
 }) {
   useEffect(() => {
-    Sentry.captureException(error)
+    captureException(error)
   }, [error])
 
   return (

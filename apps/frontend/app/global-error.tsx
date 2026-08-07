@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import * as Sentry from '@sentry/nextjs'
+import { captureException } from '@/utils/sentry'
 
 // This boundary replaces the root layout when an error escapes it, so it
 // cannot rely on globals.css or the design-token classes being loaded —
@@ -14,7 +14,7 @@ export default function GlobalError({
   reset: () => void
 }) {
   useEffect(() => {
-    Sentry.captureException(error)
+    captureException(error)
   }, [error])
 
   return (
