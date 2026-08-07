@@ -4,6 +4,8 @@ Audit of Fantasy Reel's observability posture across the Next.js frontend (Verce
 
 **Date:** 2026-08-07
 
+> **Status update (2026-08-07):** Tier 1 (§3, items 1–6) is implemented on this branch — Sentry (frontend + Edge Functions, env-gated), error boundaries, `job_runs` persistence with red cron dashboards on partial failure, process-trades migrated to Vercel Cron, fetch timeouts/retries everywhere, structured logging with request IDs, generalized `notification_log`, and Discord ops alerts. See the "Observability Conventions" section in `CLAUDE.md` for the resulting usage conventions. Tiers 2–3 remain open.
+
 ---
 
 ## 1. What exists today
