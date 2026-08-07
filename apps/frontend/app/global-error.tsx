@@ -79,6 +79,8 @@ export default function GlobalError({
             >
               Try again
             </button>
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- global-error replaces
+                the root layout and must not depend on the App Router being functional */}
             <a
               href="/"
               style={{

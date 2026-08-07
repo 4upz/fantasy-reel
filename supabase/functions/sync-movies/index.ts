@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { fetchWithRetry } from '../_shared/http.ts'
 
 interface SyncMoviesRequest {
   year?: number
@@ -43,12 +44,12 @@ async function fetchExternalIds(
 ): Promise<string | null> {
   try {
     const url = `https://api.themoviedb.org/3/movie/${tmdbId}/external_ids`
-    const response = await fetch(url, {
+    const response = await fetchWithRetry(url, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-    })
+    }, { timeoutMs: 10_000, retries: 1 })
 
     if (!response.ok) {
       console.warn(`Failed to fetch external IDs for TMDb ID ${tmdbId}: ${response.status}`)
@@ -119,12 +120,12 @@ Deno.serve(async (req) => {
 
     console.log(`Fetching movies from TMDb: ${tmdbUrl.toString()}`)
 
-    const tmdbResponse = await fetch(tmdbUrl.toString(), {
+    const tmdbResponse = await fetchWithRetry(tmdbUrl.toString(), {
       headers: {
         'Authorization': `Bearer ${tmdbToken}`,
         'Content-Type': 'application/json',
       },
-    })
+    }, { timeoutMs: 10_000, retries: 1 })
 
     if (!tmdbResponse.ok) {
       if (tmdbResponse.status === 401) {

@@ -29,6 +29,9 @@ export async function proxyCronRequest(
           'Content-Type': 'application/json',
           'X-Cron-Secret': cronSecret,
         },
+        // Headroom under this route's maxDuration=60 so a hung Edge Function
+        // doesn't tie up the request indefinitely.
+        signal: AbortSignal.timeout(55_000),
         ...(body ? { body: JSON.stringify(body) } : {}),
       }
     )
@@ -46,7 +49,11 @@ export async function proxyCronRequest(
 
     return NextResponse.json(data, { status: response.status })
   } catch (error) {
-    console.error(`Cron ${functionName} failed:`, error)
+    console.error(
+      `Cron ${functionName} failed:`,
+      error instanceof Error ? error.name : '',
+      error
+    )
     return NextResponse.json(
       { error: 'Failed to call Edge Function' },
       { status: 502 }
