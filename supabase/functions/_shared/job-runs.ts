@@ -10,6 +10,7 @@
 
 import { createLogger, serializeError } from './logger.ts'
 import { getRequestId } from './request-context.ts'
+import { alertOps } from './ops-alerts.ts'
 
 const log = createLogger('shared/job-runs')
 
@@ -51,6 +52,32 @@ function computeStatus(processed: number, failed: number): JobStatus {
   if (failed > 0 && failed < processed) return 'partial'
   // Covers failed >= processed > 0, and processed === 0 with failures.
   return 'failed'
+}
+
+/**
+ * Fire an ops alert without letting it slow down (or break) the job's own
+ * response path. Runs via EdgeRuntime.waitUntil when available so it can
+ * finish after the response is sent without delaying it; otherwise it's
+ * awaited inline (finish/fail are already async and already awaited by
+ * callers), since the isolate may be torn down before an unawaited promise
+ * settles. Mirrors the pattern in `internalErrorResponse`
+ * (_shared/utils.ts), adapted for an async caller. alertOps itself never
+ * throws, but this stays defensive to preserve the "recording never breaks
+ * the job" guarantee.
+ */
+async function dispatchAlert(title: string, fields?: Record<string, unknown>): Promise<void> {
+  try {
+    const alert = alertOps(title, fields)
+    const g = globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }
+    if (g.EdgeRuntime?.waitUntil) {
+      g.EdgeRuntime.waitUntil(alert)
+    } else {
+      await alert
+    }
+  } catch {
+    // alertOps never throws, but this call is defensive so a scheduling
+    // failure here can never take down finish()/fail()'s no-throw guarantee.
+  }
 }
 
 /**
@@ -102,15 +129,36 @@ export function startJobRun(jobName: string): JobRun {
     async finish(supabase, outcome): Promise<JobStatus> {
       const status = computeStatus(outcome.processed, outcome.failed)
       await record(supabase, status, outcome)
+
+      if (status !== 'ok') {
+        await dispatchAlert(`Cron ${jobName} run ${status}`, {
+          job_name: jobName,
+          status,
+          items_processed: outcome.processed,
+          items_failed: outcome.failed,
+          duration_ms: Date.now() - startedAt.getTime(),
+          request_id: getRequestId(),
+          first_errors: outcome.errors?.slice(0, 3),
+        })
+      }
+
       return status
     },
 
     async fail(supabase, err): Promise<'failed'> {
+      const serialized = serializeError(err)
       await record(supabase, 'failed', {
         processed: 0,
         failed: 0,
-        errors: [serializeError(err)],
+        errors: [serialized],
       })
+
+      await dispatchAlert(`Cron ${jobName} failed`, {
+        job_name: jobName,
+        request_id: getRequestId(),
+        error: serialized,
+      })
+
       return 'failed'
     },
   }
