@@ -1,4 +1,4 @@
-import * as Sentry from '@sentry/nextjs'
+import { addBreadcrumb, captureException } from '@/utils/sentry'
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { createClient } from './client'
 
@@ -45,7 +45,7 @@ export async function callEdgeFunction<T>(
         // Business-logic error responses (4xx surfaced to the user) are an
         // expected flow, not an exception - breadcrumb only so they still
         // provide context if a later, real error is captured.
-        Sentry.addBreadcrumb({
+        addBreadcrumb({
           category: 'edge-function',
           message: functionName,
           level: 'error',
@@ -60,7 +60,7 @@ export async function callEdgeFunction<T>(
         return { data: null, error: errorMessage }
       }
 
-      Sentry.addBreadcrumb({
+      addBreadcrumb({
         category: 'edge-function',
         message: functionName,
         level: 'error',
@@ -70,7 +70,7 @@ export async function callEdgeFunction<T>(
       return { data: null, error: error.message || 'Edge function error' }
     }
 
-    Sentry.addBreadcrumb({
+    addBreadcrumb({
       category: 'edge-function',
       message: functionName,
       level: 'info',
@@ -83,7 +83,7 @@ export async function callEdgeFunction<T>(
     // flow, so capture it as a real Sentry exception in addition to logging.
     console.error(`Error calling Edge Function ${functionName} [request_id=${requestId}]:`, err)
 
-    Sentry.captureException(err, {
+    captureException(err, {
       tags: { edge_function: functionName },
       extra: { request_id: requestId },
     })

@@ -1,6 +1,6 @@
 'use client'
 
-import * as Sentry from '@sentry/nextjs'
+import { captureException } from '@/utils/sentry'
 import { Toaster } from 'sonner'
 import { SWRConfig } from 'swr'
 
@@ -9,7 +9,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <SWRConfig
       value={{
         onError: (err: Error, key: string) => {
-          Sentry.captureException(err, { tags: { source: 'swr' }, extra: { key } })
+          captureException(err, { tags: { source: 'swr' }, extra: { key } })
         },
       }}
     >
