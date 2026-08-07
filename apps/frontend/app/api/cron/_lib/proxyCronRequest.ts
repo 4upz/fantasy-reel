@@ -4,6 +4,11 @@ import { NextResponse } from 'next/server'
  * Shared handler for Vercel Cron routes: validates the `Authorization: Bearer
  * $CRON_SECRET` header Vercel sends, then forwards the request to the named
  * Edge Function with `X-Cron-Secret`, relaying its JSON response.
+ *
+ * A 2xx upstream response whose body reports a `job_status` other than 'ok'
+ * (i.e. 'partial' or 'failed') is relayed with status 500 so Vercel's cron
+ * dashboard shows the run as failed instead of a green check; the body is
+ * relayed unchanged either way.
  */
 export async function proxyCronRequest(
   request: Request,
@@ -45,6 +50,17 @@ export async function proxyCronRequest(
         { error: 'Edge Function returned non-JSON response', status: response.status },
         { status: 502 }
       )
+    }
+
+    // Surface partial/failed runs: without this, an Edge Function that
+    // returns 200 with per-item errors would show green in Vercel's cron
+    // dashboard even though the run (partially) failed.
+    const jobStatus =
+      data && typeof data === 'object' && 'job_status' in data
+        ? (data as { job_status?: unknown }).job_status
+        : undefined
+    if (response.ok && typeof jobStatus === 'string' && jobStatus !== 'ok') {
+      return NextResponse.json(data, { status: 500 })
     }
 
     return NextResponse.json(data, { status: response.status })

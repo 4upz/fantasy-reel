@@ -9,6 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { runWeeklyReleasesDigest } from './handler.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 
 const log = createLogger('weekly-releases-digest')
 
@@ -16,10 +17,15 @@ Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
+  let run: JobRun | undefined
+  let runClient: JobRunsClient | undefined
+
   try {
     if (!isAuthorizedCronRequest(req)) {
       return errorResponse('Forbidden', 403)
     }
+
+    run = startJobRun('weekly-releases-digest')
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -29,9 +35,24 @@ Deno.serve(async (req) => {
     }
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey)
+    runClient = serviceClient
     const result = await runWeeklyReleasesDigest(serviceClient)
-    return jsonResponse(result)
+
+    // The handler has no per-item failure accounting -- a thrown error lands
+    // in the outer catch instead.
+    const job_status = await run.finish(serviceClient, {
+      processed: result.leagues_notified,
+      failed: 0,
+      metadata: {
+        movies_included: result.movies_included,
+        week_start: result.week_start,
+        week_end: result.week_end,
+      },
+    })
+
+    return jsonResponse({ ...result, job_status })
   } catch (error) {
+    if (run && runClient) await run.fail(runClient, error)
     return internalErrorResponse(error, log)
   }
 })

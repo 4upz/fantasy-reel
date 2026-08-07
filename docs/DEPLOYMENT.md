@@ -201,6 +201,8 @@ Vercel automatically picks up cron configuration from `vercel.json`:
 
 Check Vercel Dashboard → Project → Settings → Cron Jobs to verify.
 
+**Note:** `process-trades` now runs via Vercel Cron (every 5 minutes) instead of the previous Supabase pg_cron job. The `20260807000000_add_job_runs.sql` migration unschedules the old pg_cron job, so deploy that migration (`npx supabase db push`) alongside the frontend deployment that adds the Vercel cron entry — otherwise the job either runs twice (both schedulers active) or not at all (pg_cron removed before the Vercel cron exists).
+
 ---
 
 ## Step 4: Post-Deployment Verification
