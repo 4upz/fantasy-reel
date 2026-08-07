@@ -27,6 +27,10 @@
     {
       "path": "/api/cron/sync-release-dates",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/process-trades",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -4,6 +4,7 @@ import { fetchMDBListRatings } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
 import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 
 const log = createLogger('update-scores')
 
@@ -24,6 +25,9 @@ Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
+  let run: JobRun | undefined
+  let runClient: JobRunsClient | undefined
+
   try {
     // Verify caller is authorized (cron secret OR service role key)
     const cronSecret = Deno.env.get('CRON_SECRET')
@@ -37,6 +41,8 @@ Deno.serve(async (req) => {
       return errorResponse('Forbidden', 403)
     }
 
+    run = startJobRun('update-scores')
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     if (!supabaseUrl || !serviceRoleKey) {
       log.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
@@ -44,6 +50,7 @@ Deno.serve(async (req) => {
     }
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey)
+    runClient = serviceClient
 
     const params = req.method === 'POST'
       ? parseRequestBody(await req.text())
@@ -115,10 +122,12 @@ Deno.serve(async (req) => {
     }
 
     if (moviesToUpdate.length === 0) {
+      const job_status = await run.finish(serviceClient, { processed: 0, failed: 0 })
       return jsonResponse({
         movies_fetched: 0,
         scores_updated: 0,
-        errors: []
+        errors: [],
+        job_status
       })
     }
 
@@ -244,9 +253,21 @@ Deno.serve(async (req) => {
     // Must be awaited -- the runtime may abort in-flight fetches after we respond
     const notifications = await sendScoreNotifications(serviceClient, scoreContext)
 
-    return jsonResponse({ ...results, notifications })
+    const job_status = await run.finish(serviceClient, {
+      processed: moviesToUpdate.length,
+      failed: results.errors.length,
+      errors: results.errors,
+      metadata: {
+        movies_fetched: results.movies_fetched,
+        scores_updated: results.scores_updated,
+        notifications,
+      },
+    })
+
+    return jsonResponse({ ...results, notifications, job_status })
 
   } catch (error) {
+    if (run && runClient) await run.fail(runClient, error)
     return internalErrorResponse(error, log)
   }
 })

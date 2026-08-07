@@ -34,6 +34,7 @@ import {
   getCounterpickNoSlotsEmailText,
 } from '../_shared/email-templates/counterpick-no-slots.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 
 const log = createLogger('process-bids')
 
@@ -958,6 +959,9 @@ Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
+  let run: JobRun | undefined
+  let runClient: JobRunsClient | undefined
+
   try {
     // Authenticate requests using either the X-Cron-Secret header or the Service Role key
     const cronSecret = Deno.env.get('CRON_SECRET')
@@ -981,10 +985,13 @@ Deno.serve(async (req) => {
       return errorResponse('Forbidden', 403)
     }
 
+    run = startJobRun('process-bids')
+
     const serviceClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+    runClient = serviceClient
 
     const { mode = 'weekly', league_id }: ProcessBidsRequest = await req.json().catch(() => ({ mode: 'weekly' }))
 
@@ -1328,6 +1335,23 @@ Deno.serve(async (req) => {
       ? `; voided ${voidedCount} bid(s) for movies that released before processing`
       : ''
 
+    // Items attempted = awarded pickups + awarded counterpicks + voided bids +
+    // movies whose processing errored. Skipped movies (open counter windows,
+    // no active bids) did not have work attempted on them.
+    const job_status = await run.finish(serviceClient, {
+      processed:
+        results.length + counterpickResults.length + voidedCount + errors.length,
+      failed: errors.length,
+      errors,
+      metadata: {
+        mode,
+        pickups_awarded: results.length,
+        counterpicks_awarded: counterpickResults.length,
+        bids_voided: voidedCount,
+        ...(notificationSummary ? { notifications: notificationSummary } : {}),
+      },
+    })
+
     return jsonResponse({
       message: nothingProcessed && voidedCount === 0
         ? 'No bids to process'
@@ -1341,8 +1365,10 @@ Deno.serve(async (req) => {
       voided_counterpick_bids: voidedCounterpickResults.length > 0 ? voidedCounterpickResults : undefined,
       errors: errors.length > 0 ? errors : undefined,
       notifications: notificationSummary,
+      job_status,
     })
   } catch (error) {
+    if (run && runClient) await run.fail(runClient, error)
     return internalErrorResponse(error, log)
   }
 })

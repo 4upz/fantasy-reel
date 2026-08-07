@@ -9,6 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { runSyncReleaseDates } from './handler.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 
 const log = createLogger('sync-release-dates')
 
@@ -16,10 +17,15 @@ Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
+  let run: JobRun | undefined
+  let runClient: JobRunsClient | undefined
+
   try {
     if (!isAuthorizedCronRequest(req)) {
       return errorResponse('Forbidden', 403)
     }
+
+    run = startJobRun('sync-release-dates')
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -34,9 +40,23 @@ Deno.serve(async (req) => {
     }
 
     const serviceClient = createClient(supabaseUrl, serviceRoleKey)
+    runClient = serviceClient
     const result = await runSyncReleaseDates(serviceClient, tmdbToken)
-    return jsonResponse(result)
+
+    // The handler logs and skips individual TMDb/update failures rather than
+    // counting them, so there is no per-item failed counter to map.
+    const job_status = await run.finish(serviceClient, {
+      processed: result.movies_checked,
+      failed: 0,
+      metadata: {
+        dates_changed: result.dates_changed,
+        leagues_notified: result.leagues_notified,
+      },
+    })
+
+    return jsonResponse({ ...result, job_status })
   } catch (error) {
+    if (run && runClient) await run.fail(runClient, error)
     return internalErrorResponse(error, log)
   }
 })

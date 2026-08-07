@@ -3,7 +3,9 @@ import {
   errorResponse,
   handleCorsPreflightRequest,
   internalErrorResponse,
+  isAuthorizedCronRequest,
 } from '../_shared/utils.ts'
+import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 import {
   validateTradeProposal,
   getTeamInfo,
@@ -47,25 +49,19 @@ Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
 
+  let run: JobRun | undefined
+  let runClient: JobRunsClient | undefined
+
   try {
-    // Authenticate cron requests using a secret header
-    // This prevents unauthorized triggering of trade processing
-    const cronSecret = Deno.env.get('CRON_SECRET')
-    const providedSecret = req.headers.get('X-Cron-Secret')
-
-    // If CRON_SECRET is set, require it to match
-    if (cronSecret && providedSecret !== cronSecret) {
-      return errorResponse('Unauthorized', 401)
+    // Cron secret OR service role key -- mirrors the other scheduled jobs.
+    if (!isAuthorizedCronRequest(req)) {
+      return errorResponse('Forbidden', 403)
     }
 
-    // Also accept service role key in Authorization header as alternative auth
-    const authHeader = req.headers.get('Authorization')
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-    if (!cronSecret && authHeader !== `Bearer ${serviceRoleKey}`) {
-      return errorResponse('Unauthorized', 401)
-    }
+    run = startJobRun('process-trades')
 
     const serviceClient = createServiceClient()
+    runClient = serviceClient
     const now = new Date().toISOString()
     const results: ProcessResults = {
       processed: 0,
@@ -88,9 +84,11 @@ Deno.serve(async (req) => {
     }
 
     if (!readyTrades || readyTrades.length === 0) {
+      const job_status = await run.finish(serviceClient, { processed: 0, failed: 0 })
       return jsonResponse({
         message: 'No trades ready for processing',
         ...results,
+        job_status,
       })
     }
 
@@ -141,11 +139,20 @@ Deno.serve(async (req) => {
       }
     }
 
+    const job_status = await run.finish(serviceClient, {
+      processed: results.processed,
+      failed: results.failed,
+      errors: results.errors,
+      metadata: { completed: results.completed },
+    })
+
     return jsonResponse({
       message: `Processed ${results.processed} trades: ${results.completed} completed, ${results.failed} failed`,
       ...results,
+      job_status,
     })
   } catch (error) {
+    if (run && runClient) await run.fail(runClient, error)
     return internalErrorResponse(error, log)
   }
 })
