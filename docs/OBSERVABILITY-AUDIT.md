@@ -4,7 +4,9 @@ Audit of Fantasy Reel's observability posture across the Next.js frontend (Verce
 
 **Date:** 2026-08-07
 
-> **Status update (2026-08-07):** Tier 1 (§3, items 1–6) is implemented on this branch — Sentry (frontend + Edge Functions, env-gated), error boundaries, `job_runs` persistence with red cron dashboards on partial failure, process-trades migrated to Vercel Cron, fetch timeouts/retries everywhere, structured logging with request IDs, generalized `notification_log`, and Discord ops alerts. See the "Observability Conventions" section in `CLAUDE.md` for the resulting usage conventions. Tiers 2–3 remain open.
+> **Status update (2026-08-07):** Tier 1 (§3, items 1–6) is implemented on this branch — Sentry (frontend + Edge Functions, env-gated), error boundaries, `job_runs` persistence with red cron dashboards on partial failure, process-trades migrated to Vercel Cron, fetch timeouts/retries everywhere, structured logging with request IDs, generalized `notification_log`, and Discord ops alerts. See the "Observability Conventions" section in `CLAUDE.md` for the resulting usage conventions.
+>
+> **Tier 2 status:** also implemented (branch `claude/observability-tier2`) — custom funnel events via `utils/analytics.ts` (Vercel Analytics `track`), `callEdgeFunction` instrumentation with client-side request IDs + Sentry breadcrumbs, `useTrading` migrated onto the shared wrapper, global SWR error capture, `/api/health`, Speed Insights, middleware auth-error logging, and realtime degradation tracking in the draft board. Remaining from Tier 2: pointing an external uptime monitor at `/api/health` (user action, see DEPLOYMENT.md). Tier 3 remains open.
 
 ---
 
