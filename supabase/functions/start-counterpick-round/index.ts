@@ -1,5 +1,8 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('start-counterpick-round')
 
 interface StartCounterpickRoundRequest {
   league_id: string
@@ -102,7 +105,6 @@ Deno.serve(async (req) => {
     }, 200)
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

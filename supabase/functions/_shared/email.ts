@@ -4,6 +4,9 @@
 
 import { isValidEmail } from './utils.ts'
 import { fetchWithTimeout } from './http.ts'
+import { createLogger } from './logger.ts'
+
+const log = createLogger('shared/email')
 
 // Types
 export interface InvitationEmailData {
@@ -195,13 +198,13 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'Fantasy Reel <noreply@fantasyreel.com>'
 
   if (!apiKey) {
-    console.warn('RESEND_API_KEY not configured - skipping email send')
+    log.warn('RESEND_API_KEY not configured - skipping email send')
     return { success: false, error: 'RESEND_API_KEY not configured' }
   }
 
   // Validate recipient email
   if (!isValidEmail(params.to)) {
-    console.warn('Invalid recipient email format')
+    log.warn('Invalid recipient email format')
     return { success: false, error: 'Invalid recipient email' }
   }
 
@@ -226,17 +229,18 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     }, 10_000)
 
     if (!response.ok) {
-      console.error('Resend API error', { status: response.status })
+      log.error('Resend API error', { status: response.status })
       return { success: false, error: 'Email delivery failed' }
     }
 
     const result = await response.json()
-    console.log('Email sent successfully:', result.id)
+    log.info('Email sent successfully', { message_id: result.id })
     return { success: true, messageId: result.id }
 
   } catch (error) {
-    console.error('Email send error', {
-      type: error instanceof Error ? error.constructor.name : 'Unknown'
+    // Log error type only, not full details -- the message may echo recipient PII.
+    log.error('Email send error', {
+      error_type: error instanceof Error ? error.constructor.name : 'Unknown'
     })
     return { success: false, error: 'Email delivery unavailable' }
   }
@@ -251,13 +255,13 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Se
   const fromEmail = Deno.env.get('RESEND_FROM_EMAIL') || 'Fantasy Reel <noreply@fantasyreel.com>'
 
   if (!apiKey) {
-    console.warn('RESEND_API_KEY not configured - skipping email send')
+    log.warn('RESEND_API_KEY not configured - skipping email send')
     return { success: false, error: 'RESEND_API_KEY not configured' }
   }
 
   // Validate recipient email
   if (!isValidEmail(data.recipientEmail)) {
-    console.warn('Invalid recipient email format')
+    log.warn('Invalid recipient email format')
     return { success: false, error: 'Invalid recipient email' }
   }
 
@@ -288,18 +292,18 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Se
 
     if (!response.ok) {
       // Log only status code, not full response body (may contain sensitive info)
-      console.error('Resend API error', { status: response.status })
+      log.error('Resend API error', { status: response.status })
       return { success: false, error: 'Email delivery failed' }
     }
 
     const result = await response.json()
-    console.log('Email sent successfully:', result.id)
+    log.info('Email sent successfully', { message_id: result.id })
     return { success: true, messageId: result.id }
 
   } catch (error) {
     // Log error type only, not full details
-    console.error('Email send error', {
-      type: error instanceof Error ? error.constructor.name : 'Unknown'
+    log.error('Email send error', {
+      error_type: error instanceof Error ? error.constructor.name : 'Unknown'
     })
     return { success: false, error: 'Email delivery unavailable' }
   }

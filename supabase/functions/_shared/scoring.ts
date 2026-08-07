@@ -5,6 +5,9 @@
  */
 
 import { fetchWithRetry } from './http.ts'
+import { createLogger, serializeError } from './logger.ts'
+
+const log = createLogger('shared/scoring')
 
 // --- Types ---
 
@@ -104,7 +107,8 @@ export async function fetchMDBListRatings(
     }
 
     return { ratings }
-  } catch {
+  } catch (err) {
+    log.warn('Failed to fetch ratings from MDBList', { tmdb_id: tmdbId, error: serializeError(err) })
     return { ratings: [], error: 'Failed to fetch ratings from MDBList' }
   }
 }
@@ -133,7 +137,8 @@ export async function fetchImdbId(
     if (!res.ok) return null
     const data: TMDbExternalIds = await res.json()
     return data.imdb_id || null
-  } catch {
+  } catch (err) {
+    log.warn('Failed to fetch IMDb ID from TMDb', { tmdb_id: tmdbId, error: serializeError(err) })
     return null
   }
 }

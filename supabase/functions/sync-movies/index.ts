@@ -1,6 +1,9 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
+
+const log = createLogger('sync-movies')
 
 interface SyncMoviesRequest {
   year?: number
@@ -52,14 +55,14 @@ async function fetchExternalIds(
     }, { timeoutMs: 10_000, retries: 1 })
 
     if (!response.ok) {
-      console.warn(`Failed to fetch external IDs for TMDb ID ${tmdbId}: ${response.status}`)
+      log.warn('Failed to fetch external IDs', { tmdb_id: tmdbId, status: response.status })
       return null
     }
 
     const data: TMDbExternalIds = await response.json()
     return data.imdb_id || null
   } catch (error) {
-    console.warn(`Error fetching external IDs for TMDb ID ${tmdbId}:`, error)
+    log.warn('Error fetching external IDs', { tmdb_id: tmdbId, error: serializeError(error) })
     return null
   }
 }
@@ -72,7 +75,7 @@ Deno.serve(async (req) => {
   try {
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!tmdbToken) {
-      console.error('TMDB_API_KEY not configured')
+      log.error('TMDB_API_KEY not configured')
       return errorResponse('Movie sync service not configured', 503)
     }
 
@@ -118,7 +121,7 @@ Deno.serve(async (req) => {
     tmdbUrl.searchParams.set('primary_release_date.lte', endOfYear)
     tmdbUrl.searchParams.set('with_release_type', '2|3') // Theatrical releases
 
-    console.log(`Fetching movies from TMDb: ${tmdbUrl.toString()}`)
+    log.info('Fetching movies from TMDb', { url: tmdbUrl.toString() })
 
     const tmdbResponse = await fetchWithRetry(tmdbUrl.toString(), {
       headers: {
@@ -134,7 +137,7 @@ Deno.serve(async (req) => {
       if (tmdbResponse.status === 429) {
         return errorResponse('TMDb rate limit exceeded. Try again later.', 429)
       }
-      console.error('TMDb API error:', tmdbResponse.status, await tmdbResponse.text())
+      log.error('TMDb API error', { status: tmdbResponse.status, body: await tmdbResponse.text() })
       return errorResponse('Failed to fetch movies from TMDb', 502)
     }
 
@@ -158,7 +161,7 @@ Deno.serve(async (req) => {
 
     // Fetch external IDs (including IMDb IDs) for each movie
     // Process in batches to respect TMDb rate limits (40 requests per 10 seconds)
-    console.log(`Fetching IMDb IDs for ${safeResults.length} movies...`)
+    log.info('Fetching IMDb IDs', { movie_count: safeResults.length })
     const moviesWithImdbIds: Array<{ movie: TMDbMovie; imdb_id: string | null }> = []
 
     for (const movie of safeResults) {
@@ -198,7 +201,7 @@ Deno.serve(async (req) => {
       .select('id, tmdb_id, title, release_date')
 
     if (upsertError) {
-      console.error('Error upserting movies:', upsertError)
+      log.error('Error upserting movies', { error: serializeError(upsertError) })
       return errorResponse('Failed to save movies to database', 500)
     }
 
@@ -218,7 +221,6 @@ Deno.serve(async (req) => {
     })
 
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

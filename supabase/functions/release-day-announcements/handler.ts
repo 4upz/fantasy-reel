@@ -16,6 +16,9 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { fetchRosterHoldings, groupHoldingsByLeague } from '../_shared/roster-holdings.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
+
+const log = createLogger('release-day-announcements')
 
 const NOTIFICATION_TYPE = 'release_day'
 const MAX_FIELDS = 25
@@ -66,7 +69,7 @@ export async function runReleaseDayAnnouncements(
       .in('movie_id', holdings.map((h) => h.movieId))
 
     if (logError) {
-      console.error(`Failed to check notification log for league ${leagueId}:`, logError)
+      log.error('Failed to check notification log', { league_id: leagueId, error: serializeError(logError) })
       continue
     }
 
@@ -87,7 +90,7 @@ export async function runReleaseDayAnnouncements(
       )
 
     if (insertError) {
-      console.error(`Failed to record notification log for league ${leagueId}:`, insertError)
+      log.error('Failed to record notification log', { league_id: leagueId, error: serializeError(insertError) })
       continue
     }
 

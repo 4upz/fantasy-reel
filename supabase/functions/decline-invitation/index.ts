@@ -6,7 +6,11 @@ import {
   authenticateRequest,
   isAuthError,
   isInvitationExpired,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('decline-invitation')
 
 interface DeclineInvitationRequest {
   invitation_id: string
@@ -69,7 +73,6 @@ Deno.serve(async (req) => {
       message: 'Invitation declined successfully',
     })
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

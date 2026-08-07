@@ -6,8 +6,11 @@
  * ../_shared/sync-release-dates.test.ts).
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { runSyncReleaseDates } from './handler.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('sync-release-dates')
 
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
@@ -22,11 +25,11 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!supabaseUrl || !serviceRoleKey) {
-      console.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
+      log.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
       return errorResponse('Release date sync service not configured', 503)
     }
     if (!tmdbToken) {
-      console.error('TMDB_API_KEY not configured')
+      log.error('TMDB_API_KEY not configured')
       return errorResponse('Release date sync service not configured', 503)
     }
 
@@ -34,7 +37,6 @@ Deno.serve(async (req) => {
     const result = await runSyncReleaseDates(serviceClient, tmdbToken)
     return jsonResponse(result)
   } catch (error) {
-    console.error('Unexpected error in sync-release-dates:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

@@ -109,6 +109,7 @@ In Supabase Dashboard → Project Settings → Edge Functions → Secrets, add:
 | `RESEND_API_KEY` | **REQUIRED** - Resend API key for emails (invitations, notifications) |
 | `RESEND_FROM_EMAIL` | Sender email (e.g., `Fantasy Reel <noreply@yourdomain.com>`) |
 | `CRON_SECRET` | Random string for Vercel cron auth (generate with `openssl rand -hex 32`) |
+| `SENTRY_DSN` | Optional; enables error tracking in Edge Functions |
 
 Or via CLI:
 ```bash
@@ -118,6 +119,7 @@ npx supabase secrets set MDBLIST_API_KEY=your_key
 npx supabase secrets set RESEND_API_KEY=your_key
 npx supabase secrets set RESEND_FROM_EMAIL="Fantasy Reel <noreply@yourdomain.com>"
 npx supabase secrets set CRON_SECRET=$(openssl rand -hex 32)
+npx supabase secrets set SENTRY_DSN=your_sentry_dsn
 ```
 
 ### 2.5 Configure Authentication

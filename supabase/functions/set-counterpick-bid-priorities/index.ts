@@ -18,7 +18,11 @@ import {
   isAuthError,
   isValidUUID,
   createServiceClient,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('set-counterpick-bid-priorities')
 
 interface SetCounterpickBidPrioritiesRequest {
   league_id: string
@@ -135,7 +139,6 @@ Deno.serve(async (req) => {
       message: 'Bid priorities updated',
     })
   } catch (error) {
-    console.error('Error setting counterpick bid priorities:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

@@ -6,7 +6,11 @@ import {
   isValidUUID,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('merge-accounts')
 
 interface MergeAccountsRequest {
   originalUserId: string
@@ -143,7 +147,6 @@ Deno.serve(async (req) => {
       message: `Accounts merged successfully. ${providerName} is now linked to your account.`,
     })
   } catch (error) {
-    console.error('Unexpected error in merge-accounts:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

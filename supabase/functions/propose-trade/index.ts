@@ -5,6 +5,7 @@ import {
   isValidUUID,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import {
   TradeItems,
@@ -17,6 +18,9 @@ import {
   getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('propose-trade')
 
 interface ProposeTradeRequest {
   league_id: string
@@ -186,7 +190,6 @@ Deno.serve(async (req) => {
       201
     )
   } catch (error) {
-    console.error('Error proposing trade:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

@@ -18,10 +18,14 @@ import {
   isValidUUID,
   createServiceClient,
   isUpcomingMovie,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, DiscordEmbed } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('place-counterpick-bid')
 
 interface PlaceCounterpickBidRequest {
   league_id: string
@@ -426,7 +430,6 @@ Deno.serve(async (req) => {
       was_update: !!existingTeamBid,
     }, 201)
   } catch (error) {
-    console.error('Error placing counterpick bid:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

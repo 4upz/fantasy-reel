@@ -5,6 +5,7 @@ import {
   isValidUUID,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import {
   getTeamInfo,
@@ -15,6 +16,9 @@ import {
   TradeOffer,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('veto-trade')
 
 interface VetoTradeRequest {
   trade_offer_id: string
@@ -157,7 +161,6 @@ Deno.serve(async (req) => {
       trade_offer_id,
     })
   } catch (error) {
-    console.error('Error vetoing trade:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

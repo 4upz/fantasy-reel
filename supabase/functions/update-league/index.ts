@@ -6,9 +6,13 @@ import {
   authenticateRequest,
   isAuthError,
   isValidUUID,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 import { snapshotStandings, formatPoints } from '../_shared/score-notifications.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('update-league')
 
 type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
 
@@ -162,8 +166,7 @@ Deno.serve(async (req) => {
         return errorResponse('Invalid action', 400)
     }
   } catch (error) {
-    console.error('Unexpected error:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })
 

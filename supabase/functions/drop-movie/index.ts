@@ -4,7 +4,11 @@ import {
   errorResponse,
   handleCorsPreflightRequest,
   isValidUUID,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('drop-movie')
 
 interface DropMovieRequest {
   pickup_id?: string
@@ -301,7 +305,6 @@ Deno.serve(async (req) => {
       drops_remaining: dropLimit - (dropCount ?? 0) - 1,
     })
   } catch (error) {
-    console.error('Error dropping movie:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })

@@ -4,6 +4,7 @@ import {
   handleCorsPreflightRequest,
   authenticateRequest,
   isAuthError,
+  internalErrorResponse,
 } from '../_shared/utils.ts'
 import {
   TradeItems,
@@ -18,6 +19,9 @@ import {
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { createLogger } from '../_shared/logger.ts'
+
+const log = createLogger('counter-trade')
 
 interface CounterTradeRequest {
   trade_offer_id: string
@@ -183,7 +187,6 @@ Deno.serve(async (req) => {
       trade_offer: updatedOffer,
     })
   } catch (error) {
-    console.error('Error countering trade:', error)
-    return errorResponse('Internal server error', 500)
+    return internalErrorResponse(error, log)
   }
 })
