@@ -205,6 +205,9 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 - **Email sends:** log every delivery outcome through `logNotificationDelivery` (`_shared/notification-log.ts`, service-role client required) with a stable snake_case `notification_type`. Query the `failed_notifications` view for failures.
 - **Ops alerts:** `alertOps(title, fields)` from `_shared/ops-alerts.ts` posts to the private ops Discord channel (`OPS_DISCORD_WEBHOOK_URL` secret; no-op when unset). Fires automatically on non-ok job runs and webhook health threshold crossings — reserve manual calls for genuinely actionable conditions.
 - **Frontend errors:** `@sentry/nextjs` is wired via `instrumentation.ts` / `instrumentation-client.ts`, active only when `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_DSN` are set. `app/error.tsx` and `app/global-error.tsx` are the error boundaries — keep them in sync with design-system changes.
+- **Edge Function calls from the frontend:** always go through `callEdgeFunction` (`utils/supabase/functions.ts`) — never raw `fetch` to `/functions/v1/*`. It sends a client `x-request-id`, records duration/status Sentry breadcrumbs, and captures unexpected failures.
+- **Product events:** `trackEvent(name, props)` from `utils/analytics.ts` (wraps Vercel Analytics). Fire only on success paths, ids-only props (no names/emails). Canonical event names are listed in that file's doc comment — reuse them, don't invent variants.
+- **Health:** `/api/health` probes Supabase reachability (200/503) for external uptime monitors — keep it dependency-light and unauthenticated.
 
 ---
 
