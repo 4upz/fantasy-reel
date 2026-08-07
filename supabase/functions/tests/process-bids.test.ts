@@ -10,7 +10,7 @@ import { getServiceClient, createTestFactory, uniqueName, getUserId } from './_s
 
 /**
  * Generate a tmdb_id well outside both the real TMDb ID range and the shared
- * draft-movie pool (factory picks start at 900_100_001 and increment - see
+ * draft-movie pool (factory picks use a per-run 900m-940m range - see
  * createActiveLeague). Tests that mutate a movie's release_date must use an
  * id nobody else touches, or they corrupt the shared pool for every other
  * integration test that drafts afterward.

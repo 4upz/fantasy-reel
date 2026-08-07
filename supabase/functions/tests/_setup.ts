@@ -306,6 +306,31 @@ export function uniqueName(prefix: string): string {
 }
 
 /**
+ * Per-run base for draft-pool tmdb_ids, monotonic across the whole run.
+ *
+ * A fixed base (formerly 900_100_001) made every run reuse the same movie
+ * rows via draft-pick's find-or-create — and tests that legitimately mark a
+ * drafted movie as released (weekly-releases-digest,
+ * release-day-announcements set release_date to "today") poisoned those
+ * shared rows for every LATER run: the next day, "today" is in the past and
+ * every draft fails pick validation with "Movie has already been released".
+ *
+ * Seeded from the clock so each run gets fresh ids, and monotonic within the
+ * run so ranges never collide between createActiveLeague calls. Stays inside
+ * 900,000,000-940,000,000: no real TMDb ids live there (so
+ * sync-release-dates can't "correct" the fake future dates), and it sits
+ * below the 950m+ band other test fixtures use.
+ */
+let draftPoolCursor = 900_000_000 + (Date.now() % 40_000_000)
+
+function nextDraftPoolTmdbId(): number {
+  // Reserve a generous block per call; drafts use ~30 ids at most.
+  const base = draftPoolCursor
+  draftPoolCursor += 1000
+  return base
+}
+
+/**
  * Wait for a condition to be true (useful for async operations)
  */
 export async function waitFor(
@@ -529,8 +554,8 @@ export class TestDataFactory {
   /**
    * Create an active league (draft completed, budgets initialized)
    * This completes the full draft with all participants making picks.
-   * Draft movies start at tmdb_id 900100001 (a range with no real TMDb
-   * entries) and increment.
+   * Draft movies use tmdb_ids from a per-run range (see
+   * nextDraftPoolTmdbId) with no real TMDb entries.
    * @param name League name
    * @param numParticipants Number of participants (default: 2, max: 3 for test support)
    */
@@ -598,7 +623,7 @@ export class TestDataFactory {
     // 200001 exist on TMDb, so sync-release-dates would "correct" the pool
     // movies' fake future dates to the real films' past dates, breaking
     // every later draft with "Movie was released in a previous year".
-    let tmdbIdCounter = 900_100_001
+    let tmdbIdCounter = nextDraftPoolTmdbId()
     const currentYear = new Date().getFullYear()
 
     for (let pickNum = 1; pickNum <= totalPicks; pickNum++) {
