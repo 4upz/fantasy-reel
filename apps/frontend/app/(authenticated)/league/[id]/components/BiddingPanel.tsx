@@ -8,6 +8,7 @@ import type { League, PickupBid, TeamBudget, CounterpickBid } from '@/types'
 import BidCard from './BidCard'
 import CounterpickBidCard from './CounterpickBidCard'
 import CounterpickPriorityList from './CounterpickPriorityList'
+import { isMovieBiddable } from './utils'
 
 function ModalLoadingFallback(): React.ReactElement {
   return (
@@ -70,7 +71,8 @@ interface BiddingPanelProps {
   bids: PickupBid[]
   myBids: PickupBid[]
   budget: TeamBudget | null
-  draftedTmdbIds: number[]
+  ownedTmdbIds: number[]
+  usedPickupSlots: number
   onPlaceBid: (tmdbId: number, amount: number, movieData: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
   onCancelBid: (bidId: string) => Promise<{ success: boolean; error?: string }>
   biddingCounterpickCount: number
@@ -88,7 +90,8 @@ export default function BiddingPanel({
   bids,
   myBids,
   budget,
-  draftedTmdbIds,
+  ownedTmdbIds,
+  usedPickupSlots,
   onPlaceBid,
   onCancelBid,
   biddingCounterpickCount,
@@ -107,7 +110,6 @@ export default function BiddingPanel({
   const hasCounterpicks = biddingCounterpickSlots > 0
 
   const pickupSlots = league.total_slots - league.draft_slots
-  const usedPickupSlots = 0 // TODO: Get from pickups query
   const availableSlots = pickupSlots - usedPickupSlots
   const remainingBudget = budget?.remaining_budget ?? 100
 
@@ -178,6 +180,13 @@ export default function BiddingPanel({
     isOwner: boolean,
     options?: { showCounter?: boolean },
   ): React.ReactElement {
+    // A released movie can't be bid on any more, so offering "Counter Bid" on
+    // one is a dead end -- the server rejects it once the modal is filled in.
+    const releaseDate = item.type === 'pickup'
+      ? item.bid.movie_data?.release_date ?? null
+      : item.bid.movies?.release_date ?? null
+    const canCounter = !!options?.showCounter && isMovieBiddable(releaseDate)
+
     if (item.type === 'pickup') {
       return (
         <BidCard
@@ -185,7 +194,7 @@ export default function BiddingPanel({
           isOwner={isOwner}
           bidType="pickup"
           onCancel={isOwner ? () => handleCancelBid(item.bid.id) : undefined}
-          onCounter={options?.showCounter ? () => handleCounter(item.bid) : undefined}
+          onCounter={canCounter ? () => handleCounter(item.bid) : undefined}
         />
       )
     }
@@ -195,7 +204,7 @@ export default function BiddingPanel({
         isOwner={isOwner}
         bidType="counterpick"
         onCancel={isOwner ? () => handleCancelCounterpickBid(item.bid.id) : undefined}
-        onCounter={options?.showCounter ? () => handleCounterCounterpickBid(item.bid) : undefined}
+        onCounter={canCounter ? () => handleCounterCounterpickBid(item.bid) : undefined}
       />
     )
   }
@@ -254,6 +263,7 @@ export default function BiddingPanel({
           <button
             onClick={() => setIsModalOpen(true)}
             disabled={availableSlots <= 0}
+            title={availableSlots <= 0 ? 'All pickup slots are full — drop a movie to bid again' : undefined}
             className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto"
             data-testid="place-bid-button"
           >
@@ -375,6 +385,7 @@ export default function BiddingPanel({
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
               onClick={() => setIsModalOpen(true)}
+              disabled={availableSlots <= 0}
               className="btn btn-primary px-6 py-3"
             >
               <Plus className="w-5 h-5 mr-2" />
@@ -403,7 +414,7 @@ export default function BiddingPanel({
           }}
           budget={budget}
           existingBids={bids}
-          draftedTmdbIds={draftedTmdbIds}
+          ownedTmdbIds={ownedTmdbIds}
           onPlaceBid={onPlaceBid}
           counterBidTarget={counterBidTarget}
         />
