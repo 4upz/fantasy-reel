@@ -6,6 +6,7 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { fetchWithTimeout } from './http.ts'
 import { createLogger, serializeError } from './logger.ts'
+import { alertOps } from './ops-alerts.ts'
 
 const log = createLogger('shared/discord')
 
@@ -245,7 +246,9 @@ async function parseDiscordRetryAfterMs(response: Response): Promise<number> {
 
 async function trackFailure(supabase: SupabaseClient, channelId: string): Promise<void> {
   try {
-    // Use RPC-style increment to avoid race conditions
+    // Read-then-write increment -- not atomic, so concurrent failures for the
+    // same channel could race and under-count consecutive_failures. Low
+    // stakes: this only affects failure-tracking counters, not core writes.
     const { data: current } = await supabase
       .from('discord_channels')
       .select('consecutive_failures')
@@ -261,6 +264,14 @@ async function trackFailure(supabase: SupabaseClient, channelId: string): Promis
         last_error_at: new Date().toISOString(),
       })
       .eq('id', channelId)
+
+    // Alert once on the threshold crossing, not on every subsequent failure.
+    if (newCount === 3) {
+      await alertOps('Discord webhook failing for channel', {
+        channel_id: channelId,
+        consecutive_failures: newCount,
+      })
+    }
   } catch (error) {
     // Don't let failure tracking break the main flow
     log.error('Failed to track webhook failure', { channel_id: channelId, error: serializeError(error) })
