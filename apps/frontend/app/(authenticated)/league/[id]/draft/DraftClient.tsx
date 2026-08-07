@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
-import * as Sentry from '@sentry/nextjs'
+import { captureMessage } from '@/utils/sentry'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
@@ -236,7 +236,7 @@ export default function DraftClient({
             trackEvent('realtime_degraded', { league_id: league.id, status })
             if (!hasSentSentryDegradeWarningRef.current) {
               hasSentSentryDegradeWarningRef.current = true
-              Sentry.captureMessage('Realtime channel degraded', {
+              captureMessage('Realtime channel degraded', {
                 level: 'warning',
                 tags: { league_id: league.id },
                 extra: { status },
