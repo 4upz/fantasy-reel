@@ -340,18 +340,30 @@ export function validateLeagueTradingEnabled(
 }
 
 /**
- * Validate team owns the movies they're offering
+ * Validate team owns the movies they're offering, and (when the team that
+ * would receive them is known) that none is a counterpicked movie heading
+ * back to its own counterpicker -- that would collapse counterpicker_team_id
+ * == target_team_id, which the DB forbids and which is not a coherent bet
+ * anyway. This is a UX-earlier mirror of the authoritative guard in
+ * execute_trade() (see 20260808160000_counterpick_trade_guardrails.sql);
+ * the SQL-side check is what actually protects the data.
+ *
+ * @param receivingTeamId - The team that would receive `items` if the trade
+ *   goes through. Omit when that context isn't available to the caller; the
+ *   counterpick check is simply skipped in that case (execute_trade still
+ *   catches it at execution time).
  */
 export async function validateMovieOwnership(
   supabase: SupabaseClient,
   teamId: string,
-  items: TradeItems
+  items: TradeItems,
+  receivingTeamId?: string
 ): Promise<ValidationResult> {
   for (const movie of items.movies) {
     if (movie.source === 'draft_pick') {
       const { data, error } = await supabase
         .from('draft_picks')
-        .select('id, team_id, dropped_at')
+        .select('id, team_id, dropped_at, counterpicked_by_team_id')
         .eq('id', movie.source_id)
         .single()
 
@@ -364,10 +376,16 @@ export async function validateMovieOwnership(
       if (data.dropped_at) {
         return { valid: false, error: `Draft pick has been dropped: ${movie.source_id}` }
       }
+      if (receivingTeamId && data.counterpicked_by_team_id === receivingTeamId) {
+        return {
+          valid: false,
+          error: `Cannot trade a counterpicked movie to the team that counterpicked it: ${movie.source_id}`,
+        }
+      }
     } else if (movie.source === 'pickup') {
       const { data, error } = await supabase
         .from('pickups')
-        .select('id, team_id, dropped_at')
+        .select('id, team_id, dropped_at, counterpicked_by_team_id')
         .eq('id', movie.source_id)
         .single()
 
@@ -379,6 +397,12 @@ export async function validateMovieOwnership(
       }
       if (data.dropped_at) {
         return { valid: false, error: `Pickup has been dropped: ${movie.source_id}` }
+      }
+      if (receivingTeamId && data.counterpicked_by_team_id === receivingTeamId) {
+        return {
+          valid: false,
+          error: `Cannot trade a counterpicked movie to the team that counterpicked it: ${movie.source_id}`,
+        }
       }
     }
   }
@@ -558,11 +582,11 @@ export async function validateTradeProposal(
     return { valid: false, error: 'Both teams must be in the same league' }
   }
 
-  // 7. Validate movie ownership
-  result = await validateMovieOwnership(supabase, initiatorTeamId, initiatorItems)
+  // 7. Validate movie ownership (and that nothing is headed back to its own counterpicker)
+  result = await validateMovieOwnership(supabase, initiatorTeamId, initiatorItems, recipientTeamId)
   if (!result.valid) return result
 
-  result = await validateMovieOwnership(supabase, recipientTeamId, recipientItems)
+  result = await validateMovieOwnership(supabase, recipientTeamId, recipientItems, initiatorTeamId)
   if (!result.valid) return result
 
   // 8. Validate FAAB budgets

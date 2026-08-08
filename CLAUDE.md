@@ -793,6 +793,15 @@ Teams can trade movies with each other during the active season.
 | `get-trades` | List trades for league |
 | `process-trades` | Process pending/expired trades (cron) |
 
+### Counterpicks × drops × trades (policy)
+
+- A **pending** counterpick bid blocks a drop only when `leagues.counterpicks_block_drops` is on; a cancelled/lost bid doesn't count, so only `active`/`outbid` bids block.
+- An **awarded** counterpick blocks a drop for both draft picks and pickups (`counterpicked_by_team_id` is checked the same way for each).
+- Drops are only allowed while the league is `active`, regardless of counterpick state.
+- Counterpicks deliberately **survive drops** and keep scoring the inverted points for the counterpicker — this matches Fantasy Critic's ruleset and is not an oversight; see the comment on `recalculate_team_score_with_counterpicks()`.
+- A trade **cannot** send a counterpicked movie to the team that counterpicked it (would collapse counterpicker == holder); any other transfer is allowed, and `counterpicks.target_team_id` is retargeted to the new holder by `execute_trade()`.
+- `process-bids` revalidates counterpick bid targets at processing time: a bid that has become self-targeted (or targets a movie that was dropped or is now owned by the bidder) is voided uncharged rather than awarded, and surviving bid display rows are retargeted to the current holder.
+
 ---
 
 ## 9. Testing Strategy
