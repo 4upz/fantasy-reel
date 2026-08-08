@@ -47,6 +47,51 @@ Deno.test({
       return data.trade_offer.id
     }
 
+    // Like createPendingTrade, but also hands back the traded draft_pick/movie/team
+    // ids so counterpick guardrail tests can seed a counterpick on the exact item
+    // being traded and check where it lands afterward.
+    async function createPendingTradeWithPick(leagueId: string): Promise<{
+      tradeOfferId: string
+      draftPickId: string
+      movieId: string
+      initiatorTeamId: string
+      recipientTeamId: string
+    }> {
+      const initiatorTeam = await factory.getTeamForUser(leagueId, client)
+      const recipientTeam = await factory.getTeamForUser(leagueId, secondClient)
+      const initiatorPicks = await factory.getDraftPicksForUser(leagueId, client)
+
+      if (!initiatorTeam || !recipientTeam || initiatorPicks.length === 0) {
+        throw new Error('Test setup failed')
+      }
+
+      const pick = initiatorPicks[0]
+
+      const { data, error } = await client.functions.invoke('propose-trade', {
+        body: {
+          league_id: leagueId,
+          recipient_team_id: recipientTeam.teamId,
+          offered_items: {
+            movies: [{ movie_id: pick.movie_id, source: 'draft_pick', source_id: pick.id }],
+            faab: 0,
+          },
+          requested_items: { movies: [], faab: 10 },
+        },
+      })
+
+      if (error || !data.trade_offer) {
+        throw new Error(`Failed to create pending trade: ${error?.message || 'unknown error'}`)
+      }
+
+      return {
+        tradeOfferId: data.trade_offer.id,
+        draftPickId: pick.id,
+        movieId: pick.movie_id,
+        initiatorTeamId: initiatorTeam.teamId,
+        recipientTeamId: recipientTeam.teamId,
+      }
+    }
+
     // ============================================================================
     // Authentication Tests
     // ============================================================================
@@ -219,6 +264,104 @@ Deno.test({
 
       assertEquals(result.error, 'Cannot respond to a trade with status "review"')
     })
+
+    // ============================================================================
+    // Counterpick Trade Guardrail Tests
+    // ============================================================================
+
+    await t.step(
+      'trade of a movie counterpicked by a third team succeeds and retargets the counterpick',
+      async () => {
+        const leagueId = await factory.createTradingLeague(uniqueName('respond-counterpick-third'), 3)
+        const thirdClient = await factory.createThirdClient()
+
+        const { tradeOfferId, draftPickId, movieId, recipientTeamId } =
+          await createPendingTradeWithPick(leagueId)
+
+        // An uninvolved third team counterpicks the movie being traded -- this is
+        // allowed (the counterpick is a bet on the movie, not a claim on the holder).
+        await factory.addCounterpickToDraftPick(leagueId, draftPickId, thirdClient)
+
+        // Skip the review window so acceptance moves straight to 'accepted'.
+        const serviceClient = getServiceClient()
+        await serviceClient
+          .from('leagues')
+          .update({ trade_review_enabled: false })
+          .eq('id', leagueId)
+
+        const { data, error } = await secondClient.functions.invoke('respond-trade', {
+          body: { trade_offer_id: tradeOfferId, response: 'accept' },
+        })
+
+        assertEquals(error, null)
+        assertEquals(data.trade_offer.status, 'accepted')
+
+        // respond-trade only advances status; process-trades normally executes
+        // 'accepted' trades on its next run. Call execute_trade directly here to
+        // isolate the guardrail from cron scheduling.
+        const { data: execResult, error: execError } = await serviceClient.rpc('execute_trade', {
+          p_trade_id: tradeOfferId,
+        })
+        assertEquals(execError, null)
+        assertEquals(execResult.success, true)
+
+        const { data: draftPick } = await serviceClient
+          .from('draft_picks')
+          .select('team_id')
+          .eq('id', draftPickId)
+          .single()
+        assertEquals(draftPick?.team_id, recipientTeamId)
+
+        const { data: counterpick } = await serviceClient
+          .from('counterpicks')
+          .select('target_team_id')
+          .eq('league_id', leagueId)
+          .eq('movie_id', movieId)
+          .single()
+        assertEquals(counterpick?.target_team_id, recipientTeamId)
+      }
+    )
+
+    await t.step(
+      'trade sending a movie to its own counterpicker is rejected at acceptance',
+      async () => {
+        const leagueId = await factory.createTradingLeague(uniqueName('respond-counterpick-self'))
+
+        const { tradeOfferId, draftPickId, initiatorTeamId } =
+          await createPendingTradeWithPick(leagueId)
+
+        // The recipient -- who is about to receive this movie -- counterpicks it
+        // after the trade was already proposed. Accepting now would hand the
+        // movie to its own counterpicker, which the guardrail must block.
+        await factory.addCounterpickToDraftPick(leagueId, draftPickId, secondClient)
+
+        const result = await invokeFunction(secondClient, 'respond-trade', {
+          trade_offer_id: tradeOfferId,
+          response: 'accept',
+        })
+
+        assertEquals(
+          result.error,
+          `Trade can no longer be accepted: Cannot trade a counterpicked movie to the team that counterpicked it: ${draftPickId}`
+        )
+
+        // Nothing moved: the draft pick is still with the initiator and the trade is still pending.
+        const serviceClient = getServiceClient()
+        const { data: draftPick } = await serviceClient
+          .from('draft_picks')
+          .select('team_id')
+          .eq('id', draftPickId)
+          .single()
+        assertEquals(draftPick?.team_id, initiatorTeamId)
+
+        const { data: trade } = await serviceClient
+          .from('trade_offers')
+          .select('status')
+          .eq('id', tradeOfferId)
+          .single()
+        assertEquals(trade?.status, 'proposed')
+      }
+    )
 
     // ============================================================================
     // Cleanup
