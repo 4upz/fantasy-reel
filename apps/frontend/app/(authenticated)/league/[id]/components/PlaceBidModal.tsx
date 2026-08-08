@@ -14,6 +14,7 @@ import { useWishlist } from '@/hooks/useWishlist'
 interface PlaceBidModalProps {
   isOpen: boolean
   onClose: () => void
+  teamId: string
   budget: TeamBudget | null
   existingBids: PickupBid[]
   ownedTmdbIds: number[]
@@ -24,12 +25,56 @@ interface PlaceBidModalProps {
 // Quick bid amount buttons for common values
 const QUICK_BID_AMOUNTS = [0, 5, 10, 25, 50]
 
-function getValidationErrorMessage(bidAmount: number, remainingBudget: number): string {
+/** The current high active bid on a movie, and whether it belongs to this team. */
+interface ActiveBidInfo {
+  high: number
+  mine: boolean
+}
+
+interface ActiveBidChipProps {
+  tmdbId: number
+  info: ActiveBidInfo | undefined
+}
+
+/** Badge on a search result showing the leading bid already placed on a movie. */
+function ActiveBidChip({ tmdbId, info }: ActiveBidChipProps): React.ReactElement | null {
+  if (!info) return null
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${
+        info.mine
+          ? 'bg-gold-muted text-gold border-gold/30'
+          : 'bg-warning-bg/30 text-warning border-warning/20'
+      }`}
+      data-testid={`bid-chip-${tmdbId}`}
+    >
+      <DollarSign className="w-3 h-3" />
+      {info.mine ? `Your bid $${info.high}` : `High bid $${info.high}`}
+    </span>
+  )
+}
+
+function getModalTitle(
+  counterBidTarget: PickupBid | null | undefined,
+  teamId: string,
+  hasSelectedMovie: boolean,
+): string {
+  if (counterBidTarget) {
+    return counterBidTarget.team_id === teamId ? 'Raise Your Bid' : 'Counter Bid'
+  }
+  return hasSelectedMovie ? 'Set Your Bid' : 'Place a Bid'
+}
+
+function getValidationErrorMessage(bidAmount: number, remainingBudget: number, highestBid: number | null): string {
   if (bidAmount > remainingBudget) {
     return `Exceeds your budget of $${remainingBudget}`
   }
   if (bidAmount > 100) {
     return 'Maximum bid is $100'
+  }
+  if (highestBid !== null && bidAmount <= highestBid) {
+    return `Must be higher than current bid of $${highestBid}`
   }
   return 'Bid must be $0 or more'
 }
@@ -37,6 +82,7 @@ function getValidationErrorMessage(bidAmount: number, remainingBudget: number): 
 export default function PlaceBidModal({
   isOpen,
   onClose,
+  teamId,
   budget,
   existingBids,
   ownedTmdbIds,
@@ -53,12 +99,24 @@ export default function PlaceBidModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Movies already on someone's roster (drafted or picked up) or already bid on
-  // are not offerable. Memoized to prevent infinite re-renders.
-  const excludedTmdbIds = useMemo(() => {
-    const biddedTmdbIds = existingBids.map(b => b.tmdb_id)
-    return new Set([...ownedTmdbIds, ...biddedTmdbIds])
-  }, [ownedTmdbIds, existingBids])
+  // Only movies already on someone's roster (drafted or picked up) are
+  // unavailable. Movies with pending bids stay searchable so teams can compete
+  // for them. Memoized to prevent infinite re-renders.
+  const excludedTmdbIds = useMemo(() => new Set(ownedTmdbIds), [ownedTmdbIds])
+
+  // Current high active bid per movie, so search results can flag movies that
+  // already have a bid and the amount step can enforce outbidding it.
+  const activeBidsByTmdbId = useMemo(() => {
+    const map = new Map<number, ActiveBidInfo>()
+    for (const bid of existingBids) {
+      if (bid.status !== 'active') continue
+      const current = map.get(bid.tmdb_id)
+      if (!current || bid.amount > current.high) {
+        map.set(bid.tmdb_id, { high: bid.amount, mine: bid.team_id === teamId })
+      }
+    }
+    return map
+  }, [existingBids, teamId])
 
   const {
     movies: results,
@@ -131,10 +189,8 @@ export default function PlaceBidModal({
           popularity: movieData.popularity ?? 0,
           genre_ids: movieData.genre_ids || [],
         })
-        // Find the current high bid for this movie and set minimum counter
-        const highBid = existingBids
-          .filter(b => b.tmdb_id === counterBidTarget.tmdb_id && b.status === 'active')
-          .reduce((max, b) => Math.max(max, b.amount), 0)
+        // Open at the smallest amount that takes the lead.
+        const highBid = activeBidsByTmdbId.get(counterBidTarget.tmdb_id)?.high ?? 0
         setBidAmount(highBid + 1)
       } else {
         setSelectedMovie(null)
@@ -145,12 +201,23 @@ export default function PlaceBidModal({
       setSearchQuery('')
       clearSearchRef.current()
     }
-  }, [isOpen, counterBidTarget, existingBids])
+  }, [isOpen, counterBidTarget, activeBidsByTmdbId])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
     search(value)
   }
+
+  // Selecting a movie that already has an active bid starts the amount at the
+  // minimum needed to take the lead.
+  const selectMovie = useCallback((movie: TMDbSearchResult) => {
+    setSelectedMovie(movie)
+    const bidInfo = activeBidsByTmdbId.get(movie.tmdb_id)
+    setBidAmount(bidInfo ? bidInfo.high + 1 : 0)
+  }, [activeBidsByTmdbId])
+
+  const selectedBidInfo = selectedMovie ? activeBidsByTmdbId.get(selectedMovie.tmdb_id) : undefined
+  const highestBid = selectedBidInfo?.high ?? null
 
   const submitBidAction = useCallback(async () => {
     if (!selectedMovie) return
@@ -186,7 +253,8 @@ export default function PlaceBidModal({
   const { execute: handleSubmit, isLoading: isSubmitting } = useAsyncAction(submitBidAction)
 
   const remainingBudget = budget?.remaining_budget ?? 0
-  const isValidBid = bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100
+  const isValidBid = bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100 &&
+    (highestBid === null || bidAmount > highestBid)
 
   const displayedResults = showWishlistedOnly
     ? results.filter(m => isWishlisted(m.tmdb_id))
@@ -217,7 +285,7 @@ export default function PlaceBidModal({
             )}
             <div>
               <h2 id="place-bid-title" className="font-display text-xl font-semibold text-foreground">
-                {counterBidTarget ? 'Counter Bid' : selectedMovie ? 'Set Your Bid' : 'Place a Bid'}
+                {getModalTitle(counterBidTarget, teamId, !!selectedMovie)}
               </h2>
               <p className="text-sm text-foreground-muted mt-0.5">
                 {selectedMovie
@@ -324,11 +392,11 @@ export default function PlaceBidModal({
                         key={movie.tmdb_id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSelectedMovie(movie)}
+                        onClick={() => selectMovie(movie)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
-                            setSelectedMovie(movie)
+                            selectMovie(movie)
                           }
                         }}
                         data-testid={`bid-movie-result-${movie.tmdb_id}`}
@@ -368,6 +436,10 @@ export default function PlaceBidModal({
                               </span>
                             )}
                           </div>
+                          <ActiveBidChip
+                            tmdbId={movie.tmdb_id}
+                            info={activeBidsByTmdbId.get(movie.tmdb_id)}
+                          />
                         </div>
                         <div className="flex items-center text-foreground-muted group-hover:text-gold transition-colors">
                           <TrendingUp className="w-5 h-5" />
@@ -410,6 +482,16 @@ export default function PlaceBidModal({
                         <Sparkles className="w-4 h-4 text-gold" />
                         {selectedMovie.vote_average.toFixed(1)} rating
                       </p>
+                    )}
+                    {highestBid !== null && (
+                      <div className="mt-3 px-3 py-1.5 bg-warning-bg/30 border border-warning/20 rounded-lg inline-flex items-center gap-1.5">
+                        <DollarSign className="w-4 h-4 text-warning" />
+                        <span className="text-warning text-sm font-medium">
+                          {selectedBidInfo?.mine
+                            ? `Your current bid: $${highestBid}`
+                            : `Current high bid: $${highestBid}`}
+                        </span>
+                      </div>
                     )}
                     {selectedMovie.overview && (
                       <p className="text-foreground-muted text-sm mt-3 line-clamp-2">
@@ -461,7 +543,7 @@ export default function PlaceBidModal({
 
                 {!isValidBid ? (
                   <p className="text-error text-sm flex items-center gap-1.5">
-                    {getValidationErrorMessage(bidAmount, remainingBudget)}
+                    {getValidationErrorMessage(bidAmount, remainingBudget, highestBid)}
                   </p>
                 ) : (
                   <p className="text-foreground-muted text-sm">
