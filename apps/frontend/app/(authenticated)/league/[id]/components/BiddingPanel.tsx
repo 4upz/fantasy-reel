@@ -8,7 +8,7 @@ import type { League, PickupBid, TeamBudget, CounterpickBid } from '@/types'
 import BidCard from './BidCard'
 import CounterpickBidCard from './CounterpickBidCard'
 import CounterpickPriorityList from './CounterpickPriorityList'
-import { isMovieBiddable } from './utils'
+import { isMovieBiddable, latestOpenCounterWindow } from './utils'
 
 function ModalLoadingFallback(): React.ReactElement {
   return (
@@ -29,6 +29,35 @@ const PlaceCounterpickBidModal = dynamic(() => import('./PlaceCounterpickBidModa
 type UnifiedBidItem =
   | { type: 'pickup'; bid: PickupBid }
   | { type: 'counterpick'; bid: CounterpickBid }
+
+/**
+ * Movies whose processing is held past the weekly deadline because a rival's
+ * counter window is still open, keyed by movie and mapped to when that window
+ * closes. Must be given the whole league's bids: the open window lives on the
+ * *outbid* row, not on the leading bid whose card needs to explain the delay.
+ */
+function counterWindowsByMovie<K, B extends { response_deadline: string | null }>(
+  bids: B[],
+  movieKeyOf: (bid: B) => K,
+): Map<K, string> {
+  const bidsByMovie = new Map<K, B[]>()
+  for (const bid of bids) {
+    const key = movieKeyOf(bid)
+    const group = bidsByMovie.get(key)
+    if (group) {
+      group.push(bid)
+    } else {
+      bidsByMovie.set(key, [bid])
+    }
+  }
+
+  const windows = new Map<K, string>()
+  for (const [key, group] of bidsByMovie) {
+    const closesAt = latestOpenCounterWindow(group)
+    if (closesAt) windows.set(key, closesAt)
+  }
+  return windows
+}
 
 interface UnifiedBidSectionProps {
   title: string
@@ -157,6 +186,16 @@ export default function BiddingPanel({
     return { outbidCounterpickBids: outbid, activeCounterpickBids: active, otherCounterpickBids: other }
   }, [myCounterpickBids, counterpickBids, teamId])
 
+  const pickupCounterWindows = useMemo(
+    () => counterWindowsByMovie(bids, (bid) => bid.tmdb_id),
+    [bids]
+  )
+
+  const counterpickCounterWindows = useMemo(
+    () => counterWindowsByMovie(counterpickBids, (bid) => bid.movie_id),
+    [counterpickBids]
+  )
+
   // Unified bid item arrays for merged sections
   const actionRequiredItems: UnifiedBidItem[] = useMemo(() => [
     ...outbidBids.map(bid => ({ type: 'pickup' as const, bid })),
@@ -191,6 +230,7 @@ export default function BiddingPanel({
           bidType="pickup"
           onCancel={isOwner ? () => handleCancelBid(item.bid.id) : undefined}
           onCounter={canCounter ? () => handleCounter(item.bid) : undefined}
+          counterWindowClosesAt={pickupCounterWindows.get(item.bid.tmdb_id) ?? null}
         />
       )
     }
@@ -201,6 +241,7 @@ export default function BiddingPanel({
         bidType="counterpick"
         onCancel={isOwner ? () => handleCancelCounterpickBid(item.bid.id) : undefined}
         onCounter={canCounter ? () => handleCounterCounterpickBid(item.bid) : undefined}
+        counterWindowClosesAt={counterpickCounterWindows.get(item.bid.movie_id) ?? null}
       />
     )
   }

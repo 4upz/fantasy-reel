@@ -110,6 +110,18 @@ interface ProcessingError {
   error: string
 }
 
+/**
+ * A bid group that was due but left unresolved because a counter-bid response
+ * window is still open. The extended (hourly) run resolves it once the window
+ * closes; until then the league is told its results are delayed, not that no
+ * bids were placed.
+ */
+interface DeferredGroup {
+  league_id: string
+  movie_title: string
+  counter_window_ends: string
+}
+
 interface BidResultSummary {
   league_id: string
   winner_team_id: string
@@ -135,17 +147,44 @@ interface VoidedBidResult {
 // deno-lint-ignore no-explicit-any
 type ServiceClient = ReturnType<typeof createClient<any>>
 
+/**
+ * The latest counter-response deadline among `bids` that has not passed yet, or
+ * null once every window has closed. While one is open the whole bid group is
+ * unsettled -- an outbid team can still counter -- so processing waits for the
+ * last window rather than the first.
+ *
+ * Deadlines are ISO timestamps, so they compare correctly as strings.
+ */
+function latestOpenResponseDeadline(
+  bids: Array<{ response_deadline: string | null }>,
+  now: Date,
+): string | null {
+  let latest: string | null = null
+
+  for (const bid of bids) {
+    const deadline = bid.response_deadline
+    if (!deadline || new Date(deadline) <= now) continue
+    if (!latest || deadline > latest) latest = deadline
+  }
+
+  return latest
+}
+
 interface DeadlinedBid {
   response_deadline: string | null
   processing_deadline: string
 }
 
 /**
- * Active bids on `table` whose window has closed.
- * - `weekly`: the regular processing deadline has passed.
- * - `extended`: the response window has passed, and only for bids that really
- *   were in counter-bid extra time -- a response_deadline at or before the
- *   processing deadline just means the regular weekly run will pick them up.
+ * Bids on `table` whose window has closed.
+ * - `weekly`: active bids whose regular processing deadline has passed.
+ * - `extended`: bids whose counter-response window has expired, and only those
+ *   that really were in counter-bid extra time -- a response_deadline at or
+ *   before the processing deadline just means the regular weekly run will pick
+ *   them up. A `response_deadline` only ever lives on an 'outbid' row (it is
+ *   cleared whenever a bid goes back to 'active'), so the expired-window signal
+ *   is carried by outbid rows; each hit's full bid group is re-read during
+ *   processing, which finds the active leader to award.
  */
 async function fetchDueBids<T extends DeadlinedBid>(
   serviceClient: ServiceClient,
@@ -154,12 +193,15 @@ async function fetchDueBids<T extends DeadlinedBid>(
   now: Date,
   leagueId?: string,
 ): Promise<{ bids: T[]; error: unknown }> {
-  let query = serviceClient.from(table).select('*').eq('status', 'active')
+  let query = serviceClient.from(table).select('*')
 
   if (mode === 'weekly') {
-    query = query.lte('processing_deadline', now.toISOString())
+    query = query.eq('status', 'active').lte('processing_deadline', now.toISOString())
   } else {
-    query = query.not('response_deadline', 'is', null).lt('response_deadline', now.toISOString())
+    query = query
+      .in('status', ['active', 'outbid'])
+      .not('response_deadline', 'is', null)
+      .lt('response_deadline', now.toISOString())
   }
 
   if (leagueId) {
@@ -635,6 +677,7 @@ async function loadSettledCounterpickContests(
   dueBids: CounterpickBid[],
   now: Date,
   errors: ProcessingError[],
+  deferred: DeferredGroup[],
 ): Promise<{ contests: CounterpickContest[]; bidsByContest: Map<string, CounterpickBid[]> }> {
   const contests: CounterpickContest[] = []
   const bidsByContest = new Map<string, CounterpickBid[]>()
@@ -656,10 +699,20 @@ async function loadSettledCounterpickContests(
       const bids = (allBidsForMovie || []) as CounterpickBid[]
 
       // An outbid team can still counter, so this movie is not settled yet.
-      const hasOpenWindow = bids.some(
-        (bid) => bid.response_deadline && new Date(bid.response_deadline) > now
-      )
-      if (hasOpenWindow) continue
+      const openWindowEnds = latestOpenResponseDeadline(bids, now)
+      if (openWindowEnds) {
+        const { data: movie } = await serviceClient
+          .from('movies')
+          .select('title')
+          .eq('id', movieId)
+          .single()
+        deferred.push({
+          league_id: leagueId,
+          movie_title: movie?.title || `Movie ${movieId}`,
+          counter_window_ends: openWindowEnds,
+        })
+        continue
+      }
 
       const activeBids = bids.filter((bid) => bid.status === 'active')
       if (activeBids.length === 0) continue
@@ -995,6 +1048,7 @@ async function processCounterpickBids(
   now: Date,
   errors: ProcessingError[],
   voided: VoidedBidResult[],
+  deferred: DeferredGroup[],
 ): Promise<CounterpickProcessResult[]> {
   const results: CounterpickProcessResult[] = []
   if (dueBids.length === 0) return results
@@ -1003,7 +1057,8 @@ async function processCounterpickBids(
     serviceClient,
     dueBids,
     now,
-    errors
+    errors,
+    deferred
   )
   if (settledContests.length === 0) return results
 
@@ -1154,6 +1209,22 @@ async function processCounterpickBids(
   return results
 }
 
+/** One entry per league, in the order the items were collected. */
+function groupByLeague<T extends { league_id: string }>(items: T[]): Map<string, T[]> {
+  const byLeague = new Map<string, T[]>()
+
+  for (const item of items) {
+    const existing = byLeague.get(item.league_id)
+    if (existing) {
+      existing.push(item)
+    } else {
+      byLeague.set(item.league_id, [item])
+    }
+  }
+
+  return byLeague
+}
+
 async function sendBidResultsDiscordNotifications(
   serviceClient: ServiceClient,
   results: BidResultSummary[],
@@ -1163,12 +1234,7 @@ async function sendBidResultsDiscordNotifications(
 ): Promise<void> {
   if (results.length === 0) return
 
-  const resultsByLeague = new Map<string, BidResultSummary[]>()
-  for (const result of results) {
-    const existing = resultsByLeague.get(result.league_id) ?? []
-    existing.push(result)
-    resultsByLeague.set(result.league_id, existing)
-  }
+  const resultsByLeague = groupByLeague(results)
 
   const allTeamIds = [...new Set(results.map((r) => r.winner_team_id))]
   const allLeagueIds = [...resultsByLeague.keys()]
@@ -1211,6 +1277,45 @@ async function sendBidResultsDiscordNotifications(
       })
     )
   }
+
+  await Promise.allSettled(discordPromises)
+}
+
+/**
+ * Tell each affected league why its weekly results did not land: one or more
+ * bid groups are in counter-bid extra time. Sent from the weekly run only --
+ * the hourly extended run would repeat it every hour while a window stays open.
+ */
+async function sendBidsDeferredDiscordNotifications(
+  serviceClient: ServiceClient,
+  deferred: DeferredGroup[],
+): Promise<void> {
+  if (deferred.length === 0) return
+
+  const discordPromises = [...groupByLeague(deferred)].map(async ([leagueId, groups]) => {
+    const leagueName = await getLeagueName(serviceClient, leagueId)
+
+    const fields = groups.slice(0, 10).map((group) => ({
+      name: group.movie_title,
+      // Discord renders <t:seconds:R> as a live "in 2 hours" countdown.
+      value: `Counter window closes <t:${Math.floor(new Date(group.counter_window_ends).getTime() / 1000)}:R>`,
+      inline: true,
+    }))
+
+    return sendDiscordNotification(serviceClient, {
+      leagueId,
+      category: 'bids',
+      embeds: [{
+        author: buildEmbedAuthor(leagueName, leagueId),
+        title: 'Bidding Results Delayed',
+        description: `${groups.length} bid battle${groups.length === 1 ? ' is' : 's are'} still in a counter-bid window. Results will be announced automatically once it closes.`,
+        fields,
+        color: DISCORD_COLORS.gold,
+        footer: { text: leagueName },
+        url: buildLeagueUrl(leagueId, '/bidding'),
+      }],
+    })
+  })
 
   await Promise.allSettled(discordPromises)
 }
@@ -1372,6 +1477,7 @@ Deno.serve(async (req) => {
     const results: ProcessResult[] = []
     const errors: ProcessingError[] = []
     const voidedPickupResults: VoidedBidResult[] = []
+    const deferred: DeferredGroup[] = []
 
     for (const key of contestedKeys) {
       const [leagueId, tmdbIdStr] = key.split(':')
@@ -1387,17 +1493,23 @@ Deno.serve(async (req) => {
           .eq('tmdb_id', tmdbId)
           .in('status', ['active', 'outbid'])
 
-        const hasOpenWindow = (allBidsForMovie || []).some(
-          (bid) => bid.response_deadline && new Date(bid.response_deadline) > now
-        )
+        const movieBids: PickupBid[] = allBidsForMovie || []
 
-        if (hasOpenWindow) {
-          // Skip this movie - someone still has time to counter
+        const openWindowEnds = latestOpenResponseDeadline(movieBids, now)
+        if (openWindowEnds) {
+          // Someone still has time to counter: leave the group for the extended
+          // run, but record the deferral so it can be surfaced downstream.
+          const titledBid = movieBids.find((bid) => bid.movie_data?.title)
+          deferred.push({
+            league_id: leagueId,
+            movie_title: titledBid?.movie_data?.title || `Movie #${tmdbId}`,
+            counter_window_ends: openWindowEnds,
+          })
           continue
         }
 
         // Find active bids only (outbid entries don't win)
-        const activeBids = (allBidsForMovie || []).filter((b) => b.status === 'active')
+        const activeBids = movieBids.filter((b) => b.status === 'active')
         if (activeBids.length === 0) {
           continue
         }
@@ -1693,28 +1805,42 @@ Deno.serve(async (req) => {
       counterpickBidsToProcess,
       now,
       errors,
-      voidedCounterpickResults
+      voidedCounterpickResults,
+      deferred
     )
 
     await sendBidResultsDiscordNotifications(serviceClient, results, 'Bidding Results', 'movie', 'Won by')
     await sendBidResultsDiscordNotifications(serviceClient, counterpickResults, 'Counterpick Bidding Results', 'counterpick', 'Counterpicked by')
 
-    // If weekly run, check for leagues with no bids to send "no bids placed" notification
+    // Weekly wrap-up messages. "No bids were placed" is reserved for leagues
+    // that truly saw no bid activity: a league whose groups were deferred,
+    // voided, or errored had bids, and telling it otherwise misreports the week
+    // (deferred leagues get the "results delayed" message above instead).
     let notificationSummary: NotificationSummary | undefined
     if (mode === 'weekly') {
-      const leaguesWithBids = new Set([
+      await sendBidsDeferredDiscordNotifications(serviceClient, deferred)
+
+      const leaguesWithBidActivity = new Set([
         ...results.map(r => r.league_id),
-        ...counterpickResults.map(cr => cr.league_id)
+        ...counterpickResults.map(cr => cr.league_id),
+        ...deferred.map(d => d.league_id),
+        ...voidedPickupResults.map(v => v.league_id),
+        ...voidedCounterpickResults.map(v => v.league_id),
+        ...errors.map(e => e.movie_key.split(':')[0]),
       ])
-      notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBids, league_id)
+      notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBidActivity, league_id)
     }
 
-    // A run that awarded nothing but voided something did do work, so it must not
-    // report "No bids to process" -- that message is reserved for a truly idle run.
+    // A run that awarded nothing but voided or deferred something did do work,
+    // so it must not report "No bids to process" -- that message is reserved
+    // for a truly idle run.
     const voidedCount = voidedPickupResults.length + voidedCounterpickResults.length
     const nothingProcessed = results.length === 0 && counterpickResults.length === 0
     const voidedSuffix = voidedCount > 0
       ? `; voided ${voidedCount} bid(s) for movies that released before processing`
+      : ''
+    const deferredSuffix = deferred.length > 0
+      ? `; deferred ${deferred.length} movie(s) with open counter-bid windows`
       : ''
 
     // Items attempted = awarded pickups + awarded counterpicks + voided bids +
@@ -1730,14 +1856,15 @@ Deno.serve(async (req) => {
         pickups_awarded: results.length,
         counterpicks_awarded: counterpickResults.length,
         bids_voided: voidedCount,
+        movies_deferred: deferred.length,
         ...(notificationSummary ? { notifications: notificationSummary } : {}),
       },
     })
 
     return jsonResponse({
-      message: nothingProcessed && voidedCount === 0
+      message: nothingProcessed && voidedCount === 0 && deferred.length === 0
         ? 'No bids to process'
-        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)${voidedSuffix}`,
+        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)${voidedSuffix}${deferredSuffix}`,
       mode,
       processed: results.length,
       results,
@@ -1745,6 +1872,7 @@ Deno.serve(async (req) => {
       counterpick_results: counterpickResults,
       voided_pickup_bids: voidedPickupResults.length > 0 ? voidedPickupResults : undefined,
       voided_counterpick_bids: voidedCounterpickResults.length > 0 ? voidedCounterpickResults : undefined,
+      deferred: deferred.length > 0 ? deferred : undefined,
       errors: errors.length > 0 ? errors : undefined,
       notifications: notificationSummary,
       job_status,
