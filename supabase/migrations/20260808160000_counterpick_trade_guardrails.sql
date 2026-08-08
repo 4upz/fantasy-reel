@@ -289,12 +289,12 @@ COMMENT ON COLUMN counterpicks.target_team_id IS
 -- ============================================================================
 -- PART 3: Document that counterpicks deliberately survive drops
 --
--- recalculate_team_score_with_counterpicks() (20260203_counterpick_system.sql)
--- sums counterpick points with no dropped_at filter on the underlying
--- draft_pick/pickup. That reads like a missed filter next to draft_points,
--- which does exclude dropped picks -- it isn't. No function body changes here,
--- comment only.
+-- recalculate_team_score_with_counterpicks() (current body:
+-- 20260728164550_fix_team_score_pickups_and_drops.sql) sums counterpick
+-- points with no dropped_at filter on the underlying draft_pick/pickup. That
+-- reads like a missed filter next to the roster legs, which do exclude
+-- dropped rows -- it isn't. No function body changes here, comment only.
 -- ============================================================================
 
 COMMENT ON FUNCTION recalculate_team_score_with_counterpicks(UUID) IS
-  'Recalculates team scores including both draft points and counterpick points (inverted opponent scores). The counterpick leg intentionally has NO dropped_at filter: counterpicks survive drops of the underlying movie (in leagues where that is even possible -- see leagues.counterpicks_block_drops) and keep scoring the inverted points for the counterpicker. This matches Fantasy Critic''s ruleset and is deliberate, not an omission.';
+  'Recalculates team scores from the active roster (draft picks + pickups, excluding dropped) plus counterpick points (inverted opponent scores). The counterpick leg intentionally has NO dropped_at filter: counterpicks survive drops of the underlying movie (in leagues where that is even possible -- see leagues.counterpicks_block_drops) and keep scoring the inverted points for the counterpicker. This matches Fantasy Critic''s ruleset and is deliberate, not an omission.';
