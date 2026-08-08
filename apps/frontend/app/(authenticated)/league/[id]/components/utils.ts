@@ -25,6 +25,25 @@ export function formatTimeRemaining(deadline: string | null): string {
 }
 
 /**
+ * The latest still-open counter-response deadline among a movie's bids, or null
+ * once every window has closed. While one is open, process-bids holds the whole
+ * group past its weekly deadline so the outbid team can counter -- the leading
+ * bid's card should say that, not "Processing soon".
+ */
+export function latestOpenCounterWindow(
+  bids: Array<{ response_deadline: string | null }>,
+): string | null {
+  const now = Date.now()
+  let latest: string | null = null
+  for (const bid of bids) {
+    if (!bid.response_deadline) continue
+    if (new Date(bid.response_deadline).getTime() <= now) continue
+    if (!latest || bid.response_deadline > latest) latest = bid.response_deadline
+  }
+  return latest
+}
+
+/**
  * Format a release date for short display (e.g., "Jan 15")
  */
 export function formatReleaseDateShort(date: string | null): string {

@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { Clock, DollarSign, AlertTriangle, Film, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Film, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
-import { getTmdbPosterUrl, formatTimeRemaining, getBidTypeClass } from './utils'
+import BidAmountAndDeadline from './BidAmountAndDeadline'
+import { getTmdbPosterUrl, getBidTypeClass } from './utils'
 
 interface BidCardProps {
   bid: PickupBid
@@ -12,6 +13,12 @@ interface BidCardProps {
   onCancel?: () => void
   onCounter?: () => void
   bidType?: 'pickup' | 'counterpick'
+  /**
+   * When another bid on the same movie still has an open counter-response
+   * window, processing of the whole group is held until it closes. Set to that
+   * window's end so the card explains the delay instead of "Processing soon".
+   */
+  counterWindowClosesAt?: string | null
 }
 
 interface CancelBidModalProps {
@@ -144,7 +151,7 @@ function CancelBidModal({
   )
 }
 
-export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: BidCardProps) {
+export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType, counterWindowClosesAt }: BidCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false)
 
   const movieData = bid.movie_data as {
@@ -155,7 +162,6 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
 
   const isOutbid = bid.status === 'outbid'
   const isActive = bid.status === 'active'
-  const deadline = isOutbid ? bid.response_deadline : bid.processing_deadline
   const movieTitle = movieData?.title || `Movie #${bid.tmdb_id}`
 
   const typeClass = getBidTypeClass(bidType)
@@ -207,17 +213,13 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
               </p>
             )}
 
-            <div className="flex items-center gap-4 mt-2">
-              <div className="flex items-center gap-1.5 bid-amount-display text-lg">
-                <DollarSign className="w-5 h-5" />
-                <span>{bid.amount}</span>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-foreground-secondary text-sm">
-                <Clock className="w-4 h-4" />
-                <span>{formatTimeRemaining(deadline)}</span>
-              </div>
-            </div>
+            <BidAmountAndDeadline
+              amount={bid.amount}
+              isOutbid={isOutbid}
+              responseDeadline={bid.response_deadline}
+              processingDeadline={bid.processing_deadline}
+              counterWindowClosesAt={counterWindowClosesAt}
+            />
 
             {isOutbid && (
               <div className="flex items-center gap-1.5 mt-2 text-warning text-sm font-medium">
