@@ -9,23 +9,14 @@ import {
   getServiceClient,
   createTestFactory,
   uniqueName,
-  getEdgeFunctionServiceRoleKey,
 } from './_setup.ts'
+import {
+  createProcessBidsCaller,
+  PAST_DEADLINE,
+  seedCounterpickBid as seedCounterpickBidRow,
+  teamForOrThrow,
+} from './_counterpick_helpers.ts'
 import type { SupabaseClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
-
-/**
- * The `supabase start` edge runtime serves the *main checkout's* functions, so a
- * worktree change is only exercised by pointing PROCESS_BIDS_URL at a standalone
- * `deno run process-bids/index.ts` (which binds :8000). That process reads its
- * service role key from .env.test, whereas the container has its own -- so the
- * key has to follow the URL.
- */
-const STANDALONE_URL = Deno.env.get('PROCESS_BIDS_URL')
-const FUNCTION_URL = STANDALONE_URL || `${SUPABASE_URL}/functions/v1/process-bids`
-
-const PAST = new Date(Date.now() - 60 * 60 * 1000).toISOString()
 
 Deno.test({
   name: 'process-bids counterpick slot enforcement',
@@ -34,49 +25,26 @@ Deno.test({
   fn: async (t) => {
     const { client, secondClient, factory } = await createTestFactory()
     const serviceClient = getServiceClient()
-    const SERVICE_ROLE_KEY = STANDALONE_URL
-      ? (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
-      : await getEdgeFunctionServiceRoleKey()
-
-    async function callProcessBids(body: Record<string, unknown>) {
-      const response = await fetch(FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      })
-      const text = await response.text()
-      try {
-        return { status: response.status, data: JSON.parse(text) }
-      } catch {
-        return { status: response.status, data: { raw: text } }
-      }
-    }
+    const callProcessBids = await createProcessBidsCaller()
 
     /** Place an active counterpick bid straight into the table, already past its deadline. */
-    async function seedCounterpickBid(
+    const seedCounterpickBid = (
       leagueId: string,
       biddingTeamId: string,
       pick: { id: string; movie_id: string },
       targetTeamId: string,
       amount: number,
       priority = 1,
-    ) {
-      const { error } = await serviceClient.from('counterpick_bids').insert({
-        league_id: leagueId,
-        team_id: biddingTeamId,
-        movie_id: pick.movie_id,
-        target_team_id: targetTeamId,
-        draft_pick_id: pick.id,
+    ) =>
+      seedCounterpickBidRow(serviceClient, {
+        leagueId,
+        teamId: biddingTeamId,
+        movieId: pick.movie_id,
+        targetTeamId,
+        draftPickId: pick.id,
         amount,
         priority,
-        status: 'active',
-        processing_deadline: PAST,
       })
-      if (error) throw new Error(`Failed to seed counterpick bid: ${error.message}`)
-    }
 
     /** Which team, if any, holds the bidding counterpick on a movie. */
     async function counterpickerOf(leagueId: string, movieId: string) {
@@ -100,11 +68,8 @@ Deno.test({
       return count ?? 0
     }
 
-    async function teamFor(leagueId: string, userClient: SupabaseClient) {
-      const team = await factory.getTeamForUser(leagueId, userClient)
-      if (!team) throw new Error('Team not found')
-      return team.teamId
-    }
+    const teamFor = (leagueId: string, userClient: SupabaseClient) =>
+      teamForOrThrow(factory, leagueId, userClient)
 
     try {
       // Other suites leave active bids behind; they would be swept into our runs.
@@ -150,7 +115,7 @@ Deno.test({
             },
             amount: 1,
             status: 'active',
-            processing_deadline: PAST,
+            processing_deadline: PAST_DEADLINE,
           })
 
           const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })

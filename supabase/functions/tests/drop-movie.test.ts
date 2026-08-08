@@ -14,6 +14,7 @@ import {
   uniqueName,
   invokeFunction,
 } from './_setup.ts'
+import { seedCounterpickBid as seedCounterpickBidRow } from './_counterpick_helpers.ts'
 
 // Test movie data for pickups
 const currentYear = new Date().getFullYear()
@@ -45,10 +46,10 @@ async function getDraftPickRow(
 }
 
 /**
- * Seed a counterpick_bids row directly, simulating a bid placed during the
- * FAAB auction phase without going through place-counterpick-bid.
+ * Seed a counterpick_bids row targeting a draft pick, simulating a bid placed
+ * during the FAAB auction phase without going through place-counterpick-bid.
  */
-async function seedCounterpickBid(
+function seedCounterpickBid(
   serviceClient: SupabaseClient,
   leagueId: string,
   bidderTeamId: string,
@@ -56,22 +57,15 @@ async function seedCounterpickBid(
   status: 'active' | 'outbid' | 'cancelled',
   amount = 5
 ): Promise<string> {
-  const { data, error } = await serviceClient
-    .from('counterpick_bids')
-    .insert({
-      league_id: leagueId,
-      team_id: bidderTeamId,
-      movie_id: draftPick.movie_id,
-      target_team_id: draftPick.team_id,
-      draft_pick_id: draftPick.id,
-      amount,
-      status,
-      processing_deadline: new Date().toISOString(),
-    })
-    .select('id')
-    .single()
-  if (error || !data) throw new Error(`Failed to seed counterpick bid: ${error?.message}`)
-  return data.id
+  return seedCounterpickBidRow(serviceClient, {
+    leagueId,
+    teamId: bidderTeamId,
+    movieId: draftPick.movie_id,
+    targetTeamId: draftPick.team_id,
+    draftPickId: draftPick.id,
+    amount,
+    status,
+  })
 }
 
 /** Directly flip a league's status (bypassing the normal phase-transition flow). */

@@ -18,24 +18,15 @@ import {
   getServiceClient,
   createTestFactory,
   uniqueName,
-  getEdgeFunctionServiceRoleKey,
   getUserId,
 } from './_setup.ts'
+import {
+  createProcessBidsCaller,
+  PAST_DEADLINE,
+  seedCounterpickBid as seedCounterpickBidRow,
+  teamForOrThrow,
+} from './_counterpick_helpers.ts'
 import type { SupabaseClient } from '@supabase/supabase-js'
-
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
-
-/**
- * The `supabase start` edge runtime serves the *main checkout's* functions, so a
- * worktree change is only exercised by pointing PROCESS_BIDS_URL at a standalone
- * `deno run process-bids/index.ts` (which binds :8000). That process reads its
- * service role key from .env.test, whereas the container has its own -- so the
- * key has to follow the URL.
- */
-const STANDALONE_URL = Deno.env.get('PROCESS_BIDS_URL')
-const FUNCTION_URL = STANDALONE_URL || `${SUPABASE_URL}/functions/v1/process-bids`
-
-const PAST = new Date(Date.now() - 60 * 60 * 1000).toISOString()
 
 /**
  * A tmdb_id range untouched by any other suite's draft/pickup pool, so
@@ -52,26 +43,7 @@ Deno.test({
   fn: async (t) => {
     const { client, secondClient, factory } = await createTestFactory()
     const serviceClient = getServiceClient()
-    const SERVICE_ROLE_KEY = STANDALONE_URL
-      ? (Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '')
-      : await getEdgeFunctionServiceRoleKey()
-
-    async function callProcessBids(body: Record<string, unknown>) {
-      const response = await fetch(FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      })
-      const text = await response.text()
-      try {
-        return { status: response.status, data: JSON.parse(text) }
-      } catch {
-        return { status: response.status, data: { raw: text } }
-      }
-    }
+    const callProcessBids = await createProcessBidsCaller()
 
     /**
      * Seed a normal, unrelated pickup bid that will win cleanly. Mirrors
@@ -88,44 +60,15 @@ Deno.test({
         movie_data: { title: `Decoy Movie ${tmdbId}`, release_date: '2099-01-01', vote_average: 5, popularity: 10 },
         amount: 1,
         status: 'active',
-        processing_deadline: PAST,
+        processing_deadline: PAST_DEADLINE,
       })
     }
 
-    async function teamFor(leagueId: string, userClient: SupabaseClient) {
-      const team = await factory.getTeamForUser(leagueId, userClient)
-      if (!team) throw new Error('Team not found')
-      return team.teamId
-    }
+    const teamFor = (leagueId: string, userClient: SupabaseClient) =>
+      teamForOrThrow(factory, leagueId, userClient)
 
-    async function seedCounterpickBid(params: {
-      leagueId: string
-      teamId: string
-      movieId: string
-      targetTeamId: string
-      draftPickId?: string
-      pickupId?: string
-      amount: number
-      status?: string
-    }): Promise<string> {
-      const { data, error } = await serviceClient
-        .from('counterpick_bids')
-        .insert({
-          league_id: params.leagueId,
-          team_id: params.teamId,
-          movie_id: params.movieId,
-          target_team_id: params.targetTeamId,
-          draft_pick_id: params.draftPickId ?? null,
-          pickup_id: params.pickupId ?? null,
-          amount: params.amount,
-          status: params.status ?? 'active',
-          processing_deadline: PAST,
-        })
-        .select('id')
-        .single()
-      if (error || !data) throw new Error(`Failed to seed counterpick bid: ${error?.message}`)
-      return data.id
-    }
+    const seedCounterpickBid = (params: Parameters<typeof seedCounterpickBidRow>[1]) =>
+      seedCounterpickBidRow(serviceClient, params)
 
     async function bidStatus(bidId: string): Promise<string | undefined> {
       const { data } = await serviceClient
@@ -454,6 +397,87 @@ Deno.test({
             .eq('movie_id', pick.movie_id)
             .maybeSingle()
           assertEquals(counterpick, null)
+        },
+      )
+
+      await t.step(
+        "promotes an 'outbid' bid whose own target is still live when every active bid is voided",
+        async () => {
+          const leagueId = await factory.createActiveLeague(uniqueName('cp-promote'), 3)
+          const thirdClient = await factory.createThirdClient()
+          await serviceClient.from('leagues').update({ bidding_counterpick_slots: 2 }).eq('id', leagueId)
+
+          const teamA = await teamFor(leagueId, client)
+          const teamB = await teamFor(leagueId, secondClient)
+          const teamC = await teamFor(leagueId, thirdClient)
+          await seedDecoyPickupBid(leagueId, teamB)
+
+          // B holds a movie via the draft. A leads the contest with a bid on
+          // that draft pick; C sits behind it as 'outbid' -- but C's bid
+          // references the movie's NEXT holding row (see below), not the pick.
+          const picksB = await factory.getDraftPicksForUser(leagueId, secondClient)
+          const pick = picksB[0]
+
+          const staleLeaderId = await seedCounterpickBid({
+            leagueId,
+            teamId: teamA,
+            movieId: pick.movie_id,
+            targetTeamId: teamB,
+            draftPickId: pick.id,
+            amount: 6,
+          })
+
+          // The movie is dropped by B and re-acquired by A via pickup, so A's
+          // own leading bid dies at revalidation (it now owns the movie) --
+          // leaving the contest with no active bid at all.
+          await serviceClient.from('draft_picks').update({ dropped_at: new Date().toISOString() }).eq('id', pick.id)
+
+          const { data: movieRow } = await serviceClient
+            .from('movies')
+            .select('tmdb_id')
+            .eq('id', pick.movie_id)
+            .single()
+          assertExists(movieRow)
+
+          const pickupId = await factory.createPickupForUser(leagueId, client, {
+            tmdb_id: movieRow!.tmdb_id,
+            title: pick.movie_title,
+            release_date: '2099-01-01',
+          })
+
+          // C's bid was outbid by A earlier but targets the live pickup row,
+          // so with A's leader gone it must be promoted and win -- not swept.
+          const outbidBidId = await seedCounterpickBid({
+            leagueId,
+            teamId: teamC,
+            movieId: pick.movie_id,
+            targetTeamId: teamA,
+            pickupId,
+            amount: 3,
+            status: 'outbid',
+          })
+
+          const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+          assertEquals(status, 200)
+
+          assertEquals(await bidStatus(staleLeaderId), 'cancelled')
+          assertEquals(
+            await bidStatus(outbidBidId),
+            'won',
+            "an 'outbid' bid with a live target must be promoted when the leaders die, not swept",
+          )
+          assertEquals(data.counterpick_processed, 1)
+
+          const { data: counterpick } = await serviceClient
+            .from('counterpicks')
+            .select('pickup_id, counterpicker_team_id, target_team_id')
+            .eq('league_id', leagueId)
+            .eq('movie_id', pick.movie_id)
+            .single()
+          assertExists(counterpick)
+          assertEquals(counterpick?.pickup_id, pickupId)
+          assertEquals(counterpick?.counterpicker_team_id, teamC)
+          assertEquals(counterpick?.target_team_id, teamA)
         },
       )
     } finally {

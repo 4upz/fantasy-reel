@@ -33,6 +33,54 @@
 -- ============================================================================
 
 -- ============================================================================
+-- PART 0: retarget helper
+--
+-- The same two retargeting statements would otherwise be repeated in all four
+-- transfer branches of execute_trade (initiator->recipient and back, each for
+-- draft_pick and pickup). Factored out so a future change to what "the
+-- holding moved" means for counterpicks is made in one place.
+--
+-- SECURITY INVOKER on purpose: called from inside SECURITY DEFINER
+-- execute_trade it runs unrestricted, but a direct RPC call from a user is
+-- still subject to RLS -- and EXECUTE is revoked from client roles below
+-- anyway, matching 20260805200000_lock_down_account_linking_functions.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION retarget_counterpicks_for_holding(
+  p_source TEXT,       -- 'draft_pick' | 'pickup'
+  p_source_id UUID,
+  p_new_team_id UUID
+)
+RETURNS VOID AS $$
+BEGIN
+  IF p_source = 'draft_pick' THEN
+    UPDATE counterpicks
+    SET target_team_id = p_new_team_id, updated_at = now()
+    WHERE draft_pick_id = p_source_id;
+
+    UPDATE counterpick_bids
+    SET target_team_id = p_new_team_id
+    WHERE draft_pick_id = p_source_id
+      AND status IN ('active', 'outbid');
+  ELSIF p_source = 'pickup' THEN
+    UPDATE counterpicks
+    SET target_team_id = p_new_team_id, updated_at = now()
+    WHERE pickup_id = p_source_id;
+
+    UPDATE counterpick_bids
+    SET target_team_id = p_new_team_id
+    WHERE pickup_id = p_source_id
+      AND status IN ('active', 'outbid');
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+REVOKE EXECUTE ON FUNCTION retarget_counterpicks_for_holding(TEXT, UUID, UUID) FROM PUBLIC, anon, authenticated;
+
+COMMENT ON FUNCTION retarget_counterpicks_for_holding(TEXT, UUID, UUID) IS
+  'Points counterpicks.target_team_id (and pending counterpick_bids display rows) for one draft_pick/pickup holding at its new owner. Called by execute_trade after each transfer; not callable by client roles.';
+
+-- ============================================================================
 -- PART 1: execute_trade -- add the self-counterpick guard and retargeting
 --
 -- Based on the LATEST prior definition, from 20260130_fix_trade_assets_constraint.sql
@@ -54,7 +102,6 @@ DECLARE
   v_recipient_faab INTEGER;
   v_error TEXT;
   v_assets JSONB := '[]'::jsonb;
-  v_counterpicked_by UUID;
 BEGIN
   -- Lock and fetch the trade
   SELECT * INTO v_trade
@@ -85,38 +132,31 @@ BEGIN
   -- Guard: a counterpicked movie may change hands freely EXCEPT to the team
   -- that counterpicked it -- that would make the counterpicker its own target,
   -- which counterpicks_not_own_movie forbids and which is not a coherent bet
-  -- anyway. Checked up front for BOTH sides before any row is mutated, so a
-  -- rejection here leaves the trade completely untouched (same early-return
-  -- pattern as the re-validation above). This is the authoritative gate --
-  -- the TS-side check in _shared/trade-validation.ts is a UX-earlier mirror
-  -- of the same rule, not a substitute for it.
-  FOR v_movie IN SELECT * FROM jsonb_array_elements(COALESCE(v_trade.initiator_items->'movies', '[]'::jsonb)) LOOP
-    IF (v_movie.value->>'source') = 'draft_pick' THEN
-      SELECT counterpicked_by_team_id INTO v_counterpicked_by
-      FROM draft_picks WHERE id = (v_movie.value->>'source_id')::UUID;
-    ELSE
-      SELECT counterpicked_by_team_id INTO v_counterpicked_by
-      FROM pickups WHERE id = (v_movie.value->>'source_id')::UUID;
-    END IF;
-
-    IF v_counterpicked_by IS NOT NULL AND v_counterpicked_by = v_trade.recipient_team_id THEN
-      RETURN jsonb_build_object('error', 'Cannot trade a counterpicked movie to the team that counterpicked it');
-    END IF;
-  END LOOP;
-
-  FOR v_movie IN SELECT * FROM jsonb_array_elements(COALESCE(v_trade.recipient_items->'movies', '[]'::jsonb)) LOOP
-    IF (v_movie.value->>'source') = 'draft_pick' THEN
-      SELECT counterpicked_by_team_id INTO v_counterpicked_by
-      FROM draft_picks WHERE id = (v_movie.value->>'source_id')::UUID;
-    ELSE
-      SELECT counterpicked_by_team_id INTO v_counterpicked_by
-      FROM pickups WHERE id = (v_movie.value->>'source_id')::UUID;
-    END IF;
-
-    IF v_counterpicked_by IS NOT NULL AND v_counterpicked_by = v_trade.initiator_team_id THEN
-      RETURN jsonb_build_object('error', 'Cannot trade a counterpicked movie to the team that counterpicked it');
-    END IF;
-  END LOOP;
+  -- anyway. Checked up front for BOTH sides in one batched statement before
+  -- any row is mutated, so a rejection here leaves the trade completely
+  -- untouched (same early-return pattern as the re-validation above). This is
+  -- the authoritative gate -- the TS-side check in _shared/trade-validation.ts
+  -- is a UX-earlier mirror of the same rule, not a substitute for it.
+  IF EXISTS (
+    WITH traded AS (
+      SELECT (m.value->>'source') AS source,
+             (m.value->>'source_id')::UUID AS source_id,
+             v_trade.recipient_team_id AS destination_team_id
+      FROM jsonb_array_elements(COALESCE(v_trade.initiator_items->'movies', '[]'::jsonb)) m
+      UNION ALL
+      SELECT (m.value->>'source'),
+             (m.value->>'source_id')::UUID,
+             v_trade.initiator_team_id
+      FROM jsonb_array_elements(COALESCE(v_trade.recipient_items->'movies', '[]'::jsonb)) m
+    )
+    SELECT 1
+    FROM traded
+    LEFT JOIN draft_picks dp ON traded.source = 'draft_pick' AND dp.id = traded.source_id
+    LEFT JOIN pickups pk ON traded.source = 'pickup' AND pk.id = traded.source_id
+    WHERE COALESCE(dp.counterpicked_by_team_id, pk.counterpicked_by_team_id) = traded.destination_team_id
+  ) THEN
+    RETURN jsonb_build_object('error', 'Cannot trade a counterpicked movie to the team that counterpicked it');
+  END IF;
 
   -- Transfer initiator's movies to recipient
   FOR v_movie IN SELECT * FROM jsonb_array_elements(COALESCE(v_trade.initiator_items->'movies', '[]'::jsonb)) LOOP
@@ -126,18 +166,10 @@ BEGIN
       WHERE id = (v_movie.value->>'source_id')::UUID;
 
       -- counterpicks.target_team_id tracks the CURRENT holder (see column
-      -- comment below); retarget it so scoring/display stay truthful. Also
-      -- retarget the display copy on any still-pending counterpick bids for
+      -- comment below); retarget_counterpicks_for_holding points it at the new owner so scoring/display stay truthful. It also retargets the display copy on any still-pending counterpick bids for
       -- this same reason -- their own self-target revalidation happens at
       -- bid-processing time, not here.
-      UPDATE counterpicks
-      SET target_team_id = v_trade.recipient_team_id, updated_at = now()
-      WHERE draft_pick_id = (v_movie.value->>'source_id')::UUID;
-
-      UPDATE counterpick_bids
-      SET target_team_id = v_trade.recipient_team_id
-      WHERE draft_pick_id = (v_movie.value->>'source_id')::UUID
-        AND status IN ('active', 'outbid');
+      PERFORM retarget_counterpicks_for_holding('draft_pick', (v_movie.value->>'source_id')::UUID, v_trade.recipient_team_id);
 
       -- Only insert draft_pick_id, NOT movie_id (constraint requires exactly one)
       INSERT INTO trade_assets (trade_offer_id, from_team_id, to_team_id, draft_pick_id)
@@ -152,14 +184,7 @@ BEGIN
       SET team_id = v_trade.recipient_team_id
       WHERE id = (v_movie.value->>'source_id')::UUID;
 
-      UPDATE counterpicks
-      SET target_team_id = v_trade.recipient_team_id, updated_at = now()
-      WHERE pickup_id = (v_movie.value->>'source_id')::UUID;
-
-      UPDATE counterpick_bids
-      SET target_team_id = v_trade.recipient_team_id
-      WHERE pickup_id = (v_movie.value->>'source_id')::UUID
-        AND status IN ('active', 'outbid');
+      PERFORM retarget_counterpicks_for_holding('pickup', (v_movie.value->>'source_id')::UUID, v_trade.recipient_team_id);
 
       -- Only insert pickup_id, NOT movie_id (constraint requires exactly one)
       INSERT INTO trade_assets (trade_offer_id, from_team_id, to_team_id, pickup_id)
@@ -179,14 +204,7 @@ BEGIN
       SET team_id = v_trade.initiator_team_id, updated_at = now()
       WHERE id = (v_movie.value->>'source_id')::UUID;
 
-      UPDATE counterpicks
-      SET target_team_id = v_trade.initiator_team_id, updated_at = now()
-      WHERE draft_pick_id = (v_movie.value->>'source_id')::UUID;
-
-      UPDATE counterpick_bids
-      SET target_team_id = v_trade.initiator_team_id
-      WHERE draft_pick_id = (v_movie.value->>'source_id')::UUID
-        AND status IN ('active', 'outbid');
+      PERFORM retarget_counterpicks_for_holding('draft_pick', (v_movie.value->>'source_id')::UUID, v_trade.initiator_team_id);
 
       -- Only insert draft_pick_id, NOT movie_id (constraint requires exactly one)
       INSERT INTO trade_assets (trade_offer_id, from_team_id, to_team_id, draft_pick_id)
@@ -201,14 +219,7 @@ BEGIN
       SET team_id = v_trade.initiator_team_id
       WHERE id = (v_movie.value->>'source_id')::UUID;
 
-      UPDATE counterpicks
-      SET target_team_id = v_trade.initiator_team_id, updated_at = now()
-      WHERE pickup_id = (v_movie.value->>'source_id')::UUID;
-
-      UPDATE counterpick_bids
-      SET target_team_id = v_trade.initiator_team_id
-      WHERE pickup_id = (v_movie.value->>'source_id')::UUID
-        AND status IN ('active', 'outbid');
+      PERFORM retarget_counterpicks_for_holding('pickup', (v_movie.value->>'source_id')::UUID, v_trade.initiator_team_id);
 
       -- Only insert pickup_id, NOT movie_id (constraint requires exactly one)
       INSERT INTO trade_assets (trade_offer_id, from_team_id, to_team_id, pickup_id)
