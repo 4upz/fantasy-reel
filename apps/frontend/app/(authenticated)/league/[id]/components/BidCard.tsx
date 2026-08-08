@@ -154,10 +154,17 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
   } | null
 
   const isOutbid = bid.status === 'outbid'
+  const isActive = bid.status === 'active'
   const deadline = isOutbid ? bid.response_deadline : bid.processing_deadline
   const movieTitle = movieData?.title || `Movie #${bid.tmdb_id}`
 
   const typeClass = getBidTypeClass(bidType)
+
+  // An outbid bid gets a prominent "Counter Bid" prompt; an active one gets a
+  // quieter option to raise your own bid or outbid a rival's.
+  const showRecoverButton = isOutbid && isOwner && !!onCounter
+  const showRaiseButton = isActive && !!onCounter
+  const showCancelButton = isOwner && isActive
 
   return (
     <>
@@ -221,9 +228,9 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
           </div>
 
           {/* Actions */}
-          {isOwner && (
+          {(showRecoverButton || showRaiseButton || showCancelButton) && (
             <div className="flex flex-col items-end gap-2">
-              {isOutbid && onCounter && (
+              {showRecoverButton && (
                 <button
                   onClick={onCounter}
                   className="btn btn-primary text-sm px-4"
@@ -233,7 +240,17 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
                 </button>
               )}
 
-              {bid.status === 'active' && (
+              {showRaiseButton && (
+                <button
+                  onClick={onCounter}
+                  className="btn btn-secondary text-sm px-4"
+                  data-testid={isOwner ? `raise-bid-${bid.tmdb_id}` : `counter-bid-${bid.tmdb_id}`}
+                >
+                  {isOwner ? 'Raise Bid' : 'Counter Bid'}
+                </button>
+              )}
+
+              {showCancelButton && (
                 <button
                   onClick={() => setShowCancelModal(true)}
                   className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-crimson/10"

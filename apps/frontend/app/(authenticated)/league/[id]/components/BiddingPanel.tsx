@@ -175,17 +175,13 @@ export default function BiddingPanel({
 
   const hasAnyBids = myBids.length > 0 || otherBids.length > 0 || myCounterpickBids.length > 0 || otherCounterpickBids.length > 0
 
-  function renderBidItem(
-    item: UnifiedBidItem,
-    isOwner: boolean,
-    options?: { showCounter?: boolean },
-  ): React.ReactElement {
+  function renderBidItem(item: UnifiedBidItem, isOwner: boolean): React.ReactElement {
     // A released movie can't be bid on any more, so offering "Counter Bid" on
     // one is a dead end -- the server rejects it once the modal is filled in.
     const releaseDate = item.type === 'pickup'
       ? item.bid.movie_data?.release_date ?? null
       : item.bid.movies?.release_date ?? null
-    const canCounter = !!options?.showCounter && isMovieBiddable(releaseDate)
+    const canCounter = isMovieBiddable(releaseDate)
 
     if (item.type === 'pickup') {
       return (
@@ -302,7 +298,7 @@ export default function BiddingPanel({
               className="animate-slide-up"
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              {renderBidItem(item, true, { showCounter: true })}
+              {renderBidItem(item, true)}
             </div>
           ))}
         </UnifiedBidSection>
@@ -412,6 +408,7 @@ export default function BiddingPanel({
             setIsModalOpen(false)
             setCounterBidTarget(null)
           }}
+          teamId={teamId}
           budget={budget}
           existingBids={bids}
           ownedTmdbIds={ownedTmdbIds}

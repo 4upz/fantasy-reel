@@ -15,11 +15,18 @@ interface CounterpickBidCardProps {
 
 export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, bidType }: CounterpickBidCardProps) {
   const isOutbid = bid.status === 'outbid'
+  const isActive = bid.status === 'active'
   const deadline = isOutbid ? bid.response_deadline : bid.processing_deadline
   const movieTitle = bid.movies?.title || 'Unknown Movie'
   const posterUrl = bid.movies?.poster_url || null
 
   const typeClass = getBidTypeClass(bidType)
+
+  // An outbid bid gets a prominent "Counter Bid" prompt; an active one gets a
+  // quieter option to raise your own bid or outbid a rival's.
+  const showRecoverButton = isOutbid && isOwner && !!onCounter
+  const showRaiseButton = isActive && !!onCounter
+  const showCancelButton = isOwner && isActive && !!onCancel
 
   return (
     <div
@@ -77,9 +84,9 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
         </div>
 
         {/* Actions */}
-        {isOwner && (
+        {(showRecoverButton || showRaiseButton || showCancelButton) && (
           <div className="flex flex-col items-end gap-2">
-            {isOutbid && onCounter && (
+            {showRecoverButton && (
               <button
                 onClick={onCounter}
                 className="btn btn-danger text-sm px-4"
@@ -88,7 +95,17 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
               </button>
             )}
 
-            {bid.status === 'active' && onCancel && (
+            {showRaiseButton && (
+              <button
+                onClick={onCounter}
+                className="btn btn-secondary text-sm px-4 border-crimson text-crimson hover:bg-crimson/10"
+                data-testid={isOwner ? `raise-counterpick-bid-${bid.movie_id}` : `counter-counterpick-bid-${bid.movie_id}`}
+              >
+                {isOwner ? 'Raise Bid' : 'Counter Bid'}
+              </button>
+            )}
+
+            {showCancelButton && (
               <button
                 onClick={onCancel}
                 className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-crimson/10"
