@@ -28,6 +28,8 @@ import {
   type CounterpickContest,
   type CounterpickLossReason,
   resolveCounterpickWinners,
+  resolveTargetRevalidation,
+  type TargetVoidReason,
 } from '../_shared/counterpick-resolution.ts'
 import {
   getCounterpickNoSlotsEmailHtml,
@@ -327,35 +329,90 @@ async function getTeamUserId(
   return (team?.league_participants as unknown as { user_id: string })?.user_id ?? null
 }
 
+/** Every reason a pending bid can be voided at processing time instead of settled. */
+type VoidReasonCode = 'movie_released' | TargetVoidReason
+
 /**
- * Notify a team's owner that their bid was voided at processing time because the
- * movie released while the bid was pending. Reuses the 'bid_lost' notification
- * type since no dedicated type exists for this case; `data.reason` is set to
- * 'movie_released' so the frontend can special-case the copy later.
+ * Title/body copy for a voided-bid notification, one entry per `VoidReasonCode`.
+ * All four share the same shape (a movie became un-winnable while the bid sat
+ * pending) but need distinct wording, and each must say plainly that the
+ * budget was not charged.
+ */
+function voidedBidCopy(
+  reasonCode: VoidReasonCode,
+  movieTitle: string,
+  amount: number,
+): { title: string; body: string } {
+  const title = `Bid cancelled for ${movieTitle}`
+  switch (reasonCode) {
+    case 'movie_released':
+      return {
+        title,
+        body: `${movieTitle} was released before your bid of $${amount} could be processed. Your bid was cancelled and your budget was not charged.`,
+      }
+    case 'movie_dropped':
+      return {
+        title,
+        body: `${movieTitle} was dropped before your counterpick bid of $${amount} could be processed. Your bid was cancelled and your budget was not charged.`,
+      }
+    case 'target_owned':
+      return {
+        title,
+        body: `You now own ${movieTitle}, so your counterpick bid of $${amount} was cancelled. Your budget was not charged.`,
+      }
+    case 'target_missing':
+      return {
+        title,
+        body: `${movieTitle} is no longer available to counterpick, so your bid of $${amount} was cancelled. Your budget was not charged.`,
+      }
+  }
+}
+
+/**
+ * Notify a team's owner that their bid was voided at processing time -- the
+ * movie released, was dropped by its holder, was traded to the bidder's own
+ * team, or its target holding disappeared entirely. Reuses the 'bid_lost'
+ * notification type since no dedicated type exists for any of these;
+ * `data.reason` carries the reason code so the frontend can special-case copy
+ * later.
+ *
+ * `detail` is only meaningful for `movie_released`, whose underlying
+ * `isUpcomingMovie()` check can fail for several distinct reasons (no release
+ * date, released this year, released a prior year) -- it is stored verbatim as
+ * `data.release_check_reason` for that case and otherwise ignored, so this
+ * generalization does not change what a `movie_released` notification's
+ * `data` payload looks like.
  */
 async function notifyVoidedBidder(
   serviceClient: ServiceClient,
   bid: { id: string; league_id: string; team_id: string; amount: number },
   movieTitle: string,
-  reason: string,
+  reasonCode: VoidReasonCode,
+  detail: string,
   extraData: Record<string, unknown>,
 ): Promise<void> {
   const bidderUserId = await getTeamUserId(serviceClient, bid.team_id)
   if (!bidderUserId) return
 
+  const { title, body } = voidedBidCopy(reasonCode, movieTitle, bid.amount)
+
+  const data: Record<string, unknown> = {
+    bid_id: bid.id,
+    amount: bid.amount,
+    reason: reasonCode,
+  }
+  if (reasonCode === 'movie_released') {
+    data.release_check_reason = detail
+  }
+  Object.assign(data, extraData)
+
   await serviceClient.from('notifications').insert({
     user_id: bidderUserId,
     league_id: bid.league_id,
     type: 'bid_lost',
-    title: `Bid cancelled for ${movieTitle}`,
-    body: `${movieTitle} was released before your bid of $${bid.amount} could be processed. Your bid was cancelled and your budget was not charged.`,
-    data: {
-      bid_id: bid.id,
-      amount: bid.amount,
-      reason: 'movie_released',
-      release_check_reason: reason,
-      ...extraData,
-    },
+    title,
+    body,
+    data,
   })
 }
 
@@ -687,7 +744,7 @@ async function voidReleasedCounterpickContests(
     }
 
     for (const bid of bidsToVoid) {
-      await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, {
+      await notifyVoidedBidder(serviceClient, bid, movieTitle, 'movie_released', reason, {
         movie_id: movieId,
         bid_type: 'counterpick',
       })
@@ -707,6 +764,187 @@ async function voidReleasedCounterpickContests(
       voided_count: bidsToVoid.length,
       movie_title: movieTitle,
     })
+  }
+
+  return surviving
+}
+
+/** Human-readable `VoidedBidResult.reason` text per target-revalidation void reason. */
+const TARGET_VOID_REASON_TEXT: Record<TargetVoidReason, string> = {
+  movie_dropped: 'Movie was dropped by its holder before the bid could be processed',
+  target_owned: 'The target movie was traded to the bidder\'s own team',
+  target_missing: 'The target holding no longer exists',
+}
+
+/**
+ * Re-validate every active counterpick bid against the row it targets (a
+ * draft_picks or pickups holding), voiding any bid whose target has gone stale
+ * since it was placed -- dropped, traded to the bidder's own team, or gone
+ * missing entirely -- and retargeting the rest at the row's *current* holder
+ * rather than the bid's possibly-stale stored `target_team_id`.
+ *
+ * A contest's bids do not all necessarily share one target row: a movie
+ * dropped and re-picked-up mid-week leaves one bid pointing at the now-dead
+ * draft_pick row and another at the live pickup row, and only the former
+ * should die here.
+ *
+ * Runs before slot resolution for the same reason `voidReleasedCounterpickContests`
+ * does: a bid that can never be awarded must not consume one of the bidder's
+ * scarce counterpick slots.
+ *
+ * If every active bid on a contest is voided, the contest is dropped entirely
+ * and any remaining 'outbid' bids on it are cancelled too, so they don't
+ * strand as 'outbid' forever -- the same sweep `voidReleasedCounterpickContests`
+ * does via `bidsByContest` when a whole movie goes dead.
+ */
+async function revalidateCounterpickTargets(
+  serviceClient: ServiceClient,
+  contests: CounterpickContest[],
+  bidsByContest: Map<string, CounterpickBid[]>,
+  voided: VoidedBidResult[],
+): Promise<CounterpickContest[]> {
+  const allActiveBids = contests.flatMap((contest) => contest.activeBids as CounterpickBid[])
+
+  const draftPickIds = [...new Set(
+    allActiveBids.filter((bid) => bid.draft_pick_id).map((bid) => bid.draft_pick_id as string),
+  )]
+  const pickupIds = [...new Set(
+    allActiveBids.filter((bid) => bid.pickup_id).map((bid) => bid.pickup_id as string),
+  )]
+
+  type TargetRow = { id: string; team_id: string; dropped_at: string | null }
+
+  const [
+    { rows: draftRows, unreadIds: unreadDraftPickIds },
+    { rows: pickupRows, unreadIds: unreadPickupIds },
+  ] = await Promise.all([
+    selectByIdBatches<TargetRow>(
+      draftPickIds,
+      'Failed to read draft_picks for the counterpick target check:',
+      (batch) => serviceClient.from('draft_picks').select('id, team_id, dropped_at').in('id', batch),
+    ),
+    selectByIdBatches<TargetRow>(
+      pickupIds,
+      'Failed to read pickups for the counterpick target check:',
+      (batch) => serviceClient.from('pickups').select('id, team_id, dropped_at').in('id', batch),
+    ),
+  ])
+
+  const targetRowById = new Map([...draftRows, ...pickupRows].map((row) => [row.id, row]))
+  const unreadTargetIds = new Set([...unreadDraftPickIds, ...unreadPickupIds])
+
+  const movieIds = [...new Set(contests.map((contest) => contest.key.split(':')[1]))]
+  const { rows: movies } = await selectByIdBatches<{ id: string; title: string }>(
+    movieIds,
+    'Failed to read movies for the counterpick target check:',
+    (batch) => serviceClient.from('movies').select('id, title').in('id', batch),
+  )
+  const titleByMovieId = new Map(movies.map((movie) => [movie.id, movie.title]))
+
+  const surviving: CounterpickContest[] = []
+
+  for (const contest of contests) {
+    const movieId = contest.key.split(':')[1]
+    const movieTitle = titleByMovieId.get(movieId) || `Movie ${movieId}`
+
+    const keptBids: CounterpickBid[] = []
+    const toVoid: { bid: CounterpickBid; reason: TargetVoidReason }[] = []
+
+    for (const bid of contest.activeBids as CounterpickBid[]) {
+      const sourceId = (bid.draft_pick_id ?? bid.pickup_id) as string
+      const revalidation = resolveTargetRevalidation(
+        bid,
+        targetRowById.get(sourceId),
+        unreadTargetIds.has(sourceId),
+      )
+
+      if (revalidation.outcome === 'void') {
+        toVoid.push({ bid, reason: revalidation.reason })
+        continue
+      }
+
+      // The stored target_team_id can be stale after a trade even for a bid
+      // that is otherwise still perfectly valid, so the winner this bid
+      // eventually becomes must carry the row's current holder.
+      bid.target_team_id = revalidation.targetTeamId
+      keptBids.push(bid)
+    }
+
+    if (toVoid.length > 0) {
+      await serviceClient
+        .from('counterpick_bids')
+        .update({ status: 'cancelled' })
+        .in('id', toVoid.map(({ bid }) => bid.id))
+
+      for (const { bid, reason } of toVoid) {
+        await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, '', {
+          movie_id: movieId,
+          bid_type: 'counterpick',
+        })
+
+        voided.push({
+          bid_id: bid.id,
+          league_id: bid.league_id,
+          team_id: bid.team_id,
+          amount: bid.amount,
+          movie_title: movieTitle,
+          reason: TARGET_VOID_REASON_TEXT[reason],
+          movie_id: movieId,
+        })
+      }
+
+      // Drop the voided bids from the shared per-contest bid list too, or the
+      // awarding loop below would later try to mark an already-cancelled bid
+      // as 'lost' and send it a contradictory loser notification.
+      const voidedIds = new Set(toVoid.map(({ bid }) => bid.id))
+      const remainingBids = (bidsByContest.get(contest.key) ?? []).filter(
+        (bid) => !voidedIds.has(bid.id),
+      )
+      bidsByContest.set(contest.key, remainingBids)
+
+      log.info('Voided counterpick bid(s): target holding no longer valid', {
+        voided_count: toVoid.length,
+        movie_title: movieTitle,
+        contest_dropped: keptBids.length === 0,
+      })
+    }
+
+    if (keptBids.length === 0) {
+      // No active bid survived, so this movie cannot be awarded this run.
+      // Sweep any 'outbid' bids still sitting on it too, or they strand as
+      // 'outbid' forever with no active bid left to ever beat.
+      const strandedOutbid = (bidsByContest.get(contest.key) ?? []).filter(
+        (bid) => bid.status === 'outbid',
+      )
+
+      if (strandedOutbid.length > 0) {
+        await serviceClient
+          .from('counterpick_bids')
+          .update({ status: 'cancelled' })
+          .in('id', strandedOutbid.map((bid) => bid.id))
+
+        for (const bid of strandedOutbid) {
+          await notifyVoidedBidder(serviceClient, bid, movieTitle, 'target_missing', '', {
+            movie_id: movieId,
+            bid_type: 'counterpick',
+          })
+
+          voided.push({
+            bid_id: bid.id,
+            league_id: bid.league_id,
+            team_id: bid.team_id,
+            amount: bid.amount,
+            movie_title: movieTitle,
+            reason: 'The counterpick contest could not be resolved: no valid target bid remained',
+            movie_id: movieId,
+          })
+        }
+      }
+
+      continue
+    }
+
+    surviving.push({ key: contest.key, activeBids: keptBids })
   }
 
   return surviving
@@ -737,9 +975,20 @@ async function processCounterpickBids(
   )
   if (settledContests.length === 0) return results
 
-  const contests = await voidReleasedCounterpickContests(
+  const unreleasedContests = await voidReleasedCounterpickContests(
     serviceClient,
     settledContests,
+    bidsByContest,
+    voided
+  )
+  if (unreleasedContests.length === 0) return results
+
+  // Must run before slot resolution, same as the release check above: a bid
+  // whose target has gone stale (dropped, traded away, traded to itself) can
+  // never be awarded, so it must not occupy one of the bidder's scarce slots.
+  const contests = await revalidateCounterpickTargets(
+    serviceClient,
+    unreleasedContests,
     bidsByContest,
     voided
   )
@@ -1198,7 +1447,7 @@ Deno.serve(async (req) => {
             .in('id', bidIdsToVoid)
 
           for (const bid of bidsToVoid) {
-            await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, {
+            await notifyVoidedBidder(serviceClient, bid, movieTitle, 'movie_released', reason, {
               tmdb_id: bid.tmdb_id,
               movie_id: movieId,
             })
