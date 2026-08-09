@@ -781,6 +781,35 @@ Teams can trade movies with each other during the active season.
        └── Pending trades past deadline → cancelled
 ```
 
+### Competing Trades
+
+Several open offers may name the **same movie**, and two teams may have more than
+one open offer between them. Nothing blocks the overlap at proposal time — this
+is deliberate, and mirrors Fantasy Critic's model.
+
+Only one of them can ever execute. The guarantee is **late-bound**, not enforced
+up front:
+
+- `execute_trade()` locks the trade row `FOR UPDATE` and re-runs
+  `validate_trade_items()` for both sides, which re-checks live
+  `draft_picks`/`pickups` ownership. Whichever competing offer reaches that point
+  second sees the holding already gone and refuses.
+- On success, `execute_trade()` expires every other open offer naming a holding
+  it moved (`veto_reason` explains why) and returns them as `invalidated_trades`;
+  `process-trades` notifies both parties of each.
+- `get_contested_source_ids(league_id)` reports holdings claimed by more than one
+  open offer. `get-trades` uses it to add `contested_source_ids` per offer, which
+  drives the "Contested" badge on `TradeOfferCard`. It returns counts only —
+  never who else is bidding — so it cannot leak trade contents past
+  `trade_offers` RLS.
+
+**Do not re-add a proposal-time uniqueness check on trade movies.** A trigger
+(`validate_trade_movies_trigger`) and a per-team-pair unique index used to do
+exactly that; both were dropped in `20260809120000_allow_competing_trades.sql`
+because they blocked the competing-offer behavior users asked for. The
+re-validation inside `execute_trade()` is what protects the data — see
+`tests/competing-trades.test.ts`.
+
 ### Edge Functions
 
 | Function | Purpose |

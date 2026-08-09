@@ -53,6 +53,16 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
 }
 
 /**
+ * Statuses where an offer can still be won or lost. Contested only means
+ * something while that is true -- a completed or expired trade has already had
+ * its outcome decided, so flagging it would be noise.
+ */
+const OPEN_STATUSES = new Set(['proposed', 'countered', 'accepted', 'review'])
+
+/** Stable empty set so a non-contested card doesn't allocate one per render. */
+const EMPTY_CONTESTED: ReadonlySet<string> = new Set<string>()
+
+/**
  * Find display name for a team by ID from the available team info
  */
 function findDisplayName(
@@ -97,6 +107,11 @@ export default function TradeOfferCard(props: Props) {
   // Use optimistic status if available, otherwise actual status
   const displayStatus = optimisticStatus || trade.status
   const statusStyle = STATUS_STYLES[displayStatus] || STATUS_STYLES.proposed
+
+  // Movies in this offer that another open offer also wants. Several offers may
+  // compete for the same movie, and only the first to go through happens.
+  const contestedSourceIds = new Set(trade.contested_source_ids ?? [])
+  const isContested = contestedSourceIds.size > 0 && OPEN_STATUSES.has(displayStatus)
 
   const tradeAction = useCallback(
     async (action: 'accept' | 'reject' | 'cancel' | 'veto', message?: string) => {
@@ -182,13 +197,28 @@ export default function TradeOfferCard(props: Props) {
           </div>
         </div>
 
-        <span
-          className={`px-2 py-1 text-xs font-medium rounded ${statusStyle.bg} ${statusStyle.text}`}
-          role="status"
-          aria-live="polite"
-        >
-          {optimisticStatus ? `${statusStyle.label}...` : statusStyle.label}
-        </span>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <span
+            className={`px-2 py-1 text-xs font-medium rounded ${statusStyle.bg} ${statusStyle.text}`}
+            role="status"
+            aria-live="polite"
+          >
+            {optimisticStatus ? `${statusStyle.label}...` : statusStyle.label}
+          </span>
+
+          {isContested && (
+            <span
+              className="px-2 py-0.5 text-xs font-medium rounded bg-warning-bg text-warning"
+              data-testid={`trade-contested-${trade.id}`}
+            >
+              Contested
+              <span className="sr-only">
+                . Another open trade wants a movie in this deal. Only the first trade to go
+                through will happen.
+              </span>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Trade items */}
@@ -197,11 +227,13 @@ export default function TradeOfferCard(props: Props) {
           title={`${initiatorTeam.name} sends`}
           items={trade.initiator_items as TradeItems}
           isYours={isInitiator}
+          contestedSourceIds={isContested ? contestedSourceIds : EMPTY_CONTESTED}
         />
         <TradeItemsSection
           title={`${recipientTeam.name} sends`}
           items={trade.recipient_items as TradeItems}
           isYours={isRecipient}
+          contestedSourceIds={isContested ? contestedSourceIds : EMPTY_CONTESTED}
         />
       </div>
 
@@ -383,10 +415,13 @@ function TradeItemsSection({
   title,
   items,
   isYours,
+  contestedSourceIds,
 }: {
   title: string
   items: TradeItems
   isYours: boolean
+  /** Empty unless this offer is still open and competing offers exist. */
+  contestedSourceIds: ReadonlySet<string>
 }) {
   const hasItems = items.movies.length > 0 || items.faab > 0
 
@@ -421,6 +456,11 @@ function TradeItemsSection({
                   <p className="text-xs text-foreground-muted">
                     {new Date(movie.release_date).getFullYear()}
                   </p>
+                )}
+                {/* The card badge says the deal is contested; this says which
+                    movie, which is the part that matters on a multi-movie offer. */}
+                {contestedSourceIds.has(movie.source_id) && (
+                  <p className="text-xs text-warning">Also in another trade</p>
                 )}
               </div>
             </div>
