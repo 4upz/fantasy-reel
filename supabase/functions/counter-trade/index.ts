@@ -19,7 +19,7 @@ import {
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
-import { createLogger } from '../_shared/logger.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('counter-trade')
 
@@ -109,11 +109,13 @@ Deno.serve(async (req) => {
     })
 
     if (rpcError) {
-      console.error('Failed to counter trade:', rpcError)
-      // Check if it's a movie-already-in-trade error
-      if (rpcError.message?.includes('already in a pending trade')) {
-        return errorResponse('One or more movies are already involved in another pending trade', 400)
-      }
+      // The movie-overlap trigger that raised 'already in a pending trade' was
+      // dropped in 20260809120000 -- a counter may now name movies that other
+      // open offers also name. Nothing left to translate into a 400 here.
+      log.error('Failed to counter trade', {
+        trade_offer_id,
+        error: serializeError(rpcError),
+      })
       return errorResponse('Failed to submit counter-offer', 500)
     }
 

@@ -473,6 +473,16 @@ export interface TradeOffer {
   veto_reason: string | null
   created_at: string
   updated_at: string
+  /**
+   * source_ids in this offer that at least one other open offer also names.
+   * Populated by get-trades; absent on offers loaded from anywhere else.
+   *
+   * Several offers may compete for the same movie (see migration
+   * 20260809120000) and only the first to execute wins, so a contested movie
+   * means this deal may lose. Counts are deliberately not exposed -- who else is
+   * bidding is private to those trades' own participants.
+   */
+  contested_source_ids?: string[]
 }
 
 export interface TradeAsset {

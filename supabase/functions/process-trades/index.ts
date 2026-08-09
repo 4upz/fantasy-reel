@@ -42,7 +42,23 @@ interface ProcessResults {
   processed: number
   completed: number
   failed: number
+  /** Competing offers expired because a movie they named was traded elsewhere. */
+  invalidated: number
   errors: string[]
+}
+
+/** One competing offer that execute_trade expired, as returned in its payload. */
+interface InvalidatedTrade {
+  id: string
+  league_id: string
+  initiator_team_id: string
+  recipient_team_id: string
+}
+
+interface ExecuteTradeResult {
+  success?: boolean
+  error?: string
+  invalidated_trades?: InvalidatedTrade[]
 }
 
 Deno.serve(async (req) => {
@@ -67,6 +83,7 @@ Deno.serve(async (req) => {
       processed: 0,
       completed: 0,
       failed: 0,
+      invalidated: 0,
       errors: [],
     }
 
@@ -119,7 +136,7 @@ Deno.serve(async (req) => {
           continue
         }
 
-        const { error: executeError } = await serviceClient.rpc('execute_trade', {
+        const { data: executeData, error: executeError } = await serviceClient.rpc('execute_trade', {
           p_trade_id: trade.id,
         })
 
@@ -130,8 +147,32 @@ Deno.serve(async (req) => {
           continue
         }
 
+        // execute_trade reports business-rule refusals (not in executable state,
+        // ownership re-validation failure, counterpick self-trade guard) inside
+        // its JSONB return value rather than by raising, so a null rpc error is
+        // NOT on its own proof the trade went through. This previously fell
+        // straight into notifyTradeCompleted, telling both teams a trade had
+        // completed when nothing had moved.
+        const executeResult = executeData as ExecuteTradeResult | null
+
+        if (!executeResult?.success) {
+          const reason = executeResult?.error ?? 'execute_trade returned no result'
+          log.error('Trade execution refused', { trade_id: trade.id, reason })
+          results.failed++
+          results.errors.push(`Trade ${trade.id}: ${reason}`)
+          continue
+        }
+
         await notifyTradeCompleted(serviceClient, trade)
         results.completed++
+
+        // Offers that named a movie this trade just moved were expired inside
+        // execute_trade. Tell those teams why their offer disappeared.
+        const invalidated = executeResult.invalidated_trades ?? []
+        if (invalidated.length > 0) {
+          results.invalidated += invalidated.length
+          await notifyTradesInvalidated(serviceClient, invalidated)
+        }
       } catch (error) {
         log.error('Error processing trade', { trade_id: trade.id, error: serializeError(error) })
         results.failed++
@@ -143,11 +184,13 @@ Deno.serve(async (req) => {
       processed: results.processed,
       failed: results.failed,
       errors: results.errors,
-      metadata: { completed: results.completed },
+      metadata: { completed: results.completed, invalidated: results.invalidated },
     })
 
     return jsonResponse({
-      message: `Processed ${results.processed} trades: ${results.completed} completed, ${results.failed} failed`,
+      message:
+        `Processed ${results.processed} trades: ${results.completed} completed, ${results.failed} failed` +
+        (results.invalidated > 0 ? `, ${results.invalidated} competing offers expired` : ''),
       ...results,
       job_status,
     })
@@ -217,6 +260,50 @@ async function notifyTradeCompleted(
       }],
     }),
   ])
+}
+
+/**
+ * Tell both sides of every offer that execute_trade expired because a movie it
+ * named was traded away in the deal that just completed.
+ *
+ * Deliberately in-app only, matching notifyTradeExpired below: losing a
+ * contested offer is expected traffic once competing offers are allowed, and
+ * emailing every participant each time a popular movie moves would be noise.
+ * The counterparty in the winning trade already gets a 'completed' email.
+ */
+async function notifyTradesInvalidated(
+  supabase: ReturnType<typeof createServiceClient>,
+  invalidated: InvalidatedTrade[]
+): Promise<void> {
+  const notifications: TradeNotification[] = []
+
+  for (const offer of invalidated) {
+    const [initiatorInfo, recipientInfo] = await Promise.all([
+      getTeamInfo(supabase, offer.initiator_team_id),
+      getTeamInfo(supabase, offer.recipient_team_id),
+    ])
+
+    for (const info of [initiatorInfo, recipientInfo]) {
+      if (!info) continue
+      notifications.push({
+        user_id: info.user_id,
+        league_id: offer.league_id,
+        type: 'trade_cancelled',
+        title: 'Trade No Longer Available',
+        body: 'A movie in this trade was traded in another deal, so this offer has expired.',
+        data: { trade_offer_id: offer.id, expired_reason: 'movie_traded_elsewhere' },
+      })
+    }
+  }
+
+  if (notifications.length > 0) {
+    const { error } = await supabase.from('notifications').insert(notifications)
+    if (error) {
+      // Non-blocking: the offers are already expired in the DB, and the UI shows
+      // that regardless. Losing the notification must not fail the cron run.
+      log.error('Failed to notify invalidated trade parties', { error: serializeError(error) })
+    }
+  }
 }
 
 async function notifyTradeExpired(
