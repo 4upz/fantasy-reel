@@ -565,8 +565,11 @@ Deno.test({
 
         assertEquals(receivedPayloads.length, 2)
 
-        assertEquals(receivedPayloads[0].embeds[0].title, 'Discord Embed Movie')
-        assertEquals(fieldsByName(receivedPayloads[0]).has('Previous Bid'), false)
+        assertEquals(receivedPayloads[0].embeds[0].title, 'New Bid: Discord Embed Movie')
+
+        const firstFields = fieldsByName(receivedPayloads[0])
+        assertEquals(firstFields.get('Bid'), '$5')
+        assertEquals(firstFields.has('Previous Bid'), false)
 
         assertEquals(receivedPayloads[1].embeds[0].title, 'Counter Bid: Discord Embed Movie')
 

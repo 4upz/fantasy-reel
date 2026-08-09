@@ -450,8 +450,12 @@ Deno.serve(async (req) => {
           movieTitle,
           posterPath: posterUrl,
           releaseDate,
+          amount,
           processingDeadline: new Date(processingDeadline),
-          titleSuffix: ' (🎯 Counter Pick Bid)',
+          // "New Bid: <movie> (🎯 Counterpick)" -- matches the counter
+          // variant's suffix; the old "(🎯 Counter Pick Bid)" would read as
+          // "Bid ... Bid" after the title prefix.
+          titleSuffix: ' (🎯 Counterpick)',
         })
 
     const discordPromise = sendDiscordNotification(serviceClient, {

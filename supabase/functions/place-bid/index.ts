@@ -417,6 +417,7 @@ Deno.serve(async (req) => {
           movieTitle,
           posterPath,
           releaseDate,
+          amount,
           processingDeadline: new Date(processingDeadline),
         })
 

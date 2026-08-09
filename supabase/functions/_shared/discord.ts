@@ -313,13 +313,15 @@ export interface NewBidEmbedParams {
   movieTitle: string
   posterPath?: string | null
   releaseDate?: string | null
+  /** The amount of the bid being announced. */
+  amount: number
   /** The bid group's regular weekly deadline. */
   processingDeadline: Date
-  /** Appended to the embed title, e.g. ' (🎯 Counter Pick Bid)'. */
+  /** Appended to the embed title, e.g. ' (🎯 Counterpick)'. */
   titleSuffix?: string
 }
 
-export interface CounterBidEmbedParams extends NewBidEmbedParams {
+export interface CounterBidEmbedParams extends Omit<NewBidEmbedParams, 'amount'> {
   previousAmount: number
   newAmount: number
   /** When the just-outbid team's counter-response window ends. */
@@ -329,9 +331,9 @@ export interface CounterBidEmbedParams extends NewBidEmbedParams {
 /**
  * The bids-channel embed for the opening bid on a movie.
  *
- * Intentionally anonymous: the movie only, no bidder, team, or amount, so the
- * channel learns that interest exists without leaking who or how much while
- * bidding is still open.
+ * States what happened and for how much -- the amount is already public on the
+ * bidding page, so hiding it here only made the channel less useful. Bidder and
+ * team names stay out of it.
  */
 export function buildNewBidEmbed(params: NewBidEmbedParams): DiscordEmbed {
   const closesAt = params.processingDeadline.toLocaleString('en-US', {
@@ -345,10 +347,13 @@ export function buildNewBidEmbed(params: NewBidEmbedParams): DiscordEmbed {
 
   return {
     author: buildEmbedAuthor(params.leagueName, params.leagueId),
-    title: `${params.movieTitle}${params.titleSuffix ?? ''}`,
+    title: `New Bid: ${params.movieTitle}${params.titleSuffix ?? ''}`,
     thumbnail: params.posterPath ? { url: `https://image.tmdb.org/t/p/w92${params.posterPath}` } : undefined,
     color: DISCORD_COLORS.gold,
-    fields: params.releaseDate ? [{ name: 'Release Date', value: params.releaseDate, inline: true }] : undefined,
+    fields: [
+      { name: 'Bid', value: `$${params.amount}`, inline: true },
+      ...(params.releaseDate ? [{ name: 'Release Date', value: params.releaseDate, inline: true }] : []),
+    ],
     footer: { text: `Bidding closes ${closesAt}` },
     url: buildLeagueUrl(params.leagueId, '/bidding'),
   }
