@@ -9,7 +9,7 @@ import {
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, DiscordEmbed } from '../_shared/discord.ts'
+import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, DiscordEmbed } from '../_shared/discord.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
@@ -291,10 +291,15 @@ Deno.serve(async (req) => {
     // Track outbid email promise for parallel send with Discord
     let outbidEmailPromise: Promise<unknown> | null = null
 
+    // Set when this bid took the lead from another team; drives the Discord
+    // embed's counter-bid variant below.
+    let counterContext: { previousAmount: number; counterWindowEnds: Date } | null = null
+
     // If there was a previous highest bid from another team, mark it as outbid
     if (highestBid && highestBid.team_id !== team.id) {
       const responseDeadline = new Date()
       responseDeadline.setHours(responseDeadline.getHours() + league.counterbid_hours)
+      counterContext = { previousAmount: highestBid.amount, counterWindowEnds: responseDeadline }
 
       await serviceClient
         .from('pickup_bids')
@@ -390,22 +395,36 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Intentionally anonymous: movie only, no bidder name or bid amount
-    const bidEmbed: DiscordEmbed = {
-      author: buildEmbedAuthor(league.name ?? 'League', league_id),
-      title: movieTitle,
-      thumbnail: posterPath ? { url: `https://image.tmdb.org/t/p/w92${posterPath}` } : undefined,
-      color: DISCORD_COLORS.gold,
-      fields: releaseDate ? [{ name: 'Release Date', value: releaseDate, inline: true }] : undefined,
-      footer: { text: `Bidding closes ${new Date(processingDeadline).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` },
-      url: buildLeagueUrl(league_id, '/bidding'),
-    }
+    // Both variants stay anonymous: no bidder or team names. A counter bid does
+    // show both amounts -- they are already public on the bidding page -- plus
+    // when results are now expected, since the counter window can push
+    // processing past the weekly deadline (the extended cron then resolves it).
+    const bidEmbed: DiscordEmbed = counterContext
+      ? buildCounterBidEmbed({
+          leagueId: league_id,
+          leagueName: league.name ?? 'League',
+          movieTitle,
+          posterPath,
+          releaseDate,
+          previousAmount: counterContext.previousAmount,
+          newAmount: amount,
+          processingDeadline: new Date(newBid.processing_deadline),
+          counterWindowEnds: counterContext.counterWindowEnds,
+        })
+      : buildNewBidEmbed({
+          leagueId: league_id,
+          leagueName: league.name ?? 'League',
+          movieTitle,
+          posterPath,
+          releaseDate,
+          processingDeadline: new Date(processingDeadline),
+        })
 
     const discordPromise = sendDiscordNotification(serviceClient, {
       leagueId: league_id,
       category: 'bids',
       embeds: [bidEmbed],
-      mentionRole: !!(highestBid && highestBid.team_id !== team.id),
+      mentionRole: counterContext !== null,
     })
 
     // Send email + Discord in parallel (non-blocking)

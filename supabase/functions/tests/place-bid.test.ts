@@ -6,6 +6,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
 
 // Test movie data for bidding
@@ -29,6 +30,63 @@ const testMovieData = {
  */
 function uniqueVoidTestTmdbId(): number {
   return 960_000_000 + Math.floor(Math.random() * 1_000_000)
+}
+
+/**
+ * The `supabase start` edge runtime serves the *main checkout's* functions, so
+ * a worktree change is only exercised by pointing PLACE_BID_URL at a standalone
+ * `deno run place-bid/index.ts` (which binds :8000) -- the same pattern as
+ * PROCESS_BIDS_URL in process-bids.test.ts. Unset, calls go through the SDK to
+ * the shared runtime as before.
+ */
+const PLACE_BID_URL = Deno.env.get('PLACE_BID_URL')
+
+/**
+ * Host the function should call back on to reach a server this test started.
+ * `host.docker.internal` is how the containerised edge runtime reaches the host,
+ * and it does not resolve from the host itself -- so a standalone run needs
+ * loopback instead.
+ */
+const CALLBACK_HOST = PLACE_BID_URL ? '127.0.0.1' : 'host.docker.internal'
+
+interface PlaceBidResponse {
+  bid?: { id: string; amount: number }
+  message?: string
+  error?: string
+}
+
+/** Just the parts of the Discord webhook payload these tests assert on. */
+interface WebhookPayload {
+  embeds: Array<{
+    title?: string
+    fields?: Array<{ name: string; value: string }>
+  }>
+}
+
+function fieldsByName(payload: WebhookPayload): Map<string, string> {
+  return new Map((payload.embeds[0].fields ?? []).map((field) => [field.name, field.value]))
+}
+
+async function callPlaceBid(
+  userClient: SupabaseClient,
+  body: Record<string, unknown>,
+): Promise<PlaceBidResponse> {
+  if (!PLACE_BID_URL) {
+    const { data, error } = await userClient.functions.invoke<PlaceBidResponse>('place-bid', { body })
+    if (error) return { error: String(error) }
+    return data ?? {}
+  }
+
+  const { data: { session } } = await userClient.auth.getSession()
+  const response = await fetch(PLACE_BID_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${session!.access_token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+  return await response.json() as PlaceBidResponse
 }
 
 Deno.test({
@@ -451,6 +509,80 @@ Deno.test({
         .eq('league_id', leagueId)
         .eq('tmdb_id', tmdbId)
       assertEquals(bids?.length ?? 0, 0)
+    })
+
+    await t.step('Discord embed distinguishes a counter bid, with amounts and results window', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-discord'))
+
+      const receivedPayloads: WebhookPayload[] = []
+      const server = Deno.serve({ port: 0, hostname: '0.0.0.0' }, async (req) => {
+        try {
+          receivedPayloads.push(await req.json() as WebhookPayload)
+        } catch {
+          // Ignore
+        }
+        return new Response(null, { status: 204 })
+      })
+
+      const mockWebhookUrl = `http://${CALLBACK_HOST}:${server.addr.port}/webhook`
+
+      try {
+        const { error: channelError } = await getServiceClient()
+          .from('discord_channels')
+          .insert({
+            league_id: leagueId,
+            guild_id: 'test-guild-bid-discord',
+            channel_id: uniqueName('ch-bid-discord'),
+            webhook_id: 'webhook-bid-discord',
+            webhook_url: mockWebhookUrl,
+            notify_bids: true,
+            enabled: true,
+          })
+        assertEquals(channelError, null)
+
+        const tmdbId = uniqueVoidTestTmdbId()
+        const movieData = { ...testMovieData, title: 'Discord Embed Movie' }
+
+        // Opening bid: the embed stays the anonymous movie-only card.
+        const first = await callPlaceBid(client, {
+          league_id: leagueId,
+          tmdb_id: tmdbId,
+          amount: 5,
+          movie_data: movieData,
+        })
+        assertExists(first.bid, `first bid failed: ${JSON.stringify(first)}`)
+
+        // Counter bid from the other team: the embed must say what changed.
+        const second = await callPlaceBid(secondClient, {
+          league_id: leagueId,
+          tmdb_id: tmdbId,
+          amount: 9,
+          movie_data: movieData,
+        })
+        assertExists(second.bid, `counter bid failed: ${JSON.stringify(second)}`)
+
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
+        assertEquals(receivedPayloads.length, 2)
+
+        assertEquals(receivedPayloads[0].embeds[0].title, 'Discord Embed Movie')
+        assertEquals(fieldsByName(receivedPayloads[0]).has('Previous Bid'), false)
+
+        assertEquals(receivedPayloads[1].embeds[0].title, 'Counter Bid: Discord Embed Movie')
+
+        const counterFields = fieldsByName(receivedPayloads[1])
+        assertEquals(counterFields.get('Previous Bid'), '$5')
+        assertEquals(counterFields.get('New Bid'), '$9')
+
+        // Discord-native timestamp so every viewer sees their own timezone,
+        // and "estimated" because further counters can extend it again.
+        const resultsExpected = counterFields.get('Results Expected')
+        assertExists(resultsExpected)
+        assertEquals(/<t:\d+:f> \(<t:\d+:R>\)/.test(resultsExpected), true,
+          `unexpected Results Expected value: ${resultsExpected}`)
+      } finally {
+        await server.shutdown()
+      }
     })
 
     // ============================================================================
