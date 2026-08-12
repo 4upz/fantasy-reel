@@ -8,7 +8,8 @@ import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import { findDropBlocker, type DropBlocker } from './dropRules'
-import RosterMovieModal from './RosterMovieModal'
+import LeagueMovieModal from '../components/LeagueMovieModal'
+import { getTmdbPosterUrl } from '../components/utils'
 import type { Holding } from './types'
 import type { League, Movie, TeamBudget, DraftPick, Pickup, Counterpick } from '@/types'
 
@@ -219,20 +220,25 @@ export default function RosterClient({
       </div>
 
       {selected && (
-        <RosterMovieModal
-          holding={selected}
-          blocker={blockerFor(selected)}
-          league={league}
-          dropCount={dropCount}
-          slotsFilled={totalMovies}
-          isDropping={isDropping}
-          error={dropError}
-          onClose={closeModal}
-          onConfirm={() => {
-            // useAsyncAction rethrows so it can expose `error`; the dialog renders
-            // it, so nothing is lost by swallowing the rejection here.
-            void confirmDrop(selected).catch(() => {})
+        <LeagueMovieModal
+          movie={selected.movie}
+          contextHeading="On your roster"
+          contextLabel={selected.label}
+          drop={{
+            blocker: blockerFor(selected),
+            league,
+            dropCount,
+            slotsFilled: totalMovies,
+            counterpickerName: selected.counterpickerName,
+            isDropping,
+            error: dropError,
+            onConfirm: () => {
+              // useAsyncAction rethrows so it can expose `error`; the dialog
+              // renders it, so nothing is lost by swallowing the rejection.
+              void confirmDrop(selected).catch(() => {})
+            },
           }}
+          onClose={closeModal}
         />
       )}
     </div>
@@ -290,7 +296,7 @@ function Poster({ movie }: { movie: Movie }) {
 
   return (
     <Image
-      src={`https://image.tmdb.org/t/p/w342${movie.poster_url}`}
+      src={getTmdbPosterUrl(movie.poster_url, 'w342')!}
       alt={movie.title}
       fill
       // Matches the 2 / 3 / 4 column grid below, so the browser stops fetching

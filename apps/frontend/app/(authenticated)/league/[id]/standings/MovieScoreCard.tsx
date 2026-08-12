@@ -7,6 +7,7 @@ import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
 import type { MovieWithScores } from '@/types'
 import TomatometerScore from '@/app/components/TomatometerScore'
+import { getTmdbPosterUrl } from '../components/utils'
 
 type MovieBadge =
   | { type: 'draft'; round: number; pick: number }
@@ -19,6 +20,8 @@ interface Props {
   isCounterpicked?: boolean
   /** For counterpicks, fantasy_points is stored on the counterpick row, not the movie */
   overridePoints?: number | null
+  /** Opens the movie's details. Omit to render a plain, non-interactive row. */
+  onSelect?: (movie: MovieWithScores) => void
 }
 
 /**
@@ -26,7 +29,13 @@ interface Props {
  * only thing that says how the movie was acquired, so the row itself carries no
  * section heading - the three of them read as one list.
  */
-export default function MovieScoreCard({ movie, badge, isCounterpicked = false, overridePoints }: Props) {
+export default function MovieScoreCard({
+  movie,
+  badge,
+  isCounterpicked = false,
+  overridePoints,
+  onSelect,
+}: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
@@ -38,9 +47,29 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
   const releaseDate = movie.release_date ? formatDate(movie.release_date) : 'TBA'
   const pointsLabel = hasScore ? 'Points' : isReleased ? 'Pending' : 'Upcoming'
 
+  const Row = onSelect ? 'button' : 'div'
+
   return (
-    <div
-      className="flex flex-none items-center gap-3 rounded-xl border border-border bg-background p-2.5"
+    <Row
+      {...(onSelect
+        ? {
+            type: 'button' as const,
+            // The mobile accordion row around this is itself clickable, so the
+            // event must not bubble up and collapse the team you just opened a
+            // movie from.
+            onClick: (e: React.MouseEvent) => {
+              e.stopPropagation()
+              onSelect(movie)
+            },
+            'aria-label': `View ${movie.title}`,
+            'data-clickable': 'true',
+          }
+        : {})}
+      className={`flex flex-none items-center gap-3 rounded-xl border border-border bg-background p-2.5 text-left ${
+        onSelect
+          ? 'w-full transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold'
+          : ''
+      }`}
       data-testid={`movie-score-card-${badge.type}`}
     >
       {/* Poster */}
@@ -50,7 +79,9 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
             <>
               {!imageLoaded && <div className="absolute inset-0 animate-shimmer rounded-lg bg-elevated" />}
               <Image
-                src={movie.poster_url}
+                // Stored posters are TMDb paths, not URLs. The raw path made
+                // next/image 400 on every row and fall back to the placeholder.
+                src={getTmdbPosterUrl(movie.poster_url, 'w154')!}
                 alt={movie.title}
                 fill
                 sizes="44px"
@@ -132,6 +163,6 @@ export default function MovieScoreCard({ movie, badge, isCounterpicked = false, 
         </div>
         <div className="text-[9px] uppercase tracking-[0.08em] text-foreground-muted">{pointsLabel}</div>
       </div>
-    </div>
+    </Row>
   )
 }
