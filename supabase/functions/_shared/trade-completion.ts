@@ -76,24 +76,20 @@ export async function notifyTradeCompleted(
 
   const notifications: TradeNotification[] = []
 
-  if (initiatorInfo) {
-    notifications.push({
-      user_id: initiatorInfo.user_id,
-      league_id: trade.league_id,
-      type: 'trade_completed',
-      title: 'Trade Completed',
-      body: bodyFor(recipientTeamName),
-      data: { trade_offer_id: trade.id, approved_early: approvedEarly },
-    })
-  }
+  // Each side is told about the other side.
+  const sides = [
+    { info: initiatorInfo, otherTeamName: recipientTeamName },
+    { info: recipientInfo, otherTeamName: initiatorTeamName },
+  ]
 
-  if (recipientInfo) {
+  for (const { info, otherTeamName } of sides) {
+    if (!info) continue
     notifications.push({
-      user_id: recipientInfo.user_id,
+      user_id: info.user_id,
       league_id: trade.league_id,
       type: 'trade_completed',
       title: 'Trade Completed',
-      body: bodyFor(initiatorTeamName),
+      body: bodyFor(otherTeamName),
       data: { trade_offer_id: trade.id, approved_early: approvedEarly },
     })
   }

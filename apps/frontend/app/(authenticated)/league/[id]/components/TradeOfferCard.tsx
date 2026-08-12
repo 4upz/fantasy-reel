@@ -68,6 +68,19 @@ const OPEN_STATUSES = new Set(['proposed', 'countered', 'accepted', 'review'])
 /** Stable empty set so a non-contested card doesn't allocate one per render. */
 const EMPTY_CONTESTED: ReadonlySet<string> = new Set<string>()
 
+type TradeAction = 'accept' | 'reject' | 'cancel' | 'veto' | 'approve'
+
+/** Status to show while an action is in flight, rolled back if it fails (FE#9). */
+const OPTIMISTIC_STATUS: Record<TradeAction, string> = {
+  accept: 'review',
+  reject: 'rejected',
+  cancel: 'cancelled',
+  veto: 'vetoed',
+  // Approving executes the trade in the same request, so it lands on
+  // 'completed' rather than passing back through 'accepted'.
+  approve: 'completed',
+}
+
 /**
  * Find display name for a team by ID from the available team info
  */
@@ -125,21 +138,10 @@ export default function TradeOfferCard(props: Props) {
   const isContested = contestedSourceIds.size > 0 && OPEN_STATUSES.has(displayStatus)
 
   const tradeAction = useCallback(
-    async (action: 'accept' | 'reject' | 'cancel' | 'veto' | 'approve', message?: string) => {
+    async (action: TradeAction, message?: string) => {
       setPendingAction(action)
       setError(null)
-
-      // Optimistic UI update (FE#9)
-      const optimisticStatusMap: Record<string, string> = {
-        accept: 'review',
-        reject: 'rejected',
-        cancel: 'cancelled',
-        veto: 'vetoed',
-        // Approving executes the trade in the same request, so it lands on
-        // 'completed' rather than passing back through 'accepted'.
-        approve: 'completed',
-      }
-      setOptimisticStatus(optimisticStatusMap[action])
+      setOptimisticStatus(OPTIMISTIC_STATUS[action])
 
       let result: { success: boolean; error?: string }
 
@@ -282,15 +284,6 @@ export default function TradeOfferCard(props: Props) {
               It processes automatically then — approve to process it now, or veto to block it.
             </p>
           )}
-        </div>
-      )}
-
-      {/* Commissioner approved before the review clock ran out */}
-      {trade.status === 'completed' && trade.approved_by && (
-        <div className="mb-4 p-3 bg-success-bg rounded-lg">
-          <p className="text-sm text-success">
-            Approved by the commissioner before the review period ended.
-          </p>
         </div>
       )}
 

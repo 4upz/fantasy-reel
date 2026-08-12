@@ -130,8 +130,8 @@ Deno.serve(async (req) => {
 
     // The trade has executed. Notify exactly as process-trades does, flagging
     // that it ended early so the teams know why the review period was cut short.
-    const completedOffer = { ...offer, status: 'completed' } as TradeOffer
-    await notifyTradeCompleted(serviceClient, completedOffer, { approvedEarly: true })
+    // (notifyTradeCompleted stamps the 'completed' status on the copy it sends.)
+    await notifyTradeCompleted(serviceClient, offer as TradeOffer, { approvedEarly: true })
 
     const invalidated = result.invalidated_trades ?? []
     if (invalidated.length > 0) {
