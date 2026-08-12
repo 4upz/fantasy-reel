@@ -53,15 +53,20 @@ export default async function RosterPage({ params }: RosterPageProps) {
     counterpicksResult,
     openCounterpickBidsResult,
   ] = await Promise.all([
+    // The counterpicked_by join names the team holding a counterpick so a
+    // locked movie can say who locked it. Both tables have two FKs to teams, so
+    // the constraint name is required (PGRST201 otherwise).
     supabase
       .from('draft_picks')
-      .select('*, movies(*)')
+      .select(
+        '*, movies(*), counterpicked_by:teams!draft_picks_counterpicked_by_team_id_fkey(name)'
+      )
       .eq('team_id', team.id)
       .is('dropped_at', null)
       .order('pick_number', { ascending: true }),
     supabase
       .from('pickups')
-      .select('*, movies(*)')
+      .select('*, movies(*), counterpicked_by:teams!pickups_counterpicked_by_team_id_fkey(name)')
       .eq('team_id', team.id)
       .is('dropped_at', null)
       .order('picked_up_at', { ascending: true }),
