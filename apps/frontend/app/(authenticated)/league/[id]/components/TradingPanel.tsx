@@ -38,6 +38,7 @@ interface Props {
     tradeOfferId: string,
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>
+  onApproveTrade: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
 }
 
 type TabType = 'pending' | 'my-trades' | 'all' | 'history'
@@ -57,6 +58,7 @@ export default function TradingPanel({
   onCounterTrade,
   onCancelTrade,
   onVetoTrade,
+  onApproveTrade,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('pending')
 
@@ -208,6 +210,7 @@ export default function TradingPanel({
                   onCounter={onCounterTrade}
                   onCancel={onCancelTrade}
                   onVeto={onVetoTrade}
+                  onApprove={onApproveTrade}
                 />
               ))}
             </div>

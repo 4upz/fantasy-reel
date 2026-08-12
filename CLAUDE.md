@@ -757,29 +757,46 @@ Teams can trade movies with each other during the active season.
 
 - **FAAB Budget:** Teams have a budget for bidding (Free Agent Acquisition Budget)
 - **Review Period:** Optional window for league review before trades execute
-- **Veto:** League owner can veto trades
+  (`leagues.trade_review_enabled`, `leagues.trade_veto_hours`, default 24h)
+- **Veto:** League owner can veto trades during that window
+- **Approve:** League owner can also end that window early and process the trade
+  immediately — the two commissioner answers to a review are symmetric
 
 ### Trade Lifecycle
 
 ```
 1. Team proposes trade
-   └── propose-trade creates trade with status='pending'
+   └── propose-trade creates trade with status='proposed'
        └── Specifies movies from each side
 
 2. Recipient responds
-   └── respond-trade: accept, reject, or counter
-       └── Accept → trade executes (draft_picks updated)
-       └── Reject → trade cancelled
-       └── Counter → new counter-offer created
+   └── respond-trade: accept or reject
+       ├── Accept + trade_review_enabled → status='review',
+       │   review_ends_at = now() + trade_veto_hours
+       ├── Accept + review disabled → status='accepted' (executes on the next
+       │   process-trades run)
+       └── Reject → status='rejected'
 
 3. Counter-offers
    └── counter-trade modifies the proposal
        └── Original proposer can accept/reject/counter
 
-4. Processing
-   └── process-trades cron handles expired trades
-       └── Pending trades past deadline → cancelled
+4. Commissioner review (status='review')
+   ├── veto-trade  → status='vetoed', nothing moves
+   ├── approve-trade → executes NOW, status='completed', approved_by stamped
+   └── neither → the trade executes on its own once review_ends_at passes
+
+5. Processing
+   └── process-trades cron (Vercel Cron, every 5 min) executes trades that are
+       'accepted' or whose review window has expired, and expires any trade that
+       no longer validates
 ```
+
+**Nothing else executes a trade.** `execute_trade()` has exactly two callers:
+`process-trades` (deadline reached) and `approve-trade` (commissioner said so
+early). Both must check `success` in its JSONB return value — it reports
+business-rule refusals there rather than by raising — and both notify through
+`_shared/trade-completion.ts` so the two paths cannot drift.
 
 ### Competing Trades
 
@@ -818,7 +835,8 @@ re-validation inside `execute_trade()` is what protects the data — see
 | `respond-trade` | Accept or reject trade |
 | `counter-trade` | Counter-offer on trade |
 | `cancel-trade` | Cancel pending trade |
-| `veto-trade` | League owner vetoes trade |
+| `veto-trade` | League owner vetoes trade during review |
+| `approve-trade` | League owner approves a reviewed trade and executes it immediately |
 | `get-trades` | List trades for league |
 | `process-trades` | Process pending/expired trades (cron) |
 
