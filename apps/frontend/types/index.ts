@@ -161,6 +161,8 @@ export interface MovieWithScores extends Movie {
 
 export interface TeamWithScore extends Team {
   team_scores: TeamScore | null
+  /** Every league member can read every budget, so standings show all of them. */
+  team_budgets: TeamBudget | null
 }
 
 export interface ParticipantWithTeamScore extends LeagueParticipant {

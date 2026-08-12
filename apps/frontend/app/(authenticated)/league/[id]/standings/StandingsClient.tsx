@@ -17,6 +17,8 @@ interface Props {
   pickups: PickupWithScores[]
   counterpicks: CounterpickWithScores[]
   currentUserId: string
+  /** The league's configured starting purse; 0 means this league doesn't use FAAB. */
+  startingFaab: number
 }
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
@@ -103,7 +105,9 @@ export default function StandingsClient({
   pickups,
   counterpicks,
   currentUserId,
+  startingFaab,
 }: Props) {
+  const showFaab = startingFaab > 0
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
 
@@ -167,6 +171,7 @@ export default function StandingsClient({
           <TeamStandingCard
             key={rankedTeam.participant.id}
             rankedTeam={rankedTeam}
+            startingFaab={showFaab ? startingFaab : null}
             isCurrentUser={rankedTeam.participant.user_id === currentUserId}
             isExpanded={expandedTeamId === teamId}
             isSelected={railTeam != null && teamKey(railTeam) === teamId}
@@ -194,7 +199,7 @@ export default function StandingsClient({
       )}
       </div>
 
-      {railTeam && <TeamDetailRail rankedTeam={railTeam} />}
+      {railTeam && <TeamDetailRail rankedTeam={railTeam} startingFaab={showFaab ? startingFaab : null} />}
     </div>
   )
 }
