@@ -1,10 +1,12 @@
 'use client'
 
+import { useState } from 'react'
 import Image from 'next/image'
 import { ChevronDown } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
-import type { RankedTeamFull } from '@/types'
+import type { MovieWithScores, RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
+import LeagueMovieModal from '../components/LeagueMovieModal'
 
 interface Props {
   rankedTeam: RankedTeamFull
@@ -48,6 +50,7 @@ export default function TeamStandingCard({
   onActivate,
   animationDelay = 0,
 }: Props) {
+  const [selected, setSelected] = useState<MovieWithScores | null>(null)
   const { rank, participant, draftPicks, pickups, counterpicks, isTied } = rankedTeam
   const team = participant.teams
   const teamScore = team?.team_scores
@@ -177,6 +180,7 @@ export default function TeamStandingCard({
               movie={pick.movies}
               badge={{ type: 'draft', round: pick.round, pick: pick.pick_number }}
               isCounterpicked={!!pick.counterpicked_by_team_id}
+              onSelect={setSelected}
             />
           ))}
 
@@ -185,6 +189,7 @@ export default function TeamStandingCard({
               key={pickup.id}
               movie={pickup.movies}
               badge={{ type: 'pickup', amount: pickup.amount_paid }}
+              onSelect={setSelected}
             />
           ))}
 
@@ -194,6 +199,7 @@ export default function TeamStandingCard({
               movie={cp.movies}
               badge={{ type: 'counterpick', targetTeam: cp.target_team.name }}
               overridePoints={cp.fantasy_points}
+              onSelect={setSelected}
             />
           ))}
 
@@ -201,6 +207,15 @@ export default function TeamStandingCard({
             <p className="py-3 text-center text-sm text-foreground-muted">No movies drafted yet</p>
           )}
         </div>
+      )}
+
+      {/* Read-only: this is whoever's roster you are inspecting, not yours. */}
+      {selected && (
+        <LeagueMovieModal
+          movie={selected}
+          contextHeading={`On ${displayName}`}
+          onClose={() => setSelected(null)}
+        />
       )}
     </div>
   )

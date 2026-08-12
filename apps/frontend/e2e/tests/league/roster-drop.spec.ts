@@ -29,7 +29,7 @@ import { getAdminClient } from '../../helpers/supabase.helper'
  * Key UI elements:
  * - roster-movie-card: the whole card, opens the dialog (data-locked marks locked)
  * - roster-lock-badge: the at-a-glance "you cannot drop this" marker
- * - roster-movie-modal: the one dialog (data-view is "details" or "confirm")
+ * - league-movie-modal: the one dialog (data-view is "details" or "confirm")
  * - drop-movie-button: the Drop action inside the details view
  * - drop-blocker-headline: the reason a locked movie cannot be dropped
  */
@@ -45,7 +45,7 @@ const HELD_MOVIE_COUNT = 3
 /** Opens a movie's dialog by card label. */
 async function openMovie(page: import('@playwright/test').Page, title: string, locked = false) {
   await page.getByRole('button', { name: `View ${title}${locked ? ' (locked)' : ''}` }).click()
-  await expect(page.getByTestId('roster-movie-modal')).toBeVisible()
+  await expect(page.getByTestId('league-movie-modal')).toBeVisible()
 }
 
 test.describe('Roster Drop Flow @roster', () => {
@@ -95,7 +95,7 @@ test.describe('Roster Drop Flow @roster', () => {
 
     await openMovie(authedPage, rosterLeague.droppableMovieTitle)
 
-    const modal = authedPage.getByTestId('roster-movie-modal')
+    const modal = authedPage.getByTestId('league-movie-modal')
     await expect(modal).toHaveAttribute('data-view', 'details')
     await expect(
       modal.getByRole('heading', { name: new RegExp(rosterLeague.droppableMovieTitle) })
@@ -118,9 +118,9 @@ test.describe('Roster Drop Flow @roster', () => {
     await authedPage.getByTestId('drop-movie-button').click()
 
     // Same dialog, second view - not a modal stacked on a modal.
-    const modal = authedPage.getByTestId('roster-movie-modal')
+    const modal = authedPage.getByTestId('league-movie-modal')
     await expect(modal).toHaveAttribute('data-view', 'confirm')
-    await expect(authedPage.getByTestId('roster-movie-modal')).toHaveCount(1)
+    await expect(authedPage.getByTestId('league-movie-modal')).toHaveCount(1)
 
     await expect(
       modal.getByRole('heading', { name: `Drop ${rosterLeague.droppableMovieTitle}?` })
@@ -168,7 +168,7 @@ test.describe('Roster Drop Flow @roster', () => {
     await openMovie(authedPage, rosterLeague.droppableMovieTitle)
     await authedPage.getByTestId('drop-movie-button').click()
 
-    const modal = authedPage.getByTestId('roster-movie-modal')
+    const modal = authedPage.getByTestId('league-movie-modal')
     await expect(modal).toHaveAttribute('data-view', 'confirm')
 
     // Backing out lands on the details, not on a closed dialog - a mis-tap
@@ -176,7 +176,7 @@ test.describe('Roster Drop Flow @roster', () => {
     await authedPage.getByTestId('drop-modal-dismiss').click()
     await expect(modal).toHaveAttribute('data-view', 'details')
 
-    await authedPage.getByTestId('roster-modal-close').click()
+    await authedPage.getByTestId('league-modal-close').click()
     await expect(modal).toHaveCount(0)
     await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 0/2 used')
 

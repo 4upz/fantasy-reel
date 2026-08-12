@@ -5,51 +5,74 @@ import { AlertTriangle, ArrowLeft, Film, Lock, Megaphone, TrendingDown, X } from
 import MovieDetailBody from '@/app/components/MovieDetailBody'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { formatFantasyPoints } from '@/utils/scoring'
-import { explainBlocker, type DropBlocker } from './dropRules'
-import type { Holding } from './types'
-import type { League, Movie, TMDbMovieDetails, TMDbSearchResult } from '@/types'
+import { getTmdbPosterUrl } from './utils'
+import { explainBlocker, type DropBlocker } from '../roster/dropRules'
+import type { League, TMDbMovieDetails, TMDbSearchResult } from '@/types'
 
-interface RosterMovieModalProps {
-  holding: Holding
-  /** Set when the movie cannot be dropped; the footer explains instead of offering the action. */
+/**
+ * The least a league surface has to know about a movie to open it. Deliberately
+ * loose so the roster, the overview timeline and the standings rail can all
+ * pass their own row shape without converting first.
+ */
+export interface LeagueMovieRef {
+  tmdb_id: number
+  title: string
+  poster_url: string | null
+  release_date: string | null
+  overview?: string | null
+  vote_average?: number | null
+  popularity?: number | null
+  fantasy_points?: number | null
+}
+
+/** Everything the drop step needs. Omit it entirely for a read-only panel. */
+export interface DropCapability {
   blocker: DropBlocker | null
   league: League
   dropCount: number
   /** Roster slots filled right now, before this drop. */
   slotsFilled: number
+  counterpickerName: string | null
   isDropping: boolean
   error: string | null
-  onClose: () => void
   onConfirm: () => void
+}
+
+interface LeagueMovieModalProps {
+  movie: LeagueMovieRef
+  /** Eyebrow above the context line, e.g. "On your roster". */
+  contextHeading?: string
+  /** How the movie was acquired, e.g. "Round 2, Pick 5" or "$14". */
+  contextLabel?: string
+  drop?: DropCapability
+  onClose: () => void
 }
 
 /** Which panel the one dialog is currently showing. */
 type View = 'details' | 'confirm'
 
 /**
- * The roster's movie dialog: full TMDb details first, with roster actions
- * attached, and the drop confirmation as a second view inside the same shell.
+ * The league's movie dialog: full TMDb details with whatever this surface can
+ * do about them, and the drop confirmation as a second view inside the same
+ * shell.
  *
  * One overlay, never two stacked. Opening a movie is the neutral, browsable
  * act; committing to a drop is a deliberate step further in, which is why the
  * confirmation replaces the details rather than covering them.
  */
-export default function RosterMovieModal({
-  holding,
-  blocker,
-  league,
-  dropCount,
-  slotsFilled,
-  isDropping,
-  error,
+export default function LeagueMovieModal({
+  movie,
+  contextHeading,
+  contextLabel,
+  drop,
   onClose,
-  onConfirm,
-}: RosterMovieModalProps) {
-  const { movie } = holding
+}: LeagueMovieModalProps) {
   const [view, setView] = useState<View>('details')
   const [details, setDetails] = useState<TMDbMovieDetails | null>(null)
   const [loading, setLoading] = useState(true)
   const closeRef = useRef<HTMLButtonElement>(null)
+
+  const isDropping = drop?.isDropping ?? false
 
   useEffect(() => {
     let active = true
@@ -59,7 +82,7 @@ export default function RosterMovieModal({
         body: { tmdb_id: movie.tmdb_id },
       })
       if (!active) return
-      // A failed lookup is not worth an error state: the roster already knows
+      // A failed lookup is not worth an error state: the caller already knows
       // the title, poster and release date, so the panel still reads fine.
       if (data) setDetails(data)
       setLoading(false)
@@ -99,13 +122,15 @@ export default function RosterMovieModal({
     closeRef.current?.focus()
   }, [])
 
+  const hasContext = Boolean(contextHeading || contextLabel || drop)
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-label={`${movie.title} details`}
-      data-testid="roster-movie-modal"
+      data-testid="league-movie-modal"
       data-view={view}
     >
       <div
@@ -122,7 +147,7 @@ export default function RosterMovieModal({
             onClick={onClose}
             disabled={isDropping}
             aria-label="Close"
-            data-testid="roster-modal-close"
+            data-testid="league-modal-close"
             className="absolute right-4 top-4 z-10 rounded-full border border-border bg-background/50 p-2 text-foreground-muted backdrop-blur-sm transition-all hover:border-border-hover hover:text-foreground"
           >
             <X className="h-5 w-5" />
@@ -132,26 +157,31 @@ export default function RosterMovieModal({
               forward rather than a repaint. */}
           <div key={view} className="animate-fade-in">
             {view === 'details' ? (
-              <>
-                <MovieDetailBody movie={toSearchResult(movie)} details={details} loading={loading} />
-                <RosterActionBar
-                  holding={holding}
-                  blocker={blocker}
-                  league={league}
-                  onDropClick={() => setView('confirm')}
-                />
-              </>
-            ) : (
-              <DropConfirmView
-                holding={holding}
-                league={league}
-                dropCount={dropCount}
-                slotsFilled={slotsFilled}
-                isDropping={isDropping}
-                error={error}
-                onBack={() => setView('details')}
-                onConfirm={onConfirm}
+              <MovieDetailBody
+                movie={toSearchResult(movie)}
+                details={details}
+                loading={loading}
+                collapsibleCast
+                actions={
+                  hasContext ? (
+                    <LeagueActionPanel
+                      movie={movie}
+                      contextHeading={contextHeading}
+                      contextLabel={contextLabel}
+                      drop={drop}
+                      onDropClick={() => setView('confirm')}
+                    />
+                  ) : undefined
+                }
               />
+            ) : (
+              drop && (
+                <DropConfirmView
+                  movie={movie}
+                  drop={drop}
+                  onBack={() => setView('details')}
+                />
+              )
             )}
           </div>
         </div>
@@ -161,60 +191,66 @@ export default function RosterMovieModal({
 }
 
 /**
- * The roster's own facts about this movie, plus what it can do with it. Sits
- * under the shared TMDb details, which know nothing about leagues.
+ * The league's own facts about this movie, plus what this surface can do with
+ * it. Sits high in the panel, above the synopsis, so the controls are not a
+ * scroll away on a phone.
  */
-function RosterActionBar({
-  holding,
-  blocker,
-  league,
+function LeagueActionPanel({
+  movie,
+  contextHeading,
+  contextLabel,
+  drop,
   onDropClick,
 }: {
-  holding: Holding
-  blocker: DropBlocker | null
-  league: League
+  movie: LeagueMovieRef
+  contextHeading?: string
+  contextLabel?: string
+  drop?: DropCapability
   onDropClick: () => void
 }) {
-  const { movie, label, counterpickerName } = holding
+  const points = movie.fantasy_points
 
   return (
-    <div className="border-t border-border bg-elevated/40 p-6 sm:p-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="rounded-lg border border-border bg-elevated/40 p-3 sm:p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-foreground-muted">On your roster</p>
-          <p className="mt-1 text-sm text-foreground-secondary">
-            {label}
-            {movie.fantasy_points !== null && (
-              <>
-                {' · '}
-                <span className={movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}>
-                  {formatFantasyPoints(movie.fantasy_points)} pts
-                </span>
-              </>
+          {contextHeading && (
+            <p className="text-xs uppercase tracking-wide text-foreground-muted">
+              {contextHeading}
+            </p>
+          )}
+          <p className="mt-0.5 text-sm text-foreground-secondary">
+            {contextLabel}
+            {contextLabel && ' · '}
+            {points != null ? (
+              <span className={points >= 0 ? 'text-success' : 'text-crimson'}>
+                {formatFantasyPoints(points)} pts
+              </span>
+            ) : (
+              'Not scored yet'
             )}
-            {movie.fantasy_points === null && ' · Not scored yet'}
           </p>
         </div>
 
-        {!blocker && (
+        {drop && !drop.blocker && (
           <button
             type="button"
             onClick={onDropClick}
             data-testid="drop-movie-button"
             aria-label={`Drop ${movie.title}`}
-            className="btn btn-danger h-11 flex-none sm:h-10"
+            className="btn btn-danger h-11 w-full flex-none sm:h-10 sm:w-auto"
           >
             Drop movie
           </button>
         )}
       </div>
 
-      {blocker && (
+      {drop?.blocker && (
         <BlockerNotice
-          blocker={blocker}
+          blocker={drop.blocker}
           movieTitle={movie.title}
-          league={league}
-          counterpickerName={counterpickerName}
+          league={drop.league}
+          counterpickerName={drop.counterpickerName}
         />
       )}
     </div>
@@ -245,7 +281,7 @@ function BlockerNotice({
   })
 
   return (
-    <div className="mt-4 flex items-start gap-3 rounded-lg border border-border bg-background/40 p-3">
+    <div className="mt-3 flex items-start gap-3 rounded-lg border border-border bg-background/40 p-3">
       <Lock className="mt-0.5 h-4 w-4 flex-none text-foreground-muted" aria-hidden="true" />
       <div>
         <p className="text-sm font-medium text-foreground" data-testid="drop-blocker-headline">
@@ -258,25 +294,15 @@ function BlockerNotice({
 }
 
 function DropConfirmView({
-  holding,
-  league,
-  dropCount,
-  slotsFilled,
-  isDropping,
-  error,
+  movie,
+  drop,
   onBack,
-  onConfirm,
 }: {
-  holding: Holding
-  league: League
-  dropCount: number
-  slotsFilled: number
-  isDropping: boolean
-  error: string | null
+  movie: LeagueMovieRef
+  drop: DropCapability
   onBack: () => void
-  onConfirm: () => void
 }) {
-  const { movie } = holding
+  const { league, dropCount, slotsFilled, isDropping, error, onConfirm } = drop
   const dropsRemainingAfter = league.drop_limit - dropCount - 1
 
   return (
@@ -323,7 +349,7 @@ function DropConfirmView({
             {slotsFilled - 1}/{league.total_slots} filled.
           </Consequence>
           <Consequence icon={TrendingDown}>
-            {movie.fantasy_points !== null
+            {movie.fantasy_points != null
               ? `You give up its ${formatFantasyPoints(movie.fantasy_points)} pts.`
               : 'You give up whatever it scores when it opens, good or bad.'}
           </Consequence>
@@ -344,12 +370,12 @@ function DropConfirmView({
         </p>
       )}
 
-      <div className="mt-6 flex justify-end gap-2">
+      <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <button
           type="button"
           onClick={onBack}
           disabled={isDropping}
-          className="btn btn-ghost"
+          className="btn btn-ghost h-11 sm:h-10"
           data-testid="drop-modal-dismiss"
         >
           <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
@@ -360,7 +386,7 @@ function DropConfirmView({
           onClick={onConfirm}
           disabled={isDropping}
           aria-busy={isDropping}
-          className="btn btn-danger"
+          className="btn btn-danger h-11 sm:h-10"
           data-testid="drop-modal-confirm"
         >
           {isDropping ? 'Dropping…' : 'Drop movie'}
@@ -427,16 +453,16 @@ function DropAllowanceMeter({
 }
 
 /**
- * Adapts a stored movie to the shape the shared detail panel expects, so the
+ * Adapts a league row to the shape the shared detail panel expects, so the
  * dialog has a title, poster and date to show while TMDb is still loading.
  */
-function toSearchResult(movie: Movie): TMDbSearchResult {
+function toSearchResult(movie: LeagueMovieRef): TMDbSearchResult {
   return {
     tmdb_id: movie.tmdb_id,
     title: movie.title,
-    overview: movie.overview,
+    overview: movie.overview ?? null,
     release_date: movie.release_date,
-    poster_url: movie.poster_url ? `https://image.tmdb.org/t/p/w500${movie.poster_url}` : null,
+    poster_url: getTmdbPosterUrl(movie.poster_url, 'w500'),
     vote_average: movie.vote_average ?? 0,
     popularity: movie.popularity ?? 0,
     genre_ids: [],
