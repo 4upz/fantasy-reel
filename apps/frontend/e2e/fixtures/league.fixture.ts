@@ -94,6 +94,15 @@ interface LeagueFixtures {
     pickupMovieTitle: string
     counterpickMovieTitle: string
   }
+  /** An active league whose testUser roster covers every drop state */
+  rosterLeague: TestLeague & {
+    ownerTeamId: string
+    testUserTeamId: string
+    droppableMovieTitle: string
+    releasedMovieTitle: string
+    counterpickedMovieTitle: string
+    droppableDraftPickId: string
+  }
   /** Two leagues where testUser is a participant (for league switcher tests) */
   multiLeague: {
     league1: { id: string; name: string; status: TestLeague['status'] }
@@ -230,6 +239,81 @@ export const test = authTest.extend<LeagueFixtures>({
         testUserTeamId: testUserTeam.id,
         ownerMovieId: movie1.id,
         testUserMovieId: movie2.id,
+      })
+    } finally {
+      await deleteTestLeague(league.id)
+    }
+  },
+
+  /**
+   * Roster League Fixture
+   * An active league where the testUser's roster holds one movie of each drop
+   * state, so a single page render covers every branch:
+   *   - an unreleased movie          -> droppable
+   *   - a released movie             -> not droppable (release date passed)
+   *   - an unreleased, counterpicked -> not droppable (locked, explained)
+   * Use for testing the roster drop flow.
+   */
+  rosterLeague: async ({ leagueOwner, testUser }, use) => {
+    const league = await createTestLeague(leagueOwner.id, {
+      name: uniqueLeagueName('E2E Roster'),
+      status: 'active',
+    })
+
+    try {
+      await addParticipant(league.id, testUser.id)
+
+      const ownerTeam = await createTeam(league.id, leagueOwner.id, 'Owner Team')
+      const testUserTeam = await createTeam(league.id, testUser.id, 'Test Team')
+
+      // Relative dates only: a hardcoded release date silently flips a movie
+      // from droppable to released once it passes.
+      const droppable = await createTestMovie(
+        uniqueTmdbId(41),
+        'Roster Droppable Movie',
+        daysFromNow(45)
+      )
+      const released = await createTestMovie(
+        uniqueTmdbId(42),
+        'Roster Released Movie',
+        daysFromNow(-30)
+      )
+      const counterpicked = await createTestMovie(
+        uniqueTmdbId(43),
+        'Roster Counterpicked Movie',
+        daysFromNow(60)
+      )
+
+      const droppablePick = await createDraftPick(league.id, testUserTeam.id, droppable.id, 1, 1)
+      await createDraftPick(league.id, testUserTeam.id, released.id, 2, 1)
+      const counterpickedPick = await createDraftPick(
+        league.id,
+        testUserTeam.id,
+        counterpicked.id,
+        3,
+        1
+      )
+
+      // The owner bets against one of the testUser's movies, which locks it.
+      await createCounterpick(
+        league.id,
+        ownerTeam.id,
+        testUserTeam.id,
+        counterpicked.id,
+        counterpickedPick.id,
+        1
+      )
+
+      await createTeamBudget(testUserTeam.id, 100)
+
+      await use({
+        ...league,
+        ownerTeamId: ownerTeam.id,
+        testUserTeamId: testUserTeam.id,
+        droppableMovieTitle: 'Roster Droppable Movie',
+        releasedMovieTitle: 'Roster Released Movie',
+        counterpickedMovieTitle: 'Roster Counterpicked Movie',
+        droppableDraftPickId: droppablePick.id,
       })
     } finally {
       await deleteTestLeague(league.id)

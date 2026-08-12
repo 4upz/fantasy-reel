@@ -6,6 +6,8 @@ import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
 import type { MovieWithScores, RankedTeamFull } from '@/types'
 import TeamFaab from './TeamFaab'
+import LeagueMovieModal from '../components/LeagueMovieModal'
+import { getTmdbPosterUrl } from '../components/utils'
 
 interface Props {
   rankedTeam: RankedTeamFull
@@ -26,7 +28,9 @@ function RailPoster({ movie }: { movie: MovieWithScores }) {
     <div className="relative h-12 w-8 flex-none overflow-hidden rounded-md bg-elevated">
       {movie.poster_url && !failed ? (
         <Image
-          src={movie.poster_url}
+          // Stored posters are TMDb paths, not URLs. The raw path made
+          // next/image 400 and render an empty tile.
+          src={getTmdbPosterUrl(movie.poster_url, 'w154')!}
           alt={movie.title}
           fill
           sizes="32px"
@@ -53,6 +57,7 @@ function BreakdownTile({ value, label, tone }: { value: number; label: string; t
  * put while the list scrolls.
  */
 export default function TeamDetailRail({ rankedTeam, startingFaab }: Props) {
+  const [selected, setSelected] = useState<MovieWithScores | null>(null)
   const { participant, draftPicks, pickups, counterpicks } = rankedTeam
   const team = participant.teams
   const teamScore = team?.team_scores
@@ -100,9 +105,13 @@ export default function TeamDetailRail({ rankedTeam, startingFaab }: Props) {
 
       {roster.length > 0 ? (
         roster.map(({ key, movie, points }) => (
-          <div
+          <button
             key={key}
-            className="flex items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px]"
+            type="button"
+            onClick={() => setSelected(movie)}
+            aria-label={`View ${movie.title}`}
+            data-testid="rail-movie-button"
+            className="flex w-full items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px] text-left transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
           >
             <RailPoster movie={movie} />
             <div className="min-w-0 flex-1">
@@ -120,10 +129,19 @@ export default function TeamDetailRail({ rankedTeam, startingFaab }: Props) {
             >
               {formatFantasyPoints(points)}
             </div>
-          </div>
+          </button>
         ))
       ) : (
         <p className="py-2 text-center text-[13px] text-foreground-muted">No movies drafted yet</p>
+      )}
+
+      {/* Read-only: these are whoever's roster you are inspecting, not yours. */}
+      {selected && (
+        <LeagueMovieModal
+          movie={selected}
+          contextHeading={`On ${displayName}`}
+          onClose={() => setSelected(null)}
+        />
       )}
     </aside>
   )

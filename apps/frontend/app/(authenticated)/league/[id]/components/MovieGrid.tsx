@@ -6,10 +6,37 @@ import { Flame } from 'lucide-react'
 import type { MovieTimelineItem, League } from '@/types'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
+import LeagueMovieModal from './LeagueMovieModal'
+import { getTmdbPosterUrl } from './utils'
 
 interface Props {
   movies: MovieTimelineItem[]
   leagueStatus: League['status']
+}
+
+/** Opens a movie's details. Every row and tile on this page is one of these. */
+function MovieButton({
+  movie,
+  onSelect,
+  className,
+  children,
+}: {
+  movie: MovieTimelineItem
+  onSelect: (movie: MovieTimelineItem) => void
+  className: string
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(movie)}
+      data-testid="overview-movie-button"
+      aria-label={`View ${movie.title}`}
+      className={`text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold ${className}`}
+    >
+      {children}
+    </button>
+  )
 }
 
 /** The film-strip placeholder shown wherever a poster is missing. */
@@ -43,7 +70,10 @@ function Poster({
     <div className={`relative flex flex-none items-center justify-center overflow-hidden bg-elevated ${className}`}>
       {movie.poster_url && !failed ? (
         <Image
-          src={movie.poster_url}
+          // Stored posters are TMDb paths, not URLs. Passing the raw path made
+          // next/image 400 on every poster here and silently fall back to the
+          // film-strip placeholder.
+          src={getTmdbPosterUrl(movie.poster_url, 'w342')!}
           alt={movie.title}
           fill
           sizes={sizes}
@@ -89,15 +119,24 @@ function shortDate(releaseDate: string | null): string {
  * actually imminent; the fallback next-upcoming gets a neutral surface so the
  * treatment keeps meaning something.
  */
-function NextUpHero({ movie, isImminent }: { movie: MovieTimelineItem; isImminent: boolean }) {
+function NextUpHero({
+  movie,
+  isImminent,
+  onSelect,
+}: {
+  movie: MovieTimelineItem
+  isImminent: boolean
+  onSelect: (movie: MovieTimelineItem) => void
+}) {
   return (
-    <section
-      className={`mx-4 mb-[18px] overflow-hidden rounded-[18px] p-3.5 ${
+    <MovieButton
+      movie={movie}
+      onSelect={onSelect}
+      className={`mx-4 mb-[18px] block w-[calc(100%-2rem)] overflow-hidden rounded-[18px] p-3.5 ${
         isImminent
           ? 'border border-gold/30 bg-[linear-gradient(160deg,rgba(201,162,39,0.12),var(--color-surface)_60%)]'
-          : 'border border-border bg-surface'
+          : 'border border-border bg-surface hover:border-border-hover'
       }`}
-      data-testid="next-up-hero"
     >
       <div
         className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] ${
@@ -125,7 +164,7 @@ function NextUpHero({ movie, isImminent }: { movie: MovieTimelineItem; isImminen
           </p>
         </div>
       </div>
-    </section>
+    </MovieButton>
   )
 }
 
@@ -138,14 +177,25 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
   )
 }
 
-function UpcomingShelf({ movies }: { movies: MovieTimelineItem[] }) {
+function UpcomingShelf({
+  movies,
+  onSelect,
+}: {
+  movies: MovieTimelineItem[]
+  onSelect: (movie: MovieTimelineItem) => void
+}) {
   return (
     <>
       <SectionHeader title="Upcoming" count={movies.length} />
       {/* Native horizontal scroll - no arrows on touch */}
       <div className="scrollbar-none flex gap-3 overflow-x-auto px-4 pb-[18px]" data-testid="upcoming-shelf">
         {movies.map((movie) => (
-          <div key={movie.id} className="flex w-[118px] flex-none flex-col gap-[7px]">
+          <MovieButton
+            key={movie.id}
+            movie={movie}
+            onSelect={onSelect}
+            className="flex w-[118px] flex-none flex-col gap-[7px] rounded-xl"
+          >
             <Poster
               movie={movie}
               sizes="118px"
@@ -156,22 +206,30 @@ function UpcomingShelf({ movies }: { movies: MovieTimelineItem[] }) {
               {movie.title}
             </div>
             <div className="text-[11px] text-foreground-muted">{shortDate(movie.release_date)}</div>
-          </div>
+          </MovieButton>
         ))}
       </div>
     </>
   )
 }
 
-function ScoredList({ movies }: { movies: MovieTimelineItem[] }) {
+function ScoredList({
+  movies,
+  onSelect,
+}: {
+  movies: MovieTimelineItem[]
+  onSelect: (movie: MovieTimelineItem) => void
+}) {
   return (
     <>
       <SectionHeader title="Scored" count={movies.length} />
       <div className="flex flex-col gap-2 px-4" data-testid="scored-list">
         {movies.map((movie) => (
-          <div
+          <MovieButton
             key={movie.id}
-            className="flex flex-none items-center gap-3 rounded-[14px] border border-border bg-surface px-3 py-[11px]"
+            movie={movie}
+            onSelect={onSelect}
+            className="flex flex-none items-center gap-3 rounded-[14px] border border-border bg-surface px-3 py-[11px] hover:border-border-hover"
           >
             <Poster
               movie={movie}
@@ -198,7 +256,7 @@ function ScoredList({ movies }: { movies: MovieTimelineItem[] }) {
             >
               {formatFantasyPoints(movie.fantasy_points)}
             </div>
-          </div>
+          </MovieButton>
         ))}
       </div>
     </>
@@ -206,6 +264,8 @@ function ScoredList({ movies }: { movies: MovieTimelineItem[] }) {
 }
 
 export default function MovieGrid({ movies, leagueStatus }: Props) {
+  const [selected, setSelected] = useState<MovieTimelineItem | null>(null)
+
   const { hero, heroIsImminent, upcoming, scored } = useMemo(() => {
     const scoredMovies = movies
       .filter((m) => m.status === 'scored')
@@ -253,9 +313,20 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
 
   return (
     <div className="animate-fade-in">
-      {hero && <NextUpHero movie={hero} isImminent={heroIsImminent} />}
-      {upcoming.length > 0 && <UpcomingShelf movies={upcoming} />}
-      {scored.length > 0 && <ScoredList movies={scored} />}
+      {hero && <NextUpHero movie={hero} isImminent={heroIsImminent} onSelect={setSelected} />}
+      {upcoming.length > 0 && <UpcomingShelf movies={upcoming} onSelect={setSelected} />}
+      {scored.length > 0 && <ScoredList movies={scored} onSelect={setSelected} />}
+
+      {/* Read-only here. Managing a holding is the roster's job, so the overview
+          opens a movie to look at it rather than duplicating the drop flow. */}
+      {selected && (
+        <LeagueMovieModal
+          movie={selected}
+          contextHeading="On your roster"
+          contextLabel={`Round ${selected.round}, pick ${selected.pick_number}`}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   )
 }

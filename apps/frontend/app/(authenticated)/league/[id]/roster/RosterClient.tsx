@@ -1,11 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { Film, Trophy, ShoppingCart, Trash2, Target } from 'lucide-react'
+import { Film, Trophy, ShoppingCart, Target, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
+import { findDropBlocker, type DropBlocker } from './dropRules'
+import LeagueMovieModal from '../components/LeagueMovieModal'
+import { getTmdbPosterUrl } from '../components/utils'
+import type { Holding } from './types'
 import type { League, Movie, TeamBudget, DraftPick, Pickup, Counterpick } from '@/types'
 
 interface RosterCounterpick extends Counterpick {
@@ -13,15 +18,23 @@ interface RosterCounterpick extends Counterpick {
   target_team: { name: string }
 }
 
+/** Team that counterpicked a holding, joined in by the roster page. */
+type CounterpickerRef = { name: string } | null
+
+type RosterDraftPick = DraftPick & { movies: Movie; counterpicked_by: CounterpickerRef }
+type RosterPickup = Pickup & { movies: Movie; counterpicked_by: CounterpickerRef }
+
 interface RosterClientProps {
   league: League
   team: { id: string; name: string }
-  draftPicks: (DraftPick & { movies: Movie })[]
-  pickups: (Pickup & { movies: Movie })[]
+  draftPicks: RosterDraftPick[]
+  pickups: RosterPickup[]
   budget: TeamBudget | null
   dropCount: number
   userId: string
   counterpicks: RosterCounterpick[]
+  /** Movies with an open counterpick auction, which blocks a drop. */
+  contestedMovieIds: string[]
 }
 
 export default function RosterClient({
@@ -34,64 +47,99 @@ export default function RosterClient({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   userId,
   counterpicks,
+  contestedMovieIds,
 }: RosterClientProps) {
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
   const [pickups, setPickups] = useState(initialPickups)
   const [dropCount, setDropCount] = useState(initialDropCount)
-  const [droppingId, setDroppingId] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Holding | null>(null)
 
-  const canDrop = dropCount < league.drop_limit
+  const dropsRemaining = league.drop_limit - dropCount
+  const contested = useMemo(() => new Set(contestedMovieIds), [contestedMovieIds])
 
-  // Check if a movie can be dropped (not released yet)
-  const canDropMovie = (movie: Movie): boolean => {
-    if (!movie.release_date) return true // Unknown release date = can drop
-    const today = new Date().toISOString().split('T')[0]
-    return movie.release_date >= today
-  }
+  const draftHoldings: Holding[] = useMemo(
+    () =>
+      draftPicks.map((pick) => ({
+        id: pick.id,
+        source: 'draftPicks' as const,
+        movie: pick.movies,
+        label: `Round ${pick.round}, Pick ${pick.pick_number}`,
+        counterpickedByTeamId: pick.counterpicked_by_team_id,
+        counterpickerName: pick.counterpicked_by?.name ?? null,
+      })),
+    [draftPicks]
+  )
 
-  async function handleDrop(
-    id: string,
-    movieTitle: string,
-    body: Record<string, string>,
-    removeFrom: 'draftPicks' | 'pickups'
-  ): Promise<void> {
-    if (!canDrop) {
-      toast.error(`You've used all ${league.drop_limit} drops`)
-      return
-    }
+  const pickupHoldings: Holding[] = useMemo(
+    () =>
+      pickups.map((pickup) => ({
+        id: pickup.id,
+        source: 'pickups' as const,
+        movie: pickup.movies,
+        label: `$${pickup.amount_paid}`,
+        counterpickedByTeamId: pickup.counterpicked_by_team_id,
+        counterpickerName: pickup.counterpicked_by?.name ?? null,
+      })),
+    [pickups]
+  )
 
-    setDroppingId(id)
+  const blockerFor = useCallback(
+    (holding: Holding): DropBlocker | null =>
+      findDropBlocker(holding.movie, holding.counterpickedByTeamId, {
+        leagueStatus: league.status,
+        counterpicksBlockDrops: league.counterpicks_block_drops,
+        contestedMovieIds: contested,
+        dropsRemaining,
+      }),
+    [league.status, league.counterpicks_block_drops, contested, dropsRemaining]
+  )
+
+  const dropMovie = useCallback(async (holding: Holding): Promise<void> => {
+    const body =
+      holding.source === 'draftPicks'
+        ? { draft_pick_id: holding.id }
+        : { pickup_id: holding.id }
 
     const { error } = await callEdgeFunction('drop-movie', { body })
 
-    setDroppingId(null)
+    // Thrown so useAsyncAction surfaces it in the dialog, which stays open. A
+    // toast alone would vanish behind the panel the player is still looking at.
+    if (error) throw new Error(error)
 
-    if (error) {
-      toast.error(error)
+    toast.success(`Dropped ${holding.movie.title}`)
+    if (holding.source === 'draftPicks') {
+      setDraftPicks((prev) => prev.filter((p) => p.id !== holding.id))
     } else {
-      toast.success(`Dropped ${movieTitle}`)
-      if (removeFrom === 'draftPicks') {
-        setDraftPicks(prev => prev.filter(p => p.id !== id))
-      } else {
-        setPickups(prev => prev.filter(p => p.id !== id))
-      }
-      setDropCount(prev => prev + 1)
+      setPickups((prev) => prev.filter((p) => p.id !== holding.id))
     }
-  }
+    setDropCount((prev) => prev + 1)
+    setSelected(null)
+  }, [])
+
+  const { execute: confirmDrop, isLoading: isDropping, error: dropError, reset } =
+    useAsyncAction(dropMovie)
+
+  const closeModal = useCallback(() => {
+    if (isDropping) return
+    reset()
+    setSelected(null)
+  }, [isDropping, reset])
 
   const totalMovies = draftPicks.length + pickups.length
-  const totalSlots = league.total_slots
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl font-bold text-foreground" data-testid="roster-team-name">
+          <h1
+            className="font-display text-2xl font-bold text-foreground"
+            data-testid="roster-team-name"
+          >
             {team.name}&apos;s Roster
           </h1>
           <p className="text-foreground-secondary">
-            {totalMovies}/{totalSlots} slots filled
+            {totalMovies}/{league.total_slots} slots filled
           </p>
         </div>
 
@@ -100,63 +148,34 @@ export default function RosterClient({
           <p className="font-display text-2xl font-semibold text-gold">
             ${budget?.remaining_budget ?? 100}
           </p>
-          <p className="text-foreground-muted text-sm">
-            Drops: {dropCount}/{league.drop_limit} used
+          <p
+            className={`text-sm ${dropsRemaining > 0 ? 'text-foreground-muted' : 'text-crimson'}`}
+            data-testid="drops-summary"
+          >
+            {dropsRemaining > 0
+              ? `Drops: ${dropCount}/${league.drop_limit} used`
+              : `No drops left (${dropCount}/${league.drop_limit} used)`}
           </p>
         </div>
       </div>
 
-      {/* Draft Picks Section */}
-      <div>
-        <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
-          <Trophy className="w-5 h-5 text-gold" />
-          Draft Picks ({draftPicks.length})
-        </h2>
+      <RosterSection
+        icon={<Trophy className="w-5 h-5 text-gold" />}
+        title="Draft Picks"
+        holdings={draftHoldings}
+        emptyText="No draft picks yet."
+        blockerFor={blockerFor}
+        onSelect={setSelected}
+      />
 
-        {draftPicks.length === 0 ? (
-          <p className="text-foreground-muted">No draft picks yet.</p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {draftPicks.map((pick) => (
-              <MovieCard
-                key={pick.id}
-                movie={pick.movies}
-                label={`Round ${pick.round}, Pick ${pick.pick_number}`}
-                onDrop={canDrop && canDropMovie(pick.movies)
-                  ? () => handleDrop(pick.id, pick.movies.title, { draft_pick_id: pick.id }, 'draftPicks')
-                  : undefined}
-                isDropping={droppingId === pick.id}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Pickups Section */}
-      <div>
-        <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
-          <ShoppingCart className="w-5 h-5 text-gold" />
-          Pickups ({pickups.length})
-        </h2>
-
-        {pickups.length === 0 ? (
-          <p className="text-foreground-muted">No pickups yet. Win bids to add movies!</p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {pickups.map((pickup) => (
-              <MovieCard
-                key={pickup.id}
-                movie={pickup.movies}
-                label={`$${pickup.amount_paid}`}
-                onDrop={canDrop && canDropMovie(pickup.movies)
-                  ? () => handleDrop(pickup.id, pickup.movies.title, { pickup_id: pickup.id }, 'pickups')
-                  : undefined}
-                isDropping={droppingId === pickup.id}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      <RosterSection
+        icon={<ShoppingCart className="w-5 h-5 text-gold" />}
+        title="Pickups"
+        holdings={pickupHoldings}
+        emptyText="No pickups yet. Win bids to add movies!"
+        blockerFor={blockerFor}
+        onSelect={setSelected}
+      />
 
       {/* Counterpicks Section */}
       <div>
@@ -171,35 +190,25 @@ export default function RosterClient({
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {counterpicks.map((cp) => (
               <div key={cp.id} className="card overflow-hidden">
-                {/* Poster */}
                 <div className="relative aspect-[2/3] bg-elevated">
-                  {cp.movies.poster_url ? (
-                    <Image
-                      src={`https://image.tmdb.org/t/p/w342${cp.movies.poster_url}`}
-                      alt={cp.movies.title}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <Film className="w-12 h-12 text-foreground-muted" />
-                    </div>
-                  )}
-                  {/* Counterpick badge */}
+                  <Poster movie={cp.movies} />
                   <div className="absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-xs font-medium text-white flex items-center gap-1">
                     <Target className="w-3 h-3" />
                     Counterpick
                   </div>
                 </div>
 
-                {/* Info */}
                 <div className="p-3">
-                  <h3 className="font-semibold text-foreground text-sm truncate">{cp.movies.title}</h3>
+                  <h3 className="font-semibold text-foreground text-sm truncate">
+                    {cp.movies.title}
+                  </h3>
                   <p className="text-foreground-muted text-xs">
                     vs. {cp.target_team.name} ({cp.phase})
                   </p>
                   {cp.fantasy_points !== null && (
-                    <p className={`text-sm font-semibold mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}>
+                    <p
+                      className={`text-sm font-semibold mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}
+                    >
                       {formatFantasyPoints(cp.fantasy_points)} pts
                     </p>
                   )}
@@ -209,92 +218,155 @@ export default function RosterClient({
           </div>
         )}
       </div>
+
+      {selected && (
+        <LeagueMovieModal
+          movie={selected.movie}
+          contextHeading="On your roster"
+          contextLabel={selected.label}
+          drop={{
+            blocker: blockerFor(selected),
+            league,
+            dropCount,
+            slotsFilled: totalMovies,
+            counterpickerName: selected.counterpickerName,
+            isDropping,
+            error: dropError,
+            onConfirm: () => {
+              // useAsyncAction rethrows so it can expose `error`; the dialog
+              // renders it, so nothing is lost by swallowing the rejection.
+              void confirmDrop(selected).catch(() => {})
+            },
+          }}
+          onClose={closeModal}
+        />
+      )}
     </div>
   )
 }
 
-interface MovieCardProps {
-  movie: Movie
-  label: string
-  onDrop?: () => void
-  isDropping?: boolean
+function RosterSection({
+  icon,
+  title,
+  holdings,
+  emptyText,
+  blockerFor,
+  onSelect,
+}: {
+  icon: React.ReactNode
+  title: string
+  holdings: Holding[]
+  emptyText: string
+  blockerFor: (holding: Holding) => DropBlocker | null
+  onSelect: (holding: Holding) => void
+}) {
+  return (
+    <div>
+      <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
+        {icon}
+        {title} ({holdings.length})
+      </h2>
+
+      {holdings.length === 0 ? (
+        <p className="text-foreground-muted">{emptyText}</p>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {holdings.map((holding) => (
+            <MovieCard
+              key={holding.id}
+              holding={holding}
+              isLocked={blockerFor(holding) !== null}
+              onSelect={() => onSelect(holding)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
-function MovieCard({ movie, label, onDrop, isDropping }: MovieCardProps) {
-  const [showDropConfirm, setShowDropConfirm] = useState(false)
+function Poster({ movie }: { movie: Movie }) {
+  if (!movie.poster_url) {
+    return (
+      <div className="w-full h-full flex items-center justify-center">
+        <Film className="w-12 h-12 text-foreground-muted" aria-hidden="true" />
+      </div>
+    )
+  }
 
   return (
-    <div className="card overflow-hidden group">
-      {/* Poster */}
+    <Image
+      src={getTmdbPosterUrl(movie.poster_url, 'w342')!}
+      alt={movie.title}
+      fill
+      // Matches the 2 / 3 / 4 column grid below, so the browser stops fetching
+      // a full-width image for a quarter-width slot.
+      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
+      className="object-cover"
+    />
+  )
+}
+
+/**
+ * The whole card is the control: tapping a movie opens its details, where the
+ * roster's actions live.
+ *
+ * A locked movie still carries a visible badge. Hiding that would undo the fix
+ * this flow exists for - a player has to be able to see which movies are stuck
+ * without opening each one to find out.
+ */
+function MovieCard({
+  holding,
+  isLocked,
+  onSelect,
+}: {
+  holding: Holding
+  isLocked: boolean
+  onSelect: () => void
+}) {
+  const { movie, label } = holding
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      data-testid="roster-movie-card"
+      data-locked={isLocked ? 'true' : 'false'}
+      aria-label={`View ${movie.title}${isLocked ? ' (locked)' : ''}`}
+      className="card card-interactive flex flex-col overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+    >
       <div className="relative aspect-[2/3] bg-elevated">
-        {movie.poster_url ? (
-          <Image
-            src={`https://image.tmdb.org/t/p/w342${movie.poster_url}`}
-            alt={movie.title}
-            fill
-            className="object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Film className="w-12 h-12 text-foreground-muted" />
-          </div>
-        )}
+        <Poster movie={movie} />
 
-        {/* Drop Button */}
-        {onDrop && !showDropConfirm && (
-          <button
-            onClick={() => setShowDropConfirm(true)}
-            className="absolute top-2 right-2 p-2 bg-background/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-crimson"
+        {isLocked && (
+          <span
+            data-testid="roster-lock-badge"
+            className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[11px] font-medium text-foreground-secondary backdrop-blur-sm"
           >
-            <Trash2 className="w-4 h-4 text-foreground" />
-          </button>
-        )}
-
-        {/* Drop Confirmation */}
-        {showDropConfirm && (
-          <div className="absolute inset-0 bg-background/90 flex flex-col items-center justify-center p-4">
-            <p className="text-foreground text-center mb-3">Drop this movie?</p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  onDrop?.()
-                  setShowDropConfirm(false)
-                }}
-                disabled={isDropping}
-                className="btn btn-danger text-sm py-1 px-3"
-              >
-                {isDropping ? '...' : 'Drop'}
-              </button>
-              <button
-                onClick={() => setShowDropConfirm(false)}
-                className="btn btn-ghost text-sm py-1 px-3"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
+            <Lock className="h-3 w-3" aria-hidden="true" />
+            Locked
+          </span>
         )}
       </div>
 
-      {/* Info */}
-      <div className="p-3">
-        <h3 className="font-semibold text-foreground text-sm truncate">{movie.title}</h3>
-        <p className="text-foreground-muted text-xs">{label}</p>
+      <div className="flex flex-1 flex-col p-3">
+        <h3 className="truncate text-sm font-semibold text-foreground">{movie.title}</h3>
+        <p className="text-xs text-foreground-muted">{label}</p>
         {movie.fantasy_points !== null ? (
-          <p className="text-sm font-semibold mt-1 flex items-baseline gap-1.5">
+          <p className="mt-1 flex items-baseline gap-1.5 text-sm font-semibold">
             <span className={movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}>
               {formatFantasyPoints(movie.fantasy_points)} pts
             </span>
             {movie.combined_score !== null && (
-              <span className="text-foreground-muted text-xs font-normal">
+              <span className="text-xs font-normal text-foreground-muted">
                 {formatCriticScore(movie.combined_score)}
               </span>
             )}
           </p>
         ) : (
-          <p className="text-foreground-muted text-xs mt-1">Pending</p>
+          <p className="mt-1 text-xs text-foreground-muted">Pending</p>
         )}
       </div>
-    </div>
+    </button>
   )
 }
