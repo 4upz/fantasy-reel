@@ -471,6 +471,11 @@ export interface TradeOffer {
   initiator_message: string | null
   response_message: string | null
   veto_reason: string | null
+  /**
+   * Commissioner who approved the trade before its review window expired.
+   * NULL when the trade completed on the review clock instead.
+   */
+  approved_by?: string | null
   created_at: string
   updated_at: string
   /**

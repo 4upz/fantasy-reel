@@ -38,6 +38,12 @@ interface Props {
     tradeOfferId: string,
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>
+  /**
+   * Commissioner: end the review period now and process the trade immediately.
+   * Without this the only commissioner action is veto -- an approved trade
+   * otherwise waits out the full review window before the cron executes it.
+   */
+  onApprove: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -87,12 +93,14 @@ export default function TradeOfferCard(props: Props) {
     onCounter,
     onCancel,
     onVeto,
+    onApprove,
   } = props
 
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCounterModal, setShowCounterModal] = useState(false)
   const [showVetoModal, setShowVetoModal] = useState(false)
+  const [showApproveModal, setShowApproveModal] = useState(false)
   const [showAcceptModal, setShowAcceptModal] = useState(false)
 
   // Optimistic UI state (FE#9)
@@ -103,6 +111,9 @@ export default function TradeOfferCard(props: Props) {
   const canRespond = isRecipient && (trade.status === 'proposed' || trade.status === 'countered')
   const canCancel = isInitiator && (trade.status === 'proposed' || trade.status === 'countered')
   const canVeto = isOwner && trade.status === 'review'
+  // Deliberately the same window as veto: approving is the other answer to the
+  // review the commissioner is already being asked for.
+  const canApprove = isOwner && trade.status === 'review'
 
   // Use optimistic status if available, otherwise actual status
   const displayStatus = optimisticStatus || trade.status
@@ -114,7 +125,7 @@ export default function TradeOfferCard(props: Props) {
   const isContested = contestedSourceIds.size > 0 && OPEN_STATUSES.has(displayStatus)
 
   const tradeAction = useCallback(
-    async (action: 'accept' | 'reject' | 'cancel' | 'veto', message?: string) => {
+    async (action: 'accept' | 'reject' | 'cancel' | 'veto' | 'approve', message?: string) => {
       setPendingAction(action)
       setError(null)
 
@@ -124,6 +135,9 @@ export default function TradeOfferCard(props: Props) {
         reject: 'rejected',
         cancel: 'cancelled',
         veto: 'vetoed',
+        // Approving executes the trade in the same request, so it lands on
+        // 'completed' rather than passing back through 'accepted'.
+        approve: 'completed',
       }
       setOptimisticStatus(optimisticStatusMap[action])
 
@@ -142,6 +156,9 @@ export default function TradeOfferCard(props: Props) {
         case 'veto':
           result = await onVeto(trade.id, message)
           break
+        case 'approve':
+          result = await onApprove(trade.id)
+          break
         default:
           result = { success: false, error: 'Unknown action' }
       }
@@ -157,7 +174,7 @@ export default function TradeOfferCard(props: Props) {
       }
       // If successful, the real-time subscription will update the trade
     },
-    [trade.id, onRespond, onCancel, onVeto]
+    [trade.id, onRespond, onCancel, onVeto, onApprove]
   )
 
   const { execute: handleAction, isLoading } = useAsyncAction(tradeAction)
@@ -260,6 +277,20 @@ export default function TradeOfferCard(props: Props) {
           <p className="text-sm text-warning">
             Review period ends {formatRelativeDate(trade.review_ends_at)}
           </p>
+          {isOwner && (
+            <p className="text-xs text-warning/80 mt-1">
+              It processes automatically then — approve to process it now, or veto to block it.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Commissioner approved before the review clock ran out */}
+      {trade.status === 'completed' && trade.approved_by && (
+        <div className="mb-4 p-3 bg-success-bg rounded-lg">
+          <p className="text-sm text-success">
+            Approved by the commissioner before the review period ended.
+          </p>
         </div>
       )}
 
@@ -280,7 +311,7 @@ export default function TradeOfferCard(props: Props) {
       )}
 
       {/* Actions */}
-      {(canRespond || canCancel || canVeto) && !optimisticStatus && (
+      {(canRespond || canCancel || canVeto || canApprove) && !optimisticStatus && (
         <div className="flex flex-wrap gap-2 pt-4 border-t border-border" role="group" aria-label="Trade actions">
           {canRespond && (
             <>
@@ -329,6 +360,19 @@ export default function TradeOfferCard(props: Props) {
             </button>
           )}
 
+          {canApprove && (
+            <button
+              onClick={() => setShowApproveModal(true)}
+              disabled={isLoading}
+              className="btn btn-primary"
+              aria-label="Approve trade and process it now"
+              aria-busy={pendingAction === 'approve'}
+              data-testid={`approve-trade-${trade.id}`}
+            >
+              {pendingAction === 'approve' ? 'Approving...' : 'Approve Now'}
+            </button>
+          )}
+
           {canVeto && (
             <button
               onClick={() => setShowVetoModal(true)}
@@ -371,6 +415,18 @@ export default function TradeOfferCard(props: Props) {
           onVeto={async (reason) => {
             setShowVetoModal(false)
             await handleAction('veto', reason)
+          }}
+        />
+      )}
+
+      {/* Approve Modal (commissioner) */}
+      {showApproveModal && (
+        <ApproveModal
+          trade={trade}
+          onClose={() => setShowApproveModal(false)}
+          onApprove={async () => {
+            setShowApproveModal(false)
+            await handleAction('approve')
           }}
         />
       )}
@@ -830,6 +886,106 @@ function MovieSelector({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// =============================================================================
+// Approve Modal (commissioner)
+// =============================================================================
+
+interface ApproveModalProps {
+  trade: TradeOfferWithTeams
+  onClose: () => void
+  onApprove: () => Promise<void>
+}
+
+/**
+ * Confirmation for ending a review period early. Worth a confirm step: unlike
+ * veto -- which only stops something -- this moves movies and FAAB the moment
+ * it is clicked, before the deadline both teams were told to expect.
+ */
+function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
+  const initiatorTeam = trade.initiator_team as { name: string }
+  const recipientTeam = trade.recipient_team as { name: string }
+
+  const { execute: handleApprove, isLoading } = useAsyncAction(onApprove)
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape' && !isLoading) {
+      onClose()
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="approve-modal-title"
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div className="relative bg-surface rounded-lg shadow-heavy max-w-md w-full">
+        <div className="p-4 border-b border-border">
+          <h2 id="approve-modal-title" className="text-lg font-display font-bold text-foreground">
+            Approve Trade
+          </h2>
+          <p className="text-sm text-foreground-secondary mt-1">
+            Process the trade between {initiatorTeam.name} and {recipientTeam.name} now, without
+            waiting for the review period to end?
+          </p>
+        </div>
+
+        <div className="p-4 space-y-3">
+          <div className="p-3 rounded-lg bg-surface-hover">
+            <p className="text-sm text-foreground-secondary">
+              Movies and FAAB change hands immediately, and both teams are notified that you
+              approved the trade.
+            </p>
+          </div>
+
+          {trade.contested_source_ids && trade.contested_source_ids.length > 0 && (
+            <div className="alert alert-warning" role="alert">
+              <p className="text-sm">
+                A movie in this trade is also in another open offer. Approving settles it here and
+                expires the competing offer.
+              </p>
+            </div>
+          )}
+
+          <div className="bg-warning-bg p-3 rounded-lg" role="alert">
+            <p className="text-sm text-warning">
+              This action cannot be undone — the trade can no longer be vetoed once processed.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-border flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="btn btn-ghost"
+            disabled={isLoading}
+            aria-label="Cancel approval"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => handleApprove()}
+            className="btn btn-primary"
+            disabled={isLoading}
+            aria-label="Confirm approve trade"
+            aria-busy={isLoading}
+            data-testid={`confirm-approve-trade-${trade.id}`}
+          >
+            {isLoading ? 'Approving...' : 'Approve & Process'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

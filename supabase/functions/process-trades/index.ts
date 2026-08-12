@@ -9,14 +9,15 @@ import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-run
 import {
   validateTradeProposal,
   getTeamInfo,
-  getTeamName,
   createServiceClient,
   TradeNotification,
   TradeItems,
-  TradeOffer,
-  sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import {
+  notifyTradeCompleted,
+  notifyTradesInvalidated,
+  type ExecuteTradeResult,
+} from '../_shared/trade-completion.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('process-trades')
@@ -45,20 +46,6 @@ interface ProcessResults {
   /** Competing offers expired because a movie they named was traded elsewhere. */
   invalidated: number
   errors: string[]
-}
-
-/** One competing offer that execute_trade expired, as returned in its payload. */
-interface InvalidatedTrade {
-  id: string
-  league_id: string
-  initiator_team_id: string
-  recipient_team_id: string
-}
-
-interface ExecuteTradeResult {
-  success?: boolean
-  error?: string
-  invalidated_trades?: InvalidatedTrade[]
 }
 
 Deno.serve(async (req) => {
@@ -147,12 +134,11 @@ Deno.serve(async (req) => {
           continue
         }
 
-        // execute_trade reports business-rule refusals (not in executable state,
-        // ownership re-validation failure, counterpick self-trade guard) inside
-        // its JSONB return value rather than by raising, so a null rpc error is
-        // NOT on its own proof the trade went through. This previously fell
-        // straight into notifyTradeCompleted, telling both teams a trade had
-        // completed when nothing had moved.
+        // execute_trade reports business-rule refusals inside its JSONB return
+        // value rather than by raising (see ExecuteTradeResult), so a null rpc
+        // error is NOT on its own proof the trade went through. This previously
+        // fell straight into notifyTradeCompleted, telling both teams a trade
+        // had completed when nothing had moved.
         const executeResult = executeData as ExecuteTradeResult | null
 
         if (!executeResult?.success) {
@@ -199,112 +185,6 @@ Deno.serve(async (req) => {
     return internalErrorResponse(error, log)
   }
 })
-
-async function notifyTradeCompleted(
-  supabase: ReturnType<typeof createServiceClient>,
-  trade: TradeRecord
-): Promise<void> {
-  const [initiatorInfo, recipientInfo, initiatorTeamName, recipientTeamName] = await Promise.all([
-    getTeamInfo(supabase, trade.initiator_team_id),
-    getTeamInfo(supabase, trade.recipient_team_id),
-    getTeamName(supabase, trade.initiator_team_id),
-    getTeamName(supabase, trade.recipient_team_id),
-  ])
-
-  const notifications: TradeNotification[] = []
-
-  if (initiatorInfo) {
-    notifications.push({
-      user_id: initiatorInfo.user_id,
-      league_id: trade.league_id,
-      type: 'trade_completed',
-      title: 'Trade Completed',
-      body: `Your trade with ${recipientTeamName} has been completed`,
-      data: { trade_offer_id: trade.id },
-    })
-  }
-
-  if (recipientInfo) {
-    notifications.push({
-      user_id: recipientInfo.user_id,
-      league_id: trade.league_id,
-      type: 'trade_completed',
-      title: 'Trade Completed',
-      body: `Your trade with ${initiatorTeamName} has been completed`,
-      data: { trade_offer_id: trade.id },
-    })
-  }
-
-  if (notifications.length > 0) {
-    await supabase.from('notifications').insert(notifications)
-  }
-
-  // Send email + Discord notifications in parallel
-  const tradeOffer: TradeOffer = { ...trade, status: 'completed' }
-  const leagueName = await getLeagueName(supabase, trade.league_id)
-
-  await Promise.allSettled([
-    sendTradeEmailNotifications(supabase, tradeOffer, 'completed', {
-      notifyInitiator: true,
-      notifyRecipient: true,
-    }),
-    sendDiscordNotification(supabase, {
-      leagueId: trade.league_id,
-      category: 'trades',
-      embeds: [{
-        author: buildEmbedAuthor(leagueName, trade.league_id),
-        title: `Trade completed between ${initiatorTeamName} and ${recipientTeamName}`,
-        color: DISCORD_COLORS.green,
-        footer: { text: `Trade #${trade.id.slice(0, 8)}` },
-        url: buildLeagueUrl(trade.league_id, '/trading'),
-      }],
-    }),
-  ])
-}
-
-/**
- * Tell both sides of every offer that execute_trade expired because a movie it
- * named was traded away in the deal that just completed.
- *
- * Deliberately in-app only, matching notifyTradeExpired below: losing a
- * contested offer is expected traffic once competing offers are allowed, and
- * emailing every participant each time a popular movie moves would be noise.
- * The counterparty in the winning trade already gets a 'completed' email.
- */
-async function notifyTradesInvalidated(
-  supabase: ReturnType<typeof createServiceClient>,
-  invalidated: InvalidatedTrade[]
-): Promise<void> {
-  const notifications: TradeNotification[] = []
-
-  for (const offer of invalidated) {
-    const [initiatorInfo, recipientInfo] = await Promise.all([
-      getTeamInfo(supabase, offer.initiator_team_id),
-      getTeamInfo(supabase, offer.recipient_team_id),
-    ])
-
-    for (const info of [initiatorInfo, recipientInfo]) {
-      if (!info) continue
-      notifications.push({
-        user_id: info.user_id,
-        league_id: offer.league_id,
-        type: 'trade_cancelled',
-        title: 'Trade No Longer Available',
-        body: 'A movie in this trade was traded in another deal, so this offer has expired.',
-        data: { trade_offer_id: offer.id, expired_reason: 'movie_traded_elsewhere' },
-      })
-    }
-  }
-
-  if (notifications.length > 0) {
-    const { error } = await supabase.from('notifications').insert(notifications)
-    if (error) {
-      // Non-blocking: the offers are already expired in the DB, and the UI shows
-      // that regardless. Losing the notification must not fail the cron run.
-      log.error('Failed to notify invalidated trade parties', { error: serializeError(error) })
-    }
-  }
-}
 
 async function notifyTradeExpired(
   supabase: ReturnType<typeof createServiceClient>,

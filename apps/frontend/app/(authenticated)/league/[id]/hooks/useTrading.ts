@@ -45,6 +45,8 @@ interface UseTradingReturn {
     tradeOfferId: string,
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>
+  /** Commissioner: end the review period now and process the trade immediately. */
+  approveTrade: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
   refreshTrades: () => Promise<void>
   refreshRoster: () => Promise<void>
 }
@@ -421,6 +423,40 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     [getSession, fetchTrades]
   )
 
+  // Approve a trade immediately (commissioner only)
+  const approveTrade = useCallback(
+    async (tradeOfferId: string): Promise<{ success: boolean; error?: string }> => {
+      try {
+        const session = await getSession()
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/approve-trade`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session?.access_token}`,
+            },
+            body: JSON.stringify({ trade_offer_id: tradeOfferId }),
+          }
+        )
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          return { success: false, error: data.error || 'Failed to approve trade' }
+        }
+
+        // Unlike veto, this moves movies and FAAB right away -- and the
+        // commissioner may be a party to the trade -- so refresh the roster too.
+        await Promise.all([fetchTrades(), fetchTradeableMovies(), fetchBudget()])
+        return { success: true }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      }
+    },
+    [getSession, fetchTrades, fetchTradeableMovies, fetchBudget]
+  )
+
   // Computed values
   const pendingTrades = trades.filter(
     (t) => t.status === 'proposed' || t.status === 'countered' || t.status === 'review'
@@ -448,6 +484,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     counterTrade,
     cancelTrade,
     vetoTrade,
+    approveTrade,
     refreshTrades: fetchTrades,
     refreshRoster,
   }
