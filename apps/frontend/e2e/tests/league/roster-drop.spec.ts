@@ -3,12 +3,13 @@ import { waitForToast } from '../../helpers/ui.helper'
 import { getAdminClient } from '../../helpers/supabase.helper'
 
 /**
- * Roster Drop Flow E2E Tests
+ * Roster Movie Dialog / Drop Flow E2E Tests
  *
- * Covers dropping a movie from the roster end to end, plus every state where a
- * held movie cannot be dropped.
+ * The roster card is the control: tapping a movie opens its TMDb details, and
+ * the roster's actions live in that dialog. Dropping is a second view inside
+ * the same dialog, so there is never a modal stacked on a modal.
  *
- * Two regressions these guard against:
+ * Regressions these guard against:
  *
  * 1. The drop control used to be `opacity-0 group-hover:opacity-100`, so on a
  *    touch device - which never hovers - it was fully transparent while still
@@ -18,22 +19,19 @@ import { getAdminClient } from '../../helpers/supabase.helper'
  *    an `opacity: 0` element as visible because it still has a bounding box, so
  *    the reachability test asserts computed opacity directly.
  *
- * 2. A movie that could not be dropped rendered no control at all, so it looked
- *    identical to one the player had simply never tried to drop. Every held
- *    movie now carries a control, and a locked one explains itself on click.
+ * 2. A movie that could not be dropped gave no sign of it, so it looked
+ *    identical to one the player had simply never tried to drop. Locked movies
+ *    now carry a badge on the card, and the dialog says why.
  *
  * Uses the rosterLeague fixture, whose testUser roster holds one movie in each
  * state: droppable (unreleased), released, and counterpicked.
  *
- * Getting to the roster is league-tabs.spec.ts's job - it already asserts that
- * an active league puts Roster on the mobile bar and Draft in the "More" sheet,
- * so this file navigates straight to the page and stays about the drop itself.
- *
  * Key UI elements:
- * - drop-movie-button: the per-card drop control (data-locked marks locked ones)
- * - drop-movie-modal: the confirm/explain dialog
- * - drop-blocker-headline: the reason line inside a locked movie's dialog
- * - roster-team-name: roster page heading, used as the page-loaded signal
+ * - roster-movie-card: the whole card, opens the dialog (data-locked marks locked)
+ * - roster-lock-badge: the at-a-glance "you cannot drop this" marker
+ * - roster-movie-modal: the one dialog (data-view is "details" or "confirm")
+ * - drop-movie-button: the Drop action inside the details view
+ * - drop-blocker-headline: the reason a locked movie cannot be dropped
  */
 
 /** Minimum comfortable touch target, per the WCAG 2.5.5 / Apple HIG guidance. */
@@ -44,8 +42,14 @@ const MOBILE_VIEWPORT = { width: 390, height: 844 }
 /** Every movie the rosterLeague fixture puts on the testUser roster. */
 const HELD_MOVIE_COUNT = 3
 
+/** Opens a movie's dialog by card label. */
+async function openMovie(page: import('@playwright/test').Page, title: string, locked = false) {
+  await page.getByRole('button', { name: `View ${title}${locked ? ' (locked)' : ''}` }).click()
+  await expect(page.getByTestId('roster-movie-modal')).toBeVisible()
+}
+
 test.describe('Roster Drop Flow @roster', () => {
-  test('every held movie offers a reachable control on a touch viewport', async ({
+  test('every held movie is an openable card on a touch viewport', async ({
     authedPage,
     rosterLeague,
   }) => {
@@ -53,13 +57,13 @@ test.describe('Roster Drop Flow @roster', () => {
     await authedPage.goto(`/league/${rosterLeague.id}/roster`)
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
-    const dropButtons = authedPage.getByTestId('drop-movie-button')
-    await expect(dropButtons).toHaveCount(HELD_MOVIE_COUNT)
+    const cards = authedPage.getByTestId('roster-movie-card')
+    await expect(cards).toHaveCount(HELD_MOVIE_COUNT)
 
-    // The actual regression guard. No hover has happened, so a hover-gated
-    // control would report opacity "0" here while still passing toBeVisible().
+    // The regression guard. No hover has happened, so a hover-gated control
+    // would report opacity "0" here while still passing toBeVisible().
     for (let i = 0; i < HELD_MOVIE_COUNT; i++) {
-      const presentation = await dropButtons.nth(i).evaluate((el) => {
+      const presentation = await cards.nth(i).evaluate((el) => {
         const style = window.getComputedStyle(el)
         const rect = el.getBoundingClientRect()
         return {
@@ -76,19 +80,31 @@ test.describe('Roster Drop Flow @roster', () => {
       expect(presentation.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET_PX)
     }
 
-    // Screen reader users need each control named, and a locked one named for
-    // what it actually does - explain, not drop.
-    await expect(
-      authedPage.getByRole('button', { name: `Drop ${rosterLeague.droppableMovieTitle}` })
-    ).toBeVisible()
-    await expect(
-      authedPage.getByRole('button', {
-        name: `Why ${rosterLeague.counterpickedMovieTitle} cannot be dropped`,
-      })
-    ).toBeVisible()
+    // Locked movies are distinguishable without opening anything: the released
+    // and counterpicked ones are badged, the droppable one is not.
+    await expect(authedPage.getByTestId('roster-lock-badge')).toHaveCount(2)
   })
 
-  test('the dialog spells out the cost before dropping, and the drop is recorded', async ({
+  test('the dialog shows movie details with the roster action attached', async ({
+    authedPage,
+    rosterLeague,
+  }) => {
+    await authedPage.setViewportSize(MOBILE_VIEWPORT)
+    await authedPage.goto(`/league/${rosterLeague.id}/roster`)
+    await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
+
+    await openMovie(authedPage, rosterLeague.droppableMovieTitle)
+
+    const modal = authedPage.getByTestId('roster-movie-modal')
+    await expect(modal).toHaveAttribute('data-view', 'details')
+    await expect(
+      modal.getByRole('heading', { name: new RegExp(rosterLeague.droppableMovieTitle) })
+    ).toBeVisible()
+    await expect(modal.getByText('On your roster')).toBeVisible()
+    await expect(authedPage.getByTestId('drop-movie-button')).toBeVisible()
+  })
+
+  test('the confirm view spells out the cost, and the drop is recorded', async ({
     authedPage,
     rosterLeague,
   }) => {
@@ -98,17 +114,16 @@ test.describe('Roster Drop Flow @roster', () => {
 
     await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 0/2 used')
 
-    await authedPage
-      .getByRole('button', { name: `Drop ${rosterLeague.droppableMovieTitle}` })
-      .click()
+    await openMovie(authedPage, rosterLeague.droppableMovieTitle)
+    await authedPage.getByTestId('drop-movie-button').click()
 
-    // A drop is irreversible and spends a scarce allowance, so the dialog has
-    // to say both before the player can confirm.
-    const modal = authedPage.getByTestId('drop-movie-modal')
-    await expect(modal).toBeVisible()
-    // exact, because the title also appears inside the "leaves your roster" line.
+    // Same dialog, second view - not a modal stacked on a modal.
+    const modal = authedPage.getByTestId('roster-movie-modal')
+    await expect(modal).toHaveAttribute('data-view', 'confirm')
+    await expect(authedPage.getByTestId('roster-movie-modal')).toHaveCount(1)
+
     await expect(
-      modal.getByText(rosterLeague.droppableMovieTitle, { exact: true })
+      modal.getByRole('heading', { name: `Drop ${rosterLeague.droppableMovieTitle}?` })
     ).toBeVisible()
     await expect(authedPage.getByTestId('drops-after-line')).toContainText('1 left')
     await expect(modal.getByText(/cannot be undone/i)).toBeVisible()
@@ -118,7 +133,7 @@ test.describe('Roster Drop Flow @roster', () => {
 
     await waitForToast(authedPage, new RegExp(`Dropped ${rosterLeague.droppableMovieTitle}`))
 
-    // The card goes away and the allowance ticks up without a reload.
+    // The dialog closes, the card goes away, the allowance ticks up.
     await expect(modal).toHaveCount(0)
     await expect(
       authedPage.getByRole('heading', { name: rosterLeague.droppableMovieTitle })
@@ -142,23 +157,27 @@ test.describe('Roster Drop Flow @roster', () => {
     expect(drops?.[0].draft_pick_id).toBe(rosterLeague.droppableDraftPickId)
   })
 
-  test('keeping the movie cancels the drop', async ({ authedPage, rosterLeague }) => {
+  test('keeping the movie returns to details without dropping', async ({
+    authedPage,
+    rosterLeague,
+  }) => {
     await authedPage.setViewportSize(MOBILE_VIEWPORT)
     await authedPage.goto(`/league/${rosterLeague.id}/roster`)
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
-    await authedPage
-      .getByRole('button', { name: `Drop ${rosterLeague.droppableMovieTitle}` })
-      .click()
-    await expect(authedPage.getByTestId('drop-movie-modal')).toBeVisible()
+    await openMovie(authedPage, rosterLeague.droppableMovieTitle)
+    await authedPage.getByTestId('drop-movie-button').click()
 
+    const modal = authedPage.getByTestId('roster-movie-modal')
+    await expect(modal).toHaveAttribute('data-view', 'confirm')
+
+    // Backing out lands on the details, not on a closed dialog - a mis-tap
+    // should not lose the movie you were reading about.
     await authedPage.getByTestId('drop-modal-dismiss').click()
+    await expect(modal).toHaveAttribute('data-view', 'details')
 
-    // Back to the roster, movie untouched.
-    await expect(authedPage.getByTestId('drop-movie-modal')).toHaveCount(0)
-    await expect(
-      authedPage.getByRole('heading', { name: rosterLeague.droppableMovieTitle })
-    ).toBeVisible()
+    await authedPage.getByTestId('roster-modal-close').click()
+    await expect(modal).toHaveCount(0)
     await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 0/2 used')
 
     const client = getAdminClient()
@@ -169,7 +188,7 @@ test.describe('Roster Drop Flow @roster', () => {
     expect(drops).toHaveLength(0)
   })
 
-  test('a counterpicked movie names the team that locked it', async ({
+  test('a counterpicked movie names the team that locked it and offers no drop', async ({
     authedPage,
     rosterLeague,
   }) => {
@@ -177,21 +196,13 @@ test.describe('Roster Drop Flow @roster', () => {
     await authedPage.goto(`/league/${rosterLeague.id}/roster`)
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
-    await authedPage
-      .getByRole('button', {
-        name: `Why ${rosterLeague.counterpickedMovieTitle} cannot be dropped`,
-      })
-      .click()
+    await openMovie(authedPage, rosterLeague.counterpickedMovieTitle, true)
 
-    // Explained rather than silently missing - the gap that left a team unable
-    // to tell a locked movie from one it had simply never tried to drop.
     await expect(authedPage.getByTestId('drop-blocker-headline')).toContainText('Owner Team')
     await expect(authedPage.getByTestId('drop-blocker-headline')).toContainText(
       rosterLeague.counterpickedMovieTitle
     )
-
-    // A dialog that cannot drop must not offer a drop.
-    await expect(authedPage.getByTestId('drop-modal-confirm')).toHaveCount(0)
+    await expect(authedPage.getByTestId('drop-movie-button')).toHaveCount(0)
   })
 
   test('a released movie explains that it has already opened', async ({
@@ -202,14 +213,12 @@ test.describe('Roster Drop Flow @roster', () => {
     await authedPage.goto(`/league/${rosterLeague.id}/roster`)
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
-    await authedPage
-      .getByRole('button', { name: `Why ${rosterLeague.releasedMovieTitle} cannot be dropped` })
-      .click()
+    await openMovie(authedPage, rosterLeague.releasedMovieTitle, true)
 
     await expect(authedPage.getByTestId('drop-blocker-headline')).toContainText(
       'has already opened'
     )
-    await expect(authedPage.getByTestId('drop-modal-confirm')).toHaveCount(0)
+    await expect(authedPage.getByTestId('drop-movie-button')).toHaveCount(0)
   })
 
   test('an exhausted drop allowance explains itself on the droppable movie', async ({
@@ -241,16 +250,14 @@ test.describe('Roster Drop Flow @roster', () => {
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
     await expect(authedPage.getByTestId('drops-summary')).toHaveText('No drops left (2/2 used)')
+    // With no drops left every held movie is locked, badge included.
+    await expect(authedPage.getByTestId('roster-lock-badge')).toHaveCount(HELD_MOVIE_COUNT)
 
-    await authedPage
-      .getByRole('button', {
-        name: `Why ${rosterLeague.droppableMovieTitle} cannot be dropped`,
-      })
-      .click()
+    await openMovie(authedPage, rosterLeague.droppableMovieTitle, true)
 
     await expect(authedPage.getByTestId('drop-blocker-headline')).toContainText(
       'used all 2 of your drops'
     )
-    await expect(authedPage.getByTestId('drop-modal-confirm')).toHaveCount(0)
+    await expect(authedPage.getByTestId('drop-movie-button')).toHaveCount(0)
   })
 })
