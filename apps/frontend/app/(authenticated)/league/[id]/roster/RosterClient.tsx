@@ -8,7 +8,8 @@ import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import { findDropBlocker, type DropBlocker } from './dropRules'
-import DropMovieModal from './DropMovieModal'
+import RosterMovieModal from './RosterMovieModal'
+import type { Holding } from './types'
 import type { League, Movie, TeamBudget, DraftPick, Pickup, Counterpick } from '@/types'
 
 interface RosterCounterpick extends Counterpick {
@@ -35,19 +36,6 @@ interface RosterClientProps {
   contestedMovieIds: string[]
 }
 
-/**
- * A movie on the roster, flattened so draft picks and pickups share one drop
- * path. The two differ only in their subtitle and which id drop-movie wants.
- */
-interface Holding {
-  id: string
-  source: 'draftPicks' | 'pickups'
-  movie: Movie
-  label: string
-  counterpickedByTeamId: string | null
-  counterpickerName: string | null
-}
-
 export default function RosterClient({
   league,
   team,
@@ -63,7 +51,7 @@ export default function RosterClient({
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
   const [pickups, setPickups] = useState(initialPickups)
   const [dropCount, setDropCount] = useState(initialDropCount)
-  const [pending, setPending] = useState<Holding | null>(null)
+  const [selected, setSelected] = useState<Holding | null>(null)
 
   const dropsRemaining = league.drop_limit - dropCount
   const contested = useMemo(() => new Set(contestedMovieIds), [contestedMovieIds])
@@ -113,8 +101,8 @@ export default function RosterClient({
 
     const { error } = await callEdgeFunction('drop-movie', { body })
 
-    // Thrown so useAsyncAction surfaces it in the modal, which stays open. A
-    // toast alone would vanish behind the dialog the player is still looking at.
+    // Thrown so useAsyncAction surfaces it in the dialog, which stays open. A
+    // toast alone would vanish behind the panel the player is still looking at.
     if (error) throw new Error(error)
 
     toast.success(`Dropped ${holding.movie.title}`)
@@ -124,7 +112,7 @@ export default function RosterClient({
       setPickups((prev) => prev.filter((p) => p.id !== holding.id))
     }
     setDropCount((prev) => prev + 1)
-    setPending(null)
+    setSelected(null)
   }, [])
 
   const { execute: confirmDrop, isLoading: isDropping, error: dropError, reset } =
@@ -133,11 +121,10 @@ export default function RosterClient({
   const closeModal = useCallback(() => {
     if (isDropping) return
     reset()
-    setPending(null)
+    setSelected(null)
   }, [isDropping, reset])
 
   const totalMovies = draftPicks.length + pickups.length
-  const pendingBlocker = pending ? blockerFor(pending) : null
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -171,24 +158,22 @@ export default function RosterClient({
         </div>
       </div>
 
-      {/* Draft Picks Section */}
       <RosterSection
         icon={<Trophy className="w-5 h-5 text-gold" />}
         title="Draft Picks"
         holdings={draftHoldings}
         emptyText="No draft picks yet."
         blockerFor={blockerFor}
-        onDropClick={setPending}
+        onSelect={setSelected}
       />
 
-      {/* Pickups Section */}
       <RosterSection
         icon={<ShoppingCart className="w-5 h-5 text-gold" />}
         title="Pickups"
         holdings={pickupHoldings}
         emptyText="No pickups yet. Win bids to add movies!"
         blockerFor={blockerFor}
-        onDropClick={setPending}
+        onSelect={setSelected}
       />
 
       {/* Counterpicks Section */}
@@ -233,12 +218,10 @@ export default function RosterClient({
         )}
       </div>
 
-      {pending && (
-        <DropMovieModal
-          movie={pending.movie}
-          label={pending.label}
-          blocker={pendingBlocker}
-          counterpickerName={pending.counterpickerName}
+      {selected && (
+        <RosterMovieModal
+          holding={selected}
+          blocker={blockerFor(selected)}
           league={league}
           dropCount={dropCount}
           slotsFilled={totalMovies}
@@ -246,9 +229,9 @@ export default function RosterClient({
           error={dropError}
           onClose={closeModal}
           onConfirm={() => {
-            // useAsyncAction rethrows so it can expose `error`; the modal renders
+            // useAsyncAction rethrows so it can expose `error`; the dialog renders
             // it, so nothing is lost by swallowing the rejection here.
-            void confirmDrop(pending).catch(() => {})
+            void confirmDrop(selected).catch(() => {})
           }}
         />
       )}
@@ -262,14 +245,14 @@ function RosterSection({
   holdings,
   emptyText,
   blockerFor,
-  onDropClick,
+  onSelect,
 }: {
   icon: React.ReactNode
   title: string
   holdings: Holding[]
   emptyText: string
   blockerFor: (holding: Holding) => DropBlocker | null
-  onDropClick: (holding: Holding) => void
+  onSelect: (holding: Holding) => void
 }) {
   return (
     <div>
@@ -287,7 +270,7 @@ function RosterSection({
               key={holding.id}
               holding={holding}
               isLocked={blockerFor(holding) !== null}
-              onDropClick={() => onDropClick(holding)}
+              onSelect={() => onSelect(holding)}
             />
           ))}
         </div>
@@ -310,26 +293,54 @@ function Poster({ movie }: { movie: Movie }) {
       src={`https://image.tmdb.org/t/p/w342${movie.poster_url}`}
       alt={movie.title}
       fill
+      // Matches the 2 / 3 / 4 column grid below, so the browser stops fetching
+      // a full-width image for a quarter-width slot.
+      sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
       className="object-cover"
     />
   )
 }
 
+/**
+ * The whole card is the control: tapping a movie opens its details, where the
+ * roster's actions live.
+ *
+ * A locked movie still carries a visible badge. Hiding that would undo the fix
+ * this flow exists for - a player has to be able to see which movies are stuck
+ * without opening each one to find out.
+ */
 function MovieCard({
   holding,
   isLocked,
-  onDropClick,
+  onSelect,
 }: {
   holding: Holding
   isLocked: boolean
-  onDropClick: () => void
+  onSelect: () => void
 }) {
   const { movie, label } = holding
 
   return (
-    <div className="card flex flex-col overflow-hidden">
+    <button
+      type="button"
+      onClick={onSelect}
+      data-testid="roster-movie-card"
+      data-locked={isLocked ? 'true' : 'false'}
+      aria-label={`View ${movie.title}${isLocked ? ' (locked)' : ''}`}
+      className="card card-interactive flex flex-col overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+    >
       <div className="relative aspect-[2/3] bg-elevated">
         <Poster movie={movie} />
+
+        {isLocked && (
+          <span
+            data-testid="roster-lock-badge"
+            className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[11px] font-medium text-foreground-secondary backdrop-blur-sm"
+          >
+            <Lock className="h-3 w-3" aria-hidden="true" />
+            Locked
+          </span>
+        )}
       </div>
 
       <div className="flex flex-1 flex-col p-3">
@@ -349,32 +360,7 @@ function MovieCard({
         ) : (
           <p className="mt-1 text-xs text-foreground-muted">Pending</p>
         )}
-
-        {/* Keeps the control on a common baseline across a row of cards whose
-            score lines differ in height. */}
-        <div className="flex-1" />
-
-        {/* A named control below the art, not an icon over it. Always rendered,
-            locked or not: a movie you cannot drop still owes you the reason,
-            which the modal gives on click. */}
-        <button
-          type="button"
-          onClick={onDropClick}
-          data-testid="drop-movie-button"
-          data-locked={isLocked ? 'true' : 'false'}
-          aria-label={
-            isLocked ? `Why ${movie.title} cannot be dropped` : `Drop ${movie.title}`
-          }
-          className={`mt-3 flex h-11 w-full flex-none items-center justify-center gap-1.5 rounded-md border text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson sm:h-9 ${
-            isLocked
-              ? 'border-border bg-transparent text-foreground-muted hover:border-border-hover hover:text-foreground-secondary'
-              : 'border-crimson/40 bg-transparent text-crimson hover:bg-crimson hover:text-white'
-          }`}
-        >
-          {isLocked && <Lock className="h-3 w-3" aria-hidden="true" />}
-          Drop
-        </button>
       </div>
-    </div>
+    </button>
   )
 }
