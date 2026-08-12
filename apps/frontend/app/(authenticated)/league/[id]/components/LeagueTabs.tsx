@@ -15,6 +15,8 @@ interface Props {
 export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }: Props): React.ReactElement {
   const pathname = usePathname()
   const tabs = getVisibleTabs(league, isOwner, outbidCount)
+  const primaryTabs = tabs.filter((tab) => !tab.secondary)
+  const secondaryTabs = tabs.filter((tab) => tab.secondary)
 
   return (
     <nav
@@ -22,7 +24,7 @@ export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }:
       aria-label="League navigation"
       data-testid="league-tabs"
     >
-      {tabs.map((tab) => {
+      {primaryTabs.map((tab) => {
         const isActive = isTabActive(pathname, tab.href)
 
         return (
@@ -48,6 +50,33 @@ export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }:
           </Link>
         )
       })}
+
+      {/*
+        Demoted tabs sit at the far end behind a hairline, quieter than an inactive
+        tab and without the underline slot - present for reference, not competing
+        for the click. Kept inside this nav so it stays one labelled landmark.
+      */}
+      {secondaryTabs.length > 0 && (
+        <div className="ml-auto flex items-center gap-4 self-center border-l border-border pl-4">
+          {secondaryTabs.map((tab) => {
+            const isActive = isTabActive(pathname, tab.href)
+
+            return (
+              <Link
+                key={tab.name}
+                href={tab.href}
+                data-testid="league-tab-secondary"
+                className={`text-sm transition-colors ${
+                  isActive ? 'text-gold' : 'text-foreground-muted hover:text-foreground-secondary'
+                }`}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                {tab.name}
+              </Link>
+            )
+          })}
+        </div>
+      )}
     </nav>
   )
 }

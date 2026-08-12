@@ -4,8 +4,12 @@ import { waitForPageSettle } from '../../helpers/ui.helper'
 /**
  * League Tabs Navigation E2E Tests
  *
- * Tests the horizontal tab navigation (LeagueTabs) inside the league layout.
+ * Tests the horizontal tab navigation (LeagueTabs) inside the league layout, plus
+ * the bottom bar (LeagueBottomNav) that replaces it below `lg`.
  * Tabs: Overview, Standings, Draft, Bidding, Trading, Roster, Settings (owner only)
+ *
+ * Draft is demoted once a league reaches active/completed: still reachable, but it
+ * leaves the primary tab run and the mobile bottom bar. See leagueNav.ts.
  *
  * Fixtures used:
  * - activeLeague: active-status league with testUser as non-owner participant
@@ -100,6 +104,37 @@ test.describe('League Tabs Navigation', () => {
       await expect(tabNav.getByRole('link')).toHaveCount(3)
     })
 
+    test('draft is demoted to a secondary link for active leagues', async ({
+      authedPage,
+      activeLeague,
+    }) => {
+      await authedPage.goto(`/league/${activeLeague.id}/dashboard`)
+      await waitForPageSettle(authedPage)
+
+      const tabNav = authedPage.locator('[data-testid="league-tabs"]')
+      await expect(tabNav).toBeVisible({ timeout: 10000 })
+
+      // Still reachable, but rendered outside the primary tab run
+      const secondary = tabNav.locator('[data-testid="league-tab-secondary"]')
+      await expect(secondary).toHaveCount(1)
+      await expect(secondary).toHaveText('Draft')
+      await expect(secondary).toHaveAttribute('href', `/league/${activeLeague.id}/draft`)
+    })
+
+    test('draft stays a primary tab before the season starts', async ({
+      authedPage,
+      draftReadyLeague,
+    }) => {
+      await authedPage.goto(`/league/${draftReadyLeague.id}/draft`)
+      await waitForPageSettle(authedPage)
+
+      const tabNav = authedPage.locator('[data-testid="league-tabs"]')
+      await expect(tabNav).toBeVisible({ timeout: 10000 })
+
+      await expect(tabNav.locator('[data-testid="league-tab-secondary"]')).toHaveCount(0)
+      await expect(tabNav.getByRole('link', { name: 'Draft' })).toHaveAttribute('aria-current', 'page')
+    })
+
     test('settings tab not visible for non-owner', async ({
       authedPage,
       activeLeague,
@@ -167,5 +202,48 @@ test.describe('League Tabs Navigation', () => {
       // Verify tab count: 6 links for non-owner
       await expect(tabNav.getByRole('link')).toHaveCount(6)
     })
+  })
+})
+
+test.describe('League Bottom Nav (mobile)', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('active league puts Roster on the bar and Draft in the More sheet', async ({
+    authedPage,
+    activeLeague,
+  }) => {
+    await authedPage.goto(`/league/${activeLeague.id}/dashboard`)
+    await waitForPageSettle(authedPage)
+
+    const bottomNav = authedPage.locator('[data-testid="league-bottom-nav"]')
+    await expect(bottomNav).toBeVisible({ timeout: 10000 })
+
+    // Roster takes the slot Draft used to hold during the season
+    await expect(bottomNav.getByRole('link', { name: 'Roster' })).toBeVisible()
+    await expect(bottomNav.getByRole('link', { name: 'Draft' })).toHaveCount(0)
+
+    // Draft is one tap away rather than gone
+    await bottomNav.getByRole('button', { name: 'More' }).click()
+
+    const sheet = authedPage.getByRole('dialog', { name: 'More league pages' })
+    await expect(sheet).toBeVisible()
+
+    const draftLink = sheet.getByRole('link', { name: 'Draft' })
+    await expect(draftLink).toBeVisible()
+    await draftLink.click()
+    await authedPage.waitForURL(`**/league/${activeLeague.id}/draft`)
+  })
+
+  test('pre-active league keeps Draft on the bar', async ({
+    authedPage,
+    draftReadyLeague,
+  }) => {
+    await authedPage.goto(`/league/${draftReadyLeague.id}/dashboard`)
+    await waitForPageSettle(authedPage)
+
+    const bottomNav = authedPage.locator('[data-testid="league-bottom-nav"]')
+    await expect(bottomNav).toBeVisible({ timeout: 10000 })
+
+    await expect(bottomNav.getByRole('link', { name: 'Draft' })).toBeVisible()
   })
 })
