@@ -9,7 +9,8 @@ import { waitForPageSettle } from '../../helpers/ui.helper'
  * Tabs: Overview, Standings, Draft, Bidding, Trading, Roster, Settings (owner only)
  *
  * Draft is demoted once a league reaches active/completed: still reachable, but it
- * leaves the primary tab run and the mobile bottom bar. See leagueNav.ts.
+ * sorts to the end of the desktop strip (ahead of Settings) and drops off the
+ * mobile bottom bar into the "More" sheet. See leagueNav.ts.
  *
  * Fixtures used:
  * - activeLeague: active-status league with testUser as non-owner participant
@@ -104,7 +105,7 @@ test.describe('League Tabs Navigation', () => {
       await expect(tabNav.getByRole('link')).toHaveCount(3)
     })
 
-    test('draft is demoted to a secondary link for active leagues', async ({
+    test('draft is demoted to the end of the strip for active leagues', async ({
       authedPage,
       activeLeague,
     }) => {
@@ -114,11 +115,17 @@ test.describe('League Tabs Navigation', () => {
       const tabNav = authedPage.locator('[data-testid="league-tabs"]')
       await expect(tabNav).toBeVisible({ timeout: 10000 })
 
-      // Still reachable, but rendered outside the primary tab run
-      const secondary = tabNav.locator('[data-testid="league-tab-secondary"]')
-      await expect(secondary).toHaveCount(1)
-      await expect(secondary).toHaveText('Draft')
-      await expect(secondary).toHaveAttribute('href', `/league/${activeLeague.id}/draft`)
+      const demoted = tabNav.locator('[data-testid="league-tab-secondary"]')
+      await expect(demoted).toHaveCount(1)
+      await expect(demoted).toHaveText('Draft')
+
+      // Sorts to the end of the run instead of keeping its canonical third slot.
+      // testUser is not the owner here, so Draft is last; for owners it lands
+      // immediately before Settings.
+      await expect(tabNav.getByRole('link').last()).toHaveAttribute(
+        'href',
+        `/league/${activeLeague.id}/draft`,
+      )
     })
 
     test('draft stays a primary tab before the season starts', async ({

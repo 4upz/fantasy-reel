@@ -25,7 +25,8 @@ export const TAB_VISIBILITY: Record<string, Set<LeagueStatus>> = {
 /**
  * Statuses in which a tab stays reachable but stops being a primary destination.
  * Visibility and prominence are separate axes: a demoted tab is still in the list,
- * it just moves to the edge of the desktop strip and into the mobile "More" sheet.
+ * it just sorts to the end of the desktop strip and drops into the mobile "More"
+ * sheet.
  *
  * Draft keeps its slot through counterpicking, because the board still runs that
  * round. It only steps aside once the league is playing out its season, where it
@@ -33,6 +34,22 @@ export const TAB_VISIBILITY: Record<string, Set<LeagueStatus>> = {
  */
 const TAB_DEMOTED_IN: Record<string, Set<LeagueStatus>> = {
   Draft: new Set(['active', 'completed']),
+}
+
+/**
+ * Slides demoted tabs to the end of the run, ahead of Settings. Far enough right
+ * to read as an afterthought, but still part of the row - pulling one out to its
+ * own right-aligned position made it a focal point again.
+ */
+function orderDemotedLast(tabs: LeagueTab[]): LeagueTab[] {
+  const demoted = tabs.filter((tab) => tab.secondary)
+  if (demoted.length === 0) return tabs
+
+  const rest = tabs.filter((tab) => !tab.secondary)
+  const settingsIndex = rest.findIndex((tab) => tab.name === 'Settings')
+  const insertAt = settingsIndex === -1 ? rest.length : settingsIndex
+
+  return [...rest.slice(0, insertAt), ...demoted, ...rest.slice(insertAt)]
 }
 
 /** Tabs the league's current status makes reachable, in canonical order. */
@@ -49,9 +66,11 @@ export function getVisibleTabs(league: League, isOwner: boolean, outbidCount: nu
     ...(isOwner ? [{ name: 'Settings', href: `${baseUrl}/settings` }] : []),
   ]
 
-  return allTabs
+  const visible = allTabs
     .filter((tab) => TAB_VISIBILITY[tab.name]?.has(league.status))
     .map((tab) => (TAB_DEMOTED_IN[tab.name]?.has(league.status) ? { ...tab, secondary: true } : tab))
+
+  return orderDemotedLast(visible)
 }
 
 export function isTabActive(pathname: string, href: string): boolean {
