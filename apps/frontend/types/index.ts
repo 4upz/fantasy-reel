@@ -472,8 +472,10 @@ export interface TradeOffer {
   response_message: string | null
   veto_reason: string | null
   /**
-   * Commissioner who approved the trade before its review window expired.
-   * NULL when the trade completed on the review clock instead.
+   * Commissioner who approved the trade before its review window expired;
+   * NULL when it completed on the review clock instead. Audit only -- the UI
+   * deliberately doesn't distinguish the two, since a completed trade had the
+   * commissioner's blessing either way.
    */
   approved_by?: string | null
   created_at: string
