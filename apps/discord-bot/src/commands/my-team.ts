@@ -3,6 +3,7 @@ import { getSupabase } from '../supabase.js'
 import { config } from '../config.js'
 import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
 import { requireLinkedLeague } from '../utils/channel-league.js'
+import { fetchTeamHoldings } from '../utils/roster.js'
 import { truncate } from '../utils/format.js'
 import type { Command } from './index.js'
 
@@ -82,21 +83,11 @@ export const myTeam: Command = {
     const myScore = leagueScores.find((s) => s.teams?.id === team.id)
     const totalPoints = myScore?.total_points ?? 0
 
-    const { data: draftRows } = await supabase
-      .from('draft_picks')
-      .select('movies(title, release_date, fantasy_points)')
-      .eq('team_id', team.id)
-      .is('dropped_at', null)
-      .returns<TeamRosterRow[]>()
-
-    const { data: pickupRows } = await supabase
-      .from('pickups')
-      .select('movies(title, release_date, fantasy_points)')
-      .eq('team_id', team.id)
-      .is('dropped_at', null)
-      .returns<TeamRosterRow[]>()
-
-    const roster = [...(draftRows || []), ...(pickupRows || [])]
+    const { data: roster } = await fetchTeamHoldings<TeamRosterRow>(
+      supabase,
+      team.id,
+      'movies(title, release_date, fantasy_points)'
+    )
 
     const rosterLines = roster.length > 0
       ? roster.map((r) => {
