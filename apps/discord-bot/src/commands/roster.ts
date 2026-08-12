@@ -4,10 +4,23 @@ import {
 } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
+import { requireLinkedLeague } from '../utils/channel-league.js'
+import { fetchTeamHoldings } from '../utils/roster.js'
 import { truncate } from '../utils/format.js'
 import type { Command } from './index.js'
 
 const COMPACT_THRESHOLD = 8
+
+const MOVIE_FIELDS = 'movies(title, release_date, fantasy_points, reviews(source, score))'
+
+interface RosterRow {
+  movies: {
+    title?: string
+    release_date?: string | null
+    fantasy_points?: number | null
+    reviews?: Array<{ source?: string; score?: number | null }>
+  } | null
+}
 
 export const roster: Command = {
   data: new SlashCommandBuilder()
@@ -26,22 +39,10 @@ export const roster: Command = {
     const teamNameInput = interaction.options.getString('team', true)
     const supabase = getSupabase()
 
-    // Look up league from channel
-    const { data: channelLink, error: findError } = await supabase
-      .from('discord_channels')
-      .select('league_id, leagues(name)')
-      .eq('channel_id', interaction.channelId)
-      .maybeSingle()
+    const linked = await requireLinkedLeague(interaction, supabase)
+    if (!linked) return
 
-    if (findError || !channelLink) {
-      await interaction.editReply(
-        'This channel is not linked to a league. Use /set-league first.'
-      )
-      return
-    }
-
-    const leagueId = channelLink.league_id
-    const leagueName = (channelLink as { leagues?: { name?: string } }).leagues?.name || 'League'
+    const { leagueId, leagueName } = linked
 
     // Find team by name (case-insensitive) within this league
     const { data: teams, error: teamsError } = await supabase
@@ -59,29 +60,19 @@ export const roster: Command = {
 
     const team = teams[0]
 
-    // Get draft picks with movie details
-    const { data: picks, error: picksError } = await supabase
-      .from('draft_picks')
-      .select(`
-        round,
-        movies(
-          title,
-          release_date,
-          fantasy_points,
-          reviews(source, score)
-        )
-      `)
-      .eq('team_id', team.id)
-      .eq('league_id', leagueId)
-      .order('round', { ascending: true })
+    const { data: rosterRows, error: rosterError } = await fetchTeamHoldings<RosterRow>(
+      supabase,
+      team.id,
+      MOVIE_FIELDS
+    )
 
-    if (picksError) {
-      console.error('Failed to fetch roster:', picksError)
+    if (rosterError) {
+      console.error('Failed to fetch roster:', rosterError)
       await interaction.editReply('Failed to load roster. Please try again.')
       return
     }
 
-    if (!picks || picks.length === 0) {
+    if (rosterRows.length === 0) {
       const embed = createBaseEmbed(leagueName, leagueId)
         .setTitle(team.name)
         .setDescription('No movies yet.')
@@ -91,15 +82,10 @@ export const roster: Command = {
       return
     }
 
-    const isCompact = picks.length >= COMPACT_THRESHOLD
+    const isCompact = rosterRows.length >= COMPACT_THRESHOLD
 
-    const lines = picks.map((pick) => {
-      const movie = pick.movies as {
-        title?: string
-        release_date?: string
-        fantasy_points?: number | null
-        reviews?: Array<{ source?: string; score?: number | null }>
-      } | null
+    const lines = rosterRows.map((row) => {
+      const movie = row.movies
 
       if (!movie) return '- Unknown movie'
 
@@ -135,10 +121,10 @@ export const roster: Command = {
 
     const embed = createBaseEmbed(leagueName, leagueId)
       .setTitle(team.name)
-      .setDescription(lines.join('\n'))
+      .setDescription(lines.join('\n').slice(0, 4096))
       .setColor(DISCORD_COLORS.gold)
       .setURL(leagueUrl(leagueId))
-      .setFooter({ text: `${picks.length} movies -- ${leagueName}` })
+      .setFooter({ text: `${rosterRows.length} movies -- ${leagueName}` })
 
     await interaction.editReply({ embeds: [embed] })
   },
