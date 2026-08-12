@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import Image from 'next/image'
-import { Film, Trophy, ShoppingCart, Trash2, Target } from 'lucide-react'
+import { Film, Trophy, ShoppingCart, Trash2, Target, Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import type { League, Movie, TeamBudget, DraftPick, Pickup, Counterpick } from '@/types'
 
@@ -22,6 +23,25 @@ interface RosterClientProps {
   dropCount: number
   userId: string
   counterpicks: RosterCounterpick[]
+  /** Movies with an open counterpick auction, which blocks a drop. */
+  contestedMovieIds: string[]
+}
+
+/**
+ * Why a held movie cannot be dropped right now. Mirrors the checks drop-movie
+ * runs, so the roster explains the refusal instead of leaving the player to
+ * discover it by tapping.
+ */
+type DropBlocker = 'released' | 'counterpicked' | 'contested' | 'no_drops_left'
+
+/**
+ * Only the surprising blockers get a line on the card. "Released" is self
+ * evident from the score beside it, and an exhausted drop allowance belongs in
+ * the header once rather than on every card.
+ */
+const BLOCKER_NOTICE: Partial<Record<DropBlocker, string>> = {
+  counterpicked: 'Counterpicked — locked',
+  contested: 'Counterpick bid open — locked',
 }
 
 export default function RosterClient({
@@ -34,6 +54,7 @@ export default function RosterClient({
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   userId,
   counterpicks,
+  contestedMovieIds,
 }: RosterClientProps) {
   const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
   const [pickups, setPickups] = useState(initialPickups)
@@ -41,43 +62,58 @@ export default function RosterClient({
   const [droppingId, setDroppingId] = useState<string | null>(null)
 
   const canDrop = dropCount < league.drop_limit
+  const contested = useMemo(() => new Set(contestedMovieIds), [contestedMovieIds])
 
-  // Check if a movie can be dropped (not released yet)
-  const canDropMovie = (movie: Movie): boolean => {
-    if (!movie.release_date) return true // Unknown release date = can drop
-    const today = new Date().toISOString().split('T')[0]
-    return movie.release_date >= today
-  }
+  const blockerFor = useCallback(
+    (movie: Movie, counterpickedByTeamId: string | null): DropBlocker | null => {
+      // Same order drop-movie applies, so the card never promises a drop the
+      // Edge Function would refuse.
+      const today = new Date().toISOString().split('T')[0]
+      if (movie.release_date && movie.release_date < today) return 'released'
 
-  async function handleDrop(
-    id: string,
-    movieTitle: string,
-    body: Record<string, string>,
-    removeFrom: 'draftPicks' | 'pickups'
-  ): Promise<void> {
-    if (!canDrop) {
-      toast.error(`You've used all ${league.drop_limit} drops`)
-      return
-    }
-
-    setDroppingId(id)
-
-    const { error } = await callEdgeFunction('drop-movie', { body })
-
-    setDroppingId(null)
-
-    if (error) {
-      toast.error(error)
-    } else {
-      toast.success(`Dropped ${movieTitle}`)
-      if (removeFrom === 'draftPicks') {
-        setDraftPicks(prev => prev.filter(p => p.id !== id))
-      } else {
-        setPickups(prev => prev.filter(p => p.id !== id))
+      if (league.counterpicks_block_drops) {
+        if (counterpickedByTeamId) return 'counterpicked'
+        if (contested.has(movie.id)) return 'contested'
       }
-      setDropCount(prev => prev + 1)
-    }
-  }
+
+      if (!canDrop) return 'no_drops_left'
+      return null
+    },
+    [league.counterpicks_block_drops, contested, canDrop]
+  )
+
+  const dropMovie = useCallback(
+    async (
+      id: string,
+      movieTitle: string,
+      body: Record<string, string>,
+      removeFrom: 'draftPicks' | 'pickups'
+    ): Promise<void> => {
+      setDroppingId(id)
+
+      try {
+        const { error } = await callEdgeFunction('drop-movie', { body })
+
+        if (error) {
+          toast.error(error)
+          return
+        }
+
+        toast.success(`Dropped ${movieTitle}`)
+        if (removeFrom === 'draftPicks') {
+          setDraftPicks(prev => prev.filter(p => p.id !== id))
+        } else {
+          setPickups(prev => prev.filter(p => p.id !== id))
+        }
+        setDropCount(prev => prev + 1)
+      } finally {
+        setDroppingId(null)
+      }
+    },
+    []
+  )
+
+  const { execute: handleDrop } = useAsyncAction(dropMovie)
 
   const totalMovies = draftPicks.length + pickups.length
   const totalSlots = league.total_slots
@@ -100,8 +136,10 @@ export default function RosterClient({
           <p className="font-display text-2xl font-semibold text-gold">
             ${budget?.remaining_budget ?? 100}
           </p>
-          <p className="text-foreground-muted text-sm">
-            Drops: {dropCount}/{league.drop_limit} used
+          <p className={`text-sm ${canDrop ? 'text-foreground-muted' : 'text-crimson'}`}>
+            {canDrop
+              ? `Drops: ${dropCount}/${league.drop_limit} used`
+              : `No drops left (${dropCount}/${league.drop_limit} used)`}
           </p>
         </div>
       </div>
@@ -117,17 +155,21 @@ export default function RosterClient({
           <p className="text-foreground-muted">No draft picks yet.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {draftPicks.map((pick) => (
-              <MovieCard
-                key={pick.id}
-                movie={pick.movies}
-                label={`Round ${pick.round}, Pick ${pick.pick_number}`}
-                onDrop={canDrop && canDropMovie(pick.movies)
-                  ? () => handleDrop(pick.id, pick.movies.title, { draft_pick_id: pick.id }, 'draftPicks')
-                  : undefined}
-                isDropping={droppingId === pick.id}
-              />
-            ))}
+            {draftPicks.map((pick) => {
+              const blocker = blockerFor(pick.movies, pick.counterpicked_by_team_id)
+              return (
+                <MovieCard
+                  key={pick.id}
+                  movie={pick.movies}
+                  label={`Round ${pick.round}, Pick ${pick.pick_number}`}
+                  onDrop={blocker
+                    ? undefined
+                    : () => handleDrop(pick.id, pick.movies.title, { draft_pick_id: pick.id }, 'draftPicks')}
+                  blockerNotice={blocker ? BLOCKER_NOTICE[blocker] : undefined}
+                  isDropping={droppingId === pick.id}
+                />
+              )
+            })}
           </div>
         )}
       </div>
@@ -143,17 +185,21 @@ export default function RosterClient({
           <p className="text-foreground-muted">No pickups yet. Win bids to add movies!</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {pickups.map((pickup) => (
-              <MovieCard
-                key={pickup.id}
-                movie={pickup.movies}
-                label={`$${pickup.amount_paid}`}
-                onDrop={canDrop && canDropMovie(pickup.movies)
-                  ? () => handleDrop(pickup.id, pickup.movies.title, { pickup_id: pickup.id }, 'pickups')
-                  : undefined}
-                isDropping={droppingId === pickup.id}
-              />
-            ))}
+            {pickups.map((pickup) => {
+              const blocker = blockerFor(pickup.movies, pickup.counterpicked_by_team_id)
+              return (
+                <MovieCard
+                  key={pickup.id}
+                  movie={pickup.movies}
+                  label={`$${pickup.amount_paid}`}
+                  onDrop={blocker
+                    ? undefined
+                    : () => handleDrop(pickup.id, pickup.movies.title, { pickup_id: pickup.id }, 'pickups')}
+                  blockerNotice={blocker ? BLOCKER_NOTICE[blocker] : undefined}
+                  isDropping={droppingId === pickup.id}
+                />
+              )
+            })}
           </div>
         )}
       </div>
@@ -217,14 +263,16 @@ interface MovieCardProps {
   movie: Movie
   label: string
   onDrop?: () => void
+  /** Shown when the movie is held but locked, in place of the drop control. */
+  blockerNotice?: string
   isDropping?: boolean
 }
 
-function MovieCard({ movie, label, onDrop, isDropping }: MovieCardProps) {
+function MovieCard({ movie, label, onDrop, blockerNotice, isDropping }: MovieCardProps) {
   const [showDropConfirm, setShowDropConfirm] = useState(false)
 
   return (
-    <div className="card overflow-hidden group">
+    <div className="card overflow-hidden">
       {/* Poster */}
       <div className="relative aspect-[2/3] bg-elevated">
         {movie.poster_url ? (
@@ -240,36 +288,47 @@ function MovieCard({ movie, label, onDrop, isDropping }: MovieCardProps) {
           </div>
         )}
 
-        {/* Drop Button */}
+        {/* Drop control. Always visible: a hover-only reveal is unreachable on
+            touch, which is how a team can sit on a movie it meant to drop. */}
         {onDrop && !showDropConfirm && (
           <button
+            type="button"
             onClick={() => setShowDropConfirm(true)}
-            className="absolute top-2 right-2 p-2 bg-background/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-crimson"
+            aria-label={`Drop ${movie.title}`}
+            data-testid="drop-movie-button"
+            className="absolute top-2 right-2 flex h-11 w-11 items-center justify-center rounded-full border border-border bg-background/70 text-foreground-secondary backdrop-blur-sm transition-colors hover:border-crimson/60 hover:text-crimson focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-crimson sm:h-9 sm:w-9"
           >
-            <Trash2 className="w-4 h-4 text-foreground" />
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
           </button>
         )}
 
         {/* Drop Confirmation */}
         {showDropConfirm && (
-          <div className="absolute inset-0 bg-background/90 flex flex-col items-center justify-center p-4">
-            <p className="text-foreground text-center mb-3">Drop this movie?</p>
+          <div
+            role="group"
+            aria-label={`Confirm dropping ${movie.title}`}
+            className="absolute inset-0 flex flex-col items-center justify-center bg-background/90 p-4"
+          >
+            <p className="mb-1 text-center font-semibold text-foreground">Drop {movie.title}?</p>
+            <p className="mb-3 text-center text-xs text-foreground-muted">Uses one of your drops.</p>
             <div className="flex gap-2">
               <button
+                type="button"
                 onClick={() => {
                   onDrop?.()
                   setShowDropConfirm(false)
                 }}
                 disabled={isDropping}
-                className="btn btn-danger text-sm py-1 px-3"
+                className="btn btn-danger px-3 py-1 text-sm"
               >
-                {isDropping ? '...' : 'Drop'}
+                {isDropping ? 'Dropping…' : 'Drop'}
               </button>
               <button
+                type="button"
                 onClick={() => setShowDropConfirm(false)}
-                className="btn btn-ghost text-sm py-1 px-3"
+                className="btn btn-ghost px-3 py-1 text-sm"
               >
-                Cancel
+                Keep
               </button>
             </div>
           </div>
@@ -293,6 +352,12 @@ function MovieCard({ movie, label, onDrop, isDropping }: MovieCardProps) {
           </p>
         ) : (
           <p className="text-foreground-muted text-xs mt-1">Pending</p>
+        )}
+        {blockerNotice && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-foreground-muted">
+            <Lock className="h-3 w-3 flex-none" aria-hidden="true" />
+            {blockerNotice}
+          </p>
         )}
       </div>
     </div>
