@@ -43,6 +43,7 @@ export { default as MovieTimelineCard } from '../apps/frontend/app/(authenticate
 // ── League ──────────────────────────────────────────────────────────────
 export { default as LeagueListItem } from '../apps/frontend/app/components/LeagueListItem'
 export { default as BidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidCard'
+export { default as BidWeekTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline'
 export { default as CounterpickBidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard'
 export { default as CounterpickPriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickPriorityList'
 export { default as TradeOfferCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard'
