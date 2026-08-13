@@ -28,6 +28,8 @@ const MIN_DROP_LIMIT = 0
 const MAX_DROP_LIMIT = 10
 const MIN_COUNTERBID_HOURS = 1
 const MAX_COUNTERBID_HOURS = 72
+const MIN_NEW_BID_CUTOFF_HOURS = 0
+const MAX_NEW_BID_CUTOFF_HOURS = 144
 const MIN_DRAFT_COUNTERPICK_SLOTS = 0
 const MAX_DRAFT_COUNTERPICK_SLOTS = 5
 const MIN_BIDDING_COUNTERPICK_SLOTS = 0
@@ -43,6 +45,7 @@ const INITIAL_FORM_DATA = {
   draft_slots: 5,
   drop_limit: 2,
   counterbid_hours: 24,
+  new_bid_cutoff_hours: 48,
   // Counterpick configuration (database defaults)
   draft_counterpick_slots: 1,
   bidding_counterpick_slots: 0,
@@ -81,6 +84,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
           draft_slots: data.draft_slots,
           drop_limit: data.drop_limit,
           counterbid_hours: data.counterbid_hours,
+          new_bid_cutoff_hours: data.new_bid_cutoff_hours,
           // Counterpick configuration
           draft_counterpick_slots: data.draft_counterpick_slots,
           bidding_counterpick_slots: data.bidding_counterpick_slots,
@@ -312,6 +316,28 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       <span className="text-xs text-foreground-secondary">hrs</span>
                     </div>
                     <p className="text-xs text-foreground-muted mt-1">Time to counter</p>
+                  </div>
+
+                  {/* New Bid Cutoff */}
+                  <div>
+                    <label htmlFor="new-bid-cutoff-hours" className="block text-xs font-medium text-foreground-secondary mb-1">
+                      New Bid Cutoff
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        id="new-bid-cutoff-hours"
+                        value={formData.new_bid_cutoff_hours}
+                        onChange={(e) => setFormData(prev => ({ ...prev, new_bid_cutoff_hours: parseInt(e.target.value) || MIN_NEW_BID_CUTOFF_HOURS }))}
+                        className="input w-16"
+                        min={MIN_NEW_BID_CUTOFF_HOURS}
+                        max={MAX_NEW_BID_CUTOFF_HOURS}
+                      />
+                      <span className="text-xs text-foreground-secondary">hrs</span>
+                    </div>
+                    <p className="text-xs text-foreground-muted mt-1">
+                      {formData.new_bid_cutoff_hours === 0 ? 'Open all week' : 'Then counters only'}
+                    </p>
                   </div>
                 </div>
 

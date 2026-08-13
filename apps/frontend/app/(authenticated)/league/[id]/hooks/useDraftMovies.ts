@@ -21,6 +21,13 @@ type Mode = 'browse' | 'search' | 'trending'
 
 interface UseDraftMoviesOptions {
   draftedTmdbIds: Set<number>
+  /**
+   * Skip the initial browse. Set false where the movie list is supplied from
+   * elsewhere -- e.g. the bid modal past the new-bid cutoff, which offers only
+   * the movies already being bid on and would otherwise fetch a TMDb page it
+   * never shows.
+   */
+  enabled?: boolean
 }
 
 interface UseDraftMoviesReturn {
@@ -39,7 +46,7 @@ interface UseDraftMoviesReturn {
   clearSearch: () => void
 }
 
-export function useDraftMovies({ draftedTmdbIds }: UseDraftMoviesOptions): UseDraftMoviesReturn {
+export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMoviesOptions): UseDraftMoviesReturn {
   const [movies, setMovies] = useState<TMDbSearchResult[]>([])
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -218,9 +225,10 @@ export function useDraftMovies({ draftedTmdbIds }: UseDraftMoviesOptions): UseDr
   }, [browseMovies])
 
   useEffect(() => {
+    if (!enabled) return
     browseMovies(currentFiltersRef.current, 1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
     return clearDebounce

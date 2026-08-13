@@ -14,6 +14,12 @@ export interface League {
   draft_slots: number
   drop_limit: number
   counterbid_hours: number
+  /**
+   * Hours before the weekly processing deadline after which no new bids may be
+   * opened -- only raises and counters on movies already being bid on. 48 puts
+   * the cutoff at Thursday 8pm UTC; 0 disables it.
+   */
+  new_bid_cutoff_hours: number
   // Counterpick configuration
   draft_counterpick_slots: number
   bidding_counterpick_slots: number

@@ -23,6 +23,7 @@ import {
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
 import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, DiscordEmbed } from '../_shared/discord.ts'
+import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
@@ -206,32 +207,36 @@ Deno.serve(async (req) => {
     const { data: processingDeadline } = await serviceClient
       .rpc('get_next_processing_deadline')
 
-    // Check existing highest ACTIVE bid on this movie in counterpick_bids
-    const { data: existingBids } = await serviceClient
+    // Every pending bid on this movie, highest first -- not just the leader.
+    // The counter-bid phase makes "is anyone bidding on this at all" a rule of
+    // its own, and an 'outbid' row counts: that team can still counter back.
+    // Reading the group once also means the leader, this team's own bid, and the
+    // contested check all come from a single snapshot.
+    const { data: pendingBids } = await serviceClient
       .from('counterpick_bids')
       .select('*')
       .eq('league_id', league_id)
       .eq('movie_id', movie_id)
-      .eq('status', 'active')
+      .in('status', ['active', 'outbid'])
       .order('amount', { ascending: false })
-      .limit(1)
 
-    const highestBid = existingBids?.[0]
+    const highestBid = pendingBids?.find((bid) => bid.status === 'active')
+    const existingTeamBid = pendingBids?.find((bid) => bid.team_id === team.id)
+    const isAlreadyBidOn = (pendingBids?.length ?? 0) > 0
+
+    // Past the cutoff, counterpick bidding follows the same rule as pickup
+    // bidding: no opening a contest on a movie nobody is bidding on. Both kinds
+    // share get_next_processing_deadline() and sit in the same UI panel, so a
+    // split rule would give one page two deadlines.
+    const bidWindow = computeBidWindow(processingDeadline, league.new_bid_cutoff_hours)
+    if (bidWindow.isCounterBidPhase && !isAlreadyBidOn) {
+      return errorResponse(newBidClosedMessage(bidWindow), 400)
+    }
 
     // If there's a higher or equal bid, reject
     if (highestBid && highestBid.amount >= amount) {
       return errorResponse(`There is already a bid of $${highestBid.amount}. You must bid higher.`, 400)
     }
-
-    // Check for existing team bid on this movie (active or outbid) -- update if exists, insert if new
-    const { data: existingTeamBid } = await serviceClient
-      .from('counterpick_bids')
-      .select('*')
-      .eq('league_id', league_id)
-      .eq('team_id', team.id)
-      .eq('movie_id', movie_id)
-      .in('status', ['active', 'outbid'])
-      .single()
 
     let newBid
 

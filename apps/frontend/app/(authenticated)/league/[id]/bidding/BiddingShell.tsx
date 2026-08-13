@@ -4,9 +4,11 @@ import { useCallback, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSelectedLayoutSegment } from 'next/navigation'
-import { Plus, Target } from 'lucide-react'
+import { Plus, Swords, Target } from 'lucide-react'
 import type { CounterpickBid, League, PickupBid, TeamWithOwner } from '@/types'
 import { useBidding } from '../hooks/useBidding'
+import BidWeekTimeline from '../components/BidWeekTimeline'
+import { getBidPhase } from '../components/utils'
 import { BiddingProvider } from './BiddingContext'
 
 function ModalLoadingFallback(): React.ReactElement {
@@ -56,6 +58,22 @@ function SlotStat({ label, used, total }: SlotStatProps): React.ReactElement {
   )
 }
 
+/**
+ * Why the bid button is disabled, or undefined when it isn't. Two different
+ * dead ends reach the same greyed-out button, and they need different sentences.
+ */
+function getBidCtaTitle(
+  canPlaceBid: boolean,
+  isCounterBidPhase: boolean,
+  hasContestedBids: boolean,
+): string | undefined {
+  if (!canPlaceBid) return 'All pickup slots are full — drop a movie to bid again'
+  if (isCounterBidPhase && !hasContestedBids) {
+    return 'New bids are closed and no movies are currently being bid on'
+  }
+  return undefined
+}
+
 interface Props {
   league: League
   teamId: string
@@ -63,6 +81,9 @@ interface Props {
   ownedTmdbIds: number[]
   usedPickupSlots: number
   biddingCounterpickSlots: number
+  /** From get_new_bid_cutoff(); null when the league has the cutoff disabled. */
+  newBidCutoffAt: string | null
+  processingDeadline: string | null
   children: React.ReactNode
 }
 
@@ -73,6 +94,8 @@ export default function BiddingShell({
   ownedTmdbIds,
   usedPickupSlots,
   biddingCounterpickSlots,
+  newBidCutoffAt,
+  processingDeadline,
   children,
 }: Props): React.ReactElement {
   const activeSegment = useSelectedLayoutSegment()
@@ -89,6 +112,22 @@ export default function BiddingShell({
   const remainingBudget = budget?.remaining_budget ?? 100
   const canPlaceBid = usedPickupSlots < pickupSlots
   const canPlaceCounterpickBid = hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots
+
+  // Past the cutoff the week belongs to counter bidding: only movies already
+  // being bid on can be raised or countered, and nothing can be withdrawn.
+  const { isCounterBidPhase } = useMemo(
+    () => getBidPhase(newBidCutoffAt, processingDeadline),
+    [newBidCutoffAt, processingDeadline]
+  )
+
+  // An 'outbid' row still counts as a live contest -- that team can counter back.
+  const hasContestedBids = useMemo(
+    () => bids.some((bid) => bid.status === 'active' || bid.status === 'outbid'),
+    [bids]
+  )
+
+  // With no contest left to join, the bid modal has nothing to offer.
+  const canOpenBidModal = canPlaceBid && (!isCounterBidPhase || hasContestedBids)
 
   const totalPendingBids = useMemo(
     () => [...myBids, ...myCounterpickBids]
@@ -118,6 +157,8 @@ export default function BiddingShell({
       biddingCounterpickSlots,
       canPlaceBid,
       canPlaceCounterpickBid,
+      isCounterBidPhase,
+      canOpenBidModal,
       openPlaceBid,
       openCounterpickBid,
     }),
@@ -131,6 +172,8 @@ export default function BiddingShell({
       biddingCounterpickSlots,
       canPlaceBid,
       canPlaceCounterpickBid,
+      isCounterBidPhase,
+      canOpenBidModal,
       openPlaceBid,
       openCounterpickBid,
     ]
@@ -170,16 +213,18 @@ export default function BiddingShell({
             )}
           </div>
 
+          <BidWeekTimeline cutoffAt={newBidCutoffAt} processingDeadline={processingDeadline} />
+
           <div className="flex flex-col sm:flex-row gap-3 mt-4">
             <button
               onClick={() => openPlaceBid()}
-              disabled={!canPlaceBid}
-              title={canPlaceBid ? undefined : 'All pickup slots are full — drop a movie to bid again'}
+              disabled={!canOpenBidModal}
+              title={getBidCtaTitle(canPlaceBid, isCounterBidPhase, hasContestedBids)}
               className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto"
               data-testid="place-bid-button"
             >
-              <Plus className="w-5 h-5 mr-2" />
-              Place Bid
+              {isCounterBidPhase ? <Swords className="w-5 h-5 mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
+              {isCounterBidPhase ? 'Counter a Bid' : 'Place Bid'}
             </button>
 
             {canPlaceCounterpickBid && (
@@ -235,6 +280,8 @@ export default function BiddingShell({
           ownedTmdbIds={ownedTmdbIds}
           onPlaceBid={bidding.placeBid}
           counterBidTarget={counterBidTarget}
+          isCounterBidPhase={isCounterBidPhase}
+          newBidCutoffAt={newBidCutoffAt}
         />
       )}
 

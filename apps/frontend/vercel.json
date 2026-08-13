@@ -31,6 +31,10 @@
     {
       "path": "/api/cron/process-trades",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/bid-cutoff-announcement",
+      "schedule": "0 * * * *"
     }
   ]
 }

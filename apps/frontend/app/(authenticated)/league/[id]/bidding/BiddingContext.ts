@@ -20,6 +20,17 @@ export interface BiddingContextValue {
   biddingCounterpickSlots: number
   /** False once every pickup slot is filled - the team must drop before bidding again. */
   canPlaceBid: boolean
+  /**
+   * True once the week's new-bid cutoff has passed: only raises and counters on
+   * movies already being bid on, and nothing can be withdrawn.
+   */
+  isCounterBidPhase: boolean
+  /**
+   * Whether opening the bid modal leads anywhere. Narrower than `canPlaceBid`:
+   * past the cutoff it also needs a contest to join, since the modal offers
+   * only movies already being bid on.
+   */
+  canOpenBidModal: boolean
   /** False when counterpicks are off, or the team's counterpick slots are all claimed. */
   canPlaceCounterpickBid: boolean
   /** Opens the bid modal, optionally pre-aimed at a bid to outbid. */

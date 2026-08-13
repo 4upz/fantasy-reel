@@ -83,8 +83,9 @@ export default function ActiveBidsPanel(): React.ReactElement {
     teamId,
     bidding,
     biddingCounterpickSlots,
-    canPlaceBid,
     canPlaceCounterpickBid,
+    isCounterBidPhase,
+    canOpenBidModal,
     openPlaceBid,
     openCounterpickBid,
   } = useBiddingContext()
@@ -162,7 +163,8 @@ export default function ActiveBidsPanel(): React.ReactElement {
           bid={item.bid}
           isOwner={isOwner}
           bidType="pickup"
-          onCancel={isOwner ? () => handleCancelBid(item.bid.id) : undefined}
+          onCancel={isOwner && !isCounterBidPhase ? () => handleCancelBid(item.bid.id) : undefined}
+          cancelLocked={isOwner && isCounterBidPhase}
           onCounter={canCounter ? () => openPlaceBid(item.bid) : undefined}
           counterWindowClosesAt={pickupCounterWindows.get(item.bid.tmdb_id) ?? null}
         />
@@ -173,7 +175,8 @@ export default function ActiveBidsPanel(): React.ReactElement {
         bid={item.bid}
         isOwner={isOwner}
         bidType="counterpick"
-        onCancel={isOwner ? () => handleCancelCounterpickBid(item.bid.id) : undefined}
+        onCancel={isOwner && !isCounterBidPhase ? () => handleCancelCounterpickBid(item.bid.id) : undefined}
+        cancelLocked={isOwner && isCounterBidPhase}
         onCounter={canCounter ? () => openCounterpickBid(item.bid) : undefined}
         counterWindowClosesAt={counterpickCounterWindows.get(item.bid.movie_id) ?? null}
       />
@@ -269,7 +272,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
               onClick={() => openPlaceBid()}
-              disabled={!canPlaceBid}
+              disabled={!canOpenBidModal}
               className="btn btn-primary px-6 py-3"
             >
               <Plus className="w-5 h-5 mr-2" />
