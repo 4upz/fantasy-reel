@@ -168,7 +168,8 @@ function NextUpHero({
   )
 }
 
-function SectionHeader({ title, count }: { title: string; count: number }) {
+/** Shared with the league release board so the overview's sections match. */
+export function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
     <div className="flex items-baseline gap-2 px-4 pb-2">
       <h3 className="font-display text-[15px] font-semibold text-foreground">{title}</h3>

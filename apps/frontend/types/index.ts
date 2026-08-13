@@ -409,6 +409,29 @@ export interface DashboardTeam {
   movies: MovieTimelineItem[]
 }
 
+/**
+ * One unreleased movie held by any team in the league, for the dashboard's
+ * league-wide release board. Flat by design: the board prints who holds it, not
+ * the whole team row, and the shape is a superset of `LeagueMovieRef` so a row
+ * opens the shared movie dialog without converting first.
+ */
+export interface LeagueUpcomingRelease {
+  id: string
+  tmdb_id: number
+  title: string
+  poster_url: string | null
+  /** Never null in practice - the query only returns dated, future releases. */
+  release_date: string
+  /** How the holding was acquired. Drafted movies win a tie against a pickup. */
+  source: 'draft_pick' | 'pickup'
+  team_id: string
+  team_name: string
+  /** profiles.display_name is nullable, so the board falls back to the team. */
+  owner_name: string | null
+  /** Lets a row mark itself yours without the client re-deriving your team. */
+  is_current_user_team: boolean
+}
+
 export interface StandingEntry {
   rank: number
   isTied: boolean

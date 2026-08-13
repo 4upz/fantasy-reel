@@ -1,9 +1,25 @@
+/** A bare calendar date, e.g. a movie's release_date, with no time attached. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * Parse a date for display.
+ *
+ * `new Date('2026-08-13')` is UTC midnight, which renders as the 12th for
+ * everyone west of UTC - so every release date in the app read a day early.
+ * A bare date has no timezone to convert between, so it is built as a local
+ * date instead. Timestamps still parse normally.
+ */
+function parseForDisplay(dateString: string): Date {
+  if (!DATE_ONLY.test(dateString)) return new Date(dateString)
+  const [year, month, day] = dateString.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 /**
  * Format a date string for display
  */
 export function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
+  return parseForDisplay(dateString).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
