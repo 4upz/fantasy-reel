@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { Gavel, Swords } from 'lucide-react'
 import { getBidPhase, formatDeadlineShort, formatTimeRemaining } from './utils'
 
@@ -22,19 +22,47 @@ interface BidWeekTimelineProps {
  *
  * Renders nothing when the league has no cutoff configured -- there is no split
  * to draw, and an always-full bar would just be furniture.
+ *
+ * Everything it draws depends on the clock, and two of those dependencies break
+ * server rendering: the fill width is a continuous function of "now", and the
+ * labels format in the viewer's timezone, which on Vercel is UTC on the server
+ * and something else in the browser. Both hydrate-mismatch -- the timezone one
+ * on every request from outside UTC. So the clock is read once after mount and
+ * the first paint is a placeholder holding the same height, which keeps the
+ * header card from reflowing when the real bar replaces it.
+ *
+ * `isCounterBidPhase` is left to render normally elsewhere: it compares two
+ * absolute timestamps, so server and client agree except in the sub-second
+ * window where the cutoff passes between them.
  */
 export default function BidWeekTimeline({
   cutoffAt,
   processingDeadline,
 }: BidWeekTimelineProps): React.ReactElement | null {
-  const phase = useMemo(
-    () => getBidPhase(cutoffAt, processingDeadline),
-    [cutoffAt, processingDeadline]
-  )
+  const [now, setNow] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setNow(new Date())
+  }, [])
 
   if (!cutoffAt || !processingDeadline) return null
 
-  const { isCounterBidPhase, cutoffFraction, elapsedFraction } = phase
+  // Same height as the resolved bar, so the header card doesn't reflow.
+  if (!now) {
+    return (
+      <div className="mt-4 pt-4 border-t border-border" data-testid="bid-week-timeline">
+        <div className="h-4 mb-2.5" />
+        <div className="h-1.5 rounded-full bg-elevated" />
+        <div className="h-4 mt-2" />
+      </div>
+    )
+  }
+
+  const { isCounterBidPhase, cutoffFraction, elapsedFraction } = getBidPhase(
+    cutoffAt,
+    processingDeadline,
+    now,
+  )
   const cutoffPct = `${cutoffFraction * 100}%`
   const elapsedPct = `${elapsedFraction * 100}%`
 

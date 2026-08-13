@@ -5,11 +5,14 @@ import Image from 'next/image'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
 import type { MovieWithScores, RankedTeamFull } from '@/types'
+import TeamFaab from './TeamFaab'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 import { getTmdbPosterUrl } from '../components/utils'
 
 interface Props {
   rankedTeam: RankedTeamFull
+  /** The league's starting purse, or null when the league doesn't use FAAB. */
+  startingFaab: number | null
 }
 
 interface RosterEntry {
@@ -53,7 +56,7 @@ function BreakdownTile({ value, label, tone }: { value: number; label: string; t
  * apart to show a roster, the selected team's detail opens beside it and stays
  * put while the list scrolls.
  */
-export default function TeamDetailRail({ rankedTeam }: Props) {
+export default function TeamDetailRail({ rankedTeam, startingFaab }: Props) {
   const [selected, setSelected] = useState<MovieWithScores | null>(null)
   const { participant, draftPicks, pickups, counterpicks } = rankedTeam
   const team = participant.teams
@@ -97,6 +100,8 @@ export default function TeamDetailRail({ rankedTeam }: Props) {
           tone={counterpickPoints >= 0 ? 'text-success' : 'text-crimson'}
         />
       </div>
+
+      {startingFaab !== null && <TeamFaab budget={team?.team_budgets} startingFaab={startingFaab} />}
 
       {roster.length > 0 ? (
         roster.map(({ key, movie, points }) => (
