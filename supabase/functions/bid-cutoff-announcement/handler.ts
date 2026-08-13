@@ -54,7 +54,6 @@ interface LeagueRow {
 interface ContestSummary {
   title: string
   highBid: number
-  bidders: number
   isCounterpick: boolean
 }
 
@@ -72,10 +71,15 @@ interface CounterpickBidRow {
 }
 
 /**
- * Collapse a set of bid rows into one line per movie: the leading amount and
- * how many teams are in on it. Amounts are already public on the bidding page,
- * but who bid what is not surfaced here -- the same restraint the per-bid
- * embeds keep.
+ * Collapse a set of bid rows into one line per movie, carrying only the leading
+ * amount. That amount is already public on the bidding page; everything about
+ * *who* is bidding stays hidden until the round settles -- not just names but
+ * how many teams are involved, since a count tells you how hard you would have
+ * to push. process-bids names the winner and the beaten teams afterwards.
+ *
+ * The dedupe by movie is part of that guarantee, not just tidiness: one field
+ * per bid rather than per movie would let anyone count the rows and recover the
+ * number of bidders.
  */
 function summarizeContests(
   pickupBids: PickupBidRow[],
@@ -87,10 +91,9 @@ function summarizeContests(
     const existing = byKey.get(key)
     if (existing) {
       existing.highBid = Math.max(existing.highBid, amount)
-      existing.bidders += 1
       return
     }
-    byKey.set(key, { title, highBid: amount, bidders: 1, isCounterpick })
+    byKey.set(key, { title, highBid: amount, isCounterpick })
   }
 
   for (const bid of pickupBids) {
@@ -121,9 +124,7 @@ export function buildCutoffEmbed(params: {
 
   const movieFields = shown.map((contest) => ({
     name: `${contest.isCounterpick ? '🎯 ' : ''}${contest.title}`,
-    value:
-      `High bid $${contest.highBid}` +
-      (contest.bidders > 1 ? ` · ${contest.bidders} teams` : ''),
+    value: `High bid $${contest.highBid}`,
     inline: true,
   }))
 

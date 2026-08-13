@@ -121,11 +121,11 @@ Deno.test('bid-cutoff-announcement', async (t) => {
       // Highest pot first.
       assertEquals(names[0], 'Wicked 2')
 
-      // The contested movie reports its leading amount and that two teams are on it.
+      // Only the leading amount. Dune 3 has two bidders and Wicked 2 has one,
+      // and their fields must be indistinguishable in shape -- a count would
+      // tell a rival how hard they'd have to push.
       const dune = fields.find((f) => f.name === 'Dune 3')!
-      assertEquals(dune.value, 'High bid $12 · 2 teams')
-
-      // A single-bidder contest omits the team count.
+      assertEquals(dune.value, 'High bid $12')
       assertEquals(fields.find((f) => f.name === 'Wicked 2')!.value, 'High bid $30')
 
       // The close reminder rides along as a Discord timestamp so each member
@@ -133,6 +133,51 @@ Deno.test('bid-cutoff-announcement', async (t) => {
       const unix = Math.floor(new Date(PROCESSING_DEADLINE).getTime() / 1000)
       const closes = fields.find((f) => f.name === 'Counter bidding closes')!
       assertEquals(closes.value, `<t:${unix}:F> (<t:${unix}:R>)`)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('reveals nothing about who is bidding, or how many are', async () => {
+    const { calls, restore } = stubFetch()
+    try {
+      const db = baseDb()
+      // Four teams pile onto one movie and one team sits alone on another. The
+      // embed must not let a reader tell those two situations apart.
+      db.pickup_bids = [
+        { league_id: LEAGUE_ID, tmdb_id: 101, amount: 40, status: 'active', movie_data: { title: 'Dune 3' } },
+        { league_id: LEAGUE_ID, tmdb_id: 101, amount: 30, status: 'outbid', movie_data: { title: 'Dune 3' } },
+        { league_id: LEAGUE_ID, tmdb_id: 101, amount: 20, status: 'outbid', movie_data: { title: 'Dune 3' } },
+        { league_id: LEAGUE_ID, tmdb_id: 101, amount: 10, status: 'outbid', movie_data: { title: 'Dune 3' } },
+        { league_id: LEAGUE_ID, tmdb_id: 202, amount: 40, status: 'active', movie_data: { title: 'Wicked 2' } },
+      ]
+      db.counterpick_bids = []
+      const client = createMockDbClient(db, { rpc: RPC, unique: UNIQUE })
+
+      await runBidCutoffAnnouncement(client, AFTER_CUTOFF)
+
+      const fields = sentEmbed(calls).fields ?? []
+      const contested = fields.find((f) => f.name === 'Dune 3')!
+      const uncontested = fields.find((f) => f.name === 'Wicked 2')!
+
+      // Same leading amount, four bidders versus one: identical rendering.
+      assertEquals(contested.value, uncontested.value)
+
+      // One field per movie, so the row count can't be used to derive the
+      // number of bidders either.
+      assertEquals(fields.filter((f) => f.name === 'Dune 3').length, 1)
+
+      // Every movie field is exactly the leading amount and nothing else.
+      for (const field of fields.filter((f) => f.value.startsWith('High bid'))) {
+        assertEquals(/^High bid \$\d+$/.test(field.value), true, field.value)
+      }
+
+      // No count of bidders anywhere in the payload. The description says
+      // "counter another team's", which is generic copy, so match a quantity
+      // rather than the bare word.
+      const payload = JSON.stringify(calls[0].body)
+      assertEquals(/\d+\s+teams?\b/.test(payload), false, payload)
+      assertEquals(/\bbidders?\b/.test(payload), false, payload)
     } finally {
       restore()
     }
@@ -267,7 +312,6 @@ Deno.test('bid-cutoff-announcement', async (t) => {
     const contests = Array.from({ length: 26 }, (_, i) => ({
       title: `Movie ${i}`,
       highBid: 26 - i,
-      bidders: 1,
       isCounterpick: false,
     }))
 

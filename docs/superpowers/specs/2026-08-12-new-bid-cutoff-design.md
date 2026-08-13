@@ -173,9 +173,15 @@ three things the commissioner asked for:
 
 - **Headline** — the new-bid deadline has been reached; the counter-bid phase is
   open.
-- **Pending-bid summary** — every movie with a live bid this week, its current
-  high bid, and how many teams are on it. Pickup and counterpick bids in one
-  list, capped at Discord's field limit.
+- **Pending-bid summary** — every movie with a live bid this week and its
+  current high bid, nothing else. Pickup and counterpick bids in one list,
+  capped at Discord's field limit.
+
+  Who is bidding stays hidden until the round settles, and that includes *how
+  many* are: a count tells a rival how hard they would have to push, which is
+  the same information a name would give them. One field per movie rather than
+  per bid is part of the same guarantee — otherwise the row count recovers it.
+  `process-bids` names the winner and the beaten teams once the round is over.
 - **Close reminder** — when bids process, as a `<t:…>` timestamp so each member
   reads it in their own timezone. This goes in a field, not the footer, because
   Discord does not render timestamp markup in footers.
