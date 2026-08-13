@@ -10,7 +10,7 @@ interface UseBiddingOptions {
   teamId: string
 }
 
-interface UseBiddingReturn {
+export interface UseBiddingReturn {
   bids: PickupBid[]
   myBids: PickupBid[]
   budget: TeamBudget | null
