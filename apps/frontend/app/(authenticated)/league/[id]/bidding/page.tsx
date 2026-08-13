@@ -49,7 +49,16 @@ export default async function BiddingPage({ params }: PageProps) {
   // or from a won bid (pickups) -- the same union is_movie_eligible_for_pickup()
   // checks server-side. Dropped rows release the movie back into the pool, so
   // they're excluded here too.
-  const [participantResult, draftPicksResult, pickupsResult] = await Promise.all([
+  // The new-bid cutoff and the deadline it hangs off both come from the
+  // database rather than being recomputed here, so the client can never drift
+  // from get_next_processing_deadline()'s idea of when the week turns over.
+  const [
+    participantResult,
+    draftPicksResult,
+    pickupsResult,
+    cutoffResult,
+    deadlineResult,
+  ] = await Promise.all([
     supabase
       .from('league_participants')
       .select(`*, teams (*)`)
@@ -67,6 +76,8 @@ export default async function BiddingPage({ params }: PageProps) {
       .select(`team_id, movies (tmdb_id)`)
       .eq('league_id', id)
       .is('dropped_at', null),
+    supabase.rpc('get_new_bid_cutoff', { p_league_id: id }),
+    supabase.rpc('get_next_processing_deadline'),
   ])
 
   const { data: participant } = participantResult
@@ -92,6 +103,8 @@ export default async function BiddingPage({ params }: PageProps) {
       ownedTmdbIds={ownedTmdbIds}
       usedPickupSlots={usedPickupSlots}
       biddingCounterpickSlots={league.bidding_counterpick_slots ?? 0}
+      newBidCutoffAt={(cutoffResult.data as string | null) ?? null}
+      processingDeadline={(deadlineResult.data as string | null) ?? null}
     />
   )
 }

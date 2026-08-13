@@ -10,6 +10,9 @@ interface Props {
   ownedTmdbIds: number[]
   usedPickupSlots: number
   biddingCounterpickSlots: number
+  /** From get_new_bid_cutoff(); null when the league has the cutoff disabled. */
+  newBidCutoffAt: string | null
+  processingDeadline: string | null
 }
 
 export default function BiddingClient({
@@ -18,6 +21,8 @@ export default function BiddingClient({
   ownedTmdbIds,
   usedPickupSlots,
   biddingCounterpickSlots,
+  newBidCutoffAt,
+  processingDeadline,
 }: Props): React.ReactElement {
   const {
     bids,
@@ -49,6 +54,8 @@ export default function BiddingClient({
       onCancelBid={cancelBid}
       biddingCounterpickCount={biddingCounterpickCount}
       biddingCounterpickSlots={biddingCounterpickSlots}
+      newBidCutoffAt={newBidCutoffAt}
+      processingDeadline={processingDeadline}
       counterpickBids={counterpickBids}
       myCounterpickBids={myCounterpickBids}
       onPlaceCounterpickBid={placeCounterpickBid}

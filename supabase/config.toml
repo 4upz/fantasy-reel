@@ -475,6 +475,9 @@ verify_jwt = false
 [functions.weekly-releases-digest]
 verify_jwt = false
 
+[functions.bid-cutoff-announcement]
+verify_jwt = false
+
 [functions.sync-release-dates]
 verify_jwt = false
 

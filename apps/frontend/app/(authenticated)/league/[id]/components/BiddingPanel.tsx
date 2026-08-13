@@ -2,13 +2,14 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import dynamic from 'next/dynamic'
-import { Plus, TrendingUp, AlertCircle, Film, Sparkles, Target } from 'lucide-react'
+import { Plus, TrendingUp, AlertCircle, Film, Sparkles, Target, Swords } from 'lucide-react'
 import { toast } from 'sonner'
 import type { League, PickupBid, TeamBudget, CounterpickBid } from '@/types'
 import BidCard from './BidCard'
+import BidWeekTimeline from './BidWeekTimeline'
 import CounterpickBidCard from './CounterpickBidCard'
 import CounterpickPriorityList from './CounterpickPriorityList'
-import { isMovieBiddable, latestOpenCounterWindow } from './utils'
+import { isMovieBiddable, latestOpenCounterWindow, getBidPhase } from './utils'
 
 function ModalLoadingFallback(): React.ReactElement {
   return (
@@ -57,6 +58,13 @@ function counterWindowsByMovie<K, B extends { response_deadline: string | null }
     if (closesAt) windows.set(key, closesAt)
   }
   return windows
+}
+
+/** Why the bid CTA is disabled, or undefined when it isn't. */
+function getBidCtaTitle(hasFreeSlot: boolean, canOpenBidModal: boolean): string | undefined {
+  if (!hasFreeSlot) return 'All pickup slots are full — drop a movie to bid again'
+  if (!canOpenBidModal) return 'New bids are closed and no movies are currently being bid on'
+  return undefined
 }
 
 interface UnifiedBidSectionProps {
@@ -111,6 +119,9 @@ interface BiddingPanelProps {
   onPlaceCounterpickBid: (movieId: string, amount: number) => Promise<{ success: boolean; error?: string }>
   onCancelCounterpickBid: (bidId: string) => Promise<{ success: boolean; error?: string }>
   onReorderCounterpickBids: (bidIds: string[]) => Promise<{ success: boolean; error?: string }>
+  /** From get_new_bid_cutoff(); null when the league has the cutoff disabled. */
+  newBidCutoffAt: string | null
+  processingDeadline: string | null
 }
 
 export default function BiddingPanel({
@@ -130,6 +141,8 @@ export default function BiddingPanel({
   onPlaceCounterpickBid,
   onCancelCounterpickBid,
   onReorderCounterpickBids,
+  newBidCutoffAt,
+  processingDeadline,
 }: BiddingPanelProps): React.ReactElement {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [counterBidTarget, setCounterBidTarget] = useState<PickupBid | null>(null)
@@ -186,6 +199,23 @@ export default function BiddingPanel({
     return { outbidCounterpickBids: outbid, activeCounterpickBids: active, otherCounterpickBids: other }
   }, [myCounterpickBids, counterpickBids, teamId])
 
+  // Past the cutoff, the week belongs to counter bidding: only movies already
+  // being bid on can be raised or countered, and nothing can be withdrawn.
+  const { isCounterBidPhase } = useMemo(
+    () => getBidPhase(newBidCutoffAt, processingDeadline),
+    [newBidCutoffAt, processingDeadline]
+  )
+
+  // Is anything still open to a bid from this team once the cutoff has passed?
+  // An 'outbid' row counts -- that contest is live and can be countered back.
+  const hasContestedBids = bids.some(bid => bid.status === 'active' || bid.status === 'outbid')
+
+  // With no contest left to join, the bid modal has nothing to offer.
+  const canOpenBidModal = !isCounterBidPhase || hasContestedBids
+
+  const bidCtaLabel = isCounterBidPhase ? 'Counter a Bid' : 'Place Bid'
+  const bidCtaTitle = getBidCtaTitle(availableSlots > 0, canOpenBidModal)
+
   const pickupCounterWindows = useMemo(
     () => counterWindowsByMovie(bids, (bid) => bid.tmdb_id),
     [bids]
@@ -228,7 +258,8 @@ export default function BiddingPanel({
           bid={item.bid}
           isOwner={isOwner}
           bidType="pickup"
-          onCancel={isOwner ? () => handleCancelBid(item.bid.id) : undefined}
+          onCancel={isOwner && !isCounterBidPhase ? () => handleCancelBid(item.bid.id) : undefined}
+          cancelLocked={isOwner && isCounterBidPhase}
           onCounter={canCounter ? () => handleCounter(item.bid) : undefined}
           counterWindowClosesAt={pickupCounterWindows.get(item.bid.tmdb_id) ?? null}
         />
@@ -239,7 +270,8 @@ export default function BiddingPanel({
         bid={item.bid}
         isOwner={isOwner}
         bidType="counterpick"
-        onCancel={isOwner ? () => handleCancelCounterpickBid(item.bid.id) : undefined}
+        onCancel={isOwner && !isCounterBidPhase ? () => handleCancelCounterpickBid(item.bid.id) : undefined}
+        cancelLocked={isOwner && isCounterBidPhase}
         onCounter={canCounter ? () => handleCounterCounterpickBid(item.bid) : undefined}
         counterWindowClosesAt={counterpickCounterWindows.get(item.bid.movie_id) ?? null}
       />
@@ -295,17 +327,19 @@ export default function BiddingPanel({
           )}
         </div>
 
+        <BidWeekTimeline cutoffAt={newBidCutoffAt} processingDeadline={processingDeadline} />
+
         {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 mt-4">
           <button
             onClick={() => setIsModalOpen(true)}
-            disabled={availableSlots <= 0}
-            title={availableSlots <= 0 ? 'All pickup slots are full — drop a movie to bid again' : undefined}
+            disabled={availableSlots <= 0 || !canOpenBidModal}
+            title={bidCtaTitle}
             className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto"
             data-testid="place-bid-button"
           >
-            <Plus className="w-5 h-5 mr-2" />
-            Place Bid
+            {isCounterBidPhase ? <Swords className="w-5 h-5 mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
+            {bidCtaLabel}
           </button>
 
           {hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots && (
@@ -422,7 +456,8 @@ export default function BiddingPanel({
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
               onClick={() => setIsModalOpen(true)}
-              disabled={availableSlots <= 0}
+              disabled={availableSlots <= 0 || !canOpenBidModal}
+              title={bidCtaTitle}
               className="btn btn-primary px-6 py-3"
             >
               <Plus className="w-5 h-5 mr-2" />
@@ -455,6 +490,8 @@ export default function BiddingPanel({
           ownedTmdbIds={ownedTmdbIds}
           onPlaceBid={onPlaceBid}
           counterBidTarget={counterBidTarget}
+          isCounterBidPhase={isCounterBidPhase}
+          newBidCutoffAt={newBidCutoffAt}
         />
       )}
 

@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { AlertTriangle, Film, Trash2, Target } from 'lucide-react'
+import { AlertTriangle, Film, Lock, Target, Trash2 } from 'lucide-react'
 import type { CounterpickBid } from '@/types'
 import BidAmountAndDeadline from './BidAmountAndDeadline'
 import { getTmdbPosterUrl, getBidTypeClass } from './utils'
@@ -10,6 +10,8 @@ interface CounterpickBidCardProps {
   bid: CounterpickBid
   isOwner: boolean
   onCancel?: () => void
+  /** See BidCard: the bid is committed for the week once the cutoff passes. */
+  cancelLocked?: boolean
   onCounter?: () => void
   bidType?: 'pickup' | 'counterpick'
   /**
@@ -20,7 +22,7 @@ interface CounterpickBidCardProps {
   counterWindowClosesAt?: string | null
 }
 
-export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, bidType, counterWindowClosesAt }: CounterpickBidCardProps) {
+export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt }: CounterpickBidCardProps) {
   const isOutbid = bid.status === 'outbid'
   const isActive = bid.status === 'active'
   const movieTitle = bid.movies?.title || 'Unknown Movie'
@@ -33,6 +35,7 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
   const showRecoverButton = isOutbid && isOwner && !!onCounter
   const showRaiseButton = isActive && !!onCounter
   const showCancelButton = isOwner && isActive && !!onCancel
+  const showCancelLock = isOwner && isActive && !onCancel && !!cancelLocked
 
   return (
     <div
@@ -86,7 +89,7 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
         </div>
 
         {/* Actions */}
-        {(showRecoverButton || showRaiseButton || showCancelButton) && (
+        {(showRecoverButton || showRaiseButton || showCancelButton || showCancelLock) && (
           <div className="flex flex-col items-end gap-2">
             {showRecoverButton && (
               <button
@@ -115,6 +118,16 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
                 <Trash2 className="w-4 h-4 mr-1.5" />
                 Cancel
               </button>
+            )}
+
+            {showCancelLock && (
+              <p
+                className="flex items-center gap-1.5 text-xs text-foreground-muted px-2"
+                data-testid={`counterpick-bid-locked-${bid.movie_id}`}
+              >
+                <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                Locked in
+              </p>
             )}
           </div>
         )}
