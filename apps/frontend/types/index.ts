@@ -619,6 +619,43 @@ export interface CounterpickBid {
 }
 
 // ============================================================================
+// Bid history types
+// ============================================================================
+
+/** One team's settled bid within a contest. */
+export interface BidHistoryEntry {
+  bidId: string
+  teamId: string
+  amount: number
+}
+
+/**
+ * Every settled bid on one movie from a single contest. Cancelled bids are left
+ * out entirely - a team that walked away before processing never competed.
+ */
+export interface BidHistoryResult {
+  kind: 'pickup' | 'counterpick'
+  /** Unique per contest, so a movie won twice in a season yields two results. */
+  id: string
+  title: string
+  posterUrl: string | null
+  releaseDate: string | null
+  /** The bid that took the movie, or null when no bid survived processing. */
+  winner: BidHistoryEntry | null
+  /** Beaten bids, highest first. */
+  losers: BidHistoryEntry[]
+  /** Counterpicks only: the team whose movie was targeted. */
+  targetTeamId?: string
+}
+
+/** One processing run's results. */
+export interface BidHistoryRound {
+  /** UTC calendar date (YYYY-MM-DD) the round's bids were processed on. */
+  date: string
+  results: BidHistoryResult[]
+}
+
+// ============================================================================
 // API response types
 // ============================================================================
 

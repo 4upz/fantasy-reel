@@ -315,7 +315,7 @@ INSERT INTO invitations (id, league_id, invited_by, email, token, status, sent_a
 
 INSERT INTO team_budgets (id, team_id, remaining_budget, total_spent) VALUES
   -- Oscar Contenders (active league)
-  ('bb222222-0001-0001-0001-000000000001', 'e2222222-0001-0001-0001-000000000001', 85, 15),  -- Alice: spent $15
+  ('bb222222-0001-0001-0001-000000000001', 'e2222222-0001-0001-0001-000000000001', 67, 33),  -- Alice: spent $15 + $18 (Doomsday counterpick, see section 11b)
   ('bb222222-0002-0002-0002-000000000002', 'e2222222-0002-0002-0002-000000000002', 72, 28),  -- Bob: spent $28
   ('bb222222-0003-0003-0003-000000000003', 'e2222222-0003-0003-0003-000000000003', 71, 29);  -- Carol: spent $9 + $20 (Batman Part II pickup, see section 12)
 
@@ -359,6 +359,29 @@ INSERT INTO pickup_bids (id, league_id, team_id, tmdb_id, movie_data, amount, st
   ('0b000005-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003',
    999002, '{"title": "The Batman Part II", "poster_url": "/batman2poster.jpg", "release_date": "2026-11-13"}'::jsonb,
    20, 'won', NOW() - INTERVAL '4 days', NULL, NULL, NOW() - INTERVAL '1 day');
+
+-- ============================================================
+-- 11b. COUNTERPICK BIDS (settled contest, for bid history)
+-- ============================================================
+-- Alice and Carol both bid to counterpick Bob's Avengers: Doomsday
+-- (d0222222-0016 / f0000031). Shares the Fast X processing deadline so the two
+-- settle in the same history round -- one pickup result, one counterpick.
+
+INSERT INTO counterpick_bids (id, league_id, team_id, movie_id, target_team_id, draft_pick_id, amount, priority, status, created_at, countered_at, response_deadline, processing_deadline) VALUES
+  -- Alice won the counterpick for $18
+  ('0d000001-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0001-0001-0001-000000000001',
+   'f0000031-0000-0000-0000-000000000031', 'e2222222-0002-0002-0002-000000000002', 'd0222222-0016-0016-0016-000000000016',
+   18, 1, 'won', NOW() - INTERVAL '6 days', NULL, NULL, NOW() - INTERVAL '2 days'),
+
+  -- Carol lost at $9
+  ('0d000002-0002-0002-0002-000000000002', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0003-0003-0003-000000000003',
+   'f0000031-0000-0000-0000-000000000031', 'e2222222-0002-0002-0002-000000000002', 'd0222222-0016-0016-0016-000000000016',
+   9, 1, 'lost', NOW() - INTERVAL '7 days', NOW() - INTERVAL '6 days', NOW() - INTERVAL '5 days', NOW() - INTERVAL '2 days');
+
+-- The counterpick Alice's winning bid bought her.
+INSERT INTO counterpicks (id, league_id, counterpicker_team_id, target_team_id, movie_id, draft_pick_id, pick_order, phase) VALUES
+  ('0e000001-0001-0001-0001-000000000001', '22222222-bbbb-bbbb-bbbb-222222222222', 'e2222222-0001-0001-0001-000000000001',
+   'e2222222-0002-0002-0002-000000000002', 'f0000031-0000-0000-0000-000000000031', 'd0222222-0016-0016-0016-000000000016', 1, 'bidding');
 
 -- ============================================================
 -- 12. PICKUPS (completed acquisitions via bidding)
@@ -408,5 +431,6 @@ INSERT INTO notifications (id, user_id, league_id, type, title, body, data, read
 -- ============================================================
 -- SUMMARY: 6 users, 4 leagues, 10 participants, 10 teams,
 --          32 movies, 38 picks, 45 reviews, 5 scores, 4 invites,
---          3 team_budgets, 7 bids, 2 pickups, 4 notifications
+--          3 team_budgets, 7 bids, 2 counterpick bids, 1 counterpick,
+--          2 pickups, 4 notifications
 -- ============================================================
