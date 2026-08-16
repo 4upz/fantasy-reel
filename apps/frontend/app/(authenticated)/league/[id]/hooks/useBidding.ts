@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { trackEvent } from '@/utils/analytics'
 import type { PickupBid, TeamBudget, CounterpickBid } from '@/types'
 
 interface UseBiddingOptions {
@@ -163,6 +164,7 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
     }
 
     await refetch()
+    trackEvent('bid_placed', { league_id: leagueId, amount })
     return { success: true }
   }, [leagueId, refetch])
 

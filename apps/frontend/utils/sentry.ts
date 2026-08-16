@@ -18,12 +18,23 @@ type SentryModule = typeof import('@sentry/nextjs')
 
 let sentryPromise: Promise<SentryModule> | null = null
 
+/**
+ * Clamps to [0, 1], falling back to `fallback` when unset or unparseable.
+ * NEXT_PUBLIC_ vars are inlined at build time, so this is evaluated once
+ * per build, not per-request.
+ */
+function parseSampleRate(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw)
+  if (raw === undefined || Number.isNaN(parsed)) return fallback
+  return Math.min(1, Math.max(0, parsed))
+}
+
 function loadSentry(): Promise<SentryModule> | null {
   if (!process.env.NEXT_PUBLIC_SENTRY_DSN) return null
   sentryPromise ??= import('@sentry/nextjs').then((Sentry) => {
     Sentry.init({
       dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-      tracesSampleRate: 0.1,
+      tracesSampleRate: parseSampleRate(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE, 0.1),
       sendDefaultPii: false,
     })
     return Sentry

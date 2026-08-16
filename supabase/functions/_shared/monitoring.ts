@@ -7,6 +7,13 @@ let initialized = false
 // deno-lint-ignore no-explicit-any
 let sentryPromise: Promise<any> | undefined
 
+// Clamps to [0, 1], falling back to 0 when unset or unparseable.
+function parseSampleRate(raw: string | undefined, fallback: number): number {
+  const parsed = Number(raw)
+  if (raw === undefined || Number.isNaN(parsed)) return fallback
+  return Math.min(1, Math.max(0, parsed))
+}
+
 // deno-lint-ignore no-explicit-any
 async function getSentry(dsn: string): Promise<any> {
   if (!sentryPromise) {
@@ -14,7 +21,8 @@ async function getSentry(dsn: string): Promise<any> {
   }
   const Sentry = await sentryPromise
   if (!initialized) {
-    Sentry.init({ dsn, tracesSampleRate: 0 })
+    const tracesSampleRate = parseSampleRate(Deno.env.get('SENTRY_TRACES_SAMPLE_RATE'), 0)
+    Sentry.init({ dsn, tracesSampleRate })
     initialized = true
   }
   return Sentry

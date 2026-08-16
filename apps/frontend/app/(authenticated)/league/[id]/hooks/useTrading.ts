@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
-import type { Session } from '@supabase/supabase-js'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
+import { callEdgeFunction } from '@/utils/supabase/functions'
 import type {
   TradeItems,
   TradeOfferWithTeams,
@@ -60,52 +60,23 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
   const supabase = useMemo(() => createClient(), [])
 
-  // Cache auth session to avoid redundant getSession() calls (client-swr-dedup optimization)
-  const sessionRef = useRef<Session | null>(null)
-
-  const getSession = useCallback(async (): Promise<Session | null> => {
-    if (!sessionRef.current) {
-      const { data: { session } } = await supabase.auth.getSession()
-      sessionRef.current = session
-    }
-    return sessionRef.current
-  }, [supabase])
-
-  // Clear session cache on auth state change
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      sessionRef.current = session
-    })
-
-    return () => {
-      subscription.unsubscribe()
-    }
-  }, [supabase])
-
   // Fetch trades
   const fetchTrades = useCallback(async () => {
-    try {
-      const session = await getSession()
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/get-trades?league_id=${leagueId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${session?.access_token}`,
-          },
-        }
-      )
+    // get-trades supports both GET+query-string and POST+JSON body (see
+    // supabase/functions/get-trades/index.ts); POST body matches the
+    // callEdgeFunction idiom used by every other call site in this app.
+    const { data, error: fetchError } = await callEdgeFunction<{ trades: TradeOfferWithTeams[] }>(
+      'get-trades',
+      { body: { league_id: leagueId } }
+    )
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch trades')
-      }
-
-      const data = await response.json()
-      setTrades(data.trades || [])
-    } catch (err) {
-      console.error('Error fetching trades:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch trades')
+    if (fetchError) {
+      setError(fetchError)
+      return
     }
-  }, [leagueId, getSession])
+
+    setTrades(data?.trades || [])
+  }, [leagueId])
 
   // Fetch tradeable movies (team's roster)
   const fetchTradeableMovies = useCallback(async () => {
@@ -235,39 +206,24 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       requestedItems: TradeItems,
       message?: string
     ): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const session = await getSession()
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/propose-trade`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: JSON.stringify({
-              league_id: leagueId,
-              recipient_team_id: recipientTeamId,
-              offered_items: offeredItems,
-              requested_items: requestedItems,
-              message,
-            }),
-          }
-        )
+      const { error: proposeError } = await callEdgeFunction('propose-trade', {
+        body: {
+          league_id: leagueId,
+          recipient_team_id: recipientTeamId,
+          offered_items: offeredItems,
+          requested_items: requestedItems,
+          message,
+        },
+      })
 
-        const data = await response.json()
-
-        if (!response.ok) {
-          return { success: false, error: data.error || 'Failed to propose trade' }
-        }
-
-        await fetchTrades()
-        return { success: true }
-      } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      if (proposeError) {
+        return { success: false, error: proposeError }
       }
+
+      await fetchTrades()
+      return { success: true }
     },
-    [getSession, leagueId, fetchTrades]
+    [leagueId, fetchTrades]
   )
 
   // Respond to a trade (accept/reject)
@@ -277,41 +233,26 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       response: 'accept' | 'reject',
       message?: string
     ): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const session = await getSession()
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/respond-trade`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: JSON.stringify({
-              trade_offer_id: tradeOfferId,
-              response,
-              message,
-            }),
-          }
-        )
+      const { error: respondError } = await callEdgeFunction('respond-trade', {
+        body: {
+          trade_offer_id: tradeOfferId,
+          response,
+          message,
+        },
+      })
 
-        const data = await res.json()
-
-        if (!res.ok) {
-          return { success: false, error: data.error || 'Failed to respond to trade' }
-        }
-
-        await fetchTrades()
-        // If accepted, roster will change - refresh it
-        if (response === 'accept') {
-          await Promise.all([fetchTradeableMovies(), fetchBudget()])
-        }
-        return { success: true }
-      } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      if (respondError) {
+        return { success: false, error: respondError }
       }
+
+      await fetchTrades()
+      // If accepted, roster will change - refresh it
+      if (response === 'accept') {
+        await Promise.all([fetchTradeableMovies(), fetchBudget()])
+      }
+      return { success: true }
     },
-    [getSession, fetchTrades, fetchTradeableMovies, fetchBudget]
+    [fetchTrades, fetchTradeableMovies, fetchBudget]
   )
 
   // Counter a trade
@@ -322,70 +263,40 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       counterRequestedItems: TradeItems,
       message?: string
     ): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const session = await getSession()
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/counter-trade`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: JSON.stringify({
-              trade_offer_id: tradeOfferId,
-              counter_offered_items: counterOfferedItems,
-              counter_requested_items: counterRequestedItems,
-              message,
-            }),
-          }
-        )
+      const { error: counterError } = await callEdgeFunction('counter-trade', {
+        body: {
+          trade_offer_id: tradeOfferId,
+          counter_offered_items: counterOfferedItems,
+          counter_requested_items: counterRequestedItems,
+          message,
+        },
+      })
 
-        const data = await response.json()
-
-        if (!response.ok) {
-          return { success: false, error: data.error || 'Failed to counter trade' }
-        }
-
-        await fetchTrades()
-        return { success: true }
-      } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      if (counterError) {
+        return { success: false, error: counterError }
       }
+
+      await fetchTrades()
+      return { success: true }
     },
-    [getSession, fetchTrades]
+    [fetchTrades]
   )
 
   // Cancel a trade
   const cancelTrade = useCallback(
     async (tradeOfferId: string): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const session = await getSession()
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/cancel-trade`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: JSON.stringify({ trade_offer_id: tradeOfferId }),
-          }
-        )
+      const { error: cancelError } = await callEdgeFunction('cancel-trade', {
+        body: { trade_offer_id: tradeOfferId },
+      })
 
-        const data = await response.json()
-
-        if (!response.ok) {
-          return { success: false, error: data.error || 'Failed to cancel trade' }
-        }
-
-        await fetchTrades()
-        return { success: true }
-      } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      if (cancelError) {
+        return { success: false, error: cancelError }
       }
+
+      await fetchTrades()
+      return { success: true }
     },
-    [getSession, fetchTrades]
+    [fetchTrades]
   )
 
   // Veto a trade (commissioner only)
@@ -394,67 +305,37 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       tradeOfferId: string,
       reason?: string
     ): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const session = await getSession()
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/veto-trade`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: JSON.stringify({ trade_offer_id: tradeOfferId, reason }),
-          }
-        )
+      const { error: vetoError } = await callEdgeFunction('veto-trade', {
+        body: { trade_offer_id: tradeOfferId, reason },
+      })
 
-        const data = await response.json()
-
-        if (!response.ok) {
-          return { success: false, error: data.error || 'Failed to veto trade' }
-        }
-
-        await fetchTrades()
-        return { success: true }
-      } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      if (vetoError) {
+        return { success: false, error: vetoError }
       }
+
+      await fetchTrades()
+      return { success: true }
     },
-    [getSession, fetchTrades]
+    [fetchTrades]
   )
 
   // Approve a trade immediately (commissioner only)
   const approveTrade = useCallback(
     async (tradeOfferId: string): Promise<{ success: boolean; error?: string }> => {
-      try {
-        const session = await getSession()
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/approve-trade`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session?.access_token}`,
-            },
-            body: JSON.stringify({ trade_offer_id: tradeOfferId }),
-          }
-        )
+      const { error: approveError } = await callEdgeFunction('approve-trade', {
+        body: { trade_offer_id: tradeOfferId },
+      })
 
-        const data = await response.json()
-
-        if (!response.ok) {
-          return { success: false, error: data.error || 'Failed to approve trade' }
-        }
-
-        // Unlike veto, this moves movies and budget right away -- and the
-        // commissioner may be a party to the trade -- so refresh the roster too.
-        await Promise.all([fetchTrades(), fetchTradeableMovies(), fetchBudget()])
-        return { success: true }
-      } catch (err) {
-        return { success: false, error: err instanceof Error ? err.message : 'Unknown error' }
+      if (approveError) {
+        return { success: false, error: approveError }
       }
+
+      // Unlike veto, this moves movies and budget right away -- and the
+      // commissioner may be a party to the trade -- so refresh the roster too.
+      await Promise.all([fetchTrades(), fetchTradeableMovies(), fetchBudget()])
+      return { success: true }
     },
-    [getSession, fetchTrades, fetchTradeableMovies, fetchBudget]
+    [fetchTrades, fetchTradeableMovies, fetchBudget]
   )
 
   // Computed values

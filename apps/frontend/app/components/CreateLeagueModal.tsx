@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { trackEvent } from '@/utils/analytics'
 import { FormError } from '@/app/components/FormError'
 import type { League } from '@/types'
 
@@ -99,6 +100,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
 
     if (responseData?.league) {
       setFormData(INITIAL_FORM_DATA)
+      trackEvent('league_created', { league_id: responseData.league.id })
       onSuccess?.(responseData.league)
       onClose()
       router.push(`/league/${responseData.league.id}`)

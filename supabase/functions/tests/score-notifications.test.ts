@@ -51,10 +51,13 @@ Deno.test('score-notifications snapshots', async (t) => {
   await t.step('captureScoreContext snapshots prior scores as numbers', async () => {
     const context = await captureScoreContext(supabase, [DRAFTED_MOVIE])
 
-    const points = context.previousMoviePoints.get(DRAFTED_MOVIE)
+    const scores = context.previousMovieScores.get(DRAFTED_MOVIE)
+    assertExists(scores, 'a held movie should be snapshotted')
     // PostgREST encodes numeric as a JSON number; a string here would break
     // the > / !== comparisons used to decide direction and change detection.
-    assertEquals(points === null || typeof points === 'number', true)
+    assertEquals(scores.points === null || typeof scores.points === 'number', true)
+    // combined_score is the Tomatometer, now the headline in every embed
+    assertEquals(scores.rtScore === null || typeof scores.rtScore === 'number', true)
   })
 
   await t.step('captureScoreContext returns empty for an unheld movie', async () => {

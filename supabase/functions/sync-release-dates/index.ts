@@ -9,7 +9,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { runSyncReleaseDates } from './handler.ts'
 import { createLogger } from '../_shared/logger.ts'
-import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
+import { startJobRun, purgeOldJobRuns, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 
 const log = createLogger('sync-release-dates')
 
@@ -43,6 +43,11 @@ Deno.serve(async (req) => {
     runClient = serviceClient
     const result = await runSyncReleaseDates(serviceClient, tmdbToken)
 
+    // Piggyback the job_runs retention purge on this daily cron -- as good a
+    // place as any recurring job to keep the table bounded. Never throws;
+    // a null count just means the purge itself failed (already logged).
+    const purged = await purgeOldJobRuns(serviceClient)
+
     // The handler logs and skips individual TMDb/update failures rather than
     // counting them, so there is no per-item failed counter to map.
     const job_status = await run.finish(serviceClient, {
@@ -51,6 +56,7 @@ Deno.serve(async (req) => {
       metadata: {
         dates_changed: result.dates_changed,
         leagues_notified: result.leagues_notified,
+        job_runs_purged: purged,
       },
     })
 

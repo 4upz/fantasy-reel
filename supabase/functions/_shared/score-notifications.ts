@@ -54,13 +54,21 @@ export interface DroppedMoviePlacement {
   droppedByTeamName: string
 }
 
+/** A movie's two scores at a point in time. Both are null while unscored. */
+export interface MovieScoreSnapshot {
+  /** `movies.fantasy_points` -- the curve applied to the Tomatometer. */
+  points: number | null
+  /** `movies.combined_score` -- the Tomatometer itself. */
+  rtScore: number | null
+}
+
 /** Snapshot taken before scores are recalculated. */
 export interface ScoreNotificationContext {
   movieIds: string[]
   /** Leagues holding these movies, including via dropped roster slots. */
   leagueIds: string[]
-  /** movieId -> fantasy_points before the update (null = unscored). */
-  previousMoviePoints: Map<string, number | null>
+  /** movieId -> scores before the update. */
+  previousMovieScores: Map<string, MovieScoreSnapshot>
   /** leagueId -> league name. */
   leagueNames: Map<string, string>
   /** leagueId -> standings before the update. */
@@ -77,6 +85,10 @@ export interface MovieScoreChange {
   posterUrl: string | null
   previousPoints: number | null
   newPoints: number
+  /** Tomatometer before the update; null until the movie is first scored. */
+  previousRtScore: number | null
+  /** Tomatometer after the update. Null only if the score was withdrawn. */
+  newRtScore: number | null
   /** True when the movie had no score before -- it just went live. */
   isNewScore: boolean
 }
@@ -102,10 +114,31 @@ export function formatPoints(points: number): string {
   return points.toFixed(1)
 }
 
+/** The Tomatometer, whole-number and suffixed the way the roster UI shows it. */
+export function formatRtScore(rtScore: number): string {
+  return `${Math.round(rtScore)}% RT`
+}
+
+/**
+ * A movie's score for display: the Tomatometer leads, fantasy points ride
+ * along in parentheses. Falls back to points alone if a movie somehow has
+ * points without an RT score.
+ */
+export function formatMovieScore(rtScore: number | null, points: number): string {
+  if (rtScore === null) return `**${formatPoints(points)}** pts`
+  return `**${formatRtScore(rtScore)}** (${formatPoints(points)} pts)`
+}
+
 /** Two scores are "the same" if they render identically. */
 function pointsDiffer(a: number | null, b: number | null): boolean {
   if (a === null || b === null) return a !== b
   return formatPoints(a) !== formatPoints(b)
+}
+
+/** Same test for the Tomatometer, which is rendered whole-number. */
+function rtScoresDiffer(a: number | null, b: number | null): boolean {
+  if (a === null || b === null) return a !== b
+  return formatRtScore(a) !== formatRtScore(b)
 }
 
 export function ordinal(n: number): string {
@@ -186,10 +219,42 @@ export function diffStandings(
 // Embed Builders
 // ============================================================================
 
-/** Describes a score movement the way the standings page phrases it. */
-function describeScoreMovement(previous: number, next: number): string {
+/**
+ * Describes a team's total moving. Teams have no Tomatometer of their own, so
+ * this stays fantasy points only -- see describeMovieScoreMovement for movies.
+ */
+function describeTeamScoreMovement(previous: number, next: number): string {
   const direction = next > previous ? 'UP' : 'DOWN'
   return `Score has gone **${direction}** from **${formatPoints(previous)}** to **${formatPoints(next)}**`
+}
+
+/**
+ * Which way a movie moved. The Tomatometer decides whenever it moved at all:
+ * in the flat tail of the curve points can tie at one decimal while RT --
+ * the headline number -- clearly went one way.
+ */
+function movieScoreDirection(change: MovieScoreChange): 'UP' | 'DOWN' {
+  const { previousRtScore, newRtScore } = change
+  if (previousRtScore !== null && newRtScore !== null && newRtScore !== previousRtScore) {
+    return newRtScore > previousRtScore ? 'UP' : 'DOWN'
+  }
+  return change.newPoints > (change.previousPoints as number) ? 'UP' : 'DOWN'
+}
+
+/** Same shape for a movie, with the Tomatometer leading on both sides. */
+function describeMovieScoreMovement(change: MovieScoreChange): string {
+  return (
+    `Score has gone **${movieScoreDirection(change)}** from ` +
+    `${formatMovieScore(change.previousRtScore, change.previousPoints as number)} to ` +
+    `${formatMovieScore(change.newRtScore, change.newPoints)}`
+  )
+}
+
+/** One line covering both the first-score and the movement cases. */
+function describeMovieScore(change: MovieScoreChange): string {
+  return change.isNewScore
+    ? `Now has a score of ${formatMovieScore(change.newRtScore, change.newPoints)}`
+    : describeMovieScoreMovement(change)
 }
 
 export function buildMovieScoreEmbed(
@@ -199,13 +264,11 @@ export function buildMovieScoreEmbed(
 ): DiscordEmbed {
   const { leagueId } = placement
 
-  const description = change.isNewScore
-    ? `Now has a score of **${formatPoints(change.newPoints)}**`
-    : describeScoreMovement(change.previousPoints as number, change.newPoints)
+  const description = describeMovieScore(change)
 
   let color: number = DISCORD_COLORS.blue
   if (!change.isNewScore) {
-    color = change.newPoints > (change.previousPoints as number)
+    color = movieScoreDirection(change) === 'UP'
       ? DISCORD_COLORS.green
       : DISCORD_COLORS.crimson
   }
@@ -248,7 +311,7 @@ export function buildStandingsEmbed(
   const fields = shown.map((change) => {
     const lines: string[] = []
     if (change.pointsChanged) {
-      lines.push(describeScoreMovement(change.previousPoints, change.newPoints))
+      lines.push(describeTeamScoreMovement(change.previousPoints, change.newPoints))
     }
     if (change.rankChanged) {
       lines.push(
@@ -292,9 +355,7 @@ export function buildMovieRollupEmbed(
 
   const fields = shown.map((change) => ({
     name: change.title,
-    value: change.isNewScore
-      ? `Now has a score of **${formatPoints(change.newPoints)}**`
-      : describeScoreMovement(change.previousPoints as number, change.newPoints),
+    value: describeMovieScore(change),
     inline: false,
   }))
 
@@ -333,7 +394,7 @@ export function buildNotableMissEmbed(
   return {
     author: buildEmbedAuthor(leagueName, leagueId),
     title: '👀 The one that got away',
-    description: `**${change.title}** hit **${formatPoints(change.newPoints)}** pts after **${droppedByTeamName}** dropped it`,
+    description: `**${change.title}** hit ${formatMovieScore(change.newRtScore, change.newPoints)} after **${droppedByTeamName}** dropped it`,
     thumbnail: change.posterUrl ? { url: `https://image.tmdb.org/t/p/w92${change.posterUrl}` } : undefined,
     color: DISCORD_COLORS.crimson,
     footer: { text: leagueName },
@@ -452,6 +513,21 @@ function firstOf<T>(value: T | T[] | null): T | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
 
+/** The two score columns, as PostgREST returns them. */
+interface MovieScoreRow {
+  id: string
+  fantasy_points: number | null
+  combined_score: number | null
+}
+
+/** Numeric columns can arrive as strings, so coerce before comparing. */
+function toScoreSnapshot(row: MovieScoreRow): MovieScoreSnapshot {
+  return {
+    points: row.fantasy_points === null ? null : Number(row.fantasy_points),
+    rtScore: row.combined_score === null ? null : Number(row.combined_score),
+  }
+}
+
 /**
  * Captures the pre-update state needed to describe what changed.
  * Safe to call with an empty movie list.
@@ -463,7 +539,7 @@ export async function captureScoreContext(
   const empty: ScoreNotificationContext = {
     movieIds: [],
     leagueIds: [],
-    previousMoviePoints: new Map(),
+    previousMovieScores: new Map(),
     leagueNames: new Map(),
     previousStandings: new Map(),
     placements: [],
@@ -475,7 +551,7 @@ export async function captureScoreContext(
   try {
     const { data: movies, error: moviesError } = await supabase
       .from('movies')
-      .select('id, fantasy_points')
+      .select('id, fantasy_points, combined_score')
       .in('id', movieIds)
 
     if (moviesError) {
@@ -483,11 +559,8 @@ export async function captureScoreContext(
       return empty
     }
 
-    const previousMoviePoints = new Map<string, number | null>(
-      (movies ?? []).map((m: { id: string; fantasy_points: number | null }) => [
-        m.id,
-        m.fantasy_points === null ? null : Number(m.fantasy_points),
-      ])
+    const previousMovieScores = new Map<string, MovieScoreSnapshot>(
+      (movies ?? []).map((m: MovieScoreRow) => [m.id, toScoreSnapshot(m)])
     )
 
     const holdings = await loadHoldings(supabase, movieIds)
@@ -523,7 +596,7 @@ export async function captureScoreContext(
     return {
       movieIds,
       leagueIds,
-      previousMoviePoints,
+      previousMovieScores,
       leagueNames,
       previousStandings,
       placements,
@@ -847,12 +920,12 @@ export async function sendScoreNotifications(
   }
 }
 
-interface MovieRow {
-  id: string
+interface MovieRow extends MovieScoreRow {
   title: string
   poster_url: string | null
-  fantasy_points: number | null
 }
+
+const UNSCORED: MovieScoreSnapshot = { points: null, rtScore: null }
 
 /** Returns only movies whose displayed score actually moved. */
 async function loadMovieScoreChanges(
@@ -863,7 +936,7 @@ async function loadMovieScoreChanges(
 
   const { data: movies, error } = await supabase
     .from('movies')
-    .select('id, title, poster_url, fantasy_points')
+    .select('id, title, poster_url, fantasy_points, combined_score')
     .in('id', context.movieIds)
 
   if (error) {
@@ -874,18 +947,29 @@ async function loadMovieScoreChanges(
   for (const movie of (movies ?? []) as MovieRow[]) {
     if (movie.fantasy_points === null) continue
 
-    const newPoints = Number(movie.fantasy_points)
-    const previousPoints = context.previousMoviePoints.get(movie.id) ?? null
+    const current = toScoreSnapshot(movie)
+    const newPoints = current.points as number
+    const previous = context.previousMovieScores.get(movie.id) ?? UNSCORED
 
-    if (!pointsDiffer(previousPoints, newPoints)) continue
+    // Either displayed number moving is news. The Tomatometer can shift a
+    // whole point while the curve leaves points unchanged at one decimal --
+    // most visibly in the flat tail below 30 -- and it's now the headline.
+    if (
+      !pointsDiffer(previous.points, newPoints) &&
+      !rtScoresDiffer(previous.rtScore, current.rtScore)
+    ) {
+      continue
+    }
 
     changes.set(movie.id, {
       movieId: movie.id,
       title: movie.title,
       posterUrl: movie.poster_url,
-      previousPoints,
+      previousPoints: previous.points,
       newPoints,
-      isNewScore: previousPoints === null,
+      previousRtScore: previous.rtScore,
+      newRtScore: current.rtScore,
+      isNewScore: previous.points === null,
     })
   }
 

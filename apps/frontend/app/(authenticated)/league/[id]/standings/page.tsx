@@ -53,6 +53,11 @@ export default async function StandingsPage({ params }: PageProps) {
   }
 
   // Parallelize independent queries (async-parallel optimization)
+  //
+  // Draft picks and pickups are filtered to what the team still holds, matching
+  // the roster page and recalculate_team_score_with_counterpicks(). Counterpicks
+  // deliberately are not: they survive a drop and keep scoring for the
+  // counterpicker (see CLAUDE.md "Counterpicks x drops x trades").
   const [participantsResult, draftPicksResult, pickupsResult, counterpicksResult] = await Promise.all([
     supabase
       .from('league_participants')
@@ -81,6 +86,7 @@ export default async function StandingsPage({ params }: PageProps) {
       `
       )
       .eq('league_id', id)
+      .is('dropped_at', null)
       .order('round', { ascending: true })
       .order('pick_number', { ascending: true }),
     supabase

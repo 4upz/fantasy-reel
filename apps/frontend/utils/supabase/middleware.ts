@@ -1,5 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
+import { isAuthSessionMissingError } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+
+// Auth error codes that are routine outcomes of an anonymous or logged-out
+// visitor (missing/expired/reused session or refresh token) — not worth
+// logging on every request. Anything else is unexpected and gets logged.
+const EXPECTED_AUTH_ERROR_CODES = new Set([
+  'session_not_found',
+  'session_expired',
+  'refresh_token_not_found',
+  'refresh_token_already_used',
+])
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/auth', '/forgot-password', '/reset-password', '/join']
 
@@ -41,7 +52,16 @@ export async function updateSession(request: NextRequest): Promise<NextResponse>
 
   const {
     data: { user },
+    error,
   } = await supabase.auth.getUser()
+
+  if (
+    error &&
+    !isAuthSessionMissingError(error) &&
+    !(error.code && EXPECTED_AUTH_ERROR_CODES.has(error.code))
+  ) {
+    console.error(`[middleware] ${error.name}: ${error.message}`)
+  }
 
   const pathname = request.nextUrl.pathname
 

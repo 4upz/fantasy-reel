@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
+import { captureMessage } from '@/utils/sentry'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { trackEvent } from '@/utils/analytics'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 import DraftBoard, { PickHistory } from '../components/DraftBoard'
 import ConnectionStatusIndicator, { type RealtimeStatus } from '../components/ConnectionStatusIndicator'
@@ -60,6 +62,8 @@ export default function DraftClient({
   const fetchCounterpicksRef = useRef<() => Promise<boolean>>(null!)
   const startPollingRef = useRef<() => void>(null!)
   const stopPollingRef = useRef<() => void>(null!)
+  const isRealtimeDegradedRef = useRef(false)
+  const hasSentSentryDegradeWarningRef = useRef(false)
 
   /**
    * Wraps a Supabase query with consistent error handling and state update.
@@ -218,11 +222,27 @@ export default function DraftClient({
           }
           hadSuccessfulConnection = true
           setRealtimeStatus('connected')
+          if (isRealtimeDegradedRef.current) {
+            isRealtimeDegradedRef.current = false
+            trackEvent('realtime_recovered', { league_id: league.id })
+          }
           return
         }
 
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setRealtimeStatus('reconnecting')
+          if (!isRealtimeDegradedRef.current) {
+            isRealtimeDegradedRef.current = true
+            trackEvent('realtime_degraded', { league_id: league.id, status })
+            if (!hasSentSentryDegradeWarningRef.current) {
+              hasSentSentryDegradeWarningRef.current = true
+              captureMessage('Realtime channel degraded', {
+                level: 'warning',
+                tags: { league_id: league.id },
+                extra: { status },
+              })
+            }
+          }
           // If supabase-js can't recover within 60s, fall back to polling
           if (!fallbackTimer) {
             fallbackTimer = setTimeout(() => {
@@ -281,6 +301,7 @@ export default function DraftClient({
       setError(startError)
     } else if (data?.league) {
       setLeague(data.league)
+      trackEvent('draft_started', { league_id: league.id })
     }
 
     setStartingDraft(false)
