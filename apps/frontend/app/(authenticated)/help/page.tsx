@@ -15,7 +15,7 @@ import Link from 'next/link'
 
 export const metadata = {
   title: 'How to Play | Fantasy Reel',
-  description: 'Learn how to play Fantasy Movies - drafting, scoring, pickups, trading, and more.',
+  description: 'Learn how to play Fantasy Reel - drafting, scoring, pickups, trading, and more.',
 }
 
 function Section({
@@ -120,9 +120,9 @@ export default function HelpPage() {
         {/* Content Sections */}
         <div className="space-y-16">
           {/* Overview */}
-          <Section id="overview" icon={<Film className="w-5 h-5" />} title="What is Fantasy Movies?">
+          <Section id="overview" icon={<Film className="w-5 h-5" />} title="What is Fantasy Reel?">
             <p className="text-lg">
-              Fantasy Movies works just like fantasy sports, but for films! Instead of drafting athletes,
+              Fantasy Reel works just like fantasy sports, but for films! Instead of drafting athletes,
               you draft upcoming movies. When those movies release and get reviewed by critics, you earn
               fantasy points based on their scores.
             </p>

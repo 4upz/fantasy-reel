@@ -22,6 +22,25 @@ const MIN_DROP_LIMIT = 0
 const MAX_DROP_LIMIT = 10
 const MIN_COUNTERBID_HOURS = 1
 const MAX_COUNTERBID_HOURS = 72
+const MIN_NEW_BID_CUTOFF_HOURS = 0
+const MAX_NEW_BID_CUTOFF_HOURS = 144
+
+/**
+ * The weekday+time an offset lands on, counting back from the weekly processing
+ * deadline (Saturday 8pm UTC). Shown next to the input so a commissioner picking
+ * "48" can see that it means Thursday rather than doing the arithmetic.
+ */
+function cutoffDayLabel(hours: number): string {
+  // Any Saturday 20:00 UTC works -- only the weekday and time are read off.
+  const referenceDeadline = Date.UTC(2026, 7, 15, 20, 0, 0)
+  return new Date(referenceDeadline - hours * 3600_000).toLocaleString(undefined, {
+    weekday: 'long',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+    timeZoneName: 'short',
+  })
+}
 
 interface UpdateBiddingConfigResponse {
   league: League
@@ -37,6 +56,7 @@ export default function BiddingConfigSection({
   const [draftSlots, setDraftSlots] = useState(league.draft_slots)
   const [dropLimit, setDropLimit] = useState(league.drop_limit)
   const [counterbidHours, setCounterbidHours] = useState(league.counterbid_hours)
+  const [newBidCutoffHours, setNewBidCutoffHours] = useState(league.new_bid_cutoff_hours)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Ensure draft_slots doesn't exceed total_slots
@@ -50,14 +70,19 @@ export default function BiddingConfigSection({
     totalSlots !== league.total_slots ||
     draftSlots !== league.draft_slots ||
     dropLimit !== league.drop_limit ||
-    counterbidHours !== league.counterbid_hours
+    counterbidHours !== league.counterbid_hours ||
+    newBidCutoffHours !== league.new_bid_cutoff_hours
 
   // Validation
   const totalSlotsOutOfRange = totalSlots < MIN_TOTAL_SLOTS || totalSlots > MAX_TOTAL_SLOTS
   const draftSlotsOutOfRange = draftSlots < MIN_DRAFT_SLOTS || draftSlots > totalSlots
   const dropLimitOutOfRange = dropLimit < MIN_DROP_LIMIT || dropLimit > MAX_DROP_LIMIT
   const counterbidHoursOutOfRange = counterbidHours < MIN_COUNTERBID_HOURS || counterbidHours > MAX_COUNTERBID_HOURS
-  const hasValidationError = totalSlotsOutOfRange || draftSlotsOutOfRange || dropLimitOutOfRange || counterbidHoursOutOfRange
+  const newBidCutoffOutOfRange =
+    !Number.isInteger(newBidCutoffHours) ||
+    newBidCutoffHours < MIN_NEW_BID_CUTOFF_HOURS ||
+    newBidCutoffHours > MAX_NEW_BID_CUTOFF_HOURS
+  const hasValidationError = totalSlotsOutOfRange || draftSlotsOutOfRange || dropLimitOutOfRange || counterbidHoursOutOfRange || newBidCutoffOutOfRange
 
   const isSubmitDisabled = isSubmitting || !hasChanges || hasValidationError || isLocked
 
@@ -75,6 +100,7 @@ export default function BiddingConfigSection({
         draft_slots: draftSlots,
         drop_limit: dropLimit,
         counterbid_hours: counterbidHours,
+        new_bid_cutoff_hours: newBidCutoffHours,
       },
     })
 
@@ -102,7 +128,7 @@ export default function BiddingConfigSection({
 
       {isLocked ? (
         <LockedMessage
-          message={`Bidding configuration cannot be changed after the draft has started. Current settings: ${league.draft_slots} draft slots, ${league.total_slots - league.draft_slots} pickup slots, ${league.drop_limit} max drops, ${league.counterbid_hours}h counterbid window.`}
+          message={`Bidding configuration cannot be changed after the draft has started. Current settings: ${league.draft_slots} draft slots, ${league.total_slots - league.draft_slots} pickup slots, ${league.drop_limit} max drops, ${league.counterbid_hours}h counterbid window, ${league.new_bid_cutoff_hours === 0 ? 'no new-bid cutoff' : `${league.new_bid_cutoff_hours}h new-bid cutoff`}.`}
         />
       ) : (
         <form onSubmit={handleSubmit}>
@@ -232,6 +258,41 @@ export default function BiddingConfigSection({
                 {counterbidHoursOutOfRange && (
                   <p className="text-xs text-error mt-1">
                     Must be between {MIN_COUNTERBID_HOURS} and {MAX_COUNTERBID_HOURS} hours
+                  </p>
+                )}
+              </div>
+
+              {/* New Bid Cutoff */}
+              <div>
+                <label
+                  htmlFor="new_bid_cutoff_hours"
+                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                >
+                  New Bid Cutoff
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    id="new_bid_cutoff_hours"
+                    value={newBidCutoffHours}
+                    onChange={(e) => setNewBidCutoffHours(parseInt(e.target.value, 10) || MIN_NEW_BID_CUTOFF_HOURS)}
+                    min={MIN_NEW_BID_CUTOFF_HOURS}
+                    max={MAX_NEW_BID_CUTOFF_HOURS}
+                    className={`input w-24 ${newBidCutoffOutOfRange ? 'border-error focus:border-error' : ''}`}
+                    aria-describedby="new_bid_cutoff_help"
+                  />
+                  <span className="text-sm text-foreground-secondary">
+                    hours before processing
+                  </span>
+                </div>
+                <p id="new_bid_cutoff_help" className="text-xs text-foreground-muted mt-1.5">
+                  {newBidCutoffHours === 0
+                    ? 'New bids stay open all week (0 turns the cutoff off)'
+                    : `After this point teams can only raise or counter bids already placed. ${newBidCutoffHours} puts the cutoff at ${cutoffDayLabel(newBidCutoffHours)}.`}
+                </p>
+                {newBidCutoffOutOfRange && (
+                  <p className="text-xs text-error mt-1">
+                    Must be between {MIN_NEW_BID_CUTOFF_HOURS} and {MAX_NEW_BID_CUTOFF_HOURS} hours
                   </p>
                 )}
               </div>

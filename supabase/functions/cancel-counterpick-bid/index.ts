@@ -19,6 +19,12 @@ import {
   createServiceClient,
   internalErrorResponse,
 } from '../_shared/utils.ts'
+import {
+  computeBidWindow,
+  isBidCancellable,
+  cancelClosedMessage,
+  CANCEL_IN_PROCESSING_MESSAGE,
+} from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('cancel-counterpick-bid')
@@ -69,6 +75,23 @@ Deno.serve(async (req) => {
     // Can only cancel active bids
     if (bid.status !== 'active') {
       return errorResponse('Can only cancel active bids', 400)
+    }
+
+    // Same commitment rule as cancel-bid, anchored to this bid's own cycle --
+    // see the comment there for why the deadline check is not redundant with
+    // the phase check.
+    const { data: league } = await serviceClient
+      .from('leagues')
+      .select('new_bid_cutoff_hours')
+      .eq('id', bid.league_id)
+      .single()
+
+    const bidWindow = computeBidWindow(bid.processing_deadline, league?.new_bid_cutoff_hours)
+    if (!isBidCancellable(bid.processing_deadline, bidWindow)) {
+      return errorResponse(
+        bidWindow.isCounterBidPhase ? cancelClosedMessage(bidWindow) : CANCEL_IN_PROCESSING_MESSAGE,
+        400,
+      )
     }
 
     // Cancel the bid

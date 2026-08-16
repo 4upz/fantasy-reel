@@ -6,6 +6,12 @@ import {
   isValidUUID,
   internalErrorResponse,
 } from '../_shared/utils.ts'
+import {
+  computeBidWindow,
+  isBidCancellable,
+  cancelClosedMessage,
+  CANCEL_IN_PROCESSING_MESSAGE,
+} from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('cancel-bid')
@@ -75,6 +81,33 @@ Deno.serve(async (req) => {
     // Can only cancel active bids (not outbid - that means someone else is higher)
     if (bid.status !== 'active') {
       return errorResponse('Can only cancel active bids', 400)
+    }
+
+    // Once the counter-bid phase starts a bid is a commitment. Without this, a
+    // team could bid early on a movie it never wanted, let a rival raise the
+    // price all week, then withdraw on Friday having cost them budget for
+    // nothing.
+    //
+    // The window is anchored to the bid's *own* processing_deadline rather than
+    // to get_next_processing_deadline(), so the question asked is "is this bid's
+    // cycle past its cutoff" -- which stays true for a bid held into extended
+    // time by a rival's counter window, where the global next-deadline has
+    // already rolled forward and would read as a fresh open phase.
+    //
+    // isBidCancellable's deadline check is not redundant with that: it is the
+    // only guard when a league has the cutoff disabled (hours = 0).
+    const { data: league } = await serviceClient
+      .from('leagues')
+      .select('new_bid_cutoff_hours')
+      .eq('id', bid.league_id)
+      .single()
+
+    const bidWindow = computeBidWindow(bid.processing_deadline, league?.new_bid_cutoff_hours)
+    if (!isBidCancellable(bid.processing_deadline, bidWindow)) {
+      return errorResponse(
+        bidWindow.isCounterBidPhase ? cancelClosedMessage(bidWindow) : CANCEL_IN_PROCESSING_MESSAGE,
+        400,
+      )
     }
 
     // Cancel the bid

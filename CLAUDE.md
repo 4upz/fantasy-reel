@@ -760,29 +760,75 @@ Teams can trade movies with each other during the active season.
 
 - **FAAB Budget:** Teams have a budget for bidding (Free Agent Acquisition Budget)
 - **Review Period:** Optional window for league review before trades execute
-- **Veto:** League owner can veto trades
+  (`leagues.trade_review_enabled`, `leagues.trade_veto_hours`, default 24h)
+- **Veto:** League owner can veto trades during that window
+- **Approve:** League owner can also end that window early and process the trade
+  immediately — the two commissioner answers to a review are symmetric
 
 ### Trade Lifecycle
 
 ```
 1. Team proposes trade
-   └── propose-trade creates trade with status='pending'
+   └── propose-trade creates trade with status='proposed'
        └── Specifies movies from each side
 
 2. Recipient responds
-   └── respond-trade: accept, reject, or counter
-       └── Accept → trade executes (draft_picks updated)
-       └── Reject → trade cancelled
-       └── Counter → new counter-offer created
+   └── respond-trade: accept or reject
+       ├── Accept + trade_review_enabled → status='review',
+       │   review_ends_at = now() + trade_veto_hours
+       ├── Accept + review disabled → status='accepted' (executes on the next
+       │   process-trades run)
+       └── Reject → status='rejected'
 
 3. Counter-offers
    └── counter-trade modifies the proposal
        └── Original proposer can accept/reject/counter
 
-4. Processing
-   └── process-trades cron handles expired trades
-       └── Pending trades past deadline → cancelled
+4. Commissioner review (status='review')
+   ├── veto-trade  → status='vetoed', nothing moves
+   ├── approve-trade → executes NOW, status='completed', approved_by stamped
+   └── neither → the trade executes on its own once review_ends_at passes
+
+5. Processing
+   └── process-trades cron (Vercel Cron, every 5 min) executes trades that are
+       'accepted' or whose review window has expired, and expires any trade that
+       no longer validates
 ```
+
+**Nothing else executes a trade.** `execute_trade()` has exactly two callers:
+`process-trades` (deadline reached) and `approve-trade` (commissioner said so
+early). Both must check `success` in its JSONB return value — it reports
+business-rule refusals there rather than by raising — and both notify through
+`_shared/trade-completion.ts` so the two paths cannot drift.
+
+### Competing Trades
+
+Several open offers may name the **same movie**, and two teams may have more than
+one open offer between them. Nothing blocks the overlap at proposal time — this
+is deliberate, and mirrors Fantasy Critic's model.
+
+Only one of them can ever execute. The guarantee is **late-bound**, not enforced
+up front:
+
+- `execute_trade()` locks the trade row `FOR UPDATE` and re-runs
+  `validate_trade_items()` for both sides, which re-checks live
+  `draft_picks`/`pickups` ownership. Whichever competing offer reaches that point
+  second sees the holding already gone and refuses.
+- On success, `execute_trade()` expires every other open offer naming a holding
+  it moved (`veto_reason` explains why) and returns them as `invalidated_trades`;
+  `process-trades` notifies both parties of each.
+- `get_contested_source_ids(league_id)` reports holdings claimed by more than one
+  open offer. `get-trades` uses it to add `contested_source_ids` per offer, which
+  drives the "Contested" badge on `TradeOfferCard`. It returns counts only —
+  never who else is bidding — so it cannot leak trade contents past
+  `trade_offers` RLS.
+
+**Do not re-add a proposal-time uniqueness check on trade movies.** A trigger
+(`validate_trade_movies_trigger`) and a per-team-pair unique index used to do
+exactly that; both were dropped in `20260809120000_allow_competing_trades.sql`
+because they blocked the competing-offer behavior users asked for. The
+re-validation inside `execute_trade()` is what protects the data — see
+`tests/competing-trades.test.ts`.
 
 ### Edge Functions
 
@@ -792,9 +838,19 @@ Teams can trade movies with each other during the active season.
 | `respond-trade` | Accept or reject trade |
 | `counter-trade` | Counter-offer on trade |
 | `cancel-trade` | Cancel pending trade |
-| `veto-trade` | League owner vetoes trade |
+| `veto-trade` | League owner vetoes trade during review |
+| `approve-trade` | League owner approves a reviewed trade and executes it immediately |
 | `get-trades` | List trades for league |
 | `process-trades` | Process pending/expired trades (cron) |
+
+### Counterpicks × drops × trades (policy)
+
+- A **pending** counterpick bid blocks a drop only when `leagues.counterpicks_block_drops` is on; a cancelled/lost bid doesn't count, so only `active`/`outbid` bids block.
+- An **awarded** counterpick blocks a drop for both draft picks and pickups (`counterpicked_by_team_id` is checked the same way for each).
+- Drops are only allowed while the league is `active`, regardless of counterpick state.
+- Counterpicks deliberately **survive drops** and keep scoring the inverted points for the counterpicker — this matches Fantasy Critic's ruleset and is not an oversight; see the comment on `recalculate_team_score_with_counterpicks()`.
+- A trade **cannot** send a counterpicked movie to the team that counterpicked it (would collapse counterpicker == holder); any other transfer is allowed, and `counterpicks.target_team_id` is retargeted to the new holder by `execute_trade()`.
+- `process-bids` revalidates counterpick bid targets at processing time: a bid that has become self-targeted (or targets a movie that was dropped or is now owned by the bidder) is voided uncharged rather than awarded, and surviving bid display rows are retargeted to the current holder.
 
 ---
 

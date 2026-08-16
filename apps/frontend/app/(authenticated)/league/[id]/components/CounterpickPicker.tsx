@@ -154,7 +154,7 @@ export default function CounterpickPicker({
           <Target className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-foreground-secondary text-sm">
-              Bet against an opponent&apos;s movie. If it scores below 70, you earn points equal to their loss. If it scores above 70, you lose points equal to their gain.
+              Bet against an opponent&apos;s movie. If it scores below 60, you earn points equal to their loss. If it scores above 60, you lose points equal to their gain.
             </p>
           </div>
         </div>

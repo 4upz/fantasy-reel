@@ -22,7 +22,8 @@ import {
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, DiscordEmbed } from '../_shared/discord.ts'
+import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, DiscordEmbed } from '../_shared/discord.ts'
+import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
@@ -206,32 +207,36 @@ Deno.serve(async (req) => {
     const { data: processingDeadline } = await serviceClient
       .rpc('get_next_processing_deadline')
 
-    // Check existing highest ACTIVE bid on this movie in counterpick_bids
-    const { data: existingBids } = await serviceClient
+    // Every pending bid on this movie, highest first -- not just the leader.
+    // The counter-bid phase makes "is anyone bidding on this at all" a rule of
+    // its own, and an 'outbid' row counts: that team can still counter back.
+    // Reading the group once also means the leader, this team's own bid, and the
+    // contested check all come from a single snapshot.
+    const { data: pendingBids } = await serviceClient
       .from('counterpick_bids')
       .select('*')
       .eq('league_id', league_id)
       .eq('movie_id', movie_id)
-      .eq('status', 'active')
+      .in('status', ['active', 'outbid'])
       .order('amount', { ascending: false })
-      .limit(1)
 
-    const highestBid = existingBids?.[0]
+    const highestBid = pendingBids?.find((bid) => bid.status === 'active')
+    const existingTeamBid = pendingBids?.find((bid) => bid.team_id === team.id)
+    const isAlreadyBidOn = (pendingBids?.length ?? 0) > 0
+
+    // Past the cutoff, counterpick bidding follows the same rule as pickup
+    // bidding: no opening a contest on a movie nobody is bidding on. Both kinds
+    // share get_next_processing_deadline() and sit in the same UI panel, so a
+    // split rule would give one page two deadlines.
+    const bidWindow = computeBidWindow(processingDeadline, league.new_bid_cutoff_hours)
+    if (bidWindow.isCounterBidPhase && !isAlreadyBidOn) {
+      return errorResponse(newBidClosedMessage(bidWindow), 400)
+    }
 
     // If there's a higher or equal bid, reject
     if (highestBid && highestBid.amount >= amount) {
       return errorResponse(`There is already a bid of $${highestBid.amount}. You must bid higher.`, 400)
     }
-
-    // Check for existing team bid on this movie (active or outbid) -- update if exists, insert if new
-    const { data: existingTeamBid } = await serviceClient
-      .from('counterpick_bids')
-      .select('*')
-      .eq('league_id', league_id)
-      .eq('team_id', team.id)
-      .eq('movie_id', movie_id)
-      .in('status', ['active', 'outbid'])
-      .single()
 
     let newBid
 
@@ -331,9 +336,14 @@ Deno.serve(async (req) => {
 
     let outbidEmailPromise: Promise<unknown> | null = null
 
+    // Set when this bid took the lead from another team; drives the Discord
+    // embed's counter-bid variant below.
+    let counterContext: { previousAmount: number; counterWindowEnds: Date } | null = null
+
     if (highestBid && highestBid.team_id !== team.id) {
       const responseDeadline = new Date()
       responseDeadline.setHours(responseDeadline.getHours() + league.counterbid_hours)
+      counterContext = { previousAmount: highestBid.amount, counterWindowEnds: responseDeadline }
 
       await serviceClient
         .from('counterpick_bids')
@@ -422,22 +432,42 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Intentionally anonymous: movie only, no bidder name, target team, or bid amount
-    const bidEmbed: DiscordEmbed = {
-      author: buildEmbedAuthor(league.name ?? 'League', league_id),
-      title: `${movieTitle} (🎯 Counter Pick Bid)`,
-      thumbnail: posterUrl ? { url: `https://image.tmdb.org/t/p/w92${posterUrl}` } : undefined,
-      color: DISCORD_COLORS.gold,
-      fields: releaseDate ? [{ name: 'Release Date', value: releaseDate, inline: true }] : undefined,
-      footer: { text: `Bidding closes ${new Date(processingDeadline).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` },
-      url: buildLeagueUrl(league_id, '/bidding'),
-    }
+    // Both variants stay anonymous: no bidder name or target team. A counter
+    // bid does show both amounts (already public on the bidding page) plus when
+    // results are now expected, since the counter window can push processing
+    // past the weekly deadline (the extended cron then resolves it).
+    const bidEmbed: DiscordEmbed = counterContext
+      ? buildCounterBidEmbed({
+          leagueId: league_id,
+          leagueName: league.name ?? 'League',
+          movieTitle,
+          posterPath: posterUrl,
+          releaseDate,
+          previousAmount: counterContext.previousAmount,
+          newAmount: amount,
+          processingDeadline: new Date(newBid.processing_deadline),
+          counterWindowEnds: counterContext.counterWindowEnds,
+          titleSuffix: ' (🎯 Counterpick)',
+        })
+      : buildNewBidEmbed({
+          leagueId: league_id,
+          leagueName: league.name ?? 'League',
+          movieTitle,
+          posterPath: posterUrl,
+          releaseDate,
+          amount,
+          processingDeadline: new Date(processingDeadline),
+          // "New Bid: <movie> (🎯 Counterpick)" -- matches the counter
+          // variant's suffix; the old "(🎯 Counter Pick Bid)" would read as
+          // "Bid ... Bid" after the title prefix.
+          titleSuffix: ' (🎯 Counterpick)',
+        })
 
     const discordPromise = sendDiscordNotification(serviceClient, {
       leagueId: league_id,
       category: 'bids',
       embeds: [bidEmbed],
-      mentionRole: !!(highestBid && highestBid.team_id !== team.id),
+      mentionRole: counterContext !== null,
     })
 
     // Send email + Discord in parallel (non-blocking)

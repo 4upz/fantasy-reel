@@ -61,7 +61,8 @@ export default async function StandingsPage({ params }: PageProps) {
         *,
         teams (
           *,
-          team_scores (*)
+          team_scores (*),
+          team_budgets (*)
         )
       `
       )
@@ -142,6 +143,7 @@ export default async function StandingsPage({ params }: PageProps) {
       pickups={(pickups ?? []) as PickupWithScores[]}
       counterpicks={(counterpicks ?? []) as CounterpickWithScores[]}
       currentUserId={user.id}
+      startingFaab={league.faab_budget ?? 0}
     />
   )
 }

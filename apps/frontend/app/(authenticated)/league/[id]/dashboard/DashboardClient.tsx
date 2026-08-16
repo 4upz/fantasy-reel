@@ -4,21 +4,26 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { Heart } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
-import type { League, DashboardTeam } from '@/types'
+import type { DashboardTeam, League, LeagueUpcomingRelease } from '@/types'
 import TeamHeader from '../components/TeamHeader'
 import MovieGrid from '../components/MovieGrid'
+import LeagueReleaseBoard from '../components/LeagueReleaseBoard'
 import EditTeamModal from '../components/EditTeamModal'
 
 interface Props {
   league: League
   userTeam: DashboardTeam | null
   totalTeams: number
+  leagueUpcoming: LeagueUpcomingRelease[]
+  todayIso: string
 }
 
 export default function DashboardClient({
   league: initialLeague,
   userTeam,
   totalTeams,
+  leagueUpcoming,
+  todayIso,
 }: Props): React.ReactElement {
   const [league, setLeague] = useState(initialLeague)
   const [showEditTeamModal, setShowEditTeamModal] = useState(false)
@@ -98,6 +103,7 @@ export default function DashboardClient({
         onEditTeam={() => setShowEditTeamModal(true)}
       />
       <MovieGrid movies={userTeam.movies} leagueStatus={league.status} />
+      <LeagueReleaseBoard releases={leagueUpcoming} todayIso={todayIso} />
 
       {wishlistCount > 0 && (
         <div className="card mx-4 mt-[18px] flex items-center gap-3 p-4">

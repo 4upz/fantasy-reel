@@ -1,8 +1,11 @@
 import { assertEquals } from 'jsr:@std/assert@^1.0.0'
 import {
   type CounterpickContest,
+  type CounterpickTargetRow,
   normalizeBidPriorities,
+  type RetargetableCounterpickBid,
   resolveCounterpickWinners,
+  resolveTargetRevalidation,
   type ResolvableCounterpickBid,
 } from './counterpick-resolution.ts'
 
@@ -193,4 +196,81 @@ Deno.test('resolves an empty slate without looping', () => {
 
   assertEquals(resolution.winners.size, 0)
   assertEquals(resolution.lossReasons.size, 0)
+})
+
+// ---------------------------------------------------------------------------
+// resolveTargetRevalidation (dropped / traded holdings)
+// ---------------------------------------------------------------------------
+
+function retargetableBid(
+  teamId: string,
+  targetTeamId: string,
+): RetargetableCounterpickBid {
+  return { id: 'bid-1', team_id: teamId, target_team_id: targetTeamId }
+}
+
+function targetRow(teamId: string, droppedAt: string | null = null): CounterpickTargetRow {
+  return { team_id: teamId, dropped_at: droppedAt }
+}
+
+Deno.test('target revalidation: keeps a bid whose holding is unchanged', () => {
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, targetRow('holder'), false)
+
+  assertEquals(result, { outcome: 'keep', targetTeamId: 'holder' })
+})
+
+Deno.test('target revalidation: retargets a bid at the current holder after a trade', () => {
+  // Placed against 'holder', but the row has since moved to 'new-holder'.
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, targetRow('new-holder'), false)
+
+  assertEquals(result, { outcome: 'keep', targetTeamId: 'new-holder' })
+})
+
+Deno.test('target revalidation: voids a bid whose target was dropped', () => {
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, targetRow('holder', '2026-01-01T00:00:00Z'), false)
+
+  assertEquals(result, { outcome: 'void', reason: 'movie_dropped' })
+})
+
+Deno.test('target revalidation: voids a bid the target movie was traded into the bidder\'s own team', () => {
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, targetRow('bidder'), false)
+
+  assertEquals(result, { outcome: 'void', reason: 'target_owned' })
+})
+
+Deno.test('target revalidation: voids a bid whose target row cannot be found', () => {
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, undefined, false)
+
+  assertEquals(result, { outcome: 'void', reason: 'target_missing' })
+})
+
+Deno.test('target revalidation: fails open and leaves the bid alone when the read itself failed', () => {
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, undefined, true)
+
+  assertEquals(result, { outcome: 'keep', targetTeamId: 'holder' })
+})
+
+Deno.test('target revalidation: a failed read wins even if a row was somehow also supplied', () => {
+  // Should not happen in practice (a failed batch read yields no rows), but the
+  // read-failure flag must take priority over any row so a caller can never
+  // accidentally void a bid it could not actually verify.
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, targetRow('someone-else', '2026-01-01T00:00:00Z'), true)
+
+  assertEquals(result, { outcome: 'keep', targetTeamId: 'holder' })
+})
+
+Deno.test('target revalidation: dropped takes priority over self-owned when both are true', () => {
+  // Dropping a movie does not change the row's team_id, so a row can be both
+  // dropped and (coincidentally, e.g. after a trade) sitting with the bidder.
+  const bid = retargetableBid('bidder', 'holder')
+  const result = resolveTargetRevalidation(bid, targetRow('bidder', '2026-01-01T00:00:00Z'), false)
+
+  assertEquals(result, { outcome: 'void', reason: 'movie_dropped' })
 })

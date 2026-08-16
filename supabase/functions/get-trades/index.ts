@@ -32,6 +32,53 @@ const VALID_STATUSES = [
   'expired',
 ]
 
+/** Holdings named by more than one open offer in this league, keyed by source_id. */
+type ContestedMap = Map<string, number>
+
+async function getContestedSourceIds(
+  supabase: ReturnType<typeof createServiceClient>,
+  leagueId: string
+): Promise<ContestedMap> {
+  const { data, error } = await supabase.rpc('get_contested_source_ids', {
+    p_league_id: leagueId,
+  })
+
+  if (error) {
+    // A missing contest annotation only costs the UI its "Contested" badge, so
+    // degrade to "nothing contested" rather than failing the whole trade list.
+    log.warn('Failed to resolve contested source ids', { league_id: leagueId, error: error.message })
+    return new Map()
+  }
+
+  return new Map(
+    (data ?? []).map((row: { source_id: string; trade_count: number }) => [
+      row.source_id,
+      Number(row.trade_count),
+    ])
+  )
+}
+
+interface TradeItemsShape {
+  movies?: Array<{ source_id?: string }>
+}
+
+/** The source_ids in this offer that other open offers also name. */
+function contestedSourceIdsFor(
+  trade: { initiator_items?: TradeItemsShape; recipient_items?: TradeItemsShape },
+  contested: ContestedMap
+): string[] {
+  if (contested.size === 0) return []
+
+  const ids = [
+    ...(trade.initiator_items?.movies ?? []),
+    ...(trade.recipient_items?.movies ?? []),
+  ]
+    .map((movie) => movie?.source_id)
+    .filter((id): id is string => id !== undefined && contested.has(id))
+
+  return [...new Set(ids)]
+}
+
 function parseParams(req: Request): GetTradesParams {
   if (req.method === 'GET') {
     const url = new URL(req.url)
@@ -108,8 +155,19 @@ Deno.serve(async (req) => {
       .select('*', { count: 'exact', head: true })
       .eq('league_id', league_id)
 
+    // Annotate each offer with which of ITS OWN movies are also named by another
+    // open offer, so the UI can flag a contested deal. get_contested_source_ids
+    // returns counts only -- never which teams or offers are competing -- so
+    // this cannot be used to infer the contents of someone else's trade.
+    const contested = await getContestedSourceIds(serviceClient, league_id)
+
+    const tradesWithContest = (trades ?? []).map((trade) => ({
+      ...trade,
+      contested_source_ids: contestedSourceIdsFor(trade, contested),
+    }))
+
     return jsonResponse({
-      trades: trades ?? [],
+      trades: tradesWithContest,
       pagination: {
         total: totalCount ?? 0,
         limit,

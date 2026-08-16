@@ -1,25 +1,41 @@
 'use client'
 
 import Image from 'next/image'
-import { Clock, DollarSign, AlertTriangle, Film, Trash2, Target } from 'lucide-react'
+import { AlertTriangle, Film, Lock, Target, Trash2 } from 'lucide-react'
 import type { CounterpickBid } from '@/types'
-import { getTmdbPosterUrl, formatTimeRemaining, getBidTypeClass } from './utils'
+import BidAmountAndDeadline from './BidAmountAndDeadline'
+import { getTmdbPosterUrl, getBidTypeClass } from './utils'
 
 interface CounterpickBidCardProps {
   bid: CounterpickBid
   isOwner: boolean
   onCancel?: () => void
+  /** See BidCard: the bid is committed for the week once the cutoff passes. */
+  cancelLocked?: boolean
   onCounter?: () => void
   bidType?: 'pickup' | 'counterpick'
+  /**
+   * When another bid on the same movie still has an open counter-response
+   * window, processing of the whole group is held until it closes. Set to that
+   * window's end so the card explains the delay instead of "Processing soon".
+   */
+  counterWindowClosesAt?: string | null
 }
 
-export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, bidType }: CounterpickBidCardProps) {
+export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt }: CounterpickBidCardProps) {
   const isOutbid = bid.status === 'outbid'
-  const deadline = isOutbid ? bid.response_deadline : bid.processing_deadline
+  const isActive = bid.status === 'active'
   const movieTitle = bid.movies?.title || 'Unknown Movie'
   const posterUrl = bid.movies?.poster_url || null
 
   const typeClass = getBidTypeClass(bidType)
+
+  // An outbid bid gets a prominent "Counter Bid" prompt; an active one gets a
+  // quieter option to raise your own bid or outbid a rival's.
+  const showRecoverButton = isOutbid && isOwner && !!onCounter
+  const showRaiseButton = isActive && !!onCounter
+  const showCancelButton = isOwner && isActive && !!onCancel
+  const showCancelLock = isOwner && isActive && !onCancel && !!cancelLocked
 
   return (
     <div
@@ -56,17 +72,13 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
             vs {bid.target_team?.name || 'Unknown Team'}
           </p>
 
-          <div className="flex items-center gap-4 mt-2">
-            <div className="flex items-center gap-1.5 bid-amount-display text-lg">
-              <DollarSign className="w-5 h-5" />
-              <span>{bid.amount}</span>
-            </div>
-
-            <div className="flex items-center gap-1.5 text-foreground-secondary text-sm">
-              <Clock className="w-4 h-4" />
-              <span>{formatTimeRemaining(deadline)}</span>
-            </div>
-          </div>
+          <BidAmountAndDeadline
+            amount={bid.amount}
+            isOutbid={isOutbid}
+            responseDeadline={bid.response_deadline}
+            processingDeadline={bid.processing_deadline}
+            counterWindowClosesAt={counterWindowClosesAt}
+          />
 
           {isOutbid && (
             <div className="flex items-center gap-1.5 mt-2 text-warning text-sm font-medium">
@@ -77,9 +89,9 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
         </div>
 
         {/* Actions */}
-        {isOwner && (
+        {(showRecoverButton || showRaiseButton || showCancelButton || showCancelLock) && (
           <div className="flex flex-col items-end gap-2">
-            {isOutbid && onCounter && (
+            {showRecoverButton && (
               <button
                 onClick={onCounter}
                 className="btn btn-danger text-sm px-4"
@@ -88,7 +100,17 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
               </button>
             )}
 
-            {bid.status === 'active' && onCancel && (
+            {showRaiseButton && (
+              <button
+                onClick={onCounter}
+                className="btn btn-secondary text-sm px-4 border-crimson text-crimson hover:bg-crimson/10"
+                data-testid={isOwner ? `raise-counterpick-bid-${bid.movie_id}` : `counter-counterpick-bid-${bid.movie_id}`}
+              >
+                {isOwner ? 'Raise Bid' : 'Counter Bid'}
+              </button>
+            )}
+
+            {showCancelButton && (
               <button
                 onClick={onCancel}
                 className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-crimson/10"
@@ -96,6 +118,16 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, onCounter, 
                 <Trash2 className="w-4 h-4 mr-1.5" />
                 Cancel
               </button>
+            )}
+
+            {showCancelLock && (
+              <p
+                className="flex items-center gap-1.5 text-xs text-foreground-muted px-2"
+                data-testid={`counterpick-bid-locked-${bid.movie_id}`}
+              >
+                <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                Locked in
+              </p>
             )}
           </div>
         )}

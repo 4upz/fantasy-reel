@@ -6,7 +6,15 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
+import { SupabaseClient } from '@supabase/supabase-js'
+import {
+  createTestFactory,
+  getAnonClient,
+  getServiceClient,
+  uniqueName,
+  invokeFunction,
+} from './_setup.ts'
+import { seedCounterpickBid as seedCounterpickBidRow } from './_counterpick_helpers.ts'
 
 // Test movie data for pickups
 const currentYear = new Date().getFullYear()
@@ -18,6 +26,69 @@ const testMovieData = {
   vote_average: 0,
   popularity: 100,
   genre_ids: [28, 12],
+}
+
+/**
+ * Load a draft pick's movie_id/team_id, needed to seed a counterpick_bids row
+ * (which requires draft_pick_id, movie_id, and the target team_id).
+ */
+async function getDraftPickRow(
+  serviceClient: SupabaseClient,
+  draftPickId: string
+): Promise<{ id: string; movie_id: string; team_id: string }> {
+  const { data, error } = await serviceClient
+    .from('draft_picks')
+    .select('id, movie_id, team_id')
+    .eq('id', draftPickId)
+    .single()
+  if (error || !data) throw new Error(`Failed to load draft pick: ${error?.message}`)
+  return data
+}
+
+/**
+ * Seed a counterpick_bids row targeting a draft pick, simulating a bid placed
+ * during the FAAB auction phase without going through place-counterpick-bid.
+ */
+function seedCounterpickBid(
+  serviceClient: SupabaseClient,
+  leagueId: string,
+  bidderTeamId: string,
+  draftPick: { id: string; movie_id: string; team_id: string },
+  status: 'active' | 'outbid' | 'cancelled',
+  amount = 5
+): Promise<string> {
+  return seedCounterpickBidRow(serviceClient, {
+    leagueId,
+    teamId: bidderTeamId,
+    movieId: draftPick.movie_id,
+    targetTeamId: draftPick.team_id,
+    draftPickId: draftPick.id,
+    amount,
+    status,
+  })
+}
+
+/** Directly flip a league's status (bypassing the normal phase-transition flow). */
+async function setLeagueStatus(
+  serviceClient: SupabaseClient,
+  leagueId: string,
+  status: string
+): Promise<void> {
+  const { error } = await serviceClient.from('leagues').update({ status }).eq('id', leagueId)
+  if (error) throw new Error(`Failed to update league status: ${error.message}`)
+}
+
+/** Mark a pickup as awarded to a counterpicker, mirroring what process-bids does for draft picks. */
+async function setPickupCounterpicked(
+  serviceClient: SupabaseClient,
+  pickupId: string,
+  counterpickerTeamId: string
+): Promise<void> {
+  const { error } = await serviceClient
+    .from('pickups')
+    .update({ counterpicked_by_team_id: counterpickerTeamId })
+    .eq('id', pickupId)
+  if (error) throw new Error(`Failed to update pickup counterpick: ${error.message}`)
 }
 
 Deno.test({
@@ -433,6 +504,29 @@ Deno.test({
     })
 
     // ============================================================================
+    // League Status Tests
+    // ============================================================================
+
+    await t.step('returns 400 when league is not active (e.g. counterpicking phase)', async () => {
+      const serviceClient = getServiceClient()
+      const leagueId = await factory.createActiveLeague(uniqueName('drop-not-active'))
+      const pickupId = await factory.createPickupForUser(leagueId, client, {
+        tmdb_id: 510001,
+        ...testMovieData,
+        title: 'Not Active Phase Movie',
+      })
+
+      // Simulate the league having moved back into (or still being in) the
+      // counterpicking round, where drops should not be allowed.
+      await setLeagueStatus(serviceClient, leagueId, 'counterpicking')
+
+      const result = await invokeFunction(client, 'drop-movie', {
+        pickup_id: pickupId,
+      })
+      assertEquals(result.error, 'Drops are only allowed while the league is active')
+    })
+
+    // ============================================================================
     // Counterpick Blocking Tests
     // ============================================================================
 
@@ -499,6 +593,122 @@ Deno.test({
         body: { draft_pick_id: draftPickId },
       })
 
+      assertEquals(error, null)
+      assertEquals(data.message, 'Movie dropped successfully')
+    })
+
+    await t.step('returns 400 dropping a draft pick with a pending (active) counterpick bid', async () => {
+      const serviceClient = getServiceClient()
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-bid-active'))
+
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 510002,
+        ...testMovieData,
+        title: 'Pending Active Bid Movie',
+      })
+      const draftPick = await getDraftPickRow(serviceClient, draftPickId)
+
+      const bidderTeam = await factory.getTeamForUser(leagueId, secondClient)
+      if (!bidderTeam) throw new Error('Second user has no team in this league')
+      await seedCounterpickBid(serviceClient, leagueId, bidderTeam.teamId, draftPick, 'active')
+
+      const result = await invokeFunction(client, 'drop-movie', {
+        draft_pick_id: draftPickId,
+      })
+      assertEquals(result.error, 'Cannot drop this movie: another team has a pending counterpick bid on it')
+    })
+
+    await t.step('returns 400 dropping a draft pick with a pending (outbid) counterpick bid', async () => {
+      const serviceClient = getServiceClient()
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-bid-outbid'))
+
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 510003,
+        ...testMovieData,
+        title: 'Pending Outbid Bid Movie',
+      })
+      const draftPick = await getDraftPickRow(serviceClient, draftPickId)
+
+      const bidderTeam = await factory.getTeamForUser(leagueId, secondClient)
+      if (!bidderTeam) throw new Error('Second user has no team in this league')
+      await seedCounterpickBid(serviceClient, leagueId, bidderTeam.teamId, draftPick, 'outbid')
+
+      const result = await invokeFunction(client, 'drop-movie', {
+        draft_pick_id: draftPickId,
+      })
+      assertEquals(result.error, 'Cannot drop this movie: another team has a pending counterpick bid on it')
+    })
+
+    await t.step('allows drop once the pending counterpick bid is cancelled', async () => {
+      const serviceClient = getServiceClient()
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-bid-cancelled'))
+
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 510004,
+        ...testMovieData,
+        title: 'Cancelled Bid Movie',
+      })
+      const draftPick = await getDraftPickRow(serviceClient, draftPickId)
+
+      const bidderTeam = await factory.getTeamForUser(leagueId, secondClient)
+      if (!bidderTeam) throw new Error('Second user has no team in this league')
+      const bidId = await seedCounterpickBid(serviceClient, leagueId, bidderTeam.teamId, draftPick, 'active')
+
+      // Blocked while the bid is pending
+      const blocked = await invokeFunction(client, 'drop-movie', {
+        draft_pick_id: draftPickId,
+      })
+      assertEquals(blocked.error, 'Cannot drop this movie: another team has a pending counterpick bid on it')
+
+      // Cancel the bid, then the drop should succeed
+      await serviceClient.from('counterpick_bids').update({ status: 'cancelled' }).eq('id', bidId)
+
+      const { data, error } = await client.functions.invoke('drop-movie', {
+        body: { draft_pick_id: draftPickId },
+      })
+      assertEquals(error, null)
+      assertEquals(data.message, 'Movie dropped successfully')
+    })
+
+    await t.step('returns 400 dropping a pickup that has been counterpicked (H2 regression)', async () => {
+      const serviceClient = getServiceClient()
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-block-pickup'))
+
+      const pickupId = await factory.createPickupForUser(leagueId, client, {
+        tmdb_id: 510005,
+        ...testMovieData,
+        title: 'Counterpicked Pickup',
+      })
+
+      const counterpickerTeam = await factory.getTeamForUser(leagueId, secondClient)
+      if (!counterpickerTeam) throw new Error('Second user has no team in this league')
+      await setPickupCounterpicked(serviceClient, pickupId, counterpickerTeam.teamId)
+
+      const result = await invokeFunction(client, 'drop-movie', {
+        pickup_id: pickupId,
+      })
+      assertEquals(result.error, 'Cannot drop a movie that has been counterpicked')
+    })
+
+    await t.step('allows dropping a draft pick with a pending bid when blocking is disabled', async () => {
+      const serviceClient = getServiceClient()
+      const leagueId = await factory.createActiveLeague(uniqueName('cp-bid-no-block'))
+      await factory.setCounterpickBlockDrops(leagueId, false)
+
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 510006,
+        ...testMovieData,
+        title: 'Pending Bid But Droppable',
+      })
+      const draftPick = await getDraftPickRow(serviceClient, draftPickId)
+
+      const bidderTeam = await factory.getTeamForUser(leagueId, secondClient)
+      if (!bidderTeam) throw new Error('Second user has no team in this league')
+      await seedCounterpickBid(serviceClient, leagueId, bidderTeam.teamId, draftPick, 'active')
+
+      const { data, error } = await client.functions.invoke('drop-movie', {
+        body: { draft_pick_id: draftPickId },
+      })
       assertEquals(error, null)
       assertEquals(data.message, 'Movie dropped successfully')
     })

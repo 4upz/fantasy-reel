@@ -25,14 +25,18 @@ export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }:
       {tabs.map((tab) => {
         const isActive = isTabActive(pathname, tab.href)
 
+        // A demoted tab keeps its place in the row and differs only in weight of
+        // colour - it has already given up its position, so restyling it further
+        // would just make it conspicuous again.
+        const inactiveText = tab.secondary ? 'text-foreground-muted' : 'text-foreground-secondary'
+
         return (
           <Link
             key={tab.name}
             href={tab.href}
+            data-testid={tab.secondary ? 'league-tab-secondary' : undefined}
             className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-[11px] text-sm font-medium transition-colors ${
-              isActive
-                ? 'border-gold text-gold'
-                : 'border-transparent text-foreground-secondary hover:text-foreground'
+              isActive ? 'border-gold text-gold' : `border-transparent ${inactiveText} hover:text-foreground`
             }`}
             aria-current={isActive ? 'page' : undefined}
           >

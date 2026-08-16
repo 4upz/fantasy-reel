@@ -436,6 +436,9 @@ verify_jwt = false
 [functions.veto-trade]
 verify_jwt = false
 
+[functions.approve-trade]
+verify_jwt = false
+
 [functions.process-trades]
 verify_jwt = false
 
@@ -470,6 +473,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.weekly-releases-digest]
+verify_jwt = false
+
+[functions.bid-cutoff-announcement]
 verify_jwt = false
 
 [functions.sync-release-dates]
