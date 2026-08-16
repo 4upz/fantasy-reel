@@ -64,7 +64,7 @@ export const leagueOptions: Command = {
       `Drop limit: ${settings.drop_limit ?? '?'} per season`,
       '',
       '**Bidding**',
-      `FAAB budget: $${settings.faab_budget ?? 100}`,
+      `Fantasy budget: $${settings.faab_budget ?? 100}`,
       `Counter window: ${settings.counterbid_hours ?? '?'} hours`,
       '',
       '**Counterpicks**',

@@ -1,7 +1,7 @@
 /**
  * Place Counterpick Bid Edge Function
  *
- * Allows teams to bid FAAB budget to counterpick opponent movies during
+ * Allows teams to bid fantasy budget to counterpick opponent movies during
  * the active (bidding) phase. Mirrors place-bid but targets draft picks
  * for counterpicking instead of undrafted movies for pickup.
  *

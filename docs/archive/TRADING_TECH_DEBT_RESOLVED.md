@@ -11,7 +11,7 @@ All 21 items identified on 2026-01-24 have been resolved.
 | `20260130_fix_trade_assets_constraint.sql` | execute_trade constraint violation |
 | `20260131_trading_race_condition_fixes.sql` | BE#1-3, BE#5: Race conditions, row locking, atomic RPCs |
 | `20260131_trading_rls_restrictions.sql` | BE#4: RLS trade visibility |
-| `20260201_trading_faab_config.sql` | BE#6: Dynamic FAAB limits |
+| `20260201_trading_faab_config.sql` | BE#6: Dynamic fantasy budget limits |
 | `20260201_add_notification_log.sql` | BE#7: Email delivery tracking |
 
 ---
@@ -23,10 +23,10 @@ All 21 items identified on 2026-01-24 have been resolved.
 |---|-------|-----|
 | BE#1 | Movie in multiple pending trades | Trigger `validate_trade_movies_trigger` |
 | BE#2 | No row-level locking | Atomic RPCs with `SELECT ... FOR UPDATE` |
-| BE#3 | FAAB budget race condition | `CHECK (remaining_budget >= 0)` constraint |
+| BE#3 | Fantasy budget race condition | `CHECK (remaining_budget >= 0)` constraint |
 | BE#4 | Counter-offer role swap confusing | Documented as intentional design |
 | BE#5 | Missing uniqueness constraint | Partial unique index on active trades |
-| BE#6 | Hard-coded FAAB max | `faab_budget` column on leagues |
+| BE#6 | Hard-coded budget max | `faab_budget` column on leagues |
 | BE#7 | Silent email failures | `notification_log` table |
 
 ### Frontend (9 items)

@@ -4,4 +4,4 @@ category: League
 
 # BidCard
 
-A pending or resolved FAAB bid on an undrafted movie.
+A pending or resolved fantasy-budget bid on an undrafted movie.

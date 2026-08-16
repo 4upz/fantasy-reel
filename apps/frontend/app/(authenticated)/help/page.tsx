@@ -184,7 +184,7 @@ export default function HelpPage() {
                   </li>
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
-                    <span>Set a FAAB budget for pickups (optional)</span>
+                    <span>Set a fantasy budget for pickups (optional)</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
@@ -382,13 +382,13 @@ export default function HelpPage() {
           <Section id="pickups" icon={<CircleDollarSign className="w-5 h-5" />} title="Pickups & Drops">
             <p>
               After the draft, you can still acquire new movies through the pickup (waiver) system.
-              Use your FAAB budget to bid on undrafted movies.
+              Use your fantasy budget to bid on undrafted movies.
             </p>
 
             <div className="card p-5 mb-4">
-              <h4 className="font-semibold text-foreground mb-3">FAAB Bidding System</h4>
+              <h4 className="font-semibold text-foreground mb-3">Fantasy Budget Bidding</h4>
               <p className="text-sm mb-3">
-                <strong>FAAB (Free Agent Acquisition Budget)</strong> is your currency for pickups.
+                Your <strong>Fantasy Budget</strong> is your currency for pickups.
                 Each league sets a budget amount (e.g., $100) that you can use throughout the season.
               </p>
               <ul className="space-y-2 text-sm">
@@ -402,7 +402,7 @@ export default function HelpPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
-                  <span>Winning bid amount is deducted from your FAAB budget</span>
+                  <span>Winning bid amount is deducted from your fantasy budget</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />

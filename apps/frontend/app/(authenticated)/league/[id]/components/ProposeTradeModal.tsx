@@ -79,9 +79,9 @@ export default function ProposeTradeModal({
 
   // Selected items
   const [offeredMovies, setOfferedMovies] = useState<Set<string>>(new Set())
-  const [offeredFaab, setOfferedFaab] = useState(0)
+  const [offeredBudget, setOfferedBudget] = useState(0)
   const [requestedMovies, setRequestedMovies] = useState<Set<string>>(new Set())
-  const [requestedFaab, setRequestedFaab] = useState(0)
+  const [requestedBudget, setRequestedBudget] = useState(0)
   const [message, setMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -220,9 +220,9 @@ export default function ProposeTradeModal({
 
   const hasItems =
     offeredMovies.size > 0 ||
-    offeredFaab > 0 ||
+    offeredBudget > 0 ||
     requestedMovies.size > 0 ||
-    requestedFaab > 0
+    requestedBudget > 0
 
   const submitTradeAction = useCallback(async () => {
     if (!selectedTeamId) return
@@ -237,7 +237,7 @@ export default function ProposeTradeModal({
           source: m.source,
           source_id: m.source_id,
         })),
-      faab: offeredFaab,
+      faab: offeredBudget,
     }
 
     const requestedItems: TradeItems = {
@@ -248,7 +248,7 @@ export default function ProposeTradeModal({
           source: m.source,
           source_id: m.source_id,
         })),
-      faab: requestedFaab,
+      faab: requestedBudget,
     }
 
     const result = await onPropose(
@@ -261,7 +261,7 @@ export default function ProposeTradeModal({
     if (!result.success) {
       setError(result.error || 'Failed to propose trade')
     }
-  }, [selectedTeamId, tradeableMovies, offeredMovies, offeredFaab, recipientMovies, requestedMovies, requestedFaab, message, onPropose])
+  }, [selectedTeamId, tradeableMovies, offeredMovies, offeredBudget, recipientMovies, requestedMovies, requestedBudget, message, onPropose])
 
   const { execute: handleSubmit, isLoading } = useAsyncAction(submitTradeAction)
 
@@ -342,9 +342,9 @@ export default function ProposeTradeModal({
                   setStep('select-team')
                   setSelectedTeamId(null)
                   setOfferedMovies(new Set())
-                  setOfferedFaab(0)
+                  setOfferedBudget(0)
                   setRequestedMovies(new Set())
-                  setRequestedFaab(0)
+                  setRequestedBudget(0)
                 }}
                 className="text-sm text-gold hover:text-gold-hover transition-colors"
               >
@@ -363,14 +363,14 @@ export default function ProposeTradeModal({
                 />
                 <div className="mt-3">
                   <label className="text-sm text-foreground-secondary">
-                    FAAB (max ${budget?.remaining_budget ?? 0})
+                    Budget (max ${budget?.remaining_budget ?? 0})
                   </label>
                   <input
                     type="number"
                     min={0}
                     max={budget?.remaining_budget ?? 0}
-                    value={offeredFaab}
-                    onChange={(e) => setOfferedFaab(Math.max(0, parseInt(e.target.value) || 0))}
+                    value={offeredBudget}
+                    onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
                     className="input mt-1 w-24"
                   />
                 </div>
@@ -392,15 +392,15 @@ export default function ProposeTradeModal({
                     />
                     <div className="mt-3">
                       <label className="text-sm text-foreground-secondary">
-                        FAAB (max ${recipientBudget?.remaining_budget ?? 0})
+                        Budget (max ${recipientBudget?.remaining_budget ?? 0})
                       </label>
                       <input
                         type="number"
                         min={0}
                         max={recipientBudget?.remaining_budget ?? 0}
-                        value={requestedFaab}
+                        value={requestedBudget}
                         onChange={(e) =>
-                          setRequestedFaab(Math.max(0, parseInt(e.target.value) || 0))
+                          setRequestedBudget(Math.max(0, parseInt(e.target.value) || 0))
                         }
                         className="input mt-1 w-24"
                       />

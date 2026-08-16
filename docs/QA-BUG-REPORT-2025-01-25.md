@@ -128,7 +128,7 @@ These bugs block core user flows and should be prioritized first:
   2. Leagues (creating, joining, inviting)
   3. Drafting (snake draft format, strategy tips, counterpick rounds)
   4. Scoring system (70-point baseline, bonuses/penalties, score sources)
-  5. Pickups & Drops (FAAB bidding system)
+  5. Pickups & Drops (fantasy budget bidding system)
   6. Trading (propose, accept, reject, counter, veto)
 - **Files created:**
   - `apps/frontend/app/(authenticated)/help/page.tsx` - Full help page with quick navigation and detailed sections

@@ -126,7 +126,7 @@ BEGIN
       UPDATE pickups SET counterpicked_by_team_id = NULL WHERE id = v_cp.pickup_id;
     END IF;
 
-    -- 1b. refund the FAAB the winning bid was charged, and cancel that bid.
+    -- 1b. refund the budget the winning bid was charged, and cancel that bid.
     -- Draft-phase counterpicks (make-counterpick) have no bid and no charge,
     -- so this loop simply finds nothing for them.
     FOR v_bid IN

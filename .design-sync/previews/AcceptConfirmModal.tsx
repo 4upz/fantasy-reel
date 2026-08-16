@@ -69,7 +69,7 @@ export const Default = () => (
   </Stage>
 )
 
-/** A multi-asset trade with FAAB moving both ways. */
+/** A multi-asset trade with budget moving both ways. */
 export const MultiAsset = () => (
   <Stage width={900} height={700}>
     <AcceptConfirmModal

@@ -446,7 +446,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           return { success: false, error: data.error || 'Failed to approve trade' }
         }
 
-        // Unlike veto, this moves movies and FAAB right away -- and the
+        // Unlike veto, this moves movies and budget right away -- and the
         // commissioner may be a party to the trade -- so refresh the roster too.
         await Promise.all([fetchTrades(), fetchTradeableMovies(), fetchBudget()])
         return { success: true }

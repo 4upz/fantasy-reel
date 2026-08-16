@@ -111,7 +111,7 @@ export default function TradingPanel({
           <div>
             <h2 className="text-xl font-display font-bold text-foreground">Trading Block</h2>
             <p className="text-sm text-foreground-secondary mt-1">
-              Trade movies and FAAB with other teams
+              Trade movies and budget with other teams
             </p>
           </div>
 
@@ -136,7 +136,7 @@ export default function TradingPanel({
         {budget && (
           <div className="mt-4 pt-4 border-t border-border">
             <p className="text-sm text-foreground-secondary">
-              Available FAAB: <span className="text-gold font-medium" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
+              Available Budget: <span className="text-gold font-medium" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
             </p>
           </div>
         )}

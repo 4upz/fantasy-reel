@@ -755,7 +755,12 @@ Teams can trade movies with each other during the active season.
 
 ### Configuration
 
-- **FAAB Budget:** Teams have a budget for bidding (Free Agent Acquisition Budget)
+- **Fantasy Budget:** Teams have a budget for bidding and trading. "Fantasy Budget"
+  is the user-facing term everywhere (shortened to "Budget" in tight UI); the older
+  fantasy-sports jargon "FAAB" must not appear in UI copy, Discord embeds, emails, or
+  docs. The database still stores it as `leagues.faab_budget`, `trade_assets.faab_amount`,
+  and the `faab` key inside the `trade_offers` items JSONB — those are unrenamed schema
+  identifiers, not display terms.
 - **Review Period:** Optional window for league review before trades execute
   (`leagues.trade_review_enabled`, `leagues.trade_veto_hours`, default 24h)
 - **Veto:** League owner can veto trades during that window

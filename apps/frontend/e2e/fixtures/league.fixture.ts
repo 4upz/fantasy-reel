@@ -199,7 +199,7 @@ export const test = authTest.extend<LeagueFixtures>({
       await use({
         ...league,
         teamId: team.id,
-        budget: 100, // Default FAAB budget
+        budget: 100, // Default fantasy budget
       })
     } finally {
       await deleteTestLeague(league.id)

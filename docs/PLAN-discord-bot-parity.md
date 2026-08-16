@@ -8,7 +8,7 @@ tasks). Mapped against Fantasy Reel's existing `apps/discord-bot` (discord.js ga
 
 **Domain translation used throughout:** Publisher → Team · Master Game → Movie (TMDb) ·
 Critic Score → aggregate critic score (IMDb/RT/Metacritic via MDBList) · Game News → Movie News ·
-Public Bidding → FAAB pickup bids · Conference → *no equivalent*.
+Public Bidding → fantasy budget pickup bids · Conference → *no equivalent*.
 
 ---
 
@@ -30,7 +30,7 @@ implementers must build against these **actual** facts:
   separate `pickups` table, which *does* have `movie_id` and `picked_up_at`.
 - **Active roster** = `draft_picks` rows with `dropped_at IS NULL` **plus** `pickups` rows with
   `dropped_at IS NULL`.
-- **FAAB balance** lives in `team_budgets.remaining_budget`, not on `teams`.
+- **Fantasy budget balance** lives in `team_budgets.remaining_budget`, not on `teams`.
 - **League-scoped `team_scores` queries** must filter server-side:
   `.select('..., teams!inner(..., league_participants!inner(league_id))')` +
   `.eq('teams.league_participants.league_id', leagueId)` — never fetch-all-then-filter.
@@ -87,7 +87,7 @@ URL helper in `utils/format.ts`; reuse it). Distinct from `/standings` (full tab
 
 ### A2. `/league-options` — full league settings
 FC: `LeagueOptionsCommand`. Embed listing: draft type (snake/linear), rounds, pick time limit,
-counterpick slots, bidding enabled + window + min/max bid, FAAB budget, trade review/veto settings.
+counterpick slots, bidding enabled + window + min/max bid, fantasy budget, trade review/veto settings.
 Read from `leagues` + `league_bidding_config`.
 
 ### A3. `/movie <name>` — movie lookup
@@ -114,8 +114,8 @@ state: "No bids have been processed yet."
 ### A6. `/current-bids` — pending bids
 FC: `PublicBidsCommand`. Query `pickup_bids` with `status='pending'` for the league: movie, current
 high bid **without revealing bidder amounts if the league treats bids as sealed** — check with the
-product owner: if bids are sealed-FAAB, show only *which movies have active bids and bidder count*,
-not amounts. Default to the sealed presentation; it matches FAAB norms.
+product owner: if bids are sealed-budget, show only *which movies have active bids and bidder count*,
+not amounts. Default to the sealed presentation; it matches sealed-bid norms.
 
 ### A7. `/top-available` — best unrostered movies
 FC: `TopAvailableGamesCommand`. Adaptation: instead of FC's per-publisher personalization, show the
