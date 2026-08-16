@@ -254,6 +254,10 @@ npx supabase functions logs --project-ref <your-project-ref>
 **Vercel Logs:**
 - Dashboard → Project → Deployments → Select deployment → Functions tab
 
+### Uptime Monitoring
+
+The frontend exposes `/api/health` — an unauthenticated, uncached endpoint that checks Supabase reachability and returns `200` (`{"status":"ok"}`) or `503` (`{"status":"degraded"}`). Point an external monitor (e.g. [UptimeRobot](https://uptimerobot.com), [Better Stack](https://betterstack.com)) at `https://<your-production-domain>/api/health` on a short interval (1-5 min), plus the landing page (`https://<your-production-domain>/`) as a sanity check that the app itself is serving traffic.
+
 ---
 
 ## Troubleshooting
