@@ -525,7 +525,7 @@ function TradeItemsSection({
               <div className="w-8 h-8 bg-gold/20 rounded flex items-center justify-center">
                 <span className="text-gold font-bold text-sm">$</span>
               </div>
-              <p className="text-sm font-medium text-gold">${items.faab} FAAB</p>
+              <p className="text-sm font-medium text-gold">${items.faab} budget</p>
             </div>
           )}
         </div>
@@ -572,14 +572,14 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
     existingRecipientItems.movies.forEach((m) => ids.add(m.source_id))
     return ids
   })
-  const [offeredFaab, setOfferedFaab] = useState(existingRecipientItems.faab || 0)
+  const [offeredBudget, setOfferedBudget] = useState(existingRecipientItems.faab || 0)
 
   const [requestedMovies, setRequestedMovies] = useState<Set<string>>(() => {
     const ids = new Set<string>()
     existingInitiatorItems.movies.forEach((m) => ids.add(m.source_id))
     return ids
   })
-  const [requestedFaab, setRequestedFaab] = useState(existingInitiatorItems.faab || 0)
+  const [requestedBudget, setRequestedBudget] = useState(existingInitiatorItems.faab || 0)
   const [message, setMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
 
@@ -623,7 +623,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
   }
 
   const hasItems =
-    offeredMovies.size > 0 || offeredFaab > 0 || requestedMovies.size > 0 || requestedFaab > 0
+    offeredMovies.size > 0 || offeredBudget > 0 || requestedMovies.size > 0 || requestedBudget > 0
 
   const submitCounterAction = useCallback(async () => {
     setError(null)
@@ -636,7 +636,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
           source: m.source,
           source_id: m.source_id,
         })),
-      faab: offeredFaab,
+      faab: offeredBudget,
     }
 
     const counterRequestedItems: TradeItems = {
@@ -647,7 +647,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
           source: m.source,
           source_id: m.source_id,
         })),
-      faab: requestedFaab,
+      faab: requestedBudget,
     }
 
     const result = await onCounter(counterOfferedItems, counterRequestedItems, message.trim() || undefined)
@@ -655,7 +655,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
     if (!result.success) {
       setError(result.error || 'Failed to submit counter-offer')
     }
-  }, [tradeableMovies, offeredMovies, offeredFaab, otherTeamMovies, requestedMovies, requestedFaab, message, onCounter])
+  }, [tradeableMovies, offeredMovies, offeredBudget, otherTeamMovies, requestedMovies, requestedBudget, message, onCounter])
 
   const { execute: handleSubmit, isLoading } = useAsyncAction(submitCounterAction)
 
@@ -703,14 +703,14 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               onToggle={toggleOfferedMovie}
             />
             <div className="mt-3">
-              <label htmlFor="counter-offered-faab" className="text-sm text-foreground-secondary">FAAB (max ${budget?.remaining_budget ?? 0})</label>
+              <label htmlFor="counter-offered-budget" className="text-sm text-foreground-secondary">Budget (max ${budget?.remaining_budget ?? 0})</label>
               <input
-                id="counter-offered-faab"
+                id="counter-offered-budget"
                 type="number"
                 min={0}
                 max={budget?.remaining_budget ?? 0}
-                value={offeredFaab}
-                onChange={(e) => setOfferedFaab(Math.max(0, parseInt(e.target.value) || 0))}
+                value={offeredBudget}
+                onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
                 className="input mt-1 w-24"
               />
             </div>
@@ -725,14 +725,14 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               onToggle={toggleRequestedMovie}
             />
             <div className="mt-3">
-              <label htmlFor="counter-requested-faab" className="text-sm text-foreground-secondary">FAAB</label>
+              <label htmlFor="counter-requested-budget" className="text-sm text-foreground-secondary">Budget</label>
               <input
-                id="counter-requested-faab"
+                id="counter-requested-budget"
                 type="number"
                 min={0}
                 max={100}
-                value={requestedFaab}
-                onChange={(e) => setRequestedFaab(Math.max(0, parseInt(e.target.value) || 0))}
+                value={requestedBudget}
+                onChange={(e) => setRequestedBudget(Math.max(0, parseInt(e.target.value) || 0))}
                 className="input mt-1 w-24"
               />
             </div>
@@ -900,7 +900,7 @@ interface ApproveModalProps {
 
 /**
  * Confirmation for ending a review period early. Worth a confirm step: unlike
- * veto -- which only stops something -- this moves movies and FAAB the moment
+ * veto -- which only stops something -- this moves movies and budget the moment
  * it is clicked, before the deadline both teams were told to expect.
  */
 function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
@@ -942,7 +942,7 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
         <div className="p-4 space-y-3">
           <div className="p-3 rounded-lg bg-surface-hover">
             <p className="text-sm text-foreground-secondary">
-              Movies and FAAB change hands immediately, and both teams are notified that you
+              Movies and budget change hands immediately, and both teams are notified that you
               approved the trade.
             </p>
           </div>

@@ -149,7 +149,7 @@ export default async function StandingsPage({ params }: PageProps) {
       pickups={(pickups ?? []) as PickupWithScores[]}
       counterpicks={(counterpicks ?? []) as CounterpickWithScores[]}
       currentUserId={user.id}
-      startingFaab={league.faab_budget ?? 0}
+      startingBudget={league.faab_budget ?? 0}
     />
   )
 }

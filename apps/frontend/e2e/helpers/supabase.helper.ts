@@ -716,7 +716,7 @@ interface TradeItems {
  * Create a trade offer for testing
  * Status values: proposed, countered, accepted, review, completed, rejected, cancelled, vetoed, expired
  *
- * Note: The trade_offers table requires at least one item (movie or FAAB) from either party
+ * Note: The trade_offers table requires at least one item (movie or budget) from either party
  */
 export async function createTradeOffer(
   leagueId: string,

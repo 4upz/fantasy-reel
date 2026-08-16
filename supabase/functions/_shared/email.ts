@@ -23,7 +23,7 @@ export interface TradeEmailData {
   otherTeamName: string
   leagueName: string
   leagueUrl: string
-  offeredItems: string // Pre-formatted list (e.g., "Movie A, Movie B, $10 FAAB")
+  offeredItems: string // Pre-formatted list (e.g., "Movie A, Movie B, $10 budget")
   requestedItems: string // Pre-formatted list
   message?: string
   vetoReason?: string
@@ -576,13 +576,13 @@ export async function sendTradeEmail(
 /**
  * Format trade items for email display
  * @param movies Array of movie titles
- * @param faab FAAB amount (0 if none)
- * @returns Formatted string like "Movie A, Movie B, $10 FAAB"
+ * @param budget Fantasy budget amount (0 if none)
+ * @returns Formatted string like "Movie A, Movie B, $10 budget"
  */
-export function formatTradeItemsForEmail(movies: string[], faab: number): string {
+export function formatTradeItemsForEmail(movies: string[], budget: number): string {
   const parts: string[] = [...movies]
-  if (faab > 0) {
-    parts.push(`$${faab} FAAB`)
+  if (budget > 0) {
+    parts.push(`$${budget} budget`)
   }
   return parts.length > 0 ? parts.join(', ') : 'Nothing'
 }

@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Add a FAAB-style bidding system for acquiring movies during the season, with configurable draft/pickup slots and guaranteed counter-bid windows.
+**Goal:** Add a fantasy budget bidding system for acquiring movies during the season, with configurable draft/pickup slots and guaranteed counter-bid windows.
 
 **Architecture:** Database-first approach. New tables for bids, budgets, pickups, drops, and notifications. Edge Functions handle bid placement and processing. Cron jobs for weekly batch processing and hourly extended-window checks. Frontend components for bidding UI and roster management.
 

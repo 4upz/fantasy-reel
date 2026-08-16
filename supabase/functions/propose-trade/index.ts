@@ -154,10 +154,10 @@ Deno.serve(async (req) => {
       { name: `${recipientName} offers`, value: recipientMovies || 'Nothing', inline: true },
     ]
     if (enrichedOfferedItems.faab > 0 || enrichedRequestedItems.faab > 0) {
-      const faabParts = []
-      if (enrichedOfferedItems.faab > 0) faabParts.push(`${initiatorInfo?.name ?? 'Proposer'}: $${enrichedOfferedItems.faab}`)
-      if (enrichedRequestedItems.faab > 0) faabParts.push(`${recipientName}: $${enrichedRequestedItems.faab}`)
-      fields.push({ name: 'FAAB', value: faabParts.join(' / '), inline: true })
+      const budgetParts = []
+      if (enrichedOfferedItems.faab > 0) budgetParts.push(`${initiatorInfo?.name ?? 'Proposer'}: $${enrichedOfferedItems.faab}`)
+      if (enrichedRequestedItems.faab > 0) budgetParts.push(`${recipientName}: $${enrichedRequestedItems.faab}`)
+      fields.push({ name: 'Budget', value: budgetParts.join(' / '), inline: true })
     }
     if (message?.trim()) {
       fields.push({ name: 'Message', value: message.trim(), inline: false })

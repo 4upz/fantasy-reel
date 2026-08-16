@@ -182,8 +182,8 @@ Deno.test({
       assertEquals(trade?.recipient_team_id, firstTeam?.teamId)
     })
 
-    await t.step('successfully counters with FAAB only', async () => {
-      const leagueId = await factory.createTradingLeague(uniqueName('counter-faab'))
+    await t.step('successfully counters with budget only', async () => {
+      const leagueId = await factory.createTradingLeague(uniqueName('counter-budget'))
       const tradeOfferId = await createPendingTrade(leagueId)
 
       const { data, error } = await secondClient.functions.invoke('counter-trade', {

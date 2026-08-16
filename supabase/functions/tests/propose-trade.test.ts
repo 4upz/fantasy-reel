@@ -150,8 +150,8 @@ Deno.test({
       assertEquals(result.error, 'Trade must include at least one item')
     })
 
-    await t.step('returns 400 for invalid FAAB amount (negative)', async () => {
-      const leagueId = await factory.createTradingLeague(uniqueName('trade-neg-faab'))
+    await t.step('returns 400 for invalid budget amount (negative)', async () => {
+      const leagueId = await factory.createTradingLeague(uniqueName('trade-neg-budget'))
       const recipientTeam = await factory.getTeamForUser(leagueId, secondClient)
 
       const result = await invokeFunction(client, 'propose-trade', {
@@ -160,11 +160,11 @@ Deno.test({
         offered_items: { movies: [], faab: -10 },
         requested_items: { movies: [], faab: 0 },
       })
-      assertEquals(result.error, 'FAAB must be a non-negative number')
+      assertEquals(result.error, 'Budget must be a non-negative number')
     })
 
-    await t.step('returns 400 when offering more FAAB than available', async () => {
-      const leagueId = await factory.createTradingLeague(uniqueName('trade-over-faab'))
+    await t.step('returns 400 when offering more budget than available', async () => {
+      const leagueId = await factory.createTradingLeague(uniqueName('trade-over-budget'))
       const recipientTeam = await factory.getTeamForUser(leagueId, secondClient)
 
       // Default budget is 100, try to offer 101
@@ -174,15 +174,15 @@ Deno.test({
         offered_items: { movies: [], faab: 101 },
         requested_items: { movies: [], faab: 0 },
       })
-      assertEquals(result.error, 'FAAB must not exceed league budget of $100')
+      assertEquals(result.error, 'Budget must not exceed the league maximum of $100')
     })
 
     // ============================================================================
     // Success Tests
     // ============================================================================
 
-    await t.step('successfully proposes FAAB-only trade', async () => {
-      const leagueId = await factory.createTradingLeague(uniqueName('trade-faab-success'))
+    await t.step('successfully proposes budget-only trade', async () => {
+      const leagueId = await factory.createTradingLeague(uniqueName('trade-budget-success'))
       const recipientTeam = await factory.getTeamForUser(leagueId, secondClient)
 
       const { data, error } = await client.functions.invoke('propose-trade', {
@@ -191,7 +191,7 @@ Deno.test({
           recipient_team_id: recipientTeam?.teamId,
           offered_items: { movies: [], faab: 15 },
           requested_items: { movies: [], faab: 0 },
-          message: 'Free FAAB for you!',
+          message: 'Free budget for you!',
         },
       })
 
@@ -201,7 +201,7 @@ Deno.test({
       assertEquals(data.trade_offer.recipient_team_id, recipientTeam?.teamId)
       assertEquals(data.trade_offer.status, 'proposed')
       assertEquals(data.trade_offer.initiator_items.faab, 15)
-      assertEquals(data.trade_offer.initiator_message, 'Free FAAB for you!')
+      assertEquals(data.trade_offer.initiator_message, 'Free budget for you!')
       assertEquals(data.message, 'Trade proposal submitted successfully')
     })
 
@@ -247,7 +247,7 @@ Deno.test({
       assertEquals(data.trade_offer.recipient_items.movies.length, 1)
     })
 
-    await t.step('successfully proposes movie + FAAB trade', async () => {
+    await t.step('successfully proposes movie + budget trade', async () => {
       const leagueId = await factory.createTradingLeague(uniqueName('trade-combo-success'))
       const recipientTeam = await factory.getTeamForUser(leagueId, secondClient)
       const initiatorPicks = await factory.getDraftPicksForUser(leagueId, client)

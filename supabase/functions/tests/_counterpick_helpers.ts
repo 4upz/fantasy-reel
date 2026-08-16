@@ -65,7 +65,7 @@ export async function createProcessBidsCaller(): Promise<
 
 /**
  * Seed a counterpick_bids row directly, simulating a bid placed during the
- * FAAB auction phase without going through place-counterpick-bid. Exactly one
+ * budget auction phase without going through place-counterpick-bid. Exactly one
  * of draftPickId / pickupId must be provided (the table's CHECK enforces it).
  */
 export async function seedCounterpickBid(
