@@ -114,8 +114,9 @@ Deno.serve(async (req) => {
     tmdbUrl.searchParams.set('sort_by', 'popularity.desc')
     tmdbUrl.searchParams.set('include_adult', 'false')
     tmdbUrl.searchParams.set('include_video', 'false')
-    tmdbUrl.searchParams.set('certification_country', 'US')
-    tmdbUrl.searchParams.set('certification.lte', 'R')
+    // No certification filter -- see the note in browse-movies. `certification.lte`
+    // silently drops every movie with no US rating assigned yet, which is most of
+    // the upcoming slate this sync exists to collect.
     tmdbUrl.searchParams.set('page', page.toString())
     tmdbUrl.searchParams.set('primary_release_date.gte', today)
     tmdbUrl.searchParams.set('primary_release_date.lte', endOfYear)
