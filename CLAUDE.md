@@ -757,10 +757,21 @@ Teams can trade movies with each other during the active season.
 
 - **Fantasy Budget:** Teams have a budget for bidding and trading. "Fantasy Budget"
   is the user-facing term everywhere (shortened to "Budget" in tight UI); the older
-  fantasy-sports jargon "FAAB" must not appear in UI copy, Discord embeds, emails, or
-  docs. The database still stores it as `leagues.faab_budget`, `trade_assets.faab_amount`,
-  and the `faab` key inside the `trade_offers` items JSONB — those are unrenamed schema
-  identifiers, not display terms.
+  fantasy-sports jargon "FAAB" must not appear in UI copy, Discord embeds, emails,
+  docs, or any string that can reach a user.
+
+  That last clause includes **messages returned by DB functions**. `validate_trade_items()`
+  is re-run inside `execute_trade()` under the trade row lock, and `approve-trade`
+  returns that refusal to the commissioner as the HTTP error body — so its wording is
+  user-facing even though `_shared/trade-validation.ts` usually answers first. Both
+  validators are worded identically on purpose (see
+  `20260816120000_rename_faab_in_trade_validation.sql`); change them together.
+
+  What keeps the old name, deliberately: `leagues.faab_budget`,
+  `trade_assets.faab_amount`, the `faab` key inside the `trade_offers` items JSONB,
+  the `get_league_faab_budget()` function, and plpgsql locals like `v_faab`. Those
+  are schema identifiers, not display text. Renaming them means a migration that
+  rewrites stored JSONB on a live table — a separate change, not a terminology sweep.
 - **Review Period:** Optional window for league review before trades execute
   (`leagues.trade_review_enabled`, `leagues.trade_veto_hours`, default 24h)
 - **Veto:** League owner can veto trades during that window
