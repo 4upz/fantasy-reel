@@ -275,6 +275,168 @@ Deno.test({
         assertEquals(wonNotifications, 1)
       })
 
+      await t.step('extended mode awards a bid group whose counter window has closed', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('ext-award'), 2)
+        const myTeam = await factory.getTeamForUser(leagueId, client)
+        const otherTeam = await factory.getTeamForUser(leagueId, secondClient)
+        if (!myTeam || !otherTeam) throw new Error('Teams not found')
+
+        const tmdbId = uniqueVoidTestTmdbId()
+        // The weekly deadline passed two hours ago; the loser's counter window
+        // ran past it (extra time) and expired ten minutes ago. This is exactly
+        // the state the hourly extended run exists to resolve.
+        const processingDeadline = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+        const expiredResponseDeadline = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+        const movieData = {
+          title: `Extended Award Test ${tmdbId}`,
+          poster_url: null,
+          release_date: `${new Date().getFullYear() + 1}-12-15`,
+          vote_average: 6,
+          popularity: 20,
+        }
+
+        const { error: leaderError } = await serviceClient.from('pickup_bids').insert({
+          league_id: leagueId,
+          team_id: myTeam.teamId,
+          tmdb_id: tmdbId,
+          movie_data: movieData,
+          amount: 6,
+          status: 'active',
+          processing_deadline: processingDeadline,
+        })
+        assertEquals(leaderError, null)
+
+        const { error: outbidError } = await serviceClient.from('pickup_bids').insert({
+          league_id: leagueId,
+          team_id: otherTeam.teamId,
+          tmdb_id: tmdbId,
+          movie_data: movieData,
+          amount: 4,
+          status: 'outbid',
+          countered_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+          response_deadline: expiredResponseDeadline,
+          processing_deadline: processingDeadline,
+        })
+        assertEquals(outbidError, null)
+
+        const { status, data } = await callProcessBids({ mode: 'extended', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.processed, 1)
+        assertEquals(data.results[0].winner_team_id, myTeam.teamId)
+
+        const { data: pickup } = await serviceClient
+          .from('pickups')
+          .select('team_id, amount_paid')
+          .eq('league_id', leagueId)
+          .maybeSingle()
+        assertExists(pickup)
+        assertEquals(pickup.team_id, myTeam.teamId)
+      })
+
+      await t.step('weekly run defers open counter windows and announces the delay, not "no bids"', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('defer-league'), 2)
+        const myTeam = await factory.getTeamForUser(leagueId, client)
+        const otherTeam = await factory.getTeamForUser(leagueId, secondClient)
+        if (!myTeam || !otherTeam) throw new Error('Teams not found')
+
+        const receivedPayloads: any[] = []
+        const server = Deno.serve({ port: 0, hostname: '0.0.0.0' }, async (req) => {
+          try {
+            receivedPayloads.push(await req.json())
+          } catch {
+            // Ignore
+          }
+          return new Response(null, { status: 204 })
+        })
+
+        const localPort = server.addr.port
+        const mockWebhookUrl = `http://${CALLBACK_HOST}:${localPort}/webhook`
+
+        try {
+          const { error: channelError } = await serviceClient
+            .from('discord_channels')
+            .insert({
+              league_id: leagueId,
+              guild_id: 'test-guild-defer',
+              channel_id: uniqueName('ch-defer'),
+              webhook_id: 'webhook-defer',
+              webhook_url: mockWebhookUrl,
+              notify_bids: true,
+              enabled: true,
+            })
+          assertEquals(channelError, null)
+
+          const tmdbId = uniqueVoidTestTmdbId()
+          // Weekly deadline has passed, but the outbid team's counter window is
+          // still open for another two hours: the group must be deferred.
+          const processingDeadline = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+          const openResponseDeadline = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()
+          const movieData = {
+            title: `Deferral Test ${tmdbId}`,
+            poster_url: null,
+            release_date: `${new Date().getFullYear() + 1}-12-15`,
+            vote_average: 6,
+            popularity: 20,
+          }
+
+          await serviceClient.from('pickup_bids').insert({
+            league_id: leagueId,
+            team_id: myTeam.teamId,
+            tmdb_id: tmdbId,
+            movie_data: movieData,
+            amount: 6,
+            status: 'active',
+            processing_deadline: processingDeadline,
+          })
+          await serviceClient.from('pickup_bids').insert({
+            league_id: leagueId,
+            team_id: otherTeam.teamId,
+            tmdb_id: tmdbId,
+            movie_data: movieData,
+            amount: 4,
+            status: 'outbid',
+            countered_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+            response_deadline: openResponseDeadline,
+            processing_deadline: processingDeadline,
+          })
+
+          const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+          assertEquals(status, 200)
+          assertEquals(data.processed, 0)
+
+          // The run must report the deferral so operators can tell it apart
+          // from an idle week.
+          assertExists(data.deferred)
+          assertEquals(data.deferred.length, 1)
+          assertEquals(data.deferred[0].league_id, leagueId)
+
+          await new Promise((resolve) => setTimeout(resolve, 500))
+
+          // Exactly one webhook: the "results delayed" embed. The misleading
+          // "No bids were placed" message must not fire for this league.
+          assertEquals(receivedPayloads.length, 1)
+          const embed = receivedPayloads[0].embeds[0]
+          assertEquals(embed.title, 'Bidding Results Delayed')
+          assertEquals(
+            embed.description.includes('counter-bid window'),
+            true,
+            `unexpected description: ${embed.description}`,
+          )
+
+          // The group stays untouched for the extended run to resolve later.
+          const { data: leaderAfter } = await serviceClient
+            .from('pickup_bids')
+            .select('status')
+            .eq('league_id', leagueId)
+            .eq('team_id', myTeam.teamId)
+            .eq('tmdb_id', tmdbId)
+            .single()
+          assertEquals(leaderAfter!.status, 'active')
+        } finally {
+          await server.shutdown()
+        }
+      })
+
       await t.step('does NOT send "no bids" Discord notification on extended run', async () => {
         const leagueName = uniqueName('nb-ext-league')
         const { id: leagueId } = await factory.createLeague(leagueName)

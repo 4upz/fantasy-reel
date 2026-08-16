@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
+import { MIN_NEW_BID_CUTOFF_HOURS, MAX_NEW_BID_CUTOFF_HOURS } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('create-league')
@@ -30,6 +31,7 @@ interface CreateLeagueRequest {
   draft_slots?: number
   drop_limit?: number
   counterbid_hours?: number
+  new_bid_cutoff_hours?: number
   // Counterpick configuration
   draft_counterpick_slots?: number
   bidding_counterpick_slots?: number
@@ -76,6 +78,7 @@ Deno.serve(async (req) => {
       draft_slots,
       drop_limit,
       counterbid_hours,
+      new_bid_cutoff_hours,
       // Counterpick configuration
       draft_counterpick_slots,
       bidding_counterpick_slots,
@@ -126,6 +129,21 @@ Deno.serve(async (req) => {
     if (counterbid_hours !== undefined) {
       if (counterbid_hours < MIN_COUNTERBID_HOURS || counterbid_hours > MAX_COUNTERBID_HOURS) {
         return errorResponse(`Counterbid hours must be between ${MIN_COUNTERBID_HOURS} and ${MAX_COUNTERBID_HOURS}`, 400)
+      }
+    }
+
+    // Validate new_bid_cutoff_hours bounds (0 disables the cutoff)
+    if (new_bid_cutoff_hours !== undefined) {
+      if (
+        typeof new_bid_cutoff_hours !== 'number' ||
+        !Number.isInteger(new_bid_cutoff_hours) ||
+        new_bid_cutoff_hours < MIN_NEW_BID_CUTOFF_HOURS ||
+        new_bid_cutoff_hours > MAX_NEW_BID_CUTOFF_HOURS
+      ) {
+        return errorResponse(
+          `New bid cutoff must be a whole number of hours between ${MIN_NEW_BID_CUTOFF_HOURS} and ${MAX_NEW_BID_CUTOFF_HOURS}`,
+          400
+        )
       }
     }
 
@@ -182,6 +200,7 @@ Deno.serve(async (req) => {
     if (draft_slots !== undefined) leagueInsert.draft_slots = draft_slots
     if (drop_limit !== undefined) leagueInsert.drop_limit = drop_limit
     if (counterbid_hours !== undefined) leagueInsert.counterbid_hours = counterbid_hours
+    if (new_bid_cutoff_hours !== undefined) leagueInsert.new_bid_cutoff_hours = new_bid_cutoff_hours
 
     // Add counterpick configuration if provided
     if (draft_counterpick_slots !== undefined) leagueInsert.draft_counterpick_slots = draft_counterpick_slots

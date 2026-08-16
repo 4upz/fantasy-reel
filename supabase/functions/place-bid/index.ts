@@ -9,7 +9,8 @@ import {
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, DiscordEmbed } from '../_shared/discord.ts'
+import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, DiscordEmbed } from '../_shared/discord.ts'
+import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
@@ -177,32 +178,36 @@ Deno.serve(async (req) => {
     const { data: processingDeadline } = await serviceClient
       .rpc('get_next_processing_deadline')
 
-    // Check for existing active bids on this movie in this league
-    const { data: existingBids } = await serviceClient
+    // Every pending bid on this movie in this league, highest first -- not just
+    // the leader. The counter-bid phase makes "is anyone bidding on this at all"
+    // a rule of its own, and an 'outbid' row counts: that team can still counter
+    // back. Reading the whole group once also means the leader, this team's own
+    // bid, and the contested check all come from a single snapshot.
+    const { data: pendingBids } = await serviceClient
       .from('pickup_bids')
       .select('*')
       .eq('league_id', league_id)
       .eq('tmdb_id', tmdb_id)
-      .eq('status', 'active')
+      .in('status', ['active', 'outbid'])
       .order('amount', { ascending: false })
-      .limit(1)
 
-    const highestBid = existingBids?.[0]
+    const highestBid = pendingBids?.find((bid) => bid.status === 'active')
+    const existingTeamBid = pendingBids?.find((bid) => bid.team_id === team.id)
+    const isAlreadyBidOn = (pendingBids?.length ?? 0) > 0
+
+    // Past the cutoff the rest of the week belongs to counter bidding, so a
+    // movie nobody is bidding on stays closed until the next cycle. Joining a
+    // contest another team started, and raising your own bid, both stay legal --
+    // that is the whole point of the phase.
+    const bidWindow = computeBidWindow(processingDeadline, league.new_bid_cutoff_hours)
+    if (bidWindow.isCounterBidPhase && !isAlreadyBidOn) {
+      return errorResponse(newBidClosedMessage(bidWindow), 400)
+    }
 
     // If there's a higher or equal bid, reject
     if (highestBid && highestBid.amount >= amount) {
       return errorResponse(`There is already a bid of $${highestBid.amount}. You must bid higher.`, 400)
     }
-
-    // If this team already has an active or outbid bid on this movie, update it
-    const { data: existingTeamBid } = await serviceClient
-      .from('pickup_bids')
-      .select('*')
-      .eq('league_id', league_id)
-      .eq('team_id', team.id)
-      .eq('tmdb_id', tmdb_id)
-      .in('status', ['active', 'outbid'])
-      .single()
 
     let newBid
 
@@ -291,10 +296,15 @@ Deno.serve(async (req) => {
     // Track outbid email promise for parallel send with Discord
     let outbidEmailPromise: Promise<unknown> | null = null
 
+    // Set when this bid took the lead from another team; drives the Discord
+    // embed's counter-bid variant below.
+    let counterContext: { previousAmount: number; counterWindowEnds: Date } | null = null
+
     // If there was a previous highest bid from another team, mark it as outbid
     if (highestBid && highestBid.team_id !== team.id) {
       const responseDeadline = new Date()
       responseDeadline.setHours(responseDeadline.getHours() + league.counterbid_hours)
+      counterContext = { previousAmount: highestBid.amount, counterWindowEnds: responseDeadline }
 
       await serviceClient
         .from('pickup_bids')
@@ -390,22 +400,37 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Intentionally anonymous: movie only, no bidder name or bid amount
-    const bidEmbed: DiscordEmbed = {
-      author: buildEmbedAuthor(league.name ?? 'League', league_id),
-      title: movieTitle,
-      thumbnail: posterPath ? { url: `https://image.tmdb.org/t/p/w92${posterPath}` } : undefined,
-      color: DISCORD_COLORS.gold,
-      fields: releaseDate ? [{ name: 'Release Date', value: releaseDate, inline: true }] : undefined,
-      footer: { text: `Bidding closes ${new Date(processingDeadline).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` },
-      url: buildLeagueUrl(league_id, '/bidding'),
-    }
+    // Both variants stay anonymous: no bidder or team names. A counter bid does
+    // show both amounts -- they are already public on the bidding page -- plus
+    // when results are now expected, since the counter window can push
+    // processing past the weekly deadline (the extended cron then resolves it).
+    const bidEmbed: DiscordEmbed = counterContext
+      ? buildCounterBidEmbed({
+          leagueId: league_id,
+          leagueName: league.name ?? 'League',
+          movieTitle,
+          posterPath,
+          releaseDate,
+          previousAmount: counterContext.previousAmount,
+          newAmount: amount,
+          processingDeadline: new Date(newBid.processing_deadline),
+          counterWindowEnds: counterContext.counterWindowEnds,
+        })
+      : buildNewBidEmbed({
+          leagueId: league_id,
+          leagueName: league.name ?? 'League',
+          movieTitle,
+          posterPath,
+          releaseDate,
+          amount,
+          processingDeadline: new Date(processingDeadline),
+        })
 
     const discordPromise = sendDiscordNotification(serviceClient, {
       leagueId: league_id,
       category: 'bids',
       embeds: [bidEmbed],
-      mentionRole: !!(highestBid && highestBid.team_id !== team.id),
+      mentionRole: counterContext !== null,
     })
 
     // Send email + Discord in parallel (non-blocking)

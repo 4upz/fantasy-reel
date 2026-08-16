@@ -8,9 +8,13 @@
 # silently omitted. To sync one, add it to entry.tsx + componentSrcMap.
 # To keep excluding it, add its name here.
 
+ActiveBidsPanel
 ArrowRightIcon
 ArrowUpIcon
 AvatarUpload
+BidAmountAndDeadline
+BidHistoryPanel
+BidResultCard
 BiddingConfigSection
 BiddingPanel
 ButtonSpinner
@@ -44,8 +48,11 @@ JoinLinkSection
 LeagueBottomNav
 LeagueInfoSection
 LeagueManager
+LeagueMovieModal
+LeagueReleaseBoard
 LeagueSwitcher
 LeagueTabs
+MovieDetailBody
 MoviePicker
 MovieQuickPreview
 NavBreadcrumb

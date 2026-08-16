@@ -9,6 +9,7 @@ import {
   internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
+import { MIN_NEW_BID_CUTOFF_HOURS, MAX_NEW_BID_CUTOFF_HOURS } from '../_shared/bid-window.ts'
 import { snapshotStandings, formatPoints } from '../_shared/score-notifications.ts'
 import { createLogger } from '../_shared/logger.ts'
 
@@ -36,6 +37,7 @@ interface UpdateBiddingConfigRequest {
   draft_slots?: number
   drop_limit?: number
   counterbid_hours?: number
+  new_bid_cutoff_hours?: number
 }
 
 interface KickParticipantRequest {
@@ -317,6 +319,21 @@ async function handleUpdateBiddingConfig(
       return errorResponse(`Counterbid hours must be between ${MIN_COUNTERBID_HOURS} and ${MAX_COUNTERBID_HOURS}`, 400)
     }
     updates.counterbid_hours = body.counterbid_hours
+  }
+
+  // Validate new_bid_cutoff_hours (0 disables the cutoff)
+  if (body.new_bid_cutoff_hours !== undefined) {
+    if (
+      !Number.isInteger(body.new_bid_cutoff_hours) ||
+      body.new_bid_cutoff_hours < MIN_NEW_BID_CUTOFF_HOURS ||
+      body.new_bid_cutoff_hours > MAX_NEW_BID_CUTOFF_HOURS
+    ) {
+      return errorResponse(
+        `New bid cutoff must be a whole number of hours between ${MIN_NEW_BID_CUTOFF_HOURS} and ${MAX_NEW_BID_CUTOFF_HOURS}`,
+        400
+      )
+    }
+    updates.new_bid_cutoff_hours = body.new_bid_cutoff_hours
   }
 
   if (Object.keys(updates).length === 0) {

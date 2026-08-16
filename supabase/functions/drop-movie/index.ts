@@ -64,6 +64,7 @@ Deno.serve(async (req) => {
     let teamId: string
     let movieId: string
     let leagueId: string
+    let counterpickedByTeamId: string | null
     let movie: { id: string; title: string; tmdb_id: number; release_date: string | null }
 
     if (hasPickupId) {
@@ -106,6 +107,7 @@ Deno.serve(async (req) => {
       teamId = pickup.team_id
       movieId = pickup.movie_id
       leagueId = teamInfo.league_participants.league_id
+      counterpickedByTeamId = pickup.counterpicked_by_team_id
       movie = pickup.movies as unknown as typeof movie
     } else {
       // ========== DRAFT PICK DROP FLOW ==========
@@ -147,6 +149,7 @@ Deno.serve(async (req) => {
       teamId = draftPick.team_id
       movieId = draftPick.movie_id
       leagueId = teamInfo.league_participants.league_id
+      counterpickedByTeamId = draftPick.counterpicked_by_team_id
       movie = draftPick.movies as unknown as typeof movie
     }
 
@@ -159,10 +162,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Fetch league to check drop_limit and counterpick blocking
+    // Fetch league to check status, drop_limit, and counterpick blocking
     const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
-      .select('drop_limit, counterpicks_block_drops')
+      .select('status, drop_limit, counterpicks_block_drops')
       .eq('id', leagueId)
       .single()
 
@@ -170,16 +173,28 @@ Deno.serve(async (req) => {
       return errorResponse('League not found', 404)
     }
 
-    // Check if movie is counterpicked and blocking is enabled (draft picks only)
-    if (hasDraftPickId && league.counterpicks_block_drops) {
-      const { data: counterpickCheck } = await serviceClient
-        .from('draft_picks')
-        .select('counterpicked_by_team_id')
-        .eq('id', draft_pick_id)
-        .single()
+    if (league.status !== 'active') {
+      return errorResponse('Drops are only allowed while the league is active', 400)
+    }
 
-      if (counterpickCheck?.counterpicked_by_team_id) {
+    if (league.counterpicks_block_drops) {
+      // Awarded counterpick: the loaded pickup/draft-pick row already carries
+      // counterpicked_by_team_id, so no re-query is needed here.
+      if (counterpickedByTeamId) {
         return errorResponse('Cannot drop a movie that has been counterpicked', 400)
+      }
+
+      // Pending counterpick bid: an active or outbid FAAB auction on this movie
+      // should also block the drop -- letting it through would strand the bid.
+      const { count: pendingBidCount } = await serviceClient
+        .from('counterpick_bids')
+        .select('*', { count: 'exact', head: true })
+        .eq('league_id', leagueId)
+        .eq('movie_id', movieId)
+        .in('status', ['active', 'outbid'])
+
+      if ((pendingBidCount ?? 0) > 0) {
+        return errorResponse('Cannot drop this movie: another team has a pending counterpick bid on it', 400)
       }
     }
 

@@ -2,16 +2,30 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { Clock, DollarSign, AlertTriangle, Film, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Film, Lock, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
-import { getTmdbPosterUrl, formatTimeRemaining, getBidTypeClass } from './utils'
+import BidAmountAndDeadline from './BidAmountAndDeadline'
+import { getTmdbPosterUrl, getBidTypeClass } from './utils'
 
 interface BidCardProps {
   bid: PickupBid
   isOwner: boolean
   onCancel?: () => void
+  /**
+   * True once the new-bid cutoff has passed on this team's own bid: the bid is
+   * committed for the week and the server will refuse a cancel. Shown as a
+   * short note rather than a disabled button -- the action isn't temporarily
+   * unavailable, it's gone until bids process.
+   */
+  cancelLocked?: boolean
   onCounter?: () => void
   bidType?: 'pickup' | 'counterpick'
+  /**
+   * When another bid on the same movie still has an open counter-response
+   * window, processing of the whole group is held until it closes. Set to that
+   * window's end so the card explains the delay instead of "Processing soon".
+   */
+  counterWindowClosesAt?: string | null
 }
 
 interface CancelBidModalProps {
@@ -144,7 +158,7 @@ function CancelBidModal({
   )
 }
 
-export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: BidCardProps) {
+export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt }: BidCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false)
 
   const movieData = bid.movie_data as {
@@ -154,10 +168,17 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
   } | null
 
   const isOutbid = bid.status === 'outbid'
-  const deadline = isOutbid ? bid.response_deadline : bid.processing_deadline
+  const isActive = bid.status === 'active'
   const movieTitle = movieData?.title || `Movie #${bid.tmdb_id}`
 
   const typeClass = getBidTypeClass(bidType)
+
+  // An outbid bid gets a prominent "Counter Bid" prompt; an active one gets a
+  // quieter option to raise your own bid or outbid a rival's.
+  const showRecoverButton = isOutbid && isOwner && !!onCounter
+  const showRaiseButton = isActive && !!onCounter
+  const showCancelButton = isOwner && isActive && !!onCancel
+  const showCancelLock = isOwner && isActive && !onCancel && !!cancelLocked
 
   return (
     <>
@@ -200,17 +221,13 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
               </p>
             )}
 
-            <div className="flex items-center gap-4 mt-2">
-              <div className="flex items-center gap-1.5 bid-amount-display text-lg">
-                <DollarSign className="w-5 h-5" />
-                <span>{bid.amount}</span>
-              </div>
-
-              <div className="flex items-center gap-1.5 text-foreground-secondary text-sm">
-                <Clock className="w-4 h-4" />
-                <span>{formatTimeRemaining(deadline)}</span>
-              </div>
-            </div>
+            <BidAmountAndDeadline
+              amount={bid.amount}
+              isOutbid={isOutbid}
+              responseDeadline={bid.response_deadline}
+              processingDeadline={bid.processing_deadline}
+              counterWindowClosesAt={counterWindowClosesAt}
+            />
 
             {isOutbid && (
               <div className="flex items-center gap-1.5 mt-2 text-warning text-sm font-medium">
@@ -221,9 +238,9 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
           </div>
 
           {/* Actions */}
-          {isOwner && (
+          {(showRecoverButton || showRaiseButton || showCancelButton || showCancelLock) && (
             <div className="flex flex-col items-end gap-2">
-              {isOutbid && onCounter && (
+              {showRecoverButton && (
                 <button
                   onClick={onCounter}
                   className="btn btn-primary text-sm px-4"
@@ -233,7 +250,17 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
                 </button>
               )}
 
-              {bid.status === 'active' && (
+              {showRaiseButton && (
+                <button
+                  onClick={onCounter}
+                  className="btn btn-secondary text-sm px-4"
+                  data-testid={isOwner ? `raise-bid-${bid.tmdb_id}` : `counter-bid-${bid.tmdb_id}`}
+                >
+                  {isOwner ? 'Raise Bid' : 'Counter Bid'}
+                </button>
+              )}
+
+              {showCancelButton && (
                 <button
                   onClick={() => setShowCancelModal(true)}
                   className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-crimson/10"
@@ -242,6 +269,16 @@ export default function BidCard({ bid, isOwner, onCancel, onCounter, bidType }: 
                   <Trash2 className="w-4 h-4 mr-1.5" />
                   Cancel
                 </button>
+              )}
+
+              {showCancelLock && (
+                <p
+                  className="flex items-center gap-1.5 text-xs text-foreground-muted px-2"
+                  data-testid={`bid-locked-${bid.tmdb_id}`}
+                >
+                  <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+                  Locked in
+                </p>
               )}
             </div>
           )}

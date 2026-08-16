@@ -1,7 +1,8 @@
 /**
- * Shared in-memory mock Supabase client for unit-testing the Epic C
- * scheduled-notification Edge Functions (release-day-announcements,
- * weekly-releases-digest, sync-release-dates, send-announcement).
+ * Shared in-memory mock Supabase client for unit-testing the scheduled
+ * notification Edge Functions (release-day-announcements,
+ * weekly-releases-digest, sync-release-dates, send-announcement,
+ * bid-cutoff-announcement).
  *
  * Not a test file itself (no `.test.ts` suffix), so `deno task test:unit`
  * does not execute it directly -- it's imported by the test files that do.
@@ -10,6 +11,10 @@
  * so tests can assert on realistic query results (e.g. per-league discord
  * channel filtering, notification-log dedup across two handler calls)
  * instead of returning one canned response regardless of arguments.
+ *
+ * `options.unique` reproduces Postgres unique-constraint rejections (error code
+ * 23505) so idempotency guards that rely on the insert failing can be tested,
+ * rather than only the happy path where the row simply is not there yet.
  */
 
 // deno-lint-ignore no-explicit-any
@@ -91,15 +96,45 @@ export function stubFetch(respond?: (url: string) => Response | undefined): {
   }
 }
 
+export interface MockClientOptions {
+  /**
+   * Values (or factories) returned by `client.rpc(name)`. A factory receives the
+   * call's arguments, so a test can vary the answer per league.
+   */
+  rpc?: Record<string, unknown | ((args?: Row) => unknown)>
+  /** Columns forming a unique key per table, e.g. `{ foo: ['a', 'b'] }`. */
+  unique?: Record<string, string[]>
+}
+
 /** Creates a mock Supabase client backed by `db`, mutated in place by inserts/updates. */
-export function createMockDbClient(db: MockDb) {
+export function createMockDbClient(db: MockDb, options: MockClientOptions = {}) {
   return {
+    rpc(name: string, args?: Row) {
+      const entry = options.rpc?.[name]
+      const value = typeof entry === 'function' ? (entry as (a?: Row) => unknown)(args) : entry
+      return Promise.resolve({ data: value ?? null, error: null })
+    },
     from(table: string) {
       if (!db[table]) db[table] = []
       return {
         select: (_cols?: string, _opts?: { count?: string; head?: boolean }) => chain(db[table]),
         insert: (rowsToInsert: Row | Row[]) => {
           const arr = Array.isArray(rowsToInsert) ? rowsToInsert : [rowsToInsert]
+          const uniqueCols = options.unique?.[table]
+          if (uniqueCols) {
+            const clash = arr.some((candidate) =>
+              db[table].some((existing) => uniqueCols.every((col) => existing[col] === candidate[col]))
+            )
+            if (clash) {
+              return Promise.resolve({
+                data: null,
+                error: {
+                  code: '23505',
+                  message: `duplicate key value violates unique constraint on ${table}`,
+                },
+              })
+            }
+          }
           db[table].push(...arr)
           return Promise.resolve({ data: arr, error: null })
         },

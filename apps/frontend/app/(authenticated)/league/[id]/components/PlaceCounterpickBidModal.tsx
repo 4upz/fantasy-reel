@@ -23,6 +23,17 @@ interface PlaceCounterpickBidModalProps {
 // Quick bid amount buttons for common values
 const QUICK_BID_AMOUNTS = [0, 5, 10, 25, 50]
 
+function getModalTitle(
+  counterTarget: CounterpickBid | null | undefined,
+  teamId: string,
+  step: 1 | 2,
+): string {
+  if (counterTarget) {
+    return counterTarget.team_id === teamId ? 'Raise Your Bid' : 'Counter Counterpick Bid'
+  }
+  return step === 2 ? 'Set Your Bid' : 'Place Counterpick Bid'
+}
+
 function getValidationErrorMessage(bidAmount: number, remainingBudget: number, highestBid: number | null): string {
   if (bidAmount > remainingBudget) {
     return `Exceeds your budget of $${remainingBudget}`
@@ -196,7 +207,7 @@ export default function PlaceCounterpickBidModal({
             )}
             <div>
               <h2 id="place-counterpick-bid-title" className="font-display text-xl font-semibold text-foreground">
-                {counterTarget ? 'Counter Counterpick Bid' : step === 2 ? 'Set Your Bid' : 'Place Counterpick Bid'}
+                {getModalTitle(counterTarget, teamId, step)}
               </h2>
               <p className="text-sm text-foreground-muted mt-0.5">
                 {step === 2

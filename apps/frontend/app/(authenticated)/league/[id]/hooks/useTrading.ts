@@ -45,6 +45,8 @@ interface UseTradingReturn {
     tradeOfferId: string,
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>
+  /** Commissioner: end the review period now and process the trade immediately. */
+  approveTrade: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
   refreshTrades: () => Promise<void>
   refreshRoster: () => Promise<void>
 }
@@ -317,6 +319,25 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     [fetchTrades]
   )
 
+  // Approve a trade immediately (commissioner only)
+  const approveTrade = useCallback(
+    async (tradeOfferId: string): Promise<{ success: boolean; error?: string }> => {
+      const { error: approveError } = await callEdgeFunction('approve-trade', {
+        body: { trade_offer_id: tradeOfferId },
+      })
+
+      if (approveError) {
+        return { success: false, error: approveError }
+      }
+
+      // Unlike veto, this moves movies and FAAB right away -- and the
+      // commissioner may be a party to the trade -- so refresh the roster too.
+      await Promise.all([fetchTrades(), fetchTradeableMovies(), fetchBudget()])
+      return { success: true }
+    },
+    [fetchTrades, fetchTradeableMovies, fetchBudget]
+  )
+
   // Computed values
   const pendingTrades = trades.filter(
     (t) => t.status === 'proposed' || t.status === 'countered' || t.status === 'review'
@@ -344,6 +365,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     counterTrade,
     cancelTrade,
     vetoTrade,
+    approveTrade,
     refreshTrades: fetchTrades,
     refreshRoster,
   }

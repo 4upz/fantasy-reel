@@ -14,6 +14,12 @@ export interface League {
   draft_slots: number
   drop_limit: number
   counterbid_hours: number
+  /**
+   * Hours before the weekly processing deadline after which no new bids may be
+   * opened -- only raises and counters on movies already being bid on. 48 puts
+   * the cutoff at Thursday 8pm UTC; 0 disables it.
+   */
+  new_bid_cutoff_hours: number
   // Counterpick configuration
   draft_counterpick_slots: number
   bidding_counterpick_slots: number
@@ -161,6 +167,8 @@ export interface MovieWithScores extends Movie {
 
 export interface TeamWithScore extends Team {
   team_scores: TeamScore | null
+  /** Every league member can read every budget, so standings show all of them. */
+  team_budgets: TeamBudget | null
 }
 
 export interface ParticipantWithTeamScore extends LeagueParticipant {
@@ -409,6 +417,29 @@ export interface DashboardTeam {
   movies: MovieTimelineItem[]
 }
 
+/**
+ * One unreleased movie held by any team in the league, for the dashboard's
+ * league-wide release board. Flat by design: the board prints who holds it, not
+ * the whole team row, and the shape is a superset of `LeagueMovieRef` so a row
+ * opens the shared movie dialog without converting first.
+ */
+export interface LeagueUpcomingRelease {
+  id: string
+  tmdb_id: number
+  title: string
+  poster_url: string | null
+  /** Never null in practice - the query only returns dated, future releases. */
+  release_date: string
+  /** How the holding was acquired. Drafted movies win a tie against a pickup. */
+  source: 'draft_pick' | 'pickup'
+  team_id: string
+  team_name: string
+  /** profiles.display_name is nullable, so the board falls back to the team. */
+  owner_name: string | null
+  /** Lets a row mark itself yours without the client re-deriving your team. */
+  is_current_user_team: boolean
+}
+
 export interface StandingEntry {
   rank: number
   isTied: boolean
@@ -471,8 +502,25 @@ export interface TradeOffer {
   initiator_message: string | null
   response_message: string | null
   veto_reason: string | null
+  /**
+   * Commissioner who approved the trade before its review window expired;
+   * NULL when it completed on the review clock instead. Audit only -- the UI
+   * deliberately doesn't distinguish the two, since a completed trade had the
+   * commissioner's blessing either way.
+   */
+  approved_by?: string | null
   created_at: string
   updated_at: string
+  /**
+   * source_ids in this offer that at least one other open offer also names.
+   * Populated by get-trades; absent on offers loaded from anywhere else.
+   *
+   * Several offers may compete for the same movie (see migration
+   * 20260809120000) and only the first to execute wins, so a contested movie
+   * means this deal may lose. Counts are deliberately not exposed -- who else is
+   * bidding is private to those trades' own participants.
+   */
+  contested_source_ids?: string[]
 }
 
 export interface TradeAsset {
@@ -597,6 +645,43 @@ export interface CounterpickBid {
   // Joined fields (from query)
   movies?: { title: string; poster_url: string | null; release_date: string | null; fantasy_points: number | null }
   target_team?: { name: string }
+}
+
+// ============================================================================
+// Bid history types
+// ============================================================================
+
+/** One team's settled bid within a contest. */
+export interface BidHistoryEntry {
+  bidId: string
+  teamId: string
+  amount: number
+}
+
+/**
+ * Every settled bid on one movie from a single contest. Cancelled bids are left
+ * out entirely - a team that walked away before processing never competed.
+ */
+export interface BidHistoryResult {
+  kind: 'pickup' | 'counterpick'
+  /** Unique per contest, so a movie won twice in a season yields two results. */
+  id: string
+  title: string
+  posterUrl: string | null
+  releaseDate: string | null
+  /** The bid that took the movie, or null when no bid survived processing. */
+  winner: BidHistoryEntry | null
+  /** Beaten bids, highest first. */
+  losers: BidHistoryEntry[]
+  /** Counterpicks only: the team whose movie was targeted. */
+  targetTeamId?: string
+}
+
+/** One processing run's results. */
+export interface BidHistoryRound {
+  /** UTC calendar date (YYYY-MM-DD) the round's bids were processed on. */
+  date: string
+  results: BidHistoryResult[]
 }
 
 // ============================================================================

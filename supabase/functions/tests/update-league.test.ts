@@ -297,6 +297,65 @@ Deno.test({
     assertEquals(data.league.counterbid_hours, 48)
   })
 
+  await t.step('update_bidding_config: updates new_bid_cutoff_hours', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('update-bid-cutoff'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: { action: 'update_bidding_config', league_id: leagueId, new_bid_cutoff_hours: 72 },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.new_bid_cutoff_hours, 72)
+  })
+
+  await t.step('update_bidding_config: accepts 0 to disable the new-bid cutoff', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('disable-bid-cutoff'))
+
+    const { data, error } = await client.functions.invoke('update-league', {
+      body: { action: 'update_bidding_config', league_id: leagueId, new_bid_cutoff_hours: 0 },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.new_bid_cutoff_hours, 0)
+  })
+
+  await t.step('update_bidding_config: returns 400 for new_bid_cutoff_hours above 144', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('bid-cutoff-too-big'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      new_bid_cutoff_hours: 145,
+    })
+
+    assertEquals(result.status, 400)
+    assertEquals(String(result.error).includes('between 0 and 144'), true, String(result.error))
+  })
+
+  await t.step('update_bidding_config: returns 400 for a negative new_bid_cutoff_hours', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('bid-cutoff-negative'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      new_bid_cutoff_hours: -1,
+    })
+
+    assertEquals(result.status, 400)
+  })
+
+  await t.step('update_bidding_config: returns 400 for a fractional new_bid_cutoff_hours', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('bid-cutoff-fractional'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_bidding_config',
+      league_id: leagueId,
+      new_bid_cutoff_hours: 12.5,
+    })
+
+    assertEquals(result.status, 400)
+  })
+
   await t.step('update_bidding_config: updates multiple fields at once', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('update-all-bidding'))
 

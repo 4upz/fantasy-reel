@@ -1,6 +1,66 @@
 // Re-export shared utilities for convenience
 export { formatRuntime, getReleaseYear } from '@/utils/date'
 
+/** A bidding week runs from one processing deadline to the next. */
+export const BID_CYCLE_HOURS = 168
+
+/**
+ * Where the bidding week stands relative to its new-bid cutoff.
+ *
+ * The cutoff instant itself comes from the server (`get_new_bid_cutoff`), so
+ * the client never re-derives "next Saturday 8pm" and cannot drift from the SQL.
+ * All this does is compare it to the clock and work out the bar positions.
+ *
+ * `cutoffAt` is null when the league has the cutoff disabled, which reads as a
+ * permanently open week -- the same degradation the Edge Functions apply.
+ */
+export interface BidPhase {
+  isCounterBidPhase: boolean
+  /** Fraction of the week (0-1) at which the cutoff sits. */
+  cutoffFraction: number
+  /** Fraction of the week (0-1) elapsed right now, clamped to the cycle. */
+  elapsedFraction: number
+}
+
+export function getBidPhase(
+  cutoffAt: string | null,
+  processingDeadline: string | null,
+  now: Date = new Date(),
+): BidPhase {
+  if (!cutoffAt || !processingDeadline) {
+    return { isCounterBidPhase: false, cutoffFraction: 1, elapsedFraction: 0 }
+  }
+
+  const deadlineMs = new Date(processingDeadline).getTime()
+  const cutoffMs = new Date(cutoffAt).getTime()
+  if (Number.isNaN(deadlineMs) || Number.isNaN(cutoffMs)) {
+    return { isCounterBidPhase: false, cutoffFraction: 1, elapsedFraction: 0 }
+  }
+
+  const cycleMs = BID_CYCLE_HOURS * 60 * 60 * 1000
+  const startMs = deadlineMs - cycleMs
+  const clamp = (value: number) => Math.min(1, Math.max(0, value))
+
+  return {
+    isCounterBidPhase: cutoffMs <= now.getTime(),
+    cutoffFraction: clamp((cutoffMs - startMs) / cycleMs),
+    elapsedFraction: clamp((now.getTime() - startMs) / cycleMs),
+  }
+}
+
+/**
+ * A deadline as a short local-time label, e.g. "Thu 8:00 PM". Used on the week
+ * timeline, where the two endpoints need to be scannable rather than precise.
+ */
+export function formatDeadlineShort(deadline: string | null): string {
+  if (!deadline) return ''
+  return new Date(deadline).toLocaleString(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
 /**
  * Format a countdown from now until a deadline (e.g., "2d 5h", "3h 42m", "Processing soon")
  */
@@ -22,6 +82,25 @@ export function formatTimeRemaining(deadline: string | null): string {
   }
 
   return `${hours}h ${minutes}m`
+}
+
+/**
+ * The latest still-open counter-response deadline among a movie's bids, or null
+ * once every window has closed. While one is open, process-bids holds the whole
+ * group past its weekly deadline so the outbid team can counter -- the leading
+ * bid's card should say that, not "Processing soon".
+ */
+export function latestOpenCounterWindow(
+  bids: Array<{ response_deadline: string | null }>,
+): string | null {
+  const now = Date.now()
+  let latest: string | null = null
+  for (const bid of bids) {
+    if (!bid.response_deadline) continue
+    if (new Date(bid.response_deadline).getTime() <= now) continue
+    if (!latest || bid.response_deadline > latest) latest = bid.response_deadline
+  }
+  return latest
 }
 
 /**
@@ -86,6 +165,23 @@ export function getPopularityBadge(popularity: number | null): { label: string; 
   if (popularity >= 100) return { label: 'Trending', variant: 'solid' }
   if (popularity >= 50) return { label: 'Popular', variant: 'outline' }
   return null
+}
+
+/**
+ * Bucket items by a derived key, preserving input order within each bucket.
+ */
+export function groupBy<T, K>(items: T[], keyOf: (item: T) => K): Map<K, T[]> {
+  const groups = new Map<K, T[]>()
+  for (const item of items) {
+    const key = keyOf(item)
+    const group = groups.get(key)
+    if (group) {
+      group.push(item)
+    } else {
+      groups.set(key, [item])
+    }
+  }
+  return groups
 }
 
 /**

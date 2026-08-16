@@ -300,3 +300,90 @@ export async function getLeagueName(
 export function buildEmbedAuthor(leagueName: string, leagueId: string): DiscordEmbed['author'] {
   return { name: leagueName, icon_url: FANTASY_REEL_ICON, url: buildLeagueUrl(leagueId) }
 }
+
+export interface NewBidEmbedParams {
+  leagueId: string
+  leagueName: string
+  movieTitle: string
+  posterPath?: string | null
+  releaseDate?: string | null
+  /** The amount of the bid being announced. */
+  amount: number
+  /** The bid group's regular weekly deadline. */
+  processingDeadline: Date
+  /** Appended to the embed title, e.g. ' (🎯 Counterpick)'. */
+  titleSuffix?: string
+}
+
+export interface CounterBidEmbedParams extends Omit<NewBidEmbedParams, 'amount'> {
+  previousAmount: number
+  newAmount: number
+  /** When the just-outbid team's counter-response window ends. */
+  counterWindowEnds: Date
+}
+
+/**
+ * The bids-channel embed for the opening bid on a movie.
+ *
+ * States what happened and for how much -- the amount is already public on the
+ * bidding page, so hiding it here only made the channel less useful. Bidder and
+ * team names stay out of it.
+ */
+export function buildNewBidEmbed(params: NewBidEmbedParams): DiscordEmbed {
+  const closesAt = params.processingDeadline.toLocaleString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  })
+
+  return {
+    author: buildEmbedAuthor(params.leagueName, params.leagueId),
+    title: `New Bid: ${params.movieTitle}${params.titleSuffix ?? ''}`,
+    thumbnail: params.posterPath ? { url: `https://image.tmdb.org/t/p/w92${params.posterPath}` } : undefined,
+    color: DISCORD_COLORS.gold,
+    fields: [
+      { name: 'Bid', value: `$${params.amount}`, inline: true },
+      ...(params.releaseDate ? [{ name: 'Release Date', value: params.releaseDate, inline: true }] : []),
+    ],
+    footer: { text: `Bidding closes ${closesAt}` },
+    url: buildLeagueUrl(params.leagueId, '/bidding'),
+  }
+}
+
+/**
+ * The bids-channel embed for a bid that took the lead from another team.
+ *
+ * Unlike buildNewBidEmbed, this one shows both amounts (already public on the
+ * bidding page) and when results are now expected: the later of the weekly
+ * processing deadline and the outbid team's counter window, since an open
+ * window holds the whole movie past the weekly run. Rendered as a Discord
+ * `<t:…>` timestamp so each viewer sees their own timezone -- which is also why
+ * it lives in a field, not the footer (footers don't render timestamp markup).
+ * Team names stay out of it.
+ */
+export function buildCounterBidEmbed(params: CounterBidEmbedParams): DiscordEmbed {
+  const effectiveCloseMs = Math.max(
+    params.processingDeadline.getTime(),
+    params.counterWindowEnds.getTime(),
+  )
+  const unixSeconds = Math.floor(effectiveCloseMs / 1000)
+
+  return {
+    author: buildEmbedAuthor(params.leagueName, params.leagueId),
+    title: `Counter Bid: ${params.movieTitle}${params.titleSuffix ?? ''}`,
+    description: 'The leading bid was raised. The outbid team can counter back.',
+    thumbnail: params.posterPath ? { url: `https://image.tmdb.org/t/p/w92${params.posterPath}` } : undefined,
+    color: DISCORD_COLORS.gold,
+    fields: [
+      { name: 'Previous Bid', value: `$${params.previousAmount}`, inline: true },
+      { name: 'New Bid', value: `$${params.newAmount}`, inline: true },
+      ...(params.releaseDate ? [{ name: 'Release Date', value: params.releaseDate, inline: true }] : []),
+      { name: 'Results Expected', value: `<t:${unixSeconds}:f> (<t:${unixSeconds}:R>)`, inline: false },
+    ],
+    footer: { text: 'Estimated — another counter bid extends the window' },
+    url: buildLeagueUrl(params.leagueId, '/bidding'),
+  }
+}

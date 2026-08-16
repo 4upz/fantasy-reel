@@ -171,3 +171,84 @@ export function resolveCounterpickWinners(
 
   return { winners, lossReasons }
 }
+
+/**
+ * ---------------------------------------------------------------------------
+ * Target revalidation (dropped / traded holdings)
+ * ---------------------------------------------------------------------------
+ *
+ * A counterpick bid targets a specific holding row -- a draft_picks or pickups
+ * record, referenced by exactly one of `draft_pick_id` / `pickup_id` -- not
+ * just a movie in the abstract. Bids can sit pending for up to a week (see
+ * get_next_processing_deadline), and in that time the holder can drop the
+ * movie (`dropped_at` gets set) or trade it away, which changes the row's
+ * `team_id`. A trade can even hand the movie to the bidder itself, which would
+ * violate `counterpicks`' `counterpicker_team_id != target_team_id` CHECK if
+ * the bid were awarded as-is.
+ *
+ * This is the same staleness process-bids already guards against for a
+ * released movie (see `voidReleasedCounterpickContests`): what a bid was
+ * placed against is not what processing must trust, so the holding row is
+ * re-read at settlement time. Kept free of Supabase calls, like the rest of
+ * this module, so the decision can be tested directly; the caller supplies the
+ * holding row it read (or says the read failed).
+ */
+
+export interface RetargetableCounterpickBid {
+  id: string
+  team_id: string
+  target_team_id: string
+}
+
+/** The current state of the row a counterpick bid targets (a draft_picks or pickups row). */
+export interface CounterpickTargetRow {
+  team_id: string
+  dropped_at: string | null
+}
+
+/**
+ * Why a bid's target was voided.
+ * - `movie_dropped`: the holder dropped the movie while the bid was pending.
+ * - `target_owned`: the movie was traded to the bidder's own team -- counterpicking
+ *   yourself is never valid.
+ * - `target_missing`: the holding row could not be found at all (not a read
+ *   failure -- see `resolveTargetRevalidation`).
+ */
+export type TargetVoidReason = 'movie_dropped' | 'target_owned' | 'target_missing'
+
+export type TargetRevalidation =
+  | { outcome: 'keep'; targetTeamId: string }
+  | { outcome: 'void'; reason: TargetVoidReason }
+
+/**
+ * Decide whether a bid's target holding is still valid and, if so, who
+ * currently holds it -- which may differ from the bid's stored
+ * `target_team_id` after a trade.
+ *
+ * `targetRow` is `undefined` in two situations that must be told apart via
+ * `sourceReadFailed`:
+ *  - the row genuinely no longer exists -- a real void condition
+ *    (`target_missing`);
+ *  - the read of it failed for infrastructure reasons, in which case the bid
+ *    is left untouched (`keep`, at its previously stored target) rather than
+ *    voided on the strength of a failed read. This mirrors the fail-open
+ *    posture `voidReleasedCounterpickContests` takes for a movie it could not
+ *    read: an outage must not cost a bidder a live bid.
+ *
+ * Checked in the order the guardrail spec lists them: dropped, then
+ * self-owned, then missing. A row can in principle be both dropped and now
+ * self-owned (dropping does not change `team_id`); dropped wins, since "the
+ * movie is gone" subsumes "and it happens to sit with you" as the more
+ * fundamental reason the bid cannot be honored.
+ */
+export function resolveTargetRevalidation(
+  bid: RetargetableCounterpickBid,
+  targetRow: CounterpickTargetRow | undefined,
+  sourceReadFailed: boolean,
+): TargetRevalidation {
+  if (sourceReadFailed) return { outcome: 'keep', targetTeamId: bid.target_team_id }
+  if (!targetRow) return { outcome: 'void', reason: 'target_missing' }
+  if (targetRow.dropped_at) return { outcome: 'void', reason: 'movie_dropped' }
+  if (targetRow.team_id === bid.team_id) return { outcome: 'void', reason: 'target_owned' }
+  return { outcome: 'keep', targetTeamId: targetRow.team_id }
+}

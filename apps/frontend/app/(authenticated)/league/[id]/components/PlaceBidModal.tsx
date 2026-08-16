@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { X, DollarSign, Search, Film, Sparkles, TrendingUp, Calendar, ArrowLeft, Heart } from 'lucide-react'
+import { X, DollarSign, Search, Film, Sparkles, TrendingUp, Calendar, ArrowLeft, Heart, Swords } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
-import { getTmdbPosterUrl, formatReleaseDateFull, isMovieBiddable } from './utils'
+import { getTmdbPosterUrl, formatReleaseDateFull, isMovieBiddable, formatDeadlineShort } from './utils'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import { useWishlist } from '@/hooks/useWishlist'
@@ -14,22 +14,103 @@ import { useWishlist } from '@/hooks/useWishlist'
 interface PlaceBidModalProps {
   isOpen: boolean
   onClose: () => void
+  teamId: string
   budget: TeamBudget | null
   existingBids: PickupBid[]
   ownedTmdbIds: number[]
   onPlaceBid: (tmdbId: number, amount: number, movieData: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
   counterBidTarget?: PickupBid | null
+  /**
+   * Past the new-bid cutoff the modal stops being a movie search and becomes a
+   * picker over the contest already running: searching a catalogue you are not
+   * allowed to bid from is a dead end, and the movies in play are the actual
+   * choice available.
+   */
+  isCounterBidPhase?: boolean
+  newBidCutoffAt?: string | null
 }
 
 // Quick bid amount buttons for common values
 const QUICK_BID_AMOUNTS = [0, 5, 10, 25, 50]
 
-function getValidationErrorMessage(bidAmount: number, remainingBudget: number): string {
+/** The current high active bid on a movie, and whether it belongs to this team. */
+interface ActiveBidInfo {
+  high: number
+  mine: boolean
+}
+
+interface ActiveBidChipProps {
+  tmdbId: number
+  info: ActiveBidInfo | undefined
+}
+
+/** Badge on a search result showing the leading bid already placed on a movie. */
+function ActiveBidChip({ tmdbId, info }: ActiveBidChipProps): React.ReactElement | null {
+  if (!info) return null
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${
+        info.mine
+          ? 'bg-gold-muted text-gold border-gold/30'
+          : 'bg-warning-bg/30 text-warning border-warning/20'
+      }`}
+      data-testid={`bid-chip-${tmdbId}`}
+    >
+      <DollarSign className="w-3 h-3" />
+      {info.mine ? `Your bid $${info.high}` : `High bid $${info.high}`}
+    </span>
+  )
+}
+
+function getModalTitle(
+  counterBidTarget: PickupBid | null | undefined,
+  teamId: string,
+  hasSelectedMovie: boolean,
+  isCounterBidPhase: boolean,
+): string {
+  if (counterBidTarget) {
+    return counterBidTarget.team_id === teamId ? 'Raise Your Bid' : 'Counter Bid'
+  }
+  if (hasSelectedMovie) return 'Set Your Bid'
+  return isCounterBidPhase ? 'Counter a Bid' : 'Place a Bid'
+}
+
+type BidResultsState = 'loading' | 'no-contests' | 'no-results' | 'no-wishlist-matches' | 'list'
+
+/**
+ * Which of the results panel's states to show.
+ *
+ * Past the cutoff the panel is a fixed list of the contests already running:
+ * nothing is fetched and the wishlist filter isn't offered, so the only two
+ * outcomes are the list itself or "nobody bid this week".
+ */
+function getBidResultsState(params: {
+  isCounterBidPhase: boolean
+  loading: boolean
+  searchResultCount: number
+  displayedCount: number
+}): BidResultsState {
+  const { isCounterBidPhase, loading, searchResultCount, displayedCount } = params
+
+  if (isCounterBidPhase) {
+    return displayedCount === 0 ? 'no-contests' : 'list'
+  }
+  if (loading) return 'loading'
+  if (searchResultCount === 0) return 'no-results'
+  if (displayedCount === 0) return 'no-wishlist-matches'
+  return 'list'
+}
+
+function getValidationErrorMessage(bidAmount: number, remainingBudget: number, highestBid: number | null): string {
   if (bidAmount > remainingBudget) {
     return `Exceeds your budget of $${remainingBudget}`
   }
   if (bidAmount > 100) {
     return 'Maximum bid is $100'
+  }
+  if (highestBid !== null && bidAmount <= highestBid) {
+    return `Must be higher than current bid of $${highestBid}`
   }
   return 'Bid must be $0 or more'
 }
@@ -37,11 +118,14 @@ function getValidationErrorMessage(bidAmount: number, remainingBudget: number): 
 export default function PlaceBidModal({
   isOpen,
   onClose,
+  teamId,
   budget,
   existingBids,
   ownedTmdbIds,
   onPlaceBid,
   counterBidTarget,
+  isCounterBidPhase = false,
+  newBidCutoffAt = null,
 }: PlaceBidModalProps) {
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [bidAmount, setBidAmount] = useState(0)
@@ -53,19 +137,31 @@ export default function PlaceBidModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Movies already on someone's roster (drafted or picked up) or already bid on
-  // are not offerable. Memoized to prevent infinite re-renders.
-  const excludedTmdbIds = useMemo(() => {
-    const biddedTmdbIds = existingBids.map(b => b.tmdb_id)
-    return new Set([...ownedTmdbIds, ...biddedTmdbIds])
-  }, [ownedTmdbIds, existingBids])
+  // Only movies already on someone's roster (drafted or picked up) are
+  // unavailable. Movies with pending bids stay searchable so teams can compete
+  // for them. Memoized to prevent infinite re-renders.
+  const excludedTmdbIds = useMemo(() => new Set(ownedTmdbIds), [ownedTmdbIds])
+
+  // Current high active bid per movie, so search results can flag movies that
+  // already have a bid and the amount step can enforce outbidding it.
+  const activeBidsByTmdbId = useMemo(() => {
+    const map = new Map<number, ActiveBidInfo>()
+    for (const bid of existingBids) {
+      if (bid.status !== 'active') continue
+      const current = map.get(bid.tmdb_id)
+      if (!current || bid.amount > current.high) {
+        map.set(bid.tmdb_id, { high: bid.amount, mine: bid.team_id === teamId })
+      }
+    }
+    return map
+  }, [existingBids, teamId])
 
   const {
     movies: results,
     loading,
     search,
     clearSearch,
-  } = useDraftMovies({ draftedTmdbIds: excludedTmdbIds })
+  } = useDraftMovies({ draftedTmdbIds: excludedTmdbIds, enabled: !isCounterBidPhase })
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -131,10 +227,8 @@ export default function PlaceBidModal({
           popularity: movieData.popularity ?? 0,
           genre_ids: movieData.genre_ids || [],
         })
-        // Find the current high bid for this movie and set minimum counter
-        const highBid = existingBids
-          .filter(b => b.tmdb_id === counterBidTarget.tmdb_id && b.status === 'active')
-          .reduce((max, b) => Math.max(max, b.amount), 0)
+        // Open at the smallest amount that takes the lead.
+        const highBid = activeBidsByTmdbId.get(counterBidTarget.tmdb_id)?.high ?? 0
         setBidAmount(highBid + 1)
       } else {
         setSelectedMovie(null)
@@ -145,12 +239,23 @@ export default function PlaceBidModal({
       setSearchQuery('')
       clearSearchRef.current()
     }
-  }, [isOpen, counterBidTarget, existingBids])
+  }, [isOpen, counterBidTarget, activeBidsByTmdbId])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
     search(value)
   }
+
+  // Selecting a movie that already has an active bid starts the amount at the
+  // minimum needed to take the lead.
+  const selectMovie = useCallback((movie: TMDbSearchResult) => {
+    setSelectedMovie(movie)
+    const bidInfo = activeBidsByTmdbId.get(movie.tmdb_id)
+    setBidAmount(bidInfo ? bidInfo.high + 1 : 0)
+  }, [activeBidsByTmdbId])
+
+  const selectedBidInfo = selectedMovie ? activeBidsByTmdbId.get(selectedMovie.tmdb_id) : undefined
+  const highestBid = selectedBidInfo?.high ?? null
 
   const submitBidAction = useCallback(async () => {
     if (!selectedMovie) return
@@ -186,11 +291,55 @@ export default function PlaceBidModal({
   const { execute: handleSubmit, isLoading: isSubmitting } = useAsyncAction(submitBidAction)
 
   const remainingBudget = budget?.remaining_budget ?? 0
-  const isValidBid = bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100
+  const isValidBid = bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100 &&
+    (highestBid === null || bidAmount > highestBid)
 
-  const displayedResults = showWishlistedOnly
+  // The movies still in play, rebuilt from the bids themselves. 'outbid' rows
+  // count: that contest is live and its team can counter back. movie_data was
+  // captured from TMDb when the bid was placed, so it already carries
+  // everything a search result would.
+  const contestedMovies = useMemo(() => {
+    const byTmdbId = new Map<number, TMDbSearchResult>()
+    for (const bid of existingBids) {
+      if (bid.status !== 'active' && bid.status !== 'outbid') continue
+      if (excludedTmdbIds.has(bid.tmdb_id) || byTmdbId.has(bid.tmdb_id)) continue
+
+      const data = bid.movie_data as Partial<TMDbSearchResult> | null
+
+      // A released movie can no longer be bid on, so listing one here would be
+      // a dead end -- the server rejects it once the amount is filled in. The
+      // bid cards gate their "Counter Bid" button the same way.
+      if (!isMovieBiddable(data?.release_date ?? null)) continue
+
+      byTmdbId.set(bid.tmdb_id, {
+        tmdb_id: bid.tmdb_id,
+        title: data?.title ?? `Movie #${bid.tmdb_id}`,
+        overview: data?.overview ?? null,
+        release_date: data?.release_date ?? null,
+        poster_url: data?.poster_url ?? null,
+        vote_average: data?.vote_average ?? 0,
+        popularity: data?.popularity ?? 0,
+        genre_ids: data?.genre_ids ?? [],
+      })
+    }
+    // Highest bid first: the contests that need answering are the loud ones.
+    return [...byTmdbId.values()].sort(
+      (a, b) => (activeBidsByTmdbId.get(b.tmdb_id)?.high ?? 0) - (activeBidsByTmdbId.get(a.tmdb_id)?.high ?? 0)
+    )
+  }, [existingBids, excludedTmdbIds, activeBidsByTmdbId])
+
+  const searchResults = showWishlistedOnly
     ? results.filter(m => isWishlisted(m.tmdb_id))
     : results
+
+  const displayedResults = isCounterBidPhase ? contestedMovies : searchResults
+
+  const resultsState = getBidResultsState({
+    isCounterBidPhase,
+    loading,
+    searchResultCount: results.length,
+    displayedCount: displayedResults.length,
+  })
 
   if (!isOpen) return null
 
@@ -217,12 +366,14 @@ export default function PlaceBidModal({
             )}
             <div>
               <h2 id="place-bid-title" className="font-display text-xl font-semibold text-foreground">
-                {counterBidTarget ? 'Counter Bid' : selectedMovie ? 'Set Your Bid' : 'Place a Bid'}
+                {getModalTitle(counterBidTarget, teamId, !!selectedMovie, isCounterBidPhase)}
               </h2>
               <p className="text-sm text-foreground-muted mt-0.5">
                 {selectedMovie
                   ? 'Choose your bid amount'
-                  : 'Search for a movie to bid on'}
+                  : isCounterBidPhase
+                    ? 'Pick a movie already being bid on'
+                    : 'Search for a movie to bid on'}
               </p>
             </div>
           </div>
@@ -249,52 +400,87 @@ export default function PlaceBidModal({
         <div className="flex-1 overflow-y-auto">
           {!selectedMovie ? (
             <div className="p-5">
-              {/* Search Input */}
-              <div className="relative mb-5">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-muted" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
-                  placeholder="Search for a movie..."
-                  className="input w-full pl-12 py-3 text-base"
-                  data-testid="bid-movie-search-input"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => handleSearchChange('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 btn btn-ghost p-1.5 rounded-full"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Filter Toggle */}
-              <div className="flex items-center gap-2 mb-4">
-                <button
-                  onClick={() => setShowWishlistedOnly(prev => !prev)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all ${
-                    showWishlistedOnly
-                      ? 'bg-crimson/20 text-crimson border border-crimson/30'
-                      : 'bg-elevated text-foreground-muted border border-border hover:border-border-hover'
-                  }`}
-                  aria-pressed={showWishlistedOnly}
+              {isCounterBidPhase ? (
+                /* No search: after the cutoff the only legal targets are the
+                   movies already in play, so those are what the modal offers. */
+                <div
+                  className="flex gap-3 p-3.5 mb-5 rounded-lg border border-gold/25 bg-gold-muted"
+                  data-testid="counter-bid-phase-notice"
                 >
-                  <Heart className="w-3.5 h-3.5" fill={showWishlistedOnly ? 'currentColor' : 'none'} />
-                  Wishlisted
-                </button>
-              </div>
+                  <Swords className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" aria-hidden="true" />
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      New bids closed{newBidCutoffAt ? ` ${formatDeadlineShort(newBidCutoffAt)}` : ''}
+                    </p>
+                    <p className="text-xs text-foreground-secondary mt-1 leading-relaxed">
+                      Raise your bid or counter another team&apos;s on the movies below. Movies
+                      nobody has bid on reopen once this week&apos;s bids are processed.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Search Input */}
+                  <div className="relative mb-5">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-foreground-muted" />
+                    <input
+                      ref={searchInputRef}
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => handleSearchChange(e.target.value)}
+                      placeholder="Search for a movie..."
+                      className="input w-full pl-12 py-3 text-base"
+                      data-testid="bid-movie-search-input"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => handleSearchChange('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 btn btn-ghost p-1.5 rounded-full"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filter Toggle */}
+                  <div className="flex items-center gap-2 mb-4">
+                    <button
+                      onClick={() => setShowWishlistedOnly(prev => !prev)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all ${
+                        showWishlistedOnly
+                          ? 'bg-crimson/20 text-crimson border border-crimson/30'
+                          : 'bg-elevated text-foreground-muted border border-border hover:border-border-hover'
+                      }`}
+                      aria-pressed={showWishlistedOnly}
+                    >
+                      <Heart className="w-3.5 h-3.5" fill={showWishlistedOnly ? 'currentColor' : 'none'} />
+                      Wishlisted
+                    </button>
+                  </div>
+                </>
+              )}
 
               {/* Results */}
               <div className="space-y-2">
-                {loading ? (
+                {resultsState === 'loading' && (
                   <div className="flex flex-col items-center justify-center py-12">
                     <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin mb-3" />
                     <p className="text-foreground-muted">Searching movies...</p>
                   </div>
-                ) : results.length === 0 ? (
+                )}
+
+                {resultsState === 'no-contests' && (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <Swords className="w-12 h-12 text-foreground-muted mb-4" />
+                    <p className="text-foreground-secondary font-medium">No bids in play</p>
+                    <p className="text-foreground-muted text-sm mt-1 max-w-xs">
+                      Nobody placed a bid before the deadline. Bidding reopens once this
+                      week&apos;s bids are processed.
+                    </p>
+                  </div>
+                )}
+
+                {resultsState === 'no-results' && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Film className="w-12 h-12 text-foreground-muted mb-4" />
                     <p className="text-foreground-secondary font-medium">
@@ -306,7 +492,9 @@ export default function PlaceBidModal({
                         : 'Type a movie title above to get started'}
                     </p>
                   </div>
-                ) : displayedResults.length === 0 ? (
+                )}
+
+                {resultsState === 'no-wishlist-matches' && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Heart className="w-12 h-12 text-foreground-muted mb-4" />
                     <p className="text-foreground-secondary font-medium">No wishlisted movies found</p>
@@ -314,21 +502,25 @@ export default function PlaceBidModal({
                       Add movies to your wishlist first, then filter here
                     </p>
                   </div>
-                ) : (
+                )}
+
+                {resultsState === 'list' && (
                   <>
                     <p className="text-foreground-muted text-sm mb-3">
-                      {displayedResults.length} movies found
+                      {isCounterBidPhase
+                        ? `${displayedResults.length} ${displayedResults.length === 1 ? 'movie' : 'movies'} still being bid on`
+                        : `${displayedResults.length} movies found`}
                     </p>
                     {displayedResults.map((movie, index) => (
                       <div
                         key={movie.tmdb_id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSelectedMovie(movie)}
+                        onClick={() => selectMovie(movie)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
                             e.preventDefault()
-                            setSelectedMovie(movie)
+                            selectMovie(movie)
                           }
                         }}
                         data-testid={`bid-movie-result-${movie.tmdb_id}`}
@@ -368,6 +560,10 @@ export default function PlaceBidModal({
                               </span>
                             )}
                           </div>
+                          <ActiveBidChip
+                            tmdbId={movie.tmdb_id}
+                            info={activeBidsByTmdbId.get(movie.tmdb_id)}
+                          />
                         </div>
                         <div className="flex items-center text-foreground-muted group-hover:text-gold transition-colors">
                           <TrendingUp className="w-5 h-5" />
@@ -410,6 +606,16 @@ export default function PlaceBidModal({
                         <Sparkles className="w-4 h-4 text-gold" />
                         {selectedMovie.vote_average.toFixed(1)} rating
                       </p>
+                    )}
+                    {highestBid !== null && (
+                      <div className="mt-3 px-3 py-1.5 bg-warning-bg/30 border border-warning/20 rounded-lg inline-flex items-center gap-1.5">
+                        <DollarSign className="w-4 h-4 text-warning" />
+                        <span className="text-warning text-sm font-medium">
+                          {selectedBidInfo?.mine
+                            ? `Your current bid: $${highestBid}`
+                            : `Current high bid: $${highestBid}`}
+                        </span>
+                      </div>
                     )}
                     {selectedMovie.overview && (
                       <p className="text-foreground-muted text-sm mt-3 line-clamp-2">
@@ -461,7 +667,7 @@ export default function PlaceBidModal({
 
                 {!isValidBid ? (
                   <p className="text-error text-sm flex items-center gap-1.5">
-                    {getValidationErrorMessage(bidAmount, remainingBudget)}
+                    {getValidationErrorMessage(bidAmount, remainingBudget, highestBid)}
                   </p>
                 ) : (
                   <p className="text-foreground-muted text-sm">

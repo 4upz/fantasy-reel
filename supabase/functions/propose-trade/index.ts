@@ -18,7 +18,7 @@ import {
   getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
-import { createLogger } from '../_shared/logger.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('propose-trade')
 
@@ -113,15 +113,16 @@ Deno.serve(async (req) => {
       .single()
 
     if (insertError || !tradeOffer) {
-      console.error('Failed to create trade offer:', insertError)
-      // Check for movie-already-in-trade error from trigger
-      if (insertError?.message?.includes('already in a pending trade')) {
-        return errorResponse('One or more movies are already involved in another pending trade', 400)
-      }
-      // Check for unique constraint violation (same teams already have pending trade)
-      if (insertError?.code === '23505') {
-        return errorResponse('You already have a pending trade with this team', 400)
-      }
+      // Competing offers are legal as of 20260809120000: the movie-overlap
+      // trigger and the one-open-offer-per-team-pair unique index are both
+      // gone, so the two constraint violations this used to translate into 400s
+      // can no longer happen. Anything reaching here is a genuine failure.
+      log.error('Failed to create trade offer', {
+        league_id,
+        initiator_team_id: initiatorTeamId,
+        recipient_team_id,
+        error: serializeError(insertError),
+      })
       return errorResponse('Failed to create trade offer', 500)
     }
 
