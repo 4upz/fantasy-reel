@@ -246,24 +246,18 @@ async function parseDiscordRetryAfterMs(response: Response): Promise<number> {
 
 async function trackFailure(supabase: SupabaseClient, channelId: string): Promise<void> {
   try {
-    // Read-then-write increment -- not atomic, so concurrent failures for the
-    // same channel could race and under-count consecutive_failures. Low
-    // stakes: this only affects failure-tracking counters, not core writes.
-    const { data: current } = await supabase
-      .from('discord_channels')
-      .select('consecutive_failures')
-      .eq('id', channelId)
-      .single()
+    // Atomic increment via increment_discord_webhook_failure (see
+    // 20260807120000_atomic_webhook_failure_increment.sql) -- a single
+    // UPDATE ... RETURNING done server-side, so concurrent failures for the
+    // same channel can't race on a read-then-write and under-count.
+    const { data: newCount, error } = await supabase.rpc('increment_discord_webhook_failure', {
+      p_channel_id: channelId,
+    })
 
-    const newCount = (current?.consecutive_failures ?? 0) + 1
-
-    await supabase
-      .from('discord_channels')
-      .update({
-        consecutive_failures: newCount,
-        last_error_at: new Date().toISOString(),
-      })
-      .eq('id', channelId)
+    if (error) {
+      log.error('Failed to track webhook failure', { channel_id: channelId, error: serializeError(error) })
+      return
+    }
 
     // Alert once on the threshold crossing, not on every subsequent failure.
     if (newCount === 3) {

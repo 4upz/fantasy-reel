@@ -44,11 +44,17 @@ interface MockUpdateTracker {
   calls: Array<{ table: string; data: Record<string, unknown>; filter: Record<string, unknown> }>
 }
 
+interface MockRpcTracker {
+  calls: Array<{ fn: string; params: Record<string, unknown> }>
+}
+
 function createMockSupabase(
   channelsData: unknown[] | null,
-  channelsError: null | { message: string } = null
+  channelsError: null | { message: string } = null,
+  rpcResponse: { data: unknown; error: null | { message: string } } = { data: 1, error: null }
 ) {
   const updateTracker: MockUpdateTracker = { calls: [] }
+  const rpcTracker: MockRpcTracker = { calls: [] }
 
   const client = {
     from: (table: string) => ({
@@ -85,7 +91,13 @@ function createMockSupabase(
         },
       }),
     }),
+    // Backs trackFailure()'s atomic increment (increment_discord_webhook_failure).
+    rpc: (fn: string, params: Record<string, unknown>) => {
+      rpcTracker.calls.push({ fn, params })
+      return Promise.resolve(rpcResponse)
+    },
     _updateTracker: updateTracker,
+    _rpcTracker: rpcTracker,
   }
 
   return client as unknown as ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>
@@ -240,7 +252,9 @@ Deno.test('sendDiscordNotification - tracks failures on webhook error', async ()
         thread_id: null,
       },
     ]
-    const supabase = createMockSupabase(channels)
+    // increment_discord_webhook_failure does the +1 server-side (atomically);
+    // the mock just returns what the DB would after incrementing 2 -> 3.
+    const supabase = createMockSupabase(channels, null, { data: 3, error: null })
 
     await sendDiscordNotification(supabase, {
       leagueId: 'league-1',
@@ -251,11 +265,11 @@ Deno.test('sendDiscordNotification - tracks failures on webhook error', async ()
     // Webhook should have been called
     assertEquals(fetchCalls.length, 1)
 
-    // Failure tracking should have been called
-    const tracker = (supabase as unknown as { _updateTracker: MockUpdateTracker })._updateTracker
+    // Failure tracking should have called the atomic-increment RPC
+    const tracker = (supabase as unknown as { _rpcTracker: MockRpcTracker })._rpcTracker
     assertEquals(tracker.calls.length, 1)
-    assertEquals(tracker.calls[0].table, 'discord_channels')
-    assertEquals(tracker.calls[0].data.consecutive_failures, 3)
+    assertEquals(tracker.calls[0].fn, 'increment_discord_webhook_failure')
+    assertEquals(tracker.calls[0].params.p_channel_id, 'ch-1')
   } finally {
     restoreFetch()
   }

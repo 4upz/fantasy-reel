@@ -152,7 +152,7 @@ Deno.test({
 
 /**
  * Generate a tmdb_id well outside the real TMDb ID range, the shared
- * draft-movie pool (factory picks start at 900_100_001 - see
+ * draft-movie pool (factory picks use a per-run 900m-940m range - see
  * createActiveLeague), and other test files' void ranges (e.g.
  * process-bids.test.ts uses 950_000_000+, place-bid.test.ts uses
  * 960_000_000+). Release-date tests need a movie nobody else touches so
