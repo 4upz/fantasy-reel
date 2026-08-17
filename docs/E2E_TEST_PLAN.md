@@ -283,7 +283,7 @@ e2e/tests/
 |------|-------------|----------------|
 | `shows drafted movies` | Draft picks visible | - |
 | `shows pickup movies` | Bidding wins visible | - |
-| `shows budget remaining` | FAAB budget correct | - |
+| `shows budget remaining` | Fantasy budget correct | - |
 
 #### `drop-movie.spec.ts`
 | Test | Description | Edge Functions |

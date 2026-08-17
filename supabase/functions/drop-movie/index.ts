@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
         return errorResponse('Cannot drop a movie that has been counterpicked', 400)
       }
 
-      // Pending counterpick bid: an active or outbid FAAB auction on this movie
+      // Pending counterpick bid: an active or outbid budget auction on this movie
       // should also block the drop -- letting it through would strand the bid.
       const { count: pendingBidCount } = await serviceClient
         .from('counterpick_bids')

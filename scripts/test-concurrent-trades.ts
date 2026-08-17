@@ -308,20 +308,20 @@ async function testConcurrentTradeAccepts(): Promise<void> {
 }
 
 /**
- * Test 4: FAAB Budget Exhaustion
+ * Test 4: Fantasy Budget Exhaustion
  *
  * User with $50 remaining budget tries to:
- * - Propose trade offering $30 FAAB
+ * - Propose trade offering $30 budget
  * - Place bid for $30
  * Both happen concurrently.
  * Expected: Only one should succeed (total $30 <= $50).
  */
-async function testFaabBudgetExhaustion(): Promise<void> {
-  log('Test 4: FAAB Budget Exhaustion Race Condition')
+async function testBudgetExhaustion(): Promise<void> {
+  log('Test 4: Fantasy Budget Exhaustion Race Condition')
 
   // Document for future implementation
   logResult(
-    'FAAB Budget Exhaustion',
+    'Fantasy Budget Exhaustion',
     true,
     'Test documented - requires controlled budget setup'
   )
@@ -379,7 +379,7 @@ async function main(): Promise<void> {
   await testConcurrentBids()
   await testConcurrentTradeProposals()
   await testConcurrentTradeAccepts()
-  await testFaabBudgetExhaustion()
+  await testBudgetExhaustion()
 
   printSummary()
 }

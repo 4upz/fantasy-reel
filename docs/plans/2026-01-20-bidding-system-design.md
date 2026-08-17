@@ -2,7 +2,7 @@
 
 ## Overview
 
-This design adds a flexible slot system where teams acquire movies through both drafting (pre-season) and pickups (during season via bidding). Inspired by Fantasy Critic's FAAB-style bidding with the addition of guaranteed counter-bid windows.
+This design adds a flexible slot system where teams acquire movies through both drafting (pre-season) and pickups (during season via bidding). Inspired by Fantasy Critic's blind-budget bidding with the addition of guaranteed counter-bid windows.
 
 ## Slot Configuration
 

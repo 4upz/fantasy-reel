@@ -5,7 +5,7 @@
 
 ## Problem
 
-The standings page only shows draft picks when expanding a team's card. Pickups (won via FAAB bidding) and counterpick details (specific movies being bet against) are missing. Users cannot see another team's complete roster from standings — only their drafted movies.
+The standings page only shows draft picks when expanding a team's card. Pickups (won via fantasy budget bidding) and counterpick details (specific movies being bet against) are missing. Users cannot see another team's complete roster from standings — only their drafted movies.
 
 The roster page (`/league/[id]/roster`) correctly displays all three acquisition types but is limited to the current user's own team.
 

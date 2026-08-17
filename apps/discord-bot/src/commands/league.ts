@@ -102,7 +102,7 @@ export const league: Command = {
       `**Members:** ${memberCount ?? 0}`,
       `**Draft:** ${config?.draft_slots ?? '?'} rounds, ${config?.total_slots ?? '?'} roster slots, ${config?.drop_limit ?? '?'} drops allowed`,
       `**Counterpicks:** ${counterpickSlots} slot${counterpickSlots === 1 ? '' : 's'}`,
-      `**FAAB Budget:** $${config?.faab_budget ?? 100}`,
+      `**Fantasy Budget:** $${config?.faab_budget ?? 100}`,
       '',
       '**Top Standings**',
       topLines.length > 0 ? topLines.join('\n') : 'No standings yet.',

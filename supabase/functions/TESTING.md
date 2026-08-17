@@ -318,8 +318,8 @@ The project does not currently have E2E tests configured. When setting up Playwr
    - Navigate to league trades tab
    - Click "Propose Trade"
    - Select recipient team
-   - Add movies/FAAB to offer
-   - Add movies/FAAB to request
+   - Add movies/budget to offer
+   - Add movies/budget to request
    - Submit proposal
    - Verify trade appears in pending list
 
@@ -439,7 +439,7 @@ async function testConcurrentBids(leagueId: string, movieId: string) {
 
 1. **Same movie in multiple trades** - Should prevent accepting both
 2. **Concurrent bid processing** - Only highest bid should win
-3. **FAAB budget exhaustion** - Can't spend more than available
+3. **Fantasy budget exhaustion** - Can't spend more than available
 4. **Trade execution conflicts** - Same movie can't be in two accepted trades
 
 ---

@@ -6,13 +6,13 @@ import { ChevronDown } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
 import type { HoldingMovie, RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
-import TeamFaab, { faabTone, formatFaab, remainingFaab } from './TeamFaab'
+import TeamBudgetSummary, { budgetTone, formatBudget, remainingBudget } from './TeamBudget'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 
 interface Props {
   rankedTeam: RankedTeamFull
-  /** The league's starting purse, or null when the league doesn't use FAAB. */
-  startingFaab: number | null
+  /** The league's starting purse, or null when the league doesn't use a fantasy budget. */
+  startingBudget: number | null
   isCurrentUser: boolean
   /** Mobile only - above lg the roster lives in the detail rail instead. */
   isExpanded: boolean
@@ -47,7 +47,7 @@ function BreakdownChip({ label, value, tone }: { label: string; value: number; t
 
 export default function TeamStandingCard({
   rankedTeam,
-  startingFaab,
+  startingBudget,
   isCurrentUser,
   isExpanded,
   isSelected,
@@ -67,7 +67,7 @@ export default function TeamStandingCard({
   const moviesScored = teamScore?.movies_scored ?? 0
   const moviesPending = teamScore?.movies_pending ?? 0
   const movieCount = draftPicks.length + pickups.length
-  const faabLeft = startingFaab == null ? null : remainingFaab(team?.team_budgets, startingFaab)
+  const budgetLeft = startingBudget == null ? null : remainingBudget(team?.team_budgets, startingBudget)
 
   const displayName = team?.name || profile?.display_name || 'Unnamed Team'
   const ownerHandle = team?.name ? profile?.display_name : null
@@ -138,10 +138,10 @@ export default function TeamStandingCard({
 
           {/* Spending power is only useful next to everyone else's, so it sits in
               the collapsed row rather than behind an expand. */}
-          {faabLeft !== null && (
+          {budgetLeft !== null && (
             <div className="hidden flex-none text-center lg:block lg:w-[72px]">
-              <div className="text-[11px] text-foreground-muted">FAAB</div>
-              <div className={`text-[15px] font-semibold ${faabTone(faabLeft)}`}>{formatFaab(faabLeft)}</div>
+              <div className="text-[11px] text-foreground-muted">Budget</div>
+              <div className={`text-[15px] font-semibold ${budgetTone(budgetLeft)}`}>{formatBudget(budgetLeft)}</div>
             </div>
           )}
 
@@ -165,9 +165,9 @@ export default function TeamStandingCard({
           <span className="flex-1" />
           {/* flex-none so the purse survives the truncation the scored/pending
               text takes when a team name pushes the row wide */}
-          {faabLeft !== null && (
-            <span className={`flex-none text-xs font-semibold ${faabTone(faabLeft)}`}>
-              {formatFaab(faabLeft)}
+          {budgetLeft !== null && (
+            <span className={`flex-none text-xs font-semibold ${budgetTone(budgetLeft)}`}>
+              {formatBudget(budgetLeft)}
             </span>
           )}
           <ChevronDown
@@ -195,7 +195,7 @@ export default function TeamStandingCard({
             />
           </div>
 
-          {startingFaab !== null && <TeamFaab budget={team?.team_budgets} startingFaab={startingFaab} />}
+          {startingBudget !== null && <TeamBudgetSummary budget={team?.team_budgets} startingBudget={startingBudget} />}
 
           {draftPicks.map((pick) => (
             <MovieScoreCard

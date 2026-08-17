@@ -47,7 +47,7 @@ async function getDraftPickRow(
 
 /**
  * Seed a counterpick_bids row targeting a draft pick, simulating a bid placed
- * during the FAAB auction phase without going through place-counterpick-bid.
+ * during the budget auction phase without going through place-counterpick-bid.
  */
 function seedCounterpickBid(
   serviceClient: SupabaseClient,

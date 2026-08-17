@@ -120,9 +120,9 @@ export default function AcceptConfirmModal({
 
 function TradeItemsList({ items }: { items: TradeItems }) {
   const hasMovies = items.movies.length > 0
-  const hasFaab = items.faab > 0
+  const hasBudget = items.faab > 0
 
-  if (!hasMovies && !hasFaab) {
+  if (!hasMovies && !hasBudget) {
     return <p className="text-sm text-foreground-muted italic">Nothing</p>
   }
 
@@ -156,12 +156,12 @@ function TradeItemsList({ items }: { items: TradeItems }) {
         </div>
       ))}
 
-      {hasFaab && (
+      {hasBudget && (
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-gold/20 rounded flex items-center justify-center">
             <span className="text-gold font-bold text-sm">$</span>
           </div>
-          <p className="text-sm font-medium text-gold">${items.faab} FAAB</p>
+          <p className="text-sm font-medium text-gold">${items.faab} budget</p>
         </div>
       )}
     </div>

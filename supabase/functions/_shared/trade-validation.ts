@@ -251,26 +251,26 @@ export async function getTradeMentionContent(
 /**
  * Validate that a string is a valid trade items structure
  * @param items - The trade items to validate
- * @param maxFaab - Maximum FAAB allowed (from league configuration, defaults to 100)
+ * @param maxBudget - Maximum budget allowed (from league configuration, defaults to 100)
  */
-export function validateTradeItemsStructure(items: unknown, maxFaab = 100): ValidationResult {
+export function validateTradeItemsStructure(items: unknown, maxBudget = 100): ValidationResult {
   if (!items || typeof items !== 'object') {
     return { valid: false, error: 'Invalid items structure' }
   }
 
   const typedItems = items as TradeItems
 
-  // Validate faab - use league's configured maximum
+  // Validate the budget amount - use league's configured maximum
   if (typeof typedItems.faab !== 'number' || typedItems.faab < 0) {
-    return { valid: false, error: 'FAAB must be a non-negative number' }
+    return { valid: false, error: 'Budget must be a non-negative number' }
   }
 
-  if (typedItems.faab > maxFaab) {
-    return { valid: false, error: `FAAB must not exceed league budget of $${maxFaab}` }
+  if (typedItems.faab > maxBudget) {
+    return { valid: false, error: `Budget must not exceed the league maximum of $${maxBudget}` }
   }
 
   if (!Number.isInteger(typedItems.faab)) {
-    return { valid: false, error: 'FAAB must be a whole number' }
+    return { valid: false, error: 'Budget must be a whole number' }
   }
 
   // Validate movies array
@@ -411,16 +411,16 @@ export async function validateMovieOwnership(
 }
 
 /**
- * Validate team has enough FAAB budget
+ * Validate team has enough fantasy budget
  */
-export function validateFaabBudget(
+export function validateBudget(
   remainingBudget: number,
-  faabAmount: number
+  budgetAmount: number
 ): ValidationResult {
-  if (faabAmount > remainingBudget) {
+  if (budgetAmount > remainingBudget) {
     return {
       valid: false,
-      error: `Insufficient FAAB budget. Have $${remainingBudget}, trying to trade $${faabAmount}`
+      error: `Insufficient budget. Have $${remainingBudget}, trying to trade $${budgetAmount}`
     }
   }
   return { valid: true }
@@ -545,13 +545,13 @@ export async function validateTradeProposal(
   initiatorItems: TradeItems,
   recipientItems: TradeItems
 ): Promise<ValidationResult> {
-  // 1. Get league config first (needed for FAAB validation)
+  // 1. Get league config first (needed for budget validation)
   const config = await getLeagueTradeConfig(supabase, leagueId)
   if (!config) {
     return { valid: false, error: 'League not found' }
   }
 
-  // 2. Validate items structure (using league's FAAB budget)
+  // 2. Validate items structure (using the league's fantasy budget)
   let result = validateTradeItemsStructure(initiatorItems, config.faab_budget)
   if (!result.valid) return result
 
@@ -589,11 +589,11 @@ export async function validateTradeProposal(
   result = await validateMovieOwnership(supabase, recipientTeamId, recipientItems, initiatorTeamId)
   if (!result.valid) return result
 
-  // 8. Validate FAAB budgets
-  result = validateFaabBudget(initiatorInfo.remaining_budget, initiatorItems.faab)
+  // 8. Validate fantasy budgets
+  result = validateBudget(initiatorInfo.remaining_budget, initiatorItems.faab)
   if (!result.valid) return result
 
-  result = validateFaabBudget(recipientInfo.remaining_budget, recipientItems.faab)
+  result = validateBudget(recipientInfo.remaining_budget, recipientItems.faab)
   if (!result.valid) return result
 
   // 9. Validate roster space

@@ -219,8 +219,14 @@ Deno.serve(async (req) => {
     tmdbUrl.searchParams.set('region', 'US')
     tmdbUrl.searchParams.set('include_adult', 'false')
     tmdbUrl.searchParams.set('include_video', 'false')
-    tmdbUrl.searchParams.set('certification_country', 'US')
-    tmdbUrl.searchParams.set('certification.lte', 'R')
+    // No certification filter. `certification.lte=R` is not "R or milder" on
+    // TMDb -- it is an inner join onto the certification table, so anything
+    // without a US rating yet is dropped entirely. Ratings are assigned close
+    // to release, so that excluded almost every upcoming movie: on the default
+    // year window this filter cut discover from 2859 results to 210, and a
+    // dropped movie a team wanted to re-bid on (The Cat in the Hat, Nov 2026)
+    // was unreachable on all 11 remaining pages while sitting on page 2
+    // without it. Adult content is already excluded by include_adult=false.
     tmdbUrl.searchParams.set('page', page.toString())
     tmdbUrl.searchParams.set('primary_release_date.gte', gte)
     tmdbUrl.searchParams.set('primary_release_date.lte', lte)

@@ -2,7 +2,7 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build the frontend UI for the FAAB-style bidding system, including bid placement, team roster management, and notifications.
+**Goal:** Build the frontend UI for the fantasy budget bidding system, including bid placement, team roster management, and notifications.
 
 **Architecture:** React components following existing patterns (Server components for data fetching, Client components for interactivity). Uses Cinematic Dark design system, Supabase real-time subscriptions, and Edge Function calls via `callEdgeFunction` utility.
 

@@ -55,7 +55,7 @@ describe('/league-options', () => {
     expect(embed.title).toBe('League Settings')
     expect(embed.description).toContain('Invite only: On')
     expect(embed.description).toContain('Rounds: 5')
-    expect(embed.description).toContain('FAAB budget: $100')
+    expect(embed.description).toContain('Fantasy budget: $100')
     expect(embed.description).not.toContain('undefined')
     // Sensitive: join_code must never be exposed via the bot
     expect(embed.description).not.toContain('join_code')
