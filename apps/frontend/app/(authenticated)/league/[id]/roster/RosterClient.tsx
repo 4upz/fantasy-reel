@@ -10,25 +10,20 @@ import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import { findDropBlocker, type DropBlocker } from './dropRules'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 import { getTmdbPosterUrl } from '../components/utils'
-import type { Holding } from './types'
-import type { League, Movie, TeamBudget, DraftPick, Pickup, Counterpick } from '@/types'
+import { holdingMovie } from '@/utils/holdings'
+import type { Holding, RosterHolding } from './types'
+import type { HoldingMovie, League, Movie, TeamBudget, Counterpick } from '@/types'
 
 interface RosterCounterpick extends Counterpick {
   movies: Movie
   target_team: { name: string }
 }
 
-/** Team that counterpicked a holding, joined in by the roster page. */
-type CounterpickerRef = { name: string } | null
-
-type RosterDraftPick = DraftPick & { movies: Movie; counterpicked_by: CounterpickerRef }
-type RosterPickup = Pickup & { movies: Movie; counterpicked_by: CounterpickerRef }
-
 interface RosterClientProps {
   league: League
   team: { id: string; name: string }
-  draftPicks: RosterDraftPick[]
-  pickups: RosterPickup[]
+  /** The whole roster in one list - draft picks and pickups, already active. */
+  holdings: RosterHolding[]
   budget: TeamBudget | null
   dropCount: number
   userId: string
@@ -37,11 +32,23 @@ interface RosterClientProps {
   contestedMovieIds: string[]
 }
 
+/** One roster card's worth of a holding: how it was acquired decides the label. */
+function toHolding(row: RosterHolding): Holding {
+  return {
+    id: row.holding_id,
+    source: row.source,
+    movie: holdingMovie(row),
+    label:
+      row.source === 'draft' ? `Round ${row.round}, Pick ${row.pick_number}` : `$${row.amount_paid}`,
+    counterpickedByTeamId: row.counterpicked_by_team_id,
+    counterpickerName: row.counterpicked_by_name,
+  }
+}
+
 export default function RosterClient({
   league,
   team,
-  draftPicks: initialDraftPicks,
-  pickups: initialPickups,
+  holdings: initialHoldings,
   budget,
   dropCount: initialDropCount,
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -49,8 +56,7 @@ export default function RosterClient({
   counterpicks,
   contestedMovieIds,
 }: RosterClientProps) {
-  const [draftPicks, setDraftPicks] = useState(initialDraftPicks)
-  const [pickups, setPickups] = useState(initialPickups)
+  const [holdings, setHoldings] = useState(initialHoldings)
   const [dropCount, setDropCount] = useState(initialDropCount)
   const [selected, setSelected] = useState<Holding | null>(null)
 
@@ -58,29 +64,13 @@ export default function RosterClient({
   const contested = useMemo(() => new Set(contestedMovieIds), [contestedMovieIds])
 
   const draftHoldings: Holding[] = useMemo(
-    () =>
-      draftPicks.map((pick) => ({
-        id: pick.id,
-        source: 'draftPicks' as const,
-        movie: pick.movies,
-        label: `Round ${pick.round}, Pick ${pick.pick_number}`,
-        counterpickedByTeamId: pick.counterpicked_by_team_id,
-        counterpickerName: pick.counterpicked_by?.name ?? null,
-      })),
-    [draftPicks]
+    () => holdings.filter((row) => row.source === 'draft').map(toHolding),
+    [holdings]
   )
 
   const pickupHoldings: Holding[] = useMemo(
-    () =>
-      pickups.map((pickup) => ({
-        id: pickup.id,
-        source: 'pickups' as const,
-        movie: pickup.movies,
-        label: `$${pickup.amount_paid}`,
-        counterpickedByTeamId: pickup.counterpicked_by_team_id,
-        counterpickerName: pickup.counterpicked_by?.name ?? null,
-      })),
-    [pickups]
+    () => holdings.filter((row) => row.source === 'pickup').map(toHolding),
+    [holdings]
   )
 
   const blockerFor = useCallback(
@@ -96,9 +86,7 @@ export default function RosterClient({
 
   const dropMovie = useCallback(async (holding: Holding): Promise<void> => {
     const body =
-      holding.source === 'draftPicks'
-        ? { draft_pick_id: holding.id }
-        : { pickup_id: holding.id }
+      holding.source === 'draft' ? { draft_pick_id: holding.id } : { pickup_id: holding.id }
 
     const { error } = await callEdgeFunction('drop-movie', { body })
 
@@ -107,11 +95,7 @@ export default function RosterClient({
     if (error) throw new Error(error)
 
     toast.success(`Dropped ${holding.movie.title}`)
-    if (holding.source === 'draftPicks') {
-      setDraftPicks((prev) => prev.filter((p) => p.id !== holding.id))
-    } else {
-      setPickups((prev) => prev.filter((p) => p.id !== holding.id))
-    }
+    setHoldings((prev) => prev.filter((row) => row.holding_id !== holding.id))
     setDropCount((prev) => prev + 1)
     setSelected(null)
   }, [])
@@ -125,7 +109,7 @@ export default function RosterClient({
     setSelected(null)
   }, [isDropping, reset])
 
-  const totalMovies = draftPicks.length + pickups.length
+  const totalMovies = holdings.length
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -285,7 +269,7 @@ function RosterSection({
   )
 }
 
-function Poster({ movie }: { movie: Movie }) {
+function Poster({ movie }: { movie: HoldingMovie }) {
   if (!movie.poster_url) {
     return (
       <div className="w-full h-full flex items-center justify-center">

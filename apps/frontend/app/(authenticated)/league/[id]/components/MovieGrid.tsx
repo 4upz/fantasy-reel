@@ -114,6 +114,13 @@ function shortDate(releaseDate: string | null): string {
   return releaseDate ? formatDate(releaseDate) : 'TBA'
 }
 
+/** How the movie got here: the draft slot it filled, or what the bid cost. */
+function acquisitionLabel(movie: MovieTimelineItem): string {
+  return movie.source === 'draft'
+    ? `Round ${movie.round}, pick ${movie.pick_number}`
+    : `$${movie.amount_paid} pickup`
+}
+
 /**
  * The movie that decides your week, given the whole width. Gold when it is
  * actually imminent; the fallback next-upcoming gets a neutral surface so the
@@ -157,7 +164,7 @@ function NextUpHero({
         <div className="min-w-0 flex-1">
           <h3 className="font-display text-[19px] font-bold leading-[1.25] text-foreground">{movie.title}</h3>
           <p className="mt-1 text-[13px] text-foreground-secondary">
-            {shortDate(movie.release_date)} · Round {movie.round}, pick {movie.pick_number}
+            {shortDate(movie.release_date)} · {acquisitionLabel(movie)}
           </p>
           <p className="mt-2 text-xs leading-[1.5] text-foreground-muted">
             Not rated yet. Scores land the night after release.
@@ -324,7 +331,7 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
         <LeagueMovieModal
           movie={selected}
           contextHeading="On your roster"
-          contextLabel={`Round ${selected.round}, pick ${selected.pick_number}`}
+          contextLabel={acquisitionLabel(selected)}
           onClose={() => setSelected(null)}
         />
       )}

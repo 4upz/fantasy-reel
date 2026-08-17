@@ -1,16 +1,31 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import StandingsClient from './StandingsClient'
+import { HOLDING_MOVIE_COLUMNS, holdingMovie, type HoldingMovieRow } from '@/utils/holdings'
 import type {
   ParticipantWithTeamScore,
-  DraftPickWithScores,
-  PickupWithScores,
   CounterpickWithScores,
+  DraftHolding,
+  PickupHolding,
+  TeamHolding,
 } from '@/types'
 
 interface PageProps {
   params: Promise<{ id: string }>
 }
+
+/** The `team_holdings` columns the standings select. */
+type StandingsHolding = HoldingMovieRow &
+  Pick<
+    TeamHolding,
+    | 'holding_id'
+    | 'source'
+    | 'team_id'
+    | 'round'
+    | 'pick_number'
+    | 'amount_paid'
+    | 'counterpicked_by_team_id'
+  >
 
 export default async function StandingsPage({ params }: PageProps) {
   const { id } = await params
@@ -54,11 +69,11 @@ export default async function StandingsPage({ params }: PageProps) {
 
   // Parallelize independent queries (async-parallel optimization)
   //
-  // Draft picks and pickups are filtered to what the team still holds, matching
-  // the roster page and recalculate_team_score_with_counterpicks(). Counterpicks
-  // deliberately are not: they survive a drop and keep scoring for the
-  // counterpicker (see CLAUDE.md "Counterpicks x drops x trades").
-  const [participantsResult, draftPicksResult, pickupsResult, counterpicksResult] = await Promise.all([
+  // Every roster comes from team_holdings, which is already limited to what
+  // teams still hold - matching recalculate_team_score_with_counterpicks().
+  // Counterpicks deliberately are not: they survive a drop and keep scoring for
+  // the counterpicker (see CLAUDE.md "Counterpicks x drops x trades").
+  const [participantsResult, holdingsResult, counterpicksResult] = await Promise.all([
     supabase
       .from('league_participants')
       .select(
@@ -75,43 +90,21 @@ export default async function StandingsPage({ params }: PageProps) {
       .eq('status', 'active')
       .order('draft_order', { ascending: true }),
     supabase
-      .from('draft_picks')
+      .from('team_holdings')
       .select(
-        `
-        *,
-        movies (
-          *,
-          reviews (*)
-        )
-      `
+        `holding_id, source, team_id, round, pick_number, amount_paid, counterpicked_by_team_id, ${HOLDING_MOVIE_COLUMNS}`
       )
       .eq('league_id', id)
-      .is('dropped_at', null)
+      .order('source', { ascending: true })
       .order('round', { ascending: true })
-      .order('pick_number', { ascending: true }),
-    supabase
-      .from('pickups')
-      .select(
-        `
-        *,
-        movies (
-          *,
-          reviews (*)
-        )
-      `
-      )
-      .eq('league_id', id)
-      .is('dropped_at', null)
-      .order('picked_up_at', { ascending: true }),
+      .order('pick_number', { ascending: true })
+      .order('acquired_at', { ascending: true }),
     supabase
       .from('counterpicks')
       .select(
         `
         *,
-        movies (
-          *,
-          reviews (*)
-        ),
+        movies (*),
         target_team:teams!counterpicks_target_team_id_fkey (name)
       `
       )
@@ -120,9 +113,33 @@ export default async function StandingsPage({ params }: PageProps) {
   ])
 
   const { data: participants } = participantsResult
-  const { data: draftPicks } = draftPicksResult
-  const { data: pickups } = pickupsResult
   const { data: counterpicks } = counterpicksResult
+
+  const holdings = (holdingsResult.data ?? []) as StandingsHolding[]
+
+  const draftPicks: DraftHolding[] = holdings
+    .filter((holding) => holding.source === 'draft')
+    .map((holding) => ({
+      id: holding.holding_id,
+      team_id: holding.team_id,
+      movie_id: holding.movie_id,
+      // Never null on a draft holding: the view carries the pick's own columns.
+      round: holding.round!,
+      pick_number: holding.pick_number!,
+      counterpicked_by_team_id: holding.counterpicked_by_team_id,
+      movie: holdingMovie(holding),
+    }))
+
+  const pickups: PickupHolding[] = holdings
+    .filter((holding) => holding.source === 'pickup')
+    .map((holding) => ({
+      id: holding.holding_id,
+      team_id: holding.team_id,
+      movie_id: holding.movie_id,
+      amount_paid: holding.amount_paid!,
+      counterpicked_by_team_id: holding.counterpicked_by_team_id,
+      movie: holdingMovie(holding),
+    }))
 
   // Fetch profiles separately (no direct FK from league_participants)
   const userIds = (participants ?? []).map((p) => p.user_id)
@@ -145,8 +162,8 @@ export default async function StandingsPage({ params }: PageProps) {
   return (
     <StandingsClient
       participants={participantsWithProfiles as ParticipantWithTeamScore[]}
-      draftPicks={(draftPicks ?? []) as DraftPickWithScores[]}
-      pickups={(pickups ?? []) as PickupWithScores[]}
+      draftPicks={draftPicks}
+      pickups={pickups}
       counterpicks={(counterpicks ?? []) as CounterpickWithScores[]}
       currentUserId={user.id}
       startingFaab={league.faab_budget ?? 0}

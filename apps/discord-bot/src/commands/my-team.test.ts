@@ -52,10 +52,9 @@ describe('/my-team', () => {
             { total_points: 40, teams: { id: 'team-2', league_participants: { league_id: 'league-1', user_id: 'user-2' } } },
           ],
         },
-        draft_picks: {
-          data: [{ movies: { title: 'Movie One', release_date: '2026-09-01', fantasy_points: 20 } }],
+        team_holdings: {
+          data: [{ title: 'Movie One', release_date: '2026-09-01', fantasy_points: 20 }],
         },
-        pickups: { data: [] },
       },
       rpc: { get_user_by_discord_id: { data: 'user-1' } },
     })

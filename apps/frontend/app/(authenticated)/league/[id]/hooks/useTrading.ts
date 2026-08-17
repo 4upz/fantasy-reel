@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import { fetchTradeableMovies } from '@/utils/holdings'
 import type {
   TradeItems,
   TradeOfferWithTeams,
@@ -79,70 +80,9 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
   }, [leagueId])
 
   // Fetch tradeable movies (team's roster)
-  const fetchTradeableMovies = useCallback(async () => {
+  const loadTradeableMovies = useCallback(async () => {
     try {
-      // Fetch draft picks
-      const { data: draftPicks } = await supabase
-        .from('draft_picks')
-        .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
-        .eq('team_id', teamId)
-        .is('dropped_at', null)
-
-      // Fetch pickups
-      const { data: pickups } = await supabase
-        .from('pickups')
-        .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
-        .eq('team_id', teamId)
-        .is('dropped_at', null)
-
-      const movies: TradeableMovie[] = []
-
-      type MovieData = {
-        id: string
-        title: string
-        poster_url: string | null
-        release_date: string | null
-        combined_score: number | null
-        fantasy_points: number | null
-      }
-
-      if (draftPicks) {
-        for (const pick of draftPicks) {
-          const movie = pick.movies as unknown as MovieData | null
-          if (movie) {
-            movies.push({
-              movie_id: movie.id,
-              source: 'draft_pick',
-              source_id: pick.id,
-              title: movie.title,
-              poster_url: movie.poster_url,
-              release_date: movie.release_date,
-              combined_score: movie.combined_score,
-              fantasy_points: movie.fantasy_points,
-            })
-          }
-        }
-      }
-
-      if (pickups) {
-        for (const pickup of pickups) {
-          const movie = pickup.movies as unknown as MovieData | null
-          if (movie) {
-            movies.push({
-              movie_id: movie.id,
-              source: 'pickup',
-              source_id: pickup.id,
-              title: movie.title,
-              poster_url: movie.poster_url,
-              release_date: movie.release_date,
-              combined_score: movie.combined_score,
-              fantasy_points: movie.fantasy_points,
-            })
-          }
-        }
-      }
-
-      setTradeableMovies(movies)
+      setTradeableMovies(await fetchTradeableMovies(supabase, teamId))
     } catch (err) {
       console.error('Error fetching tradeable movies:', err)
     }
@@ -163,11 +103,11 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
   useEffect(() => {
     const init = async () => {
       setIsLoading(true)
-      await Promise.all([fetchTrades(), fetchTradeableMovies(), fetchBudget()])
+      await Promise.all([fetchTrades(), loadTradeableMovies(), fetchBudget()])
       setIsLoading(false)
     }
     init()
-  }, [fetchTrades, fetchTradeableMovies, fetchBudget])
+  }, [fetchTrades, loadTradeableMovies, fetchBudget])
 
   // Real-time subscription for trades
   useEffect(() => {
@@ -186,7 +126,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           // If a trade was completed or accepted, refetch roster to reflect changes
           const newStatus = (payload.new as { status?: string })?.status
           if (newStatus === 'completed' || newStatus === 'accepted') {
-            fetchTradeableMovies()
+            loadTradeableMovies()
             fetchBudget()
           }
         }
@@ -196,7 +136,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, leagueId, fetchTrades, fetchTradeableMovies, fetchBudget])
+  }, [supabase, leagueId, fetchTrades, loadTradeableMovies, fetchBudget])
 
   // Propose a new trade
   const proposeTrade = useCallback(
@@ -248,11 +188,11 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       await fetchTrades()
       // If accepted, roster will change - refresh it
       if (response === 'accept') {
-        await Promise.all([fetchTradeableMovies(), fetchBudget()])
+        await Promise.all([loadTradeableMovies(), fetchBudget()])
       }
       return { success: true }
     },
-    [fetchTrades, fetchTradeableMovies, fetchBudget]
+    [fetchTrades, loadTradeableMovies, fetchBudget]
   )
 
   // Counter a trade
@@ -332,10 +272,10 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
       // Unlike veto, this moves movies and FAAB right away -- and the
       // commissioner may be a party to the trade -- so refresh the roster too.
-      await Promise.all([fetchTrades(), fetchTradeableMovies(), fetchBudget()])
+      await Promise.all([fetchTrades(), loadTradeableMovies(), fetchBudget()])
       return { success: true }
     },
-    [fetchTrades, fetchTradeableMovies, fetchBudget]
+    [fetchTrades, loadTradeableMovies, fetchBudget]
   )
 
   // Computed values
@@ -349,8 +289,8 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
   // Refresh roster manually (useful after trade completion)
   const refreshRoster = useCallback(async () => {
-    await Promise.all([fetchTradeableMovies(), fetchBudget()])
-  }, [fetchTradeableMovies, fetchBudget])
+    await Promise.all([loadTradeableMovies(), fetchBudget()])
+  }, [loadTradeableMovies, fetchBudget])
 
   return {
     trades,

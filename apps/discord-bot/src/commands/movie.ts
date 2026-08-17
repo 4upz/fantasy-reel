@@ -29,30 +29,24 @@ function releaseYear(releaseDate: string | null | undefined): string {
   return releaseDate ? new Date(releaseDate).getFullYear().toString() : 'TBD'
 }
 
+/**
+ * Name of the team currently holding `movieId` in this league, or null if it is
+ * unowned. `team_holdings` already excludes dropped picks and pickups, and a
+ * movie can be held by at most one team at a time.
+ */
 async function findRosterStatus(
   supabase: ReturnType<typeof getSupabase>,
   leagueId: string,
   movieId: string
 ): Promise<string | null> {
-  const { data: draftPick } = await supabase
-    .from('draft_picks')
-    .select('teams!draft_picks_team_id_fkey(name)')
+  const { data: holding } = await supabase
+    .from('team_holdings')
+    .select('team_name')
     .eq('league_id', leagueId)
     .eq('movie_id', movieId)
-    .is('dropped_at', null)
-    .maybeSingle<{ teams: { name?: string } | null }>()
+    .maybeSingle<{ team_name: string | null }>()
 
-  if (draftPick?.teams?.name) return draftPick.teams.name
-
-  const { data: pickup } = await supabase
-    .from('pickups')
-    .select('teams(name)')
-    .eq('league_id', leagueId)
-    .eq('movie_id', movieId)
-    .is('dropped_at', null)
-    .maybeSingle<{ teams: { name?: string } | null }>()
-
-  return pickup?.teams?.name || null
+  return holding?.team_name || null
 }
 
 export const movie: Command = {

@@ -6,6 +6,9 @@
  * currently hold these movies, and under whose team name.
  */
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createLogger, serializeError } from './logger.ts'
+
+const log = createLogger('shared/roster-holdings')
 
 /** One league's active hold on a movie, via a draft pick or a pickup. */
 export interface RosterHolding {
@@ -17,7 +20,7 @@ export interface RosterHolding {
 interface HoldingRow {
   movie_id: string
   league_id: string
-  teams: { name: string } | { name: string }[] | null
+  team_name: string | null
 }
 
 /**
@@ -27,41 +30,30 @@ interface HoldingRow {
  */
 const MOVIE_ID_BATCH_SIZE = 150
 
-/** Normalizes PostgREST embeds, which type single rows as arrays. */
-function firstOf<T>(value: T | T[] | null): T | null {
-  if (value === null) return null
-  return Array.isArray(value) ? value[0] ?? null : value
-}
-
 async function fetchHoldingsBatch(
   serviceClient: SupabaseClient,
   movieIds: string[] | undefined
 ): Promise<HoldingRow[]> {
-  let picksQuery = serviceClient
-    .from('draft_picks')
-    .select('movie_id, league_id, teams!draft_picks_team_id_fkey(name)')
-    .is('dropped_at', null)
-  let pickupsQuery = serviceClient
-    .from('pickups')
-    .select('movie_id, league_id, teams!pickups_team_id_fkey(name)')
-    .is('dropped_at', null)
+  let query = serviceClient.from('team_holdings').select('movie_id, league_id, team_name')
 
   if (movieIds) {
-    picksQuery = picksQuery.in('movie_id', movieIds)
-    pickupsQuery = pickupsQuery.in('movie_id', movieIds)
+    query = query.in('movie_id', movieIds)
   }
 
-  const [picks, pickups] = await Promise.all([picksQuery, pickupsQuery])
+  const { data, error } = await query
 
-  if (picks.error) console.error('Failed to load draft picks:', picks.error)
-  if (pickups.error) console.error('Failed to load pickups:', pickups.error)
+  if (error) {
+    log.error('Failed to load team holdings', { error: serializeError(error) })
+    return []
+  }
 
-  return [...(picks.data ?? []), ...(pickups.data ?? [])] as HoldingRow[]
+  return (data ?? []) as HoldingRow[]
 }
 
 /**
- * Active roster = draft_picks with dropped_at IS NULL, plus pickups with
- * dropped_at IS NULL. See docs/PLAN-discord-bot-parity.md §0.
+ * Active roster = the `team_holdings` view, which unions draft picks and
+ * pickups and excludes dropped rows on both legs. See
+ * docs/PLAN-discord-bot-parity.md §0.
  *
  * Omit `movieIds` to fetch every active holding (bounded by roster sizes,
  * so inherently small). When provided, IDs are queried in batches because
@@ -69,9 +61,9 @@ async function fetchHoldingsBatch(
  * limit — that failure mode looks like "nothing is rostered" and silently
  * suppresses notifications.
  *
- * A failure on either side is logged and treated as "no rows from that
- * table" rather than thrown, so one broken query doesn't suppress the
- * notifications the other side would still produce.
+ * A failed batch is logged and treated as "no rows" rather than thrown, so
+ * one broken query doesn't suppress the notifications the other batches
+ * would still produce.
  */
 export async function fetchRosterHoldings(
   serviceClient: SupabaseClient,
@@ -90,7 +82,7 @@ export async function fetchRosterHoldings(
   return rows.map((row) => ({
     movieId: row.movie_id,
     leagueId: row.league_id,
-    teamName: firstOf(row.teams)?.name ?? 'A team',
+    teamName: row.team_name ?? 'A team',
   }))
 }
 

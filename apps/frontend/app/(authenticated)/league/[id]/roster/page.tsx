@@ -1,6 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
+import { HOLDING_MOVIE_COLUMNS } from '@/utils/holdings'
 import RosterClient from './RosterClient'
+import type { RosterHolding } from './types'
 
 interface RosterPageProps {
   params: Promise<{ id: string }>
@@ -46,30 +48,28 @@ export default async function RosterPage({ params }: RosterPageProps) {
 
   // Parallelize independent queries (async-parallel optimization)
   const [
-    draftPicksResult,
-    pickupsResult,
+    holdingsResult,
     budgetResult,
     dropCountResult,
     counterpicksResult,
     openCounterpickBidsResult,
   ] = await Promise.all([
-    // The counterpicked_by join names the team holding a counterpick so a
-    // locked movie can say who locked it. Both tables have two FKs to teams, so
-    // the constraint name is required (PGRST201 otherwise).
+    // One read for the whole roster: team_holdings unions draft picks and
+    // pickups with dropped rows already excluded, and carries the counterpicking
+    // team's name so a locked movie can say who locked it.
+    //
+    // Draft picks sort by pick order, pickups by when they were won. 'draft'
+    // sorts before 'pickup', and the key that doesn't apply to a leg is null
+    // there, so one ordering covers both.
     supabase
-      .from('draft_picks')
+      .from('team_holdings')
       .select(
-        '*, movies(*), counterpicked_by:teams!draft_picks_counterpicked_by_team_id_fkey(name)'
+        `holding_id, source, round, pick_number, amount_paid, counterpicked_by_team_id, counterpicked_by_name, ${HOLDING_MOVIE_COLUMNS}`
       )
       .eq('team_id', team.id)
-      .is('dropped_at', null)
-      .order('pick_number', { ascending: true }),
-    supabase
-      .from('pickups')
-      .select('*, movies(*), counterpicked_by:teams!pickups_counterpicked_by_team_id_fkey(name)')
-      .eq('team_id', team.id)
-      .is('dropped_at', null)
-      .order('picked_up_at', { ascending: true }),
+      .order('source', { ascending: true })
+      .order('pick_number', { ascending: true })
+      .order('acquired_at', { ascending: true }),
     supabase.from('team_budgets').select('*').eq('team_id', team.id).single(),
     supabase.rpc('get_team_drop_count', { p_team_id: team.id }),
     supabase
@@ -87,8 +87,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
       .in('status', ['active', 'outbid']),
   ])
 
-  const { data: draftPicks } = draftPicksResult
-  const { data: pickups } = pickupsResult
+  const { data: holdings } = holdingsResult
   const { data: budget } = budgetResult
   const { data: dropCount } = dropCountResult
   const { data: counterpicks } = counterpicksResult
@@ -100,8 +99,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
     <RosterClient
       league={league}
       team={team}
-      draftPicks={draftPicks || []}
-      pickups={pickups || []}
+      holdings={(holdings ?? []) as RosterHolding[]}
       budget={budget}
       dropCount={dropCount ?? 0}
       userId={user.id}

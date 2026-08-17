@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { ChevronDown } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
-import type { MovieWithScores, RankedTeamFull } from '@/types'
+import type { HoldingMovie, RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
 import TeamFaab, { faabTone, formatFaab, remainingFaab } from './TeamFaab'
 import LeagueMovieModal from '../components/LeagueMovieModal'
@@ -54,7 +54,7 @@ export default function TeamStandingCard({
   onActivate,
   animationDelay = 0,
 }: Props) {
-  const [selected, setSelected] = useState<MovieWithScores | null>(null)
+  const [selected, setSelected] = useState<HoldingMovie | null>(null)
   const { rank, participant, draftPicks, pickups, counterpicks, isTied } = rankedTeam
   const team = participant.teams
   const teamScore = team?.team_scores
@@ -200,7 +200,7 @@ export default function TeamStandingCard({
           {draftPicks.map((pick) => (
             <MovieScoreCard
               key={pick.id}
-              movie={pick.movies}
+              movie={pick.movie}
               badge={{ type: 'draft', round: pick.round, pick: pick.pick_number }}
               isCounterpicked={!!pick.counterpicked_by_team_id}
               onSelect={setSelected}
@@ -210,7 +210,7 @@ export default function TeamStandingCard({
           {pickups.map((pickup) => (
             <MovieScoreCard
               key={pickup.id}
-              movie={pickup.movies}
+              movie={pickup.movie}
               badge={{ type: 'pickup', amount: pickup.amount_paid }}
               onSelect={setSelected}
             />

@@ -5,7 +5,7 @@ import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
-import type { MovieWithScores } from '@/types'
+import type { HoldingMovie } from '@/types'
 import TomatometerScore from '@/app/components/TomatometerScore'
 import { getTmdbPosterUrl } from '../components/utils'
 
@@ -15,13 +15,13 @@ type MovieBadge =
   | { type: 'counterpick'; targetTeam: string }
 
 interface Props {
-  movie: MovieWithScores
+  movie: HoldingMovie
   badge: MovieBadge
   isCounterpicked?: boolean
   /** For counterpicks, fantasy_points is stored on the counterpick row, not the movie */
   overridePoints?: number | null
   /** Opens the movie's details. Omit to render a plain, non-interactive row. */
-  onSelect?: (movie: MovieWithScores) => void
+  onSelect?: (movie: HoldingMovie) => void
 }
 
 /**
