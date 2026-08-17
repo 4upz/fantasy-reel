@@ -11,15 +11,46 @@ import type { Command } from './index.js'
 
 const COMPACT_THRESHOLD = 8
 
-const MOVIE_FIELDS = 'movies(title, release_date, fantasy_points, reviews(source, score))'
+const HOLDING_FIELDS = 'movie_id, title, release_date, fantasy_points'
 
 interface RosterRow {
-  movies: {
-    title?: string
-    release_date?: string | null
-    fantasy_points?: number | null
-    reviews?: Array<{ source?: string; score?: number | null }>
-  } | null
+  movie_id: string
+  title: string | null
+  release_date: string | null
+  fantasy_points: number | null
+}
+
+interface ReviewRow {
+  movie_id: string
+  source: string | null
+  score: number | null
+}
+
+/**
+ * Critic scores per movie, as `"source: score"` strings for the full
+ * (non-compact) roster line. `team_holdings` is denormalized and carries no
+ * `reviews` embed, so this is a separate lookup -- only made when the roster is
+ * short enough to show them.
+ */
+async function fetchScoresByMovie(
+  supabase: ReturnType<typeof getSupabase>,
+  movieIds: string[]
+): Promise<Map<string, string[]>> {
+  const { data } = await supabase
+    .from('reviews')
+    .select('movie_id, source, score')
+    .in('movie_id', movieIds)
+    .returns<ReviewRow[]>()
+
+  const byMovie = new Map<string, string[]>()
+  for (const review of data || []) {
+    if (review.score == null) continue
+    const scores = byMovie.get(review.movie_id) || []
+    scores.push(`${review.source}: ${review.score}`)
+    byMovie.set(review.movie_id, scores)
+  }
+
+  return byMovie
 }
 
 export const roster: Command = {
@@ -63,7 +94,7 @@ export const roster: Command = {
     const { data: rosterRows, error: rosterError } = await fetchTeamHoldings<RosterRow>(
       supabase,
       team.id,
-      MOVIE_FIELDS
+      HOLDING_FIELDS
     )
 
     if (rosterError) {
@@ -83,35 +114,28 @@ export const roster: Command = {
     }
 
     const isCompact = rosterRows.length >= COMPACT_THRESHOLD
+    const scoresByMovie = isCompact
+      ? new Map<string, string[]>()
+      : await fetchScoresByMovie(supabase, rosterRows.map((row) => row.movie_id))
 
     const lines = rosterRows.map((row) => {
-      const movie = row.movies
-
-      if (!movie) return '- Unknown movie'
-
-      const title = truncate(movie.title || 'Untitled', 40)
-      const points = movie.fantasy_points
-      const pointsStr = points != null ? `${points} pts` : 'Unreleased'
+      const title = truncate(row.title || 'Untitled', 40)
+      const pointsStr = row.fantasy_points != null ? `${row.fantasy_points} pts` : 'Unreleased'
 
       if (isCompact) {
         return `**${title}** -- ${pointsStr}`
       }
 
       // Full format: two lines
-      const releaseDate = movie.release_date
-        ? new Date(movie.release_date).toLocaleDateString('en-US', {
+      const releaseDate = row.release_date
+        ? new Date(row.release_date).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
             year: 'numeric',
           })
         : 'TBD'
 
-      const reviews = movie.reviews || []
-      const scoreDetails = reviews
-        .filter((r) => r.score != null)
-        .map((r) => `${r.source}: ${r.score}`)
-        .join(' | ')
-
+      const scoreDetails = scoresByMovie.get(row.movie_id)?.join(' | ')
       const secondLine = scoreDetails
         ? `  Opens ${releaseDate} -- ${scoreDetails}`
         : `  Opens ${releaseDate}`

@@ -435,6 +435,18 @@ apps/frontend/app/
 
 `auth.users` → `profiles` (1:1) → `league_participants` (1:N) → `teams` (1:1 per league) → `draft_picks`/`pickup_bids`/`trades`/`team_scores`. Movies have reviews (1:N). Leagues have bidding config (1:1).
 
+### Reading Rosters: the `team_holdings` View
+
+A team's roster is physically split across `draft_picks` (drafted) and `pickups` (won at auction). **Never read the pair directly for display or aggregation** — use the `team_holdings` view, the single read surface for active rosters:
+
+- Unions both tables, excludes dropped rows itself (no `dropped_at` column exposed — nothing to forget to filter).
+- Denormalized: `team_name`, `counterpicked_by_name`, and the full movie column set are flat columns (movie status is `movie_status`). This is deliberate — PostgREST cannot resolve FK embeds through a UNION view.
+- `security_invoker`: base-table RLS applies, so authenticated clients see exactly their leagues' rows.
+- Provenance survives: `source` (`'draft' | 'pickup'`), `round`/`pick_number` (draft) or `bid_id`/`amount_paid` (pickup), `holding_id` (the base row's id, e.g. for drop-movie's `draft_pick_id`/`pickup_id` body).
+- Read-only. Write paths (draft-pick, process-bids, drop-movie, trade validation/execution) still target the base tables, as do consumers that legitimately need dropped rows (score-notifications' notable-miss attribution) and Realtime subscriptions (views can't join the publication — the draft board subscribes to `draft_picks`).
+
+Shared consumers already on it: `team_active_roster()` (SQL, feeds scoring), `_shared/roster-holdings.ts` (Edge), `apps/frontend/utils/holdings.ts` + `TeamHolding` in `apps/frontend/types/index.ts`, `apps/discord-bot/src/utils/roster.ts`.
+
 ---
 
 ## 3. Tech Stack & Local Development

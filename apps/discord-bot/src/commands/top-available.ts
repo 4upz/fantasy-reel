@@ -9,7 +9,7 @@ import type { Command } from './index.js'
 const TOP_N = 10
 
 interface TmdbIdRow {
-  movies: { tmdb_id?: number } | null
+  tmdb_id: number | null
 }
 
 export const topAvailable: Command = {
@@ -26,30 +26,20 @@ export const topAvailable: Command = {
 
     const { leagueId, leagueName } = linked
 
-    const { data: draftRows, error: draftError } = await supabase
-      .from('draft_picks')
-      .select('movies(tmdb_id)')
+    const { data: rosteredRows, error: rosteredError } = await supabase
+      .from('team_holdings')
+      .select('tmdb_id')
       .eq('league_id', leagueId)
-      .is('dropped_at', null)
       .returns<TmdbIdRow[]>()
 
-    const { data: pickupRows, error: pickupError } = await supabase
-      .from('pickups')
-      .select('movies(tmdb_id)')
-      .eq('league_id', leagueId)
-      .is('dropped_at', null)
-      .returns<TmdbIdRow[]>()
-
-    if (draftError || pickupError) {
-      console.error('Failed to fetch rostered movies:', draftError || pickupError)
+    if (rosteredError) {
+      console.error('Failed to fetch rostered movies:', rosteredError)
       await interaction.editReply('Failed to load top available movies. Please try again.')
       return
     }
 
     const rosteredTmdbIds = new Set(
-      [...(draftRows || []), ...(pickupRows || [])]
-        .map((r) => r.movies?.tmdb_id)
-        .filter((id): id is number => id != null)
+      (rosteredRows || []).map((r) => r.tmdb_id).filter((id): id is number => id != null)
     )
 
     const { data: browseData, error: fetchError } = await browseMovies({ release_window: 'quarter', sort_by: 'popularity' })

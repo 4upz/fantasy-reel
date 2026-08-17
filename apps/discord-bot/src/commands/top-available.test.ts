@@ -38,8 +38,7 @@ describe('/top-available', () => {
     mockSupabase({
       tables: {
         discord_channels: linkedChannel,
-        draft_picks: { data: [{ movies: { tmdb_id: 100 } }] },
-        pickups: { data: [{ movies: { tmdb_id: 200 } }] },
+        team_holdings: { data: [{ tmdb_id: 100 }, { tmdb_id: 200 }] },
       },
     })
     mockFetchOk([
@@ -57,7 +56,7 @@ describe('/top-available', () => {
 
   it('shows an empty state when nothing is available', async () => {
     mockSupabase({
-      tables: { discord_channels: linkedChannel, draft_picks: { data: [] }, pickups: { data: [] } },
+      tables: { discord_channels: linkedChannel, team_holdings: { data: [] } },
     })
     mockFetchOk([])
     const interaction = makeInteraction()
@@ -70,7 +69,7 @@ describe('/top-available', () => {
 
   it('replies with a friendly error when the movie data fetch fails', async () => {
     mockSupabase({
-      tables: { discord_channels: linkedChannel, draft_picks: { data: [] }, pickups: { data: [] } },
+      tables: { discord_channels: linkedChannel, team_holdings: { data: [] } },
     })
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
     const interaction = makeInteraction()

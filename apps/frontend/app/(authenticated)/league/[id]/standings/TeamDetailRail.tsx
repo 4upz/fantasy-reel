@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
-import type { MovieWithScores, RankedTeamFull } from '@/types'
+import type { HoldingMovie, RankedTeamFull } from '@/types'
 import TeamBudgetSummary from './TeamBudget'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 import { getTmdbPosterUrl } from '../components/utils'
@@ -17,11 +17,11 @@ interface Props {
 
 interface RosterEntry {
   key: string
-  movie: MovieWithScores
+  movie: HoldingMovie
   points: number | null
 }
 
-function RailPoster({ movie }: { movie: MovieWithScores }) {
+function RailPoster({ movie }: { movie: HoldingMovie }) {
   const [failed, setFailed] = useState(false)
 
   return (
@@ -57,7 +57,7 @@ function BreakdownTile({ value, label, tone }: { value: number; label: string; t
  * put while the list scrolls.
  */
 export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
-  const [selected, setSelected] = useState<MovieWithScores | null>(null)
+  const [selected, setSelected] = useState<HoldingMovie | null>(null)
   const { participant, draftPicks, pickups, counterpicks } = rankedTeam
   const team = participant.teams
   const teamScore = team?.team_scores
@@ -73,8 +73,8 @@ export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
   const ownerHandle = team?.name ? profile?.display_name : null
 
   const roster: RosterEntry[] = [
-    ...draftPicks.map((pick) => ({ key: pick.id, movie: pick.movies, points: pick.movies.fantasy_points })),
-    ...pickups.map((pickup) => ({ key: pickup.id, movie: pickup.movies, points: pickup.movies.fantasy_points })),
+    ...draftPicks.map((pick) => ({ key: pick.id, movie: pick.movie, points: pick.movie.fantasy_points })),
+    ...pickups.map((pickup) => ({ key: pickup.id, movie: pickup.movie, points: pickup.movie.fantasy_points })),
     ...counterpicks.map((cp) => ({ key: cp.id, movie: cp.movies, points: cp.fantasy_points })),
   ]
 

@@ -88,6 +88,83 @@ export interface DraftPick {
   counterpicked_by_team_id: string | null
 }
 
+// ============================================================================
+// Roster holdings (the `team_holdings` view)
+// ============================================================================
+
+/** How a team came by a movie. Mirrors `team_holdings.source`. */
+export type HoldingSource = 'draft' | 'pickup'
+
+/**
+ * The same distinction in base-table vocabulary, which is what the trade tables
+ * and the dashboard's release board speak. `holdingSourceName()` converts.
+ */
+export type HoldingSourceName = 'draft_pick' | 'pickup'
+
+/**
+ * One movie a team holds right now, read from the `team_holdings` view.
+ *
+ * The view unions `draft_picks` and `pickups` with dropped rows already
+ * excluded, so a reader can no longer forget a leg. PostgREST cannot embed
+ * through a UNION view, which is why the team and movie columns arrive flat
+ * (`title`, `team_name`, `counterpicked_by_name`) instead of nested, and why
+ * the movie's own status is `movie_status`.
+ */
+export interface TeamHolding {
+  /** The `draft_picks` / `pickups` row id -- what drop-movie and trades take. */
+  holding_id: string
+  source: HoldingSource
+  league_id: string
+  team_id: string
+  movie_id: string
+  acquired_at: string
+  counterpicked_by_team_id: string | null
+  counterpicked_by_name: string | null
+  /** Draft holdings only; null on a pickup. */
+  round: number | null
+  pick_number: number | null
+  /** Pickup holdings only; null on a draft pick. */
+  bid_id: string | null
+  amount_paid: number | null
+  team_name: string
+  tmdb_id: number
+  title: string
+  release_date: string | null
+  poster_url: string | null
+  movie_status: Movie['status']
+  imdb_id: string | null
+  combined_score: number | null
+  fantasy_points: number | null
+  overview: string | null
+  backdrop_url: string | null
+  vote_average: number | null
+  vote_count: number | null
+  popularity: number | null
+  scoring_bonuses: Record<string, unknown> | null
+  scores_updated_at: string | null
+}
+
+/**
+ * The movie a holding is for, lifted back out of the flat view row.
+ *
+ * Narrower than `Movie` on purpose: these are the fields the roster and
+ * standings surfaces actually read, and the shape is a superset of
+ * `LeagueMovieRef` so a row opens the shared movie dialog without converting.
+ */
+export interface HoldingMovie {
+  id: string
+  tmdb_id: number
+  title: string
+  overview: string | null
+  release_date: string | null
+  poster_url: string | null
+  status: Movie['status']
+  vote_average: number | null
+  popularity: number | null
+  combined_score: number | null
+  fantasy_points: number | null
+}
+
 export interface Review {
   id: string
   movie_id: string
@@ -161,10 +238,6 @@ export interface InvitationWithLeague extends Invitation {
 }
 
 // Standings page types
-export interface MovieWithScores extends Movie {
-  reviews: Review[]
-}
-
 export interface TeamWithScore extends Team {
   team_scores: TeamScore | null
   /** Every league member can read every budget, so standings show all of them. */
@@ -176,31 +249,43 @@ export interface ParticipantWithTeamScore extends LeagueParticipant {
   profiles: Profile | null
 }
 
-export interface DraftPickWithScores extends DraftPick {
-  movies: MovieWithScores
+/** A drafted holding as the standings show it: the pick, plus its movie. */
+export interface DraftHolding {
+  id: string
+  team_id: string
+  movie_id: string
+  round: number
+  pick_number: number
+  counterpicked_by_team_id: string | null
+  movie: HoldingMovie
+}
+
+/** An auction win as the standings show it: the pickup, plus its movie. */
+export interface PickupHolding {
+  id: string
+  team_id: string
+  movie_id: string
+  amount_paid: number
+  counterpicked_by_team_id: string | null
+  movie: HoldingMovie
 }
 
 export interface RankedTeam {
   rank: number
   participant: ParticipantWithTeamScore
-  draftPicks: DraftPickWithScores[]
+  draftPicks: DraftHolding[]
   isTied: boolean
 }
 
-// Pickup with review scores for standings display
-export interface PickupWithScores extends Pickup {
-  movies: MovieWithScores
-}
-
-// Counterpick with review scores and team name for standings display
+// Counterpick with its movie and target team name for standings display
 export interface CounterpickWithScores extends Counterpick {
-  movies: MovieWithScores
+  movies: HoldingMovie
   target_team: { name: string }
 }
 
 // Full ranked team with all roster types
 export interface RankedTeamFull extends RankedTeam {
-  pickups: PickupWithScores[]
+  pickups: PickupHolding[]
   counterpicks: CounterpickWithScores[]
 }
 
@@ -403,9 +488,13 @@ export interface MovieTimelineItem {
   /** The Tomatometer - the only critic score that affects fantasy points. */
   combined_score: number | null
   fantasy_points: number | null
-  /** Where the movie was drafted, shown on the dashboard's "next up" hero. */
-  round: number
-  pick_number: number
+  /** Decides how the overview labels the movie: a draft slot or a winning bid. */
+  source: HoldingSource
+  /** Where the movie was drafted. Null on a pickup. */
+  round: number | null
+  pick_number: number | null
+  /** What the pickup cost. Null on a draft pick. */
+  amount_paid: number | null
 }
 
 export interface DashboardTeam {
@@ -431,7 +520,7 @@ export interface LeagueUpcomingRelease {
   /** Never null in practice - the query only returns dated, future releases. */
   release_date: string
   /** How the holding was acquired. Drafted movies win a tie against a pickup. */
-  source: 'draft_pick' | 'pickup'
+  source: HoldingSourceName
   team_id: string
   team_name: string
   /** profiles.display_name is nullable, so the board falls back to the team. */
@@ -549,7 +638,7 @@ export interface TradeOfferWithDetails extends TradeOfferWithTeams {
 // For the trade proposal UI - team's available movies
 export interface TradeableMovie {
   movie_id: string
-  source: 'draft_pick' | 'pickup'
+  source: HoldingSourceName
   source_id: string
   title: string
   poster_url: string | null

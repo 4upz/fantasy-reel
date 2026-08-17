@@ -10,8 +10,9 @@ const RECENT_WINDOW_DAYS = 14
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 interface RosterRow {
-  teams: { name?: string } | null
-  movies: { title?: string; release_date?: string } | null
+  team_name: string | null
+  title: string | null
+  release_date: string
 }
 
 function toDateString(date: Date): string {
@@ -46,32 +47,21 @@ export const upcoming: Command = {
     const gte = scope === 'recent' ? toDateString(new Date(today.getTime() - RECENT_WINDOW_DAYS * MS_PER_DAY)) : toDateString(today)
     const lte = scope === 'recent' ? toDateString(today) : toDateString(new Date(today.getTime() + UPCOMING_WINDOW_DAYS * MS_PER_DAY))
 
-    const { data: draftRows, error: draftError } = await supabase
-      .from('draft_picks')
-      .select('teams!draft_picks_team_id_fkey(name), movies!inner(title, release_date)')
+    // The range filter drops movies with no release date, so every row here has one.
+    const { data: rows, error: rowsError } = await supabase
+      .from('team_holdings')
+      .select('team_name, title, release_date')
       .eq('league_id', leagueId)
-      .is('dropped_at', null)
-      .gte('movies.release_date', gte)
-      .lte('movies.release_date', lte)
+      .gte('release_date', gte)
+      .lte('release_date', lte)
+      .order('release_date', { ascending: true })
       .returns<RosterRow[]>()
 
-    const { data: pickupRows, error: pickupError } = await supabase
-      .from('pickups')
-      .select('teams(name), movies!inner(title, release_date)')
-      .eq('league_id', leagueId)
-      .is('dropped_at', null)
-      .gte('movies.release_date', gte)
-      .lte('movies.release_date', lte)
-      .returns<RosterRow[]>()
-
-    if (draftError || pickupError) {
-      console.error('Failed to fetch upcoming releases:', draftError || pickupError)
+    if (rowsError || !rows) {
+      console.error('Failed to fetch upcoming releases:', rowsError)
       await interaction.editReply('Failed to load upcoming releases. Please try again.')
       return
     }
-
-    const rows = [...(draftRows || []), ...(pickupRows || [])].filter((r) => r.movies?.release_date)
-    rows.sort((a, b) => (a.movies!.release_date! < b.movies!.release_date! ? -1 : 1))
 
     if (rows.length === 0) {
       const emptyMessage = scope === 'recent'
@@ -88,9 +78,9 @@ export const upcoming: Command = {
     }
 
     const lines = rows.map((row) => {
-      const title = truncate(row.movies?.title || 'Untitled', 40)
-      const team = row.teams?.name || 'Unknown team'
-      const date = new Date(row.movies!.release_date!).toLocaleDateString('en-US', {
+      const title = truncate(row.title || 'Untitled', 40)
+      const team = row.team_name || 'Unknown team'
+      const date = new Date(row.release_date).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
       })

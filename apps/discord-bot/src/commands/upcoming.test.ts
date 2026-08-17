@@ -27,11 +27,11 @@ describe('/upcoming', () => {
     mockSupabase({
       tables: {
         discord_channels: linkedChannel,
-        draft_picks: {
-          data: [{ teams: { name: 'Team A' }, movies: { title: 'Movie One', release_date: '2026-08-10' } }],
-        },
-        pickups: {
-          data: [{ teams: { name: 'Team B' }, movies: { title: 'Movie Two', release_date: '2026-08-05' } }],
+        team_holdings: {
+          data: [
+            { team_name: 'Team B', title: 'Movie Two', release_date: '2026-08-05' },
+            { team_name: 'Team A', title: 'Movie One', release_date: '2026-08-10' },
+          ],
         },
       },
     })
@@ -41,7 +41,7 @@ describe('/upcoming', () => {
 
     const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
     expect(embed.title).toBe('Upcoming Releases')
-    // Sorted ascending by date: Movie Two (Aug 5) before Movie One (Aug 10)
+    // Ordered ascending by date server-side: Movie Two (Aug 5) before Movie One (Aug 10)
     const twoIndex = embed.description.indexOf('Movie Two')
     const oneIndex = embed.description.indexOf('Movie One')
     expect(twoIndex).toBeGreaterThanOrEqual(0)
@@ -52,7 +52,7 @@ describe('/upcoming', () => {
 
   it('shows an empty state when nothing is releasing in the window', async () => {
     mockSupabase({
-      tables: { discord_channels: linkedChannel, draft_picks: { data: [] }, pickups: { data: [] } },
+      tables: { discord_channels: linkedChannel, team_holdings: { data: [] } },
     })
     const interaction = makeInteraction()
 
@@ -66,8 +66,7 @@ describe('/upcoming', () => {
     mockSupabase({
       tables: {
         discord_channels: linkedChannel,
-        draft_picks: { data: null, error: { message: 'db down' } },
-        pickups: { data: [] },
+        team_holdings: { data: null, error: { message: 'db down' } },
       },
     })
     const interaction = makeInteraction()

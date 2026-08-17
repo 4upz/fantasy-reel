@@ -3,8 +3,8 @@
 import { useMemo, useState } from 'react'
 import type {
   ParticipantWithTeamScore,
-  DraftPickWithScores,
-  PickupWithScores,
+  DraftHolding,
+  PickupHolding,
   CounterpickWithScores,
   RankedTeamFull,
 } from '@/types'
@@ -13,8 +13,8 @@ import TeamDetailRail from './TeamDetailRail'
 
 interface Props {
   participants: ParticipantWithTeamScore[]
-  draftPicks: DraftPickWithScores[]
-  pickups: PickupWithScores[]
+  draftPicks: DraftHolding[]
+  pickups: PickupHolding[]
   counterpicks: CounterpickWithScores[]
   currentUserId: string
   /** The league's configured starting purse; 0 means this league doesn't use a fantasy budget. */
@@ -35,8 +35,8 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
 
 function calculateRankings(
   participants: ParticipantWithTeamScore[],
-  draftPicks: DraftPickWithScores[],
-  pickups: PickupWithScores[],
+  draftPicks: DraftHolding[],
+  pickups: PickupHolding[],
   counterpicks: CounterpickWithScores[],
 ): RankedTeamFull[] {
   const picksByTeam = groupBy(draftPicks, (p) => p.team_id)
@@ -125,8 +125,8 @@ export default function StandingsClient({
 
   const summaryStats = useMemo(() => {
     const allMovies = [
-      ...draftPicks.map((p) => p.movies),
-      ...pickups.map((p) => p.movies),
+      ...draftPicks.map((p) => p.movie),
+      ...pickups.map((p) => p.movie),
       ...counterpicks.map((cp) => cp.movies),
     ]
     const moviesScored = allMovies.filter((m) => m?.combined_score != null).length

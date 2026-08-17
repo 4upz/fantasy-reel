@@ -47,7 +47,7 @@ describe('/movie', () => {
             reviews: [{ source: 'rotten_tomatoes', score: 75 }],
           },
         },
-        draft_picks: { data: { teams: { name: 'Team A' } } },
+        team_holdings: { data: { team_name: 'Team A' } },
       },
     })
     mockFetchOk(searchResponse)

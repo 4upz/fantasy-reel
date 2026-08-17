@@ -8,7 +8,9 @@ import { truncate } from '../utils/format.js'
 import type { Command } from './index.js'
 
 interface TeamRosterRow {
-  movies: { title?: string; release_date?: string | null; fantasy_points?: number | null } | null
+  title: string | null
+  release_date: string | null
+  fantasy_points: number | null
 }
 
 interface TeamScoreRow {
@@ -86,13 +88,13 @@ export const myTeam: Command = {
     const { data: roster } = await fetchTeamHoldings<TeamRosterRow>(
       supabase,
       team.id,
-      'movies(title, release_date, fantasy_points)'
+      'title, release_date, fantasy_points'
     )
 
     const rosterLines = roster.length > 0
       ? roster.map((r) => {
-          const title = truncate(r.movies?.title || 'Unknown movie', 40)
-          const points = r.movies?.fantasy_points != null ? `${r.movies.fantasy_points} pts` : 'Unreleased'
+          const title = truncate(r.title || 'Unknown movie', 40)
+          const points = r.fantasy_points != null ? `${r.fantasy_points} pts` : 'Unreleased'
           return `**${title}** -- ${points}`
         }).join('\n')
       : 'No movies yet.'

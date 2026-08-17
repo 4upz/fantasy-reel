@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import type { Team, TradeItems, TradeableMovie, TeamBudget, TradeMovieItem } from '@/types'
 import { createClient } from '@/utils/supabase/client'
+import { fetchTradeableMovies } from '@/utils/holdings'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 
 interface Props {
@@ -106,68 +107,7 @@ export default function ProposeTradeModal({
     const fetchRecipientMovies = async () => {
       setIsLoadingRecipient(true)
       try {
-        // Fetch draft picks
-        const { data: draftPicks } = await supabase
-          .from('draft_picks')
-          .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
-          .eq('team_id', selectedTeamId)
-          .is('dropped_at', null)
-
-        // Fetch pickups
-        const { data: pickups } = await supabase
-          .from('pickups')
-          .select('id, movie_id, movies(id, title, poster_url, release_date, combined_score, fantasy_points)')
-          .eq('team_id', selectedTeamId)
-          .is('dropped_at', null)
-
-        const movies: TradeableMovie[] = []
-
-        type MovieData = {
-          id: string
-          title: string
-          poster_url: string | null
-          release_date: string | null
-          combined_score: number | null
-          fantasy_points: number | null
-        }
-
-        if (draftPicks) {
-          for (const pick of draftPicks) {
-            const movie = pick.movies as unknown as MovieData | null
-            if (movie) {
-              movies.push({
-                movie_id: movie.id,
-                source: 'draft_pick',
-                source_id: pick.id,
-                title: movie.title,
-                poster_url: movie.poster_url,
-                release_date: movie.release_date,
-                combined_score: movie.combined_score,
-                fantasy_points: movie.fantasy_points,
-              })
-            }
-          }
-        }
-
-        if (pickups) {
-          for (const pickup of pickups) {
-            const movie = pickup.movies as unknown as MovieData | null
-            if (movie) {
-              movies.push({
-                movie_id: movie.id,
-                source: 'pickup',
-                source_id: pickup.id,
-                title: movie.title,
-                poster_url: movie.poster_url,
-                release_date: movie.release_date,
-                combined_score: movie.combined_score,
-                fantasy_points: movie.fantasy_points,
-              })
-            }
-          }
-        }
-
-        setRecipientMovies(movies)
+        setRecipientMovies(await fetchTradeableMovies(supabase, selectedTeamId))
 
         // Fetch recipient budget
         const { data: budgetData } = await supabase

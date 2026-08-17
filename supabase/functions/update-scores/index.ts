@@ -13,6 +13,14 @@ interface UpdateScoresRequest {
   league_id?: string
 }
 
+/** The team_holdings columns needed to build a MovieRecord. */
+interface HoldingRow {
+  movie_id: string
+  tmdb_id: number
+  imdb_id: string | null
+  title: string
+}
+
 function parseRequestBody(body: string): UpdateScoresRequest {
   try {
     return body ? JSON.parse(body) : {}
@@ -77,29 +85,35 @@ Deno.serve(async (req) => {
 
       moviesToUpdate = (data as MovieRecord[]) || []
     } else if (params.league_id) {
-      // Update movies drafted in a specific league
+      // Update movies currently rostered in a specific league. team_holdings
+      // covers both acquisition paths; reading draft_picks alone left every
+      // auction pickup out of the league's score refresh.
       if (!isValidUUID(params.league_id)) {
         return errorResponse('Invalid league_id', 400)
       }
 
       const { data, error } = await serviceClient
-        .from('draft_picks')
-        .select(`
-          movie_id,
-          movies!inner(id, tmdb_id, imdb_id, title, status)
-        `)
+        .from('team_holdings')
+        .select('movie_id, tmdb_id, imdb_id, title')
         .eq('league_id', params.league_id)
 
       if (error) {
-        log.error('Error fetching draft picks', { error: serializeError(error) })
-        return errorResponse('Failed to fetch drafted movies', 500)
+        log.error('Error fetching league holdings', { error: serializeError(error) })
+        return errorResponse('Failed to fetch rostered movies', 500)
       }
 
-      // Supabase types the !inner join as an array, but it always returns a single object
-      moviesToUpdate = data?.map((d: { movies: MovieRecord | MovieRecord[] }) => {
-        const m = Array.isArray(d.movies) ? d.movies[0] : d.movies
-        return { id: m.id, tmdb_id: m.tmdb_id, imdb_id: m.imdb_id, title: m.title }
-      }) || []
+      // At most one team holds a movie per league, but collapse by movie id
+      // anyway so a duplicate could never double the MDBList lookups.
+      const byMovieId = new Map<string, MovieRecord>()
+      for (const row of (data ?? []) as HoldingRow[]) {
+        byMovieId.set(row.movie_id, {
+          id: row.movie_id,
+          tmdb_id: row.tmdb_id,
+          imdb_id: row.imdb_id,
+          title: row.title,
+        })
+      }
+      moviesToUpdate = [...byMovieId.values()]
     } else {
       // Default: find released drafted movies needing score updates
       const oneDayAgo = new Date()

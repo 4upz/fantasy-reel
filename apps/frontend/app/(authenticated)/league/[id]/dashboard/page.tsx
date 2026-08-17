@@ -2,12 +2,14 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DashboardClient from './DashboardClient'
 import { buildTeamInfoByTeamId, getMovieStatus } from '@/utils/league'
+import { holdingSourceName } from '@/utils/holdings'
 import type {
   League,
   DashboardTeam,
   LeagueUpcomingRelease,
   MovieTimelineItem,
   ParticipantWithProfile,
+  TeamHolding,
 } from '@/types'
 
 interface PageProps {
@@ -15,20 +17,24 @@ interface PageProps {
 }
 
 /**
- * A holding row joined to the movie it holds, tagged with how it was acquired.
- * Only what the release board prints: it reads every holding in the league.
+ * The `team_holdings` columns this page selects. One read serves both surfaces:
+ * the owner's movie timeline and the league-wide release board.
  */
-interface UpcomingHolding {
-  team_id: string
-  source: LeagueUpcomingRelease['source']
-  movies: {
-    id: string
-    tmdb_id: number
-    title: string
-    poster_url: string | null
-    release_date: string | null
-  } | null
-}
+type DashboardHolding = Pick<
+  TeamHolding,
+  | 'team_id'
+  | 'source'
+  | 'round'
+  | 'pick_number'
+  | 'amount_paid'
+  | 'movie_id'
+  | 'tmdb_id'
+  | 'title'
+  | 'poster_url'
+  | 'release_date'
+  | 'combined_score'
+  | 'fantasy_points'
+>
 
 export default async function DashboardPage({ params }: PageProps) {
   const { id } = await params
@@ -56,25 +62,7 @@ export default async function DashboardPage({ params }: PageProps) {
   // anyone west of UTC.
   const todayIso = new Date().toISOString().slice(0, 10)
 
-  // `movies!inner` is what makes the release-date filter drop the holding row.
-  // Without it PostgREST filters only the embed and hands back parent rows with
-  // a null movie. Neither query embeds `teams`: both tables have two FKs to it
-  // (team_id and counterpicked_by_team_id), so a bare embed is a PGRST201, and
-  // the participants query below already knows every team's name.
-  const upcomingHoldings = (table: 'draft_picks' | 'pickups') =>
-    supabase
-      .from(table)
-      .select('team_id, movies!inner (id, tmdb_id, title, poster_url, release_date)')
-      .eq('league_id', id)
-      .is('dropped_at', null)
-      .gte('movies.release_date', todayIso)
-
-  const [
-    { data: participants },
-    { data: draftPicks },
-    { data: upcomingPicks },
-    { data: upcomingPickups },
-  ] = await Promise.all([
+  const [{ data: participants }, { data: holdingRows }] = await Promise.all([
     // Fetch all participants with teams and scores
     supabase
       .from('league_participants')
@@ -89,24 +77,21 @@ export default async function DashboardPage({ params }: PageProps) {
       .eq('league_id', id)
       .eq('status', 'active'),
 
-    // Fetch all draft picks with movies. Dropped picks left the roster, so they
-    // must not keep showing up on the owner's timeline.
+    // Every movie still held in the league, drafted or won at auction. The view
+    // has already dropped what teams let go, and 'draft' sorts before 'pickup'
+    // so the release board's dedupe keeps letting the draft pick win.
     supabase
-      .from('draft_picks')
-      .select(`
-        *,
-        movies (*)
-      `)
+      .from('team_holdings')
+      .select(
+        'team_id, source, round, pick_number, amount_paid, movie_id, tmdb_id, title, poster_url, release_date, combined_score, fantasy_points'
+      )
       .eq('league_id', id)
-      .is('dropped_at', null),
-
-    upcomingHoldings('draft_picks'),
-    upcomingHoldings('pickups'),
+      .order('source', { ascending: true }),
   ])
 
   // Build team data
   const participantsData = participants || []
-  const picksData = draftPicks || []
+  const holdings = (holdingRows ?? []) as DashboardHolding[]
 
   // Calculate rankings for user's rank display
   const teamsWithScores = participantsData
@@ -145,31 +130,22 @@ export default async function DashboardPage({ params }: PageProps) {
       team_scores: { total_points: number } | null
     }
 
-    const userPicks = picksData.filter((p) => p.team_id === team.id)
-    const movies: MovieTimelineItem[] = userPicks.map((pick) => {
-      const movie = pick.movies as {
-        id: string
-        tmdb_id: number
-        title: string
-        poster_url: string | null
-        release_date: string | null
-        combined_score: number | null
-        fantasy_points: number | null
-      }
-
-      return {
-        id: movie.id,
-        tmdb_id: movie.tmdb_id,
-        title: movie.title,
-        poster_url: movie.poster_url,
-        release_date: movie.release_date,
-        status: getMovieStatus(movie.release_date, movie.combined_score),
-        combined_score: movie.combined_score,
-        fantasy_points: movie.fantasy_points,
-        round: pick.round,
-        pick_number: pick.pick_number,
-      }
-    })
+    const movies: MovieTimelineItem[] = holdings
+      .filter((holding) => holding.team_id === team.id)
+      .map((holding) => ({
+        id: holding.movie_id,
+        tmdb_id: holding.tmdb_id,
+        title: holding.title,
+        poster_url: holding.poster_url,
+        release_date: holding.release_date,
+        status: getMovieStatus(holding.release_date, holding.combined_score),
+        combined_score: holding.combined_score,
+        fantasy_points: holding.fantasy_points,
+        source: holding.source,
+        round: holding.round,
+        pick_number: holding.pick_number,
+        amount_paid: holding.amount_paid,
+      }))
 
     userTeam = {
       id: team.id,
@@ -182,12 +158,10 @@ export default async function DashboardPage({ params }: PageProps) {
   }
 
   const leagueUpcoming = buildLeagueUpcoming(
-    [
-      ...toHoldings(upcomingPicks, 'draft_pick'),
-      ...toHoldings(upcomingPickups, 'pickup'),
-    ],
+    holdings,
     buildTeamInfoByTeamId(participantsData as ParticipantWithProfile[]),
-    userTeam?.id ?? null
+    userTeam?.id ?? null,
+    todayIso
   )
 
   return (
@@ -201,43 +175,41 @@ export default async function DashboardPage({ params }: PageProps) {
   )
 }
 
-/** Tags a holding query's rows with the table they came from. */
-function toHoldings(rows: unknown, source: UpcomingHolding['source']): UpcomingHolding[] {
-  return ((rows ?? []) as UpcomingHolding[]).map((row) => ({ ...row, source }))
-}
-
 /**
- * Flattens both kinds of holding into one date-ordered league release list.
+ * Flattens the league's still-unreleased holdings into one date-ordered list.
+ * Undated holdings and ones that have already opened are not "upcoming".
  *
  * A movie can only be held once, but nothing in the schema enforces that across
- * the two tables - only `is_movie_eligible_for_pickup()` does - so the merge
- * dedupes by movie and lets the draft pick win.
+ * draft picks and pickups - only `is_movie_eligible_for_pickup()` does - so the
+ * merge dedupes by movie and lets the draft pick win.
  */
 function buildLeagueUpcoming(
-  holdings: UpcomingHolding[],
+  holdings: DashboardHolding[],
   teamInfo: ReturnType<typeof buildTeamInfoByTeamId>,
-  userTeamId: string | null
+  userTeamId: string | null,
+  todayIso: string
 ): LeagueUpcomingRelease[] {
   const byMovie = new Map<string, LeagueUpcomingRelease>()
 
-  for (const { movies: movie, team_id, source } of holdings) {
-    if (!movie?.release_date || byMovie.has(movie.id)) continue
+  for (const holding of holdings) {
+    if (!holding.release_date || holding.release_date < todayIso) continue
+    if (byMovie.has(holding.movie_id)) continue
 
     // A holding whose owner has since left the league is still worth showing -
     // the movie is still off the board - but there is no team name left for it.
-    const info = teamInfo.get(team_id)
+    const info = teamInfo.get(holding.team_id)
 
-    byMovie.set(movie.id, {
-      id: movie.id,
-      tmdb_id: movie.tmdb_id,
-      title: movie.title,
-      poster_url: movie.poster_url,
-      release_date: movie.release_date,
-      source,
-      team_id,
+    byMovie.set(holding.movie_id, {
+      id: holding.movie_id,
+      tmdb_id: holding.tmdb_id,
+      title: holding.title,
+      poster_url: holding.poster_url,
+      release_date: holding.release_date,
+      source: holdingSourceName(holding.source),
+      team_id: holding.team_id,
       team_name: info?.teamName ?? 'Former team',
       owner_name: info?.ownerName ?? null,
-      is_current_user_team: userTeamId != null && team_id === userTeamId,
+      is_current_user_team: userTeamId != null && holding.team_id === userTeamId,
     })
   }
 

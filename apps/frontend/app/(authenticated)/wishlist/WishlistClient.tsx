@@ -7,7 +7,7 @@ import { Settings, X, Heart, Film, ChevronDown, Check, Users } from 'lucide-reac
 import { createClient } from '@/utils/supabase/client'
 import { getTmdbPosterUrl } from '@/app/(authenticated)/league/[id]/components/utils'
 import Avatar from '@/app/components/Avatar'
-import type { WishlistedMovie } from '@/types'
+import type { TeamHolding, WishlistedMovie } from '@/types'
 
 type SortOption = 'added_at' | 'title'
 type DraftStatus = 'available' | 'yours' | 'drafted'
@@ -18,6 +18,9 @@ interface LeagueOption {
   name: string
   status: string
 }
+
+/** The `team_holdings` columns the drafted-status map needs. */
+type HoldingRow = Pick<TeamHolding, 'tmdb_id' | 'team_id' | 'team_name'>
 
 interface DraftInfo {
   tmdbId: number
@@ -158,12 +161,13 @@ export default function WishlistClient({ userId }: { userId: string }) {
     }
 
     async function fetchDraftData() {
-      const [picksResult, teamResult] = await Promise.all([
+      const [holdingsResult, teamResult] = await Promise.all([
+        // Everything already claimed in the league: drafted movies and auction
+        // wins alike. Reading draft_picks alone left pickups looking available.
         supabase
-          .from('draft_picks')
-          .select('movie_id, team_id, movies(tmdb_id), teams(name)')
-          .eq('league_id', selectedLeagueId!)
-          .is('dropped_at', null),
+          .from('team_holdings')
+          .select('tmdb_id, team_id, team_name')
+          .eq('league_id', selectedLeagueId!),
         supabase
           .from('league_participants')
           .select('teams(id)')
@@ -173,20 +177,20 @@ export default function WishlistClient({ userId }: { userId: string }) {
           .single(),
       ])
 
-      if (picksResult.data) {
-        const map = new Map<number, DraftInfo>()
-        for (const pick of picksResult.data) {
-          const movie = unwrapRelation<{ tmdb_id: number }>(pick.movies)
-          const team = unwrapRelation<{ name: string }>(pick.teams)
-          if (movie?.tmdb_id) {
-            map.set(movie.tmdb_id, {
-              tmdbId: movie.tmdb_id,
-              teamId: pick.team_id,
-              teamName: team?.name ?? 'Unknown',
-            })
-          }
-        }
-        setDraftMap(map)
+      if (holdingsResult.data) {
+        const holdings = holdingsResult.data as HoldingRow[]
+        setDraftMap(
+          new Map(
+            holdings.map((holding) => [
+              holding.tmdb_id,
+              {
+                tmdbId: holding.tmdb_id,
+                teamId: holding.team_id,
+                teamName: holding.team_name,
+              },
+            ])
+          )
+        )
       }
 
       if (teamResult.data?.teams) {

@@ -620,6 +620,10 @@ interface Holding {
  * page treats both as first-class roster entries, so notifications must too.
  *
  * Dropped rows are included but flagged inactive -- see captureScoreContext.
+ * That is why this reads the base tables rather than the `team_holdings`
+ * view: the view is active-only by design and exposes no dropped_at, so
+ * routing this through it would silently empty droppedPlacements and kill
+ * the notable-miss notification.
  */
 async function loadHoldings(
   supabase: SupabaseClient,
