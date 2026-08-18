@@ -29,7 +29,7 @@ export class TtlCache<K, V> {
     return entry.value
   }
 
-  set(key: K, value: V): void {
+  set(key: K, value: V, ttlMs: number = this.ttlMs): void {
     // Delete-then-set so an overwritten key moves to the back of Map's
     // insertion order -- otherwise a frequently-refreshed key would look
     // "oldest" and get evicted first even though it's the most current.
@@ -38,7 +38,7 @@ export class TtlCache<K, V> {
       const oldestKey = this.store.keys().next().value
       if (oldestKey !== undefined) this.store.delete(oldestKey)
     }
-    this.store.set(key, { value, expiresAt: Date.now() + this.ttlMs })
+    this.store.set(key, { value, expiresAt: Date.now() + ttlMs })
   }
 
   clear(): void {
@@ -52,9 +52,17 @@ export class TtlCache<K, V> {
    * key while a fetch is in flight share that one promise instead of firing
    * duplicate requests. Pass `shouldCache` to skip caching results that
    * represent a failure (e.g. an error payload that resolved rather than
-   * threw); rejected factory calls are never cached.
+   * threw); rejected factory calls are never cached. Pass `ttlMs` to cache
+   * this particular entry for something other than the instance's default
+   * TTL (e.g. one shared cache serving several endpoints with different
+   * freshness needs).
    */
-  async getOrFetch(key: K, factory: () => Promise<V>, shouldCache: (value: V) => boolean = () => true): Promise<V> {
+  async getOrFetch(
+    key: K,
+    factory: () => Promise<V>,
+    shouldCache: (value: V) => boolean = () => true,
+    ttlMs: number = this.ttlMs
+  ): Promise<V> {
     const cached = this.get(key)
     if (cached !== undefined) return cached
 
@@ -65,7 +73,7 @@ export class TtlCache<K, V> {
     this.pending.set(key, promise)
     try {
       const value = await promise
-      if (shouldCache(value)) this.set(key, value)
+      if (shouldCache(value)) this.set(key, value, ttlMs)
       return value
     } finally {
       this.pending.delete(key)
