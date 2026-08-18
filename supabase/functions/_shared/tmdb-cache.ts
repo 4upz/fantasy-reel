@@ -3,8 +3,10 @@
  *
  * Used by the three read-only TMDb Edge Functions (get-movie-details,
  * browse-movies, search-movies). What is stored is the *transformed* response
- * body those functions return, so a hit is served byte-for-byte identically to
- * a miss.
+ * body those functions return, so a hit is served structurally identical to a
+ * miss: same fields, same values. (Not byte-identical -- the payload lives in
+ * a jsonb column, and Postgres re-orders jsonb object keys. Anything that
+ * would hash, ETag, or snapshot the raw bytes must not rely on key order.)
  *
  * Two properties matter more than the hit rate:
  *
@@ -56,12 +58,22 @@ function resolveTtlSeconds<T>(ttl: CacheTtl<T>, payload: T): number {
  * the caller when order is not semantically meaningful); undefined/null
  * params are dropped so an explicit `undefined` and an omitted param collapse
  * to the same key, as they do at the TMDb call itself.
+ *
+ * Keys and values are URI-escaped so the `&`/`=`/`,` delimiters cannot be
+ * forged from inside a value: without this, a search for the literal string
+ * `dune&year=2026` would collide with a search for `dune` filtered to 2026
+ * and each would serve the other's cached result set.
  */
 export function buildCacheKey(prefix: string, params: Record<string, unknown>): string {
   const parts = Object.entries(params)
     .filter(([, value]) => value !== undefined && value !== null)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : String(value)}`)
+    .map(([key, value]) => {
+      const encoded = Array.isArray(value)
+        ? value.map((item) => encodeURIComponent(String(item))).join(',')
+        : encodeURIComponent(String(value))
+      return `${encodeURIComponent(key)}=${encoded}`
+    })
 
   return `${prefix}:${parts.join('&')}`
 }

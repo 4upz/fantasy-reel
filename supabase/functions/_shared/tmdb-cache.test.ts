@@ -289,6 +289,25 @@ Deno.test('buildCacheKey - arrays join and absent params collapse', () => {
   assertEquals(buildCacheKey('search', { q: 'dune' }), buildCacheKey('search', { q: 'dune', year: undefined }))
 })
 
+Deno.test('buildCacheKey - delimiters inside a value cannot forge another key', () => {
+  // A query literally containing "&year=2026" must not collide with a query
+  // of "dune" plus an actual year param -- that collision would serve one
+  // user's cached result set for the other's request.
+  const forged = buildCacheKey('search', { query: 'dune&year=2026' })
+  const filtered = buildCacheKey('search', { query: 'dune', year: 2026 })
+  assertEquals(forged === filtered, false)
+
+  // Same for "=" splitting a key, and for "," inside an array element.
+  assertEquals(
+    buildCacheKey('browse', { 'a=b': 'c' }) === buildCacheKey('browse', { a: 'b=c' }),
+    false
+  )
+  assertEquals(
+    buildCacheKey('browse', { genres: ['28,35'] }) === buildCacheKey('browse', { genres: [28, 35] }),
+    false
+  )
+})
+
 Deno.test('cacheKeyForUrl - derives the key from the request URL, sorted', () => {
   const url = new URL('https://api.themoviedb.org/3/search/movie?query=Dune&page=2&include_adult=false')
 
