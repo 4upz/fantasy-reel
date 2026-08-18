@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Film, Lock, Megaphone, TrendingDown, X } from 'lucide-react'
 import MovieDetailBody from '@/app/components/MovieDetailBody'
-import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useMovieDetails } from '@/hooks/useMovieDetails'
 import { formatFantasyPoints } from '@/utils/scoring'
 import { getTmdbPosterUrl } from './utils'
 import { explainBlocker, type DropBlocker } from '../roster/dropRules'
-import type { League, TMDbMovieDetails, TMDbSearchResult } from '@/types'
+import type { League, TMDbSearchResult } from '@/types'
 
 /**
  * The least a league surface has to know about a movie to open it. Deliberately
@@ -68,31 +68,13 @@ export default function LeagueMovieModal({
   onClose,
 }: LeagueMovieModalProps) {
   const [view, setView] = useState<View>('details')
-  const [details, setDetails] = useState<TMDbMovieDetails | null>(null)
-  const [loading, setLoading] = useState(true)
   const closeRef = useRef<HTMLButtonElement>(null)
 
   const isDropping = drop?.isDropping ?? false
 
-  useEffect(() => {
-    let active = true
-
-    async function loadDetails() {
-      const { data } = await callEdgeFunction<TMDbMovieDetails>('get-movie-details', {
-        body: { tmdb_id: movie.tmdb_id },
-      })
-      if (!active) return
-      // A failed lookup is not worth an error state: the caller already knows
-      // the title, poster and release date, so the panel still reads fine.
-      if (data) setDetails(data)
-      setLoading(false)
-    }
-
-    loadDetails()
-    return () => {
-      active = false
-    }
-  }, [movie.tmdb_id])
+  // A failed lookup is not worth an error state: the caller already knows the
+  // title, poster and release date, so the panel still reads fine.
+  const { details, isLoading: loading } = useMovieDetails(movie.tmdb_id)
 
   // Escape backs out one step at a time, so a mis-tap on Drop is recoverable
   // without losing the movie you were reading about.

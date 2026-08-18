@@ -75,7 +75,7 @@ export function useMovieSearch(
 
   const { data, error, isLoading, isValidating } = useSWR(swrKey, fetcher, {
     revalidateOnFocus: false,
-    dedupingInterval: 2000, // Dedupe same requests within 2s
+    dedupingInterval: 60_000, // Same query+page is answered from cache for a minute
     keepPreviousData: true, // Keep showing previous data while loading new page
   })
 
