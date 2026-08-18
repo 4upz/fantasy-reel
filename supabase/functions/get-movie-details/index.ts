@@ -1,7 +1,7 @@
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
-import { fetchWithRetry } from '../_shared/http.ts'
 import { createLogger } from '../_shared/logger.ts'
-import { cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
+import { buildCacheKey, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
+import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
 
 const log = createLogger('get-movie-details')
 
@@ -75,15 +75,6 @@ interface MovieDetailsResponse {
   director: string | null
 }
 
-class TMDbApiError extends Error {
-  status: number
-
-  constructor(status: number) {
-    super(`TMDb API error: ${status}`)
-    this.status = status
-  }
-}
-
 const CAST_LIMIT = 10
 const RELEASED_TTL_SECONDS = 7 * 24 * 60 * 60
 const UNRELEASED_TTL_SECONDS = 24 * 60 * 60
@@ -143,18 +134,7 @@ function toMovieDetailsResponse(movieDetails: TMDbMovieDetails): MovieDetailsRes
 
 async function fetchMovieDetails(tmdbId: number, tmdbToken: string): Promise<MovieDetailsResponse> {
   const url = `https://api.themoviedb.org/3/movie/${tmdbId}?language=en-US&append_to_response=credits`
-  const response = await fetchWithRetry(url, {
-    headers: {
-      'Authorization': `Bearer ${tmdbToken}`,
-      'Content-Type': 'application/json',
-    },
-  }, { timeoutMs: 10_000, retries: 1 })
-
-  if (!response.ok) {
-    throw new TMDbApiError(response.status)
-  }
-
-  return toMovieDetailsResponse(await response.json() as TMDbMovieDetails)
+  return toMovieDetailsResponse(await tmdbGetJson<TMDbMovieDetails>(url, tmdbToken))
 }
 
 Deno.serve(async (req) => {
@@ -181,8 +161,8 @@ Deno.serve(async (req) => {
       return errorResponse('Valid tmdb_id is required', 400)
     }
 
-    const { payload } = await cachedTmdbFetch<MovieDetailsResponse>(
-      `movie_details:${tmdb_id}`,
+    const payload = await cachedTmdbFetch<MovieDetailsResponse>(
+      buildCacheKey('movie_details', { tmdb_id }),
       ttlSecondsFor,
       () => fetchMovieDetails(tmdb_id, tmdbToken),
       log
@@ -193,17 +173,7 @@ Deno.serve(async (req) => {
     // Only reached when the cache had nothing to fall back on -- a hit or an
     // expired entry answers a rate-limited or failing TMDb before this.
     if (error instanceof TMDbApiError) {
-      if (error.status === 401) {
-        return errorResponse('TMDb API authentication failed', 401)
-      }
-      if (error.status === 404) {
-        return errorResponse('Movie not found', 404)
-      }
-      if (error.status === 429) {
-        return errorResponse('TMDb rate limit exceeded. Try again later.', 429)
-      }
-      log.error('TMDb API error', { status: error.status })
-      return errorResponse('Failed to fetch movie details', 502)
+      return tmdbErrorResponse(error, log, 'Failed to fetch movie details', { notFoundMessage: 'Movie not found' })
     }
     return internalErrorResponse(error, log)
   }

@@ -8,7 +8,7 @@
 
 import { assertEquals, assertRejects } from '@std/assert'
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { buildCacheKey, getCachedOrFetch, purgeStaleTmdbCache } from './tmdb-cache.ts'
+import { buildCacheKey, cacheKeyForUrl, getCachedOrFetch, purgeStaleTmdbCache } from './tmdb-cache.ts'
 import type { Logger } from './logger.ts'
 
 interface CacheRow {
@@ -42,12 +42,15 @@ interface MockOptions {
 
 /**
  * Minimal stand-in for the exact query shapes tmdb-cache.ts issues:
- * `select().eq().maybeSingle()`, `upsert()`, and `delete().lt().select()`.
+ * `select().eq().maybeSingle()`, `upsert()`, and
+ * `delete({ count: 'exact' }).lt()` -- the purge asks Postgres for the count
+ * rather than shipping the deleted keys back.
  */
 function createMockClient(options: MockOptions = {}) {
   const rows = options.rows ?? []
   const upserts: CacheRow[] = []
   const deletedBefore: string[] = []
+  const countRequested: Array<'exact' | undefined> = []
 
   const client = {
     from(_table: string) {
@@ -66,24 +69,22 @@ function createMockClient(options: MockOptions = {}) {
           upserts.push(row)
           return Promise.resolve({ data: null, error: options.writeError ?? null })
         },
-        delete: () => ({
+        delete: (opts?: { count: 'exact' }) => ({
           lt: (_col: string, cutoff: string) => {
             deletedBefore.push(cutoff)
-            return {
-              select: () =>
-                Promise.resolve(
-                  options.deleteError
-                    ? { data: null, error: options.deleteError }
-                    : { data: rows.map((r) => ({ cache_key: r.cache_key })), error: null }
-                ),
-            }
+            countRequested.push(opts?.count)
+            return Promise.resolve(
+              options.deleteError
+                ? { count: null, error: options.deleteError }
+                : { count: rows.length, error: null }
+            )
           },
         }),
       }
     },
   }
 
-  return { client: client as unknown as SupabaseClient, upserts, deletedBefore }
+  return { client: client as unknown as SupabaseClient, upserts, deletedBefore, countRequested }
 }
 
 function row(overrides: Partial<CacheRow> & { expires_at: string }): CacheRow {
@@ -229,6 +230,48 @@ Deno.test('getCachedOrFetch - a throwing cache client never breaks the request',
   assertEquals(result.payload, { fresh: true })
 })
 
+Deno.test('getCachedOrFetch - concurrent callers of one cold key share a single fetch', async () => {
+  const { client, upserts } = createMockClient()
+  const { log } = createTestLogger()
+  let fetcherCalls = 0
+
+  const fetcher = () => {
+    fetcherCalls++
+    // Resolves a turn later so both callers are genuinely in flight at once.
+    return new Promise<{ fresh: number }>((resolve) =>
+      setTimeout(() => resolve({ fresh: fetcherCalls }), 5)
+    )
+  }
+
+  const [first, second] = await Promise.all([
+    getCachedOrFetch(client, 'hot', 60, fetcher, log),
+    getCachedOrFetch(client, 'hot', 60, fetcher, log),
+  ])
+
+  // One TMDb call, one cache write, same payload handed to both callers.
+  assertEquals(fetcherCalls, 1)
+  assertEquals(upserts.length, 1)
+  assertEquals(first.payload, { fresh: 1 })
+  assertEquals(second.payload, { fresh: 1 })
+})
+
+Deno.test('getCachedOrFetch - a coalesced fetch is not held past its failure', async () => {
+  const { client } = createMockClient()
+  const { log } = createTestLogger()
+  let fetcherCalls = 0
+
+  const failing = () => {
+    fetcherCalls++
+    return Promise.reject(new Error('TMDb API error: 500'))
+  }
+
+  await assertRejects(() => getCachedOrFetch(client, 'cold', 60, failing, log))
+  // The in-flight entry is cleared in `finally`, so the next request retries
+  // rather than inheriting the failed promise forever.
+  await assertRejects(() => getCachedOrFetch(client, 'cold', 60, failing, log))
+  assertEquals(fetcherCalls, 2)
+})
+
 Deno.test('buildCacheKey - key order does not depend on param order', () => {
   assertEquals(
     buildCacheKey('browse', { page: 2, sort_by: 'popularity', gte: '2026-08-18' }),
@@ -246,14 +289,36 @@ Deno.test('buildCacheKey - arrays join and absent params collapse', () => {
   assertEquals(buildCacheKey('search', { q: 'dune' }), buildCacheKey('search', { q: 'dune', year: undefined }))
 })
 
+Deno.test('cacheKeyForUrl - derives the key from the request URL, sorted', () => {
+  const url = new URL('https://api.themoviedb.org/3/search/movie?query=Dune&page=2&include_adult=false')
+
+  assertEquals(cacheKeyForUrl('search', url), 'search:include_adult=false&page=2&query=Dune')
+  // Same params, different order in the URL -- same key.
+  assertEquals(
+    cacheKeyForUrl('search', 'https://api.themoviedb.org/3/search/movie?page=2&include_adult=false&query=Dune'),
+    cacheKeyForUrl('search', url)
+  )
+})
+
+Deno.test('cacheKeyForUrl - overrides normalize a param in the key only', () => {
+  const url = new URL('https://api.themoviedb.org/3/search/movie?query=%20DUNE%20&page=1')
+
+  assertEquals(cacheKeyForUrl('search', url, { query: 'dune' }), 'search:page=1&query=dune')
+  // The URL itself is untouched: TMDb still receives the raw query.
+  assertEquals(url.searchParams.get('query'), ' DUNE ')
+})
+
 Deno.test('purgeStaleTmdbCache - deletes by fetched_at cutoff and reports the count', async () => {
-  const { client, deletedBefore } = createMockClient({
+  const { client, deletedBefore, countRequested } = createMockClient({
     rows: [row({ cache_key: 'a', expires_at: anHourAgo() }), row({ cache_key: 'b', expires_at: anHourAgo() })],
   })
 
   const deleted = await purgeStaleTmdbCache(client, 90)
 
   assertEquals(deleted, 2)
+  // Counted server-side: a purge can span six figures of keys, none of which
+  // anyone wants shipped back over the wire.
+  assertEquals(countRequested, ['exact'])
   assertEquals(deletedBefore.length, 1)
   const cutoffAgeDays = (Date.now() - new Date(deletedBefore[0]).getTime()) / 86_400_000
   // Comfortably inside TMDb's 6-month retention ceiling.

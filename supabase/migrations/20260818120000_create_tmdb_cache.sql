@@ -29,7 +29,7 @@ CREATE TABLE tmdb_cache (
 );
 
 COMMENT ON TABLE tmdb_cache IS 'Cached TMDb API responses (already transformed into the shape the Edge Functions return). Service-role only. TMDb terms forbid retaining their data beyond 6 months; the sync-release-dates nightly cron purges rows with fetched_at older than 90 days.';
-COMMENT ON COLUMN tmdb_cache.cache_key IS 'Canonical key: a namespace prefix plus every request parameter that changes the response, sorted (e.g. movie_details:1234, search:dune:page=2).';
+COMMENT ON COLUMN tmdb_cache.cache_key IS 'Canonical key: a namespace prefix, a colon, then k=v pairs joined by & and sorted by key. For browse and search the pairs are derived from the TMDb request URL''s own query string (with normalized overrides, e.g. a lowercased search query), so every param that reaches TMDb is in the key by construction. Real examples: movie_details:tmdb_id=1234, search:include_adult=false&language=en-US&page=2&query=dune, browse:page=1&today=2026-08-18&trending=true.';
 COMMENT ON COLUMN tmdb_cache.payload IS 'The transformed response body served to clients verbatim on a cache hit.';
 COMMENT ON COLUMN tmdb_cache.fetched_at IS 'When TMDb was last called for this key. Drives the 90-day retention purge, NOT freshness -- use expires_at for that.';
 COMMENT ON COLUMN tmdb_cache.expires_at IS 'Freshness deadline. Past this the row is stale: refetched on the next request, but still served as a fallback if that refetch fails.';

@@ -8,7 +8,7 @@
  */
 
 import { assertEquals, assertRejects } from '@std/assert'
-import { fetchWithRetry } from './http.ts'
+import { fetchWithRetry, MAX_RETRY_AFTER_MS, retryDelayMs } from './http.ts'
 
 const URL_UNDER_TEST = 'https://api.themoviedb.org/3/movie/1'
 
@@ -60,15 +60,22 @@ Deno.test('fetchWithRetry - Retry-After wins over the caller backoff', async () 
   assertEquals(elapsed < 1_000, true, `waited ${elapsed}ms`)
 })
 
-Deno.test('fetchWithRetry - an outsized Retry-After is capped at 2s', async () => {
-  const { impl } = stubResponses([rateLimited('3600'), new Response('ok', { status: 200 })])
+Deno.test('retryDelayMs - an outsized Retry-After is capped at 2s', () => {
+  // Asserted on the computation rather than by timing a real sleep: an hour of
+  // Retry-After must not cost the test suite (or an Edge Function) the wait.
+  assertEquals(retryDelayMs(rateLimited('3600'), 0), MAX_RETRY_AFTER_MS)
+  assertEquals(MAX_RETRY_AFTER_MS, 2_000)
 
-  const start = performance.now()
-  const response = await fetchWithRetry(URL_UNDER_TEST, {}, { backoffMs: 0 }, impl)
-  const elapsed = performance.now() - start
+  // Under the cap the server's own value is honored verbatim.
+  assertEquals(retryDelayMs(rateLimited('1'), 0), 1_000)
+  assertEquals(retryDelayMs(rateLimited('0'), 10_000), 0)
 
-  assertEquals(response.status, 200)
-  assertEquals(elapsed >= 1_900 && elapsed < 4_000, true, `waited ${elapsed}ms`)
+  // Non-429s, unparseable and negative values fall back to the caller backoff.
+  assertEquals(retryDelayMs(new Response('boom', { status: 503 }), 500), 500)
+  assertEquals(retryDelayMs(rateLimited('Wed, 18 Aug 2026 12:00:00 GMT'), 500), 500)
+  assertEquals(retryDelayMs(rateLimited('  '), 500), 500)
+  assertEquals(retryDelayMs(rateLimited('-5'), 500), 500)
+  assertEquals(retryDelayMs(undefined, 500), 500)
 })
 
 Deno.test('fetchWithRetry - an unparseable Retry-After falls back to the backoff', async () => {

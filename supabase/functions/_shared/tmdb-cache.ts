@@ -20,15 +20,16 @@
  * sync-release-dates.
  */
 
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { createLogger, serializeError, type Logger } from './logger.ts'
+import { purgeByAge } from './job-runs.ts'
+import { createServiceClient } from './utils.ts'
 
 const CACHE_TABLE = 'tmdb_cache'
-const MS_PER_DAY = 24 * 60 * 60 * 1000
 
-export type CacheStatus = 'hit' | 'miss' | 'stale'
+type CacheStatus = 'hit' | 'miss' | 'stale'
 
-export interface CachedResult<T> {
+interface CachedResult<T> {
   payload: T
   cacheStatus: CacheStatus
 }
@@ -41,7 +42,7 @@ export interface CachedResult<T> {
  * known *after* the fetch. Computing the TTL from the payload avoids a
  * chicken-and-egg first request that would have to guess.
  */
-export type CacheTtl<T> = number | ((payload: T) => number)
+type CacheTtl<T> = number | ((payload: T) => number)
 
 function resolveTtlSeconds<T>(ttl: CacheTtl<T>, payload: T): number {
   return typeof ttl === 'function' ? ttl(payload) : ttl
@@ -65,6 +66,28 @@ export function buildCacheKey(prefix: string, params: Record<string, unknown>): 
   return `${prefix}:${parts.join('&')}`
 }
 
+/**
+ * `buildCacheKey` over a TMDb request URL's own query string, so the key is
+ * derived from the exact params the request carries instead of a hand-kept
+ * mirror of them that can drift.
+ *
+ * `overrides` replaces (or adds) params in the key only -- used for normalized
+ * values such as a lowercased search query, where TMDb still receives the raw
+ * one. The URL carries no secret: the API token travels in the Authorization
+ * header, never in the query string.
+ */
+export function cacheKeyForUrl(
+  prefix: string,
+  url: URL | string,
+  overrides: Record<string, string> = {}
+): string {
+  const params: Record<string, string> = {}
+  for (const [key, value] of new URL(url).searchParams) {
+    params[key] = value
+  }
+  return buildCacheKey(prefix, { ...params, ...overrides })
+}
+
 interface CacheRow {
   payload: unknown
   expires_at: string
@@ -83,10 +106,7 @@ async function readCache(
       .eq('cache_key', cacheKey)
       .maybeSingle()
 
-    if (error) {
-      log.warn('tmdb cache read failed', { cache_key: cacheKey, error: serializeError(error) })
-      return null
-    }
+    if (error) throw error
 
     return (data as CacheRow | null) ?? null
   } catch (error) {
@@ -114,12 +134,48 @@ async function writeCache(
         expires_at: new Date(now.getTime() + ttlSeconds * 1000).toISOString(),
       }, { onConflict: 'cache_key' })
 
-    if (error) {
-      log.warn('tmdb cache write failed', { cache_key: cacheKey, error: serializeError(error) })
-    }
+    if (error) throw error
   } catch (error) {
     log.warn('tmdb cache write failed', { cache_key: cacheKey, error: serializeError(error) })
   }
+}
+
+/**
+ * Runs `work` off the response path when the runtime supports it, mirroring
+ * `internalErrorResponse` (_shared/utils.ts) and `dispatchAlert`
+ * (_shared/job-runs.ts): `EdgeRuntime.waitUntil` lets the cache write finish
+ * after the response is sent, and outside that runtime (tests, local Deno) it
+ * is awaited inline, since an unawaited promise may never settle before the
+ * isolate is torn down.
+ */
+function detach(work: Promise<void>): Promise<void> {
+  const g = globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }
+  if (g.EdgeRuntime?.waitUntil) {
+    g.EdgeRuntime.waitUntil(work)
+    return Promise.resolve()
+  }
+  return work
+}
+
+/**
+ * Fetches in flight, by cache key.
+ *
+ * A cold popular key (the first draft-board browse of the day, a typeahead
+ * prefix several drafters hit at once) would otherwise send one TMDb call per
+ * concurrent request, all of them redundant. Sharing the promise makes the
+ * first caller's fetch the only one; the rest await it and get the same
+ * payload. Scoped to one isolate -- this is deduplication, not a second cache
+ * tier.
+ */
+const inFlight = new Map<string, Promise<unknown>>()
+
+function coalesce<T>(cacheKey: string, work: () => Promise<T>): Promise<T> {
+  const existing = inFlight.get(cacheKey) as Promise<T> | undefined
+  if (existing) return existing
+
+  const promise = work().finally(() => inFlight.delete(cacheKey))
+  inFlight.set(cacheKey, promise)
+  return promise
 }
 
 /**
@@ -130,6 +186,9 @@ async function writeCache(
  * policies. `fetcher` must throw on failure; a thrown error falls back to an
  * expired entry when one exists ('stale'), and is otherwise rethrown for the
  * caller's own error mapping (e.g. TMDb 429 -> HTTP 429).
+ *
+ * Concurrent misses on one key share a single `fetcher` call (see `coalesce`),
+ * so a cold popular key costs one TMDb request, not one per request in flight.
  *
  * Emits exactly one structured line per call carrying cache_key and
  * cache_status, so hit rate per namespace is answerable from logs alone.
@@ -149,8 +208,14 @@ export async function getCachedOrFetch<T>(
   }
 
   try {
-    const payload = await fetcher()
-    await writeCache(client, cacheKey, payload, resolveTtlSeconds(ttlSeconds, payload), log)
+    const payload = await coalesce(cacheKey, async () => {
+      const fetched = await fetcher()
+      // The write is off the response path where the runtime allows it: the
+      // user's answer is already in hand, and writeCache swallows its own
+      // failures, so there is nothing left to wait for.
+      await detach(writeCache(client, cacheKey, fetched, resolveTtlSeconds(ttlSeconds, fetched), log))
+      return fetched
+    })
     log.info('tmdb cache', { cache_key: cacheKey, cache_status: 'miss' })
     return { payload, cacheStatus: 'miss' }
   } catch (error) {
@@ -180,18 +245,12 @@ let cacheClient: SupabaseClient | null | undefined
 function getCacheClient(log: Logger): SupabaseClient | null {
   if (cacheClient !== undefined) return cacheClient
 
-  const url = Deno.env.get('SUPABASE_URL')
-  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  if (!url || !key) {
-    log.warn('tmdb cache disabled: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
-    cacheClient = null
-    return null
-  }
-
   try {
-    cacheClient = createClient(url, key)
+    // Throws when SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are missing, which
+    // for the cache is a degraded mode, not a failure.
+    cacheClient = createServiceClient()
   } catch (error) {
-    log.warn('tmdb cache disabled: client creation failed', { error: serializeError(error) })
+    log.warn('tmdb cache disabled: no service role client', { error: serializeError(error) })
     cacheClient = null
   }
   return cacheClient
@@ -200,17 +259,20 @@ function getCacheClient(log: Logger): SupabaseClient | null {
 /**
  * `getCachedOrFetch` with the service-role client resolved for you -- the form
  * the TMDb Edge Functions actually call. Falls straight through to `fetcher`
- * when no cache client can be built.
+ * when no cache client can be built. Returns the payload alone: cache status
+ * is logged here and no caller acts on it.
  */
 export async function cachedTmdbFetch<T>(
   cacheKey: string,
   ttlSeconds: CacheTtl<T>,
   fetcher: () => Promise<T>,
   log: Logger
-): Promise<CachedResult<T>> {
+): Promise<T> {
   const client = getCacheClient(log)
-  if (!client) return { payload: await fetcher(), cacheStatus: 'miss' }
-  return getCachedOrFetch(client, cacheKey, ttlSeconds, fetcher, log)
+  if (!client) return await fetcher()
+
+  const { payload } = await getCachedOrFetch(client, cacheKey, ttlSeconds, fetcher, log)
+  return payload
 }
 
 const purgeLog = createLogger('shared/tmdb-cache')
@@ -220,41 +282,18 @@ const purgeLog = createLogger('shared/tmdb-cache')
  * "do not retain beyond 6 months" term with a wide margin. Runs nightly from
  * sync-release-dates.
  *
- * Best-effort like purgeOldJobRuns: never throws, so a purge failure cannot
- * break the caller's job outcome. Returns the number of rows deleted, or null
- * if the delete failed (logged either way).
+ * Best-effort like purgeOldJobRuns, and the same primitive underneath: never
+ * throws, so a purge failure cannot break the caller's job outcome. Returns
+ * the number of rows deleted, or null if the delete failed.
  */
-export async function purgeStaleTmdbCache(
+export function purgeStaleTmdbCache(
   client: SupabaseClient,
   retentionDays = 90
 ): Promise<number | null> {
-  try {
-    const cutoff = new Date(Date.now() - retentionDays * MS_PER_DAY).toISOString()
-
-    const { data, error } = await client
-      .from(CACHE_TABLE)
-      .delete()
-      .lt('fetched_at', cutoff)
-      .select('cache_key')
-
-    if (error) {
-      purgeLog.error('Failed to purge stale tmdb cache', {
-        retention_days: retentionDays,
-        error: serializeError(error),
-      })
-      return null
-    }
-
-    purgeLog.info('Purged stale tmdb cache', {
-      retention_days: retentionDays,
-      rows_deleted: data?.length ?? 0,
-    })
-    return data?.length ?? null
-  } catch (err) {
-    purgeLog.error('Failed to purge stale tmdb cache', {
-      retention_days: retentionDays,
-      error: serializeError(err),
-    })
-    return null
-  }
+  return purgeByAge(client, {
+    table: CACHE_TABLE,
+    column: 'fetched_at',
+    retentionDays,
+    log: purgeLog,
+  })
 }
