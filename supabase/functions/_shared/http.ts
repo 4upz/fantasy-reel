@@ -68,11 +68,39 @@ export async function fetchWithTimeout(
 }
 
 /**
- * Fetch with a bounded timeout and a single retry on network/timeout errors
- * or 5xx responses. Never retries 4xx -- those won't succeed on a retry.
- * Intended only for idempotent GETs. Returns the last response (even if not
- * ok) once retries are exhausted, or rethrows the last error if every
- * attempt failed to produce a response at all.
+ * Upper bound on how long a server's `Retry-After` may hold a request. Edge
+ * Functions answer a user waiting on a page; TMDb's 429s clear in about a
+ * second, so anything longer is better spent failing over to a stale cache
+ * entry than blocking.
+ */
+const MAX_RETRY_AFTER_MS = 2_000
+
+/**
+ * How long to wait before the next attempt: a 429's `Retry-After` (seconds,
+ * capped) when the server gave a usable one, otherwise the caller's backoff.
+ * `Retry-After` may also be an HTTP-date, which is not parsed -- those fall
+ * back to the plain backoff rather than risking a long, badly-parsed wait.
+ */
+function retryDelayMs(response: Response | undefined, backoffMs: number): number {
+  if (response?.status !== 429) return backoffMs
+
+  // Number('') is 0, which would mean "retry instantly" -- treat a blank
+  // header as absent instead.
+  const header = response.headers.get('Retry-After')?.trim()
+  const seconds = header ? Number(header) : NaN
+  if (!Number.isFinite(seconds) || seconds < 0) return backoffMs
+
+  return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS)
+}
+
+/**
+ * Fetch with a bounded timeout and a single retry on network/timeout errors,
+ * 5xx responses, or 429 rate limits. A 429 honors the server's `Retry-After`
+ * header (in seconds, capped at 2s) and otherwise uses the caller's backoff.
+ * Never retries any other 4xx -- those won't succeed on a retry. Intended
+ * only for idempotent GETs. Returns the last response (even if not ok) once
+ * retries are exhausted, or rethrows the last error if every attempt failed
+ * to produce a response at all.
  */
 export async function fetchWithRetry(
   url: string | URL,
@@ -87,21 +115,28 @@ export async function fetchWithRetry(
   let lastResponse: Response | undefined
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    // Distinct from `lastResponse` (which is sticky across attempts, so a
+    // later network error still returns an earlier response): the delay must
+    // reflect *this* attempt's Retry-After, not a previous one's.
+    let attemptResponse: Response | undefined
     try {
       const response = await fetchWithTimeout(url, init, timeoutMs, fetchImpl)
-      if (response.ok || response.status < 500) return response
+      if (response.ok || (response.status < 500 && response.status !== 429)) return response
+      attemptResponse = response
       lastResponse = response
     } catch (error) {
       lastError = error
     }
 
     if (attempt < retries) {
+      const delayMs = retryDelayMs(attemptResponse, backoffMs)
       log.warn('outbound retry', {
         host,
         attempt: attempt + 1,
-        reason: lastResponse ? `status_${lastResponse.status}` : lastError instanceof Error ? lastError.name : 'unknown',
+        delay_ms: delayMs,
+        reason: attemptResponse ? `status_${attemptResponse.status}` : lastError instanceof Error ? lastError.name : 'unknown',
       })
-      await new Promise((resolve) => setTimeout(resolve, backoffMs))
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
   }
 

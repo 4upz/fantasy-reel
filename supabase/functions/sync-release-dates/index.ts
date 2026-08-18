@@ -10,6 +10,7 @@ import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCr
 import { runSyncReleaseDates } from './handler.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { startJobRun, purgeOldJobRuns, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
+import { purgeStaleTmdbCache } from '../_shared/tmdb-cache.ts'
 
 const log = createLogger('sync-release-dates')
 
@@ -48,6 +49,11 @@ Deno.serve(async (req) => {
     // a null count just means the purge itself failed (already logged).
     const purged = await purgeOldJobRuns(serviceClient)
 
+    // Same deal for the TMDb response cache, and here retention is a licence
+    // term, not just hygiene: TMDb forbids retaining their data past 6 months.
+    // Also never throws; null means the purge itself failed (already logged).
+    const tmdbCachePurged = await purgeStaleTmdbCache(serviceClient)
+
     // The handler logs and skips individual TMDb/update failures rather than
     // counting them, so there is no per-item failed counter to map.
     const job_status = await run.finish(serviceClient, {
@@ -57,6 +63,7 @@ Deno.serve(async (req) => {
         dates_changed: result.dates_changed,
         leagues_notified: result.leagues_notified,
         job_runs_purged: purged,
+        tmdb_cache_purged: tmdbCachePurged,
       },
     })
 
