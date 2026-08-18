@@ -1,5 +1,5 @@
 import useSWR from 'swr'
-import { callEdgeFunction } from '@/utils/supabase/functions'
+import { edgeFetcher } from '@/utils/supabase/functions'
 import type { TMDbMovieDetails } from '@/types'
 
 /** Movie details barely change, and every miss costs two TMDb calls server-side. */
@@ -7,14 +7,8 @@ const DETAILS_TTL_MS = 600_000
 
 type FetcherKey = ['get-movie-details', number]
 
-async function fetcher([, tmdbId]: FetcherKey): Promise<TMDbMovieDetails> {
-  const { data, error } = await callEdgeFunction<TMDbMovieDetails>('get-movie-details', {
-    body: { tmdb_id: tmdbId },
-  })
-  if (error) throw new Error(error)
-  if (!data) throw new Error('No data returned')
-  return data
-}
+const fetcher = ([, tmdbId]: FetcherKey): Promise<TMDbMovieDetails> =>
+  edgeFetcher<TMDbMovieDetails>('get-movie-details', { tmdb_id: tmdbId })
 
 interface UseMovieDetailsReturn {
   details: TMDbMovieDetails | null
@@ -36,10 +30,7 @@ export function useMovieDetails(tmdbId: number | null): UseMovieDetailsReturn {
   const key: FetcherKey | null = tmdbId != null ? ['get-movie-details', tmdbId] : null
 
   const { data, error, isLoading } = useSWR(key, fetcher, {
-    revalidateOnFocus: false,
     dedupingInterval: DETAILS_TTL_MS,
-    // Never show one movie's details under another movie's title.
-    keepPreviousData: false,
   })
 
   return {

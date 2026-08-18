@@ -91,3 +91,18 @@ export async function callEdgeFunction<T>(
     return { data: null, error: err instanceof Error ? err.message : 'Unknown error' }
   }
 }
+
+/**
+ * `callEdgeFunction` adapted to the SWR fetcher contract: SWR distinguishes
+ * success from failure by whether the promise rejects, so the `{ data, error }`
+ * pair has to be turned back into a throw.
+ */
+export async function edgeFetcher<T>(
+  functionName: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  const { data, error } = await callEdgeFunction<T>(functionName, { body })
+  if (error) throw new Error(error)
+  if (!data) throw new Error('No data returned')
+  return data
+}

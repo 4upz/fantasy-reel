@@ -9,7 +9,6 @@ import { useDebounce } from '@/hooks/useDebounce'
 import { useMovieSearch } from '@/hooks/useMovieSearch'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
 import type { TMDbSearchResult } from '@/types'
-import TMDbAttribution from '@/components/TMDbAttribution'
 import MovieSearchBar from './components/MovieSearchBar'
 import MovieFilters from './components/MovieFilters'
 import MovieGrid from './components/MovieGrid'
@@ -55,14 +54,6 @@ export default function MovieSearchClient(): React.ReactElement {
 
   function handleClear(): void {
     setInputValue('')
-  }
-
-  function handleMovieClick(movie: TMDbSearchResult): void {
-    setSelectedMovie(movie)
-  }
-
-  function handleCloseModal(): void {
-    setSelectedMovie(null)
   }
 
   const hasResults = results.length > 0
@@ -166,7 +157,7 @@ export default function MovieSearchClient(): React.ReactElement {
 
         {!loading && hasResults && (
           <>
-            <MovieGrid movies={results} onMovieClick={handleMovieClick} />
+            <MovieGrid movies={results} onMovieClick={setSelectedMovie} />
 
             {loadingMore && (
               <div className="mt-4 sm:mt-6">
@@ -180,10 +171,6 @@ export default function MovieSearchClient(): React.ReactElement {
           </>
         )}
 
-        {/* TMDb Attribution - Powered By section */}
-        <div className="mt-16 py-12 border-t border-border">
-          <TMDbAttribution variant="powered-by" className="mx-auto" />
-        </div>
       </div>
 
       {selectedMovie && (
@@ -191,7 +178,7 @@ export default function MovieSearchClient(): React.ReactElement {
           movie={selectedMovie}
           details={movieDetails}
           loading={loadingDetails}
-          onClose={handleCloseModal}
+          onClose={() => setSelectedMovie(null)}
         />
       )}
     </div>

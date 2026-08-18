@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWRInfinite from 'swr/infinite'
-import { callEdgeFunction } from '@/utils/supabase/functions'
+import { edgeFetcher } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbSearchResponse } from '@/types'
 
 export interface BrowseFilters {
@@ -20,8 +20,6 @@ type PaginatedResponse = TMDbSearchResponse | BrowseResponse
 
 type Mode = 'browse' | 'search' | 'trending'
 
-/** Movie lists are browsed repeatedly within a session; a minute is plenty fresh. */
-const LIST_TTL_MS = 60_000
 const SEARCH_DEBOUNCE_MS = 300
 
 const DEFAULT_FILTERS: BrowseFilters = {
@@ -41,40 +39,34 @@ type Request =
   | { mode: 'trending' }
 
 /**
- * SWR key for one page of one request. The body is serialized into the key so
- * the fetcher can rebuild it without closing over anything, and so two
- * equivalent requests hash to the same string.
+ * SWR key for one page of one request: the function to call and the body to
+ * call it with. SWR hashes the body stably (keys sorted, `undefined` dropped),
+ * so two equivalent requests share one cache entry.
  */
-type PageKey = [functionName: string, serializedBody: string]
+type PageKey = [functionName: string, body: Record<string, unknown>]
 
 function buildPageKey(request: Request, page: number): PageKey {
   switch (request.mode) {
     case 'search':
-      return ['search-movies', JSON.stringify({ query: request.query, page, upcoming_only: true })]
+      return ['search-movies', { query: request.query, page, upcoming_only: true }]
     case 'trending':
-      return ['browse-movies', JSON.stringify({ page, trending: true })]
+      return ['browse-movies', { page, trending: true }]
     case 'browse':
       return [
         'browse-movies',
-        JSON.stringify({
+        {
           page,
           release_window: request.filters.releaseWindow,
           genres: request.filters.genres.length > 0 ? request.filters.genres : undefined,
           min_rating: request.filters.minRating > 0 ? request.filters.minRating : undefined,
           sort_by: 'popularity',
-        }),
+        },
       ]
   }
 }
 
-async function fetcher([functionName, serializedBody]: PageKey): Promise<PaginatedResponse> {
-  const { data, error } = await callEdgeFunction<PaginatedResponse>(functionName, {
-    body: JSON.parse(serializedBody) as Record<string, unknown>,
-  })
-  if (error) throw new Error(error)
-  if (!data) throw new Error('No data returned')
-  return data
-}
+const fetcher = ([functionName, body]: PageKey): Promise<PaginatedResponse> =>
+  edgeFetcher<PaginatedResponse>(functionName, body)
 
 interface UseDraftMoviesOptions {
   draftedTmdbIds: Set<number>
@@ -92,80 +84,65 @@ interface UseDraftMoviesReturn {
   loading: boolean
   loadingMore: boolean
   error: string | null
-  page: number
-  totalPages: number
   totalResults: number
   mode: Mode
   search: (query: string) => void
   browse: (filters: BrowseFilters) => void
-  fetchTrending: (trendingPage?: number, append?: boolean) => void
+  fetchTrending: () => void
   loadMore: () => void
   clearSearch: () => void
 }
 
 export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMoviesOptions): UseDraftMoviesReturn {
-  const [request, setRequest] = useState<Request | null>(
-    enabled ? { mode: 'browse', filters: DEFAULT_FILTERS } : null
-  )
-  const [mode, setMode] = useState<Mode>('browse')
+  const [request, setRequest] = useState<Request>({ mode: 'browse', filters: DEFAULT_FILTERS })
 
   const currentFiltersRef = useRef<BrowseFilters>(DEFAULT_FILTERS)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
-  /**
-   * The drafted set as of the last committed render, not the current one.
-   * Results are filtered when a page lands and then left alone, so a movie
-   * taken while the grid is open stays put and shows its "Drafted" overlay
-   * instead of silently vanishing out from under the cursor.
-   */
-  const draftedAtFetchRef = useRef(draftedTmdbIds)
-  useEffect(() => {
-    draftedAtFetchRef.current = draftedTmdbIds
-  }, [draftedTmdbIds])
-
+  // A null key is SWR's "don't fetch": a hook that starts disabled sits idle
+  // and fetches the moment its owner turns it on.
   const getKey = useCallback(
-    (index: number): PageKey | null => (request ? buildPageKey(request, index + 1) : null),
-    [request]
+    (index: number): PageKey | null => (enabled ? buildPageKey(request, index + 1) : null),
+    [enabled, request]
   )
 
   const { data, error, isLoading, size, setSize } = useSWRInfinite(getKey, fetcher, {
-    revalidateOnFocus: false,
     // Paging in more movies must not re-request the pages already on screen.
     revalidateFirstPage: false,
-    dedupingInterval: LIST_TTL_MS,
+    // Keys depend on the page index alone, never on the previous page, so
+    // pages can be revalidated concurrently instead of one after another.
+    parallel: true,
     keepPreviousData: true,
   })
 
   const movies = useMemo(() => {
-    const drafted = draftedAtFetchRef.current
+    /*
+     * The drafted set is read here but deliberately left out of the deps:
+     * results are filtered when a page lands and then left alone, so a movie
+     * taken while the grid is open stays put and shows its "Drafted" overlay
+     * instead of silently vanishing out from under the cursor.
+     */
     const seen = new Set<number>()
     const result: TMDbSearchResult[] = []
 
     for (const pageData of data ?? []) {
       for (const movie of pageData.results) {
-        if (drafted.has(movie.tmdb_id) || seen.has(movie.tmdb_id)) continue
+        if (draftedTmdbIds.has(movie.tmdb_id) || seen.has(movie.tmdb_id)) continue
         seen.add(movie.tmdb_id)
         result.push(movie)
       }
     }
     return result
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data])
 
   const lastPage = data && data.length > 0 ? data[data.length - 1] : undefined
   const page = lastPage?.page ?? 1
   const totalPages = lastPage?.total_pages ?? 0
-  const totalResults = lastPage?.total_results ?? 0
 
   // A page has been requested that has not landed yet -- SWR's canonical
   // "loading more" check, and the only case where results already show.
   const loadingMore = size > 1 && data != null && data.length < size
-
-  // `mode` describes what is on screen, so it only catches up once the request
-  // it belongs to has actually resolved.
-  useEffect(() => {
-    if (!request || isLoading) return
-    setMode(request.mode)
-  }, [request, isLoading])
 
   const clearDebounce = useCallback(() => {
     if (debounceRef.current) {
@@ -174,21 +151,31 @@ export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMovie
     }
   }, [])
 
+  /** Switch to a different list, always starting from its first page. */
+  const changeRequest = useCallback(
+    (next: Request) => {
+      clearDebounce()
+      setRequest(next)
+      setSize(1)
+    },
+    [clearDebounce, setSize]
+  )
+
   const search = useCallback(
     (query: string) => {
       clearDebounce()
 
-      if (!query.trim()) {
-        setMode('browse')
-        setRequest({ mode: 'browse', filters: currentFiltersRef.current })
+      const trimmed = query.trim()
+      if (!trimmed) {
+        changeRequest({ mode: 'browse', filters: currentFiltersRef.current })
         return
       }
 
       debounceRef.current = setTimeout(() => {
-        setRequest({ mode: 'search', query: query.trim() })
+        changeRequest({ mode: 'search', query: trimmed })
       }, SEARCH_DEBOUNCE_MS)
     },
-    [clearDebounce]
+    [changeRequest, clearDebounce]
   )
 
   const browse = useCallback(
@@ -197,41 +184,24 @@ export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMovie
       clearDebounce()
 
       debounceRef.current = setTimeout(() => {
-        setRequest({ mode: 'browse', filters })
+        changeRequest({ mode: 'browse', filters })
       }, SEARCH_DEBOUNCE_MS)
     },
-    [clearDebounce]
+    [changeRequest, clearDebounce]
   )
 
-  const fetchTrending = useCallback(
-    (trendingPage: number = 1, append: boolean = false) => {
-      clearDebounce()
-      setRequest({ mode: 'trending' })
-      setSize(append ? trendingPage : 1)
-    },
-    [clearDebounce, setSize]
-  )
+  const fetchTrending = useCallback(() => {
+    changeRequest({ mode: 'trending' })
+  }, [changeRequest])
+
+  const clearSearch = useCallback(() => {
+    search('')
+  }, [search])
 
   const loadMore = useCallback(() => {
     if (loadingMore || page >= totalPages) return
     setSize((current) => current + 1)
   }, [loadingMore, page, totalPages, setSize])
-
-  const clearSearch = useCallback(() => {
-    setMode('browse')
-    setRequest({ mode: 'browse', filters: currentFiltersRef.current })
-  }, [])
-
-  // A hook that starts disabled still fetches once its owner turns it on.
-  const wasEnabledRef = useRef(enabled)
-  useEffect(() => {
-    if (!enabled || wasEnabledRef.current) {
-      wasEnabledRef.current = enabled
-      return
-    }
-    wasEnabledRef.current = enabled
-    setRequest({ mode: 'browse', filters: currentFiltersRef.current })
-  }, [enabled])
 
   useEffect(() => clearDebounce, [clearDebounce])
 
@@ -240,10 +210,8 @@ export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMovie
     loading: isLoading,
     loadingMore,
     error: error?.message ?? null,
-    page,
-    totalPages,
-    totalResults,
-    mode,
+    totalResults: lastPage?.total_results ?? 0,
+    mode: request.mode,
     search,
     browse,
     fetchTrending,

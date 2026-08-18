@@ -1,6 +1,6 @@
 import useSWR from 'swr'
 import { useCallback, useState, useEffect, useRef } from 'react'
-import { callEdgeFunction } from '@/utils/supabase/functions'
+import { edgeFetcher } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbSearchResponse } from '@/types'
 
 interface UseMovieSearchOptions {
@@ -22,14 +22,13 @@ interface UseMovieSearchReturn {
 
 type FetcherKey = ['search-movies', string, number, number | null | undefined]
 
-async function fetcher([, q, p, y]: FetcherKey): Promise<TMDbSearchResponse> {
-  const { data, error } = await callEdgeFunction<TMDbSearchResponse>('search-movies', {
-    body: { query: q, page: p, upcoming_only: false, ...(y && { year: y }) },
+const fetcher = ([, q, p, y]: FetcherKey): Promise<TMDbSearchResponse> =>
+  edgeFetcher<TMDbSearchResponse>('search-movies', {
+    query: q,
+    page: p,
+    upcoming_only: false,
+    ...(y && { year: y }),
   })
-  if (error) throw new Error(error)
-  if (!data) throw new Error('No data returned')
-  return data
-}
 
 /**
  * SWR-powered movie search hook with automatic request deduplication.
@@ -74,8 +73,6 @@ export function useMovieSearch(
     : null
 
   const { data, error, isLoading, isValidating } = useSWR(swrKey, fetcher, {
-    revalidateOnFocus: false,
-    dedupingInterval: 60_000, // Same query+page is answered from cache for a minute
     keepPreviousData: true, // Keep showing previous data while loading new page
   })
 

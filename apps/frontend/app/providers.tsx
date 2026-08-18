@@ -11,6 +11,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
         // Nothing in this app changes just because the tab regained focus, and
         // the movie data behind most keys is billed per TMDb call.
         revalidateOnFocus: false,
+        // Same key inside a minute is answered from cache, so a remounting
+        // component (draft board, bid modal, movie dialog) costs nothing.
+        // Hooks override this only where the data is even more static.
+        dedupingInterval: 60_000,
         onError: (err: Error, key: string) => {
           captureException(err, { tags: { source: 'swr' }, extra: { key } })
         },
