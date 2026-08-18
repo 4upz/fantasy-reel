@@ -41,16 +41,30 @@ function parseRequestBody(body: string): UpdateScoresRequest {
  */
 const MAX_MOVIES_PER_RUN = 100
 
-function capMovies(movies: MovieRecord[], source: string): MovieRecord[] {
-  if (movies.length <= MAX_MOVIES_PER_RUN) return movies
+/**
+ * Truncation is reported in-band (response body and job_runs metadata), not
+ * just logged: a caller that asked for 250 movies and silently got 100 scored
+ * has no way to know it must invoke again.
+ */
+interface Truncation {
+  truncated: true
+  remaining: number
+}
 
+function capMovies(
+  movies: MovieRecord[],
+  source: string
+): { movies: MovieRecord[]; truncation?: Truncation } {
+  if (movies.length <= MAX_MOVIES_PER_RUN) return { movies }
+
+  const remaining = movies.length - MAX_MOVIES_PER_RUN
   log.warn('Movie batch capped', {
     source,
     requested: movies.length,
     processed: MAX_MOVIES_PER_RUN,
-    dropped: movies.length - MAX_MOVIES_PER_RUN,
+    dropped: remaining,
   })
-  return movies.slice(0, MAX_MOVIES_PER_RUN)
+  return { movies: movies.slice(0, MAX_MOVIES_PER_RUN), truncation: { truncated: true, remaining } }
 }
 
 Deno.serve(async (req) => {
@@ -89,6 +103,7 @@ Deno.serve(async (req) => {
       : {}
 
     let moviesToUpdate: MovieRecord[] = []
+    let truncation: Truncation | undefined
 
     if (params.movie_ids && params.movie_ids.length > 0) {
       // Update specific movies
@@ -107,7 +122,9 @@ Deno.serve(async (req) => {
         return errorResponse('Failed to fetch movies', 500)
       }
 
-      moviesToUpdate = capMovies((data as MovieRecord[]) || [], 'movie_ids')
+      const capped = capMovies((data as MovieRecord[]) || [], 'movie_ids')
+      moviesToUpdate = capped.movies
+      truncation = capped.truncation
     } else if (params.league_id) {
       // Update movies currently rostered in a specific league. team_holdings
       // covers both acquisition paths; reading draft_picks alone left every
@@ -137,7 +154,9 @@ Deno.serve(async (req) => {
           title: row.title,
         })
       }
-      moviesToUpdate = capMovies([...byMovieId.values()], 'league_id')
+      const capped = capMovies([...byMovieId.values()], 'league_id')
+      moviesToUpdate = capped.movies
+      truncation = capped.truncation
     } else {
       // Default: find released drafted movies needing score updates
       const oneDayAgo = new Date()
@@ -299,10 +318,11 @@ Deno.serve(async (req) => {
         movies_fetched: results.movies_fetched,
         scores_updated: results.scores_updated,
         notifications,
+        ...truncation,
       },
     })
 
-    return jsonResponse({ ...results, notifications, job_status })
+    return jsonResponse({ ...results, ...truncation, notifications, job_status })
 
   } catch (error) {
     if (run && runClient) await run.fail(runClient, error)

@@ -73,15 +73,18 @@ export async function fetchWithTimeout(
  * second, so anything longer is better spent failing over to a stale cache
  * entry than blocking.
  */
-const MAX_RETRY_AFTER_MS = 2_000
+export const MAX_RETRY_AFTER_MS = 2_000
 
 /**
  * How long to wait before the next attempt: a 429's `Retry-After` (seconds,
  * capped) when the server gave a usable one, otherwise the caller's backoff.
  * `Retry-After` may also be an HTTP-date, which is not parsed -- those fall
  * back to the plain backoff rather than risking a long, badly-parsed wait.
+ *
+ * Exported so the policy can be asserted arithmetically in tests instead of
+ * by timing an actual sleep.
  */
-function retryDelayMs(response: Response | undefined, backoffMs: number): number {
+export function retryDelayMs(response: Response | undefined, backoffMs: number): number {
   if (response?.status !== 429) return backoffMs
 
   // Number('') is 0, which would mean "retry instantly" -- treat a blank
@@ -112,30 +115,29 @@ export async function fetchWithRetry(
   const host = hostOf(url)
 
   let lastError: unknown
+  // Sticky across attempts, so a later network error still returns an earlier
+  // retryable response rather than throwing.
   let lastResponse: Response | undefined
 
   for (let attempt = 0; attempt <= retries; attempt++) {
-    // Distinct from `lastResponse` (which is sticky across attempts, so a
-    // later network error still returns an earlier response): the delay must
-    // reflect *this* attempt's Retry-After, not a previous one's.
-    let attemptResponse: Response | undefined
+    // This attempt's own outcome: the delay must reflect *this* attempt's
+    // Retry-After, and the log line this attempt's reason.
+    let delayMs = backoffMs
+    let reason: string
+
     try {
       const response = await fetchWithTimeout(url, init, timeoutMs, fetchImpl)
       if (response.ok || (response.status < 500 && response.status !== 429)) return response
-      attemptResponse = response
       lastResponse = response
+      delayMs = retryDelayMs(response, backoffMs)
+      reason = `status_${response.status}`
     } catch (error) {
       lastError = error
+      reason = error instanceof Error ? error.name : 'unknown'
     }
 
     if (attempt < retries) {
-      const delayMs = retryDelayMs(attemptResponse, backoffMs)
-      log.warn('outbound retry', {
-        host,
-        attempt: attempt + 1,
-        delay_ms: delayMs,
-        reason: attemptResponse ? `status_${attemptResponse.status}` : lastError instanceof Error ? lastError.name : 'unknown',
-      })
+      log.warn('outbound retry', { host, attempt: attempt + 1, delay_ms: delayMs, reason })
       await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
   }

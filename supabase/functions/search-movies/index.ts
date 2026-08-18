@@ -1,7 +1,7 @@
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie, internalErrorResponse } from '../_shared/utils.ts'
-import { fetchWithRetry } from '../_shared/http.ts'
 import { createLogger } from '../_shared/logger.ts'
-import { buildCacheKey, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
+import { cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
+import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
 
 const log = createLogger('search-movies')
 
@@ -58,17 +58,6 @@ interface SearchPage {
   results: SearchResult[]
 }
 
-class TMDbApiError extends Error {
-  status: number
-  body: string
-
-  constructor(status: number, body: string) {
-    super(`TMDb API error: ${status}`)
-    this.status = status
-    this.body = body
-  }
-}
-
 /**
  * Filters search results to only include upcoming movies from the current year or later.
  * Only used when upcoming_only=true is explicitly passed.
@@ -82,18 +71,7 @@ function filterUpcomingMovies(results: SearchResult[]): SearchResult[] {
 }
 
 async function fetchSearchPage(url: string, tmdbToken: string): Promise<SearchPage> {
-  const tmdbResponse = await fetchWithRetry(url, {
-    headers: {
-      'Authorization': `Bearer ${tmdbToken}`,
-      'Content-Type': 'application/json',
-    },
-  }, { timeoutMs: 10_000, retries: 1 })
-
-  if (!tmdbResponse.ok) {
-    throw new TMDbApiError(tmdbResponse.status, await tmdbResponse.text())
-  }
-
-  const tmdbData: TMDbSearchResponse = await tmdbResponse.json()
+  const tmdbData = await tmdbGetJson<TMDbSearchResponse>(url, tmdbToken)
 
   return {
     page: tmdbData.page,
@@ -150,16 +128,14 @@ Deno.serve(async (req) => {
       tmdbUrl.searchParams.set('year', year.toString())
     }
 
-    // Case and surrounding whitespace never change what TMDb returns, so
-    // normalizing them in the key collapses "Dune", "dune " and " DUNE" onto
-    // one entry. Only the key is normalized -- TMDb still gets the raw query.
-    const cacheKey = buildCacheKey('search', {
-      q: query.trim().toLowerCase(),
-      page,
-      year,
-    })
+    // The key is derived from the request URL, so every param that reaches
+    // TMDb is in it by construction. Case and surrounding whitespace never
+    // change what TMDb returns, so the query is overridden with a normalized
+    // form -- collapsing "Dune", "dune " and " DUNE" onto one entry. Only the
+    // key is normalized; TMDb still gets the raw query.
+    const cacheKey = cacheKeyForUrl('search', tmdbUrl, { query: query.trim().toLowerCase() })
 
-    const { payload } = await cachedTmdbFetch<SearchPage>(
+    const payload = await cachedTmdbFetch<SearchPage>(
       cacheKey,
       SEARCH_TTL_SECONDS,
       () => fetchSearchPage(tmdbUrl.toString(), tmdbToken),
@@ -179,14 +155,7 @@ Deno.serve(async (req) => {
     // Only reached when the cache had nothing to fall back on -- a hit or an
     // expired entry answers a rate-limited or failing TMDb before this.
     if (error instanceof TMDbApiError) {
-      if (error.status === 401) {
-        return errorResponse('TMDb API authentication failed', 401)
-      }
-      if (error.status === 429) {
-        return errorResponse('TMDb rate limit exceeded. Try again later.', 429)
-      }
-      log.error('TMDb API error', { status: error.status, body: error.body })
-      return errorResponse('Failed to search movies', 502)
+      return tmdbErrorResponse(error, log, 'Failed to search movies')
     }
     return internalErrorResponse(error, log)
   }
