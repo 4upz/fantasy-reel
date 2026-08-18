@@ -4,6 +4,7 @@ import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
 import { topAvailable } from './top-available.js'
+import { clearFunctionCaches } from '../utils/functions-client.js'
 
 function mockFetchOk(results: unknown[]) {
   vi.stubGlobal(
@@ -23,6 +24,9 @@ describe('/top-available', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllGlobals()
+    // Every test below calls browseMovies with the same options, so without
+    // clearing the cache only the first test's fetch stub would ever run.
+    clearFunctionCaches()
   })
 
   it('replies with a friendly message when the channel is not linked', async () => {

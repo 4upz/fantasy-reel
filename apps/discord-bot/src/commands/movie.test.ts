@@ -4,6 +4,7 @@ import { mockSupabase, makeInteraction } from '../_test/helpers.js'
 vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
 import { movie } from './movie.js'
+import { clearFunctionCaches } from '../utils/functions-client.js'
 
 function mockFetchOk(body: unknown) {
   vi.stubGlobal(
@@ -30,6 +31,9 @@ describe('/movie', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.unstubAllGlobals()
+    // Several tests below re-query the same title/prefix and expect that
+    // test's own fetch stub to run, not a cached result from an earlier test.
+    clearFunctionCaches()
   })
 
   it('looks up a movie by name and shows league roster context', async () => {

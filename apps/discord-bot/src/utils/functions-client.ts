@@ -1,8 +1,29 @@
 import { config } from '../config.js'
+import { TtlCache } from './ttl-cache.js'
 
 export interface EdgeFunctionResult<T> {
   data: T | null
   error: string | null
+}
+
+/** Never cache a result that came back as an error -- only successful lookups are stable enough to reuse. */
+function isSuccess<T>(result: EdgeFunctionResult<T>): boolean {
+  return result.error === null
+}
+
+const SEARCH_TTL_MS = 10 * 60 * 1000 // 10 minutes -- autocomplete re-queries the same prefixes constantly
+const DETAILS_TTL_MS = 60 * 60 * 1000 // 1 hour -- movie metadata rarely changes within a session
+const BROWSE_TTL_MS = 15 * 60 * 1000 // 15 minutes -- top-available filters this against league state per call, so the raw list is safe to reuse
+
+const searchCache = new TtlCache<string, EdgeFunctionResult<SearchMoviesResponse>>(SEARCH_TTL_MS)
+const detailsCache = new TtlCache<number, EdgeFunctionResult<MovieDetailsResponse>>(DETAILS_TTL_MS)
+const browseCache = new TtlCache<string, EdgeFunctionResult<BrowseMoviesResponse>>(BROWSE_TTL_MS)
+
+/** Test-only: drops all cached entries so each test starts from a clean cache. */
+export function clearFunctionCaches(): void {
+  searchCache.clear()
+  detailsCache.clear()
+  browseCache.clear()
 }
 
 async function callEdgeFunction<T>(functionName: string, body: unknown): Promise<EdgeFunctionResult<T>> {
@@ -51,7 +72,15 @@ export function searchMovies(
   query: string,
   opts: { page?: number; upcoming_only?: boolean } = {}
 ): Promise<EdgeFunctionResult<SearchMoviesResponse>> {
-  return callEdgeFunction('search-movies', { query, ...opts })
+  // Autocomplete re-sends near-identical queries on almost every keystroke, so
+  // normalize the query before keying the cache -- "Dune", "dune", " Dune "
+  // should all share one entry.
+  const cacheKey = JSON.stringify({ query: query.trim().toLowerCase(), ...opts })
+  return searchCache.getOrFetch(
+    cacheKey,
+    () => callEdgeFunction('search-movies', { query, ...opts }),
+    isSuccess
+  )
 }
 
 export interface BrowseMoviesResult extends TMDbSearchResult {
@@ -75,7 +104,10 @@ export function browseMovies(
     trending?: boolean
   } = {}
 ): Promise<EdgeFunctionResult<BrowseMoviesResponse>> {
-  return callEdgeFunction('browse-movies', opts)
+  // Safe to cache the raw browse response: callers (e.g. top-available) filter
+  // it against per-league roster state after the fetch, not before.
+  const cacheKey = JSON.stringify(opts)
+  return browseCache.getOrFetch(cacheKey, () => callEdgeFunction('browse-movies', opts), isSuccess)
 }
 
 export interface MovieDetailsResponse {
@@ -97,5 +129,9 @@ export interface MovieDetailsResponse {
 }
 
 export function getMovieDetails(tmdbId: number): Promise<EdgeFunctionResult<MovieDetailsResponse>> {
-  return callEdgeFunction('get-movie-details', { tmdb_id: tmdbId })
+  return detailsCache.getOrFetch(
+    tmdbId,
+    () => callEdgeFunction('get-movie-details', { tmdb_id: tmdbId }),
+    isSuccess
+  )
 }
