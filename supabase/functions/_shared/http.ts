@@ -127,6 +127,10 @@ export async function fetchWithRetry(
 
     try {
       const response = await fetchWithTimeout(url, init, timeoutMs, fetchImpl)
+      // Any earlier retryable response is superseded by this one and its body
+      // will never be read; cancel it so the retry doesn't leak a connection
+      // until GC. Whichever response is ultimately returned stays consumable.
+      if (lastResponse) await lastResponse.body?.cancel().catch(() => {})
       if (response.ok || (response.status < 500 && response.status !== 429)) return response
       lastResponse = response
       delayMs = retryDelayMs(response, backoffMs)

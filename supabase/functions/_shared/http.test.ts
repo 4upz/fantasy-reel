@@ -30,6 +30,21 @@ function rateLimited(retryAfter?: string): Response {
   })
 }
 
+/** A response whose body records whether it was cancelled. */
+function cancelTracking(status: number): { response: Response; wasCancelled: () => boolean } {
+  let cancelled = false
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('body'))
+      controller.close()
+    },
+    cancel() {
+      cancelled = true
+    },
+  })
+  return { response: new Response(body, { status }), wasCancelled: () => cancelled }
+}
+
 Deno.test('fetchWithRetry - retries a 429 and returns the recovered response', async () => {
   const { impl, callCount } = stubResponses([rateLimited('0'), new Response('ok', { status: 200 })])
 
@@ -137,6 +152,18 @@ Deno.test('fetchWithRetry - retries thrown errors and rethrows when none produce
     'network down'
   )
   assertEquals(callCount(), 2)
+})
+
+Deno.test('fetchWithRetry - a superseded retryable response has its body cancelled', async () => {
+  const first = cancelTracking(429)
+  const second = cancelTracking(200)
+  const { impl } = stubResponses([first.response, second.response])
+  const response = await fetchWithRetry(URL_UNDER_TEST, {}, { retries: 1, backoffMs: 0 }, impl)
+  assertEquals(response.status, 200)
+  assertEquals(first.wasCancelled(), true)
+  // The returned response stays consumable.
+  assertEquals(second.wasCancelled(), false)
+  assertEquals(await response.text(), 'body')
 })
 
 Deno.test('fetchWithRetry - a later network error still returns an earlier response', async () => {
