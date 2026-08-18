@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { callEdgeFunction } from '@/utils/supabase/functions'
-import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
+import { useMovieDetails } from '@/hooks/useMovieDetails'
+import type { TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import { CloseIcon, StarIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
@@ -25,23 +25,10 @@ export default function MovieQuickPreview({
   onDraft,
   picking,
 }: Props) {
-  const [details, setDetails] = useState<TMDbMovieDetails | null>(null)
-  const [loading, setLoading] = useState(true)
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false)
-
-  useEffect(() => {
-    async function fetchDetails(): Promise<void> {
-      setLoading(true)
-      const { data } = await callEdgeFunction<TMDbMovieDetails>('get-movie-details', {
-        body: { tmdb_id: movie.tmdb_id },
-      })
-      if (data) {
-        setDetails(data)
-      }
-      setLoading(false)
-    }
-    fetchDetails()
-  }, [movie.tmdb_id])
+  // A failed lookup is not worth an error state: the caller already knows the
+  // title, poster and release date, so the panel still reads fine.
+  const { details, isLoading: loading } = useMovieDetails(movie.tmdb_id)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {

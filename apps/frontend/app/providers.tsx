@@ -8,6 +8,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SWRConfig
       value={{
+        // Nothing in this app changes just because the tab regained focus, and
+        // the movie data behind most keys is billed per TMDb call.
+        revalidateOnFocus: false,
         onError: (err: Error, key: string) => {
           captureException(err, { tags: { source: 'swr' }, extra: { key } })
         },

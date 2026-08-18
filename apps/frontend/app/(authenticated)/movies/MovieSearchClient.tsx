@@ -3,12 +3,12 @@
 import { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Clapperboard, Search } from 'lucide-react'
-import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
 import { useScrollPosition } from '@/hooks/useScrollPosition'
 import { useDebounce } from '@/hooks/useDebounce'
 import { useMovieSearch } from '@/hooks/useMovieSearch'
-import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
+import { useMovieDetails } from '@/hooks/useMovieDetails'
+import type { TMDbSearchResult } from '@/types'
 import TMDbAttribution from '@/components/TMDbAttribution'
 import MovieSearchBar from './components/MovieSearchBar'
 import MovieFilters from './components/MovieFilters'
@@ -39,10 +39,12 @@ export default function MovieSearchClient(): React.ReactElement {
     loadMore,
   } = useMovieSearch(debouncedQuery, { year })
 
-  // Movie detail modal state
+  // Movie detail modal state -- details are cached per movie, so re-opening one
+  // already viewed this session costs nothing.
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
-  const [movieDetails, setMovieDetails] = useState<TMDbMovieDetails | null>(null)
-  const [loadingDetails, setLoadingDetails] = useState(false)
+  const { details: movieDetails, isLoading: loadingDetails } = useMovieDetails(
+    selectedMovie?.tmdb_id ?? null
+  )
 
   function handleInputChange(value: string): void {
     setInputValue(value)
@@ -55,25 +57,12 @@ export default function MovieSearchClient(): React.ReactElement {
     setInputValue('')
   }
 
-  async function handleMovieClick(movie: TMDbSearchResult): Promise<void> {
+  function handleMovieClick(movie: TMDbSearchResult): void {
     setSelectedMovie(movie)
-    setLoadingDetails(true)
-    setMovieDetails(null)
-
-    const { data, error: detailError } = await callEdgeFunction<TMDbMovieDetails>(
-      'get-movie-details',
-      { body: { tmdb_id: movie.tmdb_id } }
-    )
-
-    if (data && !detailError) {
-      setMovieDetails(data)
-    }
-    setLoadingDetails(false)
   }
 
   function handleCloseModal(): void {
     setSelectedMovie(null)
-    setMovieDetails(null)
   }
 
   const hasResults = results.length > 0
