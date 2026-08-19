@@ -25,7 +25,8 @@ let sentryPromise: Promise<SentryModule> | null = null
  */
 function parseSampleRate(raw: string | undefined, fallback: number): number {
   const parsed = Number(raw)
-  if (raw === undefined || Number.isNaN(parsed)) return fallback
+  // Number('') === 0, so an empty var must be treated as unset, not as 0.
+  if (raw === undefined || raw.trim() === '' || Number.isNaN(parsed)) return fallback
   return Math.min(1, Math.max(0, parsed))
 }
 
@@ -36,6 +37,17 @@ function loadSentry(): Promise<SentryModule> | null {
       dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
       tracesSampleRate: parseSampleRate(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE, 0.1),
       sendDefaultPii: false,
+      // Session Replay: masks all text and blocks all media by default, so
+      // recordings stay PII-safe without per-component opt-outs.
+      integrations: [Sentry.replayIntegration()],
+      replaysSessionSampleRate: parseSampleRate(
+        process.env.NEXT_PUBLIC_SENTRY_REPLAYS_SESSION_SAMPLE_RATE,
+        0.1
+      ),
+      replaysOnErrorSampleRate: parseSampleRate(
+        process.env.NEXT_PUBLIC_SENTRY_REPLAYS_ON_ERROR_SAMPLE_RATE,
+        1.0
+      ),
     })
     return Sentry
   })
