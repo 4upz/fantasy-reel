@@ -17,9 +17,10 @@ jobs:
   e2e-tests:
     name: E2E Tests (Chromium)
     runs-on: ubuntu-latest
-    # The suite takes ~13-18 min when healthy; 40 leaves margin for dev-server
-    # compile overhead without letting a truly hung run block CI for long.
-    timeout-minutes: 40
+    # Tests run against a production build (see the Build step below), so the
+    # suite is compile-free at test time. Healthy runs finish well under 15 min
+    # including the ~2-3 min build; 25 catches a truly hung run early.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout repository
@@ -43,7 +44,21 @@ jobs:
           version: 2.111.0
 
       - name: Start Supabase
-        run: supabase start
+        # The CLI intermittently 502s while the stack is coming up
+        # ("An invalid response was received from the upstream server"),
+        # which used to fail the whole run in ~5 min. Retry a couple of
+        # times with a clean stop in between before giving up.
+        run: |
+          for attempt in 1 2 3; do
+            if supabase start; then
+              exit 0
+            fi
+            echo "supabase start failed (attempt ${attempt}); retrying..."
+            supabase stop --no-backup || true
+            sleep 15
+          done
+          echo "supabase start failed after 3 attempts"
+          exit 1
 
       - name: Get Supabase keys and set environment
         id: supabase-keys
@@ -55,13 +70,32 @@ jobs:
           echo "service-role-key=$SERVICE_KEY" >> $GITHUB_OUTPUT
 
       - name: Reset database
-        run: supabase db reset --no-seed
+        # Same intermittent-502 hazard as supabase start; the reset is
+        # idempotent, so retrying is safe.
+        run: |
+          for attempt in 1 2 3; do
+            if supabase db reset --no-seed; then
+              exit 0
+            fi
+            echo "supabase db reset failed (attempt ${attempt}); retrying..."
+            sleep 15
+          done
+          echo "supabase db reset failed after 3 attempts"
+          exit 1
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
         working-directory: apps/frontend
 
-      # Note: No build step needed - Playwright's webServer config starts the dev server
+      # Build a production bundle so tests run against `next start` instead of
+      # a dev server. `next dev` compiles routes on first hit, and 4 parallel
+      # workers hammering an uncompiled app on a 4-vCPU runner is what caused
+      # the 30s page.goto timeouts, 22-28 min runs, and most of the flakes.
+      # NEXT_PUBLIC_* vars are inlined at build time and were exported to
+      # GITHUB_ENV by the "Get Supabase keys" step above.
+      - name: Build frontend
+        run: npm run build
+        working-directory: apps/frontend
 
       - name: Run E2E tests
         run: npm run test:e2e -- --project=chromium
@@ -69,13 +103,16 @@ jobs:
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase-keys.outputs.service-role-key }}
 
+      # Reports are only uploaded on failure and expire quickly: uploading
+      # every run (plus failure videos) exhausted the account's artifact
+      # storage quota, which itself started failing runs.
       - name: Upload Playwright report
-        if: always()
+        if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-report
           path: apps/frontend/playwright-report/
-          retention-days: 7
+          retention-days: 3
 
       - name: Upload test artifacts
         if: failure()
@@ -83,4 +120,4 @@ jobs:
         with:
           name: test-artifacts
           path: apps/frontend/test-results/
-          retention-days: 7
+          retention-days: 3

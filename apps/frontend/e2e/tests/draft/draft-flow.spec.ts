@@ -1,4 +1,4 @@
-import { test, expect, loginAs } from '../../fixtures/league.fixture'
+import { test, expect } from '../../fixtures/league.fixture'
 import { setupAllMocks, MOCK_MOVIES } from '../../helpers/mock-api.helper'
 import { updateLeagueStatus } from '../../helpers/supabase.helper'
 
@@ -18,22 +18,16 @@ import { updateLeagueStatus } from '../../helpers/supabase.helper'
  * - draft-progress: Progress ring showing picks made / total
  * - pick-order-queue: Shows upcoming pick order
  *
- * NOTE: Turn-based tests (your turn, waiting state, making picks) require
- * draft_order to be set on league_participants. The current fixture doesn't
- * set draft_order, and the start-draft Edge Function doesn't either.
- * These tests are marked as fixme until the fixture sets draft_order.
+ * NOTE: Turn-based assertions (your turn, waiting state, making picks) rely on
+ * the draft_order the draftReadyLeague fixture sets: owner=1, testUser=2,
+ * secondUser=3. The tests still marked fixme need something the fixture can't
+ * provide: real-time propagation across two contexts, or a real Edge Function
+ * pick that passes turn validation.
  */
 test.describe('Draft Flow', () => {
-  test('owner can start draft @critical', async ({
-    authenticatedPage,
-    draftReadyLeague,
-    leagueOwner,
-  }) => {
-    const page = authenticatedPage
+  test('owner can start draft @critical', async ({ leagueOwnerPage, draftReadyLeague }) => {
+    const page = leagueOwnerPage
     await setupAllMocks(page)
-
-    // Login as owner
-    await loginAs(page, leagueOwner)
 
     // Navigate to draft page (league is in 'setup' status)
     await page.goto(`/league/${draftReadyLeague.id}/draft`)
@@ -48,14 +42,9 @@ test.describe('Draft Flow', () => {
     await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 15000 })
   })
 
-  test('shows movie picker with search functionality', async ({
-    authenticatedPage,
-    draftReadyLeague,
-    leagueOwner,
-  }) => {
-    const page = authenticatedPage
+  test('shows movie picker with search functionality', async ({ leagueOwnerPage, draftReadyLeague }) => {
+    const page = leagueOwnerPage
     await setupAllMocks(page)
-    await loginAs(page, leagueOwner)
 
     // Set up drafting state directly
     await updateLeagueStatus(draftReadyLeague.id, 'drafting')
@@ -83,13 +72,11 @@ test.describe('Draft Flow', () => {
   })
 
   test('user can make a draft pick when it is their turn @critical', async ({
-    authenticatedPage,
+    leagueOwnerPage,
     draftReadyLeague,
-    leagueOwner,
   }) => {
-    const page = authenticatedPage
+    const page = leagueOwnerPage
     await setupAllMocks(page)
-    await loginAs(page, leagueOwner)
 
     // Set league to drafting status
     await updateLeagueStatus(draftReadyLeague.id, 'drafting')
@@ -147,37 +134,20 @@ test.describe('Draft Flow', () => {
 test.describe('Multi-User Draft (Real-time)', () => {
   // Multi-user real-time tests are inherently flaky due to
   // real-time subscription timing and multiple browser contexts.
-  test.fixme('picks propagate to all users in real-time @realtime', async ({
-    browser,
-    draftReadyLeague,
-    leagueOwner,
-    testUser,
-  }) => {
+  test.fixme('picks propagate to all users in real-time @realtime', async () => {
     // This test requires:
-    // 1. draft_order set on participants (not in fixture)
-    // 2. Two browser contexts connected via real-time subscriptions
-    // 3. Reliable real-time propagation timing
+    // 1. Two browser contexts connected via real-time subscriptions
+    // 2. Reliable real-time propagation timing
   })
 
-  test.fixme('turn indicator updates when pick is made', async ({
-    browser,
-    draftReadyLeague,
-    leagueOwner,
-    testUser,
-    secondUser,
-  }) => {
-    // Requires draft_order + reliable real-time propagation.
+  test.fixme('turn indicator updates when pick is made', async () => {
+    // Requires reliable real-time propagation across contexts.
   })
 })
 
 test.describe('Draft Progress', () => {
-  test('shows progress indicator', async ({
-    authenticatedPage,
-    draftReadyLeague,
-    leagueOwner,
-  }) => {
-    const page = authenticatedPage
-    await loginAs(page, leagueOwner)
+  test('shows progress indicator', async ({ leagueOwnerPage, draftReadyLeague }) => {
+    const page = leagueOwnerPage
     await updateLeagueStatus(draftReadyLeague.id, 'drafting')
 
     await page.goto(`/league/${draftReadyLeague.id}/draft`)
@@ -189,12 +159,8 @@ test.describe('Draft Progress', () => {
     await expect(page.getByTestId('draft-progress')).toContainText(/0/)
   })
 
-  test.fixme('progress updates after each pick', async ({
-    authenticatedPage,
-    draftReadyLeague,
-    leagueOwner,
-  }) => {
-    // Requires draft_order on participants + making a real draft pick
-    // via the Edge Function which validates turn order.
+  test.fixme('progress updates after each pick', async () => {
+    // Requires making a real draft pick via the Edge Function,
+    // which validates turn order.
   })
 })
