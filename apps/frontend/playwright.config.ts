@@ -57,14 +57,17 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:3000',
 
-    // Capture trace on first retry for debugging
+    // Capture trace on first retry for debugging. Traces include a
+    // screencast, so separate video recording is disabled below.
     trace: 'on-first-retry',
 
     // Capture screenshots on failure
     screenshot: 'only-on-failure',
 
-    // Retain video on failure for debugging
-    video: 'retain-on-failure',
+    // No standalone video: recording every test slowed workers down, and
+    // retained failure videos exhausted the CI artifact storage quota
+    // (which then failed otherwise-green runs). Traces cover debugging.
+    video: 'off',
 
     /**
      * Action timeout - time to wait for click(), fill(), etc.
@@ -132,21 +135,23 @@ export default defineConfig({
   /**
    * Web Server Configuration
    *
-   * In CI: Start fresh dev server
-   * Locally: Reuse existing server (faster iteration)
+   * In CI: serve the production build (`next start`). The workflow runs
+   * `next build` first. A dev server compiles every route on first hit,
+   * and parallel workers hitting an uncompiled app on a small runner is
+   * what caused the 30s navigation timeouts and 22-28 min suite runs.
+   * Locally: reuse an already-running dev server (faster iteration).
    */
   webServer: {
-    // Plain `next dev` (webpack), not `npm run dev` (--turbopack): the Sentry
-    // SDK doesn't support Turbopack until Next 15.4.1, and running the E2E
-    // suite against that combination degrades the dev server app-wide.
-    // Production builds use webpack, so this also matches prod more closely.
-    // Revert to `npm run dev` after upgrading Next past 15.4.1.
-    command: 'npx next dev',
+    // Local runs use plain `next dev` (webpack), not `npm run dev`
+    // (--turbopack): the Sentry SDK doesn't support Turbopack until Next
+    // 15.4.1, and running the E2E suite against that combination degrades
+    // the dev server app-wide. Revert after upgrading Next past 15.4.1.
+    command: process.env.CI ? 'npx next start' : 'npx next dev',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000, // 2 minutes to start
 
-    // Environment variables for the dev server
+    // Environment variables for the server
     env: {
       // Ensure we're using local Supabase
       NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',

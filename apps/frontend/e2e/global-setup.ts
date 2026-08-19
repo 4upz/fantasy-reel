@@ -22,7 +22,7 @@ import { MOCK_MOVIES } from './fixtures/test-data'
  * - https://supabase.com/docs/guides/local-development/testing
  */
 
-setup('global setup', async () => {
+setup('global setup', async ({ baseURL }) => {
   console.log('🔧 Running E2E test setup...')
 
   // Verify Supabase connection
@@ -37,10 +37,12 @@ setup('global setup', async () => {
   await seedTestMovies()
 
   // Pre-compile the hottest routes so the first tests don't pay the dev
-  // server's on-demand compile cost (early specs were timing out on the
-  // cold /login → /dashboard path in CI).
-  console.log('  Warming up dev server routes...')
-  await warmUpRoutes()
+  // server's on-demand compile cost. Only relevant locally: CI serves a
+  // production build, which has nothing to compile.
+  if (!process.env.CI) {
+    console.log('  Warming up dev server routes...')
+    await warmUpRoutes(baseURL ?? 'http://localhost:3000')
+  }
 
   console.log('✅ E2E test setup complete')
 })
@@ -49,8 +51,7 @@ setup('global setup', async () => {
  * Hit the most-used routes once so Next.js dev compiles them before tests run.
  * Failures are non-fatal: tests will just pay the compile cost themselves.
  */
-async function warmUpRoutes(): Promise<void> {
-  const baseURL = 'http://localhost:3000'
+async function warmUpRoutes(baseURL: string): Promise<void> {
   const routes = ['/login', '/signup', '/dashboard', '/settings']
 
   await Promise.all(

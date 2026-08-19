@@ -213,9 +213,8 @@ export async function loginAs(page: Page, user: TestUser): Promise<void> {
   await page.fill('[data-testid="password-input"]', user.password)
   await page.click('[data-testid="login-button"]')
 
-  // Wait for redirect to dashboard. 30s matches the config's navigationTimeout:
-  // in CI the dev server compiles routes on first hit, and early tests routinely
-  // exceed 10s on the cold /login → /dashboard path.
+  // Wait for redirect to dashboard. 30s matches the config's navigationTimeout;
+  // locally the dev server still compiles /login → /dashboard on first hit.
   await page.waitForURL('/dashboard', { timeout: 30000 })
 }
 
