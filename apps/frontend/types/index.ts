@@ -155,6 +155,15 @@ export interface TeamHolding {
 }
 
 /**
+ * The `team_holdings` columns the conditional-drop picker needs: enough to name
+ * a holding, and enough to explain why one cannot be dropped.
+ */
+export type DroppableHolding = Pick<
+  TeamHolding,
+  'holding_id' | 'source' | 'title' | 'release_date' | 'counterpicked_by_team_id' | 'poster_url'
+>
+
+/**
  * The movie a holding is for, lifted back out of the flat view row.
  *
  * Narrower than `Movie` on purpose: these are the fields the roster and
@@ -407,6 +416,15 @@ export interface PickupBid {
   countered_at: string | null
   response_deadline: string | null
   processing_deadline: string
+  /**
+   * Team-chosen rank among its own pending bids; 1 is the one it wants most.
+   * Never decides who wins a contest -- only which of a team's own wins it
+   * keeps when it wins more than it has room for.
+   */
+  priority: number
+  /** Holding released only if this bid wins. At most one is ever set. */
+  conditional_drop_draft_pick_id: string | null
+  conditional_drop_pickup_id: string | null
 }
 
 export interface TeamBudget {

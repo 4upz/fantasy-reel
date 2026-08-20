@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import type { CounterpickBid, PickupBid } from '@/types'
 import BidCard from './BidCard'
 import CounterpickBidCard from './CounterpickBidCard'
+import BidPriorityList from './BidPriorityList'
 import CounterpickPriorityList from './CounterpickPriorityList'
 import { groupBy, isMovieBiddable, latestOpenCounterWindow } from './utils'
 import { useBiddingContext } from '../bidding/BiddingContext'
@@ -80,8 +81,11 @@ function UnifiedBidSection({
 
 export default function ActiveBidsPanel(): React.ReactElement {
   const {
+    league,
     teamId,
     bidding,
+    usedRosterSlots,
+    myHoldings,
     biddingCounterpickSlots,
     canPlaceCounterpickBid,
     isCounterBidPhase,
@@ -98,8 +102,15 @@ export default function ActiveBidsPanel(): React.ReactElement {
     biddingCounterpickCount,
     cancelBid,
     cancelCounterpickBid,
+    setBidPriorities,
     setCounterpickBidPriorities,
   } = bidding
+
+  /** Holding id -> title, so a bid can name the movie it would drop. */
+  const holdingTitles = useMemo(
+    () => new Map(myHoldings.map((holding) => [holding.holding_id, holding.title])),
+    [myHoldings]
+  )
 
   const hasCounterpicks = biddingCounterpickSlots > 0
 
@@ -158,11 +169,20 @@ export default function ActiveBidsPanel(): React.ReactElement {
     const canCounter = isMovieBiddable(releaseDate)
 
     if (item.type === 'pickup') {
+      // Only the bid's own team holds the drop target, so only they can be
+      // shown its title -- another team's roster is not this card's business.
+      const dropHoldingId =
+        item.bid.conditional_drop_pickup_id ?? item.bid.conditional_drop_draft_pick_id
+      const dropTitle = isOwner && dropHoldingId
+        ? holdingTitles.get(dropHoldingId) ?? null
+        : null
+
       return (
         <BidCard
           bid={item.bid}
           isOwner={isOwner}
           bidType="pickup"
+          dropTitle={dropTitle}
           onCancel={isOwner && !isCounterBidPhase ? () => handleCancelBid(item.bid.id) : undefined}
           cancelLocked={isOwner && isCounterBidPhase}
           onCounter={canCounter ? () => openPlaceBid(item.bid) : undefined}
@@ -213,6 +233,17 @@ export default function ActiveBidsPanel(): React.ReactElement {
           {renderBidList(actionRequiredItems, true)}
         </UnifiedBidSection>
       )}
+
+      {/* Bid priority: which pickups the team keeps if more of its bids win than
+          it has roster room for. Deliberately separate from the counterpick list
+          below -- the two draw on different capacity pools, so ranking them
+          against each other would mean nothing. */}
+      <BidPriorityList
+        bids={myBids}
+        slots={league.total_slots}
+        used={usedRosterSlots}
+        onReorder={setBidPriorities}
+      />
 
       {/* Counterpick priority: which counterpicks the team keeps if more of its
           bids win than it has slots for. Only meaningful once counterpicks are

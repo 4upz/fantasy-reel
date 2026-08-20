@@ -343,14 +343,16 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                   </div>
                 </div>
 
-                {/* Pickup Slots Info */}
+                {/* Roster slots are pooled: the draft fills some, bidding the rest. */}
                 <div className="mt-3 p-2 bg-surface-hover rounded border border-border">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-foreground-secondary">Pickup Slots</span>
+                    <span className="text-foreground-secondary">Open after the draft</span>
                     <span className="font-medium text-gold">{pickupSlots} slots</span>
                   </div>
                   <p className="text-xs text-foreground-muted mt-0.5">
-                    {pickupSlots > 0 ? 'Available via bidding after draft' : 'No pickup slots'}
+                    {pickupSlots > 0
+                      ? 'Filled by bidding, or by dropping a movie and bidding on a replacement'
+                      : 'The draft fills every roster slot. Teams bid by dropping a movie first.'}
                   </p>
                 </div>
               </div>

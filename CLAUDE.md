@@ -745,6 +745,40 @@ League owners configure bidding via `/league/[id]/settings`:
        └── Email notifications sent to all bidders
 ```
 
+### Bid priority and conditional drops
+
+Teams may bid past a full roster. Two mechanisms keep that safe, both mirroring
+the counterpick system:
+
+- `pickup_bids.priority` ranks a team's own pending bids (1 = wanted most). It
+  never decides who wins a contest — the highest bid does. It decides which of
+  a team's own winning bids it keeps when it wins more than it has room for.
+  Priorities are **not** unique; gaps and duplicates normalize at processing
+  time, which keeps cancels and reorders from needing a transaction just to
+  avoid transient collisions. Reordered via `set-bid-priorities`.
+- `pickup_bids.conditional_drop_draft_pick_id` / `conditional_drop_pickup_id`
+  name a holding released only if that bid wins. `drop_limit` is charged only on
+  execution — a losing bid costs nothing. A target that has become undroppable
+  (released, counterpicked, traded away) **degrades the bid to a plain one**
+  rather than voiding it: the team wanted the movie, and the drop was only the
+  means of paying for it.
+
+Roster slots are **pooled**: bidding capacity is `total_slots` minus all active
+holdings from `team_holdings`, draft picks and pickups alike. `draft_slots` only
+governs how many arrive in the draft. That is what lets a team drop a badly
+drafted movie to make room for a pickup.
+
+`place-bid` deliberately has **no** capacity gate. A slot can free up before
+processing, so refusing the bid a week early forecloses that; a bid that still
+cannot be honored loses at processing with reason `no_slots`.
+
+`_shared/bid-resolution.ts` resolves both bid types — every contest together, at
+most one award per team per pass, then re-check capacity (slots, budget, drop
+allowance). **Do not go back to resolving contests independently**: that is what
+let teams exceed both their roster cap and their budget. Keep the module free of
+Supabase calls; its testability without a database is why the ordering rules are
+trustworthy.
+
 ### Edge Functions
 
 | Function | Purpose |

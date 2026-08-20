@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
-import { AlertTriangle, Film, Lock, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Film, Lock, Scissors, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
 import BidAmountAndDeadline from './BidAmountAndDeadline'
 import { getTmdbPosterUrl, getBidTypeClass } from './utils'
@@ -26,6 +26,11 @@ interface BidCardProps {
    * window's end so the card explains the delay instead of "Processing soon".
    */
   counterWindowClosesAt?: string | null
+  /**
+   * Title of the movie this bid drops if it wins, or null when it carries no
+   * conditional drop. Only ever set for the bid's own team.
+   */
+  dropTitle?: string | null
 }
 
 interface CancelBidModalProps {
@@ -158,7 +163,7 @@ function CancelBidModal({
   )
 }
 
-export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt }: BidCardProps) {
+export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt, dropTitle }: BidCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false)
 
   const movieData = bid.movie_data as {
@@ -228,6 +233,16 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
               processingDeadline={bid.processing_deadline}
               counterWindowClosesAt={counterWindowClosesAt}
             />
+
+            {dropTitle && (
+              <span
+                className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium bg-warning-bg/30 text-warning border border-warning/20"
+                data-testid="conditional-drop-chip"
+              >
+                <Scissors className="w-3 h-3 shrink-0" />
+                <span className="truncate">Drops {dropTitle} if won</span>
+              </span>
+            )}
 
             {isOutbid && (
               <div className="flex items-center gap-1.5 mt-2 text-warning text-sm font-medium">

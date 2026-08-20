@@ -9,7 +9,11 @@ interface LayoutProps {
 }
 
 /** The `team_holdings` columns this layout needs: who holds what movie, and how. */
-type HoldingRow = Pick<TeamHolding, 'team_id' | 'source' | 'tmdb_id'>
+type HoldingRow = Pick<
+  TeamHolding,
+  'team_id' | 'source' | 'tmdb_id' | 'holding_id' | 'title'
+  | 'release_date' | 'counterpicked_by_team_id' | 'poster_url'
+>
 
 /**
  * Loads everything both bidding tabs need, once. Living in the layout keeps the
@@ -59,7 +63,9 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
       .select(`*, teams (*), profiles (*)`)
       .eq('league_id', id)
       .eq('status', 'active'),
-    supabase.from('team_holdings').select(`team_id, source, tmdb_id`).eq('league_id', id),
+    supabase.from('team_holdings').select(
+      `team_id, source, tmdb_id, holding_id, title, release_date, counterpicked_by_team_id, poster_url`
+    ).eq('league_id', id),
     supabase.rpc('get_new_bid_cutoff', { p_league_id: id }),
     supabase.rpc('get_next_processing_deadline'),
   ])
@@ -89,9 +95,13 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
   const holdings = (holdingsResult.data ?? []) as HoldingRow[]
 
   const ownedTmdbIds = [...new Set(holdings.map((holding) => holding.tmdb_id))]
-  const usedPickupSlots = holdings.filter(
-    (holding) => holding.source === 'pickup' && holding.team_id === team.id
-  ).length
+
+  // Pooled roster: draft picks and pickups share total_slots, so dropping a
+  // drafted movie frees room for a pickup. That is what makes a conditional
+  // drop useful -- the movie a team most wants to swap out is usually one it
+  // drafted badly.
+  const myHoldings = holdings.filter((holding) => holding.team_id === team.id)
+  const usedRosterSlots = myHoldings.length
 
   return (
     <BiddingShell
@@ -99,7 +109,8 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
       teamId={team.id}
       teams={teams}
       ownedTmdbIds={ownedTmdbIds}
-      usedPickupSlots={usedPickupSlots}
+      usedRosterSlots={usedRosterSlots}
+      myHoldings={myHoldings}
       biddingCounterpickSlots={league.bidding_counterpick_slots ?? 0}
       newBidCutoffAt={(cutoffResult.data as string | null) ?? null}
       processingDeadline={(deadlineResult.data as string | null) ?? null}

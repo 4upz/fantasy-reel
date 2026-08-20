@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSelectedLayoutSegment } from 'next/navigation'
 import { Plus, Swords, Target } from 'lucide-react'
-import type { CounterpickBid, League, PickupBid, TeamWithOwner } from '@/types'
+import type { CounterpickBid, DroppableHolding, League, PickupBid, TeamWithOwner } from '@/types'
 import { useBidding } from '../hooks/useBidding'
 import BidWeekTimeline from '../components/BidWeekTimeline'
 import { getBidPhase } from '../components/utils'
@@ -59,15 +59,17 @@ function SlotStat({ label, used, total }: SlotStatProps): React.ReactElement {
 }
 
 /**
- * Why the bid button is disabled, or undefined when it isn't. Two different
- * dead ends reach the same greyed-out button, and they need different sentences.
+ * Why the bid button is disabled, or undefined when it isn't.
+ *
+ * A full roster is deliberately NOT a reason: a team can still bid with a
+ * conditional drop, or in the expectation that a slot frees up before
+ * processing. Only the new-bid cutoff with nothing in play is a genuine dead
+ * end, because the modal has no movies left to offer.
  */
 function getBidCtaTitle(
-  canPlaceBid: boolean,
   isCounterBidPhase: boolean,
   hasContestedBids: boolean,
 ): string | undefined {
-  if (!canPlaceBid) return 'All pickup slots are full — drop a movie to bid again'
   if (isCounterBidPhase && !hasContestedBids) {
     return 'New bids are closed and no movies are currently being bid on'
   }
@@ -79,7 +81,10 @@ interface Props {
   teamId: string
   teams: TeamWithOwner[]
   ownedTmdbIds: number[]
-  usedPickupSlots: number
+  /** Active holdings across the whole roster: draft picks and pickups share total_slots. */
+  usedRosterSlots: number
+  /** The team's own holdings, offered as conditional drop targets in the bid modal. */
+  myHoldings: DroppableHolding[]
   biddingCounterpickSlots: number
   /** From get_new_bid_cutoff(); null when the league has the cutoff disabled. */
   newBidCutoffAt: string | null
@@ -92,7 +97,8 @@ export default function BiddingShell({
   teamId,
   teams,
   ownedTmdbIds,
-  usedPickupSlots,
+  usedRosterSlots,
+  myHoldings,
   biddingCounterpickSlots,
   newBidCutoffAt,
   processingDeadline,
@@ -108,9 +114,10 @@ export default function BiddingShell({
   const { bids, myBids, budget, counterpickBids, myCounterpickBids, biddingCounterpickCount } = bidding
 
   const hasCounterpicks = biddingCounterpickSlots > 0
-  const pickupSlots = league.total_slots - league.draft_slots
+  // Roster slots are pooled: draft picks and pickups draw on the same total.
+  const rosterSlots = league.total_slots
+  const freeRosterSlots = Math.max(0, rosterSlots - usedRosterSlots)
   const remainingBudget = budget?.remaining_budget ?? 100
-  const canPlaceBid = usedPickupSlots < pickupSlots
   const canPlaceCounterpickBid = hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots
 
   // Past the cutoff the week belongs to counter bidding: only movies already
@@ -127,7 +134,7 @@ export default function BiddingShell({
   )
 
   // With no contest left to join, the bid modal has nothing to offer.
-  const canOpenBidModal = canPlaceBid && (!isCounterBidPhase || hasContestedBids)
+  const canOpenBidModal = !isCounterBidPhase || hasContestedBids
 
   const totalPendingBids = useMemo(
     () => [...myBids, ...myCounterpickBids]
@@ -153,9 +160,10 @@ export default function BiddingShell({
       teams,
       bidding,
       ownedTmdbIds,
-      usedPickupSlots,
+      usedRosterSlots,
+      freeRosterSlots,
+      myHoldings,
       biddingCounterpickSlots,
-      canPlaceBid,
       canPlaceCounterpickBid,
       isCounterBidPhase,
       canOpenBidModal,
@@ -168,9 +176,10 @@ export default function BiddingShell({
       teams,
       bidding,
       ownedTmdbIds,
-      usedPickupSlots,
+      usedRosterSlots,
+      freeRosterSlots,
+      myHoldings,
       biddingCounterpickSlots,
-      canPlaceBid,
       canPlaceCounterpickBid,
       isCounterBidPhase,
       canOpenBidModal,
@@ -199,7 +208,7 @@ export default function BiddingShell({
 
             <div className="hidden sm:block h-14 w-px bg-border" />
 
-            <SlotStat label="Pickups" used={usedPickupSlots} total={pickupSlots} />
+            <SlotStat label="Roster" used={usedRosterSlots} total={rosterSlots} />
 
             {hasCounterpicks && (
               <>
@@ -219,7 +228,7 @@ export default function BiddingShell({
             <button
               onClick={() => openPlaceBid()}
               disabled={!canOpenBidModal}
-              title={getBidCtaTitle(canPlaceBid, isCounterBidPhase, hasContestedBids)}
+              title={getBidCtaTitle(isCounterBidPhase, hasContestedBids)}
               className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto"
               data-testid="place-bid-button"
             >
@@ -279,6 +288,8 @@ export default function BiddingShell({
           existingBids={bids}
           ownedTmdbIds={ownedTmdbIds}
           onPlaceBid={bidding.placeBid}
+          myHoldings={myHoldings}
+          freeRosterSlots={freeRosterSlots}
           counterBidTarget={counterBidTarget}
           isCounterBidPhase={isCounterBidPhase}
           newBidCutoffAt={newBidCutoffAt}
