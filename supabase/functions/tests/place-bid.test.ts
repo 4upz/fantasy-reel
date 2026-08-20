@@ -589,6 +589,118 @@ Deno.test({
     })
 
     // ============================================================================
+    // Full roster & conditional drops
+    // ============================================================================
+
+    await t.step('accepts a bid when the roster is full', async () => {
+      // The slot gate is gone: a full roster no longer ends a team's season as
+      // a bidder. A bid that still cannot be honored loses at processing with
+      // reason 'no_slots' rather than being refused a week early.
+      const leagueId = await factory.createActiveLeague(uniqueName('full-roster-bid'))
+      const serviceClient = getServiceClient()
+
+      const team = (await factory.getTeamForUser(leagueId, client))!
+      const { data: league } = await serviceClient
+        .from('leagues').select('total_slots').eq('id', leagueId).single()
+      const { count: held } = await serviceClient
+        .from('team_holdings')
+        .select('*', { count: 'exact', head: true })
+        .eq('team_id', team.teamId)
+
+      for (let i = (held ?? 0); i < (league!.total_slots as number); i++) {
+        await factory.createPickupForUser(leagueId, client, {
+          tmdb_id: uniqueVoidTestTmdbId(),
+          title: `Roster Filler ${i}`,
+          release_date: '2099-06-01',
+        })
+      }
+
+      const result = await callPlaceBid(client, {
+        league_id: leagueId,
+        tmdb_id: uniqueVoidTestTmdbId(),
+        amount: 5,
+        movie_data: { ...testMovieData, title: 'Bid Past A Full Roster' },
+      })
+
+      assertEquals(result.error, undefined)
+      assertExists(result.bid)
+    })
+
+    await t.step('rejects a conditional drop the team does not hold', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('cond-drop-foreign'))
+
+      // A pickup belonging to the OTHER team in the league.
+      const foreignPickupId = await factory.createPickupForUser(leagueId, secondClient, {
+        tmdb_id: uniqueVoidTestTmdbId(),
+        title: 'Not Yours',
+        release_date: '2099-06-01',
+      })
+
+      const result = await callPlaceBid(client, {
+        league_id: leagueId,
+        tmdb_id: uniqueVoidTestTmdbId(),
+        amount: 5,
+        movie_data: { ...testMovieData, title: 'Foreign Drop Target' },
+        conditional_drop_pickup_id: foreignPickupId,
+      })
+
+      assertEquals(
+        result.error,
+        'You can only conditionally drop a movie your team currently holds',
+      )
+    })
+
+    await t.step('rejects two conditional drop targets', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('cond-drop-both'))
+
+      const ownPickupId = await factory.createPickupForUser(leagueId, client, {
+        tmdb_id: uniqueVoidTestTmdbId(),
+        title: 'Own Pickup',
+        release_date: '2099-06-01',
+      })
+      const ownDraftPicks = await factory.getDraftPicksForUser(leagueId, client)
+
+      const result = await callPlaceBid(client, {
+        league_id: leagueId,
+        tmdb_id: uniqueVoidTestTmdbId(),
+        amount: 5,
+        movie_data: { ...testMovieData, title: 'Two Drop Targets' },
+        conditional_drop_pickup_id: ownPickupId,
+        conditional_drop_draft_pick_id: ownDraftPicks[0].id,
+      })
+
+      assertEquals(result.error, 'Provide only one conditional drop target')
+    })
+
+    await t.step('accepts a bid carrying a valid conditional drop', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('cond-drop-ok'))
+
+      const ownPickupId = await factory.createPickupForUser(leagueId, client, {
+        tmdb_id: uniqueVoidTestTmdbId(),
+        title: 'Droppable',
+        release_date: '2099-06-01',
+      })
+
+      const result = await callPlaceBid(client, {
+        league_id: leagueId,
+        tmdb_id: uniqueVoidTestTmdbId(),
+        amount: 5,
+        movie_data: { ...testMovieData, title: 'With Conditional Drop' },
+        conditional_drop_pickup_id: ownPickupId,
+      })
+
+      assertEquals(result.error, undefined)
+      assertExists(result.bid)
+
+      // The target is only recorded, never dropped at bid time -- drop_limit is
+      // charged on execution, and this bid has not won anything yet.
+      const serviceClient = getServiceClient()
+      const { data: stillHeld } = await serviceClient
+        .from('pickups').select('dropped_at').eq('id', ownPickupId).single()
+      assertEquals(stillHeld!.dropped_at, null)
+    })
+
+    // ============================================================================
     // Cleanup
     // ============================================================================
 
