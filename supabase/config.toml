@@ -461,6 +461,9 @@ verify_jwt = false
 [functions.set-counterpick-bid-priorities]
 verify_jwt = false
 
+[functions.set-bid-priorities]
+verify_jwt = false
+
 [functions.cancel-counterpick-bid]
 verify_jwt = false
 
