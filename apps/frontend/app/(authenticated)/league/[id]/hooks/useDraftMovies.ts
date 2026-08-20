@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWRInfinite from 'swr/infinite'
+import { flattenMoviePages, MOVIE_PAGE_SWR_CONFIG, type MoviePageKey } from '@/utils/movies'
 import { edgeFetcher } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbSearchResponse } from '@/types'
 
@@ -38,14 +39,7 @@ type Request =
   | { mode: 'search'; query: string }
   | { mode: 'trending' }
 
-/**
- * SWR key for one page of one request: the function to call and the body to
- * call it with. SWR hashes the body stably (keys sorted, `undefined` dropped),
- * so two equivalent requests share one cache entry.
- */
-type PageKey = [functionName: string, body: Record<string, unknown>]
-
-function buildPageKey(request: Request, page: number): PageKey {
+function buildPageKey(request: Request, page: number): MoviePageKey {
   switch (request.mode) {
     case 'search':
       return ['search-movies', { query: request.query, page, upcoming_only: true }]
@@ -65,7 +59,7 @@ function buildPageKey(request: Request, page: number): PageKey {
   }
 }
 
-const fetcher = ([functionName, body]: PageKey): Promise<PaginatedResponse> =>
+const fetcher = ([functionName, body]: MoviePageKey): Promise<PaginatedResponse> =>
   edgeFetcher<PaginatedResponse>(functionName, body)
 
 interface UseDraftMoviesOptions {
@@ -102,39 +96,20 @@ export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMovie
   // A null key is SWR's "don't fetch": a hook that starts disabled sits idle
   // and fetches the moment its owner turns it on.
   const getKey = useCallback(
-    (index: number): PageKey | null => (enabled ? buildPageKey(request, index + 1) : null),
+    (index: number): MoviePageKey | null => (enabled ? buildPageKey(request, index + 1) : null),
     [enabled, request]
   )
 
-  const { data, error, isLoading, size, setSize } = useSWRInfinite(getKey, fetcher, {
-    // Paging in more movies must not re-request the pages already on screen.
-    revalidateFirstPage: false,
-    // Keys depend on the page index alone, never on the previous page, so
-    // pages can be revalidated concurrently instead of one after another.
-    parallel: true,
-    keepPreviousData: true,
-  })
+  const { data, error, isLoading, size, setSize } = useSWRInfinite(getKey, fetcher, MOVIE_PAGE_SWR_CONFIG)
 
-  const movies = useMemo(() => {
-    /*
-     * The drafted set is read here but deliberately left out of the deps:
-     * results are filtered when a page lands and then left alone, so a movie
-     * taken while the grid is open stays put and shows its "Drafted" overlay
-     * instead of silently vanishing out from under the cursor.
-     */
-    const seen = new Set<number>()
-    const result: TMDbSearchResult[] = []
-
-    for (const pageData of data ?? []) {
-      for (const movie of pageData.results) {
-        if (draftedTmdbIds.has(movie.tmdb_id) || seen.has(movie.tmdb_id)) continue
-        seen.add(movie.tmdb_id)
-        result.push(movie)
-      }
-    }
-    return result
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data])
+  /*
+   * The drafted set is read here but deliberately left out of the deps:
+   * results are filtered when a page lands and then left alone, so a movie
+   * taken while the grid is open stays put and shows its "Drafted" overlay
+   * instead of silently vanishing out from under the cursor.
+   */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const movies = useMemo(() => flattenMoviePages(data, draftedTmdbIds), [data])
 
   const lastPage = data && data.length > 0 ? data[data.length - 1] : undefined
   const page = lastPage?.page ?? 1
