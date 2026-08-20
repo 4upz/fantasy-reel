@@ -30,7 +30,7 @@ import {
   resolveCounterpickWinners,
   resolveTargetRevalidation,
   type TargetVoidReason,
-} from '../_shared/counterpick-resolution.ts'
+} from '../_shared/bid-resolution.ts'
 import {
   getCounterpickNoSlotsEmailHtml,
   getCounterpickNoSlotsEmailText,

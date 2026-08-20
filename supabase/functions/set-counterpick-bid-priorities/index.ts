@@ -4,7 +4,7 @@
  * Reorders a team's pending counterpick bids. Priority decides which counterpicks
  * the team keeps when more of its bids win than it has
  * `leagues.bidding_counterpick_slots` for -- see process-bids and
- * _shared/counterpick-resolution.ts (issue #24).
+ * _shared/bid-resolution.ts (issue #24).
  *
  * Request:  { league_id: string, bid_ids: string[] }  // most wanted first
  * Response: { bids: CounterpickBid[], message: string }

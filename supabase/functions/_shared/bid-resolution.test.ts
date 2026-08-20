@@ -7,7 +7,7 @@ import {
   resolveCounterpickWinners,
   resolveTargetRevalidation,
   type ResolvableCounterpickBid,
-} from './counterpick-resolution.ts'
+} from './bid-resolution.ts'
 
 let placedCounter = 0
 

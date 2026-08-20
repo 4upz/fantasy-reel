@@ -8,7 +8,7 @@
  * trading it to the bidder itself. This suite exercises the revalidation pass
  * that catches that at processing time, see `revalidateCounterpickTargets` in
  * process-bids/index.ts and `resolveTargetRevalidation` in
- * _shared/counterpick-resolution.ts.
+ * _shared/bid-resolution.ts.
  *
  * Requires: npx supabase start
  */
