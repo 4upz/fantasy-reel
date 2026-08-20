@@ -61,6 +61,11 @@ interface PickupBid {
   countered_at: string | null
   response_deadline: string | null
   processing_deadline: string
+  /** Team-chosen rank among its own pending bids; 1 is the one it wants most. */
+  priority: number
+  /** Holding released only if this bid wins. At most one is ever set. */
+  conditional_drop_draft_pick_id: string | null
+  conditional_drop_pickup_id: string | null
 }
 
 interface MovieData {
@@ -253,6 +258,74 @@ async function deductTeamBudget(
   if (budgetUpdateError) {
     log.error('Failed to update budget', { team_id: teamId, error: serializeError(budgetUpdateError) })
   }
+}
+
+/**
+ * Release a holding as part of awarding a bid that named it as a conditional
+ * drop. Mirrors drop-movie: a `team_drops` row (which is what
+ * get_team_drop_count reads, so `drop_limit` is charged) plus `dropped_at` on
+ * the source row.
+ *
+ * `team_holdings` does not say which base table a holding came from, so the
+ * pickup leg is probed first and the draft leg assumed otherwise -- holding ids
+ * are UUIDs, so at most one table can match.
+ *
+ * @returns false if the drop could not be completed, in which case the caller
+ *   must not award the bid -- awarding without the drop puts the team over cap.
+ */
+async function executeConditionalDrop(
+  serviceClient: ServiceClient,
+  holdingId: string,
+  teamId: string,
+  movieId: string,
+): Promise<boolean> {
+  const droppedAt = new Date().toISOString()
+
+  const { data: pickupRow } = await serviceClient
+    .from('pickups')
+    .select('id')
+    .eq('id', holdingId)
+    .is('dropped_at', null)
+    .maybeSingle()
+
+  const isPickup = !!pickupRow
+  const table = isPickup ? 'pickups' : 'draft_picks'
+
+  const { error: recordError } = await serviceClient.from('team_drops').insert({
+    team_id: teamId,
+    movie_id: movieId,
+    pickup_id: isPickup ? holdingId : null,
+    draft_pick_id: isPickup ? null : holdingId,
+    dropped_at: droppedAt,
+  })
+
+  if (recordError) {
+    log.error('Failed to record conditional drop', {
+      holding_id: holdingId,
+      error: serializeError(recordError),
+    })
+    return false
+  }
+
+  const { error: updateError } = await serviceClient
+    .from(table)
+    .update({ dropped_at: droppedAt })
+    .eq('id', holdingId)
+    .is('dropped_at', null)
+
+  if (updateError) {
+    log.error('Failed to mark holding dropped; rolling back drop record', {
+      holding_id: holdingId,
+      error: serializeError(updateError),
+    })
+    await serviceClient
+      .from('team_drops')
+      .delete()
+      .eq(isPickup ? 'pickup_id' : 'draft_pick_id', holdingId)
+    return false
+  }
+
+  return true
 }
 
 /** PostgREST `in` filters travel in the URI, so large sets are sent in batches. */
@@ -1625,48 +1698,84 @@ Deno.serve(async (req) => {
     const voidedPickupResults: VoidedBidResult[] = []
     const deferred: DeferredGroup[] = []
 
+    // Every due group's active bids, gathered before any award, so capacity is
+    // decided against the whole week rather than movie-by-movie. Resolving each
+    // contest independently is what let a team win more movies than it had
+    // roster room or budget for.
+    const pickupContests: BidContest[] = []
+    const bidsByKey = new Map<string, PickupBid[]>()
+
     for (const key of contestedKeys) {
       const [leagueId, tmdbIdStr] = key.split(':')
       const tmdbId = parseInt(tmdbIdStr)
 
-      try {
-        // Check if any bids for this movie still have open response windows
-        // (including outbid entries that might counter)
-        const { data: allBidsForMovie } = await serviceClient
-          .from('pickup_bids')
-          .select('*')
-          .eq('league_id', leagueId)
-          .eq('tmdb_id', tmdbId)
-          .in('status', ['active', 'outbid'])
+      // Check if any bids for this movie still have open response windows
+      // (including outbid entries that might counter)
+      const { data: allBidsForMovie } = await serviceClient
+        .from('pickup_bids')
+        .select('*')
+        .eq('league_id', leagueId)
+        .eq('tmdb_id', tmdbId)
+        .in('status', ['active', 'outbid'])
 
-        const movieBids: PickupBid[] = allBidsForMovie || []
+      const movieBids: PickupBid[] = allBidsForMovie || []
+      bidsByKey.set(key, movieBids)
 
-        const openWindowEnds = latestOpenResponseDeadline(movieBids, now)
-        if (openWindowEnds) {
-          // Someone still has time to counter: leave the group for the extended
-          // run, but record the deferral so it can be surfaced downstream.
-          const titledBid = movieBids.find((bid) => bid.movie_data?.title)
-          deferred.push({
-            league_id: leagueId,
-            movie_title: titledBid?.movie_data?.title || `Movie #${tmdbId}`,
-            counter_window_ends: openWindowEnds,
-          })
-          continue
-        }
-
-        // Find active bids only (outbid entries don't win)
-        const activeBids = movieBids.filter((b) => b.status === 'active')
-        if (activeBids.length === 0) {
-          continue
-        }
-
-        // Find the winner: highest amount, earliest created_at for ties
-        activeBids.sort((a, b) => {
-          if (b.amount !== a.amount) return b.amount - a.amount
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      const openWindowEnds = latestOpenResponseDeadline(movieBids, now)
+      if (openWindowEnds) {
+        // Someone still has time to counter: leave the group for the extended
+        // run, but record the deferral so it can be surfaced downstream.
+        const titledBid = movieBids.find((bid) => bid.movie_data?.title)
+        deferred.push({
+          league_id: leagueId,
+          movie_title: titledBid?.movie_data?.title || `Movie #${tmdbId}`,
+          counter_window_ends: openWindowEnds,
         })
+        continue
+      }
 
-        const winner = activeBids[0]
+      // Find active bids only (outbid entries don't win)
+      const activeBids = movieBids.filter((b) => b.status === 'active')
+      if (activeBids.length === 0) continue
+
+      pickupContests.push({
+        key,
+        activeBids: activeBids.map((bid) => ({
+          id: bid.id,
+          team_id: bid.team_id,
+          amount: bid.amount,
+          priority: bid.priority,
+          created_at: bid.created_at,
+          conditionalDropHoldingId:
+            bid.conditional_drop_pickup_id ?? bid.conditional_drop_draft_pick_id ?? null,
+        })),
+      })
+    }
+
+    const { capacities: pickupCapacities } = await getTeamCapacities(
+      serviceClient,
+      pickupContests,
+      'pickup',
+    )
+    const {
+      winners: pickupWinners,
+      lossReasons: pickupLossReasons,
+      executedDrops,
+    } = resolveBidWinners(pickupContests, pickupCapacities)
+
+    for (const contest of pickupContests) {
+      const key = contest.key
+      const allBidsForMovie = bidsByKey.get(key) ?? []
+
+      try {
+        const resolved = pickupWinners.get(key)
+
+        // No winner: every contender was out of room, budget, or drops. Leave
+        // the bids pending -- a later run can award them once capacity frees up
+        // -- exactly as an unawarded counterpick contest behaves.
+        if (!resolved) continue
+
+        const winner = allBidsForMovie.find((bid) => bid.id === resolved.id)!
         const movieTitle = winner.movie_data?.title || `Movie #${winner.tmdb_id}`
 
         // Create movie if it doesn't exist
@@ -1759,6 +1868,25 @@ Deno.serve(async (req) => {
             movie_title: movieTitle,
           })
           continue
+        }
+
+        // A conditional drop funds this award, so it has to happen first: a
+        // failure between the two leaves the team UNDER its cap, which a later
+        // run can still correct, rather than over it.
+        const dropHoldingId = executedDrops.get(winner.id)
+        if (dropHoldingId) {
+          const dropped = await executeConditionalDrop(
+            serviceClient,
+            dropHoldingId,
+            winner.team_id,
+            movieId,
+          )
+          if (!dropped) {
+            // Awarding without the drop would put the team over cap. Leave the
+            // bid pending for the next run instead.
+            errors.push({ movie_key: key, error: 'Failed to execute conditional drop' })
+            continue
+          }
         }
 
         // Create pickup record
@@ -1857,16 +1985,27 @@ Deno.serve(async (req) => {
           const loserUserId = await getTeamUserId(serviceClient, loserBid.team_id)
 
           if (loserUserId) {
+            // Say which constraint actually stopped the bid. "Not enough" is
+            // wrong -- and unactionable -- for a bid that led its contest but
+            // had nowhere to put the movie or nothing left to pay with.
+            const lossReason: BidLossReason = pickupLossReasons.get(loserBid.id) ?? 'outbid'
+            const lossBody = lossReason === 'insufficient_budget'
+              ? `Your bid of $${loserBid.amount} on ${movieTitle} could not be honored — your remaining Fantasy Budget was already committed to higher-priority bids.`
+              : lossReason === 'no_slots'
+                ? `Your bid of $${loserBid.amount} on ${movieTitle} could not be honored — your roster was full and no conditional drop was available.`
+                : `Your bid of $${loserBid.amount} was not enough. The winning bid was $${winner.amount}.`
+
             await serviceClient.from('notifications').insert({
               user_id: loserUserId,
               league_id: loserBid.league_id,
               type: 'bid_lost',
               title: `Bid unsuccessful for ${movieTitle}`,
-              body: `Your bid of $${loserBid.amount} was not enough. The winning bid was $${winner.amount}.`,
+              body: lossBody,
               data: {
                 bid_id: loserBid.id,
                 tmdb_id: loserBid.tmdb_id,
                 winning_amount: winner.amount,
+                loss_reason: lossReason,
               },
             })
 
