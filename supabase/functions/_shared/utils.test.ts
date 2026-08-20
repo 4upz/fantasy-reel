@@ -12,6 +12,8 @@ import {
   handleCorsPreflightRequest,
   generateJoinCode,
   isValidJoinCode,
+  isServiceRoleRequest,
+  authenticateUserOrServiceRole,
 } from './utils.ts'
 import { corsHeaders } from './cors.ts'
 
@@ -315,5 +317,93 @@ Deno.test('isValidJoinCode', async (t) => {
       const code = generateJoinCode()
       assertEquals(isValidJoinCode(code), true, `Generated code "${code}" should be valid`)
     }
+  })
+})
+
+// ============================================================================
+// isServiceRoleRequest / authenticateUserOrServiceRole Tests
+//
+// Only the paths that need no network are unit tested here: a real user JWT
+// has to be verified against Supabase Auth, so "valid session succeeds" and
+// "garbage token is rejected" live in tests/movie-endpoints-auth.test.ts.
+// ============================================================================
+
+const TEST_SERVICE_ROLE_KEY = 'test-service-role-key-abcdef0123456789'
+
+function requestWithAuthorization(authorization?: string): Request {
+  return new Request('http://localhost/test', {
+    method: 'POST',
+    headers: authorization ? { Authorization: authorization } : {},
+  })
+}
+
+/** Runs `body` with SUPABASE_SERVICE_ROLE_KEY set, restoring the env after. */
+async function withServiceRoleKey(key: string | null, body: () => void | Promise<void>) {
+  const previous = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (key === null) Deno.env.delete('SUPABASE_SERVICE_ROLE_KEY')
+  else Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', key)
+  try {
+    await body()
+  } finally {
+    if (previous === undefined) Deno.env.delete('SUPABASE_SERVICE_ROLE_KEY')
+    else Deno.env.set('SUPABASE_SERVICE_ROLE_KEY', previous)
+  }
+}
+
+Deno.test('isServiceRoleRequest', async (t) => {
+  await t.step('accepts the service role key as a bearer token', async () => {
+    await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, () => {
+      assertEquals(
+        isServiceRoleRequest(requestWithAuthorization(`Bearer ${TEST_SERVICE_ROLE_KEY}`)),
+        true
+      )
+    })
+  })
+
+  await t.step('rejects other tokens, malformed headers, and no header', async () => {
+    await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, () => {
+      assertEquals(isServiceRoleRequest(requestWithAuthorization()), false)
+      assertEquals(isServiceRoleRequest(requestWithAuthorization('Bearer anon-key')), false)
+      // Right secret, wrong scheme / no scheme.
+      assertEquals(isServiceRoleRequest(requestWithAuthorization(TEST_SERVICE_ROLE_KEY)), false)
+      assertEquals(
+        isServiceRoleRequest(requestWithAuthorization(`Basic ${TEST_SERVICE_ROLE_KEY}`)),
+        false
+      )
+      // A prefix of the key must not pass -- the comparison is length-aware.
+      assertEquals(
+        isServiceRoleRequest(requestWithAuthorization(`Bearer ${TEST_SERVICE_ROLE_KEY.slice(0, -1)}`)),
+        false
+      )
+    })
+  })
+
+  await t.step('never authorizes when SUPABASE_SERVICE_ROLE_KEY is unset', async () => {
+    await withServiceRoleKey(null, () => {
+      assertEquals(isServiceRoleRequest(requestWithAuthorization('Bearer ')), false)
+      assertEquals(isServiceRoleRequest(requestWithAuthorization('Bearer undefined')), false)
+    })
+  })
+})
+
+Deno.test('authenticateUserOrServiceRole', async (t) => {
+  await t.step('lets a service role caller through', async () => {
+    await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, async () => {
+      const result = await authenticateUserOrServiceRole(
+        requestWithAuthorization(`Bearer ${TEST_SERVICE_ROLE_KEY}`)
+      )
+      assertEquals(result, null)
+    })
+  })
+
+  await t.step('returns the standard 401 when no Authorization header is sent', async () => {
+    await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, async () => {
+      const result = await authenticateUserOrServiceRole(requestWithAuthorization())
+
+      assertExists(result)
+      assertEquals(result!.status, 401)
+      assertEquals(await result!.json(), { error: 'Unauthorized' })
+      assertHasCorsHeaders(result!)
+    })
   })
 })

@@ -62,6 +62,57 @@ export function isAuthError(result: AuthResult | Response): result is Response {
   return result instanceof Response
 }
 
+/**
+ * Constant-time string comparison, so a wrong secret cannot be narrowed
+ * character by character from response timing. Length is compared up front:
+ * the service role key's length is not the secret, its content is.
+ */
+function secretsMatch(presented: string, expected: string): boolean {
+  if (presented.length !== expected.length) return false
+  let diff = 0
+  for (let i = 0; i < presented.length; i++) {
+    diff |= presented.charCodeAt(i) ^ expected.charCodeAt(i)
+  }
+  return diff === 0
+}
+
+/**
+ * Whether the caller presented the service role key as its bearer token.
+ *
+ * This is the Discord bot's path (apps/discord-bot/src/utils/functions-client.ts):
+ * it acts for a whole guild rather than one signed-in user, so it has no
+ * session JWT to send. An unset SUPABASE_SERVICE_ROLE_KEY never authorizes --
+ * a missing secret must not open an endpoint up.
+ */
+export function isServiceRoleRequest(req: Request): boolean {
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  const authorization = req.headers.get('Authorization')
+  if (!serviceRoleKey || !authorization) return false
+  return secretsMatch(authorization, `Bearer ${serviceRoleKey}`)
+}
+
+/**
+ * Authorizes an endpoint that needs *a* caller but no particular one: any
+ * signed-in user, or the service role key.
+ *
+ * The TMDb read endpoints (browse-movies, search-movies, get-movie-details)
+ * use this. They run before any league context, so there is no membership or
+ * role to check -- but they do spend the league's TMDb quota, and every one of
+ * them carries `verify_jwt = false` (the CLI's ES256 bug), so without this
+ * anyone holding the public anon key could drive TMDb traffic through them.
+ *
+ * Returns null when the request may proceed, or the 401 Response to return.
+ */
+export async function authenticateUserOrServiceRole(req: Request): Promise<Response | null> {
+  // Answered here rather than by authenticateRequest, which assumes the header
+  // is present and would otherwise build its client with a null Authorization.
+  if (!req.headers.get('Authorization')) return errorResponse('Unauthorized', 401)
+  if (isServiceRoleRequest(req)) return null
+
+  const result = await authenticateRequest(req)
+  return isAuthError(result) ? result : null
+}
+
 export function isInvitationExpired(expiresAt: string): boolean {
   return new Date(expiresAt) < new Date()
 }
@@ -75,8 +126,7 @@ export function isAuthorizedCronRequest(req: Request): boolean {
   const cronSecret = Deno.env.get('CRON_SECRET')
   if (cronSecret && req.headers.get('X-Cron-Secret') === cronSecret) return true
 
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-  return Boolean(serviceRoleKey) && req.headers.get('Authorization') === `Bearer ${serviceRoleKey}`
+  return isServiceRoleRequest(req)
 }
 
 export function errorResponse(message: string, status = 500): Response {

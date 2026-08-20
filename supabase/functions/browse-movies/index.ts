@@ -1,4 +1,4 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateUserOrServiceRole } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { buildCacheKey, cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
 import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
@@ -176,6 +176,11 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
+    // Any signed-in user, or the service role (the Discord bot) -- see
+    // authenticateUserOrServiceRole for why that is the whole check here.
+    const authError = await authenticateUserOrServiceRole(req)
+    if (authError) return authError
+
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!tmdbToken) {
       log.error('TMDB_API_KEY not configured')
