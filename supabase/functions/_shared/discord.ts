@@ -297,6 +297,22 @@ export async function getLeagueName(
   return data?.name ?? 'League'
 }
 
+/**
+ * Render an instant as a Discord timestamp token.
+ *
+ * Discord expands these client-side, so every reader sees it in their own
+ * timezone -- and the 'R' style counts down live. For trade offer expiry that
+ * is the whole point: it replaces the "you've got till Friday" people were
+ * typing by hand, without anyone doing timezone math.
+ *
+ * @param style 'R' for relative ("in 2 days"), 'f' for an absolute date+time.
+ */
+export function discordTimestamp(isoInstant: string, style: 'R' | 'f' = 'R'): string {
+  const seconds = Math.floor(new Date(isoInstant).getTime() / 1000)
+  if (!Number.isFinite(seconds)) return 'soon'
+  return `<t:${seconds}:${style}>`
+}
+
 export function buildEmbedAuthor(leagueName: string, leagueId: string): DiscordEmbed['author'] {
   return { name: leagueName, icon_url: FANTASY_REEL_ICON, url: buildLeagueUrl(leagueId) }
 }

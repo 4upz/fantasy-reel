@@ -13,17 +13,19 @@ import {
   getTeamInfo,
   getTeamName,
   getTradeOffer,
+  getLeagueTradeConfig,
   validateTradeStatus,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
+import { resolveOfferExpiry, hasLapsed, type ExpiryRequest } from '../_shared/trade-expiry.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('counter-trade')
 
-interface CounterTradeRequest {
+interface CounterTradeRequest extends ExpiryRequest {
   trade_offer_id: string
   counter_offered_items: TradeItems
   counter_requested_items: TradeItems
@@ -34,6 +36,7 @@ interface CounterTradeResult {
   success?: boolean
   error?: string
   status_code?: number
+  expires_at?: string | null
 }
 
 Deno.serve(async (req) => {
@@ -52,6 +55,8 @@ Deno.serve(async (req) => {
       counter_offered_items,
       counter_requested_items,
       message,
+      expires_at,
+      expiry_anchor,
     }: CounterTradeRequest = await req.json()
 
     // First fetch the trade to verify authorization (without locking)
@@ -68,6 +73,13 @@ Deno.serve(async (req) => {
 
     const statusError = validateTradeStatus(originalOffer, ['proposed', 'countered'], 'counter')
     if (statusError) return statusError
+
+    // UX-earlier mirror of the guard inside counter_trade(). The sweep runs
+    // every 5 minutes, so an offer can be past its clock while still sitting in
+    // 'proposed'; the SQL check under the row lock is what actually decides.
+    if (hasLapsed(originalOffer.expires_at)) {
+      return errorResponse('This offer has expired', 400)
+    }
 
     // ROLE SWAP DESIGN DECISION:
     // When a counter-offer is submitted, the initiator and recipient roles are swapped.
@@ -98,6 +110,28 @@ Deno.serve(async (req) => {
     const enrichedOfferedItems = await enrichTradeItems(serviceClient, counter_offered_items)
     const enrichedRequestedItems = await enrichTradeItems(serviceClient, counter_requested_items)
 
+    // A counter is a new offer wearing the old row, so it gets a fresh clock --
+    // inheriting the original one would lapse the counter early (counter a 48h
+    // offer at hour 47 and it dies a minute later).
+    const leagueConfig = await getLeagueTradeConfig(serviceClient, originalOffer.league_id)
+    if (!leagueConfig) {
+      return errorResponse('League not found', 404)
+    }
+
+    const expiry = await resolveOfferExpiry(
+      serviceClient,
+      { expires_at, expiry_anchor },
+      {
+        leagueConfig,
+        initiatorItems: enrichedOfferedItems,
+        recipientItems: enrichedRequestedItems,
+      }
+    )
+
+    if (!expiry.valid) {
+      return errorResponse(expiry.error, 400)
+    }
+
     // Use the atomic database function with row-level locking
     const { data: rpcResult, error: rpcError } = await serviceClient.rpc('counter_trade', {
       p_trade_id: trade_offer_id,
@@ -106,6 +140,8 @@ Deno.serve(async (req) => {
       p_new_initiator_items: enrichedOfferedItems,
       p_new_recipient_items: enrichedRequestedItems,
       p_message: message?.trim() || null,
+      p_expires_at: expiry.expires_at,
+      p_expiry_anchor: expiry.expiry_anchor,
     })
 
     if (rpcError) {
@@ -161,6 +197,13 @@ Deno.serve(async (req) => {
       { name: `${counterTeamInfo?.name ?? 'Counterer'} offers`, value: counterMovies || 'Nothing', inline: true },
       { name: `${counterRecipientName} offers`, value: counterRequestedMovies || 'Nothing', inline: true },
     ]
+    if (updatedOffer.expires_at) {
+      counterFields.push({
+        name: 'Expires',
+        value: discordTimestamp(updatedOffer.expires_at),
+        inline: true,
+      })
+    }
     if (message?.trim()) {
       counterFields.push({ name: 'Message', value: message.trim(), inline: false })
     }

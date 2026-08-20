@@ -16,6 +16,7 @@ import {
   getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { hasLapsed } from '../_shared/trade-expiry.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('respond-trade')
@@ -65,6 +66,15 @@ Deno.serve(async (req) => {
 
     // For accept, re-validate trade items before the atomic operation
     if (response === 'accept') {
+      // UX-earlier mirror of the guard inside respond_to_trade(). The sweep runs
+      // every 5 minutes, so an offer can be past its clock while still sitting
+      // in 'proposed' -- the SQL check under the row lock is what decides, this
+      // one just gets there first with a cleaner message. Rejecting a lapsed
+      // offer stays allowed: declining something already dead costs nothing.
+      if (hasLapsed(tradeOffer.expires_at)) {
+        return errorResponse('This offer has expired', 400)
+      }
+
       const validationResult = await validateTradeProposal(
         serviceClient,
         tradeOffer.league_id,

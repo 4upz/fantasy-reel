@@ -1,0 +1,431 @@
+-- ============================================================================
+-- Per-offer trade expiry
+--
+-- Lets a proposer put a clock on a trade offer: it lapses on its own if the
+-- recipient never answers. See docs/PLAN-trade-offer-expiry.md.
+--
+-- Three clocks now exist on a trade and must not be confused:
+--   leagues.trade_deadline   -- season-level, last date a trade may happen
+--   trade_offers.review_ends_at -- post-accept commissioner veto window
+--   trade_offers.expires_at  -- THIS: how long an unanswered offer stands
+--
+-- Enforcement is two-layered. This file is layer 1: the authoritative check
+-- lives inside respond_to_trade()/counter_trade(), under the row lock they
+-- already take, so a late or wedged cron can never let a lapsed offer through.
+-- Layer 2 (process-trades) only materializes status and sends notifications.
+-- ============================================================================
+
+-- ============================================================================
+-- PART 1: Columns
+-- ============================================================================
+
+ALTER TABLE trade_offers
+  ADD COLUMN IF NOT EXISTS expires_at              TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS expiry_reminder_sent_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS expiry_anchor           TEXT,
+  ADD COLUMN IF NOT EXISTS expired_reason          TEXT;
+
+ALTER TABLE trade_offers
+  ADD CONSTRAINT check_expiry_anchor_value
+    CHECK (expiry_anchor IS NULL OR expiry_anchor IN ('fixed', 'first_release')),
+  ADD CONSTRAINT check_expired_reason_value
+    CHECK (expired_reason IS NULL
+           OR expired_reason IN ('offer_window', 'movie_released', 'league_deadline')),
+  -- An offer either has a clock and a record of where it came from, or neither.
+  -- Existing rows backfill to (NULL, NULL) and satisfy this.
+  ADD CONSTRAINT check_expiry_anchor_paired
+    CHECK ((expires_at IS NULL) = (expiry_anchor IS NULL));
+
+COMMENT ON COLUMN trade_offers.expires_at IS
+  'When this unanswered offer lapses. NULL = stands forever (the pre-expiry behavior, and what every offer created before this migration keeps). Always a resolved timestamp regardless of how the proposer picked it.';
+COMMENT ON COLUMN trade_offers.expiry_anchor IS
+  'How expires_at was derived: "fixed" (preset or custom time, never moves) or "first_release" (earliest release among the offer''s movies, re-resolved by process-trades when a release date shifts).';
+COMMENT ON COLUMN trade_offers.expired_reason IS
+  'Why an expired offer expired: offer_window (its clock ran out), movie_released (its release anchor arrived), league_deadline (the season trade deadline passed). NULL on offers expired for other reasons -- those carry veto_reason instead, which is what execute_trade and the process-trades revalidation path already write.';
+COMMENT ON COLUMN trade_offers.expiry_reminder_sent_at IS
+  'When the single "expiring soon" nudge was sent, so overlapping cron runs cannot double-send. Reset to NULL whenever the clock is reset (counter-offer, extension).';
+
+-- Supports the sweep. The predicate is a strict SUBSET of the "open offer"
+-- status list hardcoded in get_contested_source_ids, execute_trade and the two
+-- partial indexes in 20260809120000 -- it does not redefine open-ness, so the
+-- "change all four together" rule there is untouched.
+CREATE INDEX IF NOT EXISTS idx_trade_offers_pending_expiry
+  ON trade_offers (expires_at)
+  WHERE status IN ('proposed', 'countered') AND expires_at IS NOT NULL;
+
+-- Supports release re-resolution, which scans open release-anchored offers only.
+CREATE INDEX IF NOT EXISTS idx_trade_offers_release_anchored
+  ON trade_offers (league_id)
+  WHERE status IN ('proposed', 'countered') AND expiry_anchor = 'first_release';
+
+-- ============================================================================
+-- PART 2: Release-anchor resolution
+--
+-- "Expires when X releases" resolves to the EARLIEST release among the movies
+-- on BOTH sides: once any movie in the deal is out, the information balance
+-- has already changed, so that is when the offer should stop standing.
+--
+-- The boundary matches isUpcomingMovie() in _shared/utils.ts, which treats a
+-- movie as upcoming while release_date >= today (UTC) -- i.e. it becomes
+-- released at the START of the day AFTER its release date. Using the same
+-- boundary keeps one definition of "released" in the codebase.
+--
+-- Resolution reads movies.release_date LIVE. The release_date inside the offer's
+-- items JSONB is a snapshot taken by enrichTradeItems at proposal time and
+-- drifts whenever sync-release-dates moves a date; it is display data only.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION resolve_first_release_expiry(
+  p_initiator_items JSONB,
+  p_recipient_items JSONB
+)
+RETURNS TIMESTAMPTZ
+LANGUAGE sql STABLE
+SET search_path = public
+AS $$
+  SELECT MIN((m.release_date + INTERVAL '1 day') AT TIME ZONE 'UTC')
+  FROM (
+    SELECT value FROM jsonb_array_elements(COALESCE(p_initiator_items->'movies', '[]'::jsonb))
+    UNION ALL
+    SELECT value FROM jsonb_array_elements(COALESCE(p_recipient_items->'movies', '[]'::jsonb))
+  ) AS item
+  JOIN movies m ON m.id = (item.value->>'movie_id')::UUID
+  WHERE m.release_date IS NOT NULL
+$$;
+
+COMMENT ON FUNCTION resolve_first_release_expiry(JSONB, JSONB) IS
+  'Earliest release among the movies named by a trade offer, as the instant that movie stops counting as upcoming (start of the day after its release_date, UTC). NULL when no named movie has a release date. Reads movies.release_date live, never the items JSONB snapshot.';
+
+REVOKE EXECUTE ON FUNCTION resolve_first_release_expiry(JSONB, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION resolve_first_release_expiry(JSONB, JSONB) TO authenticated, service_role;
+
+-- ============================================================================
+-- PART 3: respond_to_trade -- reject a lapsed offer under the row lock
+--
+-- Carried forward verbatim from 20260132_trading_race_condition_fixes.sql; the
+-- only addition is the expiry check marked below.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION respond_to_trade(
+  p_trade_id UUID,
+  p_response TEXT,  -- 'accept' or 'reject'
+  p_message TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_trade trade_offers;
+  v_league RECORD;
+  v_review_ends_at TIMESTAMPTZ;
+  v_new_status TEXT;
+  v_error TEXT;
+BEGIN
+  -- Lock and fetch the trade
+  v_trade := get_trade_offer_for_update(p_trade_id);
+
+  IF v_trade IS NULL THEN
+    RETURN jsonb_build_object('error', 'Trade not found', 'status_code', 404);
+  END IF;
+
+  IF v_trade.status NOT IN ('proposed', 'countered') THEN
+    RETURN jsonb_build_object(
+      'error', format('Cannot respond to a trade with status "%s"', v_trade.status),
+      'status_code', 400
+    );
+  END IF;
+
+  -- ADDED: the authoritative expiry guard. The sweep in process-trades runs
+  -- every 5 minutes, so an offer can be past its clock while still sitting in
+  -- 'proposed'. Rejecting here -- inside the lock, before any validation or
+  -- state change -- is what makes cron lag harmless. A REJECT is still allowed:
+  -- declining something already dead costs nothing and avoids a confusing error.
+  IF p_response = 'accept'
+     AND v_trade.expires_at IS NOT NULL
+     AND v_trade.expires_at <= now() THEN
+    RETURN jsonb_build_object('error', 'This offer has expired', 'status_code', 400);
+  END IF;
+
+  IF p_response = 'reject' THEN
+    UPDATE trade_offers
+    SET status = 'rejected'::trade_status,
+        responded_at = now(),
+        response_message = NULLIF(trim(p_message), '')
+    WHERE id = p_trade_id;
+
+    RETURN jsonb_build_object('success', true, 'status', 'rejected');
+  END IF;
+
+  -- Accept: re-validate trade items
+  v_error := validate_trade_items(v_trade.initiator_team_id, v_trade.initiator_items);
+  IF v_error IS NOT NULL THEN
+    RETURN jsonb_build_object('error', 'Initiator validation failed: ' || v_error, 'status_code', 400);
+  END IF;
+
+  v_error := validate_trade_items(v_trade.recipient_team_id, v_trade.recipient_items);
+  IF v_error IS NOT NULL THEN
+    RETURN jsonb_build_object('error', 'Recipient validation failed: ' || v_error, 'status_code', 400);
+  END IF;
+
+  -- Get league config
+  SELECT trade_veto_hours, trade_review_enabled
+  INTO v_league
+  FROM leagues
+  WHERE id = v_trade.league_id;
+
+  IF v_league.trade_review_enabled AND v_league.trade_veto_hours > 0 THEN
+    v_new_status := 'review';
+    v_review_ends_at := now() + (v_league.trade_veto_hours || ' hours')::INTERVAL;
+  ELSE
+    v_new_status := 'accepted';
+    v_review_ends_at := NULL;
+  END IF;
+
+  UPDATE trade_offers
+  SET status = v_new_status::trade_status,
+      responded_at = now(),
+      accepted_at = now(),
+      review_ends_at = v_review_ends_at,
+      response_message = NULLIF(trim(p_message), '')
+  WHERE id = p_trade_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'status', v_new_status,
+    'review_ends_at', v_review_ends_at
+  );
+END;
+$$;
+
+COMMENT ON FUNCTION respond_to_trade IS
+  'Atomically responds to a trade with proper row-level locking. Refuses to accept an offer past its expires_at, whether or not the sweep has caught it yet.';
+
+-- ============================================================================
+-- PART 4: counter_trade -- reject a lapsed offer, and RESET the clock
+--
+-- counter_trade updates the offer row IN PLACE (the role swap documented in
+-- counter-trade/index.ts), so without this the countered offer would inherit
+-- the original proposer's clock: counter a 48h offer at hour 47 and it dies a
+-- minute later. The counterer picks a fresh window, exactly as a proposer does.
+--
+-- The parameter list changes, so the old 6-argument version must be dropped --
+-- CREATE OR REPLACE cannot add parameters, and leaving both would make the
+-- named-argument call from counter-trade ambiguous.
+-- ============================================================================
+
+DROP FUNCTION IF EXISTS counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT);
+
+CREATE FUNCTION counter_trade(
+  p_trade_id UUID,
+  p_new_initiator_team_id UUID,
+  p_new_recipient_team_id UUID,
+  p_new_initiator_items JSONB,
+  p_new_recipient_items JSONB,
+  p_message TEXT DEFAULT NULL,
+  p_expires_at TIMESTAMPTZ DEFAULT NULL,
+  p_expiry_anchor TEXT DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_trade trade_offers;
+  v_expires_at TIMESTAMPTZ := p_expires_at;
+BEGIN
+  -- Lock and fetch the trade
+  v_trade := get_trade_offer_for_update(p_trade_id);
+
+  IF v_trade IS NULL THEN
+    RETURN jsonb_build_object('error', 'Trade not found', 'status_code', 404);
+  END IF;
+
+  IF v_trade.status NOT IN ('proposed', 'countered') THEN
+    RETURN jsonb_build_object(
+      'error', format('Cannot counter a trade with status "%s"', v_trade.status),
+      'status_code', 400
+    );
+  END IF;
+
+  -- Same authoritative guard as respond_to_trade: a lapsed offer is done, and
+  -- countering it would resurrect a dead row rather than starting a new deal.
+  IF v_trade.expires_at IS NOT NULL AND v_trade.expires_at <= now() THEN
+    RETURN jsonb_build_object('error', 'This offer has expired', 'status_code', 400);
+  END IF;
+
+  IF p_expiry_anchor IS NOT NULL AND p_expiry_anchor NOT IN ('fixed', 'first_release') THEN
+    RETURN jsonb_build_object('error', 'Invalid expiry anchor', 'status_code', 400);
+  END IF;
+
+  -- A release anchor is resolved here rather than trusted from the caller: the
+  -- counter names a different set of movies, so the earliest release may differ
+  -- from whatever the client computed against the old set.
+  IF p_expiry_anchor = 'first_release' THEN
+    v_expires_at := resolve_first_release_expiry(p_new_initiator_items, p_new_recipient_items);
+
+    IF v_expires_at IS NULL THEN
+      RETURN jsonb_build_object(
+        'error', 'No movie in this counter-offer has a release date to expire on',
+        'status_code', 400
+      );
+    END IF;
+
+    IF v_expires_at <= now() THEN
+      RETURN jsonb_build_object(
+        'error', 'The first movie in this counter-offer is already released',
+        'status_code', 400
+      );
+    END IF;
+  END IF;
+
+  IF (v_expires_at IS NULL) <> (p_expiry_anchor IS NULL) THEN
+    RETURN jsonb_build_object('error', 'Expiry and expiry anchor must be set together', 'status_code', 400);
+  END IF;
+
+  -- Update the trade with counter-offer
+  UPDATE trade_offers
+  SET status = 'countered'::trade_status,
+      initiator_team_id = p_new_initiator_team_id,
+      recipient_team_id = p_new_recipient_team_id,
+      initiator_items = p_new_initiator_items,
+      recipient_items = p_new_recipient_items,
+      responded_at = now(),
+      accepted_at = NULL,
+      review_ends_at = NULL,
+      response_message = NULLIF(trim(p_message), ''),
+      -- The counter is a new offer wearing the old row: new clock, new anchor,
+      -- and the "expiring soon" nudge becomes available again.
+      expires_at = v_expires_at,
+      expiry_anchor = p_expiry_anchor,
+      expiry_reminder_sent_at = NULL
+  WHERE id = p_trade_id;
+
+  RETURN jsonb_build_object('success', true, 'expires_at', v_expires_at);
+END;
+$$;
+
+COMMENT ON FUNCTION counter_trade IS
+  'Atomically counters a trade with proper row-level locking. Resets the offer expiry to the counterer''s choice -- the row is reused, so an inherited clock would lapse the counter early. Refuses to counter an already-lapsed offer.';
+
+REVOKE EXECUTE ON FUNCTION counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT, TIMESTAMPTZ, TEXT)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT, TIMESTAMPTZ, TEXT)
+  TO service_role;
+
+-- ============================================================================
+-- PART 5: Re-resolve release-anchored offers
+--
+-- Release dates move -- that is what the sync-release-dates cron exists for --
+-- so a first_release offer's expires_at has to follow. Only open offers: an
+-- accepted offer's clock belongs to the review window, and re-resolving it
+-- would silently change an agreed deal.
+--
+-- Returns only the offers whose expiry actually moved, so the caller can notify
+-- exactly those parties.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION reresolve_release_anchored_offers()
+RETURNS TABLE (
+  id UUID,
+  league_id UUID,
+  initiator_team_id UUID,
+  recipient_team_id UUID,
+  initiator_items JSONB,
+  recipient_items JSONB,
+  previous_expires_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ
+)
+LANGUAGE sql SECURITY DEFINER
+SET search_path = public
+AS $$
+  WITH resolved AS (
+    SELECT t.id,
+           t.expires_at AS previous_expires_at,
+           resolve_first_release_expiry(t.initiator_items, t.recipient_items) AS new_expires_at
+    FROM trade_offers t
+    WHERE t.status IN ('proposed', 'countered')
+      AND t.expiry_anchor = 'first_release'
+  ),
+  moved AS (
+    -- A resolution of NULL means every movie lost its release date, which TMDb
+    -- does when a film is pulled from the schedule. Leave the existing clock
+    -- alone rather than dropping to "never expires" (which the paired CHECK
+    -- would reject anyway) or expiring the offer on a data blip.
+    SELECT resolved.id, resolved.previous_expires_at, resolved.new_expires_at
+    FROM resolved
+    -- Every reference here is qualified on purpose: the RETURNS TABLE output
+    -- names (id, expires_at, previous_expires_at, ...) are parameters in a
+    -- LANGUAGE sql body, and an unqualified match would be ambiguous.
+    WHERE resolved.new_expires_at IS NOT NULL
+      AND resolved.new_expires_at IS DISTINCT FROM resolved.previous_expires_at
+  )
+  UPDATE trade_offers t
+  SET expires_at = moved.new_expires_at,
+      -- The window changed, so a nudge already sent described a time that is no
+      -- longer true. Let it be sent again against the new one.
+      expiry_reminder_sent_at = NULL,
+      updated_at = now()
+  FROM moved
+  WHERE t.id = moved.id
+  RETURNING t.id, t.league_id, t.initiator_team_id, t.recipient_team_id,
+            t.initiator_items, t.recipient_items,
+            moved.previous_expires_at, t.expires_at;
+$$;
+
+COMMENT ON FUNCTION reresolve_release_anchored_offers() IS
+  'Recomputes expires_at for open release-anchored offers from live movies.release_date, returning only the offers whose expiry moved. Run before the expiry sweep so a movie that moved earlier expires in the same pass.';
+
+REVOKE EXECUTE ON FUNCTION reresolve_release_anchored_offers() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION reresolve_release_anchored_offers() TO service_role;
+
+-- ============================================================================
+-- PART 6: The expiry sweep
+--
+-- Claims and flips in ONE statement, so two overlapping cron runs cannot both
+-- claim a row and double-notify: only the rows RETURNING hands back get a
+-- notification. now() is the database's -- every other clock on a trade
+-- (review_ends_at, accepted_at) is DB time, and mixing sources invites
+-- skew disputes.
+--
+-- Deliberately unbounded: expiry is one UPDATE, unlike the execution loop it
+-- runs alongside, and a league that let 40 offers pile up should not need 20
+-- minutes of cron runs to clear them.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION expire_lapsed_trade_offers()
+RETURNS SETOF trade_offers
+LANGUAGE sql SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE trade_offers t
+  SET status = 'expired'::trade_status,
+      expired_reason = CASE
+        WHEN t.expires_at IS NOT NULL AND t.expires_at <= now()
+          THEN CASE WHEN t.expiry_anchor = 'first_release' THEN 'movie_released' ELSE 'offer_window' END
+        ELSE 'league_deadline'
+      END,
+      updated_at = now()
+  FROM leagues l
+  WHERE l.id = t.league_id
+    -- Only an unanswered offer has a clock. Once both parties agree, the
+    -- review window owns the trade.
+    AND t.status IN ('proposed', 'countered')
+    AND (
+      (t.expires_at IS NOT NULL AND t.expires_at <= now())
+      -- An offer that outlives the season deadline can never be accepted --
+      -- validateTradeProposal re-checks it -- so lapse it here rather than
+      -- letting it die later with a confusing error. Deadline day is inclusive,
+      -- as in validateLeagueTradingEnabled; unlike that check, the day ends in
+      -- UTC rather than whatever locale the Edge Function happens to run in.
+      OR (l.trade_deadline IS NOT NULL
+          AND now() >= ((l.trade_deadline + INTERVAL '1 day') AT TIME ZONE 'UTC'))
+    )
+  RETURNING t.*;
+$$;
+
+COMMENT ON FUNCTION expire_lapsed_trade_offers() IS
+  'Expires open offers whose clock ran out (offer_window / movie_released) or whose league trade deadline passed (league_deadline). Claims and flips in one statement so overlapping cron runs cannot double-notify; the caller notifies exactly the returned rows.';
+
+REVOKE EXECUTE ON FUNCTION expire_lapsed_trade_offers() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION expire_lapsed_trade_offers() TO service_role;

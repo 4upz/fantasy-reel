@@ -1,6 +1,6 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isValidUUID, errorResponse, createServiceClient } from './utils.ts'
-import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData } from './email.ts'
+import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData, TradeEmailType } from './email.ts'
 import { logNotificationDelivery, statusFromEmailResult } from './notification-log.ts'
 
 // ============================================================================
@@ -58,6 +58,12 @@ export interface TradeOffer {
   initiator_message: string | null
   response_message: string | null
   veto_reason: string | null
+  /** When an unanswered offer lapses; NULL means it stands forever. */
+  expires_at?: string | null
+  /** How expires_at was derived -- 'fixed' never moves, 'first_release' follows the movie. */
+  expiry_anchor?: 'fixed' | 'first_release' | null
+  /** Why an expired offer expired; NULL when it ended for a reason veto_reason explains. */
+  expired_reason?: 'offer_window' | 'movie_released' | 'league_deadline' | null
 }
 
 export interface TradeNotification {
@@ -670,14 +676,6 @@ export async function enrichTradeItems(
 // Email Notification Helpers
 // ============================================================================
 
-type TradeEmailType =
-  | 'proposed'
-  | 'countered'
-  | 'accepted'
-  | 'rejected'
-  | 'completed'
-  | 'vetoed'
-
 interface TradePartyInfo {
   userId: string
   email: string
@@ -789,9 +787,17 @@ export async function sendTradeEmailNotifications(
     notifyRecipient?: boolean
     message?: string
     vetoReason?: string
+    /** Why an expired offer expired, already phrased for a reader. */
+    expiredReason?: string
   }
 ): Promise<void> {
-  const { notifyInitiator = false, notifyRecipient = false, message, vetoReason } = options ?? {}
+  const {
+    notifyInitiator = false,
+    notifyRecipient = false,
+    message,
+    vetoReason,
+    expiredReason,
+  } = options ?? {}
 
   if (!notifyInitiator && !notifyRecipient) return
 
@@ -838,6 +844,8 @@ export async function sendTradeEmailNotifications(
         message,
         vetoReason,
         reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
+        expiresAt: tradeOffer.expires_at ?? undefined,
+        expiredReason,
       }
 
       const result = await sendTradeEmail(emailType, emailData)
@@ -871,6 +879,8 @@ export async function sendTradeEmailNotifications(
         message,
         vetoReason,
         reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
+        expiresAt: tradeOffer.expires_at ?? undefined,
+        expiredReason,
       }
 
       const result = await sendTradeEmail(emailType, emailData)
