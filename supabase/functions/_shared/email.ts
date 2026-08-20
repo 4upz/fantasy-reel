@@ -48,39 +48,32 @@ export interface SendEmailResult {
  * Format expiration date for display in email
  */
 /**
- * An offer expiry to the minute, in UTC and labelled as such.
+ * A date for an email, in UTC and labelled as such.
  *
- * formatExpirationDate() below deliberately drops the time, which is fine for a
- * multi-day review window but useless for "expires at 4pm". The timezone is
- * spelled out because this renders in whatever locale the Edge Function runs in,
- * which is not the reader's.
+ * `withTime` because the two callers want different resolution: a multi-day
+ * review window reads fine as a date, while "expires at 4pm" does not. The
+ * timezone is spelled out either way, since this renders in whatever locale
+ * the Edge Function runs in, which is not the reader's.
  */
-function formatExpiryInstant(expiresAt: string): string {
+function formatExpirationDate(expiresAt: string, options?: { withTime?: boolean }): string {
   const date = new Date(expiresAt)
   if (isNaN(date.getTime())) {
     return 'soon'
   }
-  return `${date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'UTC',
-  })} UTC`
-}
 
-function formatExpirationDate(expiresAt: string): string {
-  const date = new Date(expiresAt)
-  if (isNaN(date.getTime())) {
-    return 'soon'
-  }
-  return date.toLocaleDateString('en-US', {
+  const formatted = date.toLocaleDateString('en-US', {
     weekday: 'long',
-    year: 'numeric',
+    ...(options?.withTime ? {} : { year: 'numeric' }),
     month: 'long',
     day: 'numeric',
+    ...(options?.withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
+    timeZone: 'UTC',
   })
+
+  // The zone label only earns its place next to a time. The two date-only
+  // callers (invitation expiry) rendered without one before this, and their
+  // copy should not change.
+  return options?.withTime ? `${formatted} UTC` : formatted
 }
 
 /**
@@ -479,7 +472,7 @@ export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData):
   // that the recipient knows how long they have without asking in Discord.
   const expirySection = (type === 'proposed' || type === 'countered') && data.expiresAt ? `
               <p style="margin: 0 0 24px; font-size: 14px; color: #b8b0a4; text-align: center;">
-                This offer expires: <strong style="color: #e8e8e8;">${formatExpiryInstant(data.expiresAt)}</strong>
+                This offer expires: <strong style="color: #e8e8e8;">${formatExpirationDate(data.expiresAt, { withTime: true })}</strong>
               </p>` : ''
 
   const expiredSection = type === 'expired' && data.expiredReason ? `
@@ -600,7 +593,7 @@ ${data.requestedItems || 'Nothing'}
   }
 
   if ((type === 'proposed' || type === 'countered') && data.expiresAt) {
-    text += `This offer expires: ${formatExpiryInstant(data.expiresAt)}
+    text += `This offer expires: ${formatExpirationDate(data.expiresAt, { withTime: true })}
 
 `
   }

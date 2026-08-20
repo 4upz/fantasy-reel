@@ -8,11 +8,9 @@ import {
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 import {
   validateTradeProposal,
-  getTeamInfo,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
-  TradeNotification,
   TradeItems,
 } from '../_shared/trade-validation.ts'
 import {
@@ -21,6 +19,7 @@ import {
   type ExecuteTradeResult,
 } from '../_shared/trade-completion.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { anchorMovieTitle, expiredReasonText } from '../_shared/trade-expiry.ts'
 
 const log = createLogger('process-trades')
 
@@ -103,9 +102,9 @@ Deno.serve(async (req) => {
     // the sweep, so a movie that moved into the past expires its offers in this
     // same pass rather than waiting five more minutes.
     //
-    // Neither step can block trade execution: an expiry failure is logged and
-    // carried in results.errors (which turns job_status non-ok and fires the
-    // existing ops alert) rather than aborting the run.
+    // Neither step can block trade execution: an expiry failure counts toward
+    // results.failed -- which is what computeStatus reads, so the run lands
+    // non-ok and fires the existing ops alert -- rather than aborting the run.
     await reresolveReleaseAnchors(serviceClient, results)
     await sweepExpiredOffers(serviceClient, results)
 
@@ -124,8 +123,8 @@ Deno.serve(async (req) => {
 
     if (!readyTrades || readyTrades.length === 0) {
       const job_status = await run.finish(serviceClient, {
-        processed: 0,
-        failed: 0,
+        processed: results.processed,
+        failed: results.failed,
         errors: results.errors,
         metadata: {
           expired_by_clock: results.expired_by_clock,
@@ -235,39 +234,22 @@ Deno.serve(async (req) => {
   }
 })
 
-/** The movie an offer's release anchor points at: the earliest-releasing one. */
-function anchorMovieTitle(trade: {
-  initiator_items: TradeItems
-  recipient_items: TradeItems
-}): string | null {
-  const dated = [...trade.initiator_items.movies, ...trade.recipient_items.movies].filter(
-    (movie) => movie.release_date
-  )
-
-  if (dated.length === 0) return null
-
-  // The titles and dates here are the snapshot enrichTradeItems took at
-  // proposal time. That is fine for naming a movie in a sentence -- the
-  // authoritative resolution against live release dates already happened in
-  // SQL, and this only has to agree about WHICH movie, not exactly when.
-  return dated.reduce((earliest, movie) =>
-    (movie.release_date as string) < (earliest.release_date as string) ? movie : earliest
-  ).title ?? null
-}
-
-/** Why an offer lapsed, phrased for the people who were waiting on it. */
-function expiredReasonText(trade: TradeRecord): string {
-  switch (trade.expired_reason) {
-    case 'movie_released': {
-      const title = anchorMovieTitle(trade)
-      return title
-        ? `The offer ran until ${title} released, and it has.`
-        : 'The offer ran until its first movie released, and it has.'
-    }
-    case 'league_deadline':
-      return 'The league trade deadline passed before it was answered.'
-    default:
-      return 'It expired before it was answered.'
+/**
+ * Run `task` over every item, a few at a time.
+ *
+ * Each expired offer costs ~20 sequential round trips (two team lookups, a
+ * league lookup, per-movie item formatting) plus two emails. A league whose
+ * trade deadline just passed can expire every open offer at once, and doing
+ * that strictly one at a time is what would put this cron near its wall clock.
+ * The cap keeps the burst off the database's throat.
+ */
+async function forEachWithConcurrency<T>(
+  items: T[],
+  task: (item: T) => Promise<void>,
+  limit = 5
+): Promise<void> {
+  for (let i = 0; i < items.length; i += limit) {
+    await Promise.allSettled(items.slice(i, i + limit).map(task))
   }
 }
 
@@ -287,6 +269,9 @@ async function reresolveReleaseAnchors(
 
   if (error) {
     log.error('Failed to re-resolve release-anchored offers', { error: serializeError(error) })
+    // Counted, not just logged: job_status is computed from processed/failed,
+    // so an error string alone would leave a broken run reporting "ok".
+    results.failed++
     results.errors.push(`Release re-resolution: ${error.message}`)
     return
   }
@@ -297,28 +282,26 @@ async function reresolveReleaseAnchors(
   results.reresolved = moved.length
   log.info('Release-anchored offers re-resolved', { count: moved.length })
 
-  for (const offer of moved) {
+  await forEachWithConcurrency(moved, async (offer) => {
     const title = anchorMovieTitle(offer)
     const body = title
       ? `${title} moved, so your trade offer now stands until its new release.`
       : 'A movie in your trade moved, so the offer window moved with it.'
 
+    // Both sides get the same sentence -- the window moved for both of them.
+    const notice = {
+      type: 'trade_proposed',
+      title: 'Trade Offer Window Moved',
+      bodyFn: () => body,
+      data: { new_expires_at: offer.expires_at, previous_expires_at: offer.previous_expires_at },
+    }
+
     await notifyTradeParties(supabase, {
-      tradeOffer: offer as unknown as TradeRecord,
-      notifyInitiator: {
-        type: 'trade_proposed',
-        title: 'Trade Offer Window Moved',
-        bodyFn: () => body,
-        data: { new_expires_at: offer.expires_at, previous_expires_at: offer.previous_expires_at },
-      },
-      notifyRecipient: {
-        type: 'trade_proposed',
-        title: 'Trade Offer Window Moved',
-        bodyFn: () => body,
-        data: { new_expires_at: offer.expires_at, previous_expires_at: offer.previous_expires_at },
-      },
+      tradeOffer: offer,
+      notifyInitiator: notice,
+      notifyRecipient: notice,
     })
-  }
+  })
 }
 
 /**
@@ -336,6 +319,7 @@ async function sweepExpiredOffers(
 
   if (error) {
     log.error('Failed to sweep expired offers', { error: serializeError(error) })
+    results.failed++
     results.errors.push(`Offer expiry sweep: ${error.message}`)
     return
   }
@@ -346,7 +330,7 @@ async function sweepExpiredOffers(
   results.expired_by_clock = expired.length
   log.info('Trade offers expired', { count: expired.length })
 
-  for (const trade of expired) {
+  await forEachWithConcurrency(expired, async (trade) => {
     const reason = expiredReasonText(trade)
 
     await notifyTradeParties(supabase, {
@@ -374,7 +358,7 @@ async function sweepExpiredOffers(
       notifyRecipient: true,
       expiredReason: reason,
     })
-  }
+  })
 }
 
 async function notifyTradeExpired(
@@ -382,36 +366,22 @@ async function notifyTradeExpired(
   trade: TradeRecord,
   reason: string
 ): Promise<void> {
-  const [initiatorInfo, recipientInfo] = await Promise.all([
-    getTeamInfo(supabase, trade.initiator_team_id),
-    getTeamInfo(supabase, trade.recipient_team_id),
-  ])
-
-  const notifications: TradeNotification[] = []
-
-  if (initiatorInfo) {
-    notifications.push({
-      user_id: initiatorInfo.user_id,
-      league_id: trade.league_id,
+  // Distinct from an offer lapsing on its own clock (sweepExpiredOffers): this
+  // is an agreed trade that could not go through, so the wording is different
+  // even though the terminal status is the same.
+  await notifyTradeParties(supabase, {
+    tradeOffer: trade,
+    notifyInitiator: {
       type: 'trade_cancelled',
       title: 'Trade Expired',
-      body: `Your trade could not be completed: ${reason}`,
-      data: { trade_offer_id: trade.id, expired_reason: reason },
-    })
-  }
-
-  if (recipientInfo) {
-    notifications.push({
-      user_id: recipientInfo.user_id,
-      league_id: trade.league_id,
+      bodyFn: () => `Your trade could not be completed: ${reason}`,
+      data: { expired_reason: reason },
+    },
+    notifyRecipient: {
       type: 'trade_cancelled',
       title: 'Trade Expired',
-      body: `A trade could not be completed: ${reason}`,
-      data: { trade_offer_id: trade.id, expired_reason: reason },
-    })
-  }
-
-  if (notifications.length > 0) {
-    await supabase.from('notifications').insert(notifications)
-  }
+      bodyFn: () => `A trade could not be completed: ${reason}`,
+      data: { expired_reason: reason },
+    },
+  })
 }

@@ -12,7 +12,6 @@ import {
   validateTradeProposal,
   enrichTradeItems,
   getTeamInfo,
-  getLeagueTradeConfig,
   createServiceClient,
   notifyTradeParties,
   sendTradeEmailNotifications,
@@ -104,16 +103,15 @@ Deno.serve(async (req) => {
     // The picker enforces the same bounds for a nicer error, but a crafted
     // request skips it entirely -- this is the check that actually holds. A
     // release anchor is resolved here rather than trusted from the client.
-    const leagueConfig = await getLeagueTradeConfig(serviceClient, league_id)
-    if (!leagueConfig) {
-      return errorResponse('League not found', 404)
-    }
-
+    //
+    // The league config comes back from the validation above rather than being
+    // fetched again: only `trade_deadline` is needed, and validateTradeProposal
+    // has already read (and vouched for) that row.
     const expiry = await resolveOfferExpiry(
       serviceClient,
       { expires_at, expiry_anchor },
       {
-        leagueConfig,
+        tradeDeadline: validationResult.config?.trade_deadline ?? null,
         initiatorItems: enrichedOfferedItems,
         recipientItems: enrichedRequestedItems,
       }

@@ -13,7 +13,6 @@ import {
   getTeamInfo,
   getTeamName,
   getTradeOffer,
-  getLeagueTradeConfig,
   validateTradeStatus,
   createServiceClient,
   notifyTradeParties,
@@ -112,17 +111,13 @@ Deno.serve(async (req) => {
 
     // A counter is a new offer wearing the old row, so it gets a fresh clock --
     // inheriting the original one would lapse the counter early (counter a 48h
-    // offer at hour 47 and it dies a minute later).
-    const leagueConfig = await getLeagueTradeConfig(serviceClient, originalOffer.league_id)
-    if (!leagueConfig) {
-      return errorResponse('League not found', 404)
-    }
-
+    // offer at hour 47 and it dies a minute later). The league config is reused
+    // from the validation above rather than re-fetched.
     const expiry = await resolveOfferExpiry(
       serviceClient,
       { expires_at, expiry_anchor },
       {
-        leagueConfig,
+        tradeDeadline: validationResult.config?.trade_deadline ?? null,
         initiatorItems: enrichedOfferedItems,
         recipientItems: enrichedRequestedItems,
       }

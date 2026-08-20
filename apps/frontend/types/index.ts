@@ -610,7 +610,31 @@ export interface TradeOffer {
    * bidding is private to those trades' own participants.
    */
   contested_source_ids?: string[]
+  /**
+   * When this unanswered offer lapses. NULL means it stands forever -- the
+   * pre-expiry behavior, still a first-class choice, and what every offer
+   * created before the feature keeps.
+   *
+   * Not to be confused with `review_ends_at` (the post-accept commissioner
+   * window) or the league's season-level `trade_deadline`.
+   */
+  expires_at?: string | null
+  /**
+   * How `expires_at` was derived. 'fixed' never moves; 'first_release' tracks
+   * the earliest release among the offer's movies and is re-resolved by the
+   * process-trades cron whenever that date shifts.
+   */
+  expiry_anchor?: ExpiryAnchor | null
+  /**
+   * Why an expired offer expired. NULL on offers that expired for a reason
+   * `veto_reason` explains instead (a competing trade executed, or the offer
+   * stopped validating).
+   */
+  expired_reason?: ExpiredReason | null
 }
+
+export type ExpiryAnchor = 'fixed' | 'first_release'
+export type ExpiredReason = 'offer_window' | 'movie_released' | 'league_deadline'
 
 export interface TradeAsset {
   id: string

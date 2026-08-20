@@ -1,5 +1,5 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import type { TradeItems, LeagueTradeConfig } from './trade-validation.ts'
+import type { TradeItems, TradeMovieItem } from './trade-validation.ts'
 
 /**
  * Per-offer trade expiry: how long an unanswered offer stands before it lapses.
@@ -115,7 +115,8 @@ export async function resolveOfferExpiry(
   supabase: SupabaseClient,
   request: ExpiryRequest | undefined,
   context: {
-    leagueConfig: Pick<LeagueTradeConfig, 'trade_deadline'>
+    /** `leagues.trade_deadline`, the season-level clock, or null if unset. */
+    tradeDeadline: string | null
     initiatorItems: TradeItems
     recipientItems: TradeItems
   }
@@ -165,7 +166,7 @@ export async function resolveOfferExpiry(
   // rather than let it die later with a confusing error. The clamp may land
   // inside the minimum window -- that is fine and not a refusal: the minimum
   // exists to stop pressure tactics, and a league deadline is not one.
-  const deadline = leagueDeadlineInstant(context.leagueConfig.trade_deadline)
+  const deadline = leagueDeadlineInstant(context.tradeDeadline)
   if (deadline && expiry > deadline) expiry = deadline
 
   // Whole minutes: a custom picker that stores :37 seconds would render as
@@ -173,6 +174,60 @@ export async function resolveOfferExpiry(
   expiry.setUTCSeconds(0, 0)
 
   return { valid: true, expires_at: expiry.toISOString(), expiry_anchor: anchor }
+}
+
+/**
+ * The movie an offer's release anchor points at: the one that opens first.
+ *
+ * Reads the titles and dates snapshotted into the items JSONB by
+ * enrichTradeItems, which is right for naming a movie in a sentence -- the
+ * authoritative resolution against live release dates is
+ * resolve_first_release_expiry() in SQL, and this only has to agree about WHICH
+ * movie, not exactly when.
+ */
+export function anchorMovieTitle(items: {
+  initiator_items: TradeItems
+  recipient_items: TradeItems
+}): string | null {
+  const dated = [...(items.initiator_items.movies ?? []), ...(items.recipient_items.movies ?? [])]
+    .filter((movie): movie is TradeMovieItem & { release_date: string } => Boolean(movie.release_date))
+
+  if (dated.length === 0) return null
+
+  return dated.reduce((earliest, movie) =>
+    movie.release_date < earliest.release_date ? movie : earliest
+  ).title ?? null
+}
+
+/**
+ * Why an expired offer expired, phrased for the people who were waiting on it.
+ *
+ * Kept in step with expiredReasonCopy() in apps/frontend/utils/tradeExpiry.ts,
+ * which says the same things on the card -- the frontend cannot import from
+ * here, so the two are deliberate mirrors.
+ */
+export function expiredReasonText(trade: {
+  expired_reason?: string | null
+  initiator_items: TradeItems
+  recipient_items: TradeItems
+}): string {
+  switch (trade.expired_reason) {
+    case 'movie_released': {
+      const title = anchorMovieTitle(trade)
+      return title
+        ? `The offer ran until ${title} released, and it has.`
+        : 'The offer ran until its first movie released, and it has.'
+    }
+    case 'league_deadline':
+      return 'The league trade deadline passed before it was answered.'
+    case 'offer_window':
+      return 'It expired before it was answered.'
+    default:
+      // Not one of the offer-expiry reasons -- a competing trade executed, or
+      // the trade stopped validating. Those carry veto_reason instead, so say
+      // nothing rather than describing them as an ordinary lapse.
+      return 'It could not be completed.'
+  }
 }
 
 /** Whether an offer's clock has already run out, wherever its status says. */

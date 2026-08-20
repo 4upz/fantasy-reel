@@ -304,13 +304,11 @@ export async function getLeagueName(
  * timezone -- and the 'R' style counts down live. For trade offer expiry that
  * is the whole point: it replaces the "you've got till Friday" people were
  * typing by hand, without anyone doing timezone math.
- *
- * @param style 'R' for relative ("in 2 days"), 'f' for an absolute date+time.
  */
-export function discordTimestamp(isoInstant: string, style: 'R' | 'f' = 'R'): string {
+export function discordTimestamp(isoInstant: string): string {
   const seconds = Math.floor(new Date(isoInstant).getTime() / 1000)
   if (!Number.isFinite(seconds)) return 'soon'
-  return `<t:${seconds}:${style}>`
+  return `<t:${seconds}:R>`
 }
 
 export function buildEmbedAuthor(leagueName: string, leagueId: string): DiscordEmbed['author'] {

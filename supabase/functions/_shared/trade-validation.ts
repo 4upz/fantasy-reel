@@ -24,6 +24,11 @@ export interface TradeItems {
 export interface ValidationResult {
   valid: boolean
   error?: string
+  /**
+   * The league's trade config, returned on success so callers that need it --
+   * offer expiry needs `trade_deadline` -- do not fetch the same row again.
+   */
+  config?: LeagueTradeConfig & { status: string }
 }
 
 export interface LeagueTradeConfig {
@@ -130,10 +135,15 @@ export function validateTradeStatus(
 /**
  * Create and insert trade notifications for one or both teams
  */
+export type NotifiableTrade = Pick<
+  TradeOffer,
+  'id' | 'league_id' | 'initiator_team_id' | 'recipient_team_id'
+>
+
 export async function notifyTradeParties(
   supabase: SupabaseClient,
   options: {
-    tradeOffer: TradeOffer
+    tradeOffer: NotifiableTrade
     notifyInitiator?: {
       type: string
       title: string
@@ -613,7 +623,7 @@ export async function validateTradeProposal(
   )
   if (!result.valid) return result
 
-  return { valid: true }
+  return { valid: true, config }
 }
 
 interface MovieData {

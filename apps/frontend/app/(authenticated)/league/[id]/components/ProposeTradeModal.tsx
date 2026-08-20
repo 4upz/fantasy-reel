@@ -7,6 +7,9 @@ import type { Team, TradeItems, TradeableMovie, TeamBudget, TradeMovieItem } fro
 import { createClient } from '@/utils/supabase/client'
 import { fetchTradeableMovies } from '@/utils/holdings'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import OfferExpiryPicker from './OfferExpiryPicker'
+import { useOfferExpiry } from '../hooks/useOfferExpiry'
+import type { ResolvedExpiry } from '@/utils/tradeExpiry'
 
 interface Props {
   team: Team
@@ -18,7 +21,8 @@ interface Props {
     recipientTeamId: string,
     offeredItems: TradeItems,
     requestedItems: TradeItems,
-    message?: string
+    message?: string,
+    expiry?: ResolvedExpiry
   ) => Promise<{ success: boolean; error?: string }>
 }
 
@@ -164,6 +168,17 @@ export default function ProposeTradeModal({
     requestedMovies.size > 0 ||
     requestedBudget > 0
 
+  // Both sides: the release anchor is the earliest release across the whole
+  // deal, not just the proposer's half.
+  const offerMovies = useMemo(
+    () => [
+      ...tradeableMovies.filter((m) => offeredMovies.has(m.source_id)),
+      ...recipientMovies.filter((m) => requestedMovies.has(m.source_id)),
+    ],
+    [tradeableMovies, offeredMovies, recipientMovies, requestedMovies]
+  )
+  const expiry = useOfferExpiry(offerMovies)
+
   const submitTradeAction = useCallback(async () => {
     if (!selectedTeamId) return
 
@@ -191,17 +206,24 @@ export default function ProposeTradeModal({
       faab: requestedBudget,
     }
 
+    const resolved = expiry.resolveNow()
+    if (!resolved.ok) {
+      setError(resolved.error)
+      return
+    }
+
     const result = await onPropose(
       selectedTeamId,
       offeredItems,
       requestedItems,
-      message.trim() || undefined
+      message.trim() || undefined,
+      resolved.expiry
     )
 
     if (!result.success) {
       setError(result.error || 'Failed to propose trade')
     }
-  }, [selectedTeamId, tradeableMovies, offeredMovies, offeredBudget, recipientMovies, requestedMovies, requestedBudget, message, onPropose])
+  }, [selectedTeamId, tradeableMovies, offeredMovies, offeredBudget, recipientMovies, requestedMovies, requestedBudget, message, expiry, onPropose])
 
   const { execute: handleSubmit, isLoading } = useAsyncAction(submitTradeAction)
 
@@ -349,6 +371,15 @@ export default function ProposeTradeModal({
                 )}
               </div>
 
+              {/* Offer expiry */}
+              <OfferExpiryPicker
+                releaseAnchor={expiry.releaseAnchor}
+                value={expiry.choice}
+                onChange={expiry.setChoice}
+                resolution={expiry.resolution}
+                fellBack={expiry.fellBack}
+              />
+
               {/* Message */}
               <div>
                 <label className="text-sm text-foreground-secondary">
@@ -383,7 +414,7 @@ export default function ProposeTradeModal({
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!hasItems || isLoading}
+              disabled={!hasItems || !expiry.resolution.ok || isLoading}
               className="btn btn-primary"
               aria-label={isLoading ? 'Proposing trade...' : 'Submit trade proposal'}
               aria-busy={isLoading}

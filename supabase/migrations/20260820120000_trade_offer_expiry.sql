@@ -43,7 +43,7 @@ COMMENT ON COLUMN trade_offers.expiry_anchor IS
 COMMENT ON COLUMN trade_offers.expired_reason IS
   'Why an expired offer expired: offer_window (its clock ran out), movie_released (its release anchor arrived), league_deadline (the season trade deadline passed). NULL on offers expired for other reasons -- those carry veto_reason instead, which is what execute_trade and the process-trades revalidation path already write.';
 COMMENT ON COLUMN trade_offers.expiry_reminder_sent_at IS
-  'When the single "expiring soon" nudge was sent, so overlapping cron runs cannot double-send. Reset to NULL whenever the clock is reset (counter-offer, extension).';
+  'Reserved for the "expiring soon" nudge (Phase 2 of docs/PLAN-trade-offer-expiry.md): when the single nudge was sent, so overlapping cron runs cannot double-send. Nothing reads it yet. It is written now -- reset to NULL wherever the clock is reset -- so adding the nudge does not mean reopening counter_trade() and reresolve_release_anchored_offers().';
 
 -- Supports the sweep. The predicate is a strict SUBSET of the "open offer"
 -- status list hardcoded in get_contested_source_ids, execute_trade and the two
@@ -53,9 +53,11 @@ CREATE INDEX IF NOT EXISTS idx_trade_offers_pending_expiry
   ON trade_offers (expires_at)
   WHERE status IN ('proposed', 'countered') AND expires_at IS NOT NULL;
 
--- Supports release re-resolution, which scans open release-anchored offers only.
+-- Supports release re-resolution, which scans open release-anchored offers and
+-- filters on nothing else. The partial predicate IS the point, so the key is
+-- the primary key rather than a column the query never touches.
 CREATE INDEX IF NOT EXISTS idx_trade_offers_release_anchored
-  ON trade_offers (league_id)
+  ON trade_offers (id)
   WHERE status IN ('proposed', 'countered') AND expiry_anchor = 'first_release';
 
 -- ============================================================================
@@ -258,27 +260,12 @@ BEGIN
     RETURN jsonb_build_object('error', 'Invalid expiry anchor', 'status_code', 400);
   END IF;
 
-  -- A release anchor is resolved here rather than trusted from the caller: the
-  -- counter names a different set of movies, so the earliest release may differ
-  -- from whatever the client computed against the old set.
-  IF p_expiry_anchor = 'first_release' THEN
-    v_expires_at := resolve_first_release_expiry(p_new_initiator_items, p_new_recipient_items);
-
-    IF v_expires_at IS NULL THEN
-      RETURN jsonb_build_object(
-        'error', 'No movie in this counter-offer has a release date to expire on',
-        'status_code', 400
-      );
-    END IF;
-
-    IF v_expires_at <= now() THEN
-      RETURN jsonb_build_object(
-        'error', 'The first movie in this counter-offer is already released',
-        'status_code', 400
-      );
-    END IF;
-  END IF;
-
+  -- The expiry arrives already resolved, bounded and clamped by
+  -- resolveOfferExpiry() in _shared/trade-expiry.ts, which is the single place
+  -- those rules live for both write paths (propose inserts its result directly).
+  -- This function deliberately does NOT re-resolve a release anchor: it would
+  -- resolve the same items to the same instant, but bare -- throwing away the
+  -- min/max window check and the league-deadline clamp the resolver applied.
   IF (v_expires_at IS NULL) <> (p_expiry_anchor IS NULL) THEN
     RETURN jsonb_build_object('error', 'Expiry and expiry anchor must be set together', 'status_code', 400);
   END IF;
@@ -395,33 +382,54 @@ GRANT EXECUTE ON FUNCTION reresolve_release_anchored_offers() TO service_role;
 
 CREATE OR REPLACE FUNCTION expire_lapsed_trade_offers()
 RETURNS SETOF trade_offers
-LANGUAGE sql SECURITY DEFINER
+LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+  -- Two statements rather than one with an OR. The two conditions live on
+  -- different relations, and Postgres cannot build a BitmapOr across a join --
+  -- a combined predicate would scan every open offer and filter. Split, the
+  -- first drives off idx_trade_offers_pending_expiry and the second off
+  -- idx_trade_offers_league_open.
+  --
+  -- Both statements claim and flip in one shot, so two overlapping cron runs
+  -- cannot both claim a row; the caller notifies exactly what it gets back.
+  -- The second cannot re-claim what the first took: the first leaves those
+  -- rows in 'expired'.
+
+  -- 1. The offer's own clock ran out.
+  RETURN QUERY
   UPDATE trade_offers t
   SET status = 'expired'::trade_status,
-      expired_reason = CASE
-        WHEN t.expires_at IS NOT NULL AND t.expires_at <= now()
-          THEN CASE WHEN t.expiry_anchor = 'first_release' THEN 'movie_released' ELSE 'offer_window' END
-        ELSE 'league_deadline'
-      END,
+      expired_reason =
+        CASE WHEN t.expiry_anchor = 'first_release' THEN 'movie_released' ELSE 'offer_window' END,
+      updated_at = now()
+  -- Only an unanswered offer has a clock. Once both parties agree, the review
+  -- window owns the trade. Kept in step with idx_trade_offers_pending_expiry,
+  -- reresolve_release_anchored_offers() and EXPIRY_RELEVANT_STATUSES in
+  -- TradeOfferCard.tsx -- change the four together.
+  WHERE t.status IN ('proposed', 'countered')
+    AND t.expires_at IS NOT NULL
+    AND t.expires_at <= now()
+  RETURNING t.*;
+
+  -- 2. The league's season deadline passed. An offer that outlives it can never
+  -- be accepted -- validateTradeProposal re-checks it -- so lapse it here
+  -- rather than letting it die later with a confusing error. Deadline day is
+  -- inclusive, as in validateLeagueTradingEnabled; unlike that check, the day
+  -- ends in UTC rather than whatever locale the Edge Function runs in.
+  RETURN QUERY
+  UPDATE trade_offers t
+  SET status = 'expired'::trade_status,
+      expired_reason = 'league_deadline',
       updated_at = now()
   FROM leagues l
   WHERE l.id = t.league_id
-    -- Only an unanswered offer has a clock. Once both parties agree, the
-    -- review window owns the trade.
     AND t.status IN ('proposed', 'countered')
-    AND (
-      (t.expires_at IS NOT NULL AND t.expires_at <= now())
-      -- An offer that outlives the season deadline can never be accepted --
-      -- validateTradeProposal re-checks it -- so lapse it here rather than
-      -- letting it die later with a confusing error. Deadline day is inclusive,
-      -- as in validateLeagueTradingEnabled; unlike that check, the day ends in
-      -- UTC rather than whatever locale the Edge Function happens to run in.
-      OR (l.trade_deadline IS NOT NULL
-          AND now() >= ((l.trade_deadline + INTERVAL '1 day') AT TIME ZONE 'UTC'))
-    )
+    AND l.trade_deadline IS NOT NULL
+    AND now() >= ((l.trade_deadline + INTERVAL '1 day') AT TIME ZONE 'UTC')
   RETURNING t.*;
+END;
 $$;
 
 COMMENT ON FUNCTION expire_lapsed_trade_offers() IS
