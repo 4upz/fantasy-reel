@@ -51,18 +51,23 @@ In UI copy: "Offer expires in 6h" vs "League trade deadline: Nov 30".
    behavior ("this one is time-sensitive, that one isn't").
 2. **"No expiry" stays first-class.** Some leagues will hate timers. Null
    `expires_at` = current behavior, and every existing offer backfills to null.
-3. **Default 48h**, preset chips 24h / 48h / 3d / 7d / No expiry.
-4. **Bounds: min 1h, max 14 days.** The minimum matters — a 5-minute offer is a
-   pressure tactic, not a deadline.
-5. **Clamp to the league trade deadline.** An offer that outlives the season
+3. **Default 48h**, preset chips 24h / 48h / 3d / 7d / **When _X_ releases** /
+   **Custom…** / No expiry.
+4. **Bounds: min 1h, max 14 days**, enforced on the server, not just in the
+   picker. The minimum matters — a 5-minute offer is a pressure tactic, not a
+   deadline — and a custom picker is exactly where someone will try to set one.
+5. **A release-anchored preset**, expiring at the first release among the movies
+   in the offer. This is the one preset that encodes fantasy logic rather than
+   clock convenience: the deal is only a bet while the movie is still unreleased.
+6. **Clamp to the league trade deadline.** An offer that outlives the season
    deadline can never be accepted (`validateTradeProposal` re-checks the league
    deadline on accept), so it should lapse at the deadline instead of dying with
    a confusing error later.
-6. **A counter-offer resets the clock**, with the counterer choosing the new
+7. **A counter-offer resets the clock**, with the counterer choosing the new
    window. See the hazard section — this is the sharpest bug in the feature.
-7. **Expiry is not cancellation.** Distinct terminal state, distinct copy,
+8. **Expiry is not cancellation.** Distinct terminal state, distinct copy,
    distinct notification. History should show "lapsed" ≠ "pulled".
-8. **The proposer may extend, never shorten.** Shortening lets someone yank the
+9. **The proposer may extend, never shorten.** Shortening lets someone yank the
    rug while the recipient is mid-decision.
 
 ---
@@ -75,9 +80,14 @@ One migration, `<ts>_trade_offer_expiry.sql`:
 ALTER TABLE trade_offers
   ADD COLUMN expires_at              TIMESTAMPTZ,
   ADD COLUMN expiry_reminder_sent_at TIMESTAMPTZ,
+  ADD COLUMN expiry_anchor           TEXT
+    CHECK (expiry_anchor IS NULL OR expiry_anchor IN ('fixed', 'first_release')),
   ADD COLUMN expired_reason          TEXT
     CHECK (expired_reason IS NULL
-           OR expired_reason IN ('offer_deadline', 'league_deadline'));
+           OR expired_reason IN ('offer_window', 'movie_released', 'league_deadline')),
+  -- An offer either has a clock and a record of where it came from, or neither.
+  ADD CONSTRAINT check_expiry_anchor_paired
+    CHECK ((expires_at IS NULL) = (expiry_anchor IS NULL));
 
 -- Sweep support. Predicate is a strict subset of the existing "open" list, so
 -- it does not redefine open-ness (see the four-places hazard below).
@@ -86,15 +96,28 @@ CREATE INDEX idx_trade_offers_pending_expiry
   WHERE status IN ('proposed', 'countered') AND expires_at IS NOT NULL;
 ```
 
+**`expires_at` is always a resolved timestamp**, whatever the user picked.
+Presets, the custom picker, and the release anchor all collapse into one column,
+so the sweep, the index, the countdown, and every guard stay uniform with exactly
+one thing to compare. `expiry_anchor` exists to record *how* that timestamp was
+derived, which matters for one thing: a `first_release` offer has to be
+re-resolved when the movie moves. See "The release anchor" below.
+
+Note the deliberate absence of a "which movie anchored this" column. The enriched
+items JSONB already carries `movie_id`, `title`, and `release_date` per movie
+(`enrichTradeItems`, `_shared/trade-validation.ts:622-661`), so both the chip
+label and the re-resolution can be computed from the row itself.
+
 `TIMESTAMPTZ`, not `DATE`. `leagues.trade_deadline` is a DATE compared against
 server-local `setHours(23,59,59)` in `_shared/trade-validation.ts:331-335` — a
 pre-existing timezone wart we should not reproduce.
 
 **`expired_reason` is deliberately narrow.** `execute_trade` and `process-trades`
 already write `status='expired'` with an explanatory `veto_reason`; they are left
-untouched. The UI rule becomes: `expired_reason === 'offer_deadline'` → "The
-offer window closed"; `'league_deadline'` → "The league trade deadline passed";
-otherwise fall back to the existing `veto_reason` text. This avoids rewriting
+untouched. The UI rule becomes: `expired_reason` drives the copy —
+`'offer_window'` → "The offer window closed", `'movie_released'` → "_X_ released",
+`'league_deadline'` → "The league trade deadline passed" — and anything else falls
+back to the existing `veto_reason` text. This avoids rewriting
 `execute_trade`, which every migration that touches it must copy forward verbatim.
 
 Phase 3 adds league config: `leagues.trade_offer_expiry_default_hours`,
@@ -124,7 +147,7 @@ separate step before the execution loop:
 
 ```sql
 UPDATE trade_offers
-SET status = 'expired', expired_reason = 'offer_deadline', updated_at = now()
+SET status = 'expired', expired_reason = 'offer_window', updated_at = now()
 WHERE status IN ('proposed', 'countered')
   AND expires_at IS NOT NULL
   AND expires_at <= now()
@@ -136,7 +159,7 @@ Three properties worth stating, because each is a bug if lost:
 - **Atomic claim.** The same statement filters and flips, so two overlapping cron
   runs cannot both claim a row and double-notify. Notify only the rows
   `RETURNING` hands back.
-- **`now()` is the database's**, not the function's. `process-trades:68` builds
+- **`now()` is the database's**, not the function's. `process-trades/index.ts:68` builds
   `now` in JS and interpolates it into the filter; the sweep must not copy that —
   every other clock in the trade system (`review_ends_at`, `accepted_at`) is DB
   time, and mixing sources invites off-by-a-clock-skew disputes.
@@ -145,8 +168,15 @@ Three properties worth stating, because each is a bug if lost:
   40 offers pile up should not need 20 minutes to clear them. Cap the
   notification fan-out instead if anything.
 
-The same sweep step handles the league-deadline case: open offers in leagues
-whose `trade_deadline` has passed → `expired_reason='league_deadline'`.
+The same cron step handles two more cases:
+
+- **League deadline.** Open offers in leagues whose `trade_deadline` has passed →
+  `expired_reason='league_deadline'`.
+- **Release re-resolution.** Before the expiry claim runs, recompute `expires_at`
+  for open `expiry_anchor='first_release'` offers from live `movies.release_date`
+  (see "The release anchor"). Order matters: re-resolve first, then sweep, so a
+  movie that moved earlier expires in the same run instead of the next one. An
+  offer whose anchor has passed gets `expired_reason='movie_released'`.
 
 **Layer 3 (UX only)** — mirror the expiry check in the TypeScript edge functions
 `respond-trade` and `counter-trade` before the RPC, for a cleaner error. Same
@@ -201,6 +231,21 @@ miss.
    expires. Do not retro-apply a default window to live offers — people did not
    agree to a clock they never saw.
 
+7. **The items JSONB `release_date` is a snapshot, not a source of truth.**
+   `enrichTradeItems` copies `title`, `poster_url`, and `release_date` into the
+   offer at proposal time (`_shared/trade-validation.ts:655-660`). Every other
+   consumer treats that as display data, so it has never mattered that it drifts.
+   Release-anchored expiry is the first thing that would make a decision on it.
+   Resolve through `movie_id` → `movies.release_date` instead, both at proposal
+   time and on every re-resolution.
+
+8. **Client-side minimum enforcement is theater on its own.** The custom picker
+   makes it trivial to submit any timestamp — an edited `min` attribute, a direct
+   `callEdgeFunction` call, or the Discord bot later. `propose-trade`,
+   `counter-trade`, and `extend-trade-offer` must each range-check `expires_at`
+   server-side; the picker's job is to make the valid range obvious, not to
+   guarantee it.
+
 ---
 
 ## UX
@@ -210,13 +255,105 @@ miss.
 A chip row directly above the existing optional Message field (`:352`):
 
 ```
-Offer expires:  [ 24h ] [ 48h ] [ 3 days ] [ 7 days ] [ No expiry ]
+Offer expires:  [ 24h ] [ 48h ] [ 3 days ] [ 7 days ]
+                [ When Dune 3 releases ] [ Custom… ] [ No expiry ]
 ```
 
-Selected chip uses gold border/text (`.btn-secondary` idiom); resolved absolute
-time shown underneath in `text-foreground-muted` ("Expires Fri, Aug 22 at 4:15 PM")
-so nobody has to do timezone math. When the league trade deadline would clamp the
-choice, show that inline rather than silently truncating.
+Selected chip uses gold border/text (`.btn-secondary` idiom); the resolved
+absolute time always appears underneath in `text-foreground-muted` ("Expires Fri,
+Aug 22 at 4:15 PM — in 2 days") so nobody has to do timezone math, and so the two
+derived options (release anchor, custom) show their answer the same way the simple
+presets do. When the league trade deadline would clamp the choice, say so inline
+rather than silently truncating.
+
+### The custom picker
+
+Choosing "Custom…" reveals a datetime field inline, below the chip row.
+
+**This is the app's first date/time input.** A repo-wide grep for `type="date"`
+and `type="datetime-local"` returns nothing; `BiddingConfigSection.tsx` and
+`DraftConfigSection.tsx` use only number and text inputs, and there is no
+date-picker dependency in `apps/frontend/package.json`. Per the project's
+"check existing components before creating new patterns" rule, this should land as
+a shared `app/components/DateTimeField.tsx`, not inline in the trade modal —
+league draft windows and bidding windows are the obvious next callers.
+
+Recommended: **native `<input type="datetime-local">`** styled with the existing
+`.input` class. It gets the native wheel picker on iOS/Android for free, adds no
+bundle weight, and is keyboard-accessible by default. Its cost is cosmetic
+inconsistency across browsers, which is an acceptable trade for a field used once
+per trade proposal.
+
+Minimum enforcement happens in **three places, and all three are needed**:
+
+1. **`min` / `max` attributes** on the input (`now + 1h`, `now + 14d`), so the
+   native picker greys out invalid times. Convenience only — these are trivially
+   editable in devtools and are not honored uniformly.
+2. **A JS guard** that disables the submit button and renders an inline message in
+   the `.alert-error` idiom: "An offer has to stay open at least 1 hour." Re-check
+   on submit, not just on change, because the clock keeps moving while the modal
+   is open — a picker opened at 5:00 with a 6:00 selection is invalid by 5:01.
+3. **The authoritative check in `propose-trade` / `counter-trade`.** A crafted
+   request bypasses everything above. 400 with the same wording as the inline
+   message so the two never contradict each other.
+
+Details worth getting right: convert the field's local wall-clock value with
+`new Date(value).toISOString()` and store UTC; round seconds off so the countdown
+doesn't show "in 59 minutes" for a value the user set to exactly one hour; keep a
+visible resolved preview because `datetime-local` gives no timezone affordance at
+all. For accessibility, associate the hint and the error with `aria-describedby`,
+give the error `role="alert"`, and mark invalid state with more than color.
+
+### The release anchor
+
+"When _X_ releases" resolves to the **earliest release date among all movies in
+the offer, both sides**. Earliest rather than latest: once any movie in the deal is
+out, the deal's information balance has already changed, so that is the moment the
+offer should stop standing.
+
+**Boundary convention.** The codebase already has exactly one definition of
+"released": `isUpcomingMovie()` (`_shared/utils.ts:137-156`) treats a movie as
+upcoming while `release_date >= today` (UTC date-string compare), so it flips to
+released at the start of the day *after* its release date. The anchor should use
+that same boundary — `release_date + 1 day` at 00:00 UTC — rather than inventing a
+third date rule, which is a hazard the bidding-release plan called out explicitly.
+The tighter alternative (expire at the *start* of the release day) is in the open
+questions below; it reads better against the chip label and closes a small
+information-asymmetry window, at the cost of a second definition of released.
+
+**The chip is conditional and live.** Its label and validity depend on the current
+movie selection, so it re-derives as the user adds and removes movies. Disable it,
+with the reason visible on hover/focus rather than a silent grey chip, when:
+
+- no movies are selected yet ("Add a movie to use this");
+- no selected movie has a release date ("No release date yet");
+- the earliest release is already past ("_X_ is already out") — trading released
+  movies is legal, so this is a normal case, not an error;
+- the earliest release is less than the minimum away ("_X_ is out in 20 minutes").
+  Do **not** silently bump this to the 1h minimum: the chip would then be lying
+  about what it does.
+
+If the selection changes so the chosen anchor becomes invalid, drop back to the
+default window and say so — never submit a stale anchor.
+
+**Re-resolution is the part that will get missed.** Release dates move; that is
+what the daily `sync-release-dates` cron exists for. Two consequences:
+
+- The `release_date` inside the offer's items JSONB is a **snapshot** taken by
+  `enrichTradeItems` at proposal time and goes stale. Re-resolution must read
+  `movies.release_date` live via the `movie_id` in the JSONB, never the snapshot.
+- Open `first_release` offers need their `expires_at` recomputed. Put that in the
+  `process-trades` sweep rather than bolting it onto `sync-release-dates`: it
+  keeps all offer-expiry logic in one job and catches date changes from any
+  source, not just the nightly sync.
+
+Re-resolution rules: only for `status IN ('proposed','countered')` — an accepted
+offer's clock is the review window's, and re-resolving it would be a silent
+retroactive change to an agreed deal. If the date moves later, push `expires_at`
+out and tell both parties ("_Dune 3_ moved to Dec 20 — your offer now stands until
+then"). If it moves earlier but is still future, pull it in and tell them. If it
+moves into the past, the next sweep expires the offer with
+`expired_reason='movie_released'`.
 
 ### On the card (`TradeOfferCard.tsx`)
 
@@ -243,7 +380,8 @@ avoid a page of cards re-rendering every second.
 ### Expired state
 
 Expired offers stay in history, greyed, with reason-specific copy:
-- `offer_deadline` → "Expired — the offer window closed"
+- `offer_window` → "Expired — the offer window closed"
+- `movie_released` → "Expired — _Dune 3_ released" (title read from the items JSONB)
 - `league_deadline` → "Expired — the league trade deadline passed"
 - else → existing `veto_reason` text (competing trade, failed revalidation)
 
@@ -318,14 +456,29 @@ stable snake_case types: `trade_offer_expiring`, `trade_offer_expired`.
 
 New `trade-expiry.test.ts`, plus additions to existing files:
 
-- `propose-trade`: expiry in the past → 400; below min / above max → 400; beyond
-  the league trade deadline → clamped, not rejected; omitted → null and the offer
-  never expires.
+- `propose-trade`, fixed expiry: in the past → 400; below min / above max → 400;
+  beyond the league trade deadline → clamped, not rejected; omitted → null,
+  null `expiry_anchor`, and the offer never expires. Include a test that submits
+  a below-minimum time **directly to the edge function**, bypassing the picker —
+  that is the case the UI cannot protect.
+- `propose-trade`, release anchor: resolves to `min(release_date)` across **both**
+  sides' movies, not just the proposer's; all-null release dates → 400; earliest
+  release already past → 400; earliest release inside the minimum window → 400;
+  resolved timestamp lands on the `isUpcomingMovie` boundary, not the raw date.
+- Release re-resolution in `process-trades`: date moves later → open
+  `first_release` offers move with it and both parties are notified; moves earlier
+  but still future → pulled in; moves into the past → expired with
+  `expired_reason='movie_released'` in the **same** run; `review`/`accepted` offers
+  and `expiry_anchor='fixed'` offers are never touched; re-resolution reads
+  `movies.release_date`, not the items JSONB snapshot (assert by changing the
+  movie row and leaving the JSONB stale on purpose).
 - `respond-trade`: accept an offer whose `expires_at` has passed but which the
   cron has **not** yet swept → 400 (this is the layer-1 guard, and the single most
   important test in the feature); accept at `expires_at - 1s` → succeeds.
-- `counter-trade`: counter resets `expires_at` to the counterer's window and
-  clears `expiry_reminder_sent_at`; countering an already-lapsed offer → 400.
+- `counter-trade`: counter resets `expires_at` and `expiry_anchor` to the
+  counterer's choice and clears `expiry_reminder_sent_at`; countering an
+  already-lapsed offer → 400; a counter that changes the movie set re-resolves a
+  release anchor against the new set.
 - `process-trades`: sweep flips only `proposed`/`countered`; leaves `review` and
   `accepted` alone; leaves `expires_at IS NULL` alone; notifies both parties
   exactly once; a second run over the same data notifies zero times.
@@ -350,21 +503,37 @@ per the repo's E2E notes, not a CSS/nav selector.
 - Discord `<t:...:R>` renders as a live countdown, not a raw number.
 - A league with `trade_deadline` set: offers clamp, and the deadline sweep fires.
 - Mobile: the countdown pill and status badge must not wrap into the movie list.
+- The custom picker on iOS Safari and Android Chrome inside the trade modal — the
+  native picker must not be clipped or scroll-locked by the modal overlay.
+- Custom picker across a timezone offset: pick 9:00 PM locally, confirm the stored
+  UTC, the card countdown, the email, and the Discord `<t:…:R>` all agree.
+- The release chip's live behavior: add a movie with an earlier release and watch
+  the label and resolved time change; remove the last dated movie and confirm the
+  chip disables and the selection falls back rather than submitting stale.
 
 ### Migration verification
 
 Run `npx supabase migration up` (**not** `db reset`) against a DB carrying live
-open offers; assert every pre-existing offer has `expires_at IS NULL` and that a
-sweep leaves all of them untouched.
+open offers; assert every pre-existing offer has `expires_at IS NULL`, a NULL
+`expiry_anchor` (the paired CHECK constraint must accept the backfilled rows —
+verify before shipping, since a violated table constraint fails the whole
+migration), and that a sweep leaves all of them untouched.
 
 ---
 
 ## Phasing
 
 **Phase 1 — the feature.** Migration; `respond_to_trade` / `counter_trade` guards;
-sweep in `process-trades`; expiry picker in `ProposeTradeModal`; countdown +
-expired-reason copy in `TradeOfferCard`; expiry field in the Discord embeds;
-expired notifications. Shippable and complete on its own.
+sweep in `process-trades`; the chip row, shared `DateTimeField`, and release anchor
+in `ProposeTradeModal`; server-side range checks; release re-resolution in the
+cron; countdown + expired-reason copy in `TradeOfferCard`; expiry field in the
+Discord embeds; expired notifications. Shippable and complete on its own.
+
+The custom picker and the release anchor both belong here rather than in a later
+phase: the picker is what makes the bounds real (and therefore what forces the
+server-side range check to exist from day one), and the release anchor is the one
+option that encodes the actual fantasy logic. Presets alone would ship a weaker
+version of the thing people are already doing by hand.
 
 **Phase 2 — nudges.** Expiring-soon reminder (email + in-app + optional Discord),
 `extend-trade-offer` edge function and its button.
@@ -381,19 +550,37 @@ bidding, and counterpick config only, so this phase means a new
 Suggested agent team for Phase 1, per the topography table in CLAUDE.md:
 **Full-Stack Feature** — lead + backend-dev (migration + `process-trades` sweep +
 edge-function guards) + frontend-dev (modal picker, card countdown, `useTrading`
-race handling) + reviewer. Handoff contracts: `trade_offers.expires_at`
-(timestamptz, nullable), `expired_reason` (text, checked), `propose-trade` body
-gains `expires_at?: string | null`, `counter-trade` body gains the same.
+race handling, shared `DateTimeField`) + reviewer. Handoff contracts:
+
+- `trade_offers.expires_at` (timestamptz, nullable), `expiry_anchor`
+  (`'fixed' | 'first_release' | null`, paired with `expires_at`), `expired_reason`
+  (`'offer_window' | 'movie_released' | 'league_deadline' | null`).
+- `propose-trade` and `counter-trade` bodies gain
+  `expires_at?: string | null` (ISO-8601 UTC) and
+  `expiry_anchor?: 'fixed' | 'first_release' | null`. The client always sends a
+  resolved timestamp — the server re-derives and overrides it for
+  `first_release` rather than trusting the client's arithmetic.
+- `<DateTimeField value min max onChange error />` in
+  `apps/frontend/app/components/DateTimeField.tsx`.
 
 ---
 
 ## Open questions
 
 1. Default window — 48h, or no expiry unless the proposer opts in?
-2. Should a commissioner be able to *require* an expiry on every offer (and set a
+2. **Release-anchor boundary:** end of release day UTC (matches `isUpcomingMovie`,
+   one definition of "released" in the codebase, offer survives opening day) or
+   start of release day (reads truer against the "when _X_ releases" label and
+   closes a small information gap, at the cost of a second date rule)? This plan
+   assumes the former.
+3. Should the release anchor use the **earliest** release across the whole offer,
+   or only the movies the *recipient* would be giving up? Earliest-overall is
+   assumed here; recipient-side-only is arguable if the intent is "you can't sit
+   on my offer until you know what my guy is worth".
+4. Should a commissioner be able to *require* an expiry on every offer (and set a
    minimum), or is this purely per-proposer?
-3. Should the league trade deadline auto-expire open offers, or leave them to die
+5. Should the league trade deadline auto-expire open offers, or leave them to die
    at accept time as they do now? (This plan assumes auto-expire.)
-4. Is `animate-glow-pulse` allowed outside draft "your turn" states?
-5. Does an expired offer stay visible in the trading feed indefinitely, or fold
+6. Is `animate-glow-pulse` allowed outside draft "your turn" states?
+7. Does an expired offer stay visible in the trading feed indefinitely, or fold
    into a collapsed history section after some period?
