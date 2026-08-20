@@ -29,6 +29,7 @@ import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { createLogger, serializeError, type Logger } from './logger.ts'
 import { purgeByAge } from './job-runs.ts'
 import { createServiceClient } from './utils.ts'
+import { recordCacheOutcome } from './monitoring.ts'
 
 const CACHE_TABLE = 'tmdb_cache'
 
@@ -239,7 +240,11 @@ function coalesce<T>(cacheKey: string, work: () => Promise<T>): Promise<T> {
  * so a cold popular key costs one TMDb request, not one per request in flight.
  *
  * Emits exactly one structured line per call carrying cache_key and
- * cache_status, so hit rate per namespace is answerable from logs alone.
+ * cache_status, so hit rate per namespace is answerable from logs alone --
+ * and mirrors each decision into Sentry via `recordCacheOutcome`
+ * (_shared/monitoring.ts): a `tmdb_cache.requests` counter for hit-rate
+ * dashboards, plus a grouped error event when stale serving crosses the ops
+ * threshold. Both are no-ops without SENTRY_DSN.
  */
 export async function getCachedOrFetch<T>(
   client: SupabaseClient,
@@ -252,6 +257,7 @@ export async function getCachedOrFetch<T>(
 
   if (cached && new Date(cached.expires_at).getTime() > Date.now()) {
     log.info('tmdb cache', { cache_key: cacheKey, cache_status: 'hit' })
+    recordCacheOutcome({ cacheKey, status: 'hit' })
     return { payload: cached.payload as T, cacheStatus: 'hit' }
   }
 
@@ -265,15 +271,17 @@ export async function getCachedOrFetch<T>(
       return fetched
     })
     log.info('tmdb cache', { cache_key: cacheKey, cache_status: 'miss' })
+    recordCacheOutcome({ cacheKey, status: 'miss' })
     return { payload, cacheStatus: 'miss' }
   } catch (error) {
     if (cached) {
       const expiredForMs = Date.now() - new Date(cached.expires_at).getTime()
       const graceMs = staleGraceMs(cached)
+      const expiredForSeconds = Math.round(expiredForMs / 1000)
       const fields = {
         cache_key: cacheKey,
         expired_at: cached.expires_at,
-        expired_for_seconds: Math.round(expiredForMs / 1000),
+        expired_for_seconds: expiredForSeconds,
         stale_grace_seconds: Math.round(graceMs / 1000),
         error: serializeError(error),
       }
@@ -284,8 +292,15 @@ export async function getCachedOrFetch<T>(
         // Briefly stale is routine; an hour of it means TMDb has been failing
         // that long, which is an ops signal rather than a request-level blip.
         const line = { ...fields, cache_status: 'stale' }
-        if (expiredForMs > STALE_ERROR_AFTER_MS) log.error('tmdb cache', line)
+        const beyondErrorThreshold = expiredForMs > STALE_ERROR_AFTER_MS
+        if (beyondErrorThreshold) log.error('tmdb cache', line)
         else log.warn('tmdb cache', line)
+        recordCacheOutcome({
+          cacheKey,
+          status: 'stale',
+          alert: beyondErrorThreshold ? 'serving_stale' : undefined,
+          expiredForSeconds,
+        })
 
         return { payload: cached.payload as T, cacheStatus: 'stale' }
       }
@@ -293,9 +308,11 @@ export async function getCachedOrFetch<T>(
       // Past the grace window the row stops being a fallback: serving it would
       // hide an outage or a dead API key behind data no one can date.
       log.error('tmdb cache', { ...fields, cache_status: 'miss', stale_beyond_grace: true })
+      recordCacheOutcome({ cacheKey, status: 'miss', alert: 'grace_exhausted', expiredForSeconds })
       throw error
     }
     log.warn('tmdb cache', { cache_key: cacheKey, cache_status: 'miss', error: serializeError(error) })
+    recordCacheOutcome({ cacheKey, status: 'miss' })
     throw error
   }
 }

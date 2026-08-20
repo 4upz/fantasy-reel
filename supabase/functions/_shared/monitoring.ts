@@ -1,6 +1,14 @@
 /**
- * Sentry error tracking for Edge Functions, lazily loaded so the happy path
- * (no errors, or SENTRY_DSN unset) never pays for the import.
+ * Sentry telemetry for Edge Functions, lazily loaded so the happy path
+ * (SENTRY_DSN unset) never pays for the import.
+ *
+ * Two exports:
+ * - `captureException` -- error events, flushed inline before returning.
+ * - `recordCacheOutcome` -- one counter metric per TMDb cache decision
+ *   (`tmdb_cache.requests`, attributes `cache_status` + `cache_namespace`,
+ *   both bounded enums), plus a single grouped error event when stale
+ *   serving crosses the ops threshold. Fire-and-forget: it never throws and
+ *   never blocks the response path; flushing rides `EdgeRuntime.waitUntil`.
  */
 
 let initialized = false
@@ -17,7 +25,7 @@ function parseSampleRate(raw: string | undefined, fallback: number): number {
 // deno-lint-ignore no-explicit-any
 async function getSentry(dsn: string): Promise<any> {
   if (!sentryPromise) {
-    sentryPromise = import('npm:@sentry/deno')
+    sentryPromise = import('npm:@sentry/deno@^10.42.0')
   }
   const Sentry = await sentryPromise
   if (!initialized) {
@@ -47,4 +55,70 @@ export async function captureException(err: unknown, context?: Record<string, un
       error: monitoringError instanceof Error ? monitoringError.message : String(monitoringError),
     }))
   }
+}
+
+/**
+ * One stable message so every threshold crossing groups into a single Sentry
+ * issue -- that issue's event frequency is what an alert rule watches. The
+ * varying details travel as tags/extra, not in the message.
+ */
+const STALE_ALERT_MESSAGE = 'TMDb cache stale-serving threshold exceeded'
+
+export interface CacheOutcome {
+  cacheKey: string
+  status: 'hit' | 'miss' | 'stale'
+  /**
+   * Set when the outcome is an ops-visible failure mode: 'serving_stale'
+   * (stale served past the error threshold) or 'grace_exhausted' (stale
+   * fallback refused because the row outlived its grace window).
+   */
+  alert?: 'serving_stale' | 'grace_exhausted'
+  expiredForSeconds?: number
+}
+
+/**
+ * Records one TMDb cache decision in Sentry. No-op without SENTRY_DSN.
+ * Synchronous from the caller's point of view -- all Sentry work happens on a
+ * detached promise handed to `EdgeRuntime.waitUntil` (or left floating outside
+ * that runtime, where losing a metric is acceptable: tests and local dev).
+ */
+export function recordCacheOutcome(outcome: CacheOutcome): void {
+  const dsn = Deno.env.get('SENTRY_DSN')
+  if (!dsn) return
+
+  const work = (async () => {
+    try {
+      const Sentry = await getSentry(dsn)
+      // First key segment: movie_details | browse | search -- bounded, unlike
+      // the full key, which would blow up metric cardinality.
+      const namespace = outcome.cacheKey.split(':', 1)[0]
+
+      Sentry.metrics.count('tmdb_cache.requests', 1, {
+        attributes: { cache_status: outcome.status, cache_namespace: namespace },
+      })
+
+      if (outcome.alert) {
+        Sentry.captureMessage(STALE_ALERT_MESSAGE, {
+          level: 'error',
+          tags: { phase: outcome.alert, cache_namespace: namespace },
+          extra: {
+            cache_key: outcome.cacheKey,
+            expired_for_seconds: outcome.expiredForSeconds,
+          },
+        })
+      }
+
+      await Sentry.flush(2000)
+    } catch (monitoringError) {
+      console.warn(JSON.stringify({
+        level: 'warn',
+        fn: 'monitoring',
+        msg: 'recordCacheOutcome failed',
+        error: monitoringError instanceof Error ? monitoringError.message : String(monitoringError),
+      }))
+    }
+  })()
+
+  const g = globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }
+  g.EdgeRuntime?.waitUntil(work)
 }
