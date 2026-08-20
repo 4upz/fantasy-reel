@@ -25,9 +25,13 @@ import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templat
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import {
-  type CounterpickContest,
-  type CounterpickLossReason,
-  resolveCounterpickWinners,
+  type BidContest,
+  type BidLossReason,
+  resolveBidWinners,
+  slotsOnlyCapacity,
+  type TeamCapacity,
+  type DroppableCandidate,
+  droppableHoldingIds,
   resolveTargetRevalidation,
   type TargetVoidReason,
 } from '../_shared/bid-resolution.ts'
@@ -300,7 +304,7 @@ async function selectByIdBatches<T>(
  */
 async function getRemainingCounterpickSlots(
   serviceClient: ServiceClient,
-  contests: CounterpickContest[],
+  contests: BidContest[],
 ): Promise<{ remaining: Map<string, number>; slotsByLeague: Map<string, number> }> {
   const leagueOfTeam = new Map<string, string>()
   for (const contest of contests) {
@@ -551,7 +555,7 @@ async function notifyCounterpickLoser(
     movieTitle: string
     movieId: string
     winner: CounterpickBid | undefined
-    reason: CounterpickLossReason
+    reason: BidLossReason
     slots: number
   },
 ): Promise<void> {
@@ -678,8 +682,8 @@ async function loadSettledCounterpickContests(
   now: Date,
   errors: ProcessingError[],
   deferred: DeferredGroup[],
-): Promise<{ contests: CounterpickContest[]; bidsByContest: Map<string, CounterpickBid[]> }> {
-  const contests: CounterpickContest[] = []
+): Promise<{ contests: BidContest[]; bidsByContest: Map<string, CounterpickBid[]> }> {
+  const contests: BidContest[] = []
   const bidsByContest = new Map<string, CounterpickBid[]>()
   const contestedKeys = new Set(dueBids.map((bid) => `${bid.league_id}:${bid.movie_id}`))
 
@@ -746,10 +750,10 @@ async function loadSettledCounterpickContests(
  */
 async function voidReleasedCounterpickContests(
   serviceClient: ServiceClient,
-  contests: CounterpickContest[],
+  contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
-): Promise<CounterpickContest[]> {
+): Promise<BidContest[]> {
   const movieIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
 
   const { rows: movies } = await selectByIdBatches<
@@ -761,7 +765,7 @@ async function voidReleasedCounterpickContests(
   )
   const moviesById = new Map(movies.map((movie) => [movie.id, movie]))
 
-  const surviving: CounterpickContest[] = []
+  const surviving: BidContest[] = []
 
   for (const contest of contests) {
     const [, movieId] = contest.key.split(':')
@@ -852,10 +856,10 @@ const TARGET_VOID_REASON_TEXT: Record<TargetVoidReason, string> = {
  */
 async function revalidateCounterpickTargets(
   serviceClient: ServiceClient,
-  contests: CounterpickContest[],
+  contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
-): Promise<CounterpickContest[]> {
+): Promise<BidContest[]> {
   const allActiveBids = contests.flatMap((contest) => contest.activeBids as CounterpickBid[])
 
   const draftPickIds = [...new Set(
@@ -895,7 +899,7 @@ async function revalidateCounterpickTargets(
   const unreadTargetIds = new Set([...unreadDraftPickIds, ...unreadPickupIds])
   const titleByMovieId = new Map(movies.map((movie) => [movie.id, movie.title]))
 
-  const surviving: CounterpickContest[] = []
+  const surviving: BidContest[] = []
 
   /**
    * Split bids by whether their target holding still supports them,
@@ -1082,7 +1086,10 @@ async function processCounterpickBids(
   if (contests.length === 0) return results
 
   const { remaining, slotsByLeague } = await getRemainingCounterpickSlots(serviceClient, contests)
-  const { winners, lossReasons } = resolveCounterpickWinners(contests, remaining)
+  const { winners, lossReasons } = resolveBidWinners(
+    contests,
+    new Map([...remaining].map(([teamId, slots]) => [teamId, slotsOnlyCapacity(slots)])),
+  )
 
   for (const { key } of contests) {
     const [leagueId, movieId] = key.split(':')
