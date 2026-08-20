@@ -47,11 +47,13 @@ export async function GET(request: Request) {
 
         if (isNewUser && user.email) {
           if (!profile) {
-            // Check if there's an existing user with this email
-            // Uses a SECURITY DEFINER function to query auth.users
-            const { count } = await supabase.rpc('count_users_by_email', {
-              email_to_check: user.email,
-            })
+            // Check if there's an existing user with this email.
+            // SECURITY DEFINER over auth.users, self-scoped: it counts rows
+            // matching the *caller's* email, so it takes no argument and
+            // cannot be used to probe anyone else's address.
+            const { count } = await supabase.rpc(
+              'count_duplicate_accounts_for_current_user'
+            )
 
             if (count && count > 1) {
               // Duplicate detected! Store context and redirect to link-account page
