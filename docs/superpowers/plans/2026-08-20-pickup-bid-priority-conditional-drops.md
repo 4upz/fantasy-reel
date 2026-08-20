@@ -33,7 +33,9 @@ cd supabase/functions && deno run --allow-all --env-file=../../.env.test place-b
 PLACE_BID_URL=http://127.0.0.1:8000 deno test --allow-all tests/place-bid.test.ts
 ```
 
-The env var differs per suite: `PLACE_BID_URL` (place-bid), `PROCESS_BIDS_URL` (process-bids), `PRIORITIES_URL` (set-counterpick-bid-priorities; use the same name for the new pickup suite). This worktree also needs `.env.test` copied from the main checkout — it is gitignored.
+The env var differs per suite: `PLACE_BID_URL` (place-bid), `PROCESS_BIDS_URL` (process-bids), `PRIORITIES_URL` (set-counterpick-bid-priorities; use the same name for the new pickup suite).
+
+This worktree also needs the gitignored env files copied from the main checkout. They are **not** at the repo root — the ones that matter here are `supabase/functions/.env.test`, `supabase/functions/.env`, `supabase/functions/.env.local`, `supabase/.env`, plus `.env.local` and `apps/frontend/.env.local`. `psql` is not on PATH on this machine; reach the database with `docker exec supabase_db_fantasy-reel psql -U postgres -d postgres -c "..."` instead.
 
 Pure unit tests (`_shared/bid-resolution.test.ts`) have no such problem: they import the module directly.
 
