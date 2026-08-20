@@ -49,5 +49,19 @@ export default sentryEnabled
       sourcemaps: {
         disable: !process.env.SENTRY_AUTH_TOKEN,
       },
+      // Auto-create a Sentry cron monitor per entry in vercel.json and send
+      // in_progress/ok/error check-ins around each run, so a job that stops
+      // firing or starts failing pages us instead of failing silently.
+      //
+      // This is the App Router option. The `webpack.automaticVercelMonitors`
+      // flag in Sentry's docs only injects the crons config into the *pages*
+      // router templates (see the SDK's wrappingLoader + apiWrapperTemplate) —
+      // our crons are `app/api/cron/*/route.ts`, so that flag is a no-op here.
+      // Enabling both makes the SDK warn and use this one anyway.
+      //
+      // Only active when process.env.VERCEL is set; local builds skip it.
+      _experimental: {
+        vercelCronsMonitoring: true,
+      },
     })
   : nextConfig;
