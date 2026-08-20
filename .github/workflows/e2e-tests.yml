@@ -83,8 +83,41 @@ jobs:
           echo "supabase db reset failed after 3 attempts"
           exit 1
 
+      # Cache the browser bundle so most runs skip the CDN download entirely.
+      # Keyed on the installed Playwright version so upgrades refresh it.
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(node -e "console.log(require('@playwright/test/package.json').version)")" >> "$GITHUB_OUTPUT"
+        working-directory: apps/frontend
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      # The install intermittently hangs (browser CDN download or apt) — one
+      # run sat for 21 minutes until the job timeout killed it. Bound each
+      # attempt with `timeout` and retry instead of letting it eat the job.
+      # On cache hit only the OS deps step runs (the runner image already has
+      # most of them, but Playwright may need a few extras).
       - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" = "true" ]; then
+            install_cmd="npx playwright install-deps chromium"
+          else
+            install_cmd="npx playwright install --with-deps chromium"
+          fi
+          for attempt in 1 2 3; do
+            if timeout 300 $install_cmd; then
+              exit 0
+            fi
+            echo "playwright install failed or hung (attempt ${attempt}); retrying..."
+            sleep 10
+          done
+          echo "playwright install failed after 3 attempts"
+          exit 1
         working-directory: apps/frontend
 
       # Build a production bundle so tests run against `next start` instead of
