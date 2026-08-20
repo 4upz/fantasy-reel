@@ -12,10 +12,13 @@
  *
  * 1. The cache can never break a request. Every read and write failure is
  *    logged and swallowed -- a broken cache degrades to calling TMDb directly.
- * 2. Stale-while-error. An expired row is kept, not deleted. When the refetch
- *    throws (TMDb 429/5xx/timeout), the expired payload is served with
- *    cache_status 'stale' instead of surfacing the failure to the user. Only
- *    when there is nothing cached at all does the error propagate.
+ * 2. Stale-while-error, bounded. An expired row is kept, not deleted. When the
+ *    refetch throws (TMDb 429/5xx/timeout), the expired payload is served with
+ *    cache_status 'stale' instead of surfacing the failure to the user -- but
+ *    only inside a grace window (see `staleGraceMs`). Past it the row is
+ *    treated as a miss and the error propagates, so a sustained outage or a
+ *    rotated TMDB_API_KEY surfaces as an error rather than silently serving
+ *    data up to the 90-day purge horizon old.
  *
  * Retention: TMDb's terms forbid retaining their data beyond 6 months.
  * `purgeStaleTmdbCache` enforces a 90-day ceiling and runs nightly from
@@ -102,7 +105,39 @@ export function cacheKeyForUrl(
 
 interface CacheRow {
   payload: unknown
+  fetched_at: string
   expires_at: string
+}
+
+/**
+ * Longest a row may be served past its expiry when the refetch keeps failing,
+ * regardless of how long it was fresh for. A movie-details row holds for a
+ * week; a week-old cast list served through a week-long outage is not a
+ * degraded answer, it is a wrong one.
+ */
+const STALE_GRACE_CAP_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Past this much expiry, a stale serve is logged at error level instead of
+ * warn: one warn is a rate limit, a stream of them an hour after expiry is an
+ * outage or a dead API key, and that is the line ops alerts on. (No alertOps
+ * call from here -- this runs per request, and the alert channel would drown.)
+ */
+const STALE_ERROR_AFTER_MS = 60 * 60 * 1000
+
+/**
+ * How long past `expires_at` a row may still answer a failed refetch: as long
+ * as it was fresh for, capped at `STALE_GRACE_CAP_MS`.
+ *
+ * Deriving it from the row's own TTL keeps the grace proportional to how fast
+ * the data was expected to move -- a 30-minute browse page buys 30 minutes of
+ * cover, not a week's worth. A row with no usable TTL (clock skew, a hand-
+ * written row) gets no grace rather than an assumed one.
+ */
+function staleGraceMs(row: CacheRow): number {
+  const ttlMs = new Date(row.expires_at).getTime() - new Date(row.fetched_at).getTime()
+  if (!Number.isFinite(ttlMs) || ttlMs <= 0) return 0
+  return Math.min(ttlMs, STALE_GRACE_CAP_MS)
 }
 
 /** Reads a row by key. Never throws -- a failed read is a miss. */
@@ -114,7 +149,7 @@ async function readCache(
   try {
     const { data, error } = await client
       .from(CACHE_TABLE)
-      .select('payload, expires_at')
+      .select('payload, fetched_at, expires_at')
       .eq('cache_key', cacheKey)
       .maybeSingle()
 
@@ -196,8 +231,9 @@ function coalesce<T>(cacheKey: string, work: () => Promise<T>): Promise<T> {
  *
  * `client` must be a service-role client -- the table has RLS on with no
  * policies. `fetcher` must throw on failure; a thrown error falls back to an
- * expired entry when one exists ('stale'), and is otherwise rethrown for the
- * caller's own error mapping (e.g. TMDb 429 -> HTTP 429).
+ * expired entry when one exists and is still inside its stale grace window
+ * ('stale'), and is otherwise rethrown for the caller's own error mapping
+ * (e.g. TMDb 429 -> HTTP 429).
  *
  * Concurrent misses on one key share a single `fetcher` call (see `coalesce`),
  * so a cold popular key costs one TMDb request, not one per request in flight.
@@ -232,15 +268,32 @@ export async function getCachedOrFetch<T>(
     return { payload, cacheStatus: 'miss' }
   } catch (error) {
     if (cached) {
-      // Stale-while-error: a rate-limited or down TMDb is far better answered
-      // with yesterday's payload than with a 429 the user cannot act on.
-      log.warn('tmdb cache', {
+      const expiredForMs = Date.now() - new Date(cached.expires_at).getTime()
+      const graceMs = staleGraceMs(cached)
+      const fields = {
         cache_key: cacheKey,
-        cache_status: 'stale',
         expired_at: cached.expires_at,
+        expired_for_seconds: Math.round(expiredForMs / 1000),
+        stale_grace_seconds: Math.round(graceMs / 1000),
         error: serializeError(error),
-      })
-      return { payload: cached.payload as T, cacheStatus: 'stale' }
+      }
+
+      if (expiredForMs < graceMs) {
+        // Stale-while-error: a rate-limited or down TMDb is far better answered
+        // with yesterday's payload than with a 429 the user cannot act on.
+        // Briefly stale is routine; an hour of it means TMDb has been failing
+        // that long, which is an ops signal rather than a request-level blip.
+        const line = { ...fields, cache_status: 'stale' }
+        if (expiredForMs > STALE_ERROR_AFTER_MS) log.error('tmdb cache', line)
+        else log.warn('tmdb cache', line)
+
+        return { payload: cached.payload as T, cacheStatus: 'stale' }
+      }
+
+      // Past the grace window the row stops being a fallback: serving it would
+      // hide an outage or a dead API key behind data no one can date.
+      log.error('tmdb cache', { ...fields, cache_status: 'miss', stale_beyond_grace: true })
+      throw error
     }
     log.warn('tmdb cache', { cache_key: cacheKey, cache_status: 'miss', error: serializeError(error) })
     throw error

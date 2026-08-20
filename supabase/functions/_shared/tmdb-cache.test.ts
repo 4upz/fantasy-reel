@@ -87,17 +87,36 @@ function createMockClient(options: MockOptions = {}) {
   return { client: client as unknown as SupabaseClient, upserts, deletedBefore, countRequested }
 }
 
+const MINUTE = 60_000
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+
 function row(overrides: Partial<CacheRow> & { expires_at: string }): CacheRow {
   return {
     cache_key: 'k',
     payload: { cached: true },
-    fetched_at: new Date().toISOString(),
+    // An hour of freshness ending at expires_at unless the test says
+    // otherwise: a row's own TTL sizes its stale grace window, so fetched_at
+    // and expires_at have to stay coherent with each other.
+    fetched_at: new Date(new Date(overrides.expires_at).getTime() - HOUR).toISOString(),
     ...overrides,
   }
 }
 
-const inAnHour = () => new Date(Date.now() + 3_600_000).toISOString()
-const anHourAgo = () => new Date(Date.now() - 3_600_000).toISOString()
+/**
+ * A row that was fresh for `ttlMs` and expired `expiredForMs` ago -- the exact
+ * pair the stale grace window is derived from.
+ */
+function expiredRow(ttlMs: number, expiredForMs: number): CacheRow {
+  const expiresAt = Date.now() - expiredForMs
+  return row({
+    fetched_at: new Date(expiresAt - ttlMs).toISOString(),
+    expires_at: new Date(expiresAt).toISOString(),
+  })
+}
+
+const inAnHour = () => new Date(Date.now() + HOUR).toISOString()
+const anHourAgo = () => new Date(Date.now() - HOUR).toISOString()
 
 Deno.test('getCachedOrFetch - fresh row is a hit and never calls the fetcher', async () => {
   const { client } = createMockClient({ rows: [row({ expires_at: inAnHour() })] })
@@ -160,8 +179,9 @@ Deno.test('getCachedOrFetch - a function TTL is derived from the fetched payload
   assertEquals(ttlMs, 3_600_000)
 })
 
-Deno.test('getCachedOrFetch - stale-while-error serves the expired payload when the fetcher throws', async () => {
-  const { client } = createMockClient({ rows: [row({ expires_at: anHourAgo() })] })
+Deno.test('getCachedOrFetch - stale-while-error serves an expired payload inside the grace window', async () => {
+  // Fresh for an hour, expired five minutes ago: well inside its one-hour grace.
+  const { client } = createMockClient({ rows: [expiredRow(HOUR, 5 * MINUTE)] })
   const { log, lines } = createTestLogger()
 
   const result = await getCachedOrFetch(client, 'k', 60, () => {
@@ -174,6 +194,63 @@ Deno.test('getCachedOrFetch - stale-while-error serves the expired payload when 
   const staleLine = lines.at(-1)
   assertEquals(staleLine?.level, 'warn')
   assertEquals(staleLine?.fields.cache_status, 'stale')
+  assertEquals(staleLine?.fields.expired_for_seconds, 300)
+  assertEquals(staleLine?.fields.stale_grace_seconds, 3600)
+})
+
+Deno.test('getCachedOrFetch - a row past its grace window is a miss, not a stale serve', async () => {
+  // Fresh for an hour, expired ninety minutes ago: a row may be served stale
+  // for at most as long as it was fresh, so this one is out of cover.
+  const { client } = createMockClient({ rows: [expiredRow(HOUR, 90 * MINUTE)] })
+  const { log, lines } = createTestLogger()
+
+  await assertRejects(
+    () => getCachedOrFetch(client, 'k', 60, () => Promise.reject(new Error('TMDb API error: 401')), log),
+    Error,
+    'TMDb API error: 401'
+  )
+
+  const line = lines.at(-1)
+  assertEquals(line?.level, 'error')
+  assertEquals(line?.fields.cache_status, 'miss')
+  assertEquals(line?.fields.stale_beyond_grace, true)
+  assertEquals(line?.fields.expired_for_seconds, 5400)
+})
+
+Deno.test('getCachedOrFetch - the grace window is capped at 24h however long the TTL was', async () => {
+  const sevenDays = 7 * DAY
+  const { log } = createTestLogger()
+
+  // A movie-details row holds for a week, but grace tops out at a day.
+  const justInside = createMockClient({ rows: [expiredRow(sevenDays, 23 * HOUR)] })
+  const served = await getCachedOrFetch(justInside.client, 'k', 60, () => {
+    throw new Error('TMDb API error: 503')
+  }, log)
+  assertEquals(served.cacheStatus, 'stale')
+
+  const pastCap = createMockClient({ rows: [expiredRow(sevenDays, 25 * HOUR)] })
+  await assertRejects(
+    () => getCachedOrFetch(pastCap.client, 'k', 60, () => Promise.reject(new Error('TMDb API error: 503')), log),
+    Error,
+    'TMDb API error: 503'
+  )
+})
+
+Deno.test('getCachedOrFetch - a stale serve past an hour logs at error level', async () => {
+  // Still inside its 24h grace, so the payload is served -- but an hour of
+  // failed refetches is the sustained-outage signal ops alerts on.
+  const { client } = createMockClient({ rows: [expiredRow(DAY, 2 * HOUR)] })
+  const { log, lines } = createTestLogger()
+
+  const result = await getCachedOrFetch(client, 'k', 60, () => {
+    throw new Error('TMDb API error: 500')
+  }, log)
+
+  assertEquals(result.cacheStatus, 'stale')
+  const line = lines.at(-1)
+  assertEquals(line?.level, 'error')
+  assertEquals(line?.fields.cache_status, 'stale')
+  assertEquals(line?.fields.expired_for_seconds, 7200)
 })
 
 Deno.test('getCachedOrFetch - rethrows when the fetcher fails with nothing cached', async () => {
