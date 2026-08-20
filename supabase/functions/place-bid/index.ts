@@ -31,6 +31,13 @@ interface PlaceBidRequest {
   tmdb_id: number
   amount: number
   movie_data?: MovieData
+  /**
+   * A holding released only if this bid wins. At most one may be set. This is
+   * what lets a team with a full roster keep bidding: the movie arriving and
+   * the movie leaving cancel out, so the award needs no free slot.
+   */
+  conditional_drop_draft_pick_id?: string | null
+  conditional_drop_pickup_id?: string | null
 }
 
 Deno.serve(async (req) => {
@@ -63,7 +70,14 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { league_id, tmdb_id, amount, movie_data }: PlaceBidRequest = await req.json()
+    const {
+      league_id,
+      tmdb_id,
+      amount,
+      movie_data,
+      conditional_drop_draft_pick_id,
+      conditional_drop_pickup_id,
+    }: PlaceBidRequest = await req.json()
 
     // Validate inputs
     if (!league_id || !isValidUUID(league_id)) {
@@ -126,13 +140,41 @@ Deno.serve(async (req) => {
       return errorResponse(`Insufficient budget. You have $${budget.remaining_budget} remaining`, 400)
     }
 
-    // Check if team has pickup slots available
-    const pickupSlots = league.total_slots - league.draft_slots
-    const { data: pickupCount } = await serviceClient
-      .rpc('get_team_pickup_count', { p_team_id: team.id })
+    // No roster-capacity gate here on purpose. A full roster no longer ends a
+    // team's season as a bidder: a slot can free up before processing (a trade,
+    // a manual drop, another of this team's own conditional drops), so refusing
+    // the bid a week early forecloses that. A bid that still cannot be honored
+    // at processing time loses with reason 'no_slots' instead.
+    //
+    // A conditional drop names a holding released only if this bid wins.
+    // Ownership is checked here; whether the target is still *droppable* is
+    // re-checked at processing time, because a week can pass and the movie can
+    // release or be counterpicked in the meantime.
+    if (conditional_drop_draft_pick_id && conditional_drop_pickup_id) {
+      return errorResponse('Provide only one conditional drop target', 400)
+    }
 
-    if ((pickupCount ?? 0) >= pickupSlots) {
-      return errorResponse('No pickup slots available', 400)
+    const conditionalDropId = conditional_drop_draft_pick_id ?? conditional_drop_pickup_id ?? null
+
+    if (conditionalDropId) {
+      if (!isValidUUID(conditionalDropId)) {
+        return errorResponse('Conditional drop target must be a valid id', 400)
+      }
+
+      const { data: holding } = await serviceClient
+        .from('team_holdings')
+        .select('holding_id')
+        .eq('holding_id', conditionalDropId)
+        .eq('team_id', team.id)
+        .eq('source', conditional_drop_pickup_id ? 'pickup' : 'draft')
+        .maybeSingle()
+
+      if (!holding) {
+        return errorResponse(
+          'You can only conditionally drop a movie your team currently holds',
+          400,
+        )
+      }
     }
 
     // Look up the movie by tmdb_id in case it's already in our DB (e.g. drafted,
@@ -221,6 +263,10 @@ Deno.serve(async (req) => {
           movie_data: movie_data || existingTeamBid.movie_data,
           countered_at: null,
           response_deadline: null,
+          // Re-bidding may change or clear the conditional drop, so these are
+          // written unconditionally rather than merged with the old values.
+          conditional_drop_draft_pick_id: conditional_drop_draft_pick_id ?? null,
+          conditional_drop_pickup_id: conditional_drop_pickup_id ?? null,
         })
         .eq('id', existingTeamBid.id)
         .select()
@@ -243,6 +289,8 @@ Deno.serve(async (req) => {
           amount,
           status: 'active',
           processing_deadline: processingDeadline,
+          conditional_drop_draft_pick_id: conditional_drop_draft_pick_id ?? null,
+          conditional_drop_pickup_id: conditional_drop_pickup_id ?? null,
         })
         .select()
         .single()
