@@ -568,11 +568,12 @@ race handling, shared `DateTimeField`) + reviewer. Handoff contracts:
 ## Open questions
 
 1. Default window — 48h, or no expiry unless the proposer opts in?
-2. **Release-anchor boundary:** end of release day UTC (matches `isUpcomingMovie`,
-   one definition of "released" in the codebase, offer survives opening day) or
-   start of release day (reads truer against the "when _X_ releases" label and
-   closes a small information gap, at the cost of a second date rule)? This plan
-   assumes the former.
+2. ~~**Release-anchor boundary**~~ — **decided: end of release day UTC**, the
+   boundary `isUpcomingMovie()` already uses, so the codebase keeps one
+   definition of "released". The tighter alternative (expire at the start of the
+   release day) was rejected: it reads marginally better against the chip label
+   but buys a second date rule, and the information gap it would close is
+   already open days earlier when reviews land. Shipped in Phase 1.
 3. Should the release anchor use the **earliest** release across the whole offer,
    or only the movies the *recipient* would be giving up? Earliest-overall is
    assumed here; recipient-side-only is arguable if the intent is "you can't sit
