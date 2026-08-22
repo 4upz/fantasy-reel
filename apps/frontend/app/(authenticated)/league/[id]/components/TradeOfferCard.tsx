@@ -14,6 +14,7 @@ import type {
 } from '@/types'
 import { formatRelativeDate } from '@/utils/date'
 import AcceptConfirmModal from './AcceptConfirmModal'
+import CounterpickMark from './CounterpickMark'
 
 interface Props {
   trade: TradeOfferWithTeams
@@ -489,23 +490,31 @@ function TradeItemsSection({
         <div className="space-y-2">
           {items.movies.map((movie: TradeMovieItem) => (
             <div key={movie.source_id} className="flex items-center gap-2">
-              {movie.poster_url ? (
-                <Image
-                  src={movie.poster_url}
-                  alt={movie.title || 'Movie'}
-                  width={32}
-                  height={48}
-                  className="w-8 h-12 object-cover rounded"
-                />
-              ) : (
-                <div className="w-8 h-12 bg-surface-hover rounded flex items-center justify-center">
-                  <span className="text-xs text-foreground-muted">?</span>
-                </div>
-              )}
+              <div className="relative shrink-0">
+                {movie.poster_url ? (
+                  <Image
+                    src={movie.poster_url}
+                    alt={movie.title || 'Movie'}
+                    width={32}
+                    height={48}
+                    className="w-8 h-12 object-cover rounded"
+                  />
+                ) : (
+                  <div className="w-8 h-12 bg-surface-hover rounded flex items-center justify-center">
+                    <span className="text-xs text-foreground-muted">?</span>
+                  </div>
+                )}
+                {movie.source === 'counterpick' && <CounterpickMark />}
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-foreground truncate">
                   {movie.title || 'Unknown Movie'}
                 </p>
+                {/* Without this the row is indistinguishable from the movie
+                    itself -- same title, same poster, opposite meaning. */}
+                {movie.source === 'counterpick' && (
+                  <p className="text-xs text-crimson">Counterpick</p>
+                )}
                 {movie.release_date && (
                   <p className="text-xs text-foreground-muted">
                     {new Date(movie.release_date).getFullYear()}
@@ -846,24 +855,34 @@ function MovieSelector({
                 : 'bg-surface-hover hover:bg-elevated border border-transparent'
             } focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface`}
           >
-            {movie.poster_url ? (
-              <Image
-                src={movie.poster_url}
-                alt=""
-                width={32}
-                height={48}
-                className="w-8 h-12 object-cover rounded"
-              />
-            ) : (
-              <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
-                <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
-              </div>
-            )}
+            <div className="relative shrink-0">
+              {movie.poster_url ? (
+                <Image
+                  src={movie.poster_url}
+                  alt=""
+                  width={32}
+                  height={48}
+                  className="w-8 h-12 object-cover rounded"
+                />
+              ) : (
+                <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
+                  <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
+                </div>
+              )}
+              {movie.source === 'counterpick' && <CounterpickMark />}
+            </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground truncate">{movie.title}</p>
-              {movie.release_date && (
-                <p className="text-xs text-foreground-muted">{new Date(movie.release_date).getFullYear()}</p>
-              )}
+              <div className="flex items-center gap-2 text-xs text-foreground-muted">
+                {movie.source === 'counterpick' && (
+                  <span className="text-crimson">
+                    {movie.counterpick_target_team_name
+                      ? `vs. ${movie.counterpick_target_team_name}`
+                      : 'Counterpick'}
+                  </span>
+                )}
+                {movie.release_date && <span>{new Date(movie.release_date).getFullYear()}</span>}
+              </div>
             </div>
             <div
               className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
