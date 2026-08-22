@@ -11,6 +11,7 @@ import {
   TradeItems,
   validateTradeProposal,
   enrichTradeItems,
+  tradeItemLabel,
   getTeamInfo,
   createServiceClient,
   notifyTradeParties,
@@ -146,8 +147,8 @@ Deno.serve(async (req) => {
       recipientInfo?.user_id,
     ])
 
-    const initiatorMovies = enrichedOfferedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
-    const recipientMovies = enrichedRequestedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
+    const initiatorMovies = enrichedOfferedItems.movies.map(tradeItemLabel).join(', ')
+    const recipientMovies = enrichedRequestedItems.movies.map(tradeItemLabel).join(', ')
 
     const fields = [
       { name: `${initiatorInfo?.name ?? 'Proposer'} offers`, value: initiatorMovies || 'Nothing', inline: true },
