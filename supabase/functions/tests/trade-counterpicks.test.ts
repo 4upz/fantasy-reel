@@ -153,6 +153,16 @@ Deno.test({
       return data as ExecuteTradeResult
     }
 
+    async function teamName(teamId: string): Promise<string> {
+      const { data } = await serviceClient.from('teams').select('name').eq('id', teamId).single()
+      return data?.name ?? ''
+    }
+
+    async function movieTitleOf(movieId: string): Promise<string> {
+      const { data } = await serviceClient.from('movies').select('title').eq('id', movieId).single()
+      return data?.title ?? ''
+    }
+
     async function counterpickerOf(counterpickId: string): Promise<string | null> {
       const { data } = await serviceClient
         .from('counterpicks')
@@ -186,7 +196,10 @@ Deno.test({
         p_team_id: teamB,
         p_items: { movies: [counterpick], faab: 0 },
       })
-      assertEquals(wrongTeam, `Counterpick not owned: ${counterpick.source_id}`)
+      assertEquals(
+        wrongTeam,
+        `The counterpick on "${await movieTitleOf(counterpick.movie_id)}" is no longer owned by that team, so it can't be traded.`
+      )
     })
 
     await t.step('a counterpick changes hands, with its bookkeeping', async () => {
@@ -251,7 +264,7 @@ Deno.test({
       assertEquals(result.success, undefined)
       assertEquals(
         result.error,
-        `Cannot trade a counterpick to the team that holds the counterpicked movie: ${counterpick.source_id}`
+        `${await teamName(teamB)} holds "${await movieTitleOf(counterpick.movie_id)}", so they can't also hold the counterpick on it.`
       )
 
       // A rejection must leave the trade completely untouched.

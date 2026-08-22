@@ -585,6 +585,20 @@ export interface TradeItems {
   faab: number
 }
 
+/**
+ * The outcome of a trade action (propose, counter, accept).
+ *
+ * `error` is UI copy the server already wrote — render it as-is rather than
+ * rewriting it client-side, or the two drift. `invalidSourceIds` names the
+ * items the failure was about so the offending rows can be marked; it is empty
+ * when the problem is the deal as a whole, like budget or roster size.
+ */
+export interface TradeActionResult {
+  success: boolean
+  error?: string
+  invalidSourceIds?: string[]
+}
+
 export interface TradeOffer {
   id: string
   league_id: string

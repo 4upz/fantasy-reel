@@ -120,6 +120,13 @@ function mockDb(tables: Record<string, Row[]>) {
   return { from: (table: string) => query([...(tables[table] ?? [])]) } as any
 }
 
+/** Team rows so getTeamName can resolve the names the errors quote. */
+const TEAMS: Row[] = [
+  { id: 'team-a', name: 'Award Hunters' },
+  { id: 'team-b', name: 'Golden Globe Gang' },
+  { id: 'team-c', name: 'Academy Aces' },
+]
+
 const item = (source: TradeItemSource, sourceId: string): TradeMovieItem => ({
   movie_id: `movie-for-${sourceId}`,
   source,
@@ -136,7 +143,7 @@ Deno.test('tradeItemLabel - distinguishes a counterpick from the movie it target
 
 Deno.test('validateMovieOwnership - a team may give up a counterpick it owns', async () => {
   const db = mockDb({
-    counterpicks: [{ id: 'cp-1', counterpicker_team_id: 'team-a' }],
+    counterpicks: [{ id: 'cp-1', counterpicker_team_id: 'team-a', movies: { title: 'Dune' } }],
   })
 
   assertEquals(await validateMovieOwnership(db, 'team-a', items(item('counterpick', 'cp-1'))), {
@@ -146,28 +153,40 @@ Deno.test('validateMovieOwnership - a team may give up a counterpick it owns', a
 
 Deno.test('validateMovieOwnership - rejects a counterpick owned by another team', async () => {
   const db = mockDb({
-    counterpicks: [{ id: 'cp-1', counterpicker_team_id: 'team-b' }],
+    counterpicks: [
+      { id: 'cp-1', counterpicker_team_id: 'team-b', movies: { title: 'Dune' } },
+    ],
   })
 
   assertEquals(await validateMovieOwnership(db, 'team-a', items(item('counterpick', 'cp-1'))), {
     valid: false,
-    error: 'Counterpick not owned by team: cp-1',
+    error: `The counterpick on "Dune" is no longer owned by that team, so it can't be traded.`,
+    invalidSourceIds: ['cp-1'],
   })
 })
 
 Deno.test('validateMovieOwnership - rejects a dropped draft pick', async () => {
   const db = mockDb({
-    draft_picks: [{ id: 'pick-1', team_id: 'team-a', dropped_at: '2026-01-01T00:00:00Z' }],
+    draft_picks: [
+      {
+        id: 'pick-1',
+        team_id: 'team-a',
+        dropped_at: '2026-01-01T00:00:00Z',
+        movies: { title: 'Dune' },
+      },
+    ],
   })
 
   assertEquals(await validateMovieOwnership(db, 'team-a', items(item('draft_pick', 'pick-1'))), {
     valid: false,
-    error: 'Draft pick has been dropped: pick-1',
+    error: `"Dune" has been dropped and can no longer be traded.`,
+    invalidSourceIds: ['pick-1'],
   })
 })
 
 Deno.test('validateCounterpickPlacement - rejects sending a movie to the team that counterpicked it', async () => {
   const db = mockDb({
+    teams: TEAMS,
     counterpicks: [
       {
         id: 'cp-1',
@@ -176,6 +195,7 @@ Deno.test('validateCounterpickPlacement - rejects sending a movie to the team th
         draft_pick_id: 'pick-1',
         pickup_id: null,
         phase: 'draft',
+        movies: { title: 'Dune' },
       },
     ],
   })
@@ -190,13 +210,15 @@ Deno.test('validateCounterpickPlacement - rejects sending a movie to the team th
     ),
     {
       valid: false,
-      error: 'Cannot trade a counterpicked movie to the team that counterpicked it: pick-1',
+      error: `Golden Globe Gang holds the counterpick on "Dune", so they can't also hold the movie.`,
+      invalidSourceIds: ['pick-1'],
     }
   )
 })
 
 Deno.test('validateCounterpickPlacement - allows a movie counterpicked by an uninvolved third team', async () => {
   const db = mockDb({
+    teams: TEAMS,
     counterpicks: [
       {
         id: 'cp-1',
@@ -205,6 +227,7 @@ Deno.test('validateCounterpickPlacement - allows a movie counterpicked by an uni
         draft_pick_id: 'pick-1',
         pickup_id: null,
         phase: 'draft',
+        movies: { title: 'Dune' },
       },
     ],
   })
@@ -223,6 +246,7 @@ Deno.test('validateCounterpickPlacement - allows a movie counterpicked by an uni
 
 Deno.test('validateCounterpickPlacement - rejects sending a counterpick to the team holding the movie', async () => {
   const db = mockDb({
+    teams: TEAMS,
     counterpicks: [
       {
         id: 'cp-1',
@@ -231,6 +255,7 @@ Deno.test('validateCounterpickPlacement - rejects sending a counterpick to the t
         draft_pick_id: 'pick-1',
         pickup_id: null,
         phase: 'draft',
+        movies: { title: 'Dune' },
       },
     ],
   })
@@ -245,7 +270,8 @@ Deno.test('validateCounterpickPlacement - rejects sending a counterpick to the t
     ),
     {
       valid: false,
-      error: 'Cannot trade a counterpick to the team that holds the counterpicked movie: cp-1',
+      error: `Golden Globe Gang holds "Dune", so they can't also hold the counterpick on it.`,
+      invalidSourceIds: ['cp-1'],
     }
   )
 })
@@ -254,6 +280,7 @@ Deno.test('validateCounterpickPlacement - allows swapping a movie one way and it
   // team-a holds the movie, team-b holds the bet against it. After the swap
   // they have exchanged roles, which is legal -- neither ends up on both sides.
   const db = mockDb({
+    teams: TEAMS,
     counterpicks: [
       {
         id: 'cp-1',
@@ -262,6 +289,7 @@ Deno.test('validateCounterpickPlacement - allows swapping a movie one way and it
         draft_pick_id: 'pick-1',
         pickup_id: null,
         phase: 'draft',
+        movies: { title: 'Dune' },
       },
     ],
   })
@@ -292,6 +320,7 @@ const config = (overrides: Partial<LeagueTradeConfig> = {}): LeagueTradeConfig =
 
 Deno.test('validateCounterpickSlots - rejects a trade that puts a team over its phase limit', async () => {
   const db = mockDb({
+    teams: TEAMS,
     counterpicks: [
       { id: 'cp-1', counterpicker_team_id: 'team-a', phase: 'draft' },
       { id: 'cp-2', counterpicker_team_id: 'team-b', phase: 'draft' },
@@ -307,12 +336,16 @@ Deno.test('validateCounterpickSlots - rejects a trade that puts a team over its 
       items(item('counterpick', 'cp-2')),
       config({ draft_counterpick_slots: 1 })
     ),
-    { valid: false, error: "Trade would exceed initiator's draft counterpick limit (2/1)" }
+    {
+      valid: false,
+      error: 'This trade would leave Award Hunters with 2 draft counterpicks, over the league limit of 1.',
+    }
   )
 })
 
 Deno.test('validateCounterpickSlots - allows a one-for-one counterpick swap at the limit', async () => {
   const db = mockDb({
+    teams: TEAMS,
     counterpicks: [
       { id: 'cp-1', counterpicker_team_id: 'team-a', phase: 'draft' },
       { id: 'cp-2', counterpicker_team_id: 'team-b', phase: 'draft' },
@@ -335,6 +368,7 @@ Deno.test('validateCounterpickSlots - allows a one-for-one counterpick swap at t
 Deno.test('validateCounterpickSlots - counts phases separately', async () => {
   // The bidding slot is free even though the draft slot is full.
   const db = mockDb({
+    teams: TEAMS,
     counterpicks: [
       { id: 'cp-1', counterpicker_team_id: 'team-a', phase: 'draft' },
       { id: 'cp-2', counterpicker_team_id: 'team-b', phase: 'bidding' },

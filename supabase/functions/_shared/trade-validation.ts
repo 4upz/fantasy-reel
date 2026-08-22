@@ -38,6 +38,22 @@ export function tradeItemLabel(item: TradeMovieItem): string {
   return item.source === 'counterpick' ? `Counterpick: ${title}` : title
 }
 
+/** A movie title as it appears inside a sentence. */
+export function quoteTitle(title: string | null | undefined): string {
+  return `"${title ?? 'Unknown Movie'}"`
+}
+
+/**
+ * How an item reads mid-sentence in an error. `tradeItemLabel`'s prefix form
+ * ("Counterpick: Dune") does not survive being dropped into prose, so errors
+ * name the bet as what it is: the counterpick ON a movie.
+ */
+export function tradeItemPhrase(source: TradeItemSource, title: string | null | undefined): string {
+  return source === 'counterpick'
+    ? `the counterpick on ${quoteTitle(title)}`
+    : quoteTitle(title)
+}
+
 export interface TradeItems {
   movies: TradeMovieItem[]
   faab: number
@@ -45,7 +61,20 @@ export interface TradeItems {
 
 export interface ValidationResult {
   valid: boolean
+  /**
+   * User-facing. These strings are rendered verbatim in the trade modals, so
+   * they are written as UI copy: name the movie and the team, never a raw id.
+   * The matching SQL validator is worded identically on purpose -- see the
+   * trading section of CLAUDE.md before changing either.
+   */
   error?: string
+  /**
+   * The trade items the error is about, by source_id, so the UI can mark the
+   * offending rows instead of leaving the user to work out which one is meant.
+   * Absent when the problem is the deal as a whole (budget, roster size) rather
+   * than a particular item.
+   */
+  invalidSourceIds?: string[]
 }
 
 export interface LeagueTradeConfig {
@@ -384,43 +413,77 @@ export async function validateMovieOwnership(
   items: TradeItems
 ): Promise<ValidationResult> {
   for (const movie of items.movies) {
+    // The title comes from the same row we already have to read for ownership,
+    // so naming the movie in the error costs no extra query. `movie.title` is
+    // the fallback for an item that was enriched at propose time but whose row
+    // has since vanished.
+    const invalid = [movie.source_id]
+
     if (movie.source === 'counterpick') {
       const { data, error } = await supabase
         .from('counterpicks')
-        .select('id, counterpicker_team_id')
+        .select('id, counterpicker_team_id, movies(title)')
         .eq('id', movie.source_id)
         .single()
 
+      const title = (data?.movies as unknown as { title: string } | null)?.title ?? movie.title
+
       if (error || !data) {
-        return { valid: false, error: `Counterpick not found: ${movie.source_id}` }
+        return {
+          valid: false,
+          error: `${capitalize(tradeItemPhrase('counterpick', title))} is no longer available to trade.`,
+          invalidSourceIds: invalid,
+        }
       }
       if (data.counterpicker_team_id !== teamId) {
-        return { valid: false, error: `Counterpick not owned by team: ${movie.source_id}` }
+        return {
+          valid: false,
+          error: `${capitalize(tradeItemPhrase('counterpick', title))} is no longer owned by that team, so it can't be traded.`,
+          invalidSourceIds: invalid,
+        }
       }
       continue
     }
 
     const table = movie.source === 'draft_pick' ? 'draft_picks' : 'pickups'
-    const label = movie.source === 'draft_pick' ? 'Draft pick' : 'Pickup'
 
     const { data, error } = await supabase
       .from(table)
-      .select('id, team_id, dropped_at')
+      .select('id, team_id, dropped_at, movies(title)')
       .eq('id', movie.source_id)
       .single()
 
+    const title = (data?.movies as unknown as { title: string } | null)?.title ?? movie.title
+
     if (error || !data) {
-      return { valid: false, error: `${label} not found: ${movie.source_id}` }
+      return {
+        valid: false,
+        error: `${quoteTitle(title)} is no longer available to trade.`,
+        invalidSourceIds: invalid,
+      }
     }
     if (data.team_id !== teamId) {
-      return { valid: false, error: `${label} not owned by team: ${movie.source_id}` }
+      return {
+        valid: false,
+        error: `${quoteTitle(title)} is no longer on that team's roster, so it can't be traded.`,
+        invalidSourceIds: invalid,
+      }
     }
     if (data.dropped_at) {
-      return { valid: false, error: `${label} has been dropped: ${movie.source_id}` }
+      return {
+        valid: false,
+        error: `${quoteTitle(title)} has been dropped and can no longer be traded.`,
+        invalidSourceIds: invalid,
+      }
     }
   }
 
   return { valid: true }
+}
+
+/** Sentence-case a phrase that may start with a lowercase article. */
+function capitalize(phrase: string): string {
+  return phrase.charAt(0).toUpperCase() + phrase.slice(1)
 }
 
 /** A counterpick, as much of it as the placement and slot checks need. */
@@ -431,6 +494,8 @@ interface DisturbedCounterpick {
   draft_pick_id: string | null
   pickup_id: string | null
   phase: 'draft' | 'bidding'
+  /** Embedded so a placement error can name the movie rather than an id. */
+  movies: { title: string } | null
 }
 
 /** Where each item in a trade ends up, keyed by source_id. */
@@ -461,10 +526,14 @@ async function loadDisturbedCounterpicks(
   draftPickIds: string[],
   pickupIds: string[]
 ): Promise<DisturbedCounterpick[]> {
-  const columns = 'id, counterpicker_team_id, target_team_id, draft_pick_id, pickup_id, phase'
+  const columns =
+    'id, counterpicker_team_id, target_team_id, draft_pick_id, pickup_id, phase, movies(title)'
   // PromiseLike, not Promise: a PostgrestFilterBuilder is thenable but is not a
-  // Promise until it is awaited.
-  const lookups: Array<PromiseLike<{ data: DisturbedCounterpick[] | null }>> = []
+  // Promise until it is awaited. The row type is asserted at the merge below --
+  // supabase-js infers the embed's shape from the select string and does not
+  // land on DisturbedCounterpick's `movies`.
+  // deno-lint-ignore no-explicit-any
+  const lookups: Array<PromiseLike<{ data: any[] | null }>> = []
 
   if (counterpickIds.length > 0) {
     lookups.push(supabase.from('counterpicks').select(columns).in('id', counterpickIds))
@@ -479,7 +548,7 @@ async function loadDisturbedCounterpicks(
   const results = await Promise.all(lookups)
   const byId = new Map<string, DisturbedCounterpick>()
   for (const { data } of results) {
-    for (const row of data ?? []) byId.set(row.id, row)
+    for (const row of (data ?? []) as DisturbedCounterpick[]) byId.set(row.id, row)
   }
   return [...byId.values()]
 }
@@ -551,14 +620,21 @@ export async function validateCounterpickPlacement(
 
     if (postCounterpicker !== postHolder) continue
 
+    // Both messages name the receiving team and lead with what it already
+    // holds, because that -- not the item being sent -- is the reason.
+    const title = counterpick.movies?.title
+    const blockingTeam = await getTeamName(supabase, postHolder)
+
     return counterpickMoves.has(counterpick.id)
       ? {
           valid: false,
-          error: `Cannot trade a counterpick to the team that holds the counterpicked movie: ${counterpick.id}`,
+          error: `${blockingTeam} holds ${quoteTitle(title)}, so they can't also hold the counterpick on it.`,
+          invalidSourceIds: [counterpick.id],
         }
       : {
           valid: false,
-          error: `Cannot trade a counterpicked movie to the team that counterpicked it: ${holdingId}`,
+          error: `${blockingTeam} holds the counterpick on ${quoteTitle(title)}, so they can't also hold the movie.`,
+          invalidSourceIds: holdingId ? [holdingId] : [],
         }
   }
 
@@ -624,20 +700,17 @@ export async function validateCounterpickSlots(
   applyMove(recipientItems, recipientTeamId, initiatorTeamId)
 
   const limits: Array<{ phase: 'draft' | 'bidding'; limit: number; label: string }> = [
-    { phase: 'draft', limit: config.draft_counterpick_slots, label: 'draft counterpick' },
-    { phase: 'bidding', limit: config.bidding_counterpick_slots, label: 'bidding counterpick' },
+    { phase: 'draft', limit: config.draft_counterpick_slots, label: 'draft counterpicks' },
+    { phase: 'bidding', limit: config.bidding_counterpick_slots, label: 'bidding counterpicks' },
   ]
 
-  for (const team of [
-    { id: initiatorTeamId, name: "initiator's" },
-    { id: recipientTeamId, name: "recipient's" },
-  ]) {
+  for (const teamId of [initiatorTeamId, recipientTeamId]) {
     for (const { phase, limit, label } of limits) {
-      const count = counts.get(key(team.id, phase)) ?? 0
+      const count = counts.get(key(teamId, phase)) ?? 0
       if (count > limit) {
         return {
           valid: false,
-          error: `Trade would exceed ${team.name} ${label} limit (${count}/${limit})`,
+          error: `This trade would leave ${await getTeamName(supabase, teamId)} with ${count} ${label}, over the league limit of ${limit}.`,
         }
       }
     }
@@ -697,17 +770,15 @@ export async function validateRosterSpace(
   const newInitiatorCount = initiatorMovieCount - initiatorGiving + recipientGiving
   const newRecipientCount = recipientMovieCount - recipientGiving + initiatorGiving
 
-  if (newInitiatorCount > totalSlots) {
-    return {
-      valid: false,
-      error: `Trade would exceed initiator's roster limit (${newInitiatorCount}/${totalSlots})`
-    }
-  }
-
-  if (newRecipientCount > totalSlots) {
-    return {
-      valid: false,
-      error: `Trade would exceed recipient's roster limit (${newRecipientCount}/${totalSlots})`
+  for (const { teamId, count } of [
+    { teamId: initiatorTeamId, count: newInitiatorCount },
+    { teamId: recipientTeamId, count: newRecipientCount },
+  ]) {
+    if (count > totalSlots) {
+      return {
+        valid: false,
+        error: `This trade would leave ${await getTeamName(supabase, teamId)} with ${count} movies, over the league limit of ${totalSlots}.`,
+      }
     }
   }
 

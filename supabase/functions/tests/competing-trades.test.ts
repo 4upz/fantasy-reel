@@ -207,10 +207,19 @@ Deno.test({
 
       assertEquals(result.success, undefined, 'a stale offer must not execute')
       assertExists(result.error)
+
+      // Team A offered this movie but no longer holds it, so its side fails.
+      // Asserted in full because the wording is user-facing: it must name the
+      // movie rather than the id it used to quote (20260823120000).
+      const { data: movie } = await serviceClient
+        .from('movies')
+        .select('title')
+        .eq('id', contestedMovie.movie_id)
+        .single()
+
       assertEquals(
-        result.error.includes('not owned'),
-        true,
-        `expected an ownership failure, got: ${result.error}`
+        result.error,
+        `Initiator validation failed: "${movie?.title}" is no longer on that team's roster, so it can't be traded.`
       )
       // Team C never received anything.
       assertEquals(await ownerOf(contestedMovie.source_id), teamB)

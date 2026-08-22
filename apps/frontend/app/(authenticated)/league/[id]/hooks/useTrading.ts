@@ -5,6 +5,7 @@ import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { fetchTradeableMovies } from '@/utils/holdings'
 import type {
+  TradeActionResult,
   TradeItems,
   TradeOfferWithTeams,
   TradeableMovie,
@@ -29,27 +30,37 @@ interface UseTradingReturn {
     offeredItems: TradeItems,
     requestedItems: TradeItems,
     message?: string
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
   respondTrade: (
     tradeOfferId: string,
     response: 'accept' | 'reject',
     message?: string
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
   counterTrade: (
     tradeOfferId: string,
     counterOfferedItems: TradeItems,
     counterRequestedItems: TradeItems,
     message?: string
-  ) => Promise<{ success: boolean; error?: string }>
-  cancelTrade: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
+  cancelTrade: (tradeOfferId: string) => Promise<TradeActionResult>
   vetoTrade: (
     tradeOfferId: string,
     reason?: string
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
   /** Commissioner: end the review period now and process the trade immediately. */
-  approveTrade: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
+  approveTrade: (tradeOfferId: string) => Promise<TradeActionResult>
   refreshTrades: () => Promise<void>
   refreshRoster: () => Promise<void>
+}
+
+/**
+ * The offending item ids from a failed trade call, read off the 4xx body the
+ * Edge Function attached. Absent or malformed means "no particular item", which
+ * is the right answer for a whole-deal failure like budget or roster size.
+ */
+function invalidSourceIdsFrom(errorBody: Record<string, unknown> | null): string[] {
+  const ids = errorBody?.invalid_source_ids
+  return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
 }
 
 export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingReturn {
@@ -145,8 +156,8 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       offeredItems: TradeItems,
       requestedItems: TradeItems,
       message?: string
-    ): Promise<{ success: boolean; error?: string }> => {
-      const { error: proposeError } = await callEdgeFunction('propose-trade', {
+    ): Promise<TradeActionResult> => {
+      const { error: proposeError, errorBody } = await callEdgeFunction('propose-trade', {
         body: {
           league_id: leagueId,
           recipient_team_id: recipientTeamId,
@@ -157,7 +168,11 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       })
 
       if (proposeError) {
-        return { success: false, error: proposeError }
+        return {
+          success: false,
+          error: proposeError,
+          invalidSourceIds: invalidSourceIdsFrom(errorBody),
+        }
       }
 
       await fetchTrades()
@@ -172,8 +187,8 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       tradeOfferId: string,
       response: 'accept' | 'reject',
       message?: string
-    ): Promise<{ success: boolean; error?: string }> => {
-      const { error: respondError } = await callEdgeFunction('respond-trade', {
+    ): Promise<TradeActionResult> => {
+      const { error: respondError, errorBody } = await callEdgeFunction('respond-trade', {
         body: {
           trade_offer_id: tradeOfferId,
           response,
@@ -182,7 +197,11 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       })
 
       if (respondError) {
-        return { success: false, error: respondError }
+        return {
+          success: false,
+          error: respondError,
+          invalidSourceIds: invalidSourceIdsFrom(errorBody),
+        }
       }
 
       await fetchTrades()
@@ -202,8 +221,8 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       counterOfferedItems: TradeItems,
       counterRequestedItems: TradeItems,
       message?: string
-    ): Promise<{ success: boolean; error?: string }> => {
-      const { error: counterError } = await callEdgeFunction('counter-trade', {
+    ): Promise<TradeActionResult> => {
+      const { error: counterError, errorBody } = await callEdgeFunction('counter-trade', {
         body: {
           trade_offer_id: tradeOfferId,
           counter_offered_items: counterOfferedItems,
@@ -213,7 +232,11 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       })
 
       if (counterError) {
-        return { success: false, error: counterError }
+        return {
+          success: false,
+          error: counterError,
+          invalidSourceIds: invalidSourceIdsFrom(errorBody),
+        }
       }
 
       await fetchTrades()
@@ -224,7 +247,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
   // Cancel a trade
   const cancelTrade = useCallback(
-    async (tradeOfferId: string): Promise<{ success: boolean; error?: string }> => {
+    async (tradeOfferId: string): Promise<TradeActionResult> => {
       const { error: cancelError } = await callEdgeFunction('cancel-trade', {
         body: { trade_offer_id: tradeOfferId },
       })
@@ -244,7 +267,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     async (
       tradeOfferId: string,
       reason?: string
-    ): Promise<{ success: boolean; error?: string }> => {
+    ): Promise<TradeActionResult> => {
       const { error: vetoError } = await callEdgeFunction('veto-trade', {
         body: { trade_offer_id: tradeOfferId, reason },
       })
@@ -261,7 +284,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
 
   // Approve a trade immediately (commissioner only)
   const approveTrade = useCallback(
-    async (tradeOfferId: string): Promise<{ success: boolean; error?: string }> => {
+    async (tradeOfferId: string): Promise<TradeActionResult> => {
       const { error: approveError } = await callEdgeFunction('approve-trade', {
         body: { trade_offer_id: tradeOfferId },
       })

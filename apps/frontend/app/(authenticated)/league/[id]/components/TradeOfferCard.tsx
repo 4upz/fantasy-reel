@@ -6,6 +6,7 @@ import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
 import type {
   TeamWithOwner,
+  TradeActionResult,
   TradeOfferWithTeams,
   TradeItems,
   TradeMovieItem,
@@ -28,24 +29,24 @@ interface Props {
     tradeOfferId: string,
     response: 'accept' | 'reject',
     message?: string
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
   onCounter: (
     tradeOfferId: string,
     counterOfferedItems: TradeItems,
     counterRequestedItems: TradeItems,
     message?: string
-  ) => Promise<{ success: boolean; error?: string }>
-  onCancel: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
+  onCancel: (tradeOfferId: string) => Promise<TradeActionResult>
   onVeto: (
     tradeOfferId: string,
     reason?: string
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
   /**
    * Commissioner: end the review period now and process the trade immediately.
    * Without this the only commissioner action is veto -- an approved trade
    * otherwise waits out the full review window before the cron executes it.
    */
-  onApprove: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
+  onApprove: (tradeOfferId: string) => Promise<TradeActionResult>
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -557,7 +558,7 @@ interface CounterTradeModalProps {
     counterOfferedItems: TradeItems,
     counterRequestedItems: TradeItems,
     message?: string
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
 }
 
 function CounterTradeModal(counterProps: CounterTradeModalProps) {
@@ -591,6 +592,8 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
   const [requestedBudget, setRequestedBudget] = useState(existingInitiatorItems.faab || 0)
   const [message, setMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /** Items the server rejected on the last counter attempt. */
+  const [invalidSourceIds, setInvalidSourceIds] = useState<ReadonlySet<string>>(EMPTY_CONTESTED)
 
   // Get the other team's movies from the original trade items
   const otherTeamMovies: TradeableMovie[] = existingInitiatorItems.movies.map((m) => ({
@@ -636,6 +639,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 
   const submitCounterAction = useCallback(async () => {
     setError(null)
+    setInvalidSourceIds(EMPTY_CONTESTED)
 
     const counterOfferedItems: TradeItems = {
       movies: tradeableMovies
@@ -663,6 +667,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 
     if (!result.success) {
       setError(result.error || 'Failed to submit counter-offer')
+      setInvalidSourceIds(new Set(result.invalidSourceIds ?? []))
     }
   }, [tradeableMovies, offeredMovies, offeredBudget, otherTeamMovies, requestedMovies, requestedBudget, message, onCounter])
 
@@ -710,6 +715,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               movies={tradeableMovies}
               selectedIds={offeredMovies}
               onToggle={toggleOfferedMovie}
+              invalidIds={invalidSourceIds}
             />
             <div className="mt-3">
               <label htmlFor="counter-offered-budget" className="text-sm text-foreground-secondary">Budget (max ${budget?.remaining_budget ?? 0})</label>
@@ -732,6 +738,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               movies={otherTeamMovies}
               selectedIds={requestedMovies}
               onToggle={toggleRequestedMovie}
+              invalidIds={invalidSourceIds}
             />
             <div className="mt-3">
               <label htmlFor="counter-requested-budget" className="text-sm text-foreground-secondary">Budget</label>
@@ -797,10 +804,13 @@ function MovieSelector({
   movies,
   selectedIds,
   onToggle,
+  invalidIds = EMPTY_CONTESTED,
 }: {
   movies: TradeableMovie[]
   selectedIds: Set<string>
   onToggle: (sourceId: string) => void
+  /** Items the server rejected on the last submit. */
+  invalidIds?: ReadonlySet<string>
 }) {
   // Empty state with helpful message (FE#7)
   if (movies.length === 0) {
@@ -836,6 +846,7 @@ function MovieSelector({
     >
       {movies.map((movie) => {
         const isSelected = selectedIds.has(movie.source_id)
+        const isInvalid = invalidIds.has(movie.source_id)
         return (
           <div
             key={movie.source_id}
@@ -850,9 +861,11 @@ function MovieSelector({
               }
             }}
             className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors cursor-pointer ${
-              isSelected
-                ? 'bg-gold/20 border border-gold'
-                : 'bg-surface-hover hover:bg-elevated border border-transparent'
+              isInvalid
+                ? 'bg-crimson/15 border border-crimson'
+                : isSelected
+                  ? 'bg-gold/20 border border-gold'
+                  : 'bg-surface-hover hover:bg-elevated border border-transparent'
             } focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface`}
           >
             <div className="relative shrink-0">
@@ -874,6 +887,7 @@ function MovieSelector({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground truncate">{movie.title}</p>
               <div className="flex items-center gap-2 text-xs text-foreground-muted">
+                {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
                 {movie.source === 'counterpick' && (
                   <span className="text-crimson">
                     {movie.counterpick_target_team_name
