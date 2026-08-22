@@ -20,6 +20,13 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') })
  * - https://github.com/isaacharrisholt/supawright
  * - https://fireship.io/courses/supabase/setup-playwright/
  */
+
+/**
+ * Where the suite points. Defaults to :3000 so nothing changes for a normal
+ * run; set E2E_BASE_URL to test a worktree's own server on another port.
+ */
+const E2E_BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
+
 export default defineConfig({
   testDir: './e2e/tests',
 
@@ -55,7 +62,11 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: 'http://localhost:3000',
+    // Overridable so a git worktree can test its OWN server. With this
+    // hardcoded, `reuseExistingServer` silently attaches to whatever is already
+    // on :3000 -- normally the main checkout -- and the suite passes or fails
+    // against code that is not the branch under test.
+    baseURL: E2E_BASE_URL,
 
     // Capture trace on first retry for debugging. Traces include a
     // screencast, so separate video recording is disabled below.
@@ -147,7 +158,7 @@ export default defineConfig({
     // 15.4.1, and running the E2E suite against that combination degrades
     // the dev server app-wide. Revert after upgrading Next past 15.4.1.
     command: process.env.CI ? 'npx next start' : 'npx next dev',
-    url: 'http://localhost:3000',
+    url: E2E_BASE_URL,
     reuseExistingServer: !process.env.CI,
     timeout: 120 * 1000, // 2 minutes to start
 

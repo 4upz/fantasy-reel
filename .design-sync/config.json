@@ -57,6 +57,8 @@
     "BidCard": "apps/frontend/app/(authenticated)/league/[id]/components/BidCard.tsx",
     "BidWeekTimeline": "apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline.tsx",
     "CounterpickBidCard": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard.tsx",
+    "PriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/PriorityList.tsx",
+    "BidPriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/BidPriorityList.tsx",
     "CounterpickPriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickPriorityList.tsx",
     "TradeOfferCard": "apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard.tsx",
     "ParticipantsList": "apps/frontend/app/(authenticated)/league/[id]/components/ParticipantsList.tsx",
