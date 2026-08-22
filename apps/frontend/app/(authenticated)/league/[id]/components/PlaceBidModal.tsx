@@ -652,6 +652,19 @@ export default function PlaceBidModal({
                 </div>
               </div>
 
+              {/* Sits above the amount step on purpose: whether this bid can
+                  land at all matters more than what it costs, and below the
+                  amount input it fell under the sticky footer at common
+                  viewport heights -- a warning you have to scroll for is not
+                  doing its job. */}
+              {freeRosterSlots === 0 && !dropHoldingId && (
+                <div className="alert alert-warning mb-6" data-testid="full-roster-warning">
+                  {myHoldings.length > 0
+                    ? 'Your roster is full. You can still place this bid, but it can only be honored if you choose a movie to drop below, or a slot frees up before bids are processed.'
+                    : 'Your roster is full and none of your movies can be dropped — they have all released or been counterpicked. You can still place this bid, but it can only be honored if a slot frees up before bids are processed.'}
+                </div>
+              )}
+
               {/* Bid Amount Section */}
               <div className="space-y-4">
                 <label className="block text-foreground font-semibold">
@@ -705,7 +718,10 @@ export default function PlaceBidModal({
               </div>
 
               {/* Conditional drop: a movie released only if this bid wins, which
-                  is what lets a full roster keep bidding. */}
+                  is what lets a full roster keep bidding. Only holdings that
+                  could actually be dropped reach this list -- a released or
+                  counterpicked movie would fail at processing, too late to
+                  choose again. */}
               {myHoldings.length > 0 && (
                 <div className="mt-6 space-y-2">
                   <label
@@ -728,14 +744,6 @@ export default function PlaceBidModal({
                       </option>
                     ))}
                   </select>
-
-                  {freeRosterSlots === 0 && !dropHoldingId && (
-                    <div className="alert alert-warning" data-testid="full-roster-warning">
-                      Your roster is full. You can still place this bid, but it can
-                      only be honored if you pick a movie to drop above, or a slot
-                      frees up before bids are processed.
-                    </div>
-                  )}
                 </div>
               )}
             </div>
