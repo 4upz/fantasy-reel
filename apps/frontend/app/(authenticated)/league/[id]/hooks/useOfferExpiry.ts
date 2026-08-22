@@ -19,6 +19,7 @@ interface UseOfferExpiryReturn {
   /** `choice` resolved for display, and for gating the submit button. */
   resolution: ExpiryResolution
   /** True when the release chip went stale and the window fell back. */
+  /** True when a stale release pick was swapped out from under the user. */
   fellBack: boolean
   /**
    * Resolve again at submit time. The clock keeps moving while a modal is open,
@@ -58,15 +59,29 @@ export function useOfferExpiry(movies: ExpiryMovie[]): UseOfferExpiryReturn {
     setChoiceState(next)
   }, [])
 
-  // The release chip can go stale under the user: pick "when X releases", then
-  // drop X from the offer. Fall back to the default window and say so, rather
-  // than leaving a dead chip selected and the submit button disabled.
+  // The release chip can go stale under the user in two ways: every unreleased
+  // movie leaves the offer, or just the one they picked does. Losing the whole
+  // option falls back to the default window; losing only the picked movie falls
+  // back to the soonest remaining one, which is a smaller surprise than
+  // switching them off the release anchor entirely.
   useEffect(() => {
-    if (choice.kind === 'release' && !releaseAnchor.available) {
+    if (choice.kind !== 'release') return
+
+    if (!releaseAnchor.available) {
       setChoiceState({ kind: 'preset', hours: DEFAULT_EXPIRY_HOURS })
       setFellBack(true)
+      return
     }
-  }, [choice.kind, releaseAnchor.available])
+
+    const stillThere =
+      choice.movieId === null ||
+      releaseAnchor.candidates.some((candidate) => candidate.movieId === choice.movieId)
+
+    if (!stillThere) {
+      setChoiceState({ kind: 'release', movieId: null })
+      setFellBack(true)
+    }
+  }, [choice, releaseAnchor])
 
   const resolveNow = useCallback(
     () => resolveExpiryChoice(choice, releaseAnchor),

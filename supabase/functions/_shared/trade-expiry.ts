@@ -1,5 +1,5 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import type { TradeItems, TradeMovieItem } from './trade-validation.ts'
+import type { TradeItems } from './trade-validation.ts'
 
 /**
  * Per-offer trade expiry: how long an unanswered offer stands before it lapses.
@@ -15,23 +15,40 @@ import type { TradeItems, TradeMovieItem } from './trade-validation.ts'
  * the client has already checked anything.
  */
 
-export type ExpiryAnchor = 'fixed' | 'first_release'
+export type ExpiryAnchor = 'fixed' | 'movie_release'
+
+/** An unreleased movie in an offer, i.e. something its expiry could wait on. */
+export interface AnchorCandidate {
+  movie_id: string
+  title: string
+  release_date: string
+  /** When it stops counting as upcoming: start of the day after release, UTC. */
+  boundary: string
+}
 
 /** How an offer's clock was chosen, as sent by the client. */
 export interface ExpiryRequest {
   /**
-   * ISO-8601 instant. Required for `fixed`, ignored for `first_release` (the
-   * server re-derives that one -- the client's arithmetic is a UI preview, and
-   * the movie set it was computed against may not be the one being saved).
+   * ISO-8601 instant. Required for `fixed`, ignored for `movie_release` (the
+   * server derives that one from the anchor movie's live release date).
    */
   expires_at?: string | null
   expiry_anchor?: ExpiryAnchor | null
+  /**
+   * Which movie a `movie_release` offer waits on. Omit to take the default --
+   * the soonest unreleased movie in the offer. Must be a movie in the offer
+   * that is still unreleased; anything else is refused rather than corrected,
+   * since silently anchoring to a different movie than the one asked for is
+   * worse than saying no.
+   */
+  expiry_anchor_movie_id?: string | null
 }
 
 /** What actually gets written to `trade_offers`. */
 export interface ResolvedExpiry {
   expires_at: string | null
   expiry_anchor: ExpiryAnchor | null
+  expiry_anchor_movie_id: string | null
 }
 
 export type ExpiryResolution =
@@ -57,8 +74,8 @@ export const EXPIRY_ERRORS = {
   unparseable: 'Offer expiry is not a valid date',
   tooSoon: `An offer has to stay open at least ${MIN_EXPIRY_MINUTES / 60} hour`,
   tooLate: `An offer cannot stay open longer than ${MAX_EXPIRY_DAYS} days`,
-  noReleaseDate: 'No movie in this trade has a release date to expire on',
-  alreadyReleased: 'The first movie in this trade is already released',
+  noReleaseDate: 'No movie in this trade is still unreleased',
+  anchorNotInOffer: 'That movie is not an unreleased movie in this trade',
 } as const
 
 const MS_PER_MINUTE = 60_000
@@ -80,28 +97,26 @@ function leagueDeadlineInstant(tradeDeadline: string | null): Date | null {
 }
 
 /**
- * Earliest release among the movies on BOTH sides of the offer, as the instant
- * that movie stops counting as upcoming.
+ * The movies in an offer its expiry could wait on: still unreleased, soonest
+ * first. The first is the default.
  *
- * Delegates to the SQL function so the boundary is defined once. It resolves
- * against live `movies.release_date` -- the `release_date` inside the items
- * JSONB is a snapshot `enrichTradeItems` took at proposal time and drifts every
- * time sync-release-dates moves a date.
+ * Delegates to SQL so the boundary and the "still unreleased" test are defined
+ * once, against live `movies.release_date` -- the `release_date` inside the
+ * items JSONB is a snapshot `enrichTradeItems` took at proposal time and drifts
+ * every time sync-release-dates moves a date.
  */
-export async function resolveFirstRelease(
+export async function getAnchorCandidates(
   supabase: SupabaseClient,
   initiatorItems: TradeItems,
   recipientItems: TradeItems
-): Promise<Date | null> {
-  const { data, error } = await supabase.rpc('resolve_first_release_expiry', {
+): Promise<AnchorCandidate[]> {
+  const { data, error } = await supabase.rpc('offer_anchor_candidates', {
     p_initiator_items: initiatorItems,
     p_recipient_items: recipientItems,
   })
 
-  if (error || !data) return null
-
-  const resolved = new Date(data as string)
-  return Number.isNaN(resolved.getTime()) ? null : resolved
+  if (error || !data) return []
+  return data as AnchorCandidate[]
 }
 
 /**
@@ -127,31 +142,49 @@ export async function resolveOfferExpiry(
   // No clock: the pre-expiry behavior, and what every offer created before this
   // feature keeps. Deliberately still a first-class choice.
   if (anchor === null && requested === null) {
-    return { valid: true, expires_at: null, expiry_anchor: null }
+    return { valid: true, expires_at: null, expiry_anchor: null, expiry_anchor_movie_id: null }
   }
 
   if (anchor === null || (anchor === 'fixed' && requested === null)) {
     return { valid: false, error: EXPIRY_ERRORS.unpaired }
   }
 
-  if (anchor !== 'fixed' && anchor !== 'first_release') {
+  if (anchor !== 'fixed' && anchor !== 'movie_release') {
     return { valid: false, error: EXPIRY_ERRORS.unknownAnchor }
   }
 
   const now = Date.now()
   const earliest = now + MIN_EXPIRY_MINUTES * MS_PER_MINUTE
   let expiry: Date
+  let anchorMovieId: string | null = null
 
-  if (anchor === 'first_release') {
-    const resolved = await resolveFirstRelease(supabase, context.initiatorItems, context.recipientItems)
+  if (anchor === 'movie_release') {
+    const candidates = await getAnchorCandidates(
+      supabase,
+      context.initiatorItems,
+      context.recipientItems
+    )
 
-    if (!resolved) return { valid: false, error: EXPIRY_ERRORS.noReleaseDate }
-    // Trading a released movie is legal, so this is a normal case rather than a
-    // data problem -- the option simply does not apply to this offer.
-    if (resolved.getTime() <= now) return { valid: false, error: EXPIRY_ERRORS.alreadyReleased }
-    if (resolved.getTime() < earliest) return { valid: false, error: EXPIRY_ERRORS.tooSoon }
+    // Every unreleased movie is a candidate, so this only fires when the whole
+    // deal is already-released movies -- a normal trade, just not one this
+    // option applies to.
+    if (candidates.length === 0) return { valid: false, error: EXPIRY_ERRORS.noReleaseDate }
 
-    expiry = resolved
+    const requestedId = request?.expiry_anchor_movie_id ?? null
+    // Default: the soonest. The client sends an explicit id when the proposer
+    // picked a later release instead.
+    const chosen = requestedId
+      ? candidates.find((candidate) => candidate.movie_id === requestedId)
+      : candidates[0]
+
+    if (!chosen) return { valid: false, error: EXPIRY_ERRORS.anchorNotInOffer }
+
+    const boundary = new Date(chosen.boundary)
+    if (Number.isNaN(boundary.getTime())) return { valid: false, error: EXPIRY_ERRORS.unparseable }
+    if (boundary.getTime() < earliest) return { valid: false, error: EXPIRY_ERRORS.tooSoon }
+
+    expiry = boundary
+    anchorMovieId = chosen.movie_id
   } else {
     expiry = new Date(requested as string)
 
@@ -173,30 +206,33 @@ export async function resolveOfferExpiry(
   // "in 59 minutes" for a window the user set to exactly one hour.
   expiry.setUTCSeconds(0, 0)
 
-  return { valid: true, expires_at: expiry.toISOString(), expiry_anchor: anchor }
+  return {
+    valid: true,
+    expires_at: expiry.toISOString(),
+    expiry_anchor: anchor,
+    expiry_anchor_movie_id: anchorMovieId,
+  }
 }
 
 /**
- * The movie an offer's release anchor points at: the one that opens first.
+ * The title of the movie an offer waits on.
  *
- * Reads the titles and dates snapshotted into the items JSONB by
- * enrichTradeItems, which is right for naming a movie in a sentence -- the
- * authoritative resolution against live release dates is
- * resolve_first_release_expiry() in SQL, and this only has to agree about WHICH
- * movie, not exactly when.
+ * A lookup by the id the server already resolved, NOT a re-derivation of which
+ * movie the anchor points at. The titles here come from the items JSONB
+ * snapshot, which is right for naming a movie in a sentence; the id is the
+ * authority on which one.
  */
-export function anchorMovieTitle(items: {
+export function anchorMovieTitle(offer: {
+  expiry_anchor_movie_id?: string | null
   initiator_items: TradeItems
   recipient_items: TradeItems
 }): string | null {
-  const dated = [...(items.initiator_items.movies ?? []), ...(items.recipient_items.movies ?? [])]
-    .filter((movie): movie is TradeMovieItem & { release_date: string } => Boolean(movie.release_date))
+  if (!offer.expiry_anchor_movie_id) return null
 
-  if (dated.length === 0) return null
+  const named = [...(offer.initiator_items.movies ?? []), ...(offer.recipient_items.movies ?? [])]
+    .find((movie) => movie.movie_id === offer.expiry_anchor_movie_id)
 
-  return dated.reduce((earliest, movie) =>
-    movie.release_date < earliest.release_date ? movie : earliest
-  ).title ?? null
+  return named?.title ?? null
 }
 
 /**
@@ -208,12 +244,15 @@ export function anchorMovieTitle(items: {
  */
 export function expiredReasonText(trade: {
   expired_reason?: string | null
+  expiry_anchor_movie_id?: string | null
   initiator_items: TradeItems
   recipient_items: TradeItems
+  /** Resolved live by the caller; preferred over the JSONB snapshot title. */
+  anchor_movie_title?: string | null
 }): string {
   switch (trade.expired_reason) {
     case 'movie_released': {
-      const title = anchorMovieTitle(trade)
+      const title = trade.anchor_movie_title ?? anchorMovieTitle(trade)
       return title
         ? `The offer ran until ${title} released, and it has.`
         : 'The offer ran until its first movie released, and it has.'

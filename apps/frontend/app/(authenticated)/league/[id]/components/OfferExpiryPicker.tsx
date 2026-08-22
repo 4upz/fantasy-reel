@@ -1,14 +1,17 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import DateTimeField from '@/app/components/DateTimeField'
 import {
   DEFAULT_EXPIRY_HOURS,
   EXPIRY_PRESETS,
   MAX_EXPIRY_DAYS,
   MIN_EXPIRY_MINUTES,
+  anchorFor,
   formatExpiryAbsolute,
+  formatReleaseDate,
   toDateTimeLocalValue,
+  type AnchorCandidate,
   type ExpiryChoice,
   type ExpiryResolution,
   type ReleaseAnchor,
@@ -55,6 +58,124 @@ function Chip({
 }
 
 /**
+ * The release option: a chip that names the movie being waited on, plus a caret
+ * that swaps it for another unreleased movie in the trade.
+ *
+ * The caret only exists when there is a second candidate -- a control that
+ * opens an empty list is worse than no control. The menu shows each release
+ * date because that is the whole basis for choosing between them.
+ */
+function ReleaseChip({
+  anchor,
+  selected,
+  chosen,
+  onSelect,
+}: {
+  anchor: ReleaseAnchor
+  selected: boolean
+  chosen: AnchorCandidate | undefined
+  onSelect: (movieId: string | null) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const caretRef = useRef<HTMLButtonElement>(null)
+
+  const label = chosen ? `When ${chosen.title} releases` : 'When it releases'
+  const hasChoice = anchor.available && anchor.candidates.length > 1
+
+  useEffect(() => {
+    if (!open) return
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      // Escape belongs to the menu first; without stopping it here the modal
+      // behind would close too.
+      event.stopPropagation()
+      setOpen(false)
+      caretRef.current?.focus()
+    }
+
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [open])
+
+  const segment = selected
+    ? 'btn-secondary'
+    : 'bg-elevated border border-border text-foreground-secondary hover:border-border-hover hover:text-foreground'
+
+  return (
+    <div ref={wrapperRef} className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => onSelect(chosen?.movieId ?? null)}
+        disabled={!anchor.available}
+        title={anchor.reason}
+        aria-pressed={selected}
+        className={`btn px-3 py-1 text-sm ${segment} ${
+          hasChoice ? 'rounded-r-none border-r-0' : ''
+        }`}
+      >
+        {label}
+      </button>
+
+      {hasChoice && (
+        <button
+          ref={caretRef}
+          type="button"
+          onClick={() => setOpen((wasOpen) => !wasOpen)}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-label="Choose which release to wait for"
+          className={`btn px-2 py-1 text-sm rounded-l-none border-l border-l-border ${segment}`}
+        >
+          <span aria-hidden="true">{open ? '▴' : '▾'}</span>
+        </button>
+      )}
+
+      {open && (
+        <div
+          role="listbox"
+          aria-label="Movies this offer can wait for"
+          className="absolute top-full left-0 z-10 mt-1 min-w-64 card p-1 shadow-heavy animate-fade-in"
+        >
+          {anchor.candidates.map((candidate) => {
+            const isChosen = candidate.movieId === chosen?.movieId
+            return (
+              <button
+                key={candidate.movieId}
+                type="button"
+                role="option"
+                aria-selected={isChosen}
+                onClick={() => {
+                  onSelect(candidate.movieId)
+                  setOpen(false)
+                  caretRef.current?.focus()
+                }}
+                className={`w-full flex items-baseline justify-between gap-4 px-3 py-2 rounded text-left text-sm transition-colors ${
+                  isChosen ? 'bg-surface-hover text-gold' : 'text-foreground hover:bg-surface-hover'
+                }`}
+              >
+                <span>{candidate.title}</span>
+                <span className="text-xs text-foreground-muted shrink-0">
+                  {formatReleaseDate(candidate.releaseDate)}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * How long an offer stands before it lapses.
  *
  * Presets, a release anchor and a custom time all resolve to one instant, which
@@ -68,6 +189,12 @@ export default function OfferExpiryPicker({
   resolution,
   fellBack,
 }: Props) {
+  // What the chip names: the picked movie, or the soonest when none was picked.
+  const chosenAnchor = anchorFor(
+    releaseAnchor,
+    value.kind === 'release' ? value.movieId : null
+  )
+
   const { minValue, maxValue } = useMemo(() => {
     const now = Date.now()
     return {
@@ -94,17 +221,12 @@ export default function OfferExpiryPicker({
           </Chip>
         ))}
 
-        <Chip
+        <ReleaseChip
+          anchor={releaseAnchor}
           selected={value.kind === 'release'}
-          disabled={!releaseAnchor.available}
-          // The reason is on the chip itself rather than left to a silently
-          // greyed control -- "already out" and "no release date" are ordinary
-          // situations a proposer should be able to understand at a glance.
-          title={releaseAnchor.reason}
-          onClick={() => onChange({ kind: 'release' })}
-        >
-          {releaseAnchor.title ? `When ${releaseAnchor.title} releases` : 'When it releases'}
-        </Chip>
+          chosen={chosenAnchor}
+          onSelect={(movieId) => onChange({ kind: 'release', movieId })}
+        />
 
         <Chip
           selected={value.kind === 'custom'}
@@ -148,8 +270,9 @@ export default function OfferExpiryPicker({
 
       {fellBack && (
         <p role="status" className="mt-2 text-sm text-warning">
-          {releaseAnchor.reason ?? 'That release no longer applies'} — switched to{' '}
-          {DEFAULT_EXPIRY_HOURS} hours.
+          {value.kind === 'release'
+            ? `That movie left the trade — now waiting on ${chosenAnchor?.title ?? 'the soonest release'}.`
+            : `${releaseAnchor.reason ?? 'That release no longer applies'} — switched to ${DEFAULT_EXPIRY_HOURS} hours.`}
         </p>
       )}
 

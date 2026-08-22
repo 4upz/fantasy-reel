@@ -662,11 +662,18 @@ export interface TradeOffer {
    */
   expires_at?: string | null
   /**
-   * How `expires_at` was derived. 'fixed' never moves; 'first_release' tracks
-   * the earliest release among the offer's movies and is re-resolved by the
-   * process-trades cron whenever that date shifts.
+   * How `expires_at` was derived. 'fixed' never moves; 'movie_release' waits on
+   * `expiry_anchor_movie_id` and is re-resolved by the process-trades cron
+   * whenever that movie's release date shifts.
    */
   expiry_anchor?: ExpiryAnchor | null
+  /** The movie a 'movie_release' offer waits on. */
+  expiry_anchor_movie_id?: string | null
+  /**
+   * That movie's title, resolved by get-trades from the live movies table.
+   * Absent on offers loaded from anywhere else.
+   */
+  anchor_movie_title?: string | null
   /**
    * Why an expired offer expired. NULL on offers that expired for a reason
    * `veto_reason` explains instead (a competing trade executed, or the offer
@@ -675,7 +682,7 @@ export interface TradeOffer {
   expired_reason?: ExpiredReason | null
 }
 
-export type ExpiryAnchor = 'fixed' | 'first_release'
+export type ExpiryAnchor = 'fixed' | 'movie_release'
 export type ExpiredReason = 'offer_window' | 'movie_released' | 'league_deadline'
 
 export interface TradeAsset {

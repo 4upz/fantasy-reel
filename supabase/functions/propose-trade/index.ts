@@ -51,6 +51,7 @@ Deno.serve(async (req) => {
       message,
       expires_at,
       expiry_anchor,
+      expiry_anchor_movie_id,
     }: ProposeTradeRequest = await req.json()
 
     if (!league_id || !isValidUUID(league_id)) {
@@ -112,7 +113,7 @@ Deno.serve(async (req) => {
     // has already read (and vouched for) that row.
     const expiry = await resolveOfferExpiry(
       serviceClient,
-      { expires_at, expiry_anchor },
+      { expires_at, expiry_anchor, expiry_anchor_movie_id },
       {
         tradeDeadline: validationResult.config?.trade_deadline ?? null,
         initiatorItems: enrichedOfferedItems,
@@ -137,6 +138,7 @@ Deno.serve(async (req) => {
         initiator_message: message?.trim() || null,
         expires_at: expiry.expires_at,
         expiry_anchor: expiry.expiry_anchor,
+        expiry_anchor_movie_id: expiry.expiry_anchor_movie_id,
       })
       .select()
       .single()

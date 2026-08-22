@@ -25,8 +25,7 @@ export const EXPIRY_ERRORS = {
   tooSoon: `An offer has to stay open at least ${MIN_EXPIRY_MINUTES / 60} hour`,
   tooLate: `An offer cannot stay open longer than ${MAX_EXPIRY_DAYS} days`,
   unparseable: 'Offer expiry is not a valid date',
-  noReleaseDate: 'No movie in this trade has a release date to expire on',
-  alreadyReleased: 'The first movie in this trade is already released',
+  noReleaseDate: 'No movie in this trade is still unreleased',
 } as const
 
 export const DEFAULT_EXPIRY_HOURS = 48
@@ -41,13 +40,19 @@ export const EXPIRY_PRESETS: ReadonlyArray<{ hours: number; label: string }> = [
 export type ExpiryChoice =
   | { kind: 'none' }
   | { kind: 'preset'; hours: number }
-  | { kind: 'release' }
+  /**
+   * Wait for a movie to open. `movieId` is null until the proposer picks one,
+   * meaning "the soonest" -- the server resolves that default so the two sides
+   * cannot disagree about which movie it is.
+   */
+  | { kind: 'release'; movieId: string | null }
   /** Raw `datetime-local` value: local wall time, no zone. */
   | { kind: 'custom'; value: string }
 
 export interface ResolvedExpiry {
   expires_at: string | null
   expiry_anchor: ExpiryAnchor | null
+  expiry_anchor_movie_id: string | null
 }
 
 export type ExpiryResolution =
@@ -58,18 +63,30 @@ const MS_PER_MINUTE = 60_000
 
 /** A movie as the picker needs it -- both sides of the offer, title and date. */
 export interface ExpiryMovie {
+  movie_id: string
   title: string
   release_date: string | null
 }
 
+/** A movie the offer could wait on: still unreleased, with a known date. */
+export interface AnchorCandidate {
+  movieId: string
+  title: string
+  releaseDate: string
+  /** When it stops counting as upcoming: start of the day after release, UTC. */
+  boundary: string
+}
+
 export interface ReleaseAnchor {
-  /** Whether "when X releases" can be chosen for the current movie selection. */
+  /** Whether "when X releases" applies to the current movie selection. */
   available: boolean
   /** Why not, phrased for the reader. Present only when unavailable. */
   reason?: string
-  /** The earliest-releasing movie -- the one the chip is named after. */
-  title?: string
-  expiresAt?: string
+  /**
+   * Every unreleased movie in the offer, soonest first. More than one means the
+   * proposer gets to choose which release the deal hinges on.
+   */
+  candidates: AnchorCandidate[]
 }
 
 /**
@@ -87,69 +104,68 @@ function releaseBoundary(releaseDate: string): Date | null {
 }
 
 /**
- * The movie an offer's release anchor points at: the one that opens first.
+ * The movies in an offer its expiry could wait on: still unreleased, soonest
+ * first.
  *
- * The single definition of "which movie" for the whole frontend -- the picker
- * names it on the chip and the card names it on an expired offer, and if those
- * two disagreed the app would promise "when Dune 3 releases" and then blame a
- * different film for the expiry, with nothing failing to signal it.
- */
-export function earliestReleasingMovie<T extends ExpiryMovie>(movies: T[]): T | null {
-  const dated = movies.filter((movie) => movie.release_date)
-  if (dated.length === 0) return null
-
-  // Compared as boundary instants rather than raw date strings so this cannot
-  // drift from the rule resolveReleaseAnchor applies.
-  return dated.reduce((first, movie) => {
-    const a = releaseBoundary(movie.release_date as string)
-    const b = releaseBoundary(first.release_date as string)
-    if (!a) return first
-    if (!b) return movie
-    return a < b ? movie : first
-  })
-}
-
-/**
- * Work out whether the release chip applies to the movies currently selected,
- * and what it would mean.
+ * Every unreleased movie qualifies, not just the earliest. A trade often
+ * bundles one film that is nearly out with another months away, and which of
+ * them the deal really hinges on is the proposer's call. A single already-out
+ * movie no longer disqualifies the whole option.
  *
- * Every unavailable case gets a reason rather than a silently greyed chip. Note
- * that an already-released movie is a normal case, not an error -- rosters hold
- * released movies and trading them is legal; the option just doesn't apply.
+ * This mirrors offer_anchor_candidates() in SQL, which is the authority -- this
+ * copy exists so the picker can label and order the chip without a round trip
+ * per keystroke.
  */
 export function resolveReleaseAnchor(movies: ExpiryMovie[], now = Date.now()): ReleaseAnchor {
   if (movies.length === 0) {
-    return { available: false, reason: 'Add a movie to use this' }
+    return { available: false, reason: 'Add a movie to use this', candidates: [] }
   }
 
-  const first = earliestReleasingMovie(movies)
-  const boundary = first?.release_date ? releaseBoundary(first.release_date) : null
+  const candidates = movies
+    .filter((movie): movie is ExpiryMovie & { release_date: string } => Boolean(movie.release_date))
+    .map((movie) => ({
+      movieId: movie.movie_id,
+      title: movie.title,
+      releaseDate: movie.release_date,
+      boundary: releaseBoundary(movie.release_date),
+    }))
+    .filter(
+      (candidate): candidate is AnchorCandidate & { boundary: Date } =>
+        candidate.boundary !== null && candidate.boundary.getTime() > now
+    )
+    .sort((a, b) => a.boundary.getTime() - b.boundary.getTime())
+    .map((candidate) => ({ ...candidate, boundary: candidate.boundary.toISOString() }))
 
-  if (!first || !boundary) {
-    return { available: false, reason: 'No release date yet' }
+  if (candidates.length === 0) {
+    return { available: false, reason: 'Nothing in this trade is still unreleased', candidates: [] }
   }
 
-  const earliest = { title: first.title, boundary }
+  // The soonest release could be minutes away. Deliberately not bumped up to
+  // the minimum -- the chip would then be lying about what it does -- but the
+  // later candidates are still perfectly good choices, so the option stays open.
+  const usable = candidates.filter(
+    (candidate) =>
+      new Date(candidate.boundary).getTime() >= now + MIN_EXPIRY_MINUTES * MS_PER_MINUTE
+  )
 
-  if (earliest.boundary.getTime() <= now) {
-    return { available: false, reason: `${earliest.title} is already out`, title: earliest.title }
-  }
-
-  if (earliest.boundary.getTime() < now + MIN_EXPIRY_MINUTES * MS_PER_MINUTE) {
-    // Deliberately not bumped up to the minimum: the chip would then be lying
-    // about what it does.
+  if (usable.length === 0) {
     return {
       available: false,
-      reason: `${earliest.title} is out too soon`,
-      title: earliest.title,
+      reason: `${candidates[0].title} is out too soon`,
+      candidates: [],
     }
   }
 
-  return {
-    available: true,
-    title: earliest.title,
-    expiresAt: earliest.boundary.toISOString(),
-  }
+  return { available: true, candidates: usable }
+}
+
+/** The candidate an offer is anchored to, or the default when none was picked. */
+export function anchorFor(
+  anchor: ReleaseAnchor,
+  movieId: string | null
+): AnchorCandidate | undefined {
+  if (!movieId) return anchor.candidates[0]
+  return anchor.candidates.find((candidate) => candidate.movieId === movieId)
 }
 
 /**
@@ -166,7 +182,10 @@ export function resolveExpiryChoice(
 ): ExpiryResolution {
   switch (choice.kind) {
     case 'none':
-      return { ok: true, expiry: { expires_at: null, expiry_anchor: null } }
+      return {
+        ok: true,
+        expiry: { expires_at: null, expiry_anchor: null, expiry_anchor_movie_id: null },
+      }
 
     case 'preset':
       return {
@@ -174,19 +193,32 @@ export function resolveExpiryChoice(
         expiry: {
           expires_at: new Date(now + choice.hours * 60 * MS_PER_MINUTE).toISOString(),
           expiry_anchor: 'fixed',
+          expiry_anchor_movie_id: null,
         },
       }
 
-    case 'release':
-      if (!releaseAnchor.available || !releaseAnchor.expiresAt) {
+    case 'release': {
+      if (!releaseAnchor.available) {
         return { ok: false, error: releaseAnchor.reason ?? EXPIRY_ERRORS.noReleaseDate }
       }
-      // The timestamp is a preview; the server re-derives it from live release
-      // dates, which may have moved since this page loaded.
+
+      const chosen = anchorFor(releaseAnchor, choice.movieId)
+      if (!chosen) {
+        // The picked movie left the offer while the modal was open.
+        return { ok: false, error: EXPIRY_ERRORS.noReleaseDate }
+      }
+
+      // The timestamp is a preview; the server re-derives it from the chosen
+      // movie's live release date, which may have moved since this page loaded.
       return {
         ok: true,
-        expiry: { expires_at: releaseAnchor.expiresAt, expiry_anchor: 'first_release' },
+        expiry: {
+          expires_at: chosen.boundary,
+          expiry_anchor: 'movie_release',
+          expiry_anchor_movie_id: chosen.movieId,
+        },
       }
+    }
 
     case 'custom': {
       if (!choice.value) return { ok: false, error: EXPIRY_ERRORS.unparseable }
@@ -204,9 +236,29 @@ export function resolveExpiryChoice(
       }
 
       picked.setSeconds(0, 0)
-      return { ok: true, expiry: { expires_at: picked.toISOString(), expiry_anchor: 'fixed' } }
+      return {
+        ok: true,
+        expiry: {
+          expires_at: picked.toISOString(),
+          expiry_anchor: 'fixed',
+          expiry_anchor_movie_id: null,
+        },
+      }
     }
   }
+}
+
+/** A bare release date for the anchor menu, e.g. "Sep 18, 2026". */
+export function formatReleaseDate(releaseDate: string): string {
+  const [year, month, day] = releaseDate.split('-').map(Number)
+  if (!year || !month || !day) return releaseDate
+  // Built as a local date on purpose: `new Date('2026-09-18')` is UTC midnight,
+  // which renders as the 17th for everyone west of UTC.
+  return new Date(year, month - 1, day).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 }
 
 /** `datetime-local` wants local wall time in `YYYY-MM-DDTHH:mm`, not an ISO instant. */

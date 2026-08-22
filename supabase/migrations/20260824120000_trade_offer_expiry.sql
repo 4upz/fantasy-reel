@@ -32,11 +32,15 @@ ALTER TABLE trade_offers
   ADD COLUMN IF NOT EXISTS expires_at              TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS expiry_reminder_sent_at TIMESTAMPTZ,
   ADD COLUMN IF NOT EXISTS expiry_anchor           TEXT,
+  ADD COLUMN IF NOT EXISTS expiry_anchor_movie_id  UUID REFERENCES movies(id),
   ADD COLUMN IF NOT EXISTS expired_reason          TEXT;
 
 ALTER TABLE trade_offers
   ADD CONSTRAINT check_expiry_anchor_value
-    CHECK (expiry_anchor IS NULL OR expiry_anchor IN ('fixed', 'first_release')),
+    CHECK (expiry_anchor IS NULL OR expiry_anchor IN ('fixed', 'movie_release')),
+  -- A movie-anchored offer names the movie it waits on; a fixed one never does.
+  ADD CONSTRAINT check_expiry_anchor_movie_paired
+    CHECK ((expiry_anchor = 'movie_release') = (expiry_anchor_movie_id IS NOT NULL)),
   ADD CONSTRAINT check_expired_reason_value
     CHECK (expired_reason IS NULL
            OR expired_reason IN ('offer_window', 'movie_released', 'league_deadline')),
@@ -48,7 +52,9 @@ ALTER TABLE trade_offers
 COMMENT ON COLUMN trade_offers.expires_at IS
   'When this unanswered offer lapses. NULL = stands forever (the pre-expiry behavior, and what every offer created before this migration keeps). Always a resolved timestamp regardless of how the proposer picked it.';
 COMMENT ON COLUMN trade_offers.expiry_anchor IS
-  'How expires_at was derived: "fixed" (preset or custom time, never moves) or "first_release" (earliest release among the offer''s movies, re-resolved by process-trades when a release date shifts).';
+  'How expires_at was derived: "fixed" (preset or custom time, never moves) or "movie_release" (waits on expiry_anchor_movie_id, re-resolved by process-trades when that movie''s release date shifts).';
+COMMENT ON COLUMN trade_offers.expiry_anchor_movie_id IS
+  'The movie a "movie_release" offer waits on. The proposer picks any unreleased movie in the offer -- not necessarily the earliest -- so this is stored rather than re-derived. Storing it also means a date shift moves THIS offer''s clock instead of silently switching which movie owns the anchor.';
 COMMENT ON COLUMN trade_offers.expired_reason IS
   'Why an expired offer expired: offer_window (its clock ran out), movie_released (its release anchor arrived), league_deadline (the season trade deadline passed). NULL on offers expired for other reasons -- those carry veto_reason instead, which is what execute_trade and the process-trades revalidation path already write.';
 COMMENT ON COLUMN trade_offers.expiry_reminder_sent_at IS
@@ -67,7 +73,7 @@ CREATE INDEX IF NOT EXISTS idx_trade_offers_pending_expiry
 -- the primary key rather than a column the query never touches.
 CREATE INDEX IF NOT EXISTS idx_trade_offers_release_anchored
   ON trade_offers (id)
-  WHERE status IN ('proposed', 'countered') AND expiry_anchor = 'first_release';
+  WHERE status IN ('proposed', 'countered') AND expiry_anchor = 'movie_release';
 
 -- ============================================================================
 -- PART 2: Release-anchor resolution
@@ -86,15 +92,40 @@ CREATE INDEX IF NOT EXISTS idx_trade_offers_release_anchored
 -- drifts whenever sync-release-dates moves a date; it is display data only.
 -- ============================================================================
 
-CREATE OR REPLACE FUNCTION resolve_first_release_expiry(
-  p_initiator_items JSONB,
-  p_recipient_items JSONB
-)
+-- The instant one movie stops counting as upcoming. NULL if it has no release
+-- date. Reads movies.release_date live, never the items JSONB snapshot.
+CREATE OR REPLACE FUNCTION movie_release_boundary(p_movie_id UUID)
 RETURNS TIMESTAMPTZ
 LANGUAGE sql STABLE
 SET search_path = public
 AS $$
-  SELECT MIN((m.release_date + INTERVAL '1 day') AT TIME ZONE 'UTC')
+  SELECT (m.release_date + INTERVAL '1 day') AT TIME ZONE 'UTC'
+  FROM movies m
+  WHERE m.id = p_movie_id AND m.release_date IS NOT NULL
+$$;
+
+COMMENT ON FUNCTION movie_release_boundary(UUID) IS
+  'When a movie stops counting as upcoming: the start of the day after its release_date, UTC. Same boundary as isUpcomingMovie() in _shared/utils.ts, so the codebase keeps one definition of "released".';
+
+/**
+ * The movies in an offer that could anchor its expiry: still unreleased, with a
+ * known date, ordered soonest first.
+ *
+ * Every unreleased movie qualifies -- not just the earliest. A trade often
+ * bundles one film that is nearly out with another months away, and which of
+ * them the deal actually hinges on is the proposer's call, not the schedule's.
+ * The first row is the default.
+ */
+CREATE OR REPLACE FUNCTION offer_anchor_candidates(
+  p_initiator_items JSONB,
+  p_recipient_items JSONB
+)
+RETURNS TABLE (movie_id UUID, title TEXT, release_date DATE, boundary TIMESTAMPTZ)
+LANGUAGE sql STABLE
+SET search_path = public
+AS $$
+  SELECT DISTINCT m.id, m.title, m.release_date,
+         (m.release_date + INTERVAL '1 day') AT TIME ZONE 'UTC'
   FROM (
     SELECT value FROM jsonb_array_elements(COALESCE(p_initiator_items->'movies', '[]'::jsonb))
     UNION ALL
@@ -102,13 +133,17 @@ AS $$
   ) AS item
   JOIN movies m ON m.id = (item.value->>'movie_id')::UUID
   WHERE m.release_date IS NOT NULL
+    AND (m.release_date + INTERVAL '1 day') AT TIME ZONE 'UTC' > now()
+  ORDER BY 3, 2
 $$;
 
-COMMENT ON FUNCTION resolve_first_release_expiry(JSONB, JSONB) IS
-  'Earliest release among the movies named by a trade offer, as the instant that movie stops counting as upcoming (start of the day after its release_date, UTC). NULL when no named movie has a release date. Reads movies.release_date live, never the items JSONB snapshot.';
+COMMENT ON FUNCTION offer_anchor_candidates(JSONB, JSONB) IS
+  'Unreleased movies in a trade offer, soonest first -- the choices for a movie_release expiry, with the first row as the default. Deliberately not restricted to the earliest: the proposer picks which release the deal hinges on.';
 
-REVOKE EXECUTE ON FUNCTION resolve_first_release_expiry(JSONB, JSONB) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION resolve_first_release_expiry(JSONB, JSONB) TO authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION movie_release_boundary(UUID) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION movie_release_boundary(UUID) TO authenticated, service_role;
+REVOKE EXECUTE ON FUNCTION offer_anchor_candidates(JSONB, JSONB) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION offer_anchor_candidates(JSONB, JSONB) TO authenticated, service_role;
 
 -- ============================================================================
 -- PART 3: respond_to_trade -- reject a lapsed offer under the row lock
@@ -235,7 +270,8 @@ CREATE FUNCTION counter_trade(
   p_new_recipient_items JSONB,
   p_message TEXT DEFAULT NULL,
   p_expires_at TIMESTAMPTZ DEFAULT NULL,
-  p_expiry_anchor TEXT DEFAULT NULL
+  p_expiry_anchor TEXT DEFAULT NULL,
+  p_expiry_anchor_movie_id UUID DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER
@@ -265,8 +301,15 @@ BEGIN
     RETURN jsonb_build_object('error', 'This offer has expired', 'status_code', 400);
   END IF;
 
-  IF p_expiry_anchor IS NOT NULL AND p_expiry_anchor NOT IN ('fixed', 'first_release') THEN
+  IF p_expiry_anchor IS NOT NULL AND p_expiry_anchor NOT IN ('fixed', 'movie_release') THEN
     RETURN jsonb_build_object('error', 'Invalid expiry anchor', 'status_code', 400);
+  END IF;
+
+  IF (p_expiry_anchor = 'movie_release') <> (p_expiry_anchor_movie_id IS NOT NULL) THEN
+    RETURN jsonb_build_object(
+      'error', 'A release-anchored offer must name the movie it waits on',
+      'status_code', 400
+    );
   END IF;
 
   -- The expiry arrives already resolved, bounded and clamped by
@@ -294,6 +337,7 @@ BEGIN
       -- and the "expiring soon" nudge becomes available again.
       expires_at = v_expires_at,
       expiry_anchor = p_expiry_anchor,
+      expiry_anchor_movie_id = p_expiry_anchor_movie_id,
       expiry_reminder_sent_at = NULL
   WHERE id = p_trade_id;
 
@@ -304,16 +348,16 @@ $$;
 COMMENT ON FUNCTION counter_trade IS
   'Atomically counters a trade with proper row-level locking. Resets the offer expiry to the counterer''s choice -- the row is reused, so an inherited clock would lapse the counter early. Refuses to counter an already-lapsed offer.';
 
-REVOKE EXECUTE ON FUNCTION counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT, TIMESTAMPTZ, TEXT)
+REVOKE EXECUTE ON FUNCTION counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT, TIMESTAMPTZ, TEXT, UUID)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT, TIMESTAMPTZ, TEXT)
+GRANT EXECUTE ON FUNCTION counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT, TIMESTAMPTZ, TEXT, UUID)
   TO service_role;
 
 -- ============================================================================
 -- PART 5: Re-resolve release-anchored offers
 --
 -- Release dates move -- that is what the sync-release-dates cron exists for --
--- so a first_release offer's expires_at has to follow. Only open offers: an
+-- so a movie_release offer's expires_at has to follow. Only open offers: an
 -- accepted offer's clock belongs to the review window, and re-resolving it
 -- would silently change an agreed deal.
 --
@@ -336,12 +380,15 @@ LANGUAGE sql SECURITY DEFINER
 SET search_path = public
 AS $$
   WITH resolved AS (
+    -- Follows the movie the offer named, not whichever is earliest now. An
+    -- offer that said "until Dune 3 opens" keeps meaning that even if another
+    -- movie in the deal is rescheduled ahead of it.
     SELECT t.id,
            t.expires_at AS previous_expires_at,
-           resolve_first_release_expiry(t.initiator_items, t.recipient_items) AS new_expires_at
+           movie_release_boundary(t.expiry_anchor_movie_id) AS new_expires_at
     FROM trade_offers t
     WHERE t.status IN ('proposed', 'countered')
-      AND t.expiry_anchor = 'first_release'
+      AND t.expiry_anchor = 'movie_release'
   ),
   moved AS (
     -- A resolution of NULL means every movie lost its release date, which TMDb
@@ -411,7 +458,7 @@ BEGIN
   UPDATE trade_offers t
   SET status = 'expired'::trade_status,
       expired_reason =
-        CASE WHEN t.expiry_anchor = 'first_release' THEN 'movie_released' ELSE 'offer_window' END,
+        CASE WHEN t.expiry_anchor = 'movie_release' THEN 'movie_released' ELSE 'offer_window' END,
       updated_at = now()
   -- Only an unanswered offer has a clock. Once both parties agree, the review
   -- window owns the trade. Kept in step with idx_trade_offers_pending_expiry,

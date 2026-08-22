@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
       message,
       expires_at,
       expiry_anchor,
+      expiry_anchor_movie_id,
     }: CounterTradeRequest = await req.json()
 
     // First fetch the trade to verify authorization (without locking)
@@ -118,7 +119,7 @@ Deno.serve(async (req) => {
     // from the validation above rather than re-fetched.
     const expiry = await resolveOfferExpiry(
       serviceClient,
-      { expires_at, expiry_anchor },
+      { expires_at, expiry_anchor, expiry_anchor_movie_id },
       {
         tradeDeadline: validationResult.config?.trade_deadline ?? null,
         initiatorItems: enrichedOfferedItems,
@@ -140,6 +141,7 @@ Deno.serve(async (req) => {
       p_message: message?.trim() || null,
       p_expires_at: expiry.expires_at,
       p_expiry_anchor: expiry.expiry_anchor,
+      p_expiry_anchor_movie_id: expiry.expiry_anchor_movie_id,
     })
 
     if (rpcError) {

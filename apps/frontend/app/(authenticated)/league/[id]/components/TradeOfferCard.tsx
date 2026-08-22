@@ -18,7 +18,6 @@ import AcceptConfirmModal from './AcceptConfirmModal'
 import OfferExpiryPicker from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
 import {
-  earliestReleasingMovie,
   expiredReasonCopy,
   expiryUrgency,
   formatExpiryAbsolute,
@@ -93,20 +92,6 @@ const URGENCY_STYLES: Record<ExpiryUrgency, string> = {
   soon: 'bg-warning-bg text-warning',
   urgent: 'bg-error-bg text-error',
   lapsed: 'bg-surface-hover text-foreground-muted',
-}
-
-/**
- * The movie an offer's release anchor points at. Uses the same selection the
- * picker used when the offer was made, so the chip that promised "when X
- * releases" and the expired card that blames X name the same film.
- */
-function anchorMovieTitle(trade: TradeOfferWithTeams): string | null {
-  const movies = [
-    ...((trade.initiator_items as TradeItems).movies ?? []),
-    ...((trade.recipient_items as TradeItems).movies ?? []),
-  ].map((movie) => ({ title: movie.title ?? '', release_date: movie.release_date ?? null }))
-
-  return earliestReleasingMovie(movies)?.title || null
 }
 
 /** Stable empty set so a non-contested card doesn't allocate one per render. */
@@ -191,7 +176,10 @@ export default function TradeOfferCard(props: Props) {
   const urgency = trade.expires_at ? expiryUrgency(trade.expires_at, tickNow) : 'relaxed'
   const expiredReason =
     trade.status === 'expired'
-      ? expiredReasonCopy(trade.expired_reason, anchorMovieTitle(trade))
+      ? // The title comes from get-trades, which resolved it from the live
+        // movies table -- deriving it here from the items snapshot could name
+        // the wrong film once release dates moved.
+        expiredReasonCopy(trade.expired_reason, trade.anchor_movie_title)
       : null
 
   const expiresAt = trade.expires_at

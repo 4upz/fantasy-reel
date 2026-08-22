@@ -119,8 +119,10 @@ export interface TradeOffer {
   veto_reason: string | null
   /** When an unanswered offer lapses; NULL means it stands forever. */
   expires_at?: string | null
-  /** How expires_at was derived -- 'fixed' never moves, 'first_release' follows the movie. */
-  expiry_anchor?: 'fixed' | 'first_release' | null
+  /** How expires_at was derived -- 'fixed' never moves, 'movie_release' follows its movie. */
+  expiry_anchor?: 'fixed' | 'movie_release' | null
+  /** The movie a 'movie_release' offer waits on. */
+  expiry_anchor_movie_id?: string | null
   /** Why an expired offer expired; NULL when it ended for a reason veto_reason explains. */
   expired_reason?: 'offer_window' | 'movie_released' | 'league_deadline' | null
 }

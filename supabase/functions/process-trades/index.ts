@@ -39,7 +39,8 @@ interface TradeRecord {
   response_message: string | null
   veto_reason: string | null
   expires_at: string | null
-  expiry_anchor: 'fixed' | 'first_release' | null
+  expiry_anchor: 'fixed' | 'movie_release' | null
+  expiry_anchor_movie_id: string | null
   expired_reason: ExpiredReason | null
 }
 
@@ -53,6 +54,7 @@ interface ReresolvedOffer {
   recipient_team_id: string
   initiator_items: TradeItems
   recipient_items: TradeItems
+  expiry_anchor_movie_id: string | null
   previous_expires_at: string | null
   expires_at: string
 }
@@ -254,6 +256,35 @@ async function forEachWithConcurrency<T>(
 }
 
 /**
+ * Titles for the movies a batch of offers is anchored to, in one query.
+ *
+ * Resolved from the live movies table rather than the items JSONB: the snapshot
+ * is proposal-time display data, and a movie renamed or re-dated since then
+ * would be described wrongly to the people who were waiting on it.
+ */
+async function getAnchorTitles(
+  supabase: ReturnType<typeof createServiceClient>,
+  offers: Array<{ expiry_anchor_movie_id: string | null }>
+): Promise<Map<string, string>> {
+  const ids = [
+    ...new Set(
+      offers.map((o) => o.expiry_anchor_movie_id).filter((id): id is string => Boolean(id))
+    ),
+  ]
+
+  if (ids.length === 0) return new Map()
+
+  const { data, error } = await supabase.from('movies').select('id, title').in('id', ids)
+
+  if (error) {
+    log.warn('Failed to resolve anchor movie titles', { error: error.message })
+    return new Map()
+  }
+
+  return new Map((data ?? []).map((m: { id: string; title: string }) => [m.id, m.title]))
+}
+
+/**
  * Recompute expiry for open release-anchored offers, and tell both sides when
  * their window moved.
  *
@@ -282,8 +313,12 @@ async function reresolveReleaseAnchors(
   results.reresolved = moved.length
   log.info('Release-anchored offers re-resolved', { count: moved.length })
 
+  const titles = await getAnchorTitles(supabase, moved)
+
   await forEachWithConcurrency(moved, async (offer) => {
-    const title = anchorMovieTitle(offer)
+    const title =
+      (offer.expiry_anchor_movie_id ? titles.get(offer.expiry_anchor_movie_id) : null) ??
+      anchorMovieTitle(offer)
     const body = title
       ? `${title} moved, so your trade offer now stands until its new release.`
       : 'A movie in your trade moved, so the offer window moved with it.'
@@ -330,8 +365,15 @@ async function sweepExpiredOffers(
   results.expired_by_clock = expired.length
   log.info('Trade offers expired', { count: expired.length })
 
+  const titles = await getAnchorTitles(supabase, expired)
+
   await forEachWithConcurrency(expired, async (trade) => {
-    const reason = expiredReasonText(trade)
+    const reason = expiredReasonText({
+      ...trade,
+      anchor_movie_title: trade.expiry_anchor_movie_id
+        ? titles.get(trade.expiry_anchor_movie_id) ?? null
+        : null,
+    })
 
     await notifyTradeParties(supabase, {
       tradeOffer: trade,

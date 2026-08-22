@@ -170,6 +170,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           message,
           expires_at: expiry?.expires_at ?? null,
           expiry_anchor: expiry?.expiry_anchor ?? null,
+          expiry_anchor_movie_id: expiry?.expiry_anchor_movie_id ?? null,
         },
       })
 
@@ -244,6 +245,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           message,
           expires_at: expiry?.expires_at ?? null,
           expiry_anchor: expiry?.expiry_anchor ?? null,
+          expiry_anchor_movie_id: expiry?.expiry_anchor_movie_id ?? null,
         },
       })
 

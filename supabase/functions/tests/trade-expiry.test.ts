@@ -128,7 +128,7 @@ Deno.test({
     async function readOffer(tradeId: string) {
       const { data } = await serviceClient
         .from('trade_offers')
-        .select('status, expires_at, expiry_anchor, expired_reason')
+        .select('status, expires_at, expiry_anchor, expiry_anchor_movie_id, expired_reason')
         .eq('id', tradeId)
         .single()
       return data
@@ -204,7 +204,7 @@ Deno.test({
     // Release anchor
     // ========================================================================
 
-    await t.step('release anchor resolves to the earliest release across both sides', async () => {
+    await t.step('release anchor defaults to the soonest unreleased movie, across both sides', async () => {
       const recipientPicks = await factory.getDraftPicksForUser(leagueId, secondClient)
       assert(recipientPicks.length > 0, 'test setup: recipient needs a holding')
 
@@ -236,35 +236,121 @@ Deno.test({
             faab: 0,
           },
           // A client-supplied timestamp must be ignored for a release anchor:
-          // the server re-derives it from live release dates.
+          // the server re-derives it from the anchor movie's live release date.
           expires_at: inHours(2),
-          expiry_anchor: 'first_release',
+          expiry_anchor: 'movie_release',
         },
       )
 
       assertEquals(error, null)
-      assertEquals(data!.trade_offer.expiry_anchor, 'first_release')
+      assertEquals(data!.trade_offer.expiry_anchor, 'movie_release')
+      assertEquals(data!.trade_offer.expiry_anchor_movie_id, recipientPicks[0].movie_id)
       assertSameInstant(data!.trade_offer.expires_at, releaseBoundary(soon))
       await cleanupOffers()
     })
 
-    await t.step('release anchor is refused when no movie has a release date', async () => {
-      await serviceClient.from('movies').update({ release_date: null }).eq('id', offeredMovie.movie_id)
+    await t.step('the proposer can anchor to a LATER release instead of the soonest', async () => {
+      const recipientPicks = await factory.getDraftPicksForUser(leagueId, secondClient)
+      const soon = isoDate(10)
+      const later = isoDate(40)
+      await serviceClient.from('movies').update({ release_date: later }).eq('id', offeredMovie.movie_id)
+      await serviceClient
+        .from('movies')
+        .update({ release_date: soon })
+        .eq('id', recipientPicks[0].movie_id)
 
-      const { error, status } = await propose({ expiry_anchor: 'first_release' })
-      assertEquals(status, 400)
-      assert(error?.includes('release date'), `unexpected error: ${error}`)
+      const { data, error } = await invokeFunction<{ trade_offer: Record<string, unknown> }>(
+        client,
+        'propose-trade',
+        {
+          league_id: leagueId,
+          recipient_team_id: recipientTeam!.teamId,
+          offered_items: { movies: [offeredMovie], faab: 0 },
+          requested_items: {
+            movies: [
+              {
+                movie_id: recipientPicks[0].movie_id,
+                source: 'draft_pick',
+                source_id: recipientPicks[0].id,
+              },
+            ],
+            faab: 0,
+          },
+          expiry_anchor: 'movie_release',
+          // Explicitly the further-out movie, not the default.
+          expiry_anchor_movie_id: offeredMovie.movie_id,
+        },
+      )
+
+      assertEquals(error, null)
+      assertEquals(data!.trade_offer.expiry_anchor_movie_id, offeredMovie.movie_id)
+      assertSameInstant(data!.trade_offer.expires_at, releaseBoundary(later))
+      await cleanupOffers()
     })
 
-    await t.step('release anchor is refused when the movie is already out', async () => {
+    await t.step('an already-released movie in the trade does not disqualify the option', async () => {
+      const recipientPicks = await factory.getDraftPicksForUser(leagueId, secondClient)
+      const upcoming = isoDate(30)
+      // The offered movie is already out; the requested one is not.
+      await serviceClient
+        .from('movies')
+        .update({ release_date: isoDate(-40) })
+        .eq('id', offeredMovie.movie_id)
+      await serviceClient
+        .from('movies')
+        .update({ release_date: upcoming })
+        .eq('id', recipientPicks[0].movie_id)
+
+      const { data, error } = await invokeFunction<{ trade_offer: Record<string, unknown> }>(
+        client,
+        'propose-trade',
+        {
+          league_id: leagueId,
+          recipient_team_id: recipientTeam!.teamId,
+          offered_items: { movies: [offeredMovie], faab: 0 },
+          requested_items: {
+            movies: [
+              {
+                movie_id: recipientPicks[0].movie_id,
+                source: 'draft_pick',
+                source_id: recipientPicks[0].id,
+              },
+            ],
+            faab: 0,
+          },
+          expiry_anchor: 'movie_release',
+        },
+      )
+
+      assertEquals(error, null)
+      assertEquals(data!.trade_offer.expiry_anchor_movie_id, recipientPicks[0].movie_id)
+      assertSameInstant(data!.trade_offer.expires_at, releaseBoundary(upcoming))
+      await cleanupOffers()
+    })
+
+    await t.step('refuses an anchor movie that is not an unreleased movie in the offer', async () => {
+      await serviceClient
+        .from('movies')
+        .update({ release_date: isoDate(30) })
+        .eq('id', offeredMovie.movie_id)
+
+      const { error, status } = await propose({
+        expiry_anchor: 'movie_release',
+        expiry_anchor_movie_id: '00000000-0000-0000-0000-000000000000',
+      })
+      assertEquals(status, 400)
+      assert(error?.includes('not an unreleased movie'), `unexpected error: ${error}`)
+    })
+
+    await t.step('release anchor is refused when nothing in the trade is unreleased', async () => {
       await serviceClient
         .from('movies')
         .update({ release_date: isoDate(-5) })
         .eq('id', offeredMovie.movie_id)
 
-      const { error, status } = await propose({ expiry_anchor: 'first_release' })
+      const { error, status } = await propose({ expiry_anchor: 'movie_release' })
       assertEquals(status, 400)
-      assert(error?.includes('already released'), `unexpected error: ${error}`)
+      assert(error?.includes('still unreleased'), `unexpected error: ${error}`)
 
       await serviceClient
         .from('movies')
@@ -390,8 +476,9 @@ Deno.test({
         .update({ release_date: isoDate(20) })
         .eq('id', offeredMovie.movie_id)
 
-      const { data } = await propose({ expiry_anchor: 'first_release' })
+      const { data } = await propose({ expiry_anchor: 'movie_release' })
       const tradeId = data!.trade_offer.id as string
+      assertEquals((await readOffer(tradeId))!.expiry_anchor_movie_id, offeredMovie.movie_id)
       assertSameInstant((await readOffer(tradeId))!.expires_at, releaseBoundary(isoDate(20)))
 
       // The studio pushes it back: the offer window moves with it.
