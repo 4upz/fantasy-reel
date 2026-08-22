@@ -327,7 +327,7 @@ Deno.test({
       async () => {
         const leagueId = await factory.createTradingLeague(uniqueName('respond-counterpick-self'))
 
-        const { tradeOfferId, draftPickId, initiatorTeamId } =
+        const { tradeOfferId, draftPickId, initiatorTeamId, movieId, recipientTeamId } =
           await createPendingTradeWithPick(leagueId)
 
         // The recipient -- who is about to receive this movie -- counterpicks it
@@ -340,9 +340,23 @@ Deno.test({
           response: 'accept',
         })
 
+        // The message is UI copy, so it names the team and the movie rather
+        // than the draft_pick id it used to quote.
+        const lookupClient = getServiceClient()
+        const { data: recipientTeam } = await lookupClient
+          .from('teams')
+          .select('name')
+          .eq('id', recipientTeamId)
+          .single()
+        const { data: movie } = await lookupClient
+          .from('movies')
+          .select('title')
+          .eq('id', movieId)
+          .single()
+
         assertEquals(
           result.error,
-          `Trade can no longer be accepted: Cannot trade a counterpicked movie to the team that counterpicked it: ${draftPickId}`
+          `Trade can no longer be accepted: ${recipientTeam?.name} holds the counterpick on "${movie?.title}", so they can't also hold the movie.`
         )
 
         // Nothing moved: the draft pick is still with the initiator and the trade is still pending.

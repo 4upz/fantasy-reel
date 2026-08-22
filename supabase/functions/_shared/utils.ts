@@ -129,8 +129,18 @@ export function isAuthorizedCronRequest(req: Request): boolean {
   return isServiceRoleRequest(req)
 }
 
-export function errorResponse(message: string, status = 500): Response {
-  const body = status >= 500 ? { error: message, request_id: getRequestId() } : { error: message }
+export function errorResponse(
+  message: string,
+  status = 500,
+  /**
+   * Extra fields merged into the response body, for a 4xx the UI can act on
+   * rather than only display -- e.g. which trade items a validation failure
+   * was about. Keep it to data the client needs; `error` stays the message.
+   */
+  details?: Record<string, unknown>
+): Response {
+  const base = status >= 500 ? { error: message, request_id: getRequestId() } : { error: message }
+  const body = details ? { ...base, ...details } : base
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...getCurrentCorsHeaders(), 'Content-Type': 'application/json', 'X-Request-Id': getRequestId() }

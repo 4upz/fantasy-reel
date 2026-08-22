@@ -92,7 +92,9 @@ Deno.serve(async (req) => {
     )
 
     if (!validationResult.valid) {
-      return errorResponse(validationResult.error ?? 'Trade validation failed', 400)
+      return errorResponse(validationResult.error ?? 'Trade validation failed', 400, {
+        invalid_source_ids: validationResult.invalidSourceIds ?? [],
+      })
     }
 
     const enrichedOfferedItems = await enrichTradeItems(serviceClient, offered_items)
