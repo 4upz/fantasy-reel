@@ -10,12 +10,17 @@ type CheckResult = 'ok' | 'error'
 
 async function checkSupabase(): Promise<CheckResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!supabaseUrl) {
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !anonKey) {
     return 'error'
   }
 
   try {
+    // Hosted Supabase's API gateway rejects /auth/v1/* requests without an
+    // apikey header (401 before reaching the auth service), so the probe must
+    // send the public anon key or it reports a healthy project as down.
     const response = await fetch(`${supabaseUrl}/auth/v1/health`, {
+      headers: { apikey: anonKey },
       signal: AbortSignal.timeout(5_000),
     })
     return response.ok ? 'ok' : 'error'

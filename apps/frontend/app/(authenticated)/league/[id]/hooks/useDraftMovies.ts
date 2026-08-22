@@ -1,5 +1,7 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
-import { callEdgeFunction } from '@/utils/supabase/functions'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import useSWRInfinite from 'swr/infinite'
+import { flattenMoviePages, MOVIE_PAGE_SWR_CONFIG, type MoviePageKey } from '@/utils/movies'
+import { edgeFetcher } from '@/utils/supabase/functions'
 import type { TMDbSearchResult, TMDbSearchResponse } from '@/types'
 
 export interface BrowseFilters {
@@ -19,6 +21,47 @@ type PaginatedResponse = TMDbSearchResponse | BrowseResponse
 
 type Mode = 'browse' | 'search' | 'trending'
 
+const SEARCH_DEBOUNCE_MS = 300
+
+const DEFAULT_FILTERS: BrowseFilters = {
+  releaseWindow: 'year',
+  genres: [],
+  minRating: 0,
+}
+
+/**
+ * What list is being shown. Held as state so it can drive the SWR key: the same
+ * request always resolves to the same cache entry, which is what stops a
+ * remounting draft board or bid modal from re-hitting TMDb.
+ */
+type Request =
+  | { mode: 'browse'; filters: BrowseFilters }
+  | { mode: 'search'; query: string }
+  | { mode: 'trending' }
+
+function buildPageKey(request: Request, page: number): MoviePageKey {
+  switch (request.mode) {
+    case 'search':
+      return ['search-movies', { query: request.query, page, upcoming_only: true }]
+    case 'trending':
+      return ['browse-movies', { page, trending: true }]
+    case 'browse':
+      return [
+        'browse-movies',
+        {
+          page,
+          release_window: request.filters.releaseWindow,
+          genres: request.filters.genres.length > 0 ? request.filters.genres : undefined,
+          min_rating: request.filters.minRating > 0 ? request.filters.minRating : undefined,
+          sort_by: 'popularity',
+        },
+      ]
+  }
+}
+
+const fetcher = ([functionName, body]: MoviePageKey): Promise<PaginatedResponse> =>
+  edgeFetcher<PaginatedResponse>(functionName, body)
+
 interface UseDraftMoviesOptions {
   draftedTmdbIds: Set<number>
   /**
@@ -35,137 +78,46 @@ interface UseDraftMoviesReturn {
   loading: boolean
   loadingMore: boolean
   error: string | null
-  page: number
-  totalPages: number
   totalResults: number
   mode: Mode
   search: (query: string) => void
   browse: (filters: BrowseFilters) => void
-  fetchTrending: (trendingPage?: number, append?: boolean) => void
+  fetchTrending: () => void
   loadMore: () => void
   clearSearch: () => void
 }
 
 export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMoviesOptions): UseDraftMoviesReturn {
-  const [movies, setMovies] = useState<TMDbSearchResult[]>([])
-  const [loading, setLoading] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(0)
-  const [totalResults, setTotalResults] = useState(0)
-  const [mode, setMode] = useState<Mode>('browse')
+  const [request, setRequest] = useState<Request>({ mode: 'browse', filters: DEFAULT_FILTERS })
 
-  const currentQueryRef = useRef<string>('')
-  const currentFiltersRef = useRef<BrowseFilters>({
-    releaseWindow: 'year',
-    genres: [],
-    minRating: 0,
-  })
+  const currentFiltersRef = useRef<BrowseFilters>(DEFAULT_FILTERS)
   const debounceRef = useRef<NodeJS.Timeout | null>(null)
 
-  const filterDrafted = useCallback(
-    (results: TMDbSearchResult[]): TMDbSearchResult[] => {
-      return results.filter((m) => !draftedTmdbIds.has(m.tmdb_id))
-    },
-    [draftedTmdbIds]
+  // A null key is SWR's "don't fetch": a hook that starts disabled sits idle
+  // and fetches the moment its owner turns it on.
+  const getKey = useCallback(
+    (index: number): MoviePageKey | null => (enabled ? buildPageKey(request, index + 1) : null),
+    [enabled, request]
   )
 
-  function appendDeduped(
-    prev: TMDbSearchResult[],
-    newItems: TMDbSearchResult[]
-  ): TMDbSearchResult[] {
-    const existingIds = new Set(prev.map((m) => m.tmdb_id))
-    const unique = newItems.filter((m) => !existingIds.has(m.tmdb_id))
-    return [...prev, ...unique]
-  }
+  const { data, error, isLoading, size, setSize } = useSWRInfinite(getKey, fetcher, MOVIE_PAGE_SWR_CONFIG)
 
-  // Shared fetch logic for all three modes
-  const fetchMovies = useCallback(
-    async <T extends PaginatedResponse>(
-      functionName: string,
-      body: Record<string, unknown>,
-      targetMode: Mode,
-      append: boolean
-    ): Promise<void> => {
-      if (append) {
-        setLoadingMore(true)
-      } else {
-        setLoading(true)
-        setError(null)
-      }
+  /*
+   * The drafted set is read here but deliberately left out of the deps:
+   * results are filtered when a page lands and then left alone, so a movie
+   * taken while the grid is open stays put and shows its "Drafted" overlay
+   * instead of silently vanishing out from under the cursor.
+   */
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const movies = useMemo(() => flattenMoviePages(data, draftedTmdbIds), [data])
 
-      const { data, error: apiError } = await callEdgeFunction<T>(functionName, { body })
+  const lastPage = data && data.length > 0 ? data[data.length - 1] : undefined
+  const page = lastPage?.page ?? 1
+  const totalPages = lastPage?.total_pages ?? 0
 
-      if (apiError) {
-        setError(apiError)
-        setLoading(false)
-        setLoadingMore(false)
-        return
-      }
-
-      if (data) {
-        const filtered = filterDrafted(data.results)
-        if (append) {
-          setMovies((prev) => appendDeduped(prev, filtered))
-        } else {
-          setMovies(filtered)
-        }
-        setPage(data.page)
-        setTotalPages(data.total_pages)
-        setTotalResults(data.total_results)
-        setMode(targetMode)
-      }
-
-      setLoading(false)
-      setLoadingMore(false)
-    },
-    [filterDrafted]
-  )
-
-  const searchMovies = useCallback(
-    async (query: string, searchPage: number = 1, append: boolean = false) => {
-      if (!query.trim()) return
-
-      await fetchMovies<TMDbSearchResponse>(
-        'search-movies',
-        { query: query.trim(), page: searchPage, upcoming_only: true },
-        'search',
-        append
-      )
-    },
-    [fetchMovies]
-  )
-
-  const browseMovies = useCallback(
-    async (filters: BrowseFilters, browsePage: number = 1, append: boolean = false) => {
-      await fetchMovies<BrowseResponse>(
-        'browse-movies',
-        {
-          page: browsePage,
-          release_window: filters.releaseWindow,
-          genres: filters.genres.length > 0 ? filters.genres : undefined,
-          min_rating: filters.minRating > 0 ? filters.minRating : undefined,
-          sort_by: 'popularity',
-        },
-        'browse',
-        append
-      )
-    },
-    [fetchMovies]
-  )
-
-  const fetchTrending = useCallback(
-    async (trendingPage: number = 1, append: boolean = false) => {
-      await fetchMovies<BrowseResponse>(
-        'browse-movies',
-        { page: trendingPage, trending: true },
-        'trending',
-        append
-      )
-    },
-    [fetchMovies]
-  )
+  // A page has been requested that has not landed yet -- SWR's canonical
+  // "loading more" check, and the only case where results already show.
+  const loadingMore = size > 1 && data != null && data.length < size
 
   const clearDebounce = useCallback(() => {
     if (debounceRef.current) {
@@ -174,75 +126,67 @@ export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMovie
     }
   }, [])
 
+  /** Switch to a different list, always starting from its first page. */
+  const changeRequest = useCallback(
+    (next: Request) => {
+      clearDebounce()
+      setRequest(next)
+      setSize(1)
+    },
+    [clearDebounce, setSize]
+  )
+
   const search = useCallback(
     (query: string) => {
       clearDebounce()
-      currentQueryRef.current = query
 
-      if (!query.trim()) {
-        setMode('browse')
-        browseMovies(currentFiltersRef.current, 1)
+      const trimmed = query.trim()
+      if (!trimmed) {
+        changeRequest({ mode: 'browse', filters: currentFiltersRef.current })
         return
       }
 
       debounceRef.current = setTimeout(() => {
-        searchMovies(query, 1)
-      }, 300)
+        changeRequest({ mode: 'search', query: trimmed })
+      }, SEARCH_DEBOUNCE_MS)
     },
-    [searchMovies, browseMovies, clearDebounce]
+    [changeRequest, clearDebounce]
   )
 
   const browse = useCallback(
     (filters: BrowseFilters) => {
       currentFiltersRef.current = filters
-      currentQueryRef.current = ''
       clearDebounce()
 
       debounceRef.current = setTimeout(() => {
-        browseMovies(filters, 1)
-      }, 300)
+        changeRequest({ mode: 'browse', filters })
+      }, SEARCH_DEBOUNCE_MS)
     },
-    [browseMovies, clearDebounce]
+    [changeRequest, clearDebounce]
   )
+
+  const fetchTrending = useCallback(() => {
+    changeRequest({ mode: 'trending' })
+  }, [changeRequest])
+
+  const clearSearch = useCallback(() => {
+    search('')
+  }, [search])
 
   const loadMore = useCallback(() => {
     if (loadingMore || page >= totalPages) return
+    setSize((current) => current + 1)
+  }, [loadingMore, page, totalPages, setSize])
 
-    const nextPage = page + 1
-    if (mode === 'trending') {
-      fetchTrending(nextPage, true)
-    } else if (mode === 'search' && currentQueryRef.current) {
-      searchMovies(currentQueryRef.current, nextPage, true)
-    } else {
-      browseMovies(currentFiltersRef.current, nextPage, true)
-    }
-  }, [mode, page, totalPages, loadingMore, fetchTrending, searchMovies, browseMovies])
-
-  const clearSearch = useCallback(() => {
-    currentQueryRef.current = ''
-    setMode('browse')
-    browseMovies(currentFiltersRef.current, 1)
-  }, [browseMovies])
-
-  useEffect(() => {
-    if (!enabled) return
-    browseMovies(currentFiltersRef.current, 1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled])
-
-  useEffect(() => {
-    return clearDebounce
-  }, [clearDebounce])
+  useEffect(() => clearDebounce, [clearDebounce])
 
   return {
     movies,
-    loading,
+    loading: isLoading,
     loadingMore,
-    error,
-    page,
-    totalPages,
-    totalResults,
-    mode,
+    error: error?.message ?? null,
+    totalResults: lastPage?.total_results ?? 0,
+    mode: request.mode,
     search,
     browse,
     fetchTrending,

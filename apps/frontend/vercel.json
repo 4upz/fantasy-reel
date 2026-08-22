@@ -1,11 +1,11 @@
 {
   "crons": [
     {
-      "path": "/api/cron/process-bids?mode=weekly",
+      "path": "/api/cron/process-bids/weekly",
       "schedule": "0 20 * * 6"
     },
     {
-      "path": "/api/cron/process-bids?mode=extended",
+      "path": "/api/cron/process-bids/extended",
       "schedule": "0 * * * *"
     },
     {

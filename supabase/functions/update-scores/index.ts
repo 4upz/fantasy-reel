@@ -29,6 +29,44 @@ function parseRequestBody(body: string): UpdateScoresRequest {
   }
 }
 
+/**
+ * Ceiling on how many movies one invocation will score.
+ *
+ * The nightly cron branch has always had its own `.limit(30)`; the explicit
+ * `movie_ids[]` and `league_id` branches had none, so a large league (or a
+ * caller passing every movie it knows about) could fan out into hundreds of
+ * sequential MDBList lookups in a single request -- past the Edge Function
+ * wall clock and well into MDBList's rate limit. Callers needing more can
+ * invoke again; nothing here is stateful across invocations.
+ */
+const MAX_MOVIES_PER_RUN = 100
+
+/**
+ * Truncation is reported in-band (response body and job_runs metadata), not
+ * just logged: a caller that asked for 250 movies and silently got 100 scored
+ * has no way to know it must invoke again.
+ */
+interface Truncation {
+  truncated: true
+  remaining: number
+}
+
+function capMovies(
+  movies: MovieRecord[],
+  source: string
+): { movies: MovieRecord[]; truncation?: Truncation } {
+  if (movies.length <= MAX_MOVIES_PER_RUN) return { movies }
+
+  const remaining = movies.length - MAX_MOVIES_PER_RUN
+  log.warn('Movie batch capped', {
+    source,
+    requested: movies.length,
+    processed: MAX_MOVIES_PER_RUN,
+    dropped: remaining,
+  })
+  return { movies: movies.slice(0, MAX_MOVIES_PER_RUN), truncation: { truncated: true, remaining } }
+}
+
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
   if (corsResponse) return corsResponse
@@ -65,10 +103,11 @@ Deno.serve(async (req) => {
       : {}
 
     let moviesToUpdate: MovieRecord[] = []
+    let truncation: Truncation | undefined
 
     if (params.movie_ids && params.movie_ids.length > 0) {
       // Update specific movies
-      const validIds = params.movie_ids.filter(id => isValidUUID(id))
+      const validIds = [...new Set(params.movie_ids.filter(id => isValidUUID(id)))]
       if (validIds.length === 0) {
         return errorResponse('No valid movie_ids provided', 400)
       }
@@ -83,7 +122,9 @@ Deno.serve(async (req) => {
         return errorResponse('Failed to fetch movies', 500)
       }
 
-      moviesToUpdate = (data as MovieRecord[]) || []
+      const capped = capMovies((data as MovieRecord[]) || [], 'movie_ids')
+      moviesToUpdate = capped.movies
+      truncation = capped.truncation
     } else if (params.league_id) {
       // Update movies currently rostered in a specific league. team_holdings
       // covers both acquisition paths; reading draft_picks alone left every
@@ -113,7 +154,9 @@ Deno.serve(async (req) => {
           title: row.title,
         })
       }
-      moviesToUpdate = [...byMovieId.values()]
+      const capped = capMovies([...byMovieId.values()], 'league_id')
+      moviesToUpdate = capped.movies
+      truncation = capped.truncation
     } else {
       // Default: find released drafted movies needing score updates
       const oneDayAgo = new Date()
@@ -275,10 +318,11 @@ Deno.serve(async (req) => {
         movies_fetched: results.movies_fetched,
         scores_updated: results.scores_updated,
         notifications,
+        ...truncation,
       },
     })
 
-    return jsonResponse({ ...results, notifications, job_status })
+    return jsonResponse({ ...results, ...truncation, notifications, job_status })
 
   } catch (error) {
     if (run && runClient) await run.fail(runClient, error)

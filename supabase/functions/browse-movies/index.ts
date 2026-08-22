@@ -1,6 +1,7 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
-import { fetchWithRetry } from '../_shared/http.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateUserOrServiceRole } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { buildCacheKey, cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
+import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
 
 const log = createLogger('browse-movies')
 
@@ -46,17 +47,6 @@ interface BrowseResult {
   genre_ids: number[]
 }
 
-class TMDbApiError extends Error {
-  status: number
-  body: string
-
-  constructor(status: number, body: string) {
-    super(`TMDb API error: ${status}`)
-    this.status = status
-    this.body = body
-  }
-}
-
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 
 function toDateString(date: Date): string {
@@ -91,21 +81,6 @@ function getReleaseDateRange(releaseWindow: BrowseMoviesRequest['release_window'
   return { gte, lte }
 }
 
-async function fetchTMDbPage(url: string, token: string): Promise<TMDbResponse> {
-  const response = await fetchWithRetry(url, {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  }, { timeoutMs: 10_000, retries: 1 })
-
-  if (!response.ok) {
-    throw new TMDbApiError(response.status, await response.text())
-  }
-
-  return response.json()
-}
-
 function transformResults(movies: TMDbMovie[]): BrowseResult[] {
   return movies
     .filter((movie) => !movie.adult)
@@ -129,11 +104,35 @@ function transformResults(movies: TMDbMovie[]): BrowseResult[] {
 const TARGET_PAGE_SIZE = 20
 const MAX_TMDB_FETCHES = 5
 
+/**
+ * Browse results are the same for every user, so both paths cache on their
+ * request parameters alone.
+ *
+ * Discover is short-lived (30 min): popularity ordering shifts through the
+ * day and a newly added title should surface the same day. Trending is a
+ * weekly TMDb window that barely moves, and each client page costs up to
+ * MAX_TMDB_FETCHES TMDb calls -- by far the most expensive request this
+ * function serves -- so it holds for 12 hours.
+ *
+ * Both keys carry the date the window was computed for. Every date bound here
+ * is relative to "today", so without it a cached entry would keep serving a
+ * stale window across midnight.
+ */
+const DISCOVER_TTL_SECONDS = 30 * 60
+const TRENDING_TTL_SECONDS = 12 * 60 * 60
+
+interface BrowsePage {
+  page: number
+  total_pages: number
+  total_results: number
+  results: BrowseResult[]
+}
+
 async function fetchTrendingMovies(
   clientPage: number,
-  tmdbToken: string
-): Promise<{ page: number; total_pages: number; total_results: number; results: BrowseResult[] }> {
-  const today = toDateString(new Date())
+  tmdbToken: string,
+  today: string
+): Promise<BrowsePage> {
   const accumulated: BrowseResult[] = []
   let tmdbPage = (clientPage - 1) * MAX_TMDB_FETCHES + 1
   let fetches = 0
@@ -144,7 +143,7 @@ async function fetchTrendingMovies(
 
   while (accumulated.length < TARGET_PAGE_SIZE && fetches < MAX_TMDB_FETCHES && tmdbPage <= totalTmdbPages) {
     const url = `https://api.themoviedb.org/3/trending/movie/week?language=en-US&include_adult=false&page=${tmdbPage}`
-    const data = await fetchTMDbPage(url, tmdbToken)
+    const data = await tmdbGetJson<TMDbResponse>(url, tmdbToken)
 
     totalTmdbPages = data.total_pages
     totalTmdbResults = data.total_results
@@ -177,9 +176,14 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
+    // Any signed-in user, or the service role (the Discord bot) -- see
+    // authenticateUserOrServiceRole for why that is the whole check here.
+    const authError = await authenticateUserOrServiceRole(req)
+    if (authError) return authError
+
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!tmdbToken) {
-      console.error('TMDB_API_KEY not configured')
+      log.error('TMDB_API_KEY not configured')
       return errorResponse('Browse service not configured', 503)
     }
 
@@ -197,11 +201,22 @@ Deno.serve(async (req) => {
 
     const { page = 1, trending = false } = params
 
-    // Trending path: aggregate multiple TMDb pages server-side
+    // Computed once and threaded through both the cache key and the fetch:
+    // "today" appearing twice could otherwise straddle midnight and key a page
+    // under one date while filtering it by another.
+    const today = toDateString(new Date())
+
+    // Trending path: aggregate multiple TMDb pages server-side. The cached
+    // value is the finished aggregate, not the individual TMDb pages, so a hit
+    // replaces the whole multi-fetch loop rather than one call of it.
     if (trending) {
-      console.log(`Fetching trending movies (client page ${page})`)
-      const trendingData = await fetchTrendingMovies(page, tmdbToken)
-      return jsonResponse(trendingData)
+      const payload = await cachedTmdbFetch<BrowsePage>(
+        buildCacheKey('browse', { trending: true, page, today }),
+        TRENDING_TTL_SECONDS,
+        () => fetchTrendingMovies(page, tmdbToken, today),
+        log
+      )
+      return jsonResponse(payload)
     }
 
     // Standard discover path
@@ -249,27 +264,32 @@ Deno.serve(async (req) => {
       tmdbUrl.searchParams.set('vote_average.gte', min_rating.toString())
     }
 
-    console.log(`Browsing movies from TMDb: ${tmdbUrl.toString()}`)
+    // Keyed off the request URL itself, so every param that can change the
+    // response is in the key by construction -- including the resolved
+    // primary_release_date bounds, which pin the window to a concrete day.
+    const cacheKey = cacheKeyForUrl('browse', tmdbUrl)
 
-    const tmdbData = await fetchTMDbPage(tmdbUrl.toString(), tmdbToken)
-    const results = transformResults(tmdbData.results)
+    const payload = await cachedTmdbFetch<BrowsePage>(
+      cacheKey,
+      DISCOVER_TTL_SECONDS,
+      async () => {
+        const tmdbData = await tmdbGetJson<TMDbResponse>(tmdbUrl.toString(), tmdbToken)
+        return {
+          page: tmdbData.page,
+          total_pages: tmdbData.total_pages,
+          total_results: tmdbData.total_results,
+          results: transformResults(tmdbData.results),
+        }
+      },
+      log
+    )
 
-    return jsonResponse({
-      page: tmdbData.page,
-      total_pages: tmdbData.total_pages,
-      total_results: tmdbData.total_results,
-      results,
-    })
+    return jsonResponse(payload)
   } catch (error) {
+    // Only reached when the cache had nothing to fall back on -- a hit or an
+    // expired entry answers a rate-limited or failing TMDb before this.
     if (error instanceof TMDbApiError) {
-      if (error.status === 401) {
-        return errorResponse('TMDb API authentication failed', 401)
-      }
-      if (error.status === 429) {
-        return errorResponse('TMDb rate limit exceeded. Try again later.', 429)
-      }
-      console.error('TMDb API error:', error.status, error.body)
-      return errorResponse('Failed to browse movies', 502)
+      return tmdbErrorResponse(error, log, 'Failed to browse movies')
     }
     return internalErrorResponse(error, log)
   }

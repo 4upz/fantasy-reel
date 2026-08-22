@@ -8,7 +8,7 @@
  * failure can never break a job's response path.
  */
 
-import { createLogger, serializeError } from './logger.ts'
+import { createLogger, serializeError, type Logger } from './logger.ts'
 import { getRequestId } from './request-context.ts'
 import { alertOps } from './ops-alerts.ts'
 
@@ -28,10 +28,17 @@ export type JobStatus = 'ok' | 'partial' | 'failed'
 export interface JobRunsClient {
   from(table: string): {
     insert(values: Record<string, unknown>): PromiseLike<{ error: unknown }>
-    delete(): {
-      lt(column: string, value: string): {
-        select(columns: string): PromiseLike<{ data: unknown[] | null; error: unknown }>
-      }
+    delete(options?: { count: 'exact' }): {
+      lt(column: string, value: string): PromiseLike<{ count: number | null; error: unknown }>
+    }
+  }
+}
+
+/** The narrower slice `purgeByAge` needs. Structural for the same reason. */
+export interface PurgeableClient {
+  from(table: string): {
+    delete(options?: { count: 'exact' }): {
+      lt(column: string, value: string): PromiseLike<{ count: number | null; error: unknown }>
     }
   }
 }
@@ -169,33 +176,58 @@ export function startJobRun(jobName: string): JobRun {
   }
 }
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000
+export const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+export interface PurgeByAgeOptions {
+  /** Table to delete from. */
+  table: string
+  /** Timestamp column the retention window is measured on. */
+  column: string
+  /** Rows older than this many days are deleted. */
+  retentionDays: number
+  /** Logger of the calling module, so the line is attributed to it. */
+  log: Logger
+}
+
+/**
+ * Deletes rows whose `column` timestamp is older than `retentionDays`.
+ *
+ * The one retention primitive behind every table-bounding purge. Counting is
+ * done server-side with `count: 'exact'` rather than by returning the deleted
+ * keys -- a purge can span six figures of rows, and none of that data is
+ * wanted back.
+ *
+ * Best-effort by contract: never throws, so a purge failure cannot break the
+ * caller's own job outcome. Returns the number of rows deleted, or null if the
+ * delete failed (logged either way).
+ */
+export async function purgeByAge(
+  supabase: PurgeableClient,
+  { table, column, retentionDays, log: purgeLog }: PurgeByAgeOptions
+): Promise<number | null> {
+  try {
+    const cutoff = new Date(Date.now() - retentionDays * MS_PER_DAY).toISOString()
+
+    const { count, error } = await supabase.from(table).delete({ count: 'exact' }).lt(column, cutoff)
+
+    if (error) {
+      purgeLog.error('Failed to purge old rows', { table, retention_days: retentionDays, error: serializeError(error) })
+      return null
+    }
+
+    purgeLog.info('Purged old rows', { table, retention_days: retentionDays, rows_deleted: count ?? 0 })
+    return count ?? null
+  } catch (err) {
+    purgeLog.error('Failed to purge old rows', { table, retention_days: retentionDays, error: serializeError(err) })
+    return null
+  }
+}
 
 /**
  * Delete job_runs rows older than `retentionDays` (default 90). Every
  * scheduled job records a run here -- process-trades alone adds one every 5
  * minutes, roughly 105k rows/year -- so this keeps the table bounded.
- *
- * Best-effort like `finish`/`fail`: never throws, so a purge failure can
- * never break the caller's own job outcome. Returns the number of rows
- * deleted, or null if the delete failed (logged either way).
  */
-export async function purgeOldJobRuns(supabase: JobRunsClient, retentionDays = 90): Promise<number | null> {
-  try {
-    const cutoff = new Date(Date.now() - retentionDays * MS_PER_DAY).toISOString()
-
-    // .select('id') on the delete return gives back the deleted rows so the
-    // count can be reported without a separate count-only query.
-    const { data, error } = await supabase.from('job_runs').delete().lt('started_at', cutoff).select('id')
-
-    if (error) {
-      log.error('Failed to purge old job runs', { retention_days: retentionDays, error: serializeError(error) })
-      return null
-    }
-
-    return data?.length ?? null
-  } catch (err) {
-    log.error('Failed to purge old job runs', { retention_days: retentionDays, error: serializeError(err) })
-    return null
-  }
+export function purgeOldJobRuns(supabase: JobRunsClient, retentionDays = 90): Promise<number | null> {
+  return purgeByAge(supabase, { table: 'job_runs', column: 'started_at', retentionDays, log })
 }
