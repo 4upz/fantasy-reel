@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { fetchTradeableMovies } from '@/utils/holdings'
+import type { ResolvedExpiry } from '@/utils/tradeExpiry'
 import type {
   TradeActionResult,
   TradeItems,
@@ -29,7 +30,8 @@ interface UseTradingReturn {
     recipientTeamId: string,
     offeredItems: TradeItems,
     requestedItems: TradeItems,
-    message?: string
+    message?: string,
+    expiry?: ResolvedExpiry
   ) => Promise<TradeActionResult>
   respondTrade: (
     tradeOfferId: string,
@@ -40,7 +42,8 @@ interface UseTradingReturn {
     tradeOfferId: string,
     counterOfferedItems: TradeItems,
     counterRequestedItems: TradeItems,
-    message?: string
+    message?: string,
+    expiry?: ResolvedExpiry
   ) => Promise<TradeActionResult>
   cancelTrade: (tradeOfferId: string) => Promise<TradeActionResult>
   vetoTrade: (
@@ -155,7 +158,8 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       recipientTeamId: string,
       offeredItems: TradeItems,
       requestedItems: TradeItems,
-      message?: string
+      message?: string,
+      expiry?: ResolvedExpiry
     ): Promise<TradeActionResult> => {
       const { error: proposeError, errorBody } = await callEdgeFunction('propose-trade', {
         body: {
@@ -164,6 +168,9 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           offered_items: offeredItems,
           requested_items: requestedItems,
           message,
+          expires_at: expiry?.expires_at ?? null,
+          expiry_anchor: expiry?.expiry_anchor ?? null,
+          expiry_anchor_movie_id: expiry?.expiry_anchor_movie_id ?? null,
         },
       })
 
@@ -197,6 +204,13 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       })
 
       if (respondError) {
+        // Any refusal means this client's view of the offer may be stale -- most
+        // often because it lapsed between render and click, which is possible
+        // whenever the sweep has not caught up. Refetch so the card reflects
+        // what the server thinks rather than leaving a dead offer on screen
+        // behind an error. Matching on the message text would be cheaper but
+        // ties recovery to English copy produced by three different layers.
+        await fetchTrades()
         return {
           success: false,
           error: respondError,
@@ -220,7 +234,8 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
       tradeOfferId: string,
       counterOfferedItems: TradeItems,
       counterRequestedItems: TradeItems,
-      message?: string
+      message?: string,
+      expiry?: ResolvedExpiry
     ): Promise<TradeActionResult> => {
       const { error: counterError, errorBody } = await callEdgeFunction('counter-trade', {
         body: {
@@ -228,10 +243,15 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           counter_offered_items: counterOfferedItems,
           counter_requested_items: counterRequestedItems,
           message,
+          expires_at: expiry?.expires_at ?? null,
+          expiry_anchor: expiry?.expiry_anchor ?? null,
+          expiry_anchor_movie_id: expiry?.expiry_anchor_movie_id ?? null,
         },
       })
 
       if (counterError) {
+        // Same reasoning as respondTrade: refresh on any refusal.
+        await fetchTrades()
         return {
           success: false,
           error: counterError,

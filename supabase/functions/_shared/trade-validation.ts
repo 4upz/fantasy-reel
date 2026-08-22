@@ -1,6 +1,6 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isValidUUID, errorResponse, createServiceClient } from './utils.ts'
-import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData } from './email.ts'
+import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData, TradeEmailType } from './email.ts'
 import { logNotificationDelivery, statusFromEmailResult } from './notification-log.ts'
 
 // ============================================================================
@@ -75,6 +75,11 @@ export interface ValidationResult {
    * than a particular item.
    */
   invalidSourceIds?: string[]
+  /**
+   * The league's trade config, returned on success so callers that need it --
+   * offer expiry needs `trade_deadline` -- do not fetch the same row again.
+   */
+  config?: LeagueTradeConfig & { status: string }
 }
 
 export interface LeagueTradeConfig {
@@ -112,6 +117,14 @@ export interface TradeOffer {
   initiator_message: string | null
   response_message: string | null
   veto_reason: string | null
+  /** When an unanswered offer lapses; NULL means it stands forever. */
+  expires_at?: string | null
+  /** How expires_at was derived -- 'fixed' never moves, 'movie_release' follows its movie. */
+  expiry_anchor?: 'fixed' | 'movie_release' | null
+  /** The movie a 'movie_release' offer waits on. */
+  expiry_anchor_movie_id?: string | null
+  /** Why an expired offer expired; NULL when it ended for a reason veto_reason explains. */
+  expired_reason?: 'offer_window' | 'movie_released' | 'league_deadline' | null
 }
 
 export interface TradeNotification {
@@ -178,10 +191,15 @@ export function validateTradeStatus(
 /**
  * Create and insert trade notifications for one or both teams
  */
+export type NotifiableTrade = Pick<
+  TradeOffer,
+  'id' | 'league_id' | 'initiator_team_id' | 'recipient_team_id'
+>
+
 export async function notifyTradeParties(
   supabase: SupabaseClient,
   options: {
-    tradeOffer: TradeOffer
+    tradeOffer: NotifiableTrade
     notifyInitiator?: {
       type: string
       title: string
@@ -942,7 +960,7 @@ export async function validateTradeProposal(
   )
   if (!result.valid) return result
 
-  return { valid: true }
+  return { valid: true, config }
 }
 
 interface MovieData {
@@ -995,14 +1013,6 @@ export async function enrichTradeItems(
 // ============================================================================
 // Email Notification Helpers
 // ============================================================================
-
-type TradeEmailType =
-  | 'proposed'
-  | 'countered'
-  | 'accepted'
-  | 'rejected'
-  | 'completed'
-  | 'vetoed'
 
 interface TradePartyInfo {
   userId: string
@@ -1114,9 +1124,17 @@ export async function sendTradeEmailNotifications(
     notifyRecipient?: boolean
     message?: string
     vetoReason?: string
+    /** Why an expired offer expired, already phrased for a reader. */
+    expiredReason?: string
   }
 ): Promise<void> {
-  const { notifyInitiator = false, notifyRecipient = false, message, vetoReason } = options ?? {}
+  const {
+    notifyInitiator = false,
+    notifyRecipient = false,
+    message,
+    vetoReason,
+    expiredReason,
+  } = options ?? {}
 
   if (!notifyInitiator && !notifyRecipient) return
 
@@ -1163,6 +1181,8 @@ export async function sendTradeEmailNotifications(
         message,
         vetoReason,
         reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
+        expiresAt: tradeOffer.expires_at ?? undefined,
+        expiredReason,
       }
 
       const result = await sendTradeEmail(emailType, emailData)
@@ -1196,6 +1216,8 @@ export async function sendTradeEmailNotifications(
         message,
         vetoReason,
         reviewEndsAt: tradeOffer.review_ends_at ?? undefined,
+        expiresAt: tradeOffer.expires_at ?? undefined,
+        expiredReason,
       }
 
       const result = await sendTradeEmail(emailType, emailData)

@@ -18,12 +18,13 @@ import {
   sendTradeEmailNotifications,
   getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { resolveOfferExpiry, type ExpiryRequest } from '../_shared/trade-expiry.ts'
+import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('propose-trade')
 
-interface ProposeTradeRequest {
+interface ProposeTradeRequest extends ExpiryRequest {
   league_id: string
   recipient_team_id: string
   offered_items: TradeItems
@@ -48,6 +49,9 @@ Deno.serve(async (req) => {
       offered_items,
       requested_items,
       message,
+      expires_at,
+      expiry_anchor,
+      expiry_anchor_movie_id,
     }: ProposeTradeRequest = await req.json()
 
     if (!league_id || !isValidUUID(league_id)) {
@@ -100,6 +104,27 @@ Deno.serve(async (req) => {
     const enrichedOfferedItems = await enrichTradeItems(serviceClient, offered_items)
     const enrichedRequestedItems = await enrichTradeItems(serviceClient, requested_items)
 
+    // The picker enforces the same bounds for a nicer error, but a crafted
+    // request skips it entirely -- this is the check that actually holds. A
+    // release anchor is resolved here rather than trusted from the client.
+    //
+    // The league config comes back from the validation above rather than being
+    // fetched again: only `trade_deadline` is needed, and validateTradeProposal
+    // has already read (and vouched for) that row.
+    const expiry = await resolveOfferExpiry(
+      serviceClient,
+      { expires_at, expiry_anchor, expiry_anchor_movie_id },
+      {
+        tradeDeadline: validationResult.config?.trade_deadline ?? null,
+        initiatorItems: enrichedOfferedItems,
+        recipientItems: enrichedRequestedItems,
+      }
+    )
+
+    if (!expiry.valid) {
+      return errorResponse(expiry.error, 400)
+    }
+
     const { data: tradeOffer, error: insertError } = await serviceClient
       .from('trade_offers')
       .insert({
@@ -111,6 +136,9 @@ Deno.serve(async (req) => {
         status: 'proposed',
         proposed_at: new Date().toISOString(),
         initiator_message: message?.trim() || null,
+        expires_at: expiry.expires_at,
+        expiry_anchor: expiry.expiry_anchor,
+        expiry_anchor_movie_id: expiry.expiry_anchor_movie_id,
       })
       .select()
       .single()
@@ -161,6 +189,13 @@ Deno.serve(async (req) => {
       if (enrichedOfferedItems.faab > 0) budgetParts.push(`${initiatorInfo?.name ?? 'Proposer'}: $${enrichedOfferedItems.faab}`)
       if (enrichedRequestedItems.faab > 0) budgetParts.push(`${recipientName}: $${enrichedRequestedItems.faab}`)
       fields.push({ name: 'Budget', value: budgetParts.join(' / '), inline: true })
+    }
+    if (expiry.expires_at) {
+      fields.push({
+        name: 'Expires',
+        value: discordTimestamp(expiry.expires_at),
+        inline: true,
+      })
     }
     if (message?.trim()) {
       fields.push({ name: 'Message', value: message.trim(), inline: false })
