@@ -117,6 +117,20 @@ export default function BiddingShell({
   // Roster slots are pooled: draft picks and pickups draw on the same total.
   const rosterSlots = league.total_slots
   const freeRosterSlots = Math.max(0, rosterSlots - usedRosterSlots)
+
+  // Only holdings that could actually be dropped are offered as conditional
+  // drop targets. Mirrors drop-movie's rules (and droppableHoldingIds() in
+  // _shared/bid-resolution.ts, which re-checks them at processing time):
+  // offering a released or counterpicked movie is a dead end that would fail a
+  // week later, when the bid is settled and it is too late to choose again.
+  const droppableHoldings = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return myHoldings.filter((holding) => {
+      if (holding.release_date && holding.release_date < today) return false
+      if (league.counterpicks_block_drops && holding.counterpicked_by_team_id) return false
+      return true
+    })
+  }, [myHoldings, league.counterpicks_block_drops])
   const remainingBudget = budget?.remaining_budget ?? 100
   const canPlaceCounterpickBid = hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots
 
@@ -288,7 +302,7 @@ export default function BiddingShell({
           existingBids={bids}
           ownedTmdbIds={ownedTmdbIds}
           onPlaceBid={bidding.placeBid}
-          myHoldings={myHoldings}
+          myHoldings={droppableHoldings}
           freeRosterSlots={freeRosterSlots}
           counterBidTarget={counterBidTarget}
           isCounterBidPhase={isCounterBidPhase}
