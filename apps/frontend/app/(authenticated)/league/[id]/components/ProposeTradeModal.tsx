@@ -10,6 +10,7 @@ import { useAsyncAction } from '@/hooks/useAsyncAction'
 import OfferExpiryPicker from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
 import type { ResolvedExpiry } from '@/utils/tradeExpiry'
+import CounterpickMark from './CounterpickMark'
 
 interface Props {
   team: Team
@@ -567,22 +568,32 @@ function MovieSelector({
                 : 'bg-surface-hover hover:bg-elevated border border-transparent'
             } ${isFocused ? 'ring-2 ring-gold ring-offset-2 ring-offset-surface' : ''}`}
           >
-            {movie.poster_url ? (
-              <Image
-                src={movie.poster_url}
-                alt=""
-                width={32}
-                height={48}
-                className="w-8 h-12 object-cover rounded"
-              />
-            ) : (
-              <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
-                <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
-              </div>
-            )}
+            <div className="relative shrink-0">
+              {movie.poster_url ? (
+                <Image
+                  src={movie.poster_url}
+                  alt=""
+                  width={32}
+                  height={48}
+                  className="w-8 h-12 object-cover rounded"
+                />
+              ) : (
+                <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
+                  <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
+                </div>
+              )}
+              {movie.source === 'counterpick' && <CounterpickMark />}
+            </div>
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground truncate">{movie.title}</p>
               <div className="flex items-center gap-2 text-xs text-foreground-muted">
+                {movie.source === 'counterpick' && (
+                  <span className="text-crimson">
+                    {movie.counterpick_target_team_name
+                      ? `vs. ${movie.counterpick_target_team_name}`
+                      : 'Counterpick'}
+                  </span>
+                )}
                 {movie.release_date && (
                   <span>{new Date(movie.release_date).getFullYear()}</span>
                 )}

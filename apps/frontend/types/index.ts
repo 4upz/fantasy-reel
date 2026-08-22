@@ -102,6 +102,16 @@ export type HoldingSource = 'draft' | 'pickup'
 export type HoldingSourceName = 'draft_pick' | 'pickup'
 
 /**
+ * What a trade item refers to: a roster holding, or a counterpick.
+ *
+ * A counterpick is an asset in its own right -- the inverted bet a team owns
+ * against somebody else's movie -- and is tradeable like any holding, so trade
+ * items speak a slightly wider vocabulary than rosters do. `source_id` points
+ * at `counterpicks.id` for that case.
+ */
+export type TradeItemSource = HoldingSourceName | 'counterpick'
+
+/**
  * One movie a team holds right now, read from the `team_holdings` view.
  *
  * The view unions `draft_picks` and `pickups` with dropped rows already
@@ -562,7 +572,7 @@ export type TradeStatus =
 
 export interface TradeMovieItem {
   movie_id: string
-  source: 'draft_pick' | 'pickup'
+  source: TradeItemSource
   source_id: string
   // Cached movie data for display
   title?: string
@@ -662,11 +672,17 @@ export interface TradeOfferWithDetails extends TradeOfferWithTeams {
 // For the trade proposal UI - team's available movies
 export interface TradeableMovie {
   movie_id: string
-  source: HoldingSourceName
+  source: TradeItemSource
   source_id: string
   title: string
   poster_url: string | null
   release_date: string | null
+  /**
+   * For a counterpick, the team currently holding the movie it targets -- the
+   * only way to tell "Dune" from "the bet against whoever holds Dune" in a
+   * list. Null for roster holdings.
+   */
+  counterpick_target_team_name?: string | null
   /** Tomatometer score (0-100), for context only - not a points value. */
   combined_score: number | null
   /** Fantasy points the movie is actually worth; null until it has an RT score. */

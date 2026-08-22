@@ -7,13 +7,35 @@ import { logNotificationDelivery, statusFromEmailResult } from './notification-l
 // Types
 // ============================================================================
 
+/**
+ * What a trade item refers to. 'draft_pick'/'pickup' name a roster holding by
+ * its base-table id; 'counterpick' names a row in `counterpicks` -- the bet a
+ * team owns against somebody else's movie, which is tradeable in its own right.
+ */
+export type TradeItemSource = 'draft_pick' | 'pickup' | 'counterpick'
+
+/** Does this item occupy a movie slot on a roster? Counterpicks do not. */
+export function isRosterItem(item: TradeMovieItem): boolean {
+  return item.source !== 'counterpick'
+}
+
 export interface TradeMovieItem {
   movie_id: string
-  source: 'draft_pick' | 'pickup'
+  source: TradeItemSource
   source_id: string
   title?: string
   poster_url?: string | null
   release_date?: string | null
+}
+
+/**
+ * How an item reads in an email or a Discord embed. A counterpick and the movie
+ * it targets are the same title, so an unlabelled list of a trade's contents
+ * would be genuinely ambiguous about which one is changing hands.
+ */
+export function tradeItemLabel(item: TradeMovieItem): string {
+  const title = item.title ?? 'Unknown Movie'
+  return item.source === 'counterpick' ? `Counterpick: ${title}` : title
 }
 
 export interface TradeItems {
@@ -38,6 +60,9 @@ export interface LeagueTradeConfig {
   trade_review_enabled: boolean
   total_slots: number
   faab_budget: number
+  /** Counterpick capacity, per phase -- the caps a trade must not push a team past. */
+  draft_counterpick_slots: number
+  bidding_counterpick_slots: number
 }
 
 export interface TeamInfo {
@@ -298,8 +323,8 @@ export function validateTradeItemsStructure(items: unknown, maxBudget = 100): Va
     if (!movie.movie_id || !isValidUUID(movie.movie_id)) {
       return { valid: false, error: 'Invalid movie_id in trade items' }
     }
-    if (!movie.source || !['draft_pick', 'pickup'].includes(movie.source)) {
-      return { valid: false, error: 'Invalid source type (must be draft_pick or pickup)' }
+    if (!movie.source || !['draft_pick', 'pickup', 'counterpick'].includes(movie.source)) {
+      return { valid: false, error: 'Invalid source type (must be draft_pick, pickup or counterpick)' }
     }
     if (!movie.source_id || !isValidUUID(movie.source_id)) {
       return { valid: false, error: 'Invalid source_id in trade items' }
@@ -356,68 +381,279 @@ export function validateLeagueTradingEnabled(
 }
 
 /**
- * Validate team owns the movies they're offering, and (when the team that
- * would receive them is known) that none is a counterpicked movie heading
- * back to its own counterpicker -- that would collapse counterpicker_team_id
- * == target_team_id, which the DB forbids and which is not a coherent bet
- * anyway. This is a UX-earlier mirror of the authoritative guard in
- * execute_trade() (see 20260808160000_counterpick_trade_guardrails.sql);
- * the SQL-side check is what actually protects the data.
+ * Validate a team owns everything it is putting on the table: its roster
+ * holdings are still its own and undropped, and its counterpicks are still
+ * counterpicked by it.
  *
- * @param receivingTeamId - The team that would receive `items` if the trade
- *   goes through. Omit when that context isn't available to the caller; the
- *   counterpick check is simply skipped in that case (execute_trade still
- *   catches it at execution time).
+ * Ownership only. Whether an item may land where the trade is sending it is
+ * the separate question `validateCounterpickPlacement` answers, because that
+ * one cannot be decided from one side of the deal alone.
+ *
+ * A counterpick has no dropped_at to check: it deliberately survives a drop of
+ * the movie it targets and keeps scoring (see
+ * recalculate_team_score_with_counterpicks), so a row that still exists is
+ * still worth points and still tradeable.
  */
 export async function validateMovieOwnership(
   supabase: SupabaseClient,
   teamId: string,
-  items: TradeItems,
-  receivingTeamId?: string
+  items: TradeItems
 ): Promise<ValidationResult> {
   for (const movie of items.movies) {
-    if (movie.source === 'draft_pick') {
+    if (movie.source === 'counterpick') {
       const { data, error } = await supabase
-        .from('draft_picks')
-        .select('id, team_id, dropped_at, counterpicked_by_team_id')
+        .from('counterpicks')
+        .select('id, counterpicker_team_id')
         .eq('id', movie.source_id)
         .single()
 
       if (error || !data) {
-        return { valid: false, error: `Draft pick not found: ${movie.source_id}` }
+        return { valid: false, error: `Counterpick not found: ${movie.source_id}` }
       }
-      if (data.team_id !== teamId) {
-        return { valid: false, error: `Draft pick not owned by team: ${movie.source_id}` }
+      if (data.counterpicker_team_id !== teamId) {
+        return { valid: false, error: `Counterpick not owned by team: ${movie.source_id}` }
       }
-      if (data.dropped_at) {
-        return { valid: false, error: `Draft pick has been dropped: ${movie.source_id}` }
-      }
-      if (receivingTeamId && data.counterpicked_by_team_id === receivingTeamId) {
-        return {
+      continue
+    }
+
+    const table = movie.source === 'draft_pick' ? 'draft_picks' : 'pickups'
+    const label = movie.source === 'draft_pick' ? 'Draft pick' : 'Pickup'
+
+    const { data, error } = await supabase
+      .from(table)
+      .select('id, team_id, dropped_at')
+      .eq('id', movie.source_id)
+      .single()
+
+    if (error || !data) {
+      return { valid: false, error: `${label} not found: ${movie.source_id}` }
+    }
+    if (data.team_id !== teamId) {
+      return { valid: false, error: `${label} not owned by team: ${movie.source_id}` }
+    }
+    if (data.dropped_at) {
+      return { valid: false, error: `${label} has been dropped: ${movie.source_id}` }
+    }
+  }
+
+  return { valid: true }
+}
+
+/** A counterpick, as much of it as the placement and slot checks need. */
+interface DisturbedCounterpick {
+  id: string
+  counterpicker_team_id: string
+  target_team_id: string
+  draft_pick_id: string | null
+  pickup_id: string | null
+  phase: 'draft' | 'bidding'
+}
+
+/** Where each item in a trade ends up, keyed by source_id. */
+function destinationsBySourceId(
+  initiatorTeamId: string,
+  recipientTeamId: string,
+  initiatorItems: TradeItems,
+  recipientItems: TradeItems,
+  matches: (item: TradeMovieItem) => boolean
+): Map<string, string> {
+  const destinations = new Map<string, string>()
+  for (const item of initiatorItems.movies) {
+    if (matches(item)) destinations.set(item.source_id, recipientTeamId)
+  }
+  for (const item of recipientItems.movies) {
+    if (matches(item)) destinations.set(item.source_id, initiatorTeamId)
+  }
+  return destinations
+}
+
+/**
+ * Every counterpick this trade could disturb: the ones changing hands, plus the
+ * ones sitting on a movie that is changing hands.
+ */
+async function loadDisturbedCounterpicks(
+  supabase: SupabaseClient,
+  counterpickIds: string[],
+  draftPickIds: string[],
+  pickupIds: string[]
+): Promise<DisturbedCounterpick[]> {
+  const columns = 'id, counterpicker_team_id, target_team_id, draft_pick_id, pickup_id, phase'
+  // PromiseLike, not Promise: a PostgrestFilterBuilder is thenable but is not a
+  // Promise until it is awaited.
+  const lookups: Array<PromiseLike<{ data: DisturbedCounterpick[] | null }>> = []
+
+  if (counterpickIds.length > 0) {
+    lookups.push(supabase.from('counterpicks').select(columns).in('id', counterpickIds))
+  }
+  if (draftPickIds.length > 0) {
+    lookups.push(supabase.from('counterpicks').select(columns).in('draft_pick_id', draftPickIds))
+  }
+  if (pickupIds.length > 0) {
+    lookups.push(supabase.from('counterpicks').select(columns).in('pickup_id', pickupIds))
+  }
+
+  const results = await Promise.all(lookups)
+  const byId = new Map<string, DisturbedCounterpick>()
+  for (const { data } of results) {
+    for (const row of data ?? []) byId.set(row.id, row)
+  }
+  return [...byId.values()]
+}
+
+/**
+ * Reject any trade that would leave one team holding both a movie and the
+ * counterpick against it. `counterpicks_not_own_movie` forbids
+ * counterpicker_team_id == target_team_id at the DB layer, and betting against
+ * your own holding is not a coherent bet in the first place.
+ *
+ * Judged on POST-trade ownership, which matters in both directions:
+ *   - a movie sent to the team that counterpicked it is rejected...
+ *   - ...unless that same trade sends the counterpick the other way, which is a
+ *     perfectly sensible swap and is allowed.
+ *
+ * This is a UX-earlier mirror of the authoritative guard inside execute_trade()
+ * (see 20260822120000_allow_trading_counterpicks.sql), which runs under the
+ * trade row lock and is what actually protects the data. The two are worded
+ * identically on purpose -- the SQL wording is what a commissioner sees when
+ * ownership changes between the two checks.
+ *
+ * One deliberate difference from the SQL: post-trade holder is derived from
+ * counterpicks.target_team_id, which tracks the current holder by contract
+ * (execute_trade retargets it on every transfer), rather than re-reading
+ * draft_picks/pickups.
+ */
+export async function validateCounterpickPlacement(
+  supabase: SupabaseClient,
+  initiatorTeamId: string,
+  recipientTeamId: string,
+  initiatorItems: TradeItems,
+  recipientItems: TradeItems
+): Promise<ValidationResult> {
+  const counterpickMoves = destinationsBySourceId(
+    initiatorTeamId,
+    recipientTeamId,
+    initiatorItems,
+    recipientItems,
+    (item) => item.source === 'counterpick'
+  )
+  const holdingMoves = destinationsBySourceId(
+    initiatorTeamId,
+    recipientTeamId,
+    initiatorItems,
+    recipientItems,
+    isRosterItem
+  )
+
+  const movingDraftPickIds = [...initiatorItems.movies, ...recipientItems.movies]
+    .filter((item) => item.source === 'draft_pick')
+    .map((item) => item.source_id)
+  const movingPickupIds = [...initiatorItems.movies, ...recipientItems.movies]
+    .filter((item) => item.source === 'pickup')
+    .map((item) => item.source_id)
+
+  const disturbed = await loadDisturbedCounterpicks(
+    supabase,
+    [...counterpickMoves.keys()],
+    movingDraftPickIds,
+    movingPickupIds
+  )
+
+  for (const counterpick of disturbed) {
+    const holdingId = counterpick.draft_pick_id ?? counterpick.pickup_id
+    const postCounterpicker =
+      counterpickMoves.get(counterpick.id) ?? counterpick.counterpicker_team_id
+    const postHolder =
+      (holdingId ? holdingMoves.get(holdingId) : undefined) ?? counterpick.target_team_id
+
+    if (postCounterpicker !== postHolder) continue
+
+    return counterpickMoves.has(counterpick.id)
+      ? {
           valid: false,
-          error: `Cannot trade a counterpicked movie to the team that counterpicked it: ${movie.source_id}`,
+          error: `Cannot trade a counterpick to the team that holds the counterpicked movie: ${counterpick.id}`,
         }
-      }
-    } else if (movie.source === 'pickup') {
-      const { data, error } = await supabase
-        .from('pickups')
-        .select('id, team_id, dropped_at, counterpicked_by_team_id')
-        .eq('id', movie.source_id)
-        .single()
+      : {
+          valid: false,
+          error: `Cannot trade a counterpicked movie to the team that counterpicked it: ${holdingId}`,
+        }
+  }
 
-      if (error || !data) {
-        return { valid: false, error: `Pickup not found: ${movie.source_id}` }
-      }
-      if (data.team_id !== teamId) {
-        return { valid: false, error: `Pickup not owned by team: ${movie.source_id}` }
-      }
-      if (data.dropped_at) {
-        return { valid: false, error: `Pickup has been dropped: ${movie.source_id}` }
-      }
-      if (receivingTeamId && data.counterpicked_by_team_id === receivingTeamId) {
+  return { valid: true }
+}
+
+/**
+ * Counterpicks occupy their own per-phase slots
+ * (`leagues.draft_counterpick_slots` / `bidding_counterpick_slots`), the same
+ * scarce resource process-bids rations when awarding counterpick bids. A trade
+ * must respect them, or a team could buy up every counterpick in the league.
+ *
+ * Counted per phase because that is how the slots are configured and how
+ * process-bids spends them -- a draft-phase counterpick arriving by trade does
+ * not free a bidding-phase slot.
+ */
+export async function validateCounterpickSlots(
+  supabase: SupabaseClient,
+  initiatorTeamId: string,
+  recipientTeamId: string,
+  initiatorItems: TradeItems,
+  recipientItems: TradeItems,
+  config: LeagueTradeConfig
+): Promise<ValidationResult> {
+  const tradedIds = [...initiatorItems.movies, ...recipientItems.movies]
+    .filter((item) => item.source === 'counterpick')
+    .map((item) => item.source_id)
+
+  if (tradedIds.length === 0) return { valid: true }
+
+  const [{ data: traded }, { data: held }] = await Promise.all([
+    supabase.from('counterpicks').select('id, phase').in('id', tradedIds),
+    supabase
+      .from('counterpicks')
+      .select('counterpicker_team_id, phase')
+      .in('counterpicker_team_id', [initiatorTeamId, recipientTeamId]),
+  ])
+
+  const phaseOf = new Map<string, 'draft' | 'bidding'>(
+    (traded ?? []).map((row: { id: string; phase: 'draft' | 'bidding' }) => [row.id, row.phase])
+  )
+
+  // Current holdings, then the trade's effect on them.
+  const counts = new Map<string, number>()
+  const key = (teamId: string, phase: string) => `${teamId}:${phase}`
+  const bump = (teamId: string, phase: string, delta: number) =>
+    counts.set(key(teamId, phase), (counts.get(key(teamId, phase)) ?? 0) + delta)
+
+  for (const row of (held ?? []) as Array<{ counterpicker_team_id: string; phase: string }>) {
+    bump(row.counterpicker_team_id, row.phase, 1)
+  }
+
+  const applyMove = (items: TradeItems, from: string, to: string) => {
+    for (const item of items.movies) {
+      if (item.source !== 'counterpick') continue
+      const phase = phaseOf.get(item.source_id)
+      if (!phase) continue
+      bump(from, phase, -1)
+      bump(to, phase, 1)
+    }
+  }
+  applyMove(initiatorItems, initiatorTeamId, recipientTeamId)
+  applyMove(recipientItems, recipientTeamId, initiatorTeamId)
+
+  const limits: Array<{ phase: 'draft' | 'bidding'; limit: number; label: string }> = [
+    { phase: 'draft', limit: config.draft_counterpick_slots, label: 'draft counterpick' },
+    { phase: 'bidding', limit: config.bidding_counterpick_slots, label: 'bidding counterpick' },
+  ]
+
+  for (const team of [
+    { id: initiatorTeamId, name: "initiator's" },
+    { id: recipientTeamId, name: "recipient's" },
+  ]) {
+    for (const { phase, limit, label } of limits) {
+      const count = counts.get(key(team.id, phase)) ?? 0
+      if (count > limit) {
         return {
           valid: false,
-          error: `Cannot trade a counterpicked movie to the team that counterpicked it: ${movie.source_id}`,
+          error: `Trade would exceed ${team.name} ${label} limit (${count}/${limit})`,
         }
       }
     }
@@ -443,7 +679,12 @@ export function validateBudget(
 }
 
 /**
- * Validate both teams will have valid roster sizes after trade
+ * Validate both teams will have valid roster sizes after trade.
+ *
+ * Counterpick items are excluded from the count on both sides: they occupy
+ * counterpick slots, not roster slots, and `get_team_movie_count` (the current
+ * count this is compared against) counts only draft_picks and pickups. Their
+ * capacity is `validateCounterpickSlots`'s job.
  */
 export async function validateRosterSpace(
   supabase: SupabaseClient,
@@ -465,14 +706,12 @@ export async function validateRosterSpace(
   const initiatorMovieCount = initiatorCount ?? 0
   const recipientMovieCount = recipientCount ?? 0
 
-  // Calculate post-trade counts
-  const initiatorGiving = initiatorItems.movies.length
-  const initiatorReceiving = recipientItems.movies.length
-  const recipientGiving = recipientItems.movies.length
-  const recipientReceiving = initiatorItems.movies.length
+  // Calculate post-trade counts. What one side gives, the other receives.
+  const initiatorGiving = initiatorItems.movies.filter(isRosterItem).length
+  const recipientGiving = recipientItems.movies.filter(isRosterItem).length
 
-  const newInitiatorCount = initiatorMovieCount - initiatorGiving + initiatorReceiving
-  const newRecipientCount = recipientMovieCount - recipientGiving + recipientReceiving
+  const newInitiatorCount = initiatorMovieCount - initiatorGiving + recipientGiving
+  const newRecipientCount = recipientMovieCount - recipientGiving + initiatorGiving
 
   if (newInitiatorCount > totalSlots) {
     return {
@@ -537,7 +776,7 @@ export async function getLeagueTradeConfig(
 ): Promise<(LeagueTradeConfig & { status: string }) | null> {
   const { data, error } = await supabase
     .from('leagues')
-    .select('status, trades_enabled, trade_deadline, trade_veto_hours, trade_review_enabled, total_slots, faab_budget')
+    .select('status, trades_enabled, trade_deadline, trade_veto_hours, trade_review_enabled, total_slots, faab_budget, draft_counterpick_slots, bidding_counterpick_slots')
     .eq('id', leagueId)
     .single()
 
@@ -547,6 +786,10 @@ export async function getLeagueTradeConfig(
   return {
     ...data,
     faab_budget: data.faab_budget ?? 100,
+    // A league with counterpicks switched off has no slots, so any counterpick
+    // item fails the capacity check -- correct, since it could not have one.
+    draft_counterpick_slots: data.draft_counterpick_slots ?? 0,
+    bidding_counterpick_slots: data.bidding_counterpick_slots ?? 0,
   } as LeagueTradeConfig & { status: string }
 }
 
@@ -598,11 +841,21 @@ export async function validateTradeProposal(
     return { valid: false, error: 'Both teams must be in the same league' }
   }
 
-  // 7. Validate movie ownership (and that nothing is headed back to its own counterpicker)
-  result = await validateMovieOwnership(supabase, initiatorTeamId, initiatorItems, recipientTeamId)
+  // 7. Validate ownership of every item each side is giving up
+  result = await validateMovieOwnership(supabase, initiatorTeamId, initiatorItems)
   if (!result.valid) return result
 
-  result = await validateMovieOwnership(supabase, recipientTeamId, recipientItems, initiatorTeamId)
+  result = await validateMovieOwnership(supabase, recipientTeamId, recipientItems)
+  if (!result.valid) return result
+
+  // 7b. Validate no team ends up holding both a movie and the bet against it
+  result = await validateCounterpickPlacement(
+    supabase,
+    initiatorTeamId,
+    recipientTeamId,
+    initiatorItems,
+    recipientItems
+  )
   if (!result.valid) return result
 
   // 8. Validate fantasy budgets
@@ -623,6 +876,17 @@ export async function validateTradeProposal(
   )
   if (!result.valid) return result
 
+  // 10. Validate counterpick slot capacity
+  result = await validateCounterpickSlots(
+    supabase,
+    initiatorTeamId,
+    recipientTeamId,
+    initiatorItems,
+    recipientItems,
+    config
+  )
+  if (!result.valid) return result
+
   return { valid: true, config }
 }
 
@@ -630,6 +894,13 @@ interface MovieData {
   title: string
   poster_url: string | null
   release_date: string | null
+}
+
+/** The table a trade item's source_id is a primary key in. */
+function sourceTable(source: TradeItemSource): 'draft_picks' | 'pickups' | 'counterpicks' {
+  if (source === 'draft_pick') return 'draft_picks'
+  if (source === 'pickup') return 'pickups'
+  return 'counterpicks'
 }
 
 /**
@@ -642,31 +913,15 @@ export async function enrichTradeItems(
   const enrichedMovies: TradeMovieItem[] = []
 
   for (const movie of items.movies) {
-    let movieData: MovieData | null = null
+    // Every source reaches its movie through the same embed -- counterpicks
+    // carry movie_id directly, holdings carry it on the base row.
+    const { data } = await supabase
+      .from(sourceTable(movie.source))
+      .select('movies(title, poster_url, release_date)')
+      .eq('id', movie.source_id)
+      .single()
 
-    if (movie.source === 'draft_pick') {
-      const { data } = await supabase
-        .from('draft_picks')
-        .select('movies(title, poster_url, release_date)')
-        .eq('id', movie.source_id)
-        .single()
-
-      if (data?.movies) {
-        const movies = data.movies as unknown as MovieData
-        movieData = movies
-      }
-    } else if (movie.source === 'pickup') {
-      const { data } = await supabase
-        .from('pickups')
-        .select('movies(title, poster_url, release_date)')
-        .eq('id', movie.source_id)
-        .single()
-
-      if (data?.movies) {
-        const movies = data.movies as unknown as MovieData
-        movieData = movies
-      }
-    }
+    const movieData = (data?.movies as unknown as MovieData) ?? null
 
     enrichedMovies.push({
       ...movie,
@@ -770,15 +1025,14 @@ async function formatItemsForEmail(
   const movieTitles: string[] = []
 
   for (const movie of items.movies) {
-    const table = movie.source === 'draft_pick' ? 'draft_picks' : 'pickups'
     const { data } = await supabase
-      .from(table)
+      .from(sourceTable(movie.source))
       .select('movies(title)')
       .eq('id', movie.source_id)
       .single()
 
     const movieData = data?.movies as unknown as { title: string } | null
-    movieTitles.push(movieData?.title ?? 'Unknown Movie')
+    movieTitles.push(tradeItemLabel({ ...movie, title: movieData?.title }))
   }
 
   return formatTradeItemsForEmail(movieTitles, items.faab)

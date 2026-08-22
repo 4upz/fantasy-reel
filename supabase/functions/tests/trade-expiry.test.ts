@@ -38,6 +38,44 @@ function releaseBoundary(releaseDate: string): string {
   return new Date(Date.UTC(y, m - 1, d + 1)).toISOString()
 }
 
+/**
+ * Compare two timestamps as instants, not strings.
+ *
+ * Postgres hands timestamptz back through PostgREST as `+00:00`, while
+ * Date.toISOString() writes `.000Z`. Same moment, different spelling.
+ */
+function assertSameInstant(actual: unknown, expected: string, msg?: string) {
+  assertEquals(
+    new Date(actual as string).getTime(),
+    new Date(expected).getTime(),
+    msg ?? `expected ${actual} to be the same instant as ${expected}`,
+  )
+}
+
+/**
+ * The service role key the EDGE RUNTIME actually uses, which is not the one in
+ * .env.test -- the container gets its own. Cron auth compares against the
+ * runtime's, so a test that sends .env.test's key gets a 403. Same approach as
+ * process-bids.test.ts.
+ */
+async function getEdgeFunctionServiceRoleKey(): Promise<string> {
+  try {
+    const cmd = new Deno.Command('docker', {
+      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
+      stdout: 'piped',
+      stderr: 'piped',
+    })
+    const output = await cmd.output()
+    if (output.success) {
+      const key = new TextDecoder().decode(output.stdout).trim()
+      if (key) return key
+    }
+  } catch {
+    // Docker not available or container not found
+  }
+  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+}
+
 function isoDate(offsetDays: number): string {
   return new Date(Date.now() + offsetDays * DAY_MS).toISOString().split('T')[0]
 }
@@ -49,7 +87,7 @@ Deno.test({
   fn: async (t) => {
     const { client, secondClient, factory } = await createTestFactory()
     const serviceClient = getServiceClient()
-    const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const SERVICE_ROLE_KEY = await getEdgeFunctionServiceRoleKey()
 
     const leagueId = await factory.createTradingLeague(uniqueName('Expiry League'))
     const recipientTeam = await factory.getTeamForUser(leagueId, secondClient)
@@ -206,7 +244,7 @@ Deno.test({
 
       assertEquals(error, null)
       assertEquals(data!.trade_offer.expiry_anchor, 'first_release')
-      assertEquals(data!.trade_offer.expires_at, releaseBoundary(soon))
+      assertSameInstant(data!.trade_offer.expires_at, releaseBoundary(soon))
       await cleanupOffers()
     })
 
@@ -354,14 +392,14 @@ Deno.test({
 
       const { data } = await propose({ expiry_anchor: 'first_release' })
       const tradeId = data!.trade_offer.id as string
-      assertEquals((await readOffer(tradeId))!.expires_at, releaseBoundary(isoDate(20)))
+      assertSameInstant((await readOffer(tradeId))!.expires_at, releaseBoundary(isoDate(20)))
 
       // The studio pushes it back: the offer window moves with it.
       const pushed = isoDate(45)
       await serviceClient.from('movies').update({ release_date: pushed }).eq('id', offeredMovie.movie_id)
       const moved = await runProcessTrades()
       assert(moved.data.reresolved >= 1, 'anchored offer did not follow the release date')
-      assertEquals((await readOffer(tradeId))!.expires_at, releaseBoundary(pushed))
+      assertSameInstant((await readOffer(tradeId))!.expires_at, releaseBoundary(pushed))
 
       // Now it opens early -- re-resolution and the sweep run in the same pass.
       await serviceClient

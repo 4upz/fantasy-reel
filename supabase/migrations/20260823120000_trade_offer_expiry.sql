@@ -1,6 +1,13 @@
 -- ============================================================================
 -- Per-offer trade expiry
 --
+-- Dated after 20260822120000_allow_trading_counterpicks deliberately. The
+-- original 20260820120000 collided with two other in-flight branches
+-- (pickup_bid_priority_and_conditional_drops, lock_down_account_lookups_and_profiles)
+-- that claim the same version. schema_migrations is keyed on version, so
+-- whichever landed first would have silently marked this one applied and the
+-- expiry feature would have gone missing with no error.
+--
 -- Lets a proposer put a clock on a trade offer: it lapses on its own if the
 -- recipient never answers. See docs/PLAN-trade-offer-expiry.md.
 --

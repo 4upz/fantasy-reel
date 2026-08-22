@@ -10,6 +10,7 @@ import {
   TradeItems,
   validateTradeProposal,
   enrichTradeItems,
+  tradeItemLabel,
   getTeamInfo,
   getTeamName,
   getTradeOffer,
@@ -185,8 +186,8 @@ Deno.serve(async (req) => {
     const counterRecipientName = await getTeamName(serviceClient, counterRecipientTeamId)
     const leagueName = await getLeagueName(serviceClient, originalOffer.league_id)
 
-    const counterMovies = enrichedOfferedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
-    const counterRequestedMovies = enrichedRequestedItems.movies.map(m => m.title ?? 'Unknown').join(', ')
+    const counterMovies = enrichedOfferedItems.movies.map(tradeItemLabel).join(', ')
+    const counterRequestedMovies = enrichedRequestedItems.movies.map(tradeItemLabel).join(', ')
 
     const counterFields = [
       { name: `${counterTeamInfo?.name ?? 'Counterer'} offers`, value: counterMovies || 'Nothing', inline: true },
