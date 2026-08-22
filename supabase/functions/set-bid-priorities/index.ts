@@ -1,13 +1,17 @@
 /**
- * Set Counterpick Bid Priorities Edge Function
+ * Set Bid Priorities Edge Function
  *
- * Reorders a team's pending counterpick bids. Priority decides which counterpicks
- * the team keeps when more of its bids win than it has
- * `leagues.bidding_counterpick_slots` for -- see process-bids and
- * _shared/bid-resolution.ts (issue #24).
+ * Reorders a team's pending pickup bids. Priority never decides who WINS a
+ * contest -- the highest bid does that. It decides which of a team's own
+ * winning bids it keeps when it wins more than it has roster room or budget
+ * for -- see process-bids and _shared/bid-resolution.ts.
+ *
+ * The counterpick equivalent is set-counterpick-bid-priorities; the two are
+ * deliberately separate because they draw on different capacity pools, so
+ * ranking them against each other would be meaningless.
  *
  * Request:  { league_id: string, bid_ids: string[] }  // most wanted first
- * Response: { bids: CounterpickBid[], message: string }
+ * Response: { bids: PickupBid[], message: string }
  */
 
 import {
@@ -20,11 +24,11 @@ import {
   createServiceClient,
   internalErrorResponse,
 } from '../_shared/utils.ts'
-import { createLogger } from '../_shared/logger.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
 
-const log = createLogger('set-counterpick-bid-priorities')
+const log = createLogger('set-bid-priorities')
 
-interface SetCounterpickBidPrioritiesRequest {
+interface SetBidPrioritiesRequest {
   league_id: string
   bid_ids: string[]
 }
@@ -43,7 +47,7 @@ Deno.serve(async (req) => {
 
     const serviceClient = createServiceClient()
 
-    const { league_id, bid_ids }: SetCounterpickBidPrioritiesRequest = await req.json()
+    const { league_id, bid_ids }: SetBidPrioritiesRequest = await req.json()
 
     if (!league_id || !isValidUUID(league_id)) {
       return errorResponse('Valid league_id is required', 400)
@@ -81,7 +85,7 @@ Deno.serve(async (req) => {
 
     const loadPendingBids = () =>
       serviceClient
-        .from('counterpick_bids')
+        .from('pickup_bids')
         .select('*')
         .eq('league_id', league_id)
         .eq('team_id', team.id)
@@ -91,12 +95,12 @@ Deno.serve(async (req) => {
     const { data: pendingBids, error: bidsError } = await loadPendingBids()
 
     if (bidsError) {
-      console.error('Error loading counterpick bids:', bidsError)
+      log.error('Error loading pickup bids', { error: serializeError(bidsError) })
       return errorResponse('Failed to load bids', 500)
     }
 
     if (!pendingBids || pendingBids.length === 0) {
-      return errorResponse('You have no pending counterpick bids to reorder', 400)
+      return errorResponse('You have no pending bids to reorder', 400)
     }
 
     // Require the full set. A partial list would leave the omitted bids at stale
@@ -104,14 +108,14 @@ Deno.serve(async (req) => {
     const pendingIds = new Set(pendingBids.map((bid) => bid.id))
     if (bid_ids.some((id) => !pendingIds.has(id))) {
       return errorResponse(
-        'bid_ids may only contain your own pending counterpick bids in this league',
+        'bid_ids may only contain your own pending bids in this league',
         400,
       )
     }
 
     if (bid_ids.length !== pendingBids.length) {
       return errorResponse(
-        `bid_ids must list all ${pendingBids.length} of your pending counterpick bids`,
+        `bid_ids must list all ${pendingBids.length} of your pending bids`,
         400,
       )
     }
@@ -120,7 +124,7 @@ Deno.serve(async (req) => {
     await Promise.all(
       bid_ids.map((bidId, index) =>
         serviceClient
-          .from('counterpick_bids')
+          .from('pickup_bids')
           .update({ priority: index + 1 })
           .eq('id', bidId)
           .eq('team_id', team.id)
@@ -130,7 +134,7 @@ Deno.serve(async (req) => {
     const { data: updatedBids, error: refetchError } = await loadPendingBids()
 
     if (refetchError) {
-      console.error('Error reloading counterpick bids:', refetchError)
+      log.error('Error reloading pickup bids', { error: serializeError(refetchError) })
       return errorResponse('Priorities saved but could not be reloaded', 500)
     }
 

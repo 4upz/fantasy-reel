@@ -15,34 +15,137 @@
  * Kept free of Supabase calls so the ordering rules can be tested directly.
  */
 
-export interface ResolvableCounterpickBid {
+export interface ResolvableBid {
   id: string
   team_id: string
   amount: number
   /** Team-chosen rank among its own pending bids; 1 is the one it wants most. */
   priority: number
   created_at: string
+  /**
+   * Holding this bid releases if it wins, funding the award without a free
+   * slot. Absent or null when the bid carries no conditional drop.
+   *
+   * Optional because conditional drops are a pickup-only feature: counterpick
+   * rows are handed to the resolver as-is and simply never carry one, so making
+   * it required would force a meaningless field onto every counterpick call
+   * site.
+   */
+  conditionalDropHoldingId?: string | null
 }
 
-export interface CounterpickContest {
+export interface BidContest {
   /** Opaque identifier for the movie being contested, e.g. `${league_id}:${movie_id}`. */
   key: string
   /** Every bid with status 'active' on this movie. */
-  activeBids: ResolvableCounterpickBid[]
+  activeBids: ResolvableBid[]
+}
+
+/**
+ * What a team can still absorb this run.
+ *
+ * `freeSlots` means "room for one more movie of this kind", and the two bid
+ * types measure it against different pools: pooled roster room for pickups,
+ * remaining `bidding_counterpick_slots` for counterpicks. They never collide,
+ * because the two are resolved in separate calls with their own capacity map.
+ */
+export interface TeamCapacity {
+  freeSlots: number
+  remainingBudget: number
+  remainingDrops: number
+  /**
+   * Holdings still available to be conditionally dropped. A target missing from
+   * this set has become undroppable (released, traded away, counterpick-blocked)
+   * or was already spent by a higher-priority bid from the same team.
+   */
+  droppableHoldingIds: ReadonlySet<string>
+}
+
+/** Capacity where slots are the only binding dimension -- counterpicks, and tests. */
+export function slotsOnlyCapacity(freeSlots: number): TeamCapacity {
+  return {
+    freeSlots,
+    remainingBudget: Number.MAX_SAFE_INTEGER,
+    remainingDrops: 0,
+    droppableHoldingIds: new Set<string>(),
+  }
 }
 
 /**
  * Why a bid did not win.
  * - `outbid`: a stronger bid took the movie.
- * - `no_slots`: the bid led its contest but the team's slots were already full.
+ * - `no_slots`: the bid led its contest but the team had no room -- no free
+ *   slot, and no conditional drop it could still cash.
+ * - `insufficient_budget`: the bid led its contest but the team's remaining
+ *   budget was already committed to higher-priority bids.
  */
-export type CounterpickLossReason = 'outbid' | 'no_slots'
+export type BidLossReason = 'outbid' | 'no_slots' | 'insufficient_budget'
 
-export interface CounterpickResolution {
+export interface BidResolution {
   /** Contest key -> winning bid. Keys absent here went unawarded. */
-  winners: Map<string, ResolvableCounterpickBid>
+  winners: Map<string, ResolvableBid>
   /** Bid id -> why it lost. Contains every active bid that is not a winner. */
-  lossReasons: Map<string, CounterpickLossReason>
+  lossReasons: Map<string, BidLossReason>
+  /**
+   * Winning bid id -> holding it must drop. Only bids whose award was actually
+   * funded by a conditional drop appear; one that won on a free slot does not,
+   * because its drop must not fire.
+   */
+  executedDrops: Map<string, string>
+}
+
+/** Mutable working copy of a TeamCapacity, spent down as awards are made. */
+interface WorkingCapacity {
+  freeSlots: number
+  remainingBudget: number
+  remainingDrops: number
+  droppableHoldingIds: Set<string>
+}
+
+/** The conditional drop this bid can actually cash right now, or null. */
+function usableDrop(bid: ResolvableBid, capacity: WorkingCapacity): string | null {
+  const holdingId = bid.conditionalDropHoldingId
+  if (!holdingId) return null
+  if (capacity.remainingDrops <= 0) return null
+  return capacity.droppableHoldingIds.has(holdingId) ? holdingId : null
+}
+
+/**
+ * Whether `capacity` can absorb `bid`. Budget always binds. Room comes either
+ * from a free slot or from a conditional drop that is still cashable -- a
+ * drop-funded award is slot-neutral, since the movie arriving and the movie
+ * leaving cancel out.
+ */
+function canAfford(bid: ResolvableBid, capacity: WorkingCapacity | undefined): boolean {
+  if (!capacity) return false
+  if (capacity.remainingBudget < bid.amount) return false
+  return capacity.freeSlots > 0 || usableDrop(bid, capacity) !== null
+}
+
+/**
+ * Spend `bid` against `capacity`.
+ *
+ * A free slot is preferred over a conditional drop: the drop is the fallback
+ * that buys room when there is none, and spending it while a slot sits open
+ * would burn drop allowance the team did not need to spend.
+ *
+ * @returns the holding dropped to fund this award, or null if a slot funded it.
+ */
+function consume(bid: ResolvableBid, capacity: WorkingCapacity): string | null {
+  capacity.remainingBudget -= bid.amount
+
+  if (capacity.freeSlots > 0) {
+    capacity.freeSlots -= 1
+    return null
+  }
+
+  // canAfford already established this is non-null when no slot is free.
+  const holdingId = usableDrop(bid, capacity)!
+  capacity.remainingDrops -= 1
+  // Retiring the holding is what stops a team's second bid from cashing the
+  // same drop target twice.
+  capacity.droppableHoldingIds.delete(holdingId)
+  return holdingId
 }
 
 /**
@@ -50,8 +153,8 @@ export interface CounterpickResolution {
  * breaks the remaining tie only so repeated runs agree with each other.
  */
 export function compareBidStrength(
-  a: ResolvableCounterpickBid,
-  b: ResolvableCounterpickBid,
+  a: ResolvableBid,
+  b: ResolvableBid,
 ): number {
   if (b.amount !== a.amount) return b.amount - a.amount
 
@@ -74,8 +177,8 @@ export function compareBidStrength(
  *
  * @returns bid id -> normalized priority
  */
-export function normalizeBidPriorities(contests: CounterpickContest[]): Map<string, number> {
-  const bidsByTeam = new Map<string, ResolvableCounterpickBid[]>()
+export function normalizeBidPriorities(contests: BidContest[]): Map<string, number> {
+  const bidsByTeam = new Map<string, ResolvableBid[]>()
   for (const contest of contests) {
     for (const bid of contest.activeBids) {
       const existing = bidsByTeam.get(bid.team_id)
@@ -92,29 +195,41 @@ export function normalizeBidPriorities(contests: CounterpickContest[]): Map<stri
   return normalized
 }
 
-/** The bid a team would take a contest with, if a slot is free for it. */
+/** The bid a team would take a contest with, if it can still afford it. */
 interface Contender {
   key: string
-  bid: ResolvableCounterpickBid
+  bid: ResolvableBid
 }
 
 /**
- * Pick a winner for every contest without letting any team exceed its slots.
+ * Pick a winner for every contest without letting any team exceed its capacity.
  *
  * @param contests Movies with at least one active bid and no open counter window.
- * @param remainingSlotsByTeam Slots each team can still fill. Teams absent from
- *   the map are treated as having none.
+ * @param capacityByTeam What each team can still absorb. Teams absent from the
+ *   map are treated as having none -- callers fail closed, so an unreadable
+ *   team withholds awards for one run rather than being handed a fresh
+ *   allowance on top of what it already holds.
  */
-export function resolveCounterpickWinners(
-  contests: CounterpickContest[],
-  remainingSlotsByTeam: ReadonlyMap<string, number>,
-): CounterpickResolution {
+export function resolveBidWinners(
+  contests: BidContest[],
+  capacityByTeam: ReadonlyMap<string, TeamCapacity>,
+): BidResolution {
   const normalizedPriorities = normalizeBidPriorities(contests)
-  const priorityOf = (bid: ResolvableCounterpickBid) =>
+  const priorityOf = (bid: ResolvableBid) =>
     normalizedPriorities.get(bid.id) ?? bid.priority
 
-  const remainingSlots = new Map(remainingSlotsByTeam)
-  const winners = new Map<string, ResolvableCounterpickBid>()
+  // Working copies, so the caller's capacities are not mutated.
+  const capacities = new Map<string, WorkingCapacity>(
+    [...capacityByTeam].map(([teamId, c]) => [teamId, {
+      freeSlots: c.freeSlots,
+      remainingBudget: c.remainingBudget,
+      remainingDrops: c.remainingDrops,
+      droppableHoldingIds: new Set(c.droppableHoldingIds),
+    }]),
+  )
+
+  const winners = new Map<string, ResolvableBid>()
+  const executedDrops = new Map<string, string>()
 
   // Strongest bid first, so the leading contender for a contest is just the first
   // entry whose team still has room.
@@ -140,7 +255,7 @@ export function resolveCounterpickWinners(
     // contests happen to be iterated in.
     const contenderByTeam = new Map<string, Contender>()
     for (const key of unresolvedKeys) {
-      const bid = rankedBids.get(key)!.find((b) => (remainingSlots.get(b.team_id) ?? 0) > 0)
+      const bid = rankedBids.get(key)!.find((b) => canAfford(b, capacities.get(b.team_id)))
       if (!bid) continue
 
       const incumbent = contenderByTeam.get(bid.team_id)
@@ -153,23 +268,87 @@ export function resolveCounterpickWinners(
     for (const { key, bid } of contenderByTeam.values()) {
       winners.set(key, bid)
       unresolvedKeys.delete(key)
-      remainingSlots.set(bid.team_id, (remainingSlots.get(bid.team_id) ?? 0) - 1)
+      const dropped = consume(bid, capacities.get(bid.team_id)!)
+      if (dropped) executedDrops.set(bid.id, dropped)
     }
   }
 
-  const lossReasons = new Map<string, CounterpickLossReason>()
+  const lossReasons = new Map<string, BidLossReason>()
   for (const contest of contests) {
     const winner = winners.get(contest.key)
     for (const bid of contest.activeBids) {
       if (winner && bid.id === winner.id) continue
+
       // Beating the winner (or winning a contest nobody took) means strength was
-      // never the problem -- the team simply had no slot left for this one.
+      // never the problem -- some capacity dimension stopped this bid.
       const wouldHaveWon = !winner || compareBidStrength(bid, winner) < 0
-      lossReasons.set(bid.id, wouldHaveWon ? 'no_slots' : 'outbid')
+      if (!wouldHaveWon) {
+        lossReasons.set(bid.id, 'outbid')
+        continue
+      }
+
+      // Say which constraint actually bound, so the bidder is told something
+      // they can act on rather than a generic refusal.
+      const capacity = capacities.get(bid.team_id)
+      lossReasons.set(
+        bid.id,
+        capacity && capacity.remainingBudget < bid.amount ? 'insufficient_budget' : 'no_slots',
+      )
     }
   }
 
-  return { winners, lossReasons }
+  return { winners, lossReasons, executedDrops }
+}
+
+/**
+ * ---------------------------------------------------------------------------
+ * Conditional drop eligibility
+ * ---------------------------------------------------------------------------
+ *
+ * A pickup bid may name a holding released only if the bid wins. Bids sit
+ * pending for up to a week (see get_next_processing_deadline), so what was
+ * droppable at bid time may not be at processing time -- the movie can release,
+ * or get counterpicked. These are the same rules drop-movie enforces; keeping
+ * them here, pure, means the decision is testable and the two paths cannot
+ * silently disagree about what "droppable" means.
+ *
+ * A target failing these checks does not void the bid. It degrades to a bid
+ * with no conditional drop, which can still win on a free slot -- the team
+ * wanted the movie, and the drop was only the means of paying for it.
+ */
+
+export interface DroppableCandidate {
+  holdingId: string
+  releaseDate: string | null
+  counterpickedByTeamId: string | null
+  hasPendingCounterpickBid: boolean
+}
+
+/**
+ * @param options.today ISO date (YYYY-MM-DD). Passed in rather than read from
+ *   the clock so callers and tests agree on the boundary.
+ */
+export function droppableHoldingIds(
+  candidates: DroppableCandidate[],
+  options: { today: string; counterpicksBlockDrops: boolean },
+): Set<string> {
+  const droppable = new Set<string>()
+
+  for (const candidate of candidates) {
+    // Released movies are locked: their score is already in play. Strictly
+    // "before today", matching drop-movie's own `<` comparison.
+    if (candidate.releaseDate && candidate.releaseDate < options.today) continue
+
+    if (options.counterpicksBlockDrops) {
+      if (candidate.counterpickedByTeamId) continue
+      // A pending counterpick auction would be stranded by the drop.
+      if (candidate.hasPendingCounterpickBid) continue
+    }
+
+    droppable.add(candidate.holdingId)
+  }
+
+  return droppable
 }
 
 /**
@@ -187,7 +366,7 @@ export function resolveCounterpickWinners(
  * the bid were awarded as-is.
  *
  * This is the same staleness process-bids already guards against for a
- * released movie (see `voidReleasedCounterpickContests`): what a bid was
+ * released movie (see `voidReleasedBidContests`): what a bid was
  * placed against is not what processing must trust, so the holding row is
  * re-read at settlement time. Kept free of Supabase calls, like the rest of
  * this module, so the decision can be tested directly; the caller supplies the
@@ -232,7 +411,7 @@ export type TargetRevalidation =
  *  - the read of it failed for infrastructure reasons, in which case the bid
  *    is left untouched (`keep`, at its previously stored target) rather than
  *    voided on the strength of a failed read. This mirrors the fail-open
- *    posture `voidReleasedCounterpickContests` takes for a movie it could not
+ *    posture `voidReleasedBidContests` takes for a movie it could not
  *    read: an outage must not cost a bidder a live bid.
  *
  * Checked in the order the guardrail spec lists them: dropped, then

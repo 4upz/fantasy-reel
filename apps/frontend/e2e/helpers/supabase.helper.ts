@@ -855,14 +855,28 @@ export async function createMovieReviews(
 
 
 /**
- * Enable bidding for a league
- * Bidding is available in active leagues - this function sets the league status to 'active'
+ * Enable bidding for a league.
+ *
+ * Bidding is available in active leagues, so this sets status to 'active'.
+ *
+ * It also pins `new_bid_cutoff_hours` to 0, which disables the new-bid cutoff
+ * (see `get_new_bid_cutoff()` and `computeBidWindow()`, both of which treat 0
+ * as "no cutoff"). Without that pin the league inherits the column default of
+ * 48 hours, and the bid phase is then derived from the real wall clock:
+ * `get_next_processing_deadline()` is the next Saturday 20:00 UTC, so the
+ * cutoff lands on Thursday 20:00 UTC and every run between then and Saturday
+ * 20:00 UTC lands in the counter-bid phase. In that phase the new-bid button
+ * is disabled and cancels are locked, so the whole place-bid suite failed for
+ * two days out of every seven depending only on which day CI ran.
+ *
+ * Tests that need the counter-bid phase should set the cutoff themselves
+ * rather than waiting for the calendar to provide it.
  */
 export async function enableLeagueBidding(leagueId: string): Promise<void> {
   const client = getAdminClient()
   const { error } = await client
     .from('leagues')
-    .update({ status: 'active' })
+    .update({ status: 'active', new_bid_cutoff_hours: 0 })
     .eq('id', leagueId)
   if (error) throw new Error(`Failed to enable bidding: ${error.message}`)
 }

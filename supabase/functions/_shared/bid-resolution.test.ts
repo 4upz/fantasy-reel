@@ -1,13 +1,17 @@
 import { assertEquals } from 'jsr:@std/assert@^1.0.0'
 import {
-  type CounterpickContest,
+  type BidContest,
   type CounterpickTargetRow,
+  type DroppableCandidate,
+  droppableHoldingIds,
   normalizeBidPriorities,
   type RetargetableCounterpickBid,
-  resolveCounterpickWinners,
+  resolveBidWinners,
   resolveTargetRevalidation,
-  type ResolvableCounterpickBid,
-} from './counterpick-resolution.ts'
+  type ResolvableBid,
+  slotsOnlyCapacity,
+  type TeamCapacity,
+} from './bid-resolution.ts'
 
 let placedCounter = 0
 
@@ -18,7 +22,7 @@ function bid(
   amount: number,
   priority: number,
   createdAt?: string,
-): ResolvableCounterpickBid {
+): ResolvableBid {
   placedCounter += 1
   return {
     id,
@@ -26,15 +30,41 @@ function bid(
     amount,
     priority,
     created_at: createdAt ?? `2026-01-01T00:00:${String(placedCounter).padStart(2, '0')}Z`,
+    conditionalDropHoldingId: null,
   }
 }
 
-function contest(key: string, ...activeBids: ResolvableCounterpickBid[]): CounterpickContest {
+/** A bid carrying a conditional drop on `holdingId`. */
+function dropBid(
+  id: string,
+  teamId: string,
+  amount: number,
+  priority: number,
+  holdingId: string,
+): ResolvableBid {
+  return { ...bid(id, teamId, amount, priority), conditionalDropHoldingId: holdingId }
+}
+
+/**
+ * A full TeamCapacity, so each test states only the dimension it exercises.
+ * Defaults are deliberately non-binding except `remainingDrops`, which starts
+ * at zero because most tests are about slots and budget.
+ */
+function cap(partial: Partial<TeamCapacity> = {}): TeamCapacity {
+  return {
+    freeSlots: partial.freeSlots ?? 99,
+    remainingBudget: partial.remainingBudget ?? Number.MAX_SAFE_INTEGER,
+    remainingDrops: partial.remainingDrops ?? 0,
+    droppableHoldingIds: partial.droppableHoldingIds ?? new Set<string>(),
+  }
+}
+
+function contest(key: string, ...activeBids: ResolvableBid[]): BidContest {
   return { key, activeBids }
 }
 
-function winnerIds(contests: CounterpickContest[], slots: Record<string, number>) {
-  const resolution = resolveCounterpickWinners(contests, new Map(Object.entries(slots)))
+function winnerIds(contests: BidContest[], slots: Record<string, number>) {
+  const resolution = resolveBidWinners(contests, new Map(Object.entries(slots).map(([team, n]) => [team, slotsOnlyCapacity(n)])))
   return Object.fromEntries(
     contests.map((c) => [c.key, resolution.winners.get(c.key)?.id ?? null]),
   )
@@ -61,7 +91,7 @@ Deno.test('caps a team at its remaining slots (issue #24)', () => {
     contest('Y', bid('a-y', 'A', 5, 2)),
   ]
 
-  const resolution = resolveCounterpickWinners(contests, new Map([['A', 1]]))
+  const resolution = resolveBidWinners(contests, new Map([['A', slotsOnlyCapacity(1)]]))
 
   assertEquals(resolution.winners.size, 1)
   assertEquals(resolution.winners.get('X')?.id, 'a-x')
@@ -126,7 +156,7 @@ Deno.test('distinguishes being outbid from running out of slots', () => {
     contest('Y', bid('a-y', 'A', 5, 2), bid('b-y', 'B', 3, 1)),
   ]
 
-  const resolution = resolveCounterpickWinners(contests, new Map([['A', 1], ['B', 1]]))
+  const resolution = resolveBidWinners(contests, new Map([['A', slotsOnlyCapacity(1)], ['B', slotsOnlyCapacity(1)]]))
 
   // A led Y on strength and lost it only for want of a slot.
   assertEquals(resolution.lossReasons.get('a-y'), 'no_slots')
@@ -137,7 +167,7 @@ Deno.test('distinguishes being outbid from running out of slots', () => {
 Deno.test('marks genuine outbids as outbid', () => {
   const contests = [contest('X', bid('a-x', 'A', 6, 1), bid('b-x', 'B', 2, 1))]
 
-  const resolution = resolveCounterpickWinners(contests, new Map([['A', 1], ['B', 1]]))
+  const resolution = resolveBidWinners(contests, new Map([['A', slotsOnlyCapacity(1)], ['B', slotsOnlyCapacity(1)]]))
 
   assertEquals(resolution.lossReasons.get('b-x'), 'outbid')
 })
@@ -145,7 +175,7 @@ Deno.test('marks genuine outbids as outbid', () => {
 Deno.test('when nobody has a slot every bid is reported as no_slots', () => {
   const contests = [contest('X', bid('a-x', 'A', 6, 1), bid('b-x', 'B', 2, 1))]
 
-  const resolution = resolveCounterpickWinners(contests, new Map([['A', 0], ['B', 0]]))
+  const resolution = resolveBidWinners(contests, new Map([['A', slotsOnlyCapacity(0)], ['B', slotsOnlyCapacity(0)]]))
 
   assertEquals(resolution.winners.size, 0)
   assertEquals(resolution.lossReasons.get('a-x'), 'no_slots')
@@ -192,7 +222,7 @@ Deno.test('normalizes each team independently', () => {
 })
 
 Deno.test('resolves an empty slate without looping', () => {
-  const resolution = resolveCounterpickWinners([], new Map())
+  const resolution = resolveBidWinners([], new Map())
 
   assertEquals(resolution.winners.size, 0)
   assertEquals(resolution.lossReasons.size, 0)
@@ -273,4 +303,205 @@ Deno.test('target revalidation: dropped takes priority over self-owned when both
   const result = resolveTargetRevalidation(bid, targetRow('bidder', '2026-01-01T00:00:00Z'), false)
 
   assertEquals(result, { outcome: 'void', reason: 'movie_dropped' })
+})
+
+// ---------------------------------------------------------------------------
+// Capacity-aware resolution: budget, conditional drops, drop allowance
+// ---------------------------------------------------------------------------
+
+Deno.test('budget exhaustion awards in priority order and falls through', () => {
+  // Team A leads all three at $40 with $100 to spend: two fit, the third does not.
+  const contests = [
+    contest('X', bid('a-x', 'A', 40, 1)),
+    contest('Y', bid('a-y', 'A', 40, 2)),
+    contest('Z', bid('a-z', 'A', 40, 3), bid('b-z', 'B', 5, 1)),
+  ]
+
+  const resolution = resolveBidWinners(
+    contests,
+    new Map([['A', cap({ remainingBudget: 100 })], ['B', cap()]]),
+  )
+
+  assertEquals(resolution.winners.get('X')?.id, 'a-x')
+  assertEquals(resolution.winners.get('Y')?.id, 'a-y')
+  // A cannot afford Z, so it falls through to the runner-up rather than going unawarded.
+  assertEquals(resolution.winners.get('Z')?.id, 'b-z')
+  assertEquals(resolution.lossReasons.get('a-z'), 'insufficient_budget')
+})
+
+Deno.test('a conditional drop wins a contest with no free slot', () => {
+  const contests = [contest('X', dropBid('a-x', 'A', 5, 1, 'h1'))]
+
+  const resolution = resolveBidWinners(
+    contests,
+    new Map([['A', cap({ freeSlots: 0, remainingDrops: 1, droppableHoldingIds: new Set(['h1']) })]]),
+  )
+
+  assertEquals(resolution.winners.get('X')?.id, 'a-x')
+  assertEquals(resolution.executedDrops.get('a-x'), 'h1')
+})
+
+Deno.test('two bids naming the same drop target: only the higher priority takes it', () => {
+  const contests = [
+    contest('X', dropBid('a-x', 'A', 5, 1, 'h1')),
+    contest('Y', dropBid('a-y', 'A', 5, 2, 'h1'), bid('b-y', 'B', 1, 1)),
+  ]
+
+  const resolution = resolveBidWinners(
+    contests,
+    new Map([
+      ['A', cap({ freeSlots: 0, remainingDrops: 2, droppableHoldingIds: new Set(['h1']) })],
+      ['B', cap()],
+    ]),
+  )
+
+  assertEquals(resolution.winners.get('X')?.id, 'a-x')
+  assertEquals(resolution.executedDrops.get('a-x'), 'h1')
+  // h1 is spent, and A has no free slot, so Y falls to B.
+  assertEquals(resolution.winners.get('Y')?.id, 'b-y')
+  assertEquals(resolution.lossReasons.get('a-y'), 'no_slots')
+})
+
+Deno.test('conditional drops are capped by remaining drop allowance', () => {
+  const contests = [
+    contest('X', dropBid('a-x', 'A', 5, 1, 'h1')),
+    contest('Y', dropBid('a-y', 'A', 5, 2, 'h2')),
+  ]
+
+  const resolution = resolveBidWinners(
+    contests,
+    new Map([['A', cap({
+      freeSlots: 0,
+      remainingDrops: 1,
+      droppableHoldingIds: new Set(['h1', 'h2']),
+    })]]),
+  )
+
+  assertEquals(resolution.winners.size, 1)
+  assertEquals(resolution.winners.get('X')?.id, 'a-x')
+  assertEquals(resolution.lossReasons.get('a-y'), 'no_slots')
+})
+
+Deno.test('an invalid drop target degrades the bid to a plain bid', () => {
+  // 'h-gone' is absent from droppableHoldingIds: the target became undroppable.
+  const contests = [contest('X', dropBid('a-x', 'A', 5, 1, 'h-gone'))]
+
+  const withSlot = resolveBidWinners(contests, new Map([['A', cap({ freeSlots: 1 })]]))
+  assertEquals(withSlot.winners.get('X')?.id, 'a-x')
+  // It won on a free slot, so no drop fires.
+  assertEquals(withSlot.executedDrops.has('a-x'), false)
+
+  const withoutSlot = resolveBidWinners(contests, new Map([['A', cap({ freeSlots: 0 })]]))
+  assertEquals(withoutSlot.winners.size, 0)
+  assertEquals(withoutSlot.lossReasons.get('a-x'), 'no_slots')
+})
+
+Deno.test('a free slot is preferred over spending a conditional drop', () => {
+  // Burning drop allowance while a slot sits open would cost the team a drop it
+  // did not need to spend.
+  const contests = [contest('X', dropBid('a-x', 'A', 5, 1, 'h1'))]
+
+  const resolution = resolveBidWinners(
+    contests,
+    new Map([['A', cap({ freeSlots: 1, remainingDrops: 1, droppableHoldingIds: new Set(['h1']) })]]),
+  )
+
+  assertEquals(resolution.winners.get('X')?.id, 'a-x')
+  assertEquals(resolution.executedDrops.has('a-x'), false)
+})
+
+Deno.test('a team absent from the capacity map wins nothing', () => {
+  const contests = [contest('X', bid('a-x', 'A', 5, 1), bid('b-x', 'B', 1, 1))]
+
+  const resolution = resolveBidWinners(contests, new Map([['B', cap()]]))
+
+  // Fail-closed: an unreadable team is treated as having no capacity at all.
+  assertEquals(resolution.winners.get('X')?.id, 'b-x')
+})
+
+Deno.test("the caller's capacity map is not mutated", () => {
+  const contests = [contest('X', bid('a-x', 'A', 5, 1))]
+  const capacity = cap({ freeSlots: 1, remainingBudget: 10 })
+  const capacities = new Map([['A', capacity]])
+
+  resolveBidWinners(contests, capacities)
+
+  assertEquals(capacity.freeSlots, 1)
+  assertEquals(capacity.remainingBudget, 10)
+})
+
+// ---------------------------------------------------------------------------
+// Conditional drop eligibility
+// ---------------------------------------------------------------------------
+
+function candidate(
+  holdingId: string,
+  overrides: Partial<DroppableCandidate> = {},
+): DroppableCandidate {
+  return {
+    holdingId,
+    releaseDate: '2099-01-01',
+    counterpickedByTeamId: null,
+    hasPendingCounterpickBid: false,
+    ...overrides,
+  }
+}
+
+const TODAY = '2026-08-20'
+
+Deno.test('an unreleased, uncontested holding is droppable', () => {
+  const ids = droppableHoldingIds([candidate('h1')], {
+    today: TODAY,
+    counterpicksBlockDrops: true,
+  })
+
+  assertEquals([...ids], ['h1'])
+})
+
+Deno.test('a released holding is not droppable', () => {
+  // drop-movie refuses release_date < today; a conditional drop must match.
+  const ids = droppableHoldingIds([candidate('h1', { releaseDate: '2026-08-19' })], {
+    today: TODAY,
+    counterpicksBlockDrops: true,
+  })
+
+  assertEquals(ids.size, 0)
+})
+
+Deno.test('a holding released today is still droppable', () => {
+  // The rule is strictly "before today", matching drop-movie's < comparison.
+  const ids = droppableHoldingIds([candidate('h1', { releaseDate: TODAY })], {
+    today: TODAY,
+    counterpicksBlockDrops: true,
+  })
+
+  assertEquals([...ids], ['h1'])
+})
+
+Deno.test('a holding with no release date is droppable', () => {
+  const ids = droppableHoldingIds([candidate('h1', { releaseDate: null })], {
+    today: TODAY,
+    counterpicksBlockDrops: true,
+  })
+
+  assertEquals([...ids], ['h1'])
+})
+
+Deno.test('counterpick state blocks a drop only when the league says so', () => {
+  const candidates = [
+    candidate('awarded', { counterpickedByTeamId: 'team-x' }),
+    candidate('pending', { hasPendingCounterpickBid: true }),
+  ]
+
+  const blocked = droppableHoldingIds(candidates, {
+    today: TODAY,
+    counterpicksBlockDrops: true,
+  })
+  assertEquals(blocked.size, 0)
+
+  const allowed = droppableHoldingIds(candidates, {
+    today: TODAY,
+    counterpicksBlockDrops: false,
+  })
+  assertEquals(allowed.size, 2)
 })

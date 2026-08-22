@@ -3,7 +3,14 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
-import type { Team, TradeItems, TradeableMovie, TeamBudget, TradeMovieItem } from '@/types'
+import type {
+  Team,
+  TradeActionResult,
+  TradeItems,
+  TradeableMovie,
+  TeamBudget,
+  TradeMovieItem,
+} from '@/types'
 import { createClient } from '@/utils/supabase/client'
 import { fetchTradeableMovies } from '@/utils/holdings'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
@@ -11,6 +18,9 @@ import OfferExpiryPicker from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
 import type { ResolvedExpiry } from '@/utils/tradeExpiry'
 import CounterpickMark from './CounterpickMark'
+
+/** Stable empty set so a modal with no rejected rows doesn't allocate one per render. */
+const EMPTY_INVALID: ReadonlySet<string> = new Set<string>()
 
 interface Props {
   team: Team
@@ -24,7 +34,7 @@ interface Props {
     requestedItems: TradeItems,
     message?: string,
     expiry?: ResolvedExpiry
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<TradeActionResult>
 }
 
 /**
@@ -90,6 +100,12 @@ export default function ProposeTradeModal({
   const [requestedBudget, setRequestedBudget] = useState(0)
   const [message, setMessage] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /**
+   * Items the server rejected, so the rows can say which ones the error is
+   * about. Cleared on every submit -- a stale mark on a row the user has since
+   * deselected would be worse than no mark at all.
+   */
+  const [invalidSourceIds, setInvalidSourceIds] = useState<ReadonlySet<string>>(EMPTY_INVALID)
 
   const supabase = useMemo(() => createClient(), [])
   const modalRef = useFocusTrap(true)
@@ -184,6 +200,7 @@ export default function ProposeTradeModal({
     if (!selectedTeamId) return
 
     setError(null)
+    setInvalidSourceIds(EMPTY_INVALID)
 
     const offeredItems: TradeItems = {
       movies: tradeableMovies
@@ -223,6 +240,7 @@ export default function ProposeTradeModal({
 
     if (!result.success) {
       setError(result.error || 'Failed to propose trade')
+      setInvalidSourceIds(new Set(result.invalidSourceIds ?? []))
     }
   }, [selectedTeamId, tradeableMovies, offeredMovies, offeredBudget, recipientMovies, requestedMovies, requestedBudget, message, expiry, onPropose])
 
@@ -308,6 +326,10 @@ export default function ProposeTradeModal({
                   setOfferedBudget(0)
                   setRequestedMovies(new Set())
                   setRequestedBudget(0)
+                  // The rejection was about this pairing, so it means nothing
+                  // once a different partner is chosen.
+                  setError(null)
+                  setInvalidSourceIds(EMPTY_INVALID)
                 }}
                 className="text-sm text-gold hover:text-gold-hover transition-colors"
               >
@@ -323,6 +345,7 @@ export default function ProposeTradeModal({
                   movies={tradeableMovies}
                   selectedIds={offeredMovies}
                   onToggle={toggleOfferedMovie}
+                  invalidIds={invalidSourceIds}
                 />
                 <div className="mt-3">
                   <label className="text-sm text-foreground-secondary">
@@ -352,6 +375,7 @@ export default function ProposeTradeModal({
                       movies={recipientMovies}
                       selectedIds={requestedMovies}
                       onToggle={toggleRequestedMovie}
+                      invalidIds={invalidSourceIds}
                     />
                     <div className="mt-3">
                       <label className="text-sm text-foreground-secondary">
@@ -458,6 +482,8 @@ interface MovieSelectorProps {
   onToggle: (sourceId: string) => void
   listId?: string
   emptyMessage?: string
+  /** Items the server rejected on the last submit. */
+  invalidIds?: ReadonlySet<string>
 }
 
 function MovieSelector({
@@ -466,6 +492,7 @@ function MovieSelector({
   onToggle,
   listId = 'movie-list',
   emptyMessage,
+  invalidIds = EMPTY_INVALID,
 }: MovieSelectorProps) {
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const listRef = useRef<HTMLDivElement>(null)
@@ -556,6 +583,7 @@ function MovieSelector({
       {movies.map((movie, index) => {
         const isSelected = selectedIds.has(movie.source_id)
         const isFocused = focusedIndex === index
+        const isInvalid = invalidIds.has(movie.source_id)
         return (
           <div
             key={movie.source_id}
@@ -563,9 +591,11 @@ function MovieSelector({
             aria-selected={isSelected}
             onClick={() => onToggle(movie.source_id)}
             className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors cursor-pointer ${
-              isSelected
-                ? 'bg-gold/20 border border-gold'
-                : 'bg-surface-hover hover:bg-elevated border border-transparent'
+              isInvalid
+                ? 'bg-crimson/15 border border-crimson'
+                : isSelected
+                  ? 'bg-gold/20 border border-gold'
+                  : 'bg-surface-hover hover:bg-elevated border border-transparent'
             } ${isFocused ? 'ring-2 ring-gold ring-offset-2 ring-offset-surface' : ''}`}
           >
             <div className="relative shrink-0">
@@ -587,6 +617,9 @@ function MovieSelector({
             <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-foreground truncate">{movie.title}</p>
               <div className="flex items-center gap-2 text-xs text-foreground-muted">
+                {/* The alert above carries the reason; this only says which row
+                    it meant, and carries it in text rather than colour alone. */}
+                {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
                 {movie.source === 'counterpick' && (
                   <span className="text-crimson">
                     {movie.counterpick_target_team_name

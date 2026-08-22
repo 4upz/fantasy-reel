@@ -87,7 +87,8 @@ Deno.serve(async (req) => {
       if (!validationResult.valid) {
         return errorResponse(
           `Trade can no longer be accepted: ${validationResult.error}`,
-          400
+          400,
+          { invalid_source_ids: validationResult.invalidSourceIds ?? [] }
         )
       }
     }

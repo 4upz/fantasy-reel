@@ -190,16 +190,17 @@ export default function BiddingConfigSection({
               </div>
             </div>
 
-            {/* Pickup Slots Info */}
+            {/* Roster slots are pooled: the draft fills some, bidding fills the
+                rest, and a drop returns a slot to the same pool. */}
             <div className="p-3 bg-surface-hover rounded-lg border border-border">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground-secondary">Pickup Slots (bidding)</span>
+                <span className="text-foreground-secondary">Open after the draft</span>
                 <span className="font-medium text-gold">{pickupSlots} slots</span>
               </div>
               <p className="text-xs text-foreground-muted mt-1">
                 {pickupSlots > 0
-                  ? `Teams can bid on ${pickupSlots} additional movie${pickupSlots !== 1 ? 's' : ''} during the season`
-                  : 'No pickup slots available. Teams can only draft movies.'}
+                  ? `Teams draft ${draftSlots} and fill the remaining ${pickupSlots} of ${totalSlots} roster slots by bidding — or by dropping a movie and bidding on a replacement.`
+                  : `The draft fills all ${totalSlots} roster slots. Teams can still bid by dropping a movie first.`}
               </p>
             </div>
 

@@ -103,7 +103,8 @@ Deno.serve(async (req) => {
       // that is not the commissioner's decision to make by clicking approve.
       return errorResponse(
         `This trade can no longer be executed: ${validationResult.error}`,
-        409
+        409,
+        { invalid_source_ids: validationResult.invalidSourceIds ?? [] }
       )
     }
 

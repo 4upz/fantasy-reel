@@ -10,6 +10,12 @@ import { createClient } from './client'
  * Edge Function as `X-Request-Id`) so client-side breadcrumbs/logs can be
  * correlated with backend structured logs, plus a Sentry breadcrumb
  * recording duration/status for context on any later error event.
+ *
+ * `errorBody` carries the rest of a 4xx JSON body for callers that need to act
+ * on a failure rather than only display it -- the trade modals read
+ * `invalid_source_ids` from it to mark the offending rows. It is null on
+ * success and on transport failures, where there is no body to parse. Callers
+ * that only want the message keep destructuring `{ data, error }` unchanged.
  */
 export async function callEdgeFunction<T>(
   functionName: string,
@@ -17,7 +23,7 @@ export async function callEdgeFunction<T>(
     method?: 'GET' | 'POST'
     body?: Record<string, unknown>
   } = {}
-): Promise<{ data: T | null; error: string | null }> {
+): Promise<{ data: T | null; error: string | null; errorBody: Record<string, unknown> | null }> {
   const supabase = createClient()
   const requestId = crypto.randomUUID()
   const startedAt = performance.now()
@@ -57,7 +63,7 @@ export async function callEdgeFunction<T>(
           },
         })
 
-        return { data: null, error: errorMessage }
+        return { data: null, error: errorMessage, errorBody }
       }
 
       addBreadcrumb({
@@ -67,7 +73,7 @@ export async function callEdgeFunction<T>(
         data: { duration_ms: durationMs, request_id: requestId, error: error.message },
       })
 
-      return { data: null, error: error.message || 'Edge function error' }
+      return { data: null, error: error.message || 'Edge function error', errorBody: null }
     }
 
     addBreadcrumb({
@@ -77,7 +83,7 @@ export async function callEdgeFunction<T>(
       data: { duration_ms: durationMs, status: 'ok', request_id: requestId },
     })
 
-    return { data, error: null }
+    return { data, error: null, errorBody: null }
   } catch (err) {
     // Network failures / unexpected exceptions - not an expected business
     // flow, so capture it as a real Sentry exception in addition to logging.
@@ -88,7 +94,11 @@ export async function callEdgeFunction<T>(
       extra: { request_id: requestId },
     })
 
-    return { data: null, error: err instanceof Error ? err.message : 'Unknown error' }
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Unknown error',
+      errorBody: null,
+    }
   }
 }
 

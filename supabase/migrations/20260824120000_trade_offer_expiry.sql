@@ -1,12 +1,14 @@
 -- ============================================================================
 -- Per-offer trade expiry
 --
--- Dated after 20260822120000_allow_trading_counterpicks deliberately. The
--- original 20260820120000 collided with two other in-flight branches
--- (pickup_bid_priority_and_conditional_drops, lock_down_account_lookups_and_profiles)
--- that claim the same version. schema_migrations is keyed on version, so
--- whichever landed first would have silently marked this one applied and the
--- expiry feature would have gone missing with no error.
+-- Renumbered twice, and both times for the same reason: schema_migrations is
+-- keyed on version, so a duplicate version silently marks this migration
+-- applied and the expiry feature goes missing with no error.
+--   20260820120000 -> collided with pickup_bid_priority_and_conditional_drops
+--                     (now on main) and lock_down_account_lookups_and_profiles
+--                     (still in flight).
+--   20260823120000 -> collided with trade_errors_name_the_movie (now on main).
+-- Keep this dated after every migration on main when rebasing.
 --
 -- Lets a proposer put a clock on a trade offer: it lapses on its own if the
 -- recipient never answers. See docs/PLAN-trade-offer-expiry.md.

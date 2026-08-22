@@ -104,7 +104,9 @@ Deno.serve(async (req) => {
     )
 
     if (!validationResult.valid) {
-      return errorResponse(validationResult.error ?? 'Counter-offer validation failed', 400)
+      return errorResponse(validationResult.error ?? 'Counter-offer validation failed', 400, {
+        invalid_source_ids: validationResult.invalidSourceIds ?? [],
+      })
     }
 
     const enrichedOfferedItems = await enrichTradeItems(serviceClient, counter_offered_items)

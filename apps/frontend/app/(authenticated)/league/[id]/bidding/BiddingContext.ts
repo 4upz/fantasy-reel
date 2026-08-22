@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import type { CounterpickBid, League, PickupBid, TeamWithOwner } from '@/types'
+import type { CounterpickBid, DroppableHolding, League, PickupBid, TeamWithOwner } from '@/types'
 import type { UseBiddingReturn } from '../hooks/useBidding'
 
 /**
@@ -16,19 +16,26 @@ export interface BiddingContextValue {
   teams: TeamWithOwner[]
   bidding: UseBiddingReturn
   ownedTmdbIds: number[]
-  usedPickupSlots: number
+  /**
+   * Active holdings across the whole roster -- draft picks and pickups alike,
+   * since they share `total_slots`.
+   */
+  usedRosterSlots: number
+  /** Roster slots still open. Zero means a bid needs a conditional drop to land. */
+  freeRosterSlots: number
+  /** The team's own holdings, offered as conditional drop targets. */
+  myHoldings: DroppableHolding[]
   biddingCounterpickSlots: number
-  /** False once every pickup slot is filled - the team must drop before bidding again. */
-  canPlaceBid: boolean
   /**
    * True once the week's new-bid cutoff has passed: only raises and counters on
    * movies already being bid on, and nothing can be withdrawn.
    */
   isCounterBidPhase: boolean
   /**
-   * Whether opening the bid modal leads anywhere. Narrower than `canPlaceBid`:
-   * past the cutoff it also needs a contest to join, since the modal offers
-   * only movies already being bid on.
+   * Whether opening the bid modal leads anywhere. A full roster no longer closes
+   * it -- a bid can still be placed with a conditional drop, or in the
+   * expectation that a slot frees up before processing. Past the cutoff it does
+   * need a contest to join, since the modal offers only movies already in play.
    */
   canOpenBidModal: boolean
   /** False when counterpicks are off, or the team's counterpick slots are all claimed. */

@@ -45,6 +45,8 @@ export { default as LeagueListItem } from '../apps/frontend/app/components/Leagu
 export { default as BidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidCard'
 export { default as BidWeekTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline'
 export { default as CounterpickBidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard'
+export { default as PriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/PriorityList'
+export { default as BidPriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidPriorityList'
 export { default as CounterpickPriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickPriorityList'
 export { default as TradeOfferCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard'
 export { default as ParticipantsList } from '../apps/frontend/app/(authenticated)/league/[id]/components/ParticipantsList'

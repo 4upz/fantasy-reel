@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { X, DollarSign, Search, Film, Sparkles, TrendingUp, Calendar, ArrowLeft, Heart, Swords } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
-import type { TMDbSearchResult, TeamBudget, PickupBid } from '@/types'
+import type { TMDbSearchResult, TeamBudget, PickupBid, DroppableHolding } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
 import { getTmdbPosterUrl, formatReleaseDateFull, isMovieBiddable, formatDeadlineShort } from './utils'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
@@ -18,7 +18,16 @@ interface PlaceBidModalProps {
   budget: TeamBudget | null
   existingBids: PickupBid[]
   ownedTmdbIds: number[]
-  onPlaceBid: (tmdbId: number, amount: number, movieData: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
+  onPlaceBid: (
+    tmdbId: number,
+    amount: number,
+    movieData: Record<string, unknown>,
+    conditionalDrop?: { source: 'draft' | 'pickup'; holdingId: string } | null,
+  ) => Promise<{ success: boolean; error?: string }>
+  /** The team's active holdings, offered as conditional drop targets. */
+  myHoldings: DroppableHolding[]
+  /** Roster slots still open. Zero means this bid needs a drop to be honored. */
+  freeRosterSlots: number
   counterBidTarget?: PickupBid | null
   /**
    * Past the new-bid cutoff the modal stops being a movie search and becomes a
@@ -123,12 +132,16 @@ export default function PlaceBidModal({
   existingBids,
   ownedTmdbIds,
   onPlaceBid,
+  myHoldings,
+  freeRosterSlots,
   counterBidTarget,
   isCounterBidPhase = false,
   newBidCutoffAt = null,
 }: PlaceBidModalProps) {
   const [selectedMovie, setSelectedMovie] = useState<TMDbSearchResult | null>(null)
   const [bidAmount, setBidAmount] = useState(0)
+  /** holding_id of the movie to release if this bid wins, or '' for none. */
+  const [dropHoldingId, setDropHoldingId] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [showWishlistedOnly, setShowWishlistedOnly] = useState(false)
 
@@ -236,6 +249,8 @@ export default function PlaceBidModal({
         // Focus search input after a brief delay for animation
         setTimeout(() => searchInputRef.current?.focus(), 100)
       }
+      // A drop chosen for a previous bid must never carry over to the next one.
+      setDropHoldingId('')
       setSearchQuery('')
       clearSearchRef.current()
     }
@@ -277,16 +292,27 @@ export default function PlaceBidModal({
       genre_ids: selectedMovie.genre_ids,
     }
 
-    const { success, error } = await onPlaceBid(selectedMovie.tmdb_id, bidAmount, movieData)
+    const drop = myHoldings.find((holding) => holding.holding_id === dropHoldingId)
+
+    const { success, error } = await onPlaceBid(
+      selectedMovie.tmdb_id,
+      bidAmount,
+      movieData,
+      drop ? { source: drop.source, holdingId: drop.holding_id } : null,
+    )
 
     if (!success) {
       toast.error(error || 'Failed to place bid')
       return
     }
 
-    toast.success(`Bid of $${bidAmount} placed on ${selectedMovie.title}`)
+    toast.success(
+      drop
+        ? `Bid of $${bidAmount} placed on ${selectedMovie.title}. ${drop.title} drops if it wins.`
+        : `Bid of $${bidAmount} placed on ${selectedMovie.title}`
+    )
     onClose()
-  }, [selectedMovie, bidAmount, onPlaceBid, onClose])
+  }, [selectedMovie, bidAmount, dropHoldingId, myHoldings, onPlaceBid, onClose])
 
   const { execute: handleSubmit, isLoading: isSubmitting } = useAsyncAction(submitBidAction)
 
@@ -626,6 +652,19 @@ export default function PlaceBidModal({
                 </div>
               </div>
 
+              {/* Sits above the amount step on purpose: whether this bid can
+                  land at all matters more than what it costs, and below the
+                  amount input it fell under the sticky footer at common
+                  viewport heights -- a warning you have to scroll for is not
+                  doing its job. */}
+              {freeRosterSlots === 0 && !dropHoldingId && (
+                <div className="alert alert-warning mb-6" data-testid="full-roster-warning">
+                  {myHoldings.length > 0
+                    ? 'Your roster is full. You can still place this bid, but it can only be honored if you choose a movie to drop below, or a slot frees up before bids are processed.'
+                    : 'Your roster is full and none of your movies can be dropped — they have all released or been counterpicked. You can still place this bid, but it can only be honored if a slot frees up before bids are processed.'}
+                </div>
+              )}
+
               {/* Bid Amount Section */}
               <div className="space-y-4">
                 <label className="block text-foreground font-semibold">
@@ -677,6 +716,36 @@ export default function PlaceBidModal({
                   </p>
                 )}
               </div>
+
+              {/* Conditional drop: a movie released only if this bid wins, which
+                  is what lets a full roster keep bidding. Only holdings that
+                  could actually be dropped reach this list -- a released or
+                  counterpicked movie would fail at processing, too late to
+                  choose again. */}
+              {myHoldings.length > 0 && (
+                <div className="mt-6 space-y-2">
+                  <label
+                    htmlFor="conditional-drop"
+                    className="block text-sm font-medium text-foreground"
+                  >
+                    If this bid wins, also drop
+                  </label>
+                  <select
+                    id="conditional-drop"
+                    className="input w-full"
+                    value={dropHoldingId}
+                    onChange={(e) => setDropHoldingId(e.target.value)}
+                    data-testid="conditional-drop-select"
+                  >
+                    <option value="">Nothing — keep my whole roster</option>
+                    {myHoldings.map((holding) => (
+                      <option key={holding.holding_id} value={holding.holding_id}>
+                        {holding.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
         </div>

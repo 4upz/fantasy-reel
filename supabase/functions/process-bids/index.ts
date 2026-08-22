@@ -25,12 +25,15 @@ import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templat
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import {
-  type CounterpickContest,
-  type CounterpickLossReason,
-  resolveCounterpickWinners,
+  type BidContest,
+  type BidLossReason,
+  resolveBidWinners,
+  type TeamCapacity,
+  type DroppableCandidate,
+  droppableHoldingIds,
   resolveTargetRevalidation,
   type TargetVoidReason,
-} from '../_shared/counterpick-resolution.ts'
+} from '../_shared/bid-resolution.ts'
 import {
   getCounterpickNoSlotsEmailHtml,
   getCounterpickNoSlotsEmailText,
@@ -58,6 +61,11 @@ interface PickupBid {
   countered_at: string | null
   response_deadline: string | null
   processing_deadline: string
+  /** Team-chosen rank among its own pending bids; 1 is the one it wants most. */
+  priority: number
+  /** Holding released only if this bid wins. At most one is ever set. */
+  conditional_drop_draft_pick_id: string | null
+  conditional_drop_pickup_id: string | null
 }
 
 interface MovieData {
@@ -252,6 +260,74 @@ async function deductTeamBudget(
   }
 }
 
+/**
+ * Release a holding as part of awarding a bid that named it as a conditional
+ * drop. Mirrors drop-movie: a `team_drops` row (which is what
+ * get_team_drop_count reads, so `drop_limit` is charged) plus `dropped_at` on
+ * the source row.
+ *
+ * `team_holdings` does not say which base table a holding came from, so the
+ * pickup leg is probed first and the draft leg assumed otherwise -- holding ids
+ * are UUIDs, so at most one table can match.
+ *
+ * @returns false if the drop could not be completed, in which case the caller
+ *   must not award the bid -- awarding without the drop puts the team over cap.
+ */
+async function executeConditionalDrop(
+  serviceClient: ServiceClient,
+  holdingId: string,
+  teamId: string,
+  movieId: string,
+): Promise<boolean> {
+  const droppedAt = new Date().toISOString()
+
+  const { data: pickupRow } = await serviceClient
+    .from('pickups')
+    .select('id')
+    .eq('id', holdingId)
+    .is('dropped_at', null)
+    .maybeSingle()
+
+  const isPickup = !!pickupRow
+  const table = isPickup ? 'pickups' : 'draft_picks'
+
+  const { error: recordError } = await serviceClient.from('team_drops').insert({
+    team_id: teamId,
+    movie_id: movieId,
+    pickup_id: isPickup ? holdingId : null,
+    draft_pick_id: isPickup ? null : holdingId,
+    dropped_at: droppedAt,
+  })
+
+  if (recordError) {
+    log.error('Failed to record conditional drop', {
+      holding_id: holdingId,
+      error: serializeError(recordError),
+    })
+    return false
+  }
+
+  const { error: updateError } = await serviceClient
+    .from(table)
+    .update({ dropped_at: droppedAt })
+    .eq('id', holdingId)
+    .is('dropped_at', null)
+
+  if (updateError) {
+    log.error('Failed to mark holding dropped; rolling back drop record', {
+      holding_id: holdingId,
+      error: serializeError(updateError),
+    })
+    await serviceClient
+      .from('team_drops')
+      .delete()
+      .eq(isPickup ? 'pickup_id' : 'draft_pick_id', holdingId)
+    return false
+  }
+
+  return true
+}
+
 /** PostgREST `in` filters travel in the URI, so large sets are sent in batches. */
 const ID_BATCH_SIZE = 150
 
@@ -286,22 +362,36 @@ async function selectByIdBatches<T>(
 }
 
 /**
- * How many more bidding-phase counterpicks each team in `contests` may still win.
+ * How much each team in `contests` can still absorb this run.
  *
- * Counts the `counterpicks` rows a team already holds, which is the same
- * accounting place-counterpick-bid applies when a bid is placed, so the two
- * cannot disagree about what "used a slot" means.
+ * `freeSlots` means "room for one more movie of this kind", and the two kinds
+ * measure against different pools:
+ * - `counterpick`: remaining `leagues.bidding_counterpick_slots`, counted from
+ *   the `counterpicks` rows a team already holds -- the same accounting
+ *   place-counterpick-bid applies, so the two cannot disagree about what "used
+ *   a slot" means.
+ * - `pickup`: pooled roster room, `leagues.total_slots` minus every active
+ *   holding. Draft picks and pickups share the pool, which is what lets a team
+ *   drop a badly drafted movie to make room for a pickup.
  *
- * Fails closed: a team whose league config or used-slot count could not be read
- * is given zero remaining slots. That withholds counterpicks for one run, which
- * a later run can still award -- whereas reading a failed count as "zero used"
- * would hand a team a full allowance on top of counterpicks it already holds,
- * which is the very over-cap outcome this function exists to prevent.
+ * They never collide because the two kinds are resolved in separate calls with
+ * their own capacity map.
+ *
+ * Fails closed on every dimension: a team whose league config, holdings,
+ * budget, or drop count could not be read is given zero capacity. That
+ * withholds awards for one run, which a later run can still make -- whereas
+ * reading a failed count as "zero used" would hand a team a full allowance on
+ * top of what it already holds, the very over-cap outcome this exists to
+ * prevent.
+ *
+ * `slotsByLeague` carries the league's *total* allowance for this kind (not the
+ * remainder); the "no slots" notification copy quotes it.
  */
-async function getRemainingCounterpickSlots(
+async function getTeamCapacities(
   serviceClient: ServiceClient,
-  contests: CounterpickContest[],
-): Promise<{ remaining: Map<string, number>; slotsByLeague: Map<string, number> }> {
+  contests: BidContest[],
+  kind: 'pickup' | 'counterpick',
+): Promise<{ capacities: Map<string, TeamCapacity>; slotsByLeague: Map<string, number> }> {
   const leagueOfTeam = new Map<string, string>()
   for (const contest of contests) {
     const leagueId = contest.key.split(':')[0]
@@ -310,51 +400,176 @@ async function getRemainingCounterpickSlots(
 
   const leagueIds = [...new Set(leagueOfTeam.values())]
   const teamIds = [...leagueOfTeam.keys()]
+  const capacities = new Map<string, TeamCapacity>()
+  const slotsByLeague = new Map<string, number>()
+  if (teamIds.length === 0) return { capacities, slotsByLeague }
 
-  const { rows: leagueRows } = await selectByIdBatches<
-    { id: string; bidding_counterpick_slots: number | null }
-  >(
+  const { rows: leagueRows } = await selectByIdBatches<{
+    id: string
+    total_slots: number | null
+    bidding_counterpick_slots: number | null
+    drop_limit: number | null
+    counterpicks_block_drops: boolean | null
+  }>(
     leagueIds,
-    'Failed to load counterpick slot config:',
+    'Failed to load league capacity config:',
     (batch) =>
-      serviceClient.from('leagues').select('id, bidding_counterpick_slots').in('id', batch),
+      serviceClient
+        .from('leagues')
+        .select('id, total_slots, bidding_counterpick_slots, drop_limit, counterpicks_block_drops')
+        .in('id', batch),
   )
 
   // A league missing from the result -- unread or genuinely absent -- yields 0
   // slots below, so no separate handling is needed for its failure case.
-  const slotsByLeague = new Map<string, number>(
-    leagueRows.map((league) => [league.id, league.bidding_counterpick_slots ?? 0]),
-  )
+  const leagueById = new Map(leagueRows.map((league) => [league.id, league]))
+  for (const league of leagueRows) {
+    slotsByLeague.set(
+      league.id,
+      kind === 'counterpick' ? (league.bidding_counterpick_slots ?? 0) : (league.total_slots ?? 0),
+    )
+  }
 
-  const { rows: usedRows, unreadIds: uncountedTeamIds } = await selectByIdBatches<
-    { counterpicker_team_id: string }
+  const { rows: budgetRows, unreadIds: unreadBudgetTeams } = await selectByIdBatches<
+    { team_id: string; remaining_budget: number }
   >(
     teamIds,
-    'Failed to count used counterpick slots:',
+    'Failed to load team budgets:',
     (batch) =>
-      serviceClient
-        .from('counterpicks')
-        .select('counterpicker_team_id')
-        .eq('phase', 'bidding')
-        .in('counterpicker_team_id', batch),
+      serviceClient.from('team_budgets').select('team_id, remaining_budget').in('team_id', batch),
   )
+  const budgetByTeam = new Map(budgetRows.map((row) => [row.team_id, row.remaining_budget]))
 
   const usedByTeam = new Map<string, number>()
-  for (const row of usedRows) {
-    usedByTeam.set(row.counterpicker_team_id, (usedByTeam.get(row.counterpicker_team_id) ?? 0) + 1)
+  let unreadUsedTeams = new Set<string>()
+
+  if (kind === 'counterpick') {
+    const { rows, unreadIds } = await selectByIdBatches<{ counterpicker_team_id: string }>(
+      teamIds,
+      'Failed to count used counterpick slots:',
+      (batch) =>
+        serviceClient
+          .from('counterpicks')
+          .select('counterpicker_team_id')
+          .eq('phase', 'bidding')
+          .in('counterpicker_team_id', batch),
+    )
+    for (const row of rows) {
+      usedByTeam.set(row.counterpicker_team_id, (usedByTeam.get(row.counterpicker_team_id) ?? 0) + 1)
+    }
+    unreadUsedTeams = unreadIds
+  } else {
+    // team_holdings excludes dropped rows itself, so there is no dropped_at
+    // filter to forget here.
+    const { rows, unreadIds } = await selectByIdBatches<{ team_id: string }>(
+      teamIds,
+      'Failed to count active holdings:',
+      (batch) => serviceClient.from('team_holdings').select('team_id').in('team_id', batch),
+    )
+    for (const row of rows) {
+      usedByTeam.set(row.team_id, (usedByTeam.get(row.team_id) ?? 0) + 1)
+    }
+    unreadUsedTeams = unreadIds
   }
 
-  const remaining = new Map<string, number>()
+  // Drops and droppable holdings are pickup-only; counterpicks carry no
+  // conditional drops, which makes canAfford collapse to today's behaviour.
+  const dropsByTeam = new Map<string, number>()
+  const droppableByTeam = new Map<string, Set<string>>()
+  let unreadDropTeams = new Set<string>()
+
+  if (kind === 'pickup') {
+    const { rows: dropRows, unreadIds } = await selectByIdBatches<{ team_id: string }>(
+      teamIds,
+      'Failed to count team drops:',
+      (batch) => serviceClient.from('team_drops').select('team_id').in('team_id', batch),
+    )
+    for (const row of dropRows) {
+      dropsByTeam.set(row.team_id, (dropsByTeam.get(row.team_id) ?? 0) + 1)
+    }
+    unreadDropTeams = unreadIds
+
+    const { rows: holdingRows } = await selectByIdBatches<{
+      holding_id: string
+      team_id: string
+      movie_id: string
+      release_date: string | null
+      counterpicked_by_team_id: string | null
+    }>(
+      teamIds,
+      'Failed to load droppable holdings:',
+      (batch) =>
+        serviceClient
+          .from('team_holdings')
+          .select('holding_id, team_id, movie_id, release_date, counterpicked_by_team_id')
+          .in('team_id', batch),
+    )
+
+    // One query for every pending counterpick auction touching these movies,
+    // rather than one per holding.
+    const movieIds = [...new Set(holdingRows.map((row) => row.movie_id))]
+    const { rows: pendingCpBids } = await selectByIdBatches<{ movie_id: string }>(
+      movieIds,
+      'Failed to load pending counterpick bids:',
+      (batch) =>
+        serviceClient
+          .from('counterpick_bids')
+          .select('movie_id')
+          .in('status', ['active', 'outbid'])
+          .in('movie_id', batch),
+    )
+    const contestedMovieIds = new Set(pendingCpBids.map((row) => row.movie_id))
+
+    const today = new Date().toISOString().slice(0, 10)
+    const candidatesByTeam = new Map<string, DroppableCandidate[]>()
+    for (const row of holdingRows) {
+      const bucket = candidatesByTeam.get(row.team_id) ?? []
+      bucket.push({
+        holdingId: row.holding_id,
+        releaseDate: row.release_date,
+        counterpickedByTeamId: row.counterpicked_by_team_id,
+        hasPendingCounterpickBid: contestedMovieIds.has(row.movie_id),
+      })
+      candidatesByTeam.set(row.team_id, bucket)
+    }
+
+    for (const [teamId, candidates] of candidatesByTeam) {
+      const league = leagueById.get(leagueOfTeam.get(teamId) ?? '')
+      droppableByTeam.set(
+        teamId,
+        droppableHoldingIds(candidates, {
+          today,
+          // Unknown league config blocks drops: the conservative reading.
+          counterpicksBlockDrops: league?.counterpicks_block_drops ?? true,
+        }),
+      )
+    }
+  }
+
   for (const [teamId, leagueId] of leagueOfTeam) {
-    if (uncountedTeamIds.has(teamId)) {
-      remaining.set(teamId, 0)
+    const league = leagueById.get(leagueId)
+    const unreadable =
+      unreadUsedTeams.has(teamId) || unreadBudgetTeams.has(teamId) || unreadDropTeams.has(teamId)
+
+    if (unreadable || !league) {
+      capacities.set(teamId, {
+        freeSlots: 0,
+        remainingBudget: 0,
+        remainingDrops: 0,
+        droppableHoldingIds: new Set(),
+      })
       continue
     }
-    const slots = slotsByLeague.get(leagueId) ?? 0
-    remaining.set(teamId, Math.max(0, slots - (usedByTeam.get(teamId) ?? 0)))
+
+    capacities.set(teamId, {
+      freeSlots: Math.max(0, (slotsByLeague.get(leagueId) ?? 0) - (usedByTeam.get(teamId) ?? 0)),
+      remainingBudget: budgetByTeam.get(teamId) ?? 0,
+      remainingDrops: Math.max(0, (league.drop_limit ?? 0) - (dropsByTeam.get(teamId) ?? 0)),
+      droppableHoldingIds: droppableByTeam.get(teamId) ?? new Set(),
+    })
   }
 
-  return { remaining, slotsByLeague }
+  return { capacities, slotsByLeague }
 }
 
 /** The user behind a team, or null if the team has no reachable owner. */
@@ -551,7 +766,7 @@ async function notifyCounterpickLoser(
     movieTitle: string
     movieId: string
     winner: CounterpickBid | undefined
-    reason: CounterpickLossReason
+    reason: BidLossReason
     slots: number
   },
 ): Promise<void> {
@@ -678,8 +893,8 @@ async function loadSettledCounterpickContests(
   now: Date,
   errors: ProcessingError[],
   deferred: DeferredGroup[],
-): Promise<{ contests: CounterpickContest[]; bidsByContest: Map<string, CounterpickBid[]> }> {
-  const contests: CounterpickContest[] = []
+): Promise<{ contests: BidContest[]; bidsByContest: Map<string, CounterpickBid[]> }> {
+  const contests: BidContest[] = []
   const bidsByContest = new Map<string, CounterpickBid[]>()
   const contestedKeys = new Set(dueBids.map((bid) => `${bid.league_id}:${bid.movie_id}`))
 
@@ -746,10 +961,10 @@ async function loadSettledCounterpickContests(
  */
 async function voidReleasedCounterpickContests(
   serviceClient: ServiceClient,
-  contests: CounterpickContest[],
+  contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
-): Promise<CounterpickContest[]> {
+): Promise<BidContest[]> {
   const movieIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
 
   const { rows: movies } = await selectByIdBatches<
@@ -761,7 +976,7 @@ async function voidReleasedCounterpickContests(
   )
   const moviesById = new Map(movies.map((movie) => [movie.id, movie]))
 
-  const surviving: CounterpickContest[] = []
+  const surviving: BidContest[] = []
 
   for (const contest of contests) {
     const [, movieId] = contest.key.split(':')
@@ -852,10 +1067,10 @@ const TARGET_VOID_REASON_TEXT: Record<TargetVoidReason, string> = {
  */
 async function revalidateCounterpickTargets(
   serviceClient: ServiceClient,
-  contests: CounterpickContest[],
+  contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
-): Promise<CounterpickContest[]> {
+): Promise<BidContest[]> {
   const allActiveBids = contests.flatMap((contest) => contest.activeBids as CounterpickBid[])
 
   const draftPickIds = [...new Set(
@@ -895,7 +1110,7 @@ async function revalidateCounterpickTargets(
   const unreadTargetIds = new Set([...unreadDraftPickIds, ...unreadPickupIds])
   const titleByMovieId = new Map(movies.map((movie) => [movie.id, movie.title]))
 
-  const surviving: CounterpickContest[] = []
+  const surviving: BidContest[] = []
 
   /**
    * Split bids by whether their target holding still supports them,
@@ -1081,8 +1296,12 @@ async function processCounterpickBids(
   )
   if (contests.length === 0) return results
 
-  const { remaining, slotsByLeague } = await getRemainingCounterpickSlots(serviceClient, contests)
-  const { winners, lossReasons } = resolveCounterpickWinners(contests, remaining)
+  const { capacities, slotsByLeague } = await getTeamCapacities(
+    serviceClient,
+    contests,
+    'counterpick',
+  )
+  const { winners, lossReasons } = resolveBidWinners(contests, capacities)
 
   for (const { key } of contests) {
     const [leagueId, movieId] = key.split(':')
@@ -1479,48 +1698,84 @@ Deno.serve(async (req) => {
     const voidedPickupResults: VoidedBidResult[] = []
     const deferred: DeferredGroup[] = []
 
+    // Every due group's active bids, gathered before any award, so capacity is
+    // decided against the whole week rather than movie-by-movie. Resolving each
+    // contest independently is what let a team win more movies than it had
+    // roster room or budget for.
+    const pickupContests: BidContest[] = []
+    const bidsByKey = new Map<string, PickupBid[]>()
+
     for (const key of contestedKeys) {
       const [leagueId, tmdbIdStr] = key.split(':')
       const tmdbId = parseInt(tmdbIdStr)
 
-      try {
-        // Check if any bids for this movie still have open response windows
-        // (including outbid entries that might counter)
-        const { data: allBidsForMovie } = await serviceClient
-          .from('pickup_bids')
-          .select('*')
-          .eq('league_id', leagueId)
-          .eq('tmdb_id', tmdbId)
-          .in('status', ['active', 'outbid'])
+      // Check if any bids for this movie still have open response windows
+      // (including outbid entries that might counter)
+      const { data: allBidsForMovie } = await serviceClient
+        .from('pickup_bids')
+        .select('*')
+        .eq('league_id', leagueId)
+        .eq('tmdb_id', tmdbId)
+        .in('status', ['active', 'outbid'])
 
-        const movieBids: PickupBid[] = allBidsForMovie || []
+      const movieBids: PickupBid[] = allBidsForMovie || []
+      bidsByKey.set(key, movieBids)
 
-        const openWindowEnds = latestOpenResponseDeadline(movieBids, now)
-        if (openWindowEnds) {
-          // Someone still has time to counter: leave the group for the extended
-          // run, but record the deferral so it can be surfaced downstream.
-          const titledBid = movieBids.find((bid) => bid.movie_data?.title)
-          deferred.push({
-            league_id: leagueId,
-            movie_title: titledBid?.movie_data?.title || `Movie #${tmdbId}`,
-            counter_window_ends: openWindowEnds,
-          })
-          continue
-        }
-
-        // Find active bids only (outbid entries don't win)
-        const activeBids = movieBids.filter((b) => b.status === 'active')
-        if (activeBids.length === 0) {
-          continue
-        }
-
-        // Find the winner: highest amount, earliest created_at for ties
-        activeBids.sort((a, b) => {
-          if (b.amount !== a.amount) return b.amount - a.amount
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      const openWindowEnds = latestOpenResponseDeadline(movieBids, now)
+      if (openWindowEnds) {
+        // Someone still has time to counter: leave the group for the extended
+        // run, but record the deferral so it can be surfaced downstream.
+        const titledBid = movieBids.find((bid) => bid.movie_data?.title)
+        deferred.push({
+          league_id: leagueId,
+          movie_title: titledBid?.movie_data?.title || `Movie #${tmdbId}`,
+          counter_window_ends: openWindowEnds,
         })
+        continue
+      }
 
-        const winner = activeBids[0]
+      // Find active bids only (outbid entries don't win)
+      const activeBids = movieBids.filter((b) => b.status === 'active')
+      if (activeBids.length === 0) continue
+
+      pickupContests.push({
+        key,
+        activeBids: activeBids.map((bid) => ({
+          id: bid.id,
+          team_id: bid.team_id,
+          amount: bid.amount,
+          priority: bid.priority,
+          created_at: bid.created_at,
+          conditionalDropHoldingId:
+            bid.conditional_drop_pickup_id ?? bid.conditional_drop_draft_pick_id ?? null,
+        })),
+      })
+    }
+
+    const { capacities: pickupCapacities } = await getTeamCapacities(
+      serviceClient,
+      pickupContests,
+      'pickup',
+    )
+    const {
+      winners: pickupWinners,
+      lossReasons: pickupLossReasons,
+      executedDrops,
+    } = resolveBidWinners(pickupContests, pickupCapacities)
+
+    for (const contest of pickupContests) {
+      const key = contest.key
+      const allBidsForMovie = bidsByKey.get(key) ?? []
+
+      try {
+        const resolved = pickupWinners.get(key)
+
+        // No winner: every contender was out of room, budget, or drops. Leave
+        // the bids pending -- a later run can award them once capacity frees up
+        // -- exactly as an unawarded counterpick contest behaves.
+        if (!resolved) continue
+
+        const winner = allBidsForMovie.find((bid) => bid.id === resolved.id)!
         const movieTitle = winner.movie_data?.title || `Movie #${winner.tmdb_id}`
 
         // Create movie if it doesn't exist
@@ -1613,6 +1868,25 @@ Deno.serve(async (req) => {
             movie_title: movieTitle,
           })
           continue
+        }
+
+        // A conditional drop funds this award, so it has to happen first: a
+        // failure between the two leaves the team UNDER its cap, which a later
+        // run can still correct, rather than over it.
+        const dropHoldingId = executedDrops.get(winner.id)
+        if (dropHoldingId) {
+          const dropped = await executeConditionalDrop(
+            serviceClient,
+            dropHoldingId,
+            winner.team_id,
+            movieId,
+          )
+          if (!dropped) {
+            // Awarding without the drop would put the team over cap. Leave the
+            // bid pending for the next run instead.
+            errors.push({ movie_key: key, error: 'Failed to execute conditional drop' })
+            continue
+          }
         }
 
         // Create pickup record
@@ -1711,16 +1985,27 @@ Deno.serve(async (req) => {
           const loserUserId = await getTeamUserId(serviceClient, loserBid.team_id)
 
           if (loserUserId) {
+            // Say which constraint actually stopped the bid. "Not enough" is
+            // wrong -- and unactionable -- for a bid that led its contest but
+            // had nowhere to put the movie or nothing left to pay with.
+            const lossReason: BidLossReason = pickupLossReasons.get(loserBid.id) ?? 'outbid'
+            const lossBody = lossReason === 'insufficient_budget'
+              ? `Your bid of $${loserBid.amount} on ${movieTitle} could not be honored — your remaining Fantasy Budget was already committed to higher-priority bids.`
+              : lossReason === 'no_slots'
+                ? `Your bid of $${loserBid.amount} on ${movieTitle} could not be honored — your roster was full and no conditional drop was available.`
+                : `Your bid of $${loserBid.amount} was not enough. The winning bid was $${winner.amount}.`
+
             await serviceClient.from('notifications').insert({
               user_id: loserUserId,
               league_id: loserBid.league_id,
               type: 'bid_lost',
               title: `Bid unsuccessful for ${movieTitle}`,
-              body: `Your bid of $${loserBid.amount} was not enough. The winning bid was $${winner.amount}.`,
+              body: lossBody,
               data: {
                 bid_id: loserBid.id,
                 tmdb_id: loserBid.tmdb_id,
                 winning_amount: winner.amount,
+                loss_reason: lossReason,
               },
             })
 
