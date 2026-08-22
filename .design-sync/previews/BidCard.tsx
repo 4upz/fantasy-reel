@@ -85,3 +85,14 @@ export const CounterpickBid = () => (
     <BidCard bid={bid({ amount: 12 })} isOwner bidType="counterpick" onCancel={noop} />
   </div>
 )
+
+/**
+ * `dropTitle` names the movie this bid releases if it wins — the conditional
+ * drop that lets a team keep bidding on a full roster. Only ever passed for the
+ * bid's own team; a rival's roster is not this card's business.
+ */
+export const WithConditionalDrop = () => (
+  <div className="max-w-md">
+    <BidCard bid={bid()} isOwner dropTitle="Oppenheimer" onCancel={noop} onCounter={noop} />
+  </div>
+)
