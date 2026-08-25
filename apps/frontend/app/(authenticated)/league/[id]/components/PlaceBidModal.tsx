@@ -719,9 +719,8 @@ export default function PlaceBidModal({
 
               {/* Conditional drop: a movie released only if this bid wins, which
                   is what lets a full roster keep bidding. Only holdings that
-                  could actually be dropped reach this list -- a released or
-                  counterpicked movie would fail at processing, too late to
-                  choose again. */}
+                  could actually be dropped reach this list -- a counterpicked
+                  movie would fail at processing, too late to choose again. */}
               {myHoldings.length > 0 && (
                 <div className="mt-6 space-y-2">
                   <label

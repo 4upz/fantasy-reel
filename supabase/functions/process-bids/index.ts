@@ -493,7 +493,6 @@ async function getTeamCapacities(
       holding_id: string
       team_id: string
       movie_id: string
-      release_date: string | null
       counterpicked_by_team_id: string | null
     }>(
       teamIds,
@@ -501,7 +500,7 @@ async function getTeamCapacities(
       (batch) =>
         serviceClient
           .from('team_holdings')
-          .select('holding_id, team_id, movie_id, release_date, counterpicked_by_team_id')
+          .select('holding_id, team_id, movie_id, counterpicked_by_team_id')
           .in('team_id', batch),
     )
 
@@ -520,13 +519,11 @@ async function getTeamCapacities(
     )
     const contestedMovieIds = new Set(pendingCpBids.map((row) => row.movie_id))
 
-    const today = new Date().toISOString().slice(0, 10)
     const candidatesByTeam = new Map<string, DroppableCandidate[]>()
     for (const row of holdingRows) {
       const bucket = candidatesByTeam.get(row.team_id) ?? []
       bucket.push({
         holdingId: row.holding_id,
-        releaseDate: row.release_date,
         counterpickedByTeamId: row.counterpicked_by_team_id,
         hasPendingCounterpickBid: contestedMovieIds.has(row.movie_id),
       })
@@ -538,7 +535,6 @@ async function getTeamCapacities(
       droppableByTeam.set(
         teamId,
         droppableHoldingIds(candidates, {
-          today,
           // Unknown league config blocks drops: the conservative reading.
           counterpicksBlockDrops: league?.counterpicks_block_drops ?? true,
         }),

@@ -102,6 +102,7 @@ interface LeagueFixtures {
     releasedMovieTitle: string
     counterpickedMovieTitle: string
     droppableDraftPickId: string
+    releasedDraftPickId: string
   }
   /** Two leagues where testUser is a participant (for league switcher tests) */
   multiLeague: {
@@ -250,7 +251,7 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league where the testUser's roster holds one movie of each drop
    * state, so a single page render covers every branch:
    *   - an unreleased movie          -> droppable
-   *   - a released movie             -> not droppable (release date passed)
+   *   - a released, scored movie     -> droppable, and dropping it costs points
    *   - an unreleased, counterpicked -> not droppable (locked, explained)
    * Use for testing the roster drop flow.
    */
@@ -273,10 +274,13 @@ export const test = authTest.extend<LeagueFixtures>({
         'Roster Droppable Movie',
         daysFromNow(45)
       )
+      // Already out and already scored: the case where spending a drop buys
+      // something -- it retires the movie's points along with it.
       const released = await createTestMovie(
         uniqueTmdbId(42),
         'Roster Released Movie',
-        daysFromNow(-30)
+        daysFromNow(-30),
+        { status: 'released', combinedScore: 20, fantasyPoints: -17.5 }
       )
       const counterpicked = await createTestMovie(
         uniqueTmdbId(43),
@@ -285,7 +289,7 @@ export const test = authTest.extend<LeagueFixtures>({
       )
 
       const droppablePick = await createDraftPick(league.id, testUserTeam.id, droppable.id, 1, 1)
-      await createDraftPick(league.id, testUserTeam.id, released.id, 2, 1)
+      const releasedPick = await createDraftPick(league.id, testUserTeam.id, released.id, 2, 1)
       const counterpickedPick = await createDraftPick(
         league.id,
         testUserTeam.id,
@@ -314,6 +318,7 @@ export const test = authTest.extend<LeagueFixtures>({
         releasedMovieTitle: 'Roster Released Movie',
         counterpickedMovieTitle: 'Roster Counterpicked Movie',
         droppableDraftPickId: droppablePick.id,
+        releasedDraftPickId: releasedPick.id,
       })
     } finally {
       await deleteTestLeague(league.id)

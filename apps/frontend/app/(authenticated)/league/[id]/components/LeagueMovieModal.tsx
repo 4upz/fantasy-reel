@@ -1,11 +1,20 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Film, Lock, Megaphone, TrendingDown, X } from 'lucide-react'
+import {
+  AlertTriangle,
+  ArrowLeft,
+  DoorClosed,
+  Film,
+  Lock,
+  Megaphone,
+  TrendingDown,
+  X,
+} from 'lucide-react'
 import MovieDetailBody from '@/app/components/MovieDetailBody'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
 import { formatFantasyPoints } from '@/utils/scoring'
-import { getTmdbPosterUrl } from './utils'
+import { getTmdbPosterUrl, isMovieBiddable } from './utils'
 import { explainBlocker, type DropBlocker } from '../roster/dropRules'
 import type { League, TMDbSearchResult } from '@/types'
 
@@ -287,6 +296,15 @@ function DropConfirmView({
   const { league, dropCount, slotsFilled, isDropping, error, onConfirm } = drop
   const dropsRemainingAfter = league.drop_limit - dropCount - 1
 
+  // Two different questions, and only the second one is about the calendar
+  // boundary: whether the movie is already out (so its score is real money),
+  // and whether anyone could pick it up afterwards -- which a movie with no
+  // release date at all also fails.
+  const hasOpened = Boolean(
+    movie.release_date && movie.release_date < new Date().toISOString().slice(0, 10)
+  )
+  const canBeReacquired = isMovieBiddable(movie.release_date)
+
   return (
     <div className="mx-auto max-w-lg p-6 sm:p-8">
       <div className="flex items-start gap-3">
@@ -332,12 +350,23 @@ function DropConfirmView({
           </Consequence>
           <Consequence icon={TrendingDown}>
             {movie.fantasy_points != null
-              ? `You give up its ${formatFantasyPoints(movie.fantasy_points)} pts.`
-              : 'You give up whatever it scores when it opens, good or bad.'}
+              ? `You give up its ${formatFantasyPoints(movie.fantasy_points)} pts${
+                  hasOpened ? ', and the standings update the moment you confirm' : ''
+                }.`
+              : hasOpened
+                ? 'It is already out, so you give up whatever it scores once the critics land.'
+                : 'You give up whatever it scores when it opens, good or bad.'}
           </Consequence>
-          <Consequence icon={Megaphone}>
-            Everyone in the league is told it is available, and any team can bid on it.
-          </Consequence>
+          {canBeReacquired ? (
+            <Consequence icon={Megaphone}>
+              Everyone in the league is told it is available, and any team can bid on it.
+            </Consequence>
+          ) : (
+            <Consequence icon={DoorClosed}>
+              It is out of the league for good. Released movies cannot be bid on, so neither you
+              nor anyone else can pick it back up.
+            </Consequence>
+          )}
         </ul>
       </div>
 

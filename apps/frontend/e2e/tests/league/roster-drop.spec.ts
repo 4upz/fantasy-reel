@@ -24,7 +24,9 @@ import { getAdminClient } from '../../helpers/supabase.helper'
  *    now carry a badge on the card, and the dialog says why.
  *
  * Uses the rosterLeague fixture, whose testUser roster holds one movie in each
- * state: droppable (unreleased), released, and counterpicked.
+ * state: unreleased, released-and-scored, and counterpicked. Only the
+ * counterpicked one is locked -- a released movie is droppable, it just costs
+ * the points it has already banked.
  *
  * Key UI elements:
  * - roster-movie-card: the whole card, opens the dialog (data-locked marks locked)
@@ -80,9 +82,9 @@ test.describe('Roster Drop Flow @roster', () => {
       expect(presentation.height).toBeGreaterThanOrEqual(MIN_TAP_TARGET_PX)
     }
 
-    // Locked movies are distinguishable without opening anything: the released
-    // and counterpicked ones are badged, the droppable one is not.
-    await expect(authedPage.getByTestId('roster-lock-badge')).toHaveCount(2)
+    // Locked movies are distinguishable without opening anything. Only the
+    // counterpicked movie qualifies: a released movie can still be dropped.
+    await expect(authedPage.getByTestId('roster-lock-badge')).toHaveCount(1)
   })
 
   test('the dialog shows movie details with the roster action attached', async ({
@@ -205,20 +207,68 @@ test.describe('Roster Drop Flow @roster', () => {
     await expect(authedPage.getByTestId('drop-movie-button')).toHaveCount(0)
   })
 
-  test('a released movie explains that it has already opened', async ({
+  test('a released movie can be dropped, and its points go with it', async ({
     authedPage,
     rosterLeague,
   }) => {
+    const client = getAdminClient()
+
+    // Bring the stored total in line with the fixture's scored movie, the way
+    // update-scores would, so the drop has something to take away.
+    await client.rpc('recalculate_team_score_with_counterpicks', {
+      p_team_id: rosterLeague.testUserTeamId,
+    })
+    const { data: before } = await client
+      .from('team_scores')
+      .select('total_points')
+      .eq('team_id', rosterLeague.testUserTeamId)
+      .single()
+    expect(Number(before?.total_points)).toBe(-17.5)
+
     await authedPage.setViewportSize(MOBILE_VIEWPORT)
     await authedPage.goto(`/league/${rosterLeague.id}/roster`)
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
-    await openMovie(authedPage, rosterLeague.releasedMovieTitle, true)
+    // Not locked, and the drop is offered.
+    await openMovie(authedPage, rosterLeague.releasedMovieTitle)
+    await expect(authedPage.getByTestId('drop-blocker-headline')).toHaveCount(0)
+    await authedPage.getByTestId('drop-movie-button').click()
 
-    await expect(authedPage.getByTestId('drop-blocker-headline')).toContainText(
-      'has already opened'
-    )
-    await expect(authedPage.getByTestId('drop-movie-button')).toHaveCount(0)
+    // The confirmation tells the truth about a released movie: the points are
+    // real and immediate, and nobody can bid it back.
+    const modal = authedPage.getByTestId('league-movie-modal')
+    await expect(modal).toHaveAttribute('data-view', 'confirm')
+    await expect(modal.getByText(/standings update the moment you confirm/i)).toBeVisible()
+    await expect(modal.getByText(/out of the league for good/i)).toBeVisible()
+    await expect(modal.getByText(/any team can bid on it/i)).toHaveCount(0)
+
+    await authedPage.getByTestId('drop-modal-confirm').click()
+    await waitForToast(authedPage, new RegExp(`Dropped ${rosterLeague.releasedMovieTitle}`))
+
+    const { data: pick } = await client
+      .from('draft_picks')
+      .select('dropped_at')
+      .eq('id', rosterLeague.releasedDraftPickId)
+      .single()
+    expect(pick?.dropped_at).not.toBeNull()
+
+    // The trigger from 20260825120000_rescore_team_on_drop.sql: the flop's
+    // penalty is off the books.
+    const { data: after } = await client
+      .from('team_scores')
+      .select('total_points')
+      .eq('team_id', rosterLeague.testUserTeamId)
+      .single()
+    expect(Number(after?.total_points)).toBe(0)
+
+    // A released movie cannot be bid back, so the league is not told it is up
+    // for grabs.
+    const { data: notifications } = await client
+      .from('notifications')
+      .select('id')
+      .eq('league_id', rosterLeague.id)
+      .eq('type', 'pickup_available')
+    expect(notifications ?? []).toHaveLength(0)
   })
 
   test('an exhausted drop allowance explains itself on the droppable movie', async ({

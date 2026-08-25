@@ -440,49 +440,17 @@ function candidate(
 ): DroppableCandidate {
   return {
     holdingId,
-    releaseDate: '2099-01-01',
     counterpickedByTeamId: null,
     hasPendingCounterpickBid: false,
     ...overrides,
   }
 }
 
-const TODAY = '2026-08-20'
-
-Deno.test('an unreleased, uncontested holding is droppable', () => {
-  const ids = droppableHoldingIds([candidate('h1')], {
-    today: TODAY,
-    counterpicksBlockDrops: true,
-  })
-
-  assertEquals([...ids], ['h1'])
-})
-
-Deno.test('a released holding is not droppable', () => {
-  // drop-movie refuses release_date < today; a conditional drop must match.
-  const ids = droppableHoldingIds([candidate('h1', { releaseDate: '2026-08-19' })], {
-    today: TODAY,
-    counterpicksBlockDrops: true,
-  })
-
-  assertEquals(ids.size, 0)
-})
-
-Deno.test('a holding released today is still droppable', () => {
-  // The rule is strictly "before today", matching drop-movie's < comparison.
-  const ids = droppableHoldingIds([candidate('h1', { releaseDate: TODAY })], {
-    today: TODAY,
-    counterpicksBlockDrops: true,
-  })
-
-  assertEquals([...ids], ['h1'])
-})
-
-Deno.test('a holding with no release date is droppable', () => {
-  const ids = droppableHoldingIds([candidate('h1', { releaseDate: null })], {
-    today: TODAY,
-    counterpicksBlockDrops: true,
-  })
+Deno.test('an uncontested holding is droppable', () => {
+  // Whether the movie has opened is deliberately not part of this decision:
+  // drop-movie allows dropping a released movie, so a conditional drop naming
+  // one still pays for the bid it was attached to.
+  const ids = droppableHoldingIds([candidate('h1')], { counterpicksBlockDrops: true })
 
   assertEquals([...ids], ['h1'])
 })
@@ -493,15 +461,9 @@ Deno.test('counterpick state blocks a drop only when the league says so', () => 
     candidate('pending', { hasPendingCounterpickBid: true }),
   ]
 
-  const blocked = droppableHoldingIds(candidates, {
-    today: TODAY,
-    counterpicksBlockDrops: true,
-  })
+  const blocked = droppableHoldingIds(candidates, { counterpicksBlockDrops: true })
   assertEquals(blocked.size, 0)
 
-  const allowed = droppableHoldingIds(candidates, {
-    today: TODAY,
-    counterpicksBlockDrops: false,
-  })
+  const allowed = droppableHoldingIds(candidates, { counterpicksBlockDrops: false })
   assertEquals(allowed.size, 2)
 })

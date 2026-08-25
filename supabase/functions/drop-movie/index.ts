@@ -5,6 +5,7 @@ import {
   handleCorsPreflightRequest,
   isValidUUID,
   internalErrorResponse,
+  isUpcomingMovie,
 } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
 
@@ -153,14 +154,15 @@ Deno.serve(async (req) => {
       movie = draftPick.movies as unknown as typeof movie
     }
 
-    // Check if movie is released (can't drop released movies)
-    if (movie.release_date) {
-      const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD in UTC
-
-      if (movie.release_date < today) {
-        return errorResponse('Cannot drop a movie that has already been released', 400)
-      }
-    }
+    // A released movie is droppable. Its score is already banked, so dropping
+    // it retires those points -- which is the whole reason a team would spend a
+    // drop on one. Counterpick rules below still apply, and are the only thing
+    // that locks a movie to a roster.
+    //
+    // What releasing *does* change is where the movie goes afterwards: only a
+    // movie that is still biddable can be picked up by anyone else, so the same
+    // guard place-bid uses decides that here rather than a second date compare.
+    const isPickupEligible = isUpcomingMovie(movie.release_date).valid
 
     // Fetch league to check status, drop_limit, and counterpick blocking
     const { data: league, error: leagueError } = await serviceClient
@@ -279,33 +281,38 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Notify other league members that movie is available
-    const { data: leagueParticipants } = await serviceClient
-      .from('league_participants')
-      .select('user_id')
-      .eq('league_id', leagueId)
-      .eq('status', 'active')
-      .neq('user_id', user.id)
+    // Notify other league members that the movie is available -- but only when
+    // it actually is. place-bid refuses a movie that has already opened, so
+    // announcing a released drop as available for pickup would send the whole
+    // league after something none of them can bid on.
+    if (isPickupEligible) {
+      const { data: leagueParticipants } = await serviceClient
+        .from('league_participants')
+        .select('user_id')
+        .eq('league_id', leagueId)
+        .eq('status', 'active')
+        .neq('user_id', user.id)
 
-    if (leagueParticipants && leagueParticipants.length > 0) {
-      const notifications = leagueParticipants.map((participant) => ({
-        user_id: participant.user_id,
-        league_id: leagueId,
-        type: 'pickup_available' as const,
-        title: `${movie.title} is now available`,
-        body: `A team dropped ${movie.title}. It's now available for pickup.`,
-        data: {
-          tmdb_id: movie.tmdb_id,
-          movie_id: movie.id,
-        },
-      }))
+      if (leagueParticipants && leagueParticipants.length > 0) {
+        const notifications = leagueParticipants.map((participant) => ({
+          user_id: participant.user_id,
+          league_id: leagueId,
+          type: 'pickup_available' as const,
+          title: `${movie.title} is now available`,
+          body: `A team dropped ${movie.title}. It's now available for pickup.`,
+          data: {
+            tmdb_id: movie.tmdb_id,
+            movie_id: movie.id,
+          },
+        }))
 
-      const { error: notificationError } = await serviceClient
-        .from('notifications')
-        .insert(notifications)
+        const { error: notificationError } = await serviceClient
+          .from('notifications')
+          .insert(notifications)
 
-      if (notificationError) {
-        console.error('Failed to create notifications:', notificationError)
+        if (notificationError) {
+          console.error('Failed to create notifications:', notificationError)
+        }
       }
     }
 
@@ -318,6 +325,8 @@ Deno.serve(async (req) => {
       },
       drops_used: (dropCount ?? 0) + 1,
       drops_remaining: dropLimit - (dropCount ?? 0) - 1,
+      /** False once the movie has opened: nobody can bid a released movie back. */
+      available_for_pickup: isPickupEligible,
     })
   } catch (error) {
     return internalErrorResponse(error, log)

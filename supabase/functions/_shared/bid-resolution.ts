@@ -307,10 +307,14 @@ export function resolveBidWinners(
  *
  * A pickup bid may name a holding released only if the bid wins. Bids sit
  * pending for up to a week (see get_next_processing_deadline), so what was
- * droppable at bid time may not be at processing time -- the movie can release,
- * or get counterpicked. These are the same rules drop-movie enforces; keeping
- * them here, pure, means the decision is testable and the two paths cannot
- * silently disagree about what "droppable" means.
+ * droppable at bid time may not be at processing time -- the movie can get
+ * counterpicked. These are the same rules drop-movie enforces; keeping them
+ * here, pure, means the decision is testable and the two paths cannot silently
+ * disagree about what "droppable" means.
+ *
+ * A movie opening in the meantime is deliberately *not* one of those changes: a
+ * released movie is droppable, so a target that releases while the bid waits
+ * still pays for it.
  *
  * A target failing these checks does not void the bid. It degrades to a bid
  * with no conditional drop, which can still win on a free slot -- the team
@@ -319,26 +323,17 @@ export function resolveBidWinners(
 
 export interface DroppableCandidate {
   holdingId: string
-  releaseDate: string | null
   counterpickedByTeamId: string | null
   hasPendingCounterpickBid: boolean
 }
 
-/**
- * @param options.today ISO date (YYYY-MM-DD). Passed in rather than read from
- *   the clock so callers and tests agree on the boundary.
- */
 export function droppableHoldingIds(
   candidates: DroppableCandidate[],
-  options: { today: string; counterpicksBlockDrops: boolean },
+  options: { counterpicksBlockDrops: boolean },
 ): Set<string> {
   const droppable = new Set<string>()
 
   for (const candidate of candidates) {
-    // Released movies are locked: their score is already in play. Strictly
-    // "before today", matching drop-movie's own `<` comparison.
-    if (candidate.releaseDate && candidate.releaseDate < options.today) continue
-
     if (options.counterpicksBlockDrops) {
       if (candidate.counterpickedByTeamId) continue
       // A pending counterpick auction would be stranded by the drop.

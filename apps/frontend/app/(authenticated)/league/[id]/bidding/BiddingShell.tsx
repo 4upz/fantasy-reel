@@ -121,16 +121,16 @@ export default function BiddingShell({
   // Only holdings that could actually be dropped are offered as conditional
   // drop targets. Mirrors drop-movie's rules (and droppableHoldingIds() in
   // _shared/bid-resolution.ts, which re-checks them at processing time):
-  // offering a released or counterpicked movie is a dead end that would fail a
-  // week later, when the bid is settled and it is too late to choose again.
-  const droppableHoldings = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    return myHoldings.filter((holding) => {
-      if (holding.release_date && holding.release_date < today) return false
-      if (league.counterpicks_block_drops && holding.counterpicked_by_team_id) return false
-      return true
-    })
-  }, [myHoldings, league.counterpicks_block_drops])
+  // offering a counterpicked movie is a dead end that would fail a week later,
+  // when the bid is settled and it is too late to choose again. A released
+  // movie is fair game -- it can be dropped like any other.
+  const droppableHoldings = useMemo(
+    () =>
+      league.counterpicks_block_drops
+        ? myHoldings.filter((holding) => !holding.counterpicked_by_team_id)
+        : myHoldings,
+    [myHoldings, league.counterpicks_block_drops]
+  )
   const remainingBudget = budget?.remaining_budget ?? 100
   const canPlaceCounterpickBid = hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots
 

@@ -9,7 +9,6 @@ import type { League, Movie } from '@/types'
  */
 export type DropBlocker =
   | 'league_inactive'
-  | 'released'
   | 'counterpicked'
   | 'contested'
   | 'no_drops_left'
@@ -30,13 +29,13 @@ export interface DropContext {
  * the server would report first is the one the player is shown.
  */
 export function findDropBlocker(
-  movie: Pick<Movie, 'id' | 'release_date'>,
+  movie: Pick<Movie, 'id'>,
   counterpickedByTeamId: string | null,
   ctx: DropContext
 ): DropBlocker | null {
-  const today = new Date().toISOString().split('T')[0]
-  if (movie.release_date && movie.release_date < today) return 'released'
-
+  // A released movie is not a blocker. Its score is banked, so dropping it is a
+  // real move -- it retires those points -- and only counterpicks lock a movie
+  // to a roster.
   if (ctx.leagueStatus !== 'active') return 'league_inactive'
 
   if (ctx.counterpicksBlockDrops) {
@@ -76,13 +75,6 @@ export function explainBlocker(
   { movieTitle, dropLimit, leagueStatus, counterpickerName }: ExplainArgs
 ): BlockerExplanation {
   switch (blocker) {
-    case 'released':
-      return {
-        headline: `${movieTitle} has already opened.`,
-        detail:
-          'Once a movie is out, its score is locked in and it stays on your roster for the rest of the season.',
-      }
-
     case 'league_inactive':
       return leagueStatus === 'completed'
         ? {

@@ -488,6 +488,9 @@ export async function createTestMovie(
     posterUrl?: string
     status?: 'upcoming' | 'released'
     overview?: string
+    /** Critic score and the points it earns, as update-scores would write them. */
+    combinedScore?: number
+    fantasyPoints?: number
   }
 ): Promise<{ id: string; tmdbId: number }> {
   const client = getAdminClient()
@@ -502,6 +505,8 @@ export async function createTestMovie(
         poster_url: options?.posterUrl || `/test-poster-${tmdbId}.jpg`,
         status: options?.status || 'upcoming',
         overview: options?.overview || `Test movie ${title}`,
+        combined_score: options?.combinedScore ?? null,
+        fantasy_points: options?.fantasyPoints ?? null,
       },
       { onConflict: 'tmdb_id' }
     )

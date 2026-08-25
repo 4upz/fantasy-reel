@@ -222,22 +222,51 @@ Deno.test({
       assertEquals(result.error, 'Movie has already been dropped')
     })
 
-    await t.step('returns 400 when pickup movie has already been released', async () => {
-      // Create a pickup with a past release date
+    await t.step('drops a pickup whose movie has already been released', async () => {
       const leagueId = await factory.createActiveLeague(uniqueName('drop-released'))
-      const pastReleaseDate = '2024-01-01' // Past date
 
       const pickupId = await factory.createPickupForUser(leagueId, client, {
         tmdb_id: 500003,
         ...testMovieData,
         title: 'Released Movie',
-        release_date: pastReleaseDate,
+        release_date: '2024-01-01',
       })
 
-      const result = await invokeFunction(client, 'drop-movie', {
-        pickup_id: pickupId,
+      const { data, error } = await client.functions.invoke('drop-movie', {
+        body: { pickup_id: pickupId },
       })
-      assertEquals(result.error, 'Cannot drop a movie that has already been released')
+
+      assertEquals(error, null)
+      assertEquals(data.message, 'Movie dropped successfully')
+      // Nobody can bid a released movie back, so it is not offered around.
+      assertEquals(data.available_for_pickup, false)
+    })
+
+    await t.step('does not announce a released drop as available for pickup', async () => {
+      // createActiveLeague seeds a second participant, so there is somebody who
+      // would have been notified.
+      const leagueId = await factory.createActiveLeague(uniqueName('drop-released-quiet'))
+      const serviceClient = getServiceClient()
+
+      const pickupId = await factory.createPickupForUser(leagueId, client, {
+        tmdb_id: 500013,
+        ...testMovieData,
+        title: 'Quietly Released Movie',
+        release_date: '2024-01-01',
+      })
+
+      const { error } = await client.functions.invoke('drop-movie', {
+        body: { pickup_id: pickupId },
+      })
+      assertEquals(error, null)
+
+      const { data: notifications } = await serviceClient
+        .from('notifications')
+        .select('id')
+        .eq('league_id', leagueId)
+        .eq('type', 'pickup_available')
+
+      assertEquals(notifications?.length ?? 0, 0)
     })
 
     // ============================================================================
@@ -264,21 +293,71 @@ Deno.test({
       assertEquals(result.error, 'Movie has already been dropped')
     })
 
-    await t.step('returns 400 when draft pick movie has already been released', async () => {
+    await t.step('drops a draft pick whose movie has already been released', async () => {
       const leagueId = await factory.createActiveLeague(uniqueName('draft-released'))
-      const pastReleaseDate = '2024-01-01' // Past date
 
       const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
         tmdb_id: 500103,
         ...testMovieData,
         title: 'Released Draft Pick',
-        release_date: pastReleaseDate,
+        release_date: '2024-01-01',
       })
 
-      const result = await invokeFunction(client, 'drop-movie', {
-        draft_pick_id: draftPickId,
+      const { data, error } = await client.functions.invoke('drop-movie', {
+        body: { draft_pick_id: draftPickId },
       })
-      assertEquals(result.error, 'Cannot drop a movie that has already been released')
+
+      assertEquals(error, null)
+      assertEquals(data.message, 'Movie dropped successfully')
+      assertEquals(data.available_for_pickup, false)
+    })
+
+    /**
+     * The reason a team spends a drop on a movie that is already out: the
+     * points go with it. Guards the rescore trigger added in
+     * 20260825120000_rescore_team_on_drop.sql -- without it team_scores would
+     * keep paying out a movie the team no longer holds.
+     */
+    await t.step('removes a released movie\'s points from the team score', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('draft-released-score'))
+      const serviceClient = getServiceClient()
+
+      const draftPickId = await factory.createDraftPickForUser(leagueId, client, {
+        tmdb_id: 500110,
+        ...testMovieData,
+        title: 'Scored Flop',
+        release_date: '2024-01-01',
+      })
+      const draftPick = await getDraftPickRow(serviceClient, draftPickId)
+
+      // Score the movie the way update-scores would, then bring the stored team
+      // total in line with it.
+      await serviceClient
+        .from('movies')
+        .update({ combined_score: 20, fantasy_points: -17.5, status: 'released' })
+        .eq('id', draftPick.movie_id)
+      await serviceClient.rpc('recalculate_team_score_with_counterpicks', {
+        p_team_id: draftPick.team_id,
+      })
+
+      const { data: before } = await serviceClient
+        .from('team_scores')
+        .select('total_points')
+        .eq('team_id', draftPick.team_id)
+        .single()
+      assertEquals(Number(before?.total_points), -17.5)
+
+      const { error } = await client.functions.invoke('drop-movie', {
+        body: { draft_pick_id: draftPickId },
+      })
+      assertEquals(error, null)
+
+      const { data: after } = await serviceClient
+        .from('team_scores')
+        .select('total_points')
+        .eq('team_id', draftPick.team_id)
+        .single()
+      assertEquals(Number(after?.total_points), 0)
     })
 
     // ============================================================================
