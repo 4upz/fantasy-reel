@@ -19,9 +19,25 @@ import {
   type ExecuteTradeResult,
 } from '../_shared/trade-completion.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
-import { anchorMovieTitle, expiredReasonText } from '../_shared/trade-expiry.ts'
+import {
+  anchorMovieTitle,
+  expiredReasonText,
+  remainingText,
+  EXPIRY_REMINDER,
+} from '../_shared/trade-expiry.ts'
 
 const log = createLogger('process-trades')
+
+/**
+ * The most warning an "expiring soon" nudge ever gives.
+ *
+ * claim_expiry_reminders() takes the ceiling as a parameter and scales it down
+ * for short windows (min(lead, 25% of the window)), so this is only the cap for
+ * a long offer -- past a day or two of window, six hours' notice is as much as
+ * anyone acts on. Passed as an interval literal because the whole "which offers
+ * are due" question is answered in SQL; see that function's comment.
+ */
+
 
 interface TradeRecord {
   id: string
@@ -69,6 +85,8 @@ interface ProcessResults {
   expired_by_clock: number
   /** Release-anchored offers whose movie moved, so their clock moved with it. */
   reresolved: number
+  /** Open offers nudged because their clock is nearly out. One per offer, ever. */
+  expiry_reminders_sent: number
   errors: string[]
 }
 
@@ -97,6 +115,7 @@ Deno.serve(async (req) => {
       invalidated: 0,
       expired_by_clock: 0,
       reresolved: 0,
+      expiry_reminders_sent: 0,
       errors: [],
     }
 
@@ -109,6 +128,13 @@ Deno.serve(async (req) => {
     // non-ok and fires the existing ops alert -- rather than aborting the run.
     await reresolveReleaseAnchors(serviceClient, results)
     await sweepExpiredOffers(serviceClient, results)
+    // Reminders run LAST of the three, and the order is load-bearing:
+    // re-resolution can move a clock (and clears the reminder stamp so the
+    // nudge can fire again against the new window), and the sweep takes every
+    // offer that is already done. Nudging first would mean warning about an
+    // offer this same pass then expires, and warning about a window that is no
+    // longer the one the offer has.
+    await sendExpiryReminders(serviceClient, results)
 
     // Find trades ready for execution
     const { data: readyTrades, error: fetchError } = await serviceClient
@@ -131,6 +157,7 @@ Deno.serve(async (req) => {
         metadata: {
           expired_by_clock: results.expired_by_clock,
           reresolved: results.reresolved,
+          expiry_reminders_sent: results.expiry_reminders_sent,
         },
       })
       return jsonResponse({
@@ -163,6 +190,17 @@ Deno.serve(async (req) => {
             .eq('id', trade.id)
 
           await notifyTradeExpired(serviceClient, trade, validationResult.error ?? 'Validation failed')
+          // Counted into failed, not just errors: computeStatus reads
+          // processed/failed only, so pushing an error string alone reports a
+          // run that killed an agreed trade as "ok". Same omission the expiry
+          // sweep had in PR #67.
+          //
+          // This IS a failure and not merely an outcome: both parties had
+          // already agreed, and the offer was then expired without either of
+          // them asking. The refusal execute_trade reports in its JSONB return
+          // is the same event caught one layer later, and that path below has
+          // always counted -- catching it earlier should not make it quieter.
+          results.failed++
           results.errors.push(`Trade ${trade.id}: ${validationResult.error}`)
           continue
         }
@@ -219,6 +257,7 @@ Deno.serve(async (req) => {
         invalidated: results.invalidated,
         expired_by_clock: results.expired_by_clock,
         reresolved: results.reresolved,
+        expiry_reminders_sent: results.expiry_reminders_sent,
       },
     })
 
@@ -226,7 +265,10 @@ Deno.serve(async (req) => {
       message:
         `Processed ${results.processed} trades: ${results.completed} completed, ${results.failed} failed` +
         (results.invalidated > 0 ? `, ${results.invalidated} competing offers expired` : '') +
-        (results.expired_by_clock > 0 ? `, ${results.expired_by_clock} offers lapsed` : ''),
+        (results.expired_by_clock > 0 ? `, ${results.expired_by_clock} offers lapsed` : '') +
+        (results.expiry_reminders_sent > 0
+          ? `, ${results.expiry_reminders_sent} expiry reminders sent`
+          : ''),
       ...results,
       job_status,
     })
@@ -235,6 +277,23 @@ Deno.serve(async (req) => {
     return internalErrorResponse(error, log)
   }
 })
+
+/**
+ * Record a maintenance step failing, in the one place that knows how.
+ *
+ * job_status is computed from processed/failed (see computeStatus in
+ * _shared/job-runs.ts), so pushing an error string alone leaves a broken run
+ * reporting "ok". That has been got wrong twice now -- the PR #67 sweep and the
+ * revalidation path above -- because each site re-implemented it by hand.
+ */
+function recordStepFailure(
+  results: ProcessResults,
+  label: string,
+  error: { message: string }
+): void {
+  results.failed++
+  results.errors.push(`${label}: ${error.message}`)
+}
 
 /**
  * Run `task` over every item, a few at a time.
@@ -300,10 +359,7 @@ async function reresolveReleaseAnchors(
 
   if (error) {
     log.error('Failed to re-resolve release-anchored offers', { error: serializeError(error) })
-    // Counted, not just logged: job_status is computed from processed/failed,
-    // so an error string alone would leave a broken run reporting "ok".
-    results.failed++
-    results.errors.push(`Release re-resolution: ${error.message}`)
+    recordStepFailure(results, 'Release re-resolution', error)
     return
   }
 
@@ -354,8 +410,7 @@ async function sweepExpiredOffers(
 
   if (error) {
     log.error('Failed to sweep expired offers', { error: serializeError(error) })
-    results.failed++
-    results.errors.push(`Offer expiry sweep: ${error.message}`)
+    recordStepFailure(results, 'Offer expiry sweep', error)
     return
   }
 
@@ -399,6 +454,82 @@ async function sweepExpiredOffers(
       notifyInitiator: true,
       notifyRecipient: true,
       expiredReason: reason,
+    })
+  })
+}
+
+
+/**
+ * Nudge both sides of an offer whose clock is nearly out.
+ *
+ * One nudge per offer, ever. claim_expiry_reminders() picks the offers that are
+ * due and stamps expiry_reminder_sent_at in the same statement, so two
+ * overlapping cron runs cannot both claim a row -- exactly the shape the sweep
+ * uses. That means the stamp lands BEFORE the notification is sent, and a send
+ * that fails afterwards loses the nudge rather than retrying it. That is the
+ * intended trade: a duplicate "your offer expires soon" is worse than a missing
+ * one, and the offer's own expiry email still goes out either way.
+ *
+ * Both parties are told, with different sentences. The recipient is the one who
+ * has to act, so they get the imperative -- but the proposer is the only one
+ * who can extend the offer or go chase an answer, and this is the moment that
+ * matters for either. It is capped at one message per offer, so it cannot
+ * become noise.
+ */
+async function sendExpiryReminders(
+  supabase: ReturnType<typeof createServiceClient>,
+  results: ProcessResults
+): Promise<void> {
+  const { data, error } = await supabase.rpc('claim_expiry_reminders', {
+    // The policy lives in _shared/trade-expiry.ts beside the other expiry
+    // rules; claim_expiry_reminders owns only the selection.
+    p_lead: `${EXPIRY_REMINDER.leadHours} hours`,
+    p_min_window: `${EXPIRY_REMINDER.minWindowHours} hours`,
+    p_fraction: EXPIRY_REMINDER.windowFraction,
+  })
+
+  if (error) {
+    log.error('Failed to claim expiry reminders', { error: serializeError(error) })
+    recordStepFailure(results, 'Expiry reminders', error)
+    return
+  }
+
+  const due = (data ?? []) as TradeRecord[]
+  if (due.length === 0) return
+
+  results.expiry_reminders_sent = due.length
+  log.info('Expiry reminders claimed', { count: due.length })
+
+  await forEachWithConcurrency(due, async (trade) => {
+    const remaining = trade.expires_at ? remainingText(trade.expires_at) : 'very soon'
+
+    await notifyTradeParties(supabase, {
+      tradeOffer: trade,
+      // 'trade_proposed' rather than a trade_expiring enum value: adding one
+      // costs two migrations, since a new value cannot be used in the
+      // transaction that adds it. The title carries the meaning, and this
+      // points at the same live offer a trade_proposed notification does.
+      notifyInitiator: {
+        type: 'trade_proposed',
+        title: 'Trade Offer Expiring Soon',
+        bodyFn: (other) =>
+          `Your trade offer to ${other} expires ${remaining} and is still unanswered.`,
+        data: { expires_at: trade.expires_at },
+      },
+      notifyRecipient: {
+        type: 'trade_proposed',
+        title: 'Trade Offer Expiring Soon',
+        bodyFn: (other) =>
+          `The trade offer from ${other} expires ${remaining}. Respond before it lapses.`,
+        data: { expires_at: trade.expires_at },
+      },
+    })
+
+    // Logged to notification_log as 'trade_expiring_soon' by
+    // sendTradeEmailNotifications, which derives the type from the email type.
+    await sendTradeEmailNotifications(supabase, trade, 'expiring_soon', {
+      notifyInitiator: true,
+      notifyRecipient: true,
     })
   })
 }

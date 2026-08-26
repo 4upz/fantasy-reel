@@ -52,7 +52,7 @@ export interface ResolvedExpiry {
 }
 
 export type ExpiryResolution =
-  | ({ valid: true } & ResolvedExpiry)
+  | ({ valid: true; clamped: boolean } & ResolvedExpiry)
   | { valid: false; error: string }
 
 /**
@@ -62,6 +62,23 @@ export type ExpiryResolution =
  */
 export const MIN_EXPIRY_MINUTES = 60
 export const MAX_EXPIRY_DAYS = 14
+
+/**
+ * When the single "expiring soon" nudge fires: at whichever is sooner, a fixed
+ * ceiling or a fraction of the offer's own window, and never at all for a window
+ * too short to be worth interrupting twice.
+ *
+ * `minWindowHours` is a relative of MIN_EXPIRY_MINUTES above -- an offer window
+ * cannot be shorter than the minimum, and a nudge floor below that minimum would
+ * never fire. Keeping both here is what stops them disagreeing once league
+ * configuration makes the minimum per-league. Passed to claim_expiry_reminders(),
+ * which owns the selection itself because the claim has to be one statement.
+ */
+export const EXPIRY_REMINDER = {
+  leadHours: 6,
+  minWindowHours: 2,
+  windowFraction: 0.25,
+} as const
 
 /**
  * User-facing refusals. The frontend keeps its own copy of these strings
@@ -142,7 +159,13 @@ export async function resolveOfferExpiry(
   // No clock: the pre-expiry behavior, and what every offer created before this
   // feature keeps. Deliberately still a first-class choice.
   if (anchor === null && requested === null) {
-    return { valid: true, expires_at: null, expiry_anchor: null, expiry_anchor_movie_id: null }
+    return {
+      valid: true,
+      clamped: false,
+      expires_at: null,
+      expiry_anchor: null,
+      expiry_anchor_movie_id: null,
+    }
   }
 
   if (anchor === null || (anchor === 'fixed' && requested === null)) {
@@ -199,8 +222,13 @@ export async function resolveOfferExpiry(
   // rather than let it die later with a confusing error. The clamp may land
   // inside the minimum window -- that is fine and not a refusal: the minimum
   // exists to stop pressure tactics, and a league deadline is not one.
+  // Reported rather than left for callers to infer. extend-trade-offer needs to
+  // know, because a clamp can swallow an entire extension and the refusal would
+  // otherwise blame the proposer for a limit they never chose; working it out
+  // from the outside means re-deriving this function's rounding.
   const deadline = leagueDeadlineInstant(context.tradeDeadline)
-  if (deadline && expiry > deadline) expiry = deadline
+  const clamped = Boolean(deadline && expiry > deadline)
+  if (deadline && clamped) expiry = deadline
 
   // Whole minutes: a custom picker that stores :37 seconds would render as
   // "in 59 minutes" for a window the user set to exactly one hour.
@@ -208,6 +236,7 @@ export async function resolveOfferExpiry(
 
   return {
     valid: true,
+    clamped,
     expires_at: expiry.toISOString(),
     expiry_anchor: anchor,
     expiry_anchor_movie_id: anchorMovieId,
@@ -267,6 +296,25 @@ export function expiredReasonText(trade: {
       // nothing rather than describing them as an ordinary lapse.
       return 'It could not be completed.'
   }
+}
+
+/**
+ * How long an offer has left, phrased for a nudge ("in about 4 hours").
+ *
+ * Lives here beside expiredReasonText, its counterpart: both turn an offer's
+ * clock into a sentence, and one of them being in a cron handler was an
+ * accident of where it was first needed.
+ */
+export function remainingText(expiresAt: string, now = Date.now()): string {
+  const ms = new Date(expiresAt).getTime() - now
+  if (ms <= 0) return 'any moment'
+
+  const hours = Math.round(ms / 3_600_000)
+  if (hours < 1) return `in about ${Math.max(1, Math.round(ms / 60_000))} minutes`
+  if (hours < 24) return `in about ${hours} hour${hours === 1 ? '' : 's'}`
+
+  const days = Math.round(hours / 24)
+  return `in about ${days} day${days === 1 ? '' : 's'}`
 }
 
 /** Whether an offer's clock has already run out, wherever its status says. */

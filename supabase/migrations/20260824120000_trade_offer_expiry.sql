@@ -462,8 +462,9 @@ BEGIN
       updated_at = now()
   -- Only an unanswered offer has a clock. Once both parties agree, the review
   -- window owns the trade. Kept in step with idx_trade_offers_pending_expiry,
-  -- reresolve_release_anchored_offers() and EXPIRY_RELEVANT_STATUSES in
-  -- TradeOfferCard.tsx -- change the four together.
+  -- reresolve_release_anchored_offers(), claim_expiry_reminders() (added in
+  -- 20260825120000) and EXPIRY_RELEVANT_STATUSES in TradeOfferCard.tsx --
+  -- change the five together.
   WHERE t.status IN ('proposed', 'countered')
     AND t.expires_at IS NOT NULL
     AND t.expires_at <= now()

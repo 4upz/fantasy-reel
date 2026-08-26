@@ -38,6 +38,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
     cancelTrade,
     vetoTrade,
     approveTrade,
+    extendTrade,
   } = useTrading({
     leagueId: league.id,
     teamId: team.id,
@@ -78,6 +79,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
         onCancelTrade={cancelTrade}
         onVetoTrade={vetoTrade}
         onApproveTrade={approveTrade}
+        onExtendTrade={extendTrade}
       />
 
       {showProposeModal && (

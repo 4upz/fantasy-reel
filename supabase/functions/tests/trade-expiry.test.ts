@@ -501,6 +501,160 @@ Deno.test({
       await cleanupOffers()
     })
 
+    // ========================================================================
+    // The "expiring soon" nudge
+    //
+    // Due-ness depends on the whole window, not just what is left:
+    // min(6h, 25% of the window) remaining, and nothing under a 2h window. So
+    // these steps have to control BOTH ends of the clock, which means writing
+    // the start back through the service client -- propose-trade will not
+    // create an offer that started two days ago.
+    // ========================================================================
+
+    /**
+     * Rewrite an offer's clock so it looks `remaining` hours from lapsing on a
+     * window that was `windowHours` long all along.
+     *
+     * `countered` because claim_expiry_reminders measures the window from
+     * COALESCE(responded_at, proposed_at): counter_trade reuses the row and
+     * stamps responded_at, so for a countered offer that is where the current
+     * clock started.
+     */
+    async function forceDue(
+      tradeId: string,
+      windowHours: number,
+      remainingHours: number,
+      options?: { countered?: boolean },
+    ) {
+      const start = new Date(Date.now() - (windowHours - remainingHours) * HOUR_MS).toISOString()
+      const { error } = await serviceClient
+        .from('trade_offers')
+        .update({
+          proposed_at: start,
+          ...(options?.countered ? { responded_at: start } : {}),
+          expires_at: new Date(Date.now() + remainingHours * HOUR_MS).toISOString(),
+        })
+        .eq('id', tradeId)
+      assertEquals(error, null)
+    }
+
+    async function reminderStamp(tradeId: string): Promise<string | null> {
+      const { data } = await serviceClient
+        .from('trade_offers')
+        .select('expiry_reminder_sent_at')
+        .eq('id', tradeId)
+        .single()
+      return (data?.expiry_reminder_sent_at as string | null) ?? null
+    }
+
+    await t.step('nudges an offer inside its lead time, exactly once', async () => {
+      const { data } = await propose({ expires_at: inHours(48), expiry_anchor: 'fixed' })
+      const tradeId = data!.trade_offer.id as string
+      assertEquals(await reminderStamp(tradeId), null)
+
+      // A 48h window caps at the 6h lead; 1h left is well inside it.
+      await forceDue(tradeId, 48, 1)
+
+      const first = await runProcessTrades()
+      assertEquals(first.status, 200)
+      assert(first.data.expiry_reminders_sent >= 1, 'the nudge did not claim the offer')
+
+      const stamped = await reminderStamp(tradeId)
+      assertExists(stamped)
+
+      // Claim and stamp happen in one statement, so a second pass finds nothing
+      // and nobody is told twice. The offer is still open and still inside its
+      // lead time -- only the stamp keeps it from firing again.
+      const second = await runProcessTrades()
+      assertEquals(second.data.expiry_reminders_sent, 0)
+      assertSameInstant(await reminderStamp(tradeId), stamped!, 'the offer was nudged twice')
+      assertEquals((await readOffer(tradeId))!.status, 'proposed')
+
+      await cleanupOffers()
+    })
+
+    await t.step('scales the lead time down for a short window', async () => {
+      // 20 minutes left of a 3h window: 25% of 3h is 45 minutes, so this is
+      // inside the proportional lead even though it is nowhere near the 6h cap.
+      const { data } = await propose({ expires_at: inHours(3), expiry_anchor: 'fixed' })
+      const tradeId = data!.trade_offer.id as string
+      await forceDue(tradeId, 3, 20 / 60)
+
+      await runProcessTrades()
+      assertExists(await reminderStamp(tradeId))
+      await cleanupOffers()
+    })
+
+    await t.step('sends nothing on a window under two hours', async () => {
+      // 20 minutes left of a 110-minute window. By the proportional rule alone
+      // this WOULD fire (25% of 110 is 27 minutes) -- the floor is the only
+      // thing stopping it, which is what makes this worth asserting.
+      const { data } = await propose({ expires_at: inHours(2), expiry_anchor: 'fixed' })
+      const tradeId = data!.trade_offer.id as string
+      await forceDue(tradeId, 110 / 60, 20 / 60)
+
+      await runProcessTrades()
+      assertEquals(await reminderStamp(tradeId), null)
+
+      // Same time left, a window just over the floor: now it fires. Proves the
+      // step above was refused for the window and not for the time remaining.
+      await forceDue(tradeId, 130 / 60, 20 / 60)
+      await runProcessTrades()
+      assertExists(await reminderStamp(tradeId))
+
+      await cleanupOffers()
+    })
+
+    await t.step('sends nothing for an offer with no clock', async () => {
+      const { data } = await propose({})
+      const tradeId = data!.trade_offer.id as string
+
+      await runProcessTrades()
+      assertEquals(await reminderStamp(tradeId), null)
+      await cleanupOffers()
+    })
+
+    await t.step('sends nothing for an offer that already lapsed', async () => {
+      const { data } = await propose({ expires_at: inHours(48), expiry_anchor: 'fixed' })
+      const tradeId = data!.trade_offer.id as string
+      await forceLapsed(tradeId)
+
+      // The sweep in this same pass expires it. "Expires soon" about something
+      // already gone is the thing being ruled out here.
+      await runProcessTrades()
+      assertEquals((await readOffer(tradeId))!.status, 'expired')
+      assertEquals(await reminderStamp(tradeId), null)
+      await cleanupOffers()
+    })
+
+    await t.step('nudges again once a counter resets the clock', async () => {
+      const { data } = await propose({ expires_at: inHours(48), expiry_anchor: 'fixed' })
+      const tradeId = data!.trade_offer.id as string
+      await forceDue(tradeId, 48, 1)
+
+      await runProcessTrades()
+      assertExists(await reminderStamp(tradeId))
+
+      const { error } = await invokeFunction(secondClient, 'counter-trade', {
+        trade_offer_id: tradeId,
+        counter_offered_items: { movies: [], faab: 3 },
+        counter_requested_items: { movies: [offeredMovie], faab: 0 },
+        expires_at: inHours(72),
+        expiry_anchor: 'fixed',
+      })
+      assertEquals(error, null)
+
+      // The counter is a new offer wearing the old row, so its new window gets
+      // its own nudge -- counter_trade clears the stamp for exactly this.
+      assertEquals(await reminderStamp(tradeId), null)
+
+      await forceDue(tradeId, 72, 2, { countered: true })
+      await runProcessTrades()
+      assertExists(await reminderStamp(tradeId))
+
+      await cleanupOffers()
+    })
+
     await t.step('requires authentication', async () => {
       const anonClient = getAnonClient()
       const { status } = await invokeFunction(anonClient, 'propose-trade', {

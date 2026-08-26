@@ -52,6 +52,12 @@ interface UseTradingReturn {
   ) => Promise<TradeActionResult>
   /** Commissioner: end the review period now and process the trade immediately. */
   approveTrade: (tradeOfferId: string) => Promise<TradeActionResult>
+  /**
+   * Proposer: push their own offer's clock out. Forward only, and the server
+   * re-checks that -- the button can only ever offer later times, but nothing
+   * stops a crafted call.
+   */
+  extendTrade: (tradeOfferId: string, expiresAt: string) => Promise<TradeActionResult>
   refreshTrades: () => Promise<void>
   refreshRoster: () => Promise<void>
 }
@@ -321,6 +327,28 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     [fetchTrades, loadTradeableMovies, fetchBudget]
   )
 
+  // Extend an offer's clock (proposer only)
+  const extendTrade = useCallback(
+    async (tradeOfferId: string, expiresAt: string): Promise<TradeActionResult> => {
+      const { error: extendError } = await callEdgeFunction('extend-trade-offer', {
+        body: { trade_offer_id: tradeOfferId, expires_at: expiresAt },
+      })
+
+      if (extendError) {
+        // Same reasoning as respondTrade: a refusal usually means this client's
+        // view of the offer is stale -- most often it lapsed between render and
+        // click -- so refetch rather than leave a dead offer on screen behind an
+        // error message.
+        await fetchTrades()
+        return { success: false, error: extendError }
+      }
+
+      await fetchTrades()
+      return { success: true }
+    },
+    [fetchTrades]
+  )
+
   // Computed values
   const pendingTrades = trades.filter(
     (t) => t.status === 'proposed' || t.status === 'countered' || t.status === 'review'
@@ -349,6 +377,7 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
     cancelTrade,
     vetoTrade,
     approveTrade,
+    extendTrade,
     refreshTrades: fetchTrades,
     refreshRoster,
   }

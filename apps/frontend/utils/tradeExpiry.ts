@@ -37,6 +37,23 @@ export const EXPIRY_PRESETS: ReadonlyArray<{ hours: number; label: string }> = [
   { hours: 168, label: '7 days' },
 ]
 
+/**
+ * Extension lengths offered on an existing offer, measured from its CURRENT
+ * expiry rather than from now. Kept beside EXPIRY_PRESETS: "how long can an
+ * offer run" is one question with one home, and the next person will look here.
+ */
+export const EXTEND_PRESETS: ReadonlyArray<{ hours: number; label: string }> = [
+  { hours: 12, label: '+12h' },
+  { hours: 24, label: '+24h' },
+  { hours: 48, label: '+48h' },
+  { hours: 72, label: '+3 days' },
+]
+
+/** Push an existing expiry out by `hours`. Forward only -- see extend-trade-offer. */
+export function resolveExtension(fromIso: string, hours: number): Date {
+  return new Date(new Date(fromIso).getTime() + hours * 60 * 60 * 1000)
+}
+
 export type ExpiryChoice =
   | { kind: 'none' }
   | { kind: 'preset'; hours: number }

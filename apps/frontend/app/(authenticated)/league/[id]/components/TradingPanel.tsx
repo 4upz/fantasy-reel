@@ -39,6 +39,11 @@ interface Props {
     reason?: string
   ) => Promise<{ success: boolean; error?: string }>
   onApproveTrade: (tradeOfferId: string) => Promise<{ success: boolean; error?: string }>
+  /** Proposer: push their own offer's clock out. Forward only. */
+  onExtendTrade: (
+    tradeOfferId: string,
+    expiresAt: string
+  ) => Promise<{ success: boolean; error?: string }>
 }
 
 type TabType = 'pending' | 'my-trades' | 'all' | 'history'
@@ -59,6 +64,7 @@ export default function TradingPanel({
   onCancelTrade,
   onVetoTrade,
   onApproveTrade,
+  onExtendTrade,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('pending')
 
@@ -211,6 +217,7 @@ export default function TradingPanel({
                   onCancel={onCancelTrade}
                   onVeto={onVetoTrade}
                   onApprove={onApproveTrade}
+                  onExtend={onExtendTrade}
                 />
               ))}
             </div>
