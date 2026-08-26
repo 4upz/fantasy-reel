@@ -613,104 +613,182 @@
     transition: opacity 0.2s ease;
   }
 
-  /* Footer - Settings & User */
-  .sidenav-footer {
-    margin-top: auto;
-    padding-top: 1rem;
-    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
-    border-top: 1px solid var(--color-border);
-  }
+  /* ============================================
+     ACCOUNT / PROFILE MENU
+     ============================================ */
 
-  .sidenav-user {
+  /*
+    Desktop only. A floating capsule in the top-right corner holding the
+    notification bell and the account menu. It deliberately lives outside
+    .sidenav: navigation is one surface, your account is another. Fixed rather
+    than a header row so it costs no vertical space on any page.
+  */
+  /*
+    Below lg this sits in the top-right of the fixed mobile header, which
+    already supplies the bar surface - so the cluster carries no chrome of its
+    own here and only positions itself. z-index clears the header's 40; the
+    mobile drawer's 50 still covers it.
+  */
+  .profile-cluster {
+    position: fixed;
+    top: 0.625rem;
+    right: 0.75rem;
+    z-index: 41;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.75rem 0.5rem;
-    margin-top: 0.5rem;
-    border-radius: 0.5rem;
-    transition: background-color 0.2s ease;
+    gap: 0.125rem;
+    /* Let clicks fall through the cluster's own box to whatever is beneath. */
+    pointer-events: none;
   }
 
-  .sidenav-user-expanded:hover {
-    background-color: var(--color-surface-hover);
+  .profile-cluster > * {
+    pointer-events: auto;
   }
 
-  .sidenav-user-info {
-    flex: 1;
+  /*
+    On desktop there is no header bar, so the cluster becomes its own surface:
+    a glass capsule floating in the corner. Vertical padding is deliberately
+    larger than the notification badge's 4px overhang so the badge never
+    crosses the capsule's border.
+  */
+  @media (min-width: 1024px) {
+    .profile-cluster {
+      top: 0.75rem;
+      right: 1.25rem;
+      padding: 0.375rem;
+      border: 1px solid var(--color-border);
+      border-radius: 9999px;
+      background: oklch(0.12 0 0 / 0.9);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-medium);
+    }
+  }
+
+  /*
+    Hairline between the bell and the avatar, echoing the sidebar's border.
+    Only earns its place inside the desktop capsule - in the mobile header the
+    two icons already read as separate controls.
+  */
+  .profile-cluster-divider {
+    display: none;
+    width: 1px;
+    height: 20px;
+    margin-inline: 0.125rem;
+    background: var(--color-border);
+  }
+
+  @media (min-width: 1024px) {
+    .profile-cluster-divider {
+      display: block;
+    }
+  }
+
+  .profile-menu {
+    position: relative;
+  }
+
+  .profile-menu-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.125rem;
+    border: none;
+    border-radius: 9999px;
+    background: none;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .profile-menu-trigger:hover {
+    box-shadow: var(--shadow-glow-gold);
+  }
+
+  .profile-menu-panel {
+    position: absolute;
+    top: calc(100% + 0.625rem);
+    right: 0;
+    z-index: 50;
+    width: 15rem;
+    padding: 0.375rem;
+    border: 1px solid var(--color-border-hover);
+    border-radius: 0.75rem;
+    background: var(--color-surface);
+    box-shadow: var(--shadow-heavy);
+    transform-origin: top right;
+  }
+
+  /*
+    Pull the panel out past the trigger's own padding plus the capsule's, so its
+    right edge lines up with the capsule's rather than sitting inboard of it.
+  */
+  @media (min-width: 1024px) {
+    .profile-cluster .profile-menu-panel {
+      right: -0.5rem;
+    }
+  }
+
+  .profile-menu-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem 0.75rem;
+    margin-bottom: 0.375rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .profile-menu-identity-text {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
   }
 
-  .sidenav-user-name {
-    display: block;
+  .profile-menu-name {
     font-size: 0.875rem;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--color-foreground);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .sidenav-signout {
-    margin-top: 0.25rem;
-  }
-
-  /* Sign out button - shared styles for expanded and collapsed tooltip */
-  .sidenav-signout-btn,
-  .sidenav-user-tooltip-signout {
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0;
+  .profile-menu-email {
     font-size: 0.75rem;
     color: var(--color-foreground-muted);
-    background: none;
-    border: none;
-    cursor: pointer;
-    transition: color 0.15s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  .sidenav-signout-btn:hover,
-  .sidenav-user-tooltip-signout:hover {
+  .profile-menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.625rem;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    text-align: left;
+    color: var(--color-foreground-secondary);
+    background: none;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .profile-menu-item:hover {
+    background-color: var(--color-surface-hover);
+    color: var(--color-foreground);
+  }
+
+  .profile-menu-item-danger:hover {
     color: var(--color-crimson);
   }
 
-  /* Collapsed avatar with tooltip */
-  .sidenav-user-collapsed {
-    position: relative;
-    display: flex;
-    justify-content: center;
-  }
-
-  .sidenav-user-tooltip {
-    position: absolute;
-    left: calc(100% + 0.75rem);
-    top: 50%;
-    transform: translateY(-50%);
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    background: var(--color-elevated);
-    border: 1px solid var(--color-border);
-    border-radius: 0.5rem;
-    box-shadow: var(--shadow-medium);
-    white-space: nowrap;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.15s ease, visibility 0.15s ease;
-    z-index: 50;
-  }
-
-  .sidenav-user-collapsed:hover .sidenav-user-tooltip,
-  .sidenav-user-collapsed:focus-within .sidenav-user-tooltip {
-    opacity: 1;
-    visibility: visible;
-  }
-
-  .sidenav-user-tooltip-name {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--color-foreground);
+  .profile-menu-signout {
+    margin-top: 0.25rem;
+    padding-top: 0.375rem;
+    border-top: 1px solid var(--color-border);
   }
 
   /* ============================================
@@ -726,7 +804,8 @@
     left: 0;
     right: 0;
     height: 56px;
-    padding: 0 1rem;
+    /* Right padding reserves the corner for the fixed .profile-cluster. */
+    padding: 0 5.5rem 0 1rem;
     background: var(--color-surface);
     border-bottom: 1px solid var(--color-border);
     z-index: 40;
@@ -773,12 +852,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .sidenav-mobile-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
   }
 
   /* Mobile Drawer Overlay */
@@ -836,20 +909,6 @@
     color: var(--color-foreground);
   }
 
-  /* Legacy nav classes (keep for compatibility) */
-  .nav-link {
-    color: var(--color-foreground-secondary);
-    transition: color 0.2s ease;
-  }
-
-  .nav-link:hover {
-    color: var(--color-gold);
-  }
-
-  .nav-link-active {
-    color: var(--color-gold);
-  }
-
   /* Avatar circle */
   .avatar {
     display: flex;
@@ -871,23 +930,6 @@
   .avatar:hover {
     border-color: var(--color-gold-hover);
     box-shadow: 0 0 12px oklch(0.65 0.15 85 / 0.25);
-  }
-
-  /* Legacy drawer styles (keep for other components) */
-  .drawer-overlay {
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-  }
-
-  .drawer-panel {
-    background: var(--color-surface);
-    border-left: 1px solid var(--color-border);
-    box-shadow: var(--shadow-heavy);
-  }
-
-  .animate-slide-in-right {
-    animation: slide-in-right 0.25s ease-out;
   }
 
   .nav-logo:hover {
@@ -1422,11 +1464,6 @@
     color: var(--color-foreground-muted);
     font-size: 0.875rem;
   }
-}
-
-@keyframes slide-in-right {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
 }
 
 @keyframes slide-in-left {
