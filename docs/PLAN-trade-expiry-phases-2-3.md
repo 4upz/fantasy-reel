@@ -36,7 +36,7 @@ per the ordering in CLAUDE.md.
 | `supabase/functions/extend-trade-offer/` | extend-dev |
 | `supabase/config.toml` | extend-dev |
 | `.../components/TradeOfferCard.tsx` | extend-dev |
-| `.../components/TradingPanel.tsx` | extend-dev |
+| `.../components/TradingPanel.tsx` | extend-dev (wave 1), config-frontend (wave 2) |
 | `.../trading/TradingClient.tsx` | extend-dev (wave 1), config-frontend (wave 2) |
 | `apps/frontend/utils/analytics.ts` | extend-dev |
 | `supabase/functions/update-league/index.ts` | config-backend |
@@ -144,6 +144,23 @@ once in `TradingClient` rather than in each modal.
   is noise. The edge case — a recipient who already got an expiring-soon nudge —
   is covered because `extend_trade_offer` resets `expiry_reminder_sent_at`, so a
   fresh nudge fires against the new window.
+
+- **The extend ceiling is `now + maxDays`, never `currentExpiry + maxDays`.** The
+  rule is that an offer may not stand more than `maxDays` into the future *at any
+  moment*. The relative form compounds — each extension would push the ceiling
+  out again, so an offer could be walked forward indefinitely in `maxDays` chunks
+  and the cap would stop meaning anything. `extend-trade-offer` gets this right
+  for free by running `resolveOfferExpiry`; keep it that way rather than adding
+  an extend-only bound.
+- **`EXPIRY_ERRORS` wording is a verbatim cross-boundary mirror.** The frontend
+  cannot import from `supabase/functions/`, so both copies must be parameterized
+  on the bounds identically — including pluralization at N=1. The failure mode is
+  a user seeing the server's 400 and the picker's inline message disagree by a
+  letter.
+- **`TradingPanel.tsx` needed granting twice**, once per wave, for the same
+  reason: it is the only path from `TradingClient` to `TradeOfferCard`. Any prop
+  the card needs from the page passes through it. Treat it as jointly owned by
+  whoever is threading props that release.
 
 ## Loose end (lead)
 
