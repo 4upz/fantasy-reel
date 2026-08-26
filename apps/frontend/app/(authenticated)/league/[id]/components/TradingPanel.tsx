@@ -9,6 +9,7 @@ import type {
   TeamBudget,
   TradeItems,
 } from '@/types'
+import type { ExpiryBounds } from '@/utils/tradeExpiry'
 import TradeOfferCard from './TradeOfferCard'
 
 interface Props {
@@ -21,6 +22,8 @@ interface Props {
   tradeableMovies: TradeableMovie[]
   budget: TeamBudget | null
   isOwner: boolean
+  /** The league's offer-window rules, on their way to each card's modals. */
+  expiryBounds: ExpiryBounds
   onProposeTrade: () => void
   onRespondTrade: (
     tradeOfferId: string,
@@ -58,6 +61,7 @@ export default function TradingPanel({
   tradeableMovies,
   budget,
   isOwner,
+  expiryBounds,
   onProposeTrade,
   onRespondTrade,
   onCounterTrade,
@@ -212,6 +216,7 @@ export default function TradingPanel({
                   otherTeams={otherTeams}
                   tradeableMovies={tradeableMovies}
                   budget={budget}
+                  expiryBounds={expiryBounds}
                   onRespond={onRespondTrade}
                   onCounter={onCounterTrade}
                   onCancel={onCancelTrade}

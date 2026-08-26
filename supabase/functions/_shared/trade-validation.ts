@@ -92,6 +92,15 @@ export interface LeagueTradeConfig {
   /** Counterpick capacity, per phase -- the caps a trade must not push a team past. */
   draft_counterpick_slots: number
   bidding_counterpick_slots: number
+  /**
+   * Per-offer expiry bounds, NULL where the league takes the app default.
+   * Carried on the config rather than fetched separately because every caller
+   * that resolves an expiry has already read this row to validate the trade --
+   * see deriveExpiryBounds in _shared/trade-expiry.ts.
+   */
+  trade_offer_expiry_default_hours: number | null
+  trade_offer_expiry_min_hours: number | null
+  trade_offer_expiry_max_days: number | null
 }
 
 export interface TeamInfo {
@@ -855,7 +864,7 @@ export async function getLeagueTradeConfig(
 ): Promise<(LeagueTradeConfig & { status: string }) | null> {
   const { data, error } = await supabase
     .from('leagues')
-    .select('status, trades_enabled, trade_deadline, trade_veto_hours, trade_review_enabled, total_slots, faab_budget, draft_counterpick_slots, bidding_counterpick_slots')
+    .select('status, trades_enabled, trade_deadline, trade_veto_hours, trade_review_enabled, total_slots, faab_budget, draft_counterpick_slots, bidding_counterpick_slots, trade_offer_expiry_default_hours, trade_offer_expiry_min_hours, trade_offer_expiry_max_days')
     .eq('id', leagueId)
     .single()
 

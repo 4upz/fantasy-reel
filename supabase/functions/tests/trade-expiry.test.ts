@@ -201,6 +201,102 @@ Deno.test({
     })
 
     // ========================================================================
+    // League-configured bounds
+    //
+    // The bounds above are the app defaults. A league may narrow them
+    // (leagues.trade_offer_expiry_*, 20260827120000), and these steps prove the
+    // narrowed ones are what propose-trade actually enforces -- the failure
+    // this guards against is a caller forgetting to pass `bounds` and silently
+    // getting the module constants back.
+    // ========================================================================
+
+    await t.step('a league\'s own min and max govern what propose-trade accepts', async (t) => {
+      const boundedLeagueId = await factory.createTradingLeague(uniqueName('Bounded Expiry'))
+      const boundedRecipient = await factory.getTeamForUser(boundedLeagueId, secondClient)
+      const boundedPicks = await factory.getDraftPicksForUser(boundedLeagueId, client)
+      assertExists(boundedRecipient)
+      assert(boundedPicks.length > 0, 'test setup: initiator needs at least one holding')
+
+      // Through the Edge Function rather than a direct UPDATE, so the two halves
+      // of this feature are proven to connect: what the commissioner saved is
+      // what the proposer is held to.
+      const configured = await invokeFunction(client, 'update-league', {
+        action: 'update_trade_config',
+        league_id: boundedLeagueId,
+        trade_offer_expiry_min_hours: 12,
+        trade_offer_expiry_max_days: 3,
+      })
+      assertEquals(configured.error, null)
+
+      async function proposeBounded(expiry: Record<string, unknown>) {
+        return await invokeFunction<{ trade_offer: Record<string, unknown> }>(
+          client,
+          'propose-trade',
+          {
+            league_id: boundedLeagueId,
+            recipient_team_id: boundedRecipient!.teamId,
+            offered_items: {
+              movies: [{
+                movie_id: boundedPicks[0].movie_id,
+                source: 'draft_pick',
+                source_id: boundedPicks[0].id,
+              }],
+              faab: 0,
+            },
+            requested_items: { movies: [], faab: 1 },
+            ...expiry,
+          },
+        )
+      }
+
+      async function cleanupBounded() {
+        await serviceClient.from('trade_offers').delete().eq('league_id', boundedLeagueId)
+      }
+
+      await t.step('refuses a 7-day window against a 3-day maximum', async () => {
+        const { error, status } = await proposeBounded({
+          expires_at: inHours(7 * 24),
+          expiry_anchor: 'fixed',
+        })
+        assertEquals(status, 400)
+        // The app default would have allowed this, and the message has to name
+        // the league's number or the proposer will read it as a server bug.
+        assert(error?.includes('longer than 3 days'), `unexpected error: ${error}`)
+      })
+
+      await t.step('refuses a 6-hour window against a 12-hour minimum', async () => {
+        const { error, status } = await proposeBounded({
+          expires_at: inHours(6),
+          expiry_anchor: 'fixed',
+        })
+        assertEquals(status, 400)
+        assert(error?.includes('at least 12 hours'), `unexpected error: ${error}`)
+      })
+
+      await t.step('accepts a window inside the league\'s range', async () => {
+        const { data, error } = await proposeBounded({
+          expires_at: inHours(48),
+          expiry_anchor: 'fixed',
+        })
+        assertEquals(error, null)
+        assertExists(data!.trade_offer.expires_at)
+        await cleanupBounded()
+      })
+
+      await t.step('the app default still applies to a league that configured nothing', async () => {
+        // The same 7-day window the bounded league refused, in the unconfigured
+        // league from the top of this file.
+        const { data, error } = await propose({
+          expires_at: inHours(7 * 24),
+          expiry_anchor: 'fixed',
+        })
+        assertEquals(error, null)
+        assertExists(data!.trade_offer.expires_at)
+        await cleanupOffers()
+      })
+    })
+
+    // ========================================================================
     // Release anchor
     // ========================================================================
 

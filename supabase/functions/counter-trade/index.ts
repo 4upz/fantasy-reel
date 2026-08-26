@@ -20,7 +20,7 @@ import {
   sendTradeEmailNotifications,
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
-import { resolveOfferExpiry, hasLapsed, type ExpiryRequest } from '../_shared/trade-expiry.ts'
+import { resolveOfferExpiry, deriveExpiryBounds, hasLapsed, type ExpiryRequest } from '../_shared/trade-expiry.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('counter-trade')
@@ -122,6 +122,7 @@ Deno.serve(async (req) => {
       { expires_at, expiry_anchor, expiry_anchor_movie_id },
       {
         tradeDeadline: validationResult.config?.trade_deadline ?? null,
+        bounds: deriveExpiryBounds(validationResult.config),
         initiatorItems: enrichedOfferedItems,
         recipientItems: enrichedRequestedItems,
       }

@@ -12,42 +12,164 @@ import type { ExpiredReason, ExpiryAnchor } from '@/types'
  * crafted request skips this file entirely.
  */
 
-/** Kept in step with MIN_EXPIRY_MINUTES / MAX_EXPIRY_DAYS on the server. */
+/**
+ * The app-wide window rules, used whenever a league has not set its own.
+ * Kept in step with MIN_EXPIRY_MINUTES / MAX_EXPIRY_DAYS on the server.
+ */
 export const MIN_EXPIRY_MINUTES = 60
 export const MAX_EXPIRY_DAYS = 14
+export const DEFAULT_EXPIRY_HOURS = 48
 
 /**
- * Mirror of EXPIRY_ERRORS in the shared Edge Function module, so the message
- * under the picker and the server's 400 never contradict each other. Change
- * both together.
+ * A league's offer-window rules. Every bound in here is per-league, so nothing
+ * downstream may read the module constants directly -- they are only the
+ * fallback, applied once in resolveExpiryBounds().
+ *
+ * Mirrors ExpiryBounds on the server; the two sides have to agree on the shape
+ * or the picker starts offering windows the 400 then refuses.
+ */
+export interface ExpiryBounds {
+  defaultHours: number
+  minMinutes: number
+  maxDays: number
+}
+
+/** What a league that has configured nothing gets. */
+export const DEFAULT_EXPIRY_BOUNDS: ExpiryBounds = {
+  defaultHours: DEFAULT_EXPIRY_HOURS,
+  minMinutes: MIN_EXPIRY_MINUTES,
+  maxDays: MAX_EXPIRY_DAYS,
+}
+
+/** Just the league columns this reads, all optional -- see resolveExpiryBounds. */
+export interface ExpiryBoundsSource {
+  trade_offer_expiry_default_hours?: number | null
+  trade_offer_expiry_min_hours?: number | null
+  trade_offer_expiry_max_days?: number | null
+}
+
+/**
+ * Read a league's window rules off its row, falling back per field.
+ *
+ * The columns are optional as well as nullable on purpose: a client running
+ * against a database that predates the migration gets `undefined` rather than
+ * `null`, and that has to behave the same as an unconfigured league rather than
+ * producing NaN bounds that reject every window.
+ */
+export function resolveExpiryBounds(league: ExpiryBoundsSource | null | undefined): ExpiryBounds {
+  // Stored in hours, carried in minutes: the app floor is sub-day, so the
+  // picker needs the finer unit even though a league only configures hours.
+  // Written exactly as deriveExpiryBounds() on the server, including how a
+  // stored 0 behaves, so the two cannot disagree about a league's floor.
+  const minMinutes = (league?.trade_offer_expiry_min_hours ?? MIN_EXPIRY_MINUTES / 60) * 60
+  const maxDays = league?.trade_offer_expiry_max_days ?? MAX_EXPIRY_DAYS
+  const defaultHours = league?.trade_offer_expiry_default_hours ?? DEFAULT_EXPIRY_HOURS
+
+  return {
+    minMinutes,
+    maxDays,
+    // Clamped rather than trusted: the settings form keeps the default inside
+    // the min/max it is saved with, but a league configured before a later
+    // narrowing of those two can hold a default that now sits outside them, and
+    // that default is what the picker opens on.
+    defaultHours: Math.min(Math.max(defaultHours, minMinutes / 60), maxDays * 24),
+  }
+}
+
+/**
+ * Verbatim mirror of EXPIRY_ERRORS in the shared Edge Function module, so the
+ * message under the picker and the server's 400 never contradict each other.
+ * Change both together, pluralization included -- a user who trips the bound
+ * twice sees both strings, and a word of difference between them reads as two
+ * different rules.
+ *
+ * It cannot simply be imported: `supabase/functions/_shared/` is Deno code with
+ * URL specifiers and `.ts` extensions, outside this app's module graph
+ * entirely. Keeping the copies honest is a review-time obligation, which is why
+ * both sides carry this note.
  */
 export const EXPIRY_ERRORS = {
-  tooSoon: `An offer has to stay open at least ${MIN_EXPIRY_MINUTES / 60} hour`,
-  tooLate: `An offer cannot stay open longer than ${MAX_EXPIRY_DAYS} days`,
+  tooSoon: (bounds: ExpiryBounds) =>
+    `An offer has to stay open at least ${formatMinWindow(bounds.minMinutes)}`,
+  tooLate: (bounds: ExpiryBounds) =>
+    `An offer cannot stay open longer than ${bounds.maxDays} ${bounds.maxDays === 1 ? 'day' : 'days'}`,
   unparseable: 'Offer expiry is not a valid date',
   noReleaseDate: 'No movie in this trade is still unreleased',
 } as const
 
-export const DEFAULT_EXPIRY_HOURS = 48
+/**
+ * "1 hour" / "6 hours" / "30 minutes", for the minimum-window refusal.
+ *
+ * Character-identical to formatMinWindow() in
+ * supabase/functions/_shared/trade-expiry.ts, down to the singular cases: the
+ * picker's inline message disagreeing with the server's 400 by a letter is the
+ * failure mode this duplication exists to avoid. A league minimum is whole
+ * hours, so the minutes branch is unreachable from a league row -- it is here
+ * because the copy has to match, not because something reaches it.
+ */
+function formatMinWindow(minutes: number): string {
+  if (minutes % 60 !== 0) return `${minutes} minutes`
+  const hours = minutes / 60
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+}
 
-export const EXPIRY_PRESETS: ReadonlyArray<{ hours: number; label: string }> = [
-  { hours: 24, label: '24h' },
-  { hours: 48, label: '48h' },
-  { hours: 72, label: '3 days' },
-  { hours: 168, label: '7 days' },
-]
+/** The window lengths offered as chips, before a league's bounds narrow them. */
+const BASE_PRESET_HOURS: readonly number[] = [24, 48, 72, 168]
+
+/** "24h" up to two days, "3 days" beyond -- the labels the chips always had. */
+function presetLabel(hours: number): string {
+  return hours >= 72 && hours % 24 === 0 ? `${hours / 24} days` : `${hours}h`
+}
+
+/**
+ * The preset chips a given league offers.
+ *
+ * Bounds narrow the list rather than greying entries out: a chip that refuses
+ * on click is a worse explanation than the chip simply not being there, and the
+ * commissioner's ceiling is not something the proposer can act on anyway.
+ *
+ * The league's own default always appears, even when it is not one of the four
+ * standard lengths -- it is what the picker opens on, and an opening selection
+ * with no chip lit reads as nothing being selected at all.
+ */
+export function expiryPresetsFor(bounds: ExpiryBounds): ReadonlyArray<{ hours: number; label: string }> {
+  return [...new Set([...BASE_PRESET_HOURS, bounds.defaultHours])]
+    .filter((hours) => hours * 60 >= bounds.minMinutes && hours <= bounds.maxDays * 24)
+    .sort((a, b) => a - b)
+    .map((hours) => ({ hours, label: presetLabel(hours) }))
+}
 
 /**
  * Extension lengths offered on an existing offer, measured from its CURRENT
- * expiry rather than from now. Kept beside EXPIRY_PRESETS: "how long can an
- * offer run" is one question with one home, and the next person will look here.
+ * expiry rather than from now. Kept beside the presets: "how long can an offer
+ * run" is one question with one home, and the next person will look here.
  */
-export const EXTEND_PRESETS: ReadonlyArray<{ hours: number; label: string }> = [
-  { hours: 12, label: '+12h' },
-  { hours: 24, label: '+24h' },
-  { hours: 48, label: '+48h' },
-  { hours: 72, label: '+3 days' },
-]
+const BASE_EXTEND_HOURS: readonly number[] = [12, 24, 48, 72]
+
+/**
+ * The extension chips that would land inside the league's ceiling.
+ *
+ * The ceiling is `now + maxDays`, matching resolveOfferExpiry() on the server --
+ * NOT maxDays measured from the offer's current expiry. An offer already three
+ * days out therefore has fewer extensions available than a fresh one, which is
+ * the rule the 400 would state anyway.
+ *
+ * Measuring from the current expiry instead would compound: each extension
+ * would push the ceiling out with it, so an offer could be walked forward
+ * indefinitely in maxDays chunks and the league's maximum would mean nothing.
+ * The rule is that at any moment an offer may not stand more than maxDays into
+ * the future -- do not "fix" this to be relative.
+ */
+export function extendPresetsFor(
+  expiresAt: string,
+  bounds: ExpiryBounds,
+  now = Date.now()
+): ReadonlyArray<{ hours: number; label: string }> {
+  const ceiling = now + bounds.maxDays * 24 * 60 * MS_PER_MINUTE
+  return BASE_EXTEND_HOURS.filter(
+    (hours) => resolveExtension(expiresAt, hours).getTime() <= ceiling
+  ).map((hours) => ({ hours, label: `+${presetLabel(hours)}` }))
+}
 
 /** Push an existing expiry out by `hours`. Forward only -- see extend-trade-offer. */
 export function resolveExtension(fromIso: string, hours: number): Date {
@@ -133,7 +255,11 @@ function releaseBoundary(releaseDate: string): Date | null {
  * copy exists so the picker can label and order the chip without a round trip
  * per keystroke.
  */
-export function resolveReleaseAnchor(movies: ExpiryMovie[], now = Date.now()): ReleaseAnchor {
+export function resolveReleaseAnchor(
+  movies: ExpiryMovie[],
+  bounds: ExpiryBounds,
+  now = Date.now()
+): ReleaseAnchor {
   if (movies.length === 0) {
     return { available: false, reason: 'Add a movie to use this', candidates: [] }
   }
@@ -161,8 +287,7 @@ export function resolveReleaseAnchor(movies: ExpiryMovie[], now = Date.now()): R
   // the minimum -- the chip would then be lying about what it does -- but the
   // later candidates are still perfectly good choices, so the option stays open.
   const usable = candidates.filter(
-    (candidate) =>
-      new Date(candidate.boundary).getTime() >= now + MIN_EXPIRY_MINUTES * MS_PER_MINUTE
+    (candidate) => new Date(candidate.boundary).getTime() >= now + bounds.minMinutes * MS_PER_MINUTE
   )
 
   if (usable.length === 0) {
@@ -195,6 +320,7 @@ export function anchorFor(
 export function resolveExpiryChoice(
   choice: ExpiryChoice,
   releaseAnchor: ReleaseAnchor,
+  bounds: ExpiryBounds,
   now = Date.now()
 ): ExpiryResolution {
   switch (choice.kind) {
@@ -245,11 +371,11 @@ export function resolveExpiryChoice(
 
       // Re-checked on every render, not just on change: the clock keeps moving
       // while the modal is open, so a 6:00 pick made at 5:00 is invalid by 5:01.
-      if (picked.getTime() < now + MIN_EXPIRY_MINUTES * MS_PER_MINUTE) {
-        return { ok: false, error: EXPIRY_ERRORS.tooSoon }
+      if (picked.getTime() < now + bounds.minMinutes * MS_PER_MINUTE) {
+        return { ok: false, error: EXPIRY_ERRORS.tooSoon(bounds) }
       }
-      if (picked.getTime() > now + MAX_EXPIRY_DAYS * 24 * 60 * MS_PER_MINUTE) {
-        return { ok: false, error: EXPIRY_ERRORS.tooLate }
+      if (picked.getTime() > now + bounds.maxDays * 24 * 60 * MS_PER_MINUTE) {
+        return { ok: false, error: EXPIRY_ERRORS.tooLate(bounds) }
       }
 
       picked.setSeconds(0, 0)

@@ -11,11 +11,12 @@ import {
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 import { MIN_NEW_BID_CUTOFF_HOURS, MAX_NEW_BID_CUTOFF_HOURS } from '../_shared/bid-window.ts'
 import { snapshotStandings, formatPoints } from '../_shared/score-notifications.ts'
+import { deriveExpiryBounds, type LeagueExpiryConfig } from '../_shared/trade-expiry.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('update-league')
 
-type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
+type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'update_trade_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
 
 interface UpdateInfoRequest {
   action: 'update_info'
@@ -64,6 +65,20 @@ interface UpdateCounterpickConfigRequest {
   counterpicks_block_drops?: boolean
 }
 
+interface UpdateTradeConfigRequest {
+  action: 'update_trade_config'
+  league_id: string
+  trades_enabled?: boolean
+  /** Bare date (YYYY-MM-DD), inclusive. null clears the deadline. */
+  trade_deadline?: string | null
+  trade_review_enabled?: boolean
+  trade_veto_hours?: number
+  /** null on any of the three restores the app default. */
+  trade_offer_expiry_default_hours?: number | null
+  trade_offer_expiry_min_hours?: number | null
+  trade_offer_expiry_max_days?: number | null
+}
+
 interface RandomizeDraftOrderRequest {
   action: 'randomize_draft_order'
   league_id: string
@@ -80,6 +95,7 @@ type UpdateLeagueRequest =
   | UpdateDraftConfigRequest
   | UpdateBiddingConfigRequest
   | UpdateCounterpickConfigRequest
+  | UpdateTradeConfigRequest
   | RandomizeDraftOrderRequest
   | ReorderParticipantsRequest
   | KickParticipantRequest
@@ -102,6 +118,20 @@ const MAX_COUNTERBID_HOURS = 72
 // Counterpick config constraints
 const MIN_COUNTERPICK_SLOTS = 0
 const MAX_COUNTERPICK_SLOTS = 5
+
+// Trade config constraints. The veto bounds match check_trade_veto_hours on the
+// table; the expiry bounds match the three CHECKs added in
+// 20260827120000_league_trade_expiry_config.sql. Both are restated here so a
+// bad value comes back as a readable 400 instead of a constraint violation
+// surfacing as a 500.
+const MIN_TRADE_VETO_HOURS = 0
+const MAX_TRADE_VETO_HOURS = 168
+const MIN_EXPIRY_DEFAULT_HOURS = 1
+const MAX_EXPIRY_DEFAULT_HOURS = 2160
+const MIN_EXPIRY_MIN_HOURS = 1
+const MAX_EXPIRY_MIN_HOURS = 168
+const MIN_EXPIRY_MAX_DAYS = 1
+const MAX_EXPIRY_MAX_DAYS = 90
 
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
@@ -148,6 +178,9 @@ Deno.serve(async (req) => {
 
       case 'update_counterpick_config':
         return await handleUpdateCounterpickConfig(supabase, league, body as UpdateCounterpickConfigRequest)
+
+      case 'update_trade_config':
+        return await handleUpdateTradeConfig(supabase, league, body as UpdateTradeConfigRequest)
 
       case 'randomize_draft_order':
         return await handleRandomizeDraftOrder(supabase, league)
@@ -415,6 +448,144 @@ async function handleUpdateCounterpickConfig(
   }
 
   return jsonResponse({ league: updatedLeague, message: 'Counterpick configuration updated successfully' })
+}
+
+/**
+ * Trade settings: the season deadline, the commissioner review window, and the
+ * per-offer expiry bounds added in 20260827120000.
+ *
+ * Deliberately NOT gated on `setup` status, unlike every other config handler
+ * here. Trading only happens once a league is active, so a gate that let these
+ * be edited only before the draft would mean they could never be edited when
+ * they matter -- a commissioner moving the trade deadline mid-season is the
+ * normal case, not an escape hatch.
+ */
+async function handleUpdateTradeConfig(
+  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  league: LeagueExpiryConfig & { id: string },
+  body: UpdateTradeConfigRequest
+): Promise<Response> {
+  const updates: Record<string, unknown> = {}
+
+  if (body.trades_enabled !== undefined) {
+    if (typeof body.trades_enabled !== 'boolean') {
+      return errorResponse('trades_enabled must be a boolean', 400)
+    }
+    updates.trades_enabled = body.trades_enabled
+  }
+
+  if (body.trade_review_enabled !== undefined) {
+    if (typeof body.trade_review_enabled !== 'boolean') {
+      return errorResponse('trade_review_enabled must be a boolean', 400)
+    }
+    updates.trade_review_enabled = body.trade_review_enabled
+  }
+
+  if (body.trade_deadline !== undefined) {
+    if (body.trade_deadline === null) {
+      updates.trade_deadline = null
+    } else {
+      // A bare date, matching the DATE column and the inclusive end-of-day
+      // reading in validateLeagueTradingEnabled. Accepting a full timestamp
+      // here would store a truncated date silently different from what was sent.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.trade_deadline) ||
+          Number.isNaN(new Date(`${body.trade_deadline}T00:00:00.000Z`).getTime())) {
+        return errorResponse('Trade deadline must be a date in YYYY-MM-DD format', 400)
+      }
+      updates.trade_deadline = body.trade_deadline
+    }
+  }
+
+  if (body.trade_veto_hours !== undefined) {
+    if (!Number.isInteger(body.trade_veto_hours) ||
+        body.trade_veto_hours < MIN_TRADE_VETO_HOURS ||
+        body.trade_veto_hours > MAX_TRADE_VETO_HOURS) {
+      return errorResponse(
+        `Veto window must be a whole number of hours between ${MIN_TRADE_VETO_HOURS} and ${MAX_TRADE_VETO_HOURS}`,
+        400
+      )
+    }
+    updates.trade_veto_hours = body.trade_veto_hours
+  }
+
+  // The three expiry bounds share a shape: a whole number in range, or null to
+  // fall back to the app default.
+  const expiryFields = [
+    {
+      key: 'trade_offer_expiry_default_hours',
+      value: body.trade_offer_expiry_default_hours,
+      min: MIN_EXPIRY_DEFAULT_HOURS,
+      max: MAX_EXPIRY_DEFAULT_HOURS,
+      label: 'Default offer window',
+      unit: 'hours',
+    },
+    {
+      key: 'trade_offer_expiry_min_hours',
+      value: body.trade_offer_expiry_min_hours,
+      min: MIN_EXPIRY_MIN_HOURS,
+      max: MAX_EXPIRY_MIN_HOURS,
+      label: 'Minimum offer window',
+      unit: 'hours',
+    },
+    {
+      key: 'trade_offer_expiry_max_days',
+      value: body.trade_offer_expiry_max_days,
+      min: MIN_EXPIRY_MAX_DAYS,
+      max: MAX_EXPIRY_MAX_DAYS,
+      label: 'Maximum offer window',
+      unit: 'days',
+    },
+  ] as const
+
+  for (const field of expiryFields) {
+    if (field.value === undefined) continue
+    if (field.value === null) {
+      updates[field.key] = null
+      continue
+    }
+    if (!Number.isInteger(field.value) || field.value < field.min || field.value > field.max) {
+      return errorResponse(
+        `${field.label} must be a whole number of ${field.unit} between ${field.min} and ${field.max}`,
+        400
+      )
+    }
+    updates[field.key] = field.value
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return errorResponse('No valid fields to update', 400)
+  }
+
+  // Check the bounds the league will HAVE, not the ones it was sent: an owner
+  // narrowing the maximum alone still has to end up with a default inside it,
+  // and the fallbacks for whatever they left NULL are part of that answer.
+  // deriveExpiryBounds resolves those fallbacks so this and the resolver cannot
+  // disagree about what NULL means. Same rule as
+  // check_trade_offer_expiry_bounds_ordered -- this is the readable half.
+  const effective = deriveExpiryBounds({ ...league, ...updates } as LeagueExpiryConfig)
+  const effectiveMinHours = effective.minMinutes / 60
+  if (effectiveMinHours > effective.defaultHours ||
+      effective.defaultHours > effective.maxDays * 24) {
+    return errorResponse(
+      `The default offer window (${effective.defaultHours} hours) must be between the minimum ` +
+      `(${effectiveMinHours} hours) and the maximum (${effective.maxDays} days)`,
+      400
+    )
+  }
+
+  const { data: updatedLeague, error } = await supabase
+    .from('leagues')
+    .update(updates)
+    .eq('id', league.id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating trade config:', error)
+    return errorResponse('Failed to update trade configuration', 500)
+  }
+
+  return jsonResponse({ league: updatedLeague, message: 'Trade configuration updated successfully' })
 }
 
 async function handleKickParticipant(

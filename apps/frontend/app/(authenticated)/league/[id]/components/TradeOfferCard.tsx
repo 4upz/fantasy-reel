@@ -18,11 +18,12 @@ import AcceptConfirmModal from './AcceptConfirmModal'
 import OfferExpiryPicker, { Chip } from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
 import {
-  EXTEND_PRESETS,
   expiredReasonCopy,
+  extendPresetsFor,
   resolveExtension,
   expiryUrgency,
   formatExpiryAbsolute,
+  type ExpiryBounds,
   type ExpiryUrgency,
   type ResolvedExpiry,
 } from '@/utils/tradeExpiry'
@@ -36,6 +37,8 @@ interface Props {
   otherTeams: TeamWithOwner[]
   tradeableMovies: TradeableMovie[]
   budget: TeamBudget | null
+  /** The league's offer-window rules, for the counter and extend modals. */
+  expiryBounds: ExpiryBounds
   onRespond: (
     tradeOfferId: string,
     response: 'accept' | 'reject',
@@ -139,6 +142,7 @@ export default function TradeOfferCard(props: Props) {
     otherTeams,
     tradeableMovies,
     budget,
+    expiryBounds,
     onRespond,
     onCounter,
     onCancel,
@@ -514,6 +518,7 @@ export default function TradeOfferCard(props: Props) {
           currentTeamId={currentTeamId}
           tradeableMovies={tradeableMovies}
           budget={budget}
+          expiryBounds={expiryBounds}
           onClose={() => setShowCounterModal(false)}
           onCounter={async (counterOfferedItems, counterRequestedItems, message, expiry) => {
             const result = await onCounter(trade.id, counterOfferedItems, counterRequestedItems, message, expiry)
@@ -556,6 +561,7 @@ export default function TradeOfferCard(props: Props) {
         <ExtendOfferModal
           trade={trade}
           expiresAt={trade.expires_at}
+          expiryBounds={expiryBounds}
           onClose={() => setShowExtendModal(false)}
           onExtend={onExtend}
         />
@@ -683,6 +689,7 @@ interface CounterTradeModalProps {
   currentTeamId: string
   tradeableMovies: TradeableMovie[]
   budget: TeamBudget | null
+  expiryBounds: ExpiryBounds
   onClose: () => void
   onCounter: (
     counterOfferedItems: TradeItems,
@@ -698,6 +705,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
     // currentTeamId - passed for potential future use
     tradeableMovies,
     budget,
+    expiryBounds,
     onClose,
     onCounter,
   } = counterProps
@@ -777,7 +785,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
   )
   // A counter is a new offer wearing the old row, so it gets its own clock
   // rather than inheriting the one it is answering.
-  const expiry = useOfferExpiry(counterMovies)
+  const expiry = useOfferExpiry(counterMovies, expiryBounds)
 
   const submitCounterAction = useCallback(async () => {
     setError(null)
@@ -914,6 +922,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
             onChange={expiry.setChoice}
             resolution={expiry.resolution}
             fellBack={expiry.fellBack}
+            bounds={expiryBounds}
           />
 
           <div>
@@ -1090,6 +1099,8 @@ interface ExtendOfferModalProps {
   trade: TradeOfferWithTeams
   /** The clock being pushed out. Narrowed by the caller so it is never null. */
   expiresAt: string
+  /** The league's window rules -- which extensions are worth offering. */
+  expiryBounds: ExpiryBounds
   onClose: () => void
   /**
    * Takes the trade id so the card can pass its hook callback straight through.
@@ -1103,13 +1114,30 @@ interface ExtendOfferModalProps {
 /**
  * Give the other side more time.
  *
- * Only ever offers later times, which is the forward-only rule made visible --
- * the server enforces it, along with the 14-day ceiling and the league trade
- * deadline, so an over-long extension comes back as a refusal here rather than
- * being pre-emptively greyed out.
+ * Only ever offers later times, which is the forward-only rule made visible.
+ * The league's ceiling is applied the same way -- an extension that would land
+ * past it is not offered at all, since the proposer cannot do anything about a
+ * limit the commissioner set. The server still enforces both, along with the
+ * trade deadline clamp, so anything that slips through comes back as a refusal
+ * shown below.
  */
-function ExtendOfferModal({ trade, expiresAt, onClose, onExtend }: ExtendOfferModalProps) {
-  const [hours, setHours] = useState(EXTEND_PRESETS[0].hours)
+function ExtendOfferModal({
+  trade,
+  expiresAt,
+  expiryBounds,
+  onClose,
+  onExtend,
+}: ExtendOfferModalProps) {
+  // Fixed for as long as the modal is open. Recomputing on the card's countdown
+  // tick would drop options out from under the pointer as the ceiling closes in.
+  const presets = useMemo(
+    () => extendPresetsFor(expiresAt, expiryBounds),
+    [expiresAt, expiryBounds]
+  )
+  // An offer already running to the league's maximum has nothing left to give.
+  const atCeiling = presets.length === 0
+
+  const [hours, setHours] = useState(() => presets[0]?.hours ?? 0)
   const [error, setError] = useState<string | null>(null)
 
   const recipientTeam = trade.recipient_team as { name: string }
@@ -1175,28 +1203,39 @@ function ExtendOfferModal({ trade, expiresAt, onClose, onExtend }: ExtendOfferMo
             </time>
           </p>
 
-          <div>
-            <span className="text-sm text-foreground-secondary">Extend by</span>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {EXTEND_PRESETS.map((preset) => (
-                <Chip
-                  key={preset.hours}
-                  selected={hours === preset.hours}
-                  onClick={() => setHours(preset.hours)}
-                >
-                  {preset.label}
-                </Chip>
-              ))}
+          {atCeiling ? (
+            <div className="alert alert-info" role="status">
+              <p className="text-sm">
+                This offer already runs as long as the league allows — no more than{' '}
+                {expiryBounds.maxDays} {expiryBounds.maxDays === 1 ? 'day' : 'days'} from now.
+              </p>
             </div>
-          </div>
+          ) : (
+            <>
+              <div>
+                <span className="text-sm text-foreground-secondary">Extend by</span>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {presets.map((preset) => (
+                    <Chip
+                      key={preset.hours}
+                      selected={hours === preset.hours}
+                      onClick={() => setHours(preset.hours)}
+                    >
+                      {preset.label}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
 
-          {/* A chip alone never says when. Same rule as the proposal picker. */}
-          <p className="text-sm text-foreground-muted">
-            New expiry:{' '}
-            <time dateTime={newExpiresAt.toISOString()} className="text-foreground-secondary">
-              {formatExpiryAbsolute(newExpiresAt.toISOString())}
-            </time>
-          </p>
+              {/* A chip alone never says when. Same rule as the proposal picker. */}
+              <p className="text-sm text-foreground-muted">
+                New expiry:{' '}
+                <time dateTime={newExpiresAt.toISOString()} className="text-foreground-secondary">
+                  {formatExpiryAbsolute(newExpiresAt.toISOString())}
+                </time>
+              </p>
+            </>
+          )}
 
           {/*
             The one thing an extension changes besides the time. Saying it here,
@@ -1204,7 +1243,7 @@ function ExtendOfferModal({ trade, expiresAt, onClose, onExtend }: ExtendOfferMo
             bare "+24h" button: the offer stops following the movie, and finding
             that out afterwards would read as the app rewriting the deal.
           */}
-          {trade.expiry_anchor === 'movie_release' && (
+          {!atCeiling && trade.expiry_anchor === 'movie_release' && (
             <div className="alert alert-warning" role="alert">
               <p className="text-sm">
                 This offer runs until {trade.anchor_movie_title ?? 'its movie'} releases. Extending
@@ -1233,7 +1272,7 @@ function ExtendOfferModal({ trade, expiresAt, onClose, onExtend }: ExtendOfferMo
           <button
             onClick={() => handleExtend()}
             className="btn btn-primary"
-            disabled={isLoading}
+            disabled={isLoading || atCeiling}
             aria-label="Confirm extending the offer"
             aria-busy={isLoading}
             data-testid={`confirm-extend-trade-${trade.id}`}

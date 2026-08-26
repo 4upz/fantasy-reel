@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  DEFAULT_EXPIRY_HOURS,
   resolveExpiryChoice,
   resolveReleaseAnchor,
+  type ExpiryBounds,
   type ExpiryChoice,
   type ExpiryMovie,
   type ExpiryResolution,
@@ -40,18 +40,21 @@ interface UseOfferExpiryReturn {
  * @param movies Every movie in the offer, BOTH sides: the release anchor is the
  *   earliest release across the whole deal, because once any movie in it is out
  *   the information balance has already changed.
+ * @param bounds The league's window rules, from resolveExpiryBounds. Required
+ *   rather than defaulted for the same reason as on the server: a forgotten
+ *   argument would quietly enforce the app defaults on a league that set its own.
  */
-export function useOfferExpiry(movies: ExpiryMovie[]): UseOfferExpiryReturn {
+export function useOfferExpiry(movies: ExpiryMovie[], bounds: ExpiryBounds): UseOfferExpiryReturn {
   const [choice, setChoiceState] = useState<ExpiryChoice>({
     kind: 'preset',
-    hours: DEFAULT_EXPIRY_HOURS,
+    hours: bounds.defaultHours,
   })
   const [fellBack, setFellBack] = useState(false)
 
-  const releaseAnchor = useMemo(() => resolveReleaseAnchor(movies), [movies])
+  const releaseAnchor = useMemo(() => resolveReleaseAnchor(movies, bounds), [movies, bounds])
   const resolution = useMemo(
-    () => resolveExpiryChoice(choice, releaseAnchor),
-    [choice, releaseAnchor]
+    () => resolveExpiryChoice(choice, releaseAnchor, bounds),
+    [choice, releaseAnchor, bounds]
   )
 
   const setChoice = useCallback((next: ExpiryChoice) => {
@@ -68,7 +71,7 @@ export function useOfferExpiry(movies: ExpiryMovie[]): UseOfferExpiryReturn {
     if (choice.kind !== 'release') return
 
     if (!releaseAnchor.available) {
-      setChoiceState({ kind: 'preset', hours: DEFAULT_EXPIRY_HOURS })
+      setChoiceState({ kind: 'preset', hours: bounds.defaultHours })
       setFellBack(true)
       return
     }
@@ -81,11 +84,11 @@ export function useOfferExpiry(movies: ExpiryMovie[]): UseOfferExpiryReturn {
       setChoiceState({ kind: 'release', movieId: null })
       setFellBack(true)
     }
-  }, [choice, releaseAnchor])
+  }, [choice, releaseAnchor, bounds])
 
   const resolveNow = useCallback(
-    () => resolveExpiryChoice(choice, releaseAnchor),
-    [choice, releaseAnchor]
+    () => resolveExpiryChoice(choice, releaseAnchor, bounds),
+    [choice, releaseAnchor, bounds]
   )
 
   return { choice, setChoice, releaseAnchor, resolution, fellBack, resolveNow }

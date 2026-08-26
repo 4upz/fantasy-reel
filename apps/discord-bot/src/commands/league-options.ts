@@ -19,7 +19,16 @@ interface LeagueSettingsRow {
   trade_review_enabled: boolean | null
   trade_veto_hours: number | null
   trade_deadline: string | null
+  trade_offer_expiry_default_hours: number | null
+  trade_offer_expiry_min_hours: number | null
+  trade_offer_expiry_max_days: number | null
 }
+
+// What an unset (NULL) expiry column falls back to. Mirrors DEFAULT_EXPIRY_HOURS
+// / MIN_EXPIRY_MINUTES / MAX_EXPIRY_DAYS in
+// supabase/functions/_shared/trade-expiry.ts -- the bot cannot import from the
+// Edge Functions, so this reads them the same way the server resolves them.
+const EXPIRY_FALLBACK = { defaultHours: 48, minHours: 1, maxDays: 14 }
 
 const onOff = (value: boolean | null | undefined) => (value ? 'On' : 'Off')
 
@@ -42,7 +51,8 @@ export const leagueOptions: Command = {
       .select(
         'invite_only, max_participants, draft_slots, total_slots, drop_limit, counterbid_hours, ' +
         'draft_counterpick_slots, bidding_counterpick_slots, counterpicks_block_drops, faab_budget, ' +
-        'trades_enabled, trade_review_enabled, trade_veto_hours, trade_deadline'
+        'trades_enabled, trade_review_enabled, trade_veto_hours, trade_deadline, ' +
+        'trade_offer_expiry_default_hours, trade_offer_expiry_min_hours, trade_offer_expiry_max_days'
       )
       .eq('id', leagueId)
       .maybeSingle<LeagueSettingsRow>()
@@ -77,6 +87,11 @@ export const leagueOptions: Command = {
       `Review before execution: ${onOff(settings.trade_review_enabled)}`,
       `Veto window: ${settings.trade_veto_hours ?? '?'} hours`,
       settings.trade_deadline ? `Trade deadline: ${new Date(settings.trade_deadline).toLocaleDateString()}` : null,
+      '',
+      '**Offer expiry**',
+      `Default window: ${settings.trade_offer_expiry_default_hours ?? EXPIRY_FALLBACK.defaultHours} hours`,
+      `Allowed range: ${settings.trade_offer_expiry_min_hours ?? EXPIRY_FALLBACK.minHours} hours to ` +
+        `${settings.trade_offer_expiry_max_days ?? EXPIRY_FALLBACK.maxDays} days`,
     ].filter((line): line is string => line !== null)
 
     const embed = createBaseEmbed(leagueName, leagueId)
