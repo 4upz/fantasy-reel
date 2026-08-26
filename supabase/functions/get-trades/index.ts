@@ -58,6 +58,37 @@ async function getContestedSourceIds(
   )
 }
 
+/**
+ * Titles for every movie these offers are anchored to, in one query.
+ *
+ * Keyed by movie id rather than per-offer so a league whose offers all wait on
+ * the same release costs a single lookup.
+ */
+async function getAnchorTitles(
+  supabase: ReturnType<typeof createServiceClient>,
+  trades: Array<{ expiry_anchor_movie_id?: string | null }>
+): Promise<Map<string, string>> {
+  const ids = [
+    ...new Set(
+      trades
+        .map((trade) => trade.expiry_anchor_movie_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ]
+
+  if (ids.length === 0) return new Map()
+
+  const { data, error } = await supabase.from('movies').select('id, title').in('id', ids)
+
+  if (error) {
+    // Only costs the card its movie name, so degrade rather than fail the list.
+    log.warn('Failed to resolve expiry anchor titles', { error: error.message })
+    return new Map()
+  }
+
+  return new Map((data ?? []).map((movie: { id: string; title: string }) => [movie.id, movie.title]))
+}
+
 interface TradeItemsShape {
   movies?: Array<{ source_id?: string }>
 }
@@ -155,6 +186,12 @@ Deno.serve(async (req) => {
       .select('*', { count: 'exact', head: true })
       .eq('league_id', league_id)
 
+    // The movie a release-anchored offer waits on, resolved here from the live
+    // movies table. The client used to derive this from the items snapshot,
+    // which could name the wrong film once release dates moved -- the server
+    // knows which movie it picked, so it says so.
+    const anchorTitles = await getAnchorTitles(serviceClient, trades ?? [])
+
     // Annotate each offer with which of ITS OWN movies are also named by another
     // open offer, so the UI can flag a contested deal. get_contested_source_ids
     // returns counts only -- never which teams or offers are competing -- so
@@ -164,6 +201,9 @@ Deno.serve(async (req) => {
     const tradesWithContest = (trades ?? []).map((trade) => ({
       ...trade,
       contested_source_ids: contestedSourceIdsFor(trade, contested),
+      anchor_movie_title: trade.expiry_anchor_movie_id
+        ? anchorTitles.get(trade.expiry_anchor_movie_id) ?? null
+        : null,
     }))
 
     return jsonResponse({

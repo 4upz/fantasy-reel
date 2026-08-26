@@ -28,6 +28,10 @@ export interface TradeEmailData {
   message?: string
   vetoReason?: string
   reviewEndsAt?: string
+  /** When an unanswered offer lapses. Absent when the offer has no clock. */
+  expiresAt?: string
+  /** Why an expired offer expired, already phrased for a reader. */
+  expiredReason?: string
 }
 
 export interface SendEmailResult {
@@ -43,17 +47,33 @@ export interface SendEmailResult {
 /**
  * Format expiration date for display in email
  */
-function formatExpirationDate(expiresAt: string): string {
+/**
+ * A date for an email, in UTC and labelled as such.
+ *
+ * `withTime` because the two callers want different resolution: a multi-day
+ * review window reads fine as a date, while "expires at 4pm" does not. The
+ * timezone is spelled out either way, since this renders in whatever locale
+ * the Edge Function runs in, which is not the reader's.
+ */
+function formatExpirationDate(expiresAt: string, options?: { withTime?: boolean }): string {
   const date = new Date(expiresAt)
   if (isNaN(date.getTime())) {
     return 'soon'
   }
-  return date.toLocaleDateString('en-US', {
+
+  const formatted = date.toLocaleDateString('en-US', {
     weekday: 'long',
-    year: 'numeric',
+    ...(options?.withTime ? {} : { year: 'numeric' }),
     month: 'long',
     day: 'numeric',
+    ...(options?.withTime ? { hour: 'numeric', minute: '2-digit' } : {}),
+    timeZone: 'UTC',
   })
+
+  // The zone label only earns its place next to a time. The two date-only
+  // callers (invitation expiry) rendered without one before this, and their
+  // copy should not change.
+  return options?.withTime ? `${formatted} UTC` : formatted
 }
 
 /**
@@ -317,13 +337,14 @@ export async function sendInvitationEmail(data: InvitationEmailData): Promise<Se
 // Trade Email Templates
 // ============================================================================
 
-type TradeEmailType =
+export type TradeEmailType =
   | 'proposed'
   | 'countered'
   | 'accepted'
   | 'rejected'
   | 'completed'
   | 'vetoed'
+  | 'expired'
 
 interface TradeEmailConfig {
   subject: string
@@ -375,6 +396,14 @@ function getTradeEmailConfig(type: TradeEmailType, data: TradeEmailData): TradeE
       ctaText: 'View Roster',
       showItems: true,
       accentColor: '#4ade80', // green
+    },
+    expired: {
+      subject: `Trade offer expired in ${data.leagueName}`,
+      heading: 'Trade Offer Expired',
+      subheading: `Your trade with <strong style="color: #e8e8e8;">${escapeHtml(data.otherTeamName)}</strong> expired before it was answered`,
+      ctaText: 'Propose Another',
+      showItems: true,
+      accentColor: '#8a8078', // muted -- nothing went wrong, the clock just ran out
     },
     vetoed: {
       subject: `Trade vetoed by commissioner in ${data.leagueName}`,
@@ -439,6 +468,18 @@ export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData):
                 Review period ends: <strong style="color: #e8e8e8;">${formatExpirationDate(data.reviewEndsAt)}</strong>
               </p>` : ''
 
+  // An offer with a clock says so up front -- the whole point of the feature is
+  // that the recipient knows how long they have without asking in Discord.
+  const expirySection = (type === 'proposed' || type === 'countered') && data.expiresAt ? `
+              <p style="margin: 0 0 24px; font-size: 14px; color: #b8b0a4; text-align: center;">
+                This offer expires: <strong style="color: #e8e8e8;">${formatExpirationDate(data.expiresAt, { withTime: true })}</strong>
+              </p>` : ''
+
+  const expiredSection = type === 'expired' && data.expiredReason ? `
+              <p style="margin: 0 0 24px; font-size: 14px; color: #b8b0a4; text-align: center;">
+                ${escapeHtml(data.expiredReason)}
+              </p>` : ''
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -475,6 +516,8 @@ export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData):
               ${messageSection}
               ${vetoSection}
               ${reviewSection}
+              ${expirySection}
+              ${expiredSection}
 
               <!-- CTA Button -->
               <table role="presentation" cellpadding="0" cellspacing="0" style="width: 100%;">
@@ -545,6 +588,18 @@ ${data.requestedItems || 'Nothing'}
 
   if (type === 'accepted' && data.reviewEndsAt) {
     text += `Review period ends: ${formatExpirationDate(data.reviewEndsAt)}
+
+`
+  }
+
+  if ((type === 'proposed' || type === 'countered') && data.expiresAt) {
+    text += `This offer expires: ${formatExpirationDate(data.expiresAt, { withTime: true })}
+
+`
+  }
+
+  if (type === 'expired' && data.expiredReason) {
+    text += `${sanitizeEmailHeader(data.expiredReason)}
 
 `
   }

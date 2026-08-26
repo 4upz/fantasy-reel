@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import Image from 'next/image'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
@@ -15,6 +15,15 @@ import type {
 } from '@/types'
 import { formatRelativeDate } from '@/utils/date'
 import AcceptConfirmModal from './AcceptConfirmModal'
+import OfferExpiryPicker from './OfferExpiryPicker'
+import { useOfferExpiry } from '../hooks/useOfferExpiry'
+import {
+  expiredReasonCopy,
+  expiryUrgency,
+  formatExpiryAbsolute,
+  type ExpiryUrgency,
+  type ResolvedExpiry,
+} from '@/utils/tradeExpiry'
 import CounterpickMark from './CounterpickMark'
 
 interface Props {
@@ -34,7 +43,8 @@ interface Props {
     tradeOfferId: string,
     counterOfferedItems: TradeItems,
     counterRequestedItems: TradeItems,
-    message?: string
+    message?: string,
+    expiry?: ResolvedExpiry
   ) => Promise<TradeActionResult>
   onCancel: (tradeOfferId: string) => Promise<TradeActionResult>
   onVeto: (
@@ -67,6 +77,22 @@ const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }>
  * its outcome decided, so flagging it would be noise.
  */
 const OPEN_STATUSES = new Set(['proposed', 'countered', 'accepted', 'review'])
+
+/**
+ * Statuses where an offer's own clock still means anything. Once both parties
+ * agree, the review window owns the trade and the offer expiry goes inert --
+ * the row keeps it for audit, but showing it would be a second countdown
+ * competing with the one that actually decides.
+ */
+const EXPIRY_RELEVANT_STATUSES = new Set(['proposed', 'countered'])
+
+/** Countdown pill treatment by how much time is left. */
+const URGENCY_STYLES: Record<ExpiryUrgency, string> = {
+  relaxed: 'text-foreground-muted',
+  soon: 'bg-warning-bg text-warning',
+  urgent: 'bg-error-bg text-error',
+  lapsed: 'bg-surface-hover text-foreground-muted',
+}
 
 /** Stable empty set so a non-contested card doesn't allocate one per render. */
 const EMPTY_CONTESTED: ReadonlySet<string> = new Set<string>()
@@ -112,6 +138,12 @@ export default function TradeOfferCard(props: Props) {
     onApprove,
   } = props
 
+  // formatRelativeDate is a pure formatter, so a countdown only moves when
+  // something re-renders. Tick it -- but only inside the last hour of an open
+  // offer, so a page of cards is not re-rendering on a timer for a deadline
+  // that is days away.
+  const [tickNow, setTickNow] = useState(() => Date.now())
+
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCounterModal, setShowCounterModal] = useState(false)
@@ -139,6 +171,34 @@ export default function TradeOfferCard(props: Props) {
   // compete for the same movie, and only the first to go through happens.
   const contestedSourceIds = new Set(trade.contested_source_ids ?? [])
   const isContested = contestedSourceIds.size > 0 && OPEN_STATUSES.has(displayStatus)
+
+  const showExpiry = Boolean(trade.expires_at) && EXPIRY_RELEVANT_STATUSES.has(displayStatus)
+  const urgency = trade.expires_at ? expiryUrgency(trade.expires_at, tickNow) : 'relaxed'
+  const expiredReason =
+    trade.status === 'expired'
+      ? // The title comes from get-trades, which resolved it from the live
+        // movies table -- deriving it here from the items snapshot could name
+        // the wrong film once release dates moved.
+        expiredReasonCopy(trade.expired_reason, trade.anchor_movie_title)
+      : null
+
+  const expiresAt = trade.expires_at
+  useEffect(() => {
+    if (!expiresAt || !EXPIRY_RELEVANT_STATUSES.has(displayStatus)) return
+
+    if (new Date(expiresAt).getTime() - Date.now() > 60 * 60 * 1000) return
+
+    // Half-minute cadence: formatRelativeDate resolves to whole minutes, so
+    // anything finer would re-render without changing a pixel. The interval
+    // stops itself at zero -- the row's status does not change until the cron
+    // sweeps it, so waiting on displayStatus would leave this ticking against
+    // a dead offer for as long as the page stayed open.
+    const timer = setInterval(() => {
+      setTickNow(Date.now())
+      if (new Date(expiresAt).getTime() <= Date.now()) clearInterval(timer)
+    }, 30_000)
+    return () => clearInterval(timer)
+  }, [expiresAt, displayStatus])
 
   const tradeAction = useCallback(
     async (action: TradeAction, message?: string) => {
@@ -232,6 +292,25 @@ export default function TradeOfferCard(props: Props) {
             {optimisticStatus ? `${statusStyle.label}...` : statusStyle.label}
           </span>
 
+          {showExpiry && trade.expires_at && (
+            <span
+              className={`px-2 py-0.5 text-xs font-medium rounded ${
+                URGENCY_STYLES[urgency]
+              } ${
+                // An offer about to lapse on YOUR desk is a "your turn" state,
+                // which is what this animation is for. The proposer, who can do
+                // nothing but wait, gets the colour without the motion.
+                urgency === 'urgent' && isRecipient ? 'animate-glow-pulse' : ''
+              }`}
+              data-testid={`trade-expiry-${trade.id}`}
+            >
+              Expires{' '}
+              <time dateTime={trade.expires_at} title={formatExpiryAbsolute(trade.expires_at)}>
+                {formatRelativeDate(trade.expires_at)}
+              </time>
+            </span>
+          )}
+
           {isContested && (
             <span
               className="px-2 py-0.5 text-xs font-medium rounded bg-warning-bg text-warning"
@@ -291,6 +370,19 @@ export default function TradeOfferCard(props: Props) {
               It processes automatically then — approve to process it now, or veto to block it.
             </p>
           )}
+        </div>
+      )}
+
+      {/*
+        Why it expired. Before this, a lapsed offer and one killed by a competing
+        trade both rendered as a bare "Expired"; expired_reason covers the first
+        case and veto_reason still explains the rest.
+      */}
+      {trade.status === 'expired' && (expiredReason || trade.veto_reason) && (
+        <div className="mb-4 p-3 bg-surface-hover rounded-lg">
+          <p className="text-sm text-foreground-secondary">
+            <span className="font-medium">Expired:</span> {expiredReason ?? trade.veto_reason}
+          </p>
         </div>
       )}
 
@@ -395,8 +487,8 @@ export default function TradeOfferCard(props: Props) {
           tradeableMovies={tradeableMovies}
           budget={budget}
           onClose={() => setShowCounterModal(false)}
-          onCounter={async (counterOfferedItems, counterRequestedItems, message) => {
-            const result = await onCounter(trade.id, counterOfferedItems, counterRequestedItems, message)
+          onCounter={async (counterOfferedItems, counterRequestedItems, message, expiry) => {
+            const result = await onCounter(trade.id, counterOfferedItems, counterRequestedItems, message, expiry)
             if (result.success) {
               setShowCounterModal(false)
             } else if (result.error) {
@@ -557,7 +649,8 @@ interface CounterTradeModalProps {
   onCounter: (
     counterOfferedItems: TradeItems,
     counterRequestedItems: TradeItems,
-    message?: string
+    message?: string,
+    expiry?: ResolvedExpiry
   ) => Promise<TradeActionResult>
 }
 
@@ -637,6 +730,17 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
   const hasItems =
     offeredMovies.size > 0 || offeredBudget > 0 || requestedMovies.size > 0 || requestedBudget > 0
 
+  const counterMovies = useMemo(
+    () => [
+      ...tradeableMovies.filter((m) => offeredMovies.has(m.source_id)),
+      ...otherTeamMovies.filter((m) => requestedMovies.has(m.source_id)),
+    ],
+    [tradeableMovies, offeredMovies, otherTeamMovies, requestedMovies]
+  )
+  // A counter is a new offer wearing the old row, so it gets its own clock
+  // rather than inheriting the one it is answering.
+  const expiry = useOfferExpiry(counterMovies)
+
   const submitCounterAction = useCallback(async () => {
     setError(null)
     setInvalidSourceIds(EMPTY_CONTESTED)
@@ -663,13 +767,24 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
       faab: requestedBudget,
     }
 
-    const result = await onCounter(counterOfferedItems, counterRequestedItems, message.trim() || undefined)
+    const resolved = expiry.resolveNow()
+    if (!resolved.ok) {
+      setError(resolved.error)
+      return
+    }
+
+    const result = await onCounter(
+      counterOfferedItems,
+      counterRequestedItems,
+      message.trim() || undefined,
+      resolved.expiry
+    )
 
     if (!result.success) {
       setError(result.error || 'Failed to submit counter-offer')
       setInvalidSourceIds(new Set(result.invalidSourceIds ?? []))
     }
-  }, [tradeableMovies, offeredMovies, offeredBudget, otherTeamMovies, requestedMovies, requestedBudget, message, onCounter])
+  }, [tradeableMovies, offeredMovies, offeredBudget, otherTeamMovies, requestedMovies, requestedBudget, message, expiry, onCounter])
 
   const { execute: handleSubmit, isLoading } = useAsyncAction(submitCounterAction)
 
@@ -755,6 +870,14 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
           </div>
 
           {/* Message */}
+          <OfferExpiryPicker
+            releaseAnchor={expiry.releaseAnchor}
+            value={expiry.choice}
+            onChange={expiry.setChoice}
+            resolution={expiry.resolution}
+            fellBack={expiry.fellBack}
+          />
+
           <div>
             <label htmlFor="counter-message" className="text-sm text-foreground-secondary">Message (optional)</label>
             <textarea
@@ -783,7 +906,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!hasItems || isLoading}
+            disabled={!hasItems || !expiry.resolution.ok || isLoading}
             className="btn btn-primary"
             aria-label={isLoading ? 'Submitting counter offer...' : 'Submit counter offer'}
             aria-busy={isLoading}
