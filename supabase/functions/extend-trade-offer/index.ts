@@ -24,6 +24,7 @@ import {
   getTeamInfo,
   getLeagueTradeConfig,
   validateTradeStatus,
+  validateLeagueTradingEnabled,
   createServiceClient,
 } from '../_shared/trade-validation.ts'
 import { resolveOfferExpiry, deriveExpiryBounds, hasLapsed } from '../_shared/trade-expiry.ts'
@@ -100,12 +101,30 @@ Deno.serve(async (req) => {
     // the offer was waiting on, so a movie_release offer becomes a fixed one
     // here and the RPC clears the anchor movie to match.
     const config = await getLeagueTradeConfig(serviceClient, offer.league_id)
+    if (!config) {
+      return errorResponse('League not found', 404)
+    }
+
+    // The same gate every other trade write path runs. Without it a
+    // commissioner could switch trading off and a proposer could still push an
+    // open offer's clock out -- respond_to_trade would refuse the acceptance,
+    // so nothing incoherent could be executed, but the offer would go on
+    // advertising a future in a league that had closed trading.
+    const tradingEnabled = validateLeagueTradingEnabled(config, config.status)
+    if (!tradingEnabled.valid) {
+      return errorResponse(tradingEnabled.error ?? 'Trading is not available', 400)
+    }
+
     const expiry = await resolveOfferExpiry(
       serviceClient,
       { expires_at, expiry_anchor: 'fixed' },
       {
-        tradeDeadline: config?.trade_deadline ?? null,
+        tradeDeadline: config.trade_deadline,
         bounds: deriveExpiryBounds(config),
+        // The league minimum does not gate an extension -- see the comment on
+        // `earliest` in the resolver. Forward-only already guarantees an
+        // extension can only lengthen the window.
+        enforceMinimum: false,
         initiatorItems: offer.initiator_items,
         recipientItems: offer.recipient_items,
       }

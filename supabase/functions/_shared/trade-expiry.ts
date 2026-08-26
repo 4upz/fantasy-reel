@@ -173,6 +173,23 @@ function formatMinWindow(minutes: number): string {
 const MS_PER_MINUTE = 60_000
 
 /**
+ * Slack on the minimum, to absorb the gap between the client picking an instant
+ * and this function judging it.
+ *
+ * Without it a preset chip is refused deterministically, not flakily: the client
+ * offers a chip when `hours >= minimum` and sends `client_now + hours`, while
+ * this function compares against `server_now + minimum`, and server_now is
+ * always the later of the two. A league whose minimum equals one of the preset
+ * lengths therefore shows a chip that can never succeed -- and a league at
+ * min 24h / default 24h / max 1d, which every validator accepts, offers exactly
+ * that one chip and so cannot make a timed offer at all.
+ *
+ * A minute under a minimum that exists to stop five-minute pressure tactics is
+ * immaterial; a rule the UI cannot satisfy is not.
+ */
+const MIN_WINDOW_GRACE_MS = 60_000
+
+/**
  * The instant a league's trade deadline closes.
  *
  * `leagues.trade_deadline` is a bare DATE and the deadline day is inclusive
@@ -225,6 +242,11 @@ export async function resolveOfferExpiry(
     /** `leagues.trade_deadline`, the season-level clock, or null if unset. */
     tradeDeadline: string | null
     /**
+     * Whether the league's minimum window applies. Defaults to true; only the
+     * extend path turns it off, and the comment beside `earliest` says why.
+     */
+    enforceMinimum?: boolean
+    /**
      * The league's window rules, from deriveExpiryBounds. Required rather than
      * defaulted: the callers all have a league row in hand already, and a
      * forgotten argument here would silently enforce the app defaults on a
@@ -260,7 +282,15 @@ export async function resolveOfferExpiry(
 
   const { bounds } = context
   const now = Date.now()
-  const earliest = now + bounds.minMinutes * MS_PER_MINUTE
+  // enforceMinimum is off for extensions: extend_trade_offer's forward-only
+  // guard already means an extension can only lengthen an offer, so a minimum
+  // here could only stop a proposer granting SOME extra time on an offer whose
+  // window is already shorter than the league now permits. The minimum guards
+  // proposal-time pressure tactics, which an extension is the opposite of.
+  const enforceMinimum = context.enforceMinimum ?? true
+  const earliest = enforceMinimum
+    ? now + bounds.minMinutes * MS_PER_MINUTE - MIN_WINDOW_GRACE_MS
+    : Number.NEGATIVE_INFINITY
   // "At no moment may an offer stand more than maxDays into the future" -- the
   // same ceiling for a hand-picked window, a release anchor and an extension.
   const latest = now + bounds.maxDays * HOURS_PER_DAY * 60 * MS_PER_MINUTE

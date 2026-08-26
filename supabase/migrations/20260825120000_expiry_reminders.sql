@@ -8,7 +8,7 @@
 -- Nothing read it until now, which is why this migration adds a function and
 -- touches no columns.
 --
--- One nudge per offer, sent once. The whole point of the feature is that a
+-- One nudge per offer WINDOW. The whole point of the feature is that a
 -- recipient learns the offer is running out without anyone typing it in
 -- Discord; a second copy of that message is worse than none.
 -- ============================================================================
@@ -37,8 +37,17 @@
 -- counter_trade() reuses the row and stamps responded_at, so for a countered
 -- offer proposed_at belongs to a deal that no longer exists. For the open
 -- statuses this function looks at, COALESCE(responded_at, proposed_at) is
--- exactly the moment the current offer's clock started -- respond_to_trade()
--- also writes responded_at, but only on its way out of 'proposed'/'countered'.
+-- the moment the current offer's clock started for the paths that reset it --
+-- respond_to_trade and counter_trade both write responded_at on their way out
+-- of 'proposed'/'countered'.
+--
+-- extend_trade_offer (20260826120000) is the exception: it moves expires_at
+-- forward and clears the reminder stamp without touching responded_at, so after
+-- an extension this measures the whole span since the offer was made rather
+-- than the current window. Benign in this predicate -- a longer span only makes
+-- the 25% fraction more generous, and the p_lead ceiling dominates -- but it is
+-- not the exact equivalence the rest of this comment describes.
+--
 --
 -- No new index. The predicate is a strict subset of
 -- idx_trade_offers_pending_expiry (20260824120000), which already narrows to
@@ -84,7 +93,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION claim_expiry_reminders(INTERVAL, INTERVAL, NUMERIC) IS
-  'Claims open trade offers due an "expiring soon" nudge and stamps expiry_reminder_sent_at in the same statement, so overlapping cron runs cannot double-send; the caller notifies exactly the returned rows. Fires at min(p_lead, 25% of the offer window) remaining, and never for windows under 2 hours.';
+  'Claims open trade offers due an "expiring soon" nudge (one per window, not one per offer for all time -- counter_trade, extend_trade_offer and reresolve_release_anchored_offers each clear the stamp when the clock changes) and stamps expiry_reminder_sent_at in the same statement, so overlapping cron runs cannot double-send; the caller notifies exactly the returned rows. Fires at min(p_lead, 25% of the offer window) remaining, and never for windows under 2 hours.';
 
 -- A bare GRANT to service_role would restrict nothing: EXECUTE defaults to
 -- PUBLIC, so the REVOKE is the part that does the work.
