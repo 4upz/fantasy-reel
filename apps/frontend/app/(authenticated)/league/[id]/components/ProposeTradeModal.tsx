@@ -16,7 +16,7 @@ import { fetchTradeableMovies } from '@/utils/holdings'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import OfferExpiryPicker from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
-import type { ResolvedExpiry } from '@/utils/tradeExpiry'
+import type { ExpiryBounds, ResolvedExpiry } from '@/utils/tradeExpiry'
 import CounterpickMark from './CounterpickMark'
 
 /** Stable empty set so a modal with no rejected rows doesn't allocate one per render. */
@@ -27,6 +27,8 @@ interface Props {
   otherTeams: { id: string; name: string; avatar_url: string | null }[]
   tradeableMovies: TradeableMovie[]
   budget: TeamBudget | null
+  /** The league's offer-window rules, derived once in TradingClient. */
+  expiryBounds: ExpiryBounds
   onClose: () => void
   onPropose: (
     recipientTeamId: string,
@@ -84,6 +86,7 @@ export default function ProposeTradeModal({
   otherTeams,
   tradeableMovies,
   budget,
+  expiryBounds,
   onClose,
   onPropose,
 }: Props) {
@@ -194,7 +197,7 @@ export default function ProposeTradeModal({
     ],
     [tradeableMovies, offeredMovies, recipientMovies, requestedMovies]
   )
-  const expiry = useOfferExpiry(offerMovies)
+  const expiry = useOfferExpiry(offerMovies, expiryBounds)
 
   const submitTradeAction = useCallback(async () => {
     if (!selectedTeamId) return
@@ -403,6 +406,7 @@ export default function ProposeTradeModal({
                 onChange={expiry.setChoice}
                 resolution={expiry.resolution}
                 fellBack={expiry.fellBack}
+                bounds={expiryBounds}
               />
 
               {/* Message */}

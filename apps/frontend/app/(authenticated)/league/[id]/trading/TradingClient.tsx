@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { League, Team, TeamWithOwner, TradeItems } from '@/types'
 import { useTrading } from '../hooks/useTrading'
 import TradingPanel from '../components/TradingPanel'
 import { trackEvent } from '@/utils/analytics'
-import type { ResolvedExpiry } from '@/utils/tradeExpiry'
+import { resolveExpiryBounds, type ResolvedExpiry } from '@/utils/tradeExpiry'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const ProposeTradeModal = dynamic(() => import('../components/ProposeTradeModal'), {
@@ -23,6 +23,11 @@ interface Props {
 
 export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner }: Props) {
   const [showProposeModal, setShowProposeModal] = useState(false)
+
+  // Derived once for the whole page: both the propose modal and every card's
+  // counter/extend modal need the same rules, and a fresh object per consumer
+  // would re-run useOfferExpiry's memos on every render.
+  const expiryBounds = useMemo(() => resolveExpiryBounds(league), [league])
 
   const {
     trades,
@@ -73,6 +78,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
         tradeableMovies={tradeableMovies}
         budget={budget}
         isOwner={isOwner}
+        expiryBounds={expiryBounds}
         onProposeTrade={() => setShowProposeModal(true)}
         onRespondTrade={respondTrade}
         onCounterTrade={counterTrade}
@@ -88,6 +94,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
           otherTeams={otherTeams}
           tradeableMovies={tradeableMovies}
           budget={budget}
+          expiryBounds={expiryBounds}
           onClose={() => setShowProposeModal(false)}
           onPropose={async (
             recipientTeamId: string,

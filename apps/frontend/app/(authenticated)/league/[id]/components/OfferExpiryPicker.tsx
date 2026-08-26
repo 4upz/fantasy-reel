@@ -3,15 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import DateTimeField from '@/app/components/DateTimeField'
 import {
-  DEFAULT_EXPIRY_HOURS,
-  EXPIRY_PRESETS,
-  MAX_EXPIRY_DAYS,
-  MIN_EXPIRY_MINUTES,
   anchorFor,
+  expiryPresetsFor,
   formatExpiryAbsolute,
   formatReleaseDate,
   toDateTimeLocalValue,
   type AnchorCandidate,
+  type ExpiryBounds,
   type ExpiryChoice,
   type ExpiryResolution,
   type ReleaseAnchor,
@@ -24,6 +22,8 @@ interface Props {
   onChange: (choice: ExpiryChoice) => void
   resolution: ExpiryResolution
   fellBack: boolean
+  /** The league's window rules -- which chips exist, and what the field allows. */
+  bounds: ExpiryBounds
 }
 
 /**
@@ -193,6 +193,7 @@ export default function OfferExpiryPicker({
   onChange,
   resolution,
   fellBack,
+  bounds,
 }: Props) {
   // What the chip names: the picked movie, or the soonest when none was picked.
   const chosenAnchor = anchorFor(
@@ -200,13 +201,15 @@ export default function OfferExpiryPicker({
     value.kind === 'release' ? value.movieId : null
   )
 
+  const presets = useMemo(() => expiryPresetsFor(bounds), [bounds])
+
   const { minValue, maxValue } = useMemo(() => {
     const now = Date.now()
     return {
-      minValue: toDateTimeLocalValue(new Date(now + MIN_EXPIRY_MINUTES * 60_000)),
-      maxValue: toDateTimeLocalValue(new Date(now + MAX_EXPIRY_DAYS * 24 * 60 * 60_000)),
+      minValue: toDateTimeLocalValue(new Date(now + bounds.minMinutes * 60_000)),
+      maxValue: toDateTimeLocalValue(new Date(now + bounds.maxDays * 24 * 60 * 60_000)),
     }
-  }, [])
+  }, [bounds])
 
   const resolvedAt = resolution.ok ? resolution.expiry.expires_at : null
   const error = resolution.ok ? null : resolution.error
@@ -216,7 +219,7 @@ export default function OfferExpiryPicker({
       <span className="text-sm text-foreground-secondary">Offer expires</span>
 
       <div className="mt-1 flex flex-wrap gap-2">
-        {EXPIRY_PRESETS.map((preset) => (
+        {presets.map((preset) => (
           <Chip
             key={preset.hours}
             selected={value.kind === 'preset' && value.hours === preset.hours}
@@ -238,7 +241,10 @@ export default function OfferExpiryPicker({
           onClick={() =>
             onChange({
               kind: 'custom',
-              value: toDateTimeLocalValue(new Date(Date.now() + 24 * 60 * 60_000)),
+              // Seeded at the league's own default rather than a flat 24h: the
+              // field then opens on a time that is inside the bounds whatever
+              // the commissioner set them to.
+              value: toDateTimeLocalValue(new Date(Date.now() + bounds.defaultHours * 60 * 60_000)),
             })
           }
         >
@@ -277,7 +283,7 @@ export default function OfferExpiryPicker({
         <p role="status" className="mt-2 text-sm text-warning">
           {value.kind === 'release'
             ? `That movie left the trade — now waiting on ${chosenAnchor?.title ?? 'the soonest release'}.`
-            : `${releaseAnchor.reason ?? 'That release no longer applies'} — switched to ${DEFAULT_EXPIRY_HOURS} hours.`}
+            : `${releaseAnchor.reason ?? 'That release no longer applies'} — switched to ${bounds.defaultHours} hours.`}
         </p>
       )}
 

@@ -9,6 +9,7 @@ import DraftConfigSection from './components/DraftConfigSection'
 import DraftOrderSection from './components/DraftOrderSection'
 import CounterpickConfigSection from './components/CounterpickConfigSection'
 import BiddingConfigSection from './components/BiddingConfigSection'
+import TradeConfigSection from './components/TradeConfigSection'
 import ParticipantsSection from './components/ParticipantsSection'
 import DiscordAnnouncementSection from './components/DiscordAnnouncementSection'
 import DangerZoneSection from './components/DangerZoneSection'
@@ -94,6 +95,13 @@ export default function SettingsClient({
         <BiddingConfigSection
           league={league}
           isLocked={!isSetup}
+          onUpdate={handleLeagueUpdate}
+        />
+
+        {/* No isLocked: trade settings stay editable through the season, which
+            is the whole point of a deadline and a review window. */}
+        <TradeConfigSection
+          league={league}
           onUpdate={handleLeagueUpdate}
         />
 

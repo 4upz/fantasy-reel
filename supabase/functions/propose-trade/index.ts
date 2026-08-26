@@ -18,7 +18,7 @@ import {
   sendTradeEmailNotifications,
   getTradeMentionContent,
 } from '../_shared/trade-validation.ts'
-import { resolveOfferExpiry, type ExpiryRequest } from '../_shared/trade-expiry.ts'
+import { resolveOfferExpiry, deriveExpiryBounds, type ExpiryRequest } from '../_shared/trade-expiry.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
@@ -109,13 +109,14 @@ Deno.serve(async (req) => {
     // release anchor is resolved here rather than trusted from the client.
     //
     // The league config comes back from the validation above rather than being
-    // fetched again: only `trade_deadline` is needed, and validateTradeProposal
-    // has already read (and vouched for) that row.
+    // fetched again: only the deadline and the expiry bounds are needed, and
+    // validateTradeProposal has already read (and vouched for) that row.
     const expiry = await resolveOfferExpiry(
       serviceClient,
       { expires_at, expiry_anchor, expiry_anchor_movie_id },
       {
         tradeDeadline: validationResult.config?.trade_deadline ?? null,
+        bounds: deriveExpiryBounds(validationResult.config),
         initiatorItems: enrichedOfferedItems,
         recipientItems: enrichedRequestedItems,
       }

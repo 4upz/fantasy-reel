@@ -59,20 +59,71 @@ export type ExpiryResolution =
  * An offer has to stand long enough to actually be read. A five-minute window
  * is a pressure tactic, not a deadline -- and a custom time picker is exactly
  * where someone would try to set one.
+ *
+ * These three are now the FALLBACKS, not the rules: a league may override any
+ * of them (leagues.trade_offer_expiry_*, 20260827120000). Nothing below reads
+ * them directly except deriveExpiryBounds, so there is exactly one place where
+ * "the league did not say" turns into a number.
  */
 export const MIN_EXPIRY_MINUTES = 60
 export const MAX_EXPIRY_DAYS = 14
+/** What the picker preselects. Never enforced -- a bound the proposer may move. */
+export const DEFAULT_EXPIRY_HOURS = 48
+
+/** The window rules in force for one league. */
+export interface ExpiryBounds {
+  /** Preselected window in the picker. Advisory; the proposer may pick anything in range. */
+  defaultHours: number
+  /** Shortest window this league permits. Minutes, because the app floor is sub-day. */
+  minMinutes: number
+  /** Longest window this league permits. */
+  maxDays: number
+}
+
+/** The columns deriveExpiryBounds needs off a league row. */
+export interface LeagueExpiryConfig {
+  trade_offer_expiry_default_hours?: number | null
+  trade_offer_expiry_min_hours?: number | null
+  trade_offer_expiry_max_days?: number | null
+}
+
+export const DEFAULT_EXPIRY_BOUNDS: ExpiryBounds = {
+  defaultHours: DEFAULT_EXPIRY_HOURS,
+  minMinutes: MIN_EXPIRY_MINUTES,
+  maxDays: MAX_EXPIRY_DAYS,
+}
+
+/**
+ * A league row's expiry columns as the bounds every caller passes around.
+ *
+ * NULL means "the app default" rather than "no bound", so a league stores only
+ * what it disagrees with and the defaults stay in one place. Accepts a null
+ * league so callers that failed to load one still get usable bounds instead of
+ * having to decide what to do -- refusing the trade for a missing league is the
+ * caller's job, and it already does it.
+ */
+export function deriveExpiryBounds(league?: LeagueExpiryConfig | null): ExpiryBounds {
+  return {
+    defaultHours: league?.trade_offer_expiry_default_hours ?? DEFAULT_EXPIRY_HOURS,
+    minMinutes: (league?.trade_offer_expiry_min_hours ?? MIN_EXPIRY_MINUTES / 60) * 60,
+    maxDays: league?.trade_offer_expiry_max_days ?? MAX_EXPIRY_DAYS,
+  }
+}
 
 /**
  * When the single "expiring soon" nudge fires: at whichever is sooner, a fixed
  * ceiling or a fraction of the offer's own window, and never at all for a window
  * too short to be worth interrupting twice.
  *
- * `minWindowHours` is a relative of MIN_EXPIRY_MINUTES above -- an offer window
- * cannot be shorter than the minimum, and a nudge floor below that minimum would
- * never fire. Keeping both here is what stops them disagreeing once league
- * configuration makes the minimum per-league. Passed to claim_expiry_reminders(),
- * which owns the selection itself because the claim has to be one statement.
+ * `minWindowHours` is a relative of MIN_EXPIRY_MINUTES above -- a nudge floor
+ * below the shortest window a league permits is dead weight that suppresses
+ * nothing. These stay the APP-LEVEL numbers: process-trades claims every
+ * league's offers in one statement, so it has no single league's minimum to
+ * pass. claim_expiry_reminders() raises the floor to the league's own
+ * trade_offer_expiry_min_hours per row (20260827120000), which is the only
+ * place the league is in scope. Keeping the app numbers here is still what
+ * stops the two disagreeing -- change the floor here and the SQL keeps taking
+ * the greater of the two.
  */
 export const EXPIRY_REMINDER = {
   leadHours: 6,
@@ -80,20 +131,44 @@ export const EXPIRY_REMINDER = {
   windowFraction: 0.25,
 } as const
 
+const HOURS_PER_DAY = 24
+
 /**
  * User-facing refusals. The frontend keeps its own copy of these strings
  * (apps/frontend/utils/tradeExpiry.ts) so the inline picker message and the
  * server's 400 never contradict each other -- change both together.
+ *
+ * The two bound refusals take the bounds rather than baking the app defaults
+ * in: told "at least 1 hour" by a league whose minimum is six, a proposer would
+ * reasonably conclude the server was broken.
  */
 export const EXPIRY_ERRORS = {
   unpaired: 'An expiry and how it was chosen must be sent together',
   unknownAnchor: 'Unknown expiry option',
   unparseable: 'Offer expiry is not a valid date',
-  tooSoon: `An offer has to stay open at least ${MIN_EXPIRY_MINUTES / 60} hour`,
-  tooLate: `An offer cannot stay open longer than ${MAX_EXPIRY_DAYS} days`,
+  tooSoon: (bounds: ExpiryBounds) =>
+    `An offer has to stay open at least ${formatMinWindow(bounds.minMinutes)}`,
+  tooLate: (bounds: ExpiryBounds) =>
+    `An offer cannot stay open longer than ${bounds.maxDays} ${bounds.maxDays === 1 ? 'day' : 'days'}`,
   noReleaseDate: 'No movie in this trade is still unreleased',
   anchorNotInOffer: 'That movie is not an unreleased movie in this trade',
 } as const
+
+/**
+ * "1 hour" / "6 hours" / "30 minutes", for the minimum-window refusal.
+ *
+ * Character-identical to formatMinWindow() in apps/frontend/utils/tradeExpiry.ts,
+ * down to the singular cases -- these strings are a deliberate verbatim mirror,
+ * and the picker's inline message disagreeing with the server's 400 by a letter
+ * is the whole failure mode the duplication exists to avoid. A league minimum is
+ * whole hours, so the minutes branch is unreachable from a league row; it is
+ * here because the copy has to match, not because something reaches it.
+ */
+function formatMinWindow(minutes: number): string {
+  if (minutes % 60 !== 0) return `${minutes} minutes`
+  const hours = minutes / 60
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+}
 
 const MS_PER_MINUTE = 60_000
 
@@ -149,6 +224,13 @@ export async function resolveOfferExpiry(
   context: {
     /** `leagues.trade_deadline`, the season-level clock, or null if unset. */
     tradeDeadline: string | null
+    /**
+     * The league's window rules, from deriveExpiryBounds. Required rather than
+     * defaulted: the callers all have a league row in hand already, and a
+     * forgotten argument here would silently enforce the app defaults on a
+     * league that had configured its own.
+     */
+    bounds: ExpiryBounds
     initiatorItems: TradeItems
     recipientItems: TradeItems
   }
@@ -176,8 +258,9 @@ export async function resolveOfferExpiry(
     return { valid: false, error: EXPIRY_ERRORS.unknownAnchor }
   }
 
+  const { bounds } = context
   const now = Date.now()
-  const earliest = now + MIN_EXPIRY_MINUTES * MS_PER_MINUTE
+  const earliest = now + bounds.minMinutes * MS_PER_MINUTE
   let expiry: Date
   let anchorMovieId: string | null = null
 
@@ -204,17 +287,26 @@ export async function resolveOfferExpiry(
 
     const boundary = new Date(chosen.boundary)
     if (Number.isNaN(boundary.getTime())) return { valid: false, error: EXPIRY_ERRORS.unparseable }
-    if (boundary.getTime() < earliest) return { valid: false, error: EXPIRY_ERRORS.tooSoon }
+    if (boundary.getTime() < earliest) return { valid: false, error: EXPIRY_ERRORS.tooSoon(bounds) }
 
+    // A release anchor deliberately skips the maximum. The proposer did not
+    // pick a length -- they picked an event, and the league's ceiling is a limit
+    // on how long someone may sit on an offer, not on when a movie may open.
     expiry = boundary
     anchorMovieId = chosen.movie_id
   } else {
     expiry = new Date(requested as string)
 
     if (Number.isNaN(expiry.getTime())) return { valid: false, error: EXPIRY_ERRORS.unparseable }
-    if (expiry.getTime() < earliest) return { valid: false, error: EXPIRY_ERRORS.tooSoon }
-    if (expiry.getTime() > now + MAX_EXPIRY_DAYS * 24 * 60 * MS_PER_MINUTE) {
-      return { valid: false, error: EXPIRY_ERRORS.tooLate }
+    if (expiry.getTime() < earliest) return { valid: false, error: EXPIRY_ERRORS.tooSoon(bounds) }
+    // Measured from NOW, and that matters most for extend-trade-offer, which
+    // shares this resolver. The rule is "at no moment may an offer stand more
+    // than maxDays into the future", not "an extension may add maxDays": the
+    // relative form compounds, so an offer could be walked forward in maxDays
+    // chunks forever and the ceiling would stop meaning anything. Do not give
+    // extend a bound of its own.
+    if (expiry.getTime() > now + bounds.maxDays * HOURS_PER_DAY * 60 * MS_PER_MINUTE) {
+      return { valid: false, error: EXPIRY_ERRORS.tooLate(bounds) }
     }
   }
 

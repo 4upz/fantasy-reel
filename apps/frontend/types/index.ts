@@ -20,6 +20,20 @@ export interface League {
    * the cutoff at Thursday 8pm UTC; 0 disables it.
    */
   new_bid_cutoff_hours: number
+  // Trading configuration
+  trades_enabled: boolean
+  /** Last DATE a trade may happen, `YYYY-MM-DD`. Null = no season deadline. */
+  trade_deadline: string | null
+  trade_review_enabled: boolean
+  trade_veto_hours: number
+  /**
+   * Per-league offer-window rules. NULL means "use the app default" rather than
+   * "no bound", so a league stores only what it disagrees with -- see
+   * resolveExpiryBounds in utils/tradeExpiry.ts, the one place that resolves them.
+   */
+  trade_offer_expiry_default_hours: number | null
+  trade_offer_expiry_min_hours: number | null
+  trade_offer_expiry_max_days: number | null
   // Counterpick configuration
   draft_counterpick_slots: number
   bidding_counterpick_slots: number

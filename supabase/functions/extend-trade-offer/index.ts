@@ -26,7 +26,7 @@ import {
   validateTradeStatus,
   createServiceClient,
 } from '../_shared/trade-validation.ts'
-import { resolveOfferExpiry, hasLapsed } from '../_shared/trade-expiry.ts'
+import { resolveOfferExpiry, deriveExpiryBounds, hasLapsed } from '../_shared/trade-expiry.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('extend-trade-offer')
@@ -105,6 +105,7 @@ Deno.serve(async (req) => {
       { expires_at, expiry_anchor: 'fixed' },
       {
         tradeDeadline: config?.trade_deadline ?? null,
+        bounds: deriveExpiryBounds(config),
         initiatorItems: offer.initiator_items,
         recipientItems: offer.recipient_items,
       }
