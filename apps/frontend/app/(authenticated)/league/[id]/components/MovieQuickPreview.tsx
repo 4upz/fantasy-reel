@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
+import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 import type { TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
+import FranchiseHistoryPanel from '@/app/components/FranchiseHistoryPanel'
 import { CloseIcon, StarIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
 
@@ -29,6 +31,7 @@ export default function MovieQuickPreview({
   // A failed lookup is not worth an error state: the caller already knows the
   // title, poster and release date, so the panel still reads fine.
   const { details, isLoading: loading } = useMovieDetails(movie.tmdb_id)
+  const { history: franchise } = useFranchiseHistory(movie.tmdb_id)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -207,6 +210,17 @@ export default function MovieQuickPreview({
                 )}
               </div>
             </div>
+
+            {/* Franchise history: the one place with room for the film-by-film
+                line, so the grid and bid rows can stay at a single average. */}
+            {franchise && (
+              <FranchiseHistoryPanel
+                history={franchise}
+                movieTitle={displayData.title}
+                movieReleaseDate={displayData.release_date}
+                className="mt-6 animate-fade-in"
+              />
+            )}
 
             {/* Cast Section */}
             {loading ? (

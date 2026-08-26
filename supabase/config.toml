@@ -374,6 +374,9 @@ verify_jwt = false
 [functions.get-leagues]
 verify_jwt = false
 
+[functions.get-franchise-history]
+verify_jwt = false
+
 [functions.get-movie-details]
 verify_jwt = false
 

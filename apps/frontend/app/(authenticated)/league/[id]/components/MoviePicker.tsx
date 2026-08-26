@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import type { TMDbSearchResult, WishlistedMovie } from '@/types'
 import { useWishlist } from '@/hooks/useWishlist'
+import { useFranchiseHistories } from '@/hooks/useFranchiseHistory'
 import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
 import DraftFilters from './DraftFilters'
 import DraftMovieCard from './DraftMovieCard'
@@ -122,6 +123,8 @@ export default function MoviePicker({
         return movies
     }
   }, [movies, activeTab, wishlistMovies])
+
+  const franchises = useFranchiseHistories(filteredMovies.map((m) => m.tmdb_id))
 
   const handleTabChange = useCallback(
     (tab: TabType) => {
@@ -251,6 +254,7 @@ export default function MoviePicker({
                 key={movie.tmdb_id}
                 movie={movie}
                 isDrafted={draftedTmdbIds.has(movie.tmdb_id)}
+                franchise={franchises.get(movie.tmdb_id) ?? null}
                 onPreview={setPreviewMovie}
               />
             ))}

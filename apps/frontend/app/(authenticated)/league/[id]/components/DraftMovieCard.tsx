@@ -2,26 +2,36 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import type { TMDbSearchResult } from '@/types'
+import type { FranchiseHistory, TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
+import { seriesName } from '@/utils/franchise'
 import { StarIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
   movie: TMDbSearchResult
   isDrafted?: boolean
+  /** The series this movie continues, or null for a standalone / first film. */
+  franchise?: FranchiseHistory | null
   onPreview: (movie: TMDbSearchResult) => void
 }
+
+/** Points are RT - 60, so 60 is where a series average turns from gold to crimson. */
+const BREAK_EVEN = 60
 
 export default function DraftMovieCard({
   movie,
   isDrafted,
+  franchise,
   onPreview,
 }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
   const popularityBadge = getPopularityBadge(movie.popularity)
+  const releaseYear = movie.release_date ? new Date(movie.release_date).getFullYear() : null
+  const seriesLabel = franchise ? `${seriesName(franchise)} series` : null
+  const seriesAverage = franchise?.average_rt ?? null
 
   function handleCardClick(): void {
     if (!isDrafted) {
@@ -131,9 +141,27 @@ export default function DraftMovieCard({
         >
           {movie.title}
         </h3>
-        {movie.release_date && (
-          <p className="text-xs text-foreground-muted mt-1">
-            {new Date(movie.release_date).getFullYear()}
+        {/* One line, words only: the card has no room for a chart, and the
+            average is the one number that matters at a glance. The preview
+            carries the film-by-film record. */}
+        {(releaseYear || seriesLabel) && (
+          <p className="text-xs text-foreground-muted mt-1 truncate" data-testid="franchise-line">
+            {releaseYear}
+            {releaseYear && seriesLabel && ' · '}
+            {seriesLabel}
+            {seriesAverage != null && (
+              <>
+                {' · avg '}
+                <span
+                  className={cn(
+                    'font-semibold',
+                    seriesAverage >= BREAK_EVEN ? 'text-gold' : 'text-crimson'
+                  )}
+                >
+                  {seriesAverage}%
+                </span>
+              </>
+            )}
           </p>
         )}
       </div>
