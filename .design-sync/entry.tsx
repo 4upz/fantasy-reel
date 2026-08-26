@@ -7,9 +7,9 @@
 // app itself renders.
 //
 // Scope: presentational components only. Page-level containers that own data
-// fetching and routing (DraftBoard, LeagueManager, DashboardClient, CinemaNav,
-// MoviePicker, the settings form sections) are deliberately excluded — they
-// are app wiring, not design-system parts.
+// fetching and routing (DraftBoard, LeagueManager, DashboardClient, SideNav,
+// ProfileMenu, MoviePicker, the settings form sections) are deliberately
+// excluded — they are app wiring, not design-system parts.
 
 // ── Context ─────────────────────────────────────────────────────────────
 // Not a design-system component (excluded via componentSrcMap), but it must
