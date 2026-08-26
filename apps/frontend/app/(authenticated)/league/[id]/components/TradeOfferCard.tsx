@@ -1219,6 +1219,11 @@ function ExtendOfferModal({
                     <Chip
                       key={preset.hours}
                       selected={hours === preset.hours}
+                      // Locked while the request is in flight, like the confirm
+                      // button. useAsyncAction's ref guard already blocks a
+                      // second submit, but changing the selection mid-request
+                      // leaves the preview describing a time that was not sent.
+                      disabled={isLoading}
                       onClick={() => setHours(preset.hours)}
                     >
                       {preset.label}

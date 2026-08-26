@@ -165,6 +165,11 @@ export function extendPresetsFor(
   bounds: ExpiryBounds,
   now = Date.now()
 ): ReadonlyArray<{ hours: number; label: string }> {
+  // Only the ceiling narrows this list. The league's MINIMUM deliberately does
+  // not apply to an extension -- it can only lengthen the window, so a minimum
+  // could just stop a proposer granting some extra time on an offer that is
+  // already shorter than the league now permits. resolveOfferExpiry agrees:
+  // extend-trade-offer passes enforceMinimum: false.
   const ceiling = now + bounds.maxDays * 24 * 60 * MS_PER_MINUTE
   return BASE_EXTEND_HOURS.filter(
     (hours) => resolveExtension(expiresAt, hours).getTime() <= ceiling

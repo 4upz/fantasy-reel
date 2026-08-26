@@ -28,16 +28,6 @@ import {
 
 const log = createLogger('process-trades')
 
-/**
- * The most warning an "expiring soon" nudge ever gives.
- *
- * claim_expiry_reminders() takes the ceiling as a parameter and scales it down
- * for short windows (min(lead, 25% of the window)), so this is only the cap for
- * a long offer -- past a day or two of window, six hours' notice is as much as
- * anyone acts on. Passed as an interval literal because the whole "which offers
- * are due" question is answered in SQL; see that function's comment.
- */
-
 
 interface TradeRecord {
   id: string
@@ -85,7 +75,7 @@ interface ProcessResults {
   expired_by_clock: number
   /** Release-anchored offers whose movie moved, so their clock moved with it. */
   reresolved: number
-  /** Open offers nudged because their clock is nearly out. One per offer, ever. */
+  /** Open offers nudged because their clock is nearly out. One per window. */
   expiry_reminders_sent: number
   errors: string[]
 }
@@ -458,11 +448,13 @@ async function sweepExpiredOffers(
   })
 }
 
-
 /**
  * Nudge both sides of an offer whose clock is nearly out.
  *
- * One nudge per offer, ever. claim_expiry_reminders() picks the offers that are
+ * One nudge per offer WINDOW -- not one per offer for all time. counter_trade,
+ * extend_trade_offer and reresolve_release_anchored_offers each clear the stamp
+ * when they change an offer's clock, so a new window earns a new nudge.
+ * claim_expiry_reminders() picks the offers that are
  * due and stamps expiry_reminder_sent_at in the same statement, so two
  * overlapping cron runs cannot both claim a row -- exactly the shape the sweep
  * uses. That means the stamp lands BEFORE the notification is sent, and a send

@@ -227,8 +227,9 @@ export async function notifyTradeParties(
   const notifications: TradeNotification[] = []
 
   // Each side is looked up at most once, and only when it is actually needed.
-  // The previous shape issued four sequential queries when notifying both --
-  // two getTeamInfo plus two getTeamName that re-fetched rows getTeamInfo had
+  // The previous shape made four sequential CALLS -- two getTeamInfo plus two
+  // getTeamName -- but six round trips, because getTeamInfo itself queries teams
+  // and then team_budgets. The getTeamName pair re-fetched rows getTeamInfo had
   // already returned, since its select includes `name`. That is per offer, and
   // the expiry cron notifies both sides on every swept and every nudged offer.
   const [initiatorInfo, recipientInfo] = await Promise.all([

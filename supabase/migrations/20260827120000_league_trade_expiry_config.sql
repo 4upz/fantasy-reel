@@ -88,8 +88,16 @@ ALTER TABLE leagues
 -- twice about an offer they were just emailed, and lowering it under 2h for a
 -- league with a 1h minimum would reintroduce exactly that. Raising it keeps the
 -- invariant the comment above asks for -- the floor is never below the shortest
--- window the league permits, so it can never be dead weight that suppresses
--- nothing. A window exactly at the league minimum still gets its nudge.
+-- window the league permits.
+--
+-- Be clear about what that costs, because the direction is easy to misread: for
+-- any league whose minimum is under 2h -- which is every league that has not
+-- configured one, since the app minimum is 1h -- the floor stays at 2h and
+-- windows between the league minimum and 2h get NO nudge, even though the
+-- league permits them. Raising a league's minimum above 2h likewise suppresses
+-- the nudge for shorter offers that are already open and were legal when made.
+-- That is the accepted trade: a second ping about an offer the recipient was
+-- just emailed is worse than no ping on a window measured in an hour or two.
 --
 -- Everything else about the function is unchanged; it is repeated in full
 -- because CREATE OR REPLACE has no way to patch a predicate.
@@ -121,7 +129,13 @@ AS $$
     -- Redundant against the LEAST() below, which can never exceed p_lead, but
     -- the planner cannot infer a bound from a row-dependent expression. Stating
     -- it turns the index scan from "every open offer with a future clock" into
-    -- a bounded range over the next p_lead. Verified with EXPLAIN.
+    -- a bounded range over the next p_lead.
+    --
+    -- The "verified with EXPLAIN" note this comment carried was inherited from
+    -- 20260825120000, whose query had no leagues join. The bound is still
+    -- sargable and the partial index predicate still matches this WHERE exactly,
+    -- but the plan for THIS statement has not been measured -- do not read the
+    -- claim as covering it.
     AND t.expires_at <= now() + p_lead
     AND (t.expires_at - COALESCE(t.responded_at, t.proposed_at))
         >= GREATEST(
