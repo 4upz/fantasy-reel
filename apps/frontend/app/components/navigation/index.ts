@@ -1,6 +1,3 @@
-export { default as CinemaNav } from './CinemaNav'
 export { default as SideNav } from './SideNav'
 export { default as NavLogo } from './NavLogo'
-export { default as NavBreadcrumb } from './NavBreadcrumb'
-export { default as NavUserMenu } from './NavUserMenu'
-export { default as NavMobileDrawer } from './NavMobileDrawer'
+export { default as ProfileMenu } from './ProfileMenu'

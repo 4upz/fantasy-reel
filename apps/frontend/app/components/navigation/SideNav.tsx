@@ -1,17 +1,15 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/types'
-import Avatar from '../Avatar'
 import NotificationBell from '@/components/NotificationBell'
+import ProfileMenu from './ProfileMenu'
 import {
   LayoutDashboard,
   Film,
-  Settings,
-  LogOut,
   PanelLeftClose,
   PanelLeft,
   Menu,
@@ -41,7 +39,6 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
-  const drawerRef = useRef<HTMLDivElement>(null)
 
   const displayName = profile?.display_name || user.user_metadata?.display_name || user.email || 'User'
 
@@ -164,50 +161,6 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
             {globalItems.map(item => renderNavItem(item, showLabels))}
           </div>
         </nav>
-
-        <div className="flex-1" />
-
-        {/* Settings & User */}
-        <div className="sidenav-footer">
-          <Link
-            href="/settings"
-            onClick={closeMobile}
-            className={`sidenav-item ${isActive('/settings') ? 'sidenav-item-active' : ''}`}
-            title="Account Settings"
-          >
-            {isActive('/settings') && <span className="sidenav-active-indicator" />}
-            <span className="sidenav-icon"><Settings className="w-5 h-5" /></span>
-            {showLabels && <span className="sidenav-label">Account</span>}
-          </Link>
-
-          {showLabels ? (
-            <div className="sidenav-user sidenav-user-expanded">
-              <Avatar src={profile?.avatar_url} name={displayName} size="sm" />
-              <div className="sidenav-user-info">
-                <span className="sidenav-user-name">{displayName}</span>
-                <form action="/auth/signout" method="post" className="sidenav-signout">
-                  <button type="submit" className="sidenav-signout-btn" data-testid="signout-button">
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Sign out</span>
-                  </button>
-                </form>
-              </div>
-            </div>
-          ) : (
-            <div className="sidenav-user sidenav-user-collapsed">
-              <Avatar src={profile?.avatar_url} name={displayName} size="sm" />
-              <div className="sidenav-user-tooltip">
-                <span className="sidenav-user-tooltip-name">{displayName}</span>
-                <form action="/auth/signout" method="post">
-                  <button type="submit" className="sidenav-user-tooltip-signout" data-testid="signout-button-collapsed">
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Sign out</span>
-                  </button>
-                </form>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     )
   }
@@ -233,6 +186,22 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         </button>
       </aside>
 
+      {/*
+        The account cluster: notifications + the account menu, pinned to the
+        top-right corner at every breakpoint. Rendered exactly once so the
+        account menu is a single node in the DOM - two copies hidden by media
+        query would give `user-menu-button` two matches and break strict-mode
+        selectors in the E2E suite. On desktop it floats over the page as a
+        capsule, costing no page a header row; below lg it sits inside the
+        mobile header bar, which already provides the surface. The wrapper
+        ignores pointer events so content underneath stays clickable.
+      */}
+      <div className="profile-cluster">
+        <NotificationBell />
+        <span className="profile-cluster-divider" aria-hidden="true" />
+        <ProfileMenu displayName={displayName} email={user.email} avatarUrl={profile?.avatar_url} />
+      </div>
+
       {/* Mobile Header Bar */}
       <header className="sidenav-mobile-header">
         <button
@@ -247,17 +216,12 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
           <span className="sidenav-mobile-title">Fantasy Reel</span>
         </Link>
 
-        <div className="sidenav-mobile-actions">
-          <NotificationBell />
-          <Avatar src={profile?.avatar_url} name={displayName} size="sm" />
-        </div>
       </header>
 
       {/* Mobile Drawer */}
       {isMobileOpen && (
         <div className="sidenav-mobile-overlay" onClick={closeMobile}>
           <div
-            ref={drawerRef}
             className="sidenav-mobile-drawer"
             onClick={e => e.stopPropagation()}
             role="dialog"

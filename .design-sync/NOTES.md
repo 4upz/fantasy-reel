@@ -14,9 +14,9 @@ removing a design-system component means editing **two** files:
 2. `.design-sync/config.json` → `componentSrcMap` — the name → src path pin.
 
 Scope is deliberately presentational. Page-level containers that own data
-fetching and routing (DraftBoard, LeagueManager, DashboardClient, CinemaNav,
-MoviePicker, the settings form sections) are **excluded** — they are app
-wiring, not design-system parts.
+fetching and routing (DraftBoard, LeagueManager, DashboardClient, SideNav,
+ProfileMenu, MoviePicker, the settings form sections) are **excluded** — they
+are app wiring, not design-system parts.
 
 ## Root `package.json` carries a `types` field for this sync
 

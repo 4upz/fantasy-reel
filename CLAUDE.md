@@ -380,7 +380,7 @@ apps/frontend/app/
 │   ├── FormError.tsx              # Uses .alert-* classes
 │   ├── LoadingSpinner.tsx         # Uses border-gold
 │   ├── Avatar.tsx                 # User/team avatars
-│   ├── CinemaNav.tsx              # Main navigation
+│   ├── navigation/                # SideNav (app nav) + ProfileMenu (account actions)
 │   └── ...                        # 15+ shared components
 ├── hooks/                         # Shared hooks
 │   ├── useAsyncAction.ts          # Double-click protection for async actions
