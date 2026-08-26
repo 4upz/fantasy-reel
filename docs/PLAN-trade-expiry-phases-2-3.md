@@ -94,11 +94,18 @@ ALTER TABLE leagues
   ADD COLUMN trade_offer_expiry_max_days      INTEGER;  -- NULL = app default (14)
 ```
 ```
-POST /functions/v1/update-league { type: 'update_trade_config', league_id,
+POST /functions/v1/update-league { action: 'update_trade_config', league_id,
   trades_enabled?, trade_deadline?, trade_review_enabled?, trade_veto_hours?,
   trade_offer_expiry_default_hours?, trade_offer_expiry_min_hours?,
   trade_offer_expiry_max_days? }
 ```
+
+The discriminator is `action`, not `type` (corrected by the lead after checking
+`update-league/index.ts:139` and `BiddingConfigSection.tsx:97` — the first draft
+of this contract had it wrong). Only the league owner may call it; that check
+already exists ahead of the switch. `BiddingConfigSection.tsx` is the model to
+follow for the UI section, including its named min/max constants and its
+`toast` + `onUpdate(league)` result handling.
 
 `ExpiryBounds` is the shape that crosses the boundary:
 
