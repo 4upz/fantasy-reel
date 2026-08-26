@@ -1,9 +1,11 @@
+import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   jsonResponse,
   errorResponse,
   handleCorsPreflightRequest,
   internalErrorResponse,
   authenticateUserOrServiceRole,
+  createServiceClient,
 } from '../_shared/utils.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { buildCacheKey, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
@@ -11,6 +13,7 @@ import { tmdbGetJson } from '../_shared/tmdb.ts'
 import { fetchMDBListRatings } from '../_shared/scoring.ts'
 import {
   historyForMovie,
+  recordTtlSeconds,
   releasedParts,
   MAX_PRIOR_FILMS,
   type CollectionPart,
@@ -32,18 +35,21 @@ const MAX_IDS_PER_REQUEST = 40
 const CONCURRENCY = 4
 
 /**
- * Only the most recent prior films get a score lookup. A 30-part series
- * would otherwise cost 30 MDBList calls the first time anyone looks at it,
- * for films the history never shows (see MAX_PRIOR_FILMS).
+ * MDBList calls this function may spend per UTC day, across every user and
+ * league. MDBList allows ~1000/day and the nightly score sync (which decides
+ * real fantasy points) draws on the same account; this feature is context,
+ * so it gets a slice and the sync keeps the rest. Past the budget, films
+ * render unscored and the record is retried in an hour.
  */
-const SCORED_FILMS_PER_COLLECTION = MAX_PRIOR_FILMS + 4
+const MDBLIST_DAILY_BUDGET = 300
+const MDBLIST_BUDGET_API = 'mdblist'
 
 /**
- * A week for both layers. Which collection a movie belongs to never changes,
- * and a released film's Tomatometer barely moves once it has settled -- the
- * cost of being a week stale is a point or two on an old film.
+ * Which collection a movie belongs to never changes, so that layer keeps a
+ * week regardless. The collection record's own TTL depends on whether every
+ * score landed -- see recordTtlSeconds.
  */
-const TTL_SECONDS = 7 * 24 * 60 * 60
+const COLLECTION_REF_TTL_SECONDS = 7 * 24 * 60 * 60
 
 interface GetFranchiseHistoryRequest {
   tmdb_ids: number[]
@@ -91,17 +97,102 @@ async function fetchMovieCollectionRef(tmdbId: number, tmdbToken: string): Promi
   }
 }
 
+/** A film's Tomatometer, and whether a missing one might still turn up. */
+interface ScoreLookup {
+  score: number | null
+  /** True when the lookup failed (rate limit, outage) rather than found nothing. */
+  failed: boolean
+}
+
 /**
- * The Tomatometer for one released film, or null when MDBList has none. A
- * failed lookup is also null: the history still renders with a "not rated"
- * pill, and the collection record refreshes in a week.
+ * The Tomatometer for one released film from MDBList. A failed lookup is
+ * reported as such, not silently folded into "no score": the record it lands
+ * in is then cached briefly so the film is retried, instead of showing "not
+ * rated" for a week because MDBList happened to be rate-limited.
  */
-async function fetchTomatometer(tmdbId: number, mdblistApiKey: string): Promise<number | null> {
+async function fetchTomatometer(tmdbId: number, mdblistApiKey: string): Promise<ScoreLookup> {
   const { ratings, error } = await fetchMDBListRatings(tmdbId, mdblistApiKey)
   if (error) {
     log.warn('Tomatometer lookup failed for franchise film', { tmdb_id: tmdbId, error })
+    return { score: null, failed: true }
   }
-  return ratings.find((r) => r.source === 'rotten_tomatoes')?.score ?? null
+  return { score: ratings.find((r) => r.source === 'rotten_tomatoes')?.score ?? null, failed: false }
+}
+
+/** The service client, or null when this runtime cannot build one. */
+function serviceClientOrNull(): SupabaseClient | null {
+  try {
+    return createServiceClient()
+  } catch (error) {
+    log.warn('Service client unavailable; skipping local scores and budget', {
+      error: serializeError(error),
+    })
+    return null
+  }
+}
+
+/**
+ * Tomatometers already in the database for these films. A film that has been
+ * on any roster has its RT score in `reviews` from the nightly sync, so
+ * asking MDBList again would spend budget on an answer we hold.
+ */
+async function fetchLocalTomatometers(
+  client: SupabaseClient | null,
+  tmdbIds: number[]
+): Promise<Map<number, number>> {
+  if (!client || tmdbIds.length === 0) return new Map()
+
+  const { data, error } = await client
+    .from('movies')
+    .select('tmdb_id, reviews!inner(score)')
+    .eq('reviews.source', 'rotten_tomatoes')
+    .in('tmdb_id', tmdbIds)
+
+  if (error) {
+    // Only costs a few MDBList calls, so degrade rather than fail the record.
+    log.warn('Local Tomatometer lookup failed', { error: error.message })
+    return new Map()
+  }
+
+  const scores = new Map<number, number>()
+  for (const row of (data ?? []) as Array<{ tmdb_id: number; reviews: Array<{ score: number | null }> }>) {
+    const score = row.reviews?.[0]?.score
+    if (score != null) scores.set(row.tmdb_id, score)
+  }
+  return scores
+}
+
+/**
+ * How many MDBList calls this record may make right now. Fails closed: if
+ * the budget cannot be consulted, nothing is spent -- the record is cached
+ * briefly (incomplete) and tried again in an hour.
+ */
+async function reserveMdblistCalls(
+  client: SupabaseClient | null,
+  requested: number
+): Promise<number> {
+  if (!client || requested === 0) return 0
+
+  const { data, error } = await client.rpc('reserve_external_api_calls', {
+    p_api: MDBLIST_BUDGET_API,
+    p_requested: requested,
+    p_daily_limit: MDBLIST_DAILY_BUDGET,
+  })
+
+  if (error) {
+    log.warn('MDBList budget unavailable; spending nothing', { error: error.message })
+    return 0
+  }
+
+  const granted = Number(data ?? 0)
+  if (granted < requested) {
+    log.warn('MDBList daily budget exhausted for franchise history', {
+      requested,
+      granted,
+      daily_budget: MDBLIST_DAILY_BUDGET,
+    })
+  }
+  return granted
 }
 
 async function fetchCollectionRecord(
@@ -115,22 +206,43 @@ async function fetchCollectionRecord(
   )
   const today = new Date().toISOString().split('T')[0]
   const released = releasedParts(collection.parts ?? [], today)
-  const firstScoredIndex = Math.max(0, released.length - SCORED_FILMS_PER_COLLECTION)
 
-  const films: FranchiseFilm[] = await Promise.all(
-    released.map(async (part, index) => {
-      const scored = index >= firstScoredIndex
-      return {
-        tmdb_id: part.id,
-        title: part.title,
-        release_date: part.release_date,
-        poster_url: posterUrl(part.poster_path),
-        rt_score: scored ? await fetchTomatometer(part.id, mdblistApiKey) : null,
-      }
+  // Only the films a history can show get a score lookup. A 30-part series
+  // would otherwise cost 30 MDBList calls the first time anyone looks at it,
+  // for entries nobody sees; older ones stay unscored on purpose.
+  const scorable = released.slice(-MAX_PRIOR_FILMS)
+  const client = serviceClientOrNull()
+  const local = await fetchLocalTomatometers(client, scorable.map((part) => part.id))
+
+  // Budget covers only what the database could not answer. The newest films
+  // are scored first, so a partial grant still lands on the ones that
+  // matter most for predicting the next entry.
+  const needsLookup = scorable.filter((part) => !local.has(part.id)).reverse()
+  const granted = await reserveMdblistCalls(client, needsLookup.length)
+  const lookups = new Map<number, ScoreLookup>()
+  await Promise.all(
+    needsLookup.slice(0, granted).map(async (part) => {
+      lookups.set(part.id, await fetchTomatometer(part.id, mdblistApiKey))
     })
   )
 
-  return { collection_id: collection.id, collection_name: collection.name, films }
+  const budgetShort = granted < needsLookup.length
+  const anyFailed = [...lookups.values()].some((lookup) => lookup.failed)
+
+  const films: FranchiseFilm[] = released.map((part) => ({
+    tmdb_id: part.id,
+    title: part.title,
+    release_date: part.release_date,
+    poster_url: posterUrl(part.poster_path),
+    rt_score: local.get(part.id) ?? lookups.get(part.id)?.score ?? null,
+  }))
+
+  return {
+    collection_id: collection.id,
+    collection_name: collection.name,
+    films,
+    incomplete: budgetShort || anyFailed,
+  }
 }
 
 async function resolveHistory(
@@ -141,7 +253,7 @@ async function resolveHistory(
 ): Promise<FranchiseHistory | null> {
   const ref = await cachedTmdbFetch<MovieCollectionRef>(
     buildCacheKey('movie_collection', { tmdb_id: tmdbId }),
-    TTL_SECONDS,
+    COLLECTION_REF_TTL_SECONDS,
     () => fetchMovieCollectionRef(tmdbId, tmdbToken),
     log
   )
@@ -154,7 +266,7 @@ async function resolveHistory(
     const collectionId = ref.collection_id
     recordPromise = cachedTmdbFetch<CollectionRecord>(
       buildCacheKey('franchise_collection', { collection_id: collectionId }),
-      TTL_SECONDS,
+      recordTtlSeconds,
       () => fetchCollectionRecord(collectionId, tmdbToken, mdblistApiKey),
       log
     )
