@@ -113,6 +113,13 @@ The frontend receives the same shape from the league row and passes it to
 The frontend must stop hardcoding `MIN_EXPIRY_MINUTES` / `MAX_EXPIRY_DAYS` in
 its validation, but keeps them as the fallback constants.
 
+Checked by the lead so nobody has to rediscover it: `trading/page.tsx` already
+does `select('*')` on `leagues` and hands the row to `TradingClient`, so the new
+columns arrive with no extra query. The plumbing is prop-drilling only —
+`TradingClient` -> `ProposeTradeModal` -> `useOfferExpiry`, and
+`TradeOfferCard` -> `CounterTradeModal` -> `useOfferExpiry`. Derive the bounds
+once in `TradingClient` rather than in each modal.
+
 ## Loose end (lead)
 
 `process-trades` counts a trade that fails re-validation into `results.errors`
