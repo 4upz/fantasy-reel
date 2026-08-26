@@ -11,9 +11,10 @@ import { track } from '@vercel/analytics'
  * - `draft_pick_made`       — { league_id, round }
  * - `bid_placed`            — { league_id, amount }
  * - `counterpick_made`      — { league_id }
- * - `trade_proposed`        — { league_id, expiry: 'none'|'fixed'|'first_release' }
+ * - `trade_proposed`        — { league_id, expiry: 'none'|'fixed'|'movie_release' }
  * - `trade_accepted`        — { league_id }
  * - `trade_rejected`        — { league_id }
+ * - `trade_offer_extended`  — { league_id }
  * - `realtime_degraded`     — { league_id, status }
  * - `realtime_recovered`    — { league_id }
  *

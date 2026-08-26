@@ -26,7 +26,12 @@ interface Props {
   fellBack: boolean
 }
 
-function Chip({
+/**
+ * A selectable expiry chip. Exported because the extend modal renders the same
+ * row of choices -- two copies of this className pair drift the moment a token
+ * changes in one of them.
+ */
+export function Chip({
   selected,
   disabled,
   title,

@@ -15,10 +15,12 @@ import type {
 } from '@/types'
 import { formatRelativeDate } from '@/utils/date'
 import AcceptConfirmModal from './AcceptConfirmModal'
-import OfferExpiryPicker from './OfferExpiryPicker'
+import OfferExpiryPicker, { Chip } from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
 import {
+  EXTEND_PRESETS,
   expiredReasonCopy,
+  resolveExtension,
   expiryUrgency,
   formatExpiryAbsolute,
   type ExpiryUrgency,
@@ -57,6 +59,11 @@ interface Props {
    * otherwise waits out the full review window before the cron executes it.
    */
   onApprove: (tradeOfferId: string) => Promise<TradeActionResult>
+  /**
+   * Proposer: push their own offer's clock out, so the alternative to a slow
+   * reply is not cancel-and-repropose.
+   */
+  onExtend: (tradeOfferId: string, expiresAt: string) => Promise<TradeActionResult>
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -93,6 +100,7 @@ const URGENCY_STYLES: Record<ExpiryUrgency, string> = {
   urgent: 'bg-error-bg text-error',
   lapsed: 'bg-surface-hover text-foreground-muted',
 }
+
 
 /** Stable empty set so a non-contested card doesn't allocate one per render. */
 const EMPTY_CONTESTED: ReadonlySet<string> = new Set<string>()
@@ -136,6 +144,7 @@ export default function TradeOfferCard(props: Props) {
     onCancel,
     onVeto,
     onApprove,
+    onExtend,
   } = props
 
   // formatRelativeDate is a pure formatter, so a countdown only moves when
@@ -150,6 +159,7 @@ export default function TradeOfferCard(props: Props) {
   const [showVetoModal, setShowVetoModal] = useState(false)
   const [showApproveModal, setShowApproveModal] = useState(false)
   const [showAcceptModal, setShowAcceptModal] = useState(false)
+  const [showExtendModal, setShowExtendModal] = useState(false)
 
   // Optimistic UI state (FE#9)
   const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null)
@@ -158,6 +168,12 @@ export default function TradeOfferCard(props: Props) {
   const isRecipient = trade.recipient_team_id === currentTeamId
   const canRespond = isRecipient && (trade.status === 'proposed' || trade.status === 'countered')
   const canCancel = isInitiator && (trade.status === 'proposed' || trade.status === 'countered')
+  // Only the side whose offer is on the table, and only when there is a clock
+  // to move. An offer already past its clock but not yet swept still shows the
+  // button and is refused by the server -- the same submit-then-explain the
+  // rest of the trade actions use, rather than a second copy of the rule here.
+  const canExtend =
+    isInitiator && Boolean(trade.expires_at) && EXPIRY_RELEVANT_STATUSES.has(trade.status)
   const canVeto = isOwner && trade.status === 'review'
   // Deliberately the same window as veto: approving is the other answer to the
   // review the commissioner is already being asked for.
@@ -403,7 +419,7 @@ export default function TradeOfferCard(props: Props) {
       )}
 
       {/* Actions */}
-      {(canRespond || canCancel || canVeto || canApprove) && !optimisticStatus && (
+      {(canRespond || canCancel || canExtend || canVeto || canApprove) && !optimisticStatus && (
         <div className="flex flex-wrap gap-2 pt-4 border-t border-border" role="group" aria-label="Trade actions">
           {canRespond && (
             <>
@@ -437,6 +453,18 @@ export default function TradeOfferCard(props: Props) {
                 {pendingAction === 'reject' ? 'Rejecting...' : 'Reject'}
               </button>
             </>
+          )}
+
+          {canExtend && (
+            <button
+              onClick={() => setShowExtendModal(true)}
+              disabled={isLoading}
+              className="btn btn-secondary"
+              aria-label="Give the other team more time to answer"
+              data-testid={`extend-trade-${trade.id}`}
+            >
+              Extend
+            </button>
           )}
 
           {canCancel && (
@@ -520,6 +548,16 @@ export default function TradeOfferCard(props: Props) {
             setShowApproveModal(false)
             await handleAction('approve')
           }}
+        />
+      )}
+
+      {/* Extend Offer Modal (proposer) */}
+      {showExtendModal && trade.expires_at && (
+        <ExtendOfferModal
+          trade={trade}
+          expiresAt={trade.expires_at}
+          onClose={() => setShowExtendModal(false)}
+          onExtend={onExtend}
         />
       )}
 
@@ -1040,6 +1078,170 @@ function MovieSelector({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// =============================================================================
+// Extend Offer Modal (proposer)
+// =============================================================================
+
+interface ExtendOfferModalProps {
+  trade: TradeOfferWithTeams
+  /** The clock being pushed out. Narrowed by the caller so it is never null. */
+  expiresAt: string
+  onClose: () => void
+  /**
+   * Takes the trade id so the card can pass its hook callback straight through.
+   * Wrapping it in an arrow at the call site gave the prop a new identity every
+   * render -- including on the countdown tick, which fires during exactly the
+   * last hour when this modal is most likely to be open.
+   */
+  onExtend: (tradeOfferId: string, newExpiresAt: string) => Promise<TradeActionResult>
+}
+
+/**
+ * Give the other side more time.
+ *
+ * Only ever offers later times, which is the forward-only rule made visible --
+ * the server enforces it, along with the 14-day ceiling and the league trade
+ * deadline, so an over-long extension comes back as a refusal here rather than
+ * being pre-emptively greyed out.
+ */
+function ExtendOfferModal({ trade, expiresAt, onClose, onExtend }: ExtendOfferModalProps) {
+  const [hours, setHours] = useState(EXTEND_PRESETS[0].hours)
+  const [error, setError] = useState<string | null>(null)
+
+  const recipientTeam = trade.recipient_team as { name: string }
+  // One expression, used for both the preview and the request: computing the
+  // target twice let the instant shown and the instant sent drift apart.
+  const newExpiresAt = resolveExtension(expiresAt, hours)
+
+  const extendAction = useCallback(async () => {
+    setError(null)
+    const result = await onExtend(trade.id, newExpiresAt.toISOString())
+
+    if (!result.success) {
+      setError(result.error || 'Failed to extend the offer')
+      return
+    }
+
+    trackEvent('trade_offer_extended', { league_id: trade.league_id })
+    onClose()
+  }, [newExpiresAt, onExtend, onClose, trade.id, trade.league_id])
+
+  const { execute: handleExtend, isLoading } = useAsyncAction(extendAction)
+
+  // On document rather than the dialog: a keydown handler on the panel only
+  // fires once focus is already inside it, so Escape does nothing until the user
+  // tabs in. Same approach as AcceptConfirmModal.
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isLoading) {
+        onClose()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose, isLoading])
+
+  return (
+    // .modal-overlay / .modal-panel rather than a hand-rolled backdrop: the
+    // tokens carry the app's dimming and blur, and a lighter unanimated copy
+    // reads as a different kind of dialog. The two sibling modals in this file
+    // predate those classes; this one should not become a third divergence.
+    <div
+      className="modal-overlay p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="extend-offer-title"
+    >
+      <div className="modal-panel bg-surface rounded-lg shadow-heavy max-w-md w-full border border-border">
+        <div className="p-4 border-b border-border">
+          <h2 id="extend-offer-title" className="text-lg font-display font-bold text-foreground">
+            Extend Offer
+          </h2>
+          <p className="text-sm text-foreground-secondary mt-1">
+            Give {recipientTeam.name} more time to answer. An offer can only be extended, never
+            shortened.
+          </p>
+        </div>
+
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-foreground-muted">
+            Currently expires{' '}
+            <time dateTime={expiresAt} className="text-foreground-secondary">
+              {formatExpiryAbsolute(expiresAt)}
+            </time>
+          </p>
+
+          <div>
+            <span className="text-sm text-foreground-secondary">Extend by</span>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {EXTEND_PRESETS.map((preset) => (
+                <Chip
+                  key={preset.hours}
+                  selected={hours === preset.hours}
+                  onClick={() => setHours(preset.hours)}
+                >
+                  {preset.label}
+                </Chip>
+              ))}
+            </div>
+          </div>
+
+          {/* A chip alone never says when. Same rule as the proposal picker. */}
+          <p className="text-sm text-foreground-muted">
+            New expiry:{' '}
+            <time dateTime={newExpiresAt.toISOString()} className="text-foreground-secondary">
+              {formatExpiryAbsolute(newExpiresAt.toISOString())}
+            </time>
+          </p>
+
+          {/*
+            The one thing an extension changes besides the time. Saying it here,
+            before the click, is the whole reason this is a modal rather than a
+            bare "+24h" button: the offer stops following the movie, and finding
+            that out afterwards would read as the app rewriting the deal.
+          */}
+          {trade.expiry_anchor === 'movie_release' && (
+            <div className="alert alert-warning" role="alert">
+              <p className="text-sm">
+                This offer runs until {trade.anchor_movie_title ?? 'its movie'} releases. Extending
+                it past that replaces the release anchor with a fixed time, so it will stop
+                following the movie&apos;s schedule.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="alert alert-error" role="alert">
+              <p>{error}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-border flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="btn btn-ghost"
+            disabled={isLoading}
+            aria-label="Cancel extending the offer"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => handleExtend()}
+            className="btn btn-primary"
+            disabled={isLoading}
+            aria-label="Confirm extending the offer"
+            aria-busy={isLoading}
+            data-testid={`confirm-extend-trade-${trade.id}`}
+          >
+            {isLoading ? 'Extending...' : 'Extend Offer'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

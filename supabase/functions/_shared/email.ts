@@ -344,6 +344,7 @@ export type TradeEmailType =
   | 'rejected'
   | 'completed'
   | 'vetoed'
+  | 'expiring_soon'
   | 'expired'
 
 interface TradeEmailConfig {
@@ -397,6 +398,19 @@ function getTradeEmailConfig(type: TradeEmailType, data: TradeEmailData): TradeE
       showItems: true,
       accentColor: '#4ade80', // green
     },
+    expiring_soon: {
+      subject: `Trade offer with ${data.otherTeamName} expires soon in ${data.leagueName}`,
+      heading: 'Trade Offer Expiring Soon',
+      // Deliberately neutral about which side is reading. Unlike every other
+      // trade email, this one goes to BOTH parties in the same shape, and
+      // sendTradeEmailNotifications gives the template no way to tell them
+      // apart. The per-party wording ("you have to answer" vs "they haven't")
+      // lives in the in-app notification, which does know.
+      subheading: `Your trade offer with <strong style="color: #e8e8e8;">${escapeHtml(data.otherTeamName)}</strong> is still unanswered, and its clock is running out`,
+      ctaText: 'Review Trade',
+      showItems: true,
+      accentColor: '#d4b23a', // gold-hover -- attention, not alarm; nothing is wrong yet
+    },
     expired: {
       subject: `Trade offer expired in ${data.leagueName}`,
       heading: 'Trade Offer Expired',
@@ -418,10 +432,26 @@ function getTradeEmailConfig(type: TradeEmailType, data: TradeEmailData): TradeE
 }
 
 /**
+ * Column headings for the two sides of a deal: [initiator's side, recipient's side].
+ *
+ * A live offer is described from the reader's side ("They Offer"), which works
+ * only because those emails go to the one party being asked to answer. The
+ * expiring-soon nudge goes to BOTH parties, so it describes the offer instead
+ * of the reader: "You Gave" would be false (nothing has moved) and "They Offer"
+ * would be backwards for the proposer, who is looking at their own movies.
+ */
+function tradeItemHeadings(type: TradeEmailType): [string, string] {
+  if (type === 'proposed' || type === 'countered') return ['They Offer', 'They Request']
+  if (type === 'expiring_soon') return ['Offered', 'Requested']
+  return ['You Gave', 'You Received']
+}
+
+/**
  * Build HTML email template for trade notifications
  */
 export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData): string {
   const config = getTradeEmailConfig(type, data)
+  const [offeredHeading, requestedHeading] = tradeItemHeadings(type)
   const safeMessage = data.message ? escapeHtml(data.message) : null
   const safeVetoReason = data.vetoReason ? escapeHtml(data.vetoReason) : null
 
@@ -431,7 +461,7 @@ export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData):
                 <tr>
                   <td style="width: 48%; vertical-align: top; padding: 16px; background-color: #262626; border-radius: 8px;">
                     <p style="margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #8a8078; text-transform: uppercase; letter-spacing: 0.5px;">
-                      ${type === 'proposed' || type === 'countered' ? 'They Offer' : 'You Gave'}
+                      ${offeredHeading}
                     </p>
                     <p style="margin: 0; font-size: 14px; color: #e8e8e8; line-height: 1.5;">
                       ${escapeHtml(data.offeredItems) || '<em style="color: #8a8078;">Nothing</em>'}
@@ -442,7 +472,7 @@ export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData):
                   </td>
                   <td style="width: 48%; vertical-align: top; padding: 16px; background-color: #262626; border-radius: 8px;">
                     <p style="margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #8a8078; text-transform: uppercase; letter-spacing: 0.5px;">
-                      ${type === 'proposed' || type === 'countered' ? 'They Request' : 'You Received'}
+                      ${requestedHeading}
                     </p>
                     <p style="margin: 0; font-size: 14px; color: #e8e8e8; line-height: 1.5;">
                       ${escapeHtml(data.requestedItems) || '<em style="color: #8a8078;">Nothing</em>'}
@@ -469,8 +499,10 @@ export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData):
               </p>` : ''
 
   // An offer with a clock says so up front -- the whole point of the feature is
-  // that the recipient knows how long they have without asking in Discord.
-  const expirySection = (type === 'proposed' || type === 'countered') && data.expiresAt ? `
+  // that the recipient knows how long they have without asking in Discord. On
+  // the expiring-soon nudge this line IS the message, so it renders there too.
+  const expirySection =
+    (type === 'proposed' || type === 'countered' || type === 'expiring_soon') && data.expiresAt ? `
               <p style="margin: 0 0 24px; font-size: 14px; color: #b8b0a4; text-align: center;">
                 This offer expires: <strong style="color: #e8e8e8;">${formatExpirationDate(data.expiresAt, { withTime: true })}</strong>
               </p>` : ''
@@ -553,6 +585,7 @@ export function buildTradeEmailHtml(type: TradeEmailType, data: TradeEmailData):
  */
 export function buildTradeEmailText(type: TradeEmailType, data: TradeEmailData): string {
   const config = getTradeEmailConfig(type, data)
+  const [offeredHeading, requestedHeading] = tradeItemHeadings(type)
   const safeName = sanitizeEmailHeader(data.otherTeamName)
   const safeLeague = sanitizeEmailHeader(data.leagueName)
 
@@ -565,10 +598,10 @@ ${safeName} - ${safeLeague}
 `
 
   if (config.showItems) {
-    text += `${type === 'proposed' || type === 'countered' ? 'They Offer' : 'You Gave'}:
+    text += `${offeredHeading}:
 ${data.offeredItems || 'Nothing'}
 
-${type === 'proposed' || type === 'countered' ? 'They Request' : 'You Received'}:
+${requestedHeading}:
 ${data.requestedItems || 'Nothing'}
 
 `
@@ -592,7 +625,10 @@ ${data.requestedItems || 'Nothing'}
 `
   }
 
-  if ((type === 'proposed' || type === 'countered') && data.expiresAt) {
+  if (
+    (type === 'proposed' || type === 'countered' || type === 'expiring_soon') &&
+    data.expiresAt
+  ) {
     text += `This offer expires: ${formatExpirationDate(data.expiresAt, { withTime: true })}
 
 `

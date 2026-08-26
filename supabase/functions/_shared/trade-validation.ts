@@ -217,34 +217,40 @@ export async function notifyTradeParties(
   const { tradeOffer, notifyInitiator, notifyRecipient } = options
   const notifications: TradeNotification[] = []
 
-  if (notifyInitiator) {
-    const initiatorInfo = await getTeamInfo(supabase, tradeOffer.initiator_team_id)
-    const recipientTeamName = await getTeamName(supabase, tradeOffer.recipient_team_id)
-    if (initiatorInfo) {
-      notifications.push({
-        user_id: initiatorInfo.user_id,
-        league_id: tradeOffer.league_id,
-        type: notifyInitiator.type,
-        title: notifyInitiator.title,
-        body: notifyInitiator.bodyFn(recipientTeamName),
-        data: { trade_offer_id: tradeOffer.id, ...notifyInitiator.data },
-      })
-    }
+  // Each side is looked up at most once, and only when it is actually needed.
+  // The previous shape issued four sequential queries when notifying both --
+  // two getTeamInfo plus two getTeamName that re-fetched rows getTeamInfo had
+  // already returned, since its select includes `name`. That is per offer, and
+  // the expiry cron notifies both sides on every swept and every nudged offer.
+  const [initiatorInfo, recipientInfo] = await Promise.all([
+    notifyInitiator || notifyRecipient
+      ? getTeamInfo(supabase, tradeOffer.initiator_team_id)
+      : Promise.resolve(null),
+    notifyInitiator || notifyRecipient
+      ? getTeamInfo(supabase, tradeOffer.recipient_team_id)
+      : Promise.resolve(null),
+  ])
+
+  if (notifyInitiator && initiatorInfo) {
+    notifications.push({
+      user_id: initiatorInfo.user_id,
+      league_id: tradeOffer.league_id,
+      type: notifyInitiator.type,
+      title: notifyInitiator.title,
+      body: notifyInitiator.bodyFn(recipientInfo?.name ?? 'A team'),
+      data: { trade_offer_id: tradeOffer.id, ...notifyInitiator.data },
+    })
   }
 
-  if (notifyRecipient) {
-    const recipientInfo = await getTeamInfo(supabase, tradeOffer.recipient_team_id)
-    const initiatorTeamName = await getTeamName(supabase, tradeOffer.initiator_team_id)
-    if (recipientInfo) {
-      notifications.push({
-        user_id: recipientInfo.user_id,
-        league_id: tradeOffer.league_id,
-        type: notifyRecipient.type,
-        title: notifyRecipient.title,
-        body: notifyRecipient.bodyFn(initiatorTeamName),
-        data: { trade_offer_id: tradeOffer.id, ...notifyRecipient.data },
-      })
-    }
+  if (notifyRecipient && recipientInfo) {
+    notifications.push({
+      user_id: recipientInfo.user_id,
+      league_id: tradeOffer.league_id,
+      type: notifyRecipient.type,
+      title: notifyRecipient.title,
+      body: notifyRecipient.bodyFn(initiatorInfo?.name ?? 'A team'),
+      data: { trade_offer_id: tradeOffer.id, ...notifyRecipient.data },
+    })
   }
 
   if (notifications.length > 0) {
