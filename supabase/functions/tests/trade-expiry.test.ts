@@ -306,8 +306,8 @@ Deno.test({
 
       // The requested movie releases FIRST, so it -- not the offered one --
       // must set the clock.
-      const soon = isoDate(10)
-      const later = isoDate(40)
+      const soon = isoDate(5)
+      const later = isoDate(12)
       await serviceClient.from('movies').update({ release_date: later }).eq('id', offeredMovie.movie_id)
       await serviceClient
         .from('movies')
@@ -347,8 +347,8 @@ Deno.test({
 
     await t.step('the proposer can anchor to a LATER release instead of the soonest', async () => {
       const recipientPicks = await factory.getDraftPicksForUser(leagueId, secondClient)
-      const soon = isoDate(10)
-      const later = isoDate(40)
+      const soon = isoDate(5)
+      const later = isoDate(12)
       await serviceClient.from('movies').update({ release_date: later }).eq('id', offeredMovie.movie_id)
       await serviceClient
         .from('movies')
@@ -386,7 +386,7 @@ Deno.test({
 
     await t.step('an already-released movie in the trade does not disqualify the option', async () => {
       const recipientPicks = await factory.getDraftPicksForUser(leagueId, secondClient)
-      const upcoming = isoDate(30)
+      const upcoming = isoDate(12)
       // The offered movie is already out; the requested one is not.
       await serviceClient
         .from('movies')
@@ -424,10 +424,48 @@ Deno.test({
       await cleanupOffers()
     })
 
+    await t.step('the league maximum applies to release anchors too', async () => {
+      // Until this was decided the max check sat only in the fixed branch, so a
+      // league capped at days could carry an offer standing until a film opened
+      // months later. Most of a fantasy-movies roster is unreleased, so that was
+      // the ordinary case rather than an exotic one.
+      const recipientPicks = await factory.getDraftPicksForUser(leagueId, secondClient)
+      await serviceClient
+        .from('movies')
+        .update({ release_date: isoDate(120) })
+        .eq('id', offeredMovie.movie_id)
+      await serviceClient
+        .from('movies')
+        .update({ release_date: isoDate(120) })
+        .eq('id', recipientPicks[0].movie_id)
+      await serviceClient
+        .from('leagues')
+        .update({ trade_offer_expiry_max_days: 3 })
+        .eq('id', leagueId)
+
+      const { error, status } = await propose({ expiry_anchor: 'movie_release' })
+      assertEquals(status, 400)
+      assert(error?.includes('longer than'), `unexpected error: ${error}`)
+
+      // ...and a release inside the league's ceiling is still fine.
+      await serviceClient
+        .from('movies')
+        .update({ release_date: isoDate(2) })
+        .eq('id', offeredMovie.movie_id)
+      const ok = await propose({ expiry_anchor: 'movie_release' })
+      assertEquals(ok.error, null)
+
+      await serviceClient
+        .from('leagues')
+        .update({ trade_offer_expiry_max_days: null })
+        .eq('id', leagueId)
+      await cleanupOffers()
+    })
+
     await t.step('refuses an anchor movie that is not an unreleased movie in the offer', async () => {
       await serviceClient
         .from('movies')
-        .update({ release_date: isoDate(30) })
+        .update({ release_date: isoDate(10) })
         .eq('id', offeredMovie.movie_id)
 
       const { error, status } = await propose({
@@ -450,7 +488,7 @@ Deno.test({
 
       await serviceClient
         .from('movies')
-        .update({ release_date: isoDate(30) })
+        .update({ release_date: isoDate(10) })
         .eq('id', offeredMovie.movie_id)
     })
 
@@ -569,16 +607,16 @@ Deno.test({
     await t.step('a release-anchored offer follows its movie, and lapses when it opens', async () => {
       await serviceClient
         .from('movies')
-        .update({ release_date: isoDate(20) })
+        .update({ release_date: isoDate(6) })
         .eq('id', offeredMovie.movie_id)
 
       const { data } = await propose({ expiry_anchor: 'movie_release' })
       const tradeId = data!.trade_offer.id as string
       assertEquals((await readOffer(tradeId))!.expiry_anchor_movie_id, offeredMovie.movie_id)
-      assertSameInstant((await readOffer(tradeId))!.expires_at, releaseBoundary(isoDate(20)))
+      assertSameInstant((await readOffer(tradeId))!.expires_at, releaseBoundary(isoDate(6)))
 
       // The studio pushes it back: the offer window moves with it.
-      const pushed = isoDate(45)
+      const pushed = isoDate(13)
       await serviceClient.from('movies').update({ release_date: pushed }).eq('id', offeredMovie.movie_id)
       const moved = await runProcessTrades()
       assert(moved.data.reresolved >= 1, 'anchored offer did not follow the release date')

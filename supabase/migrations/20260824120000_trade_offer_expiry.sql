@@ -365,6 +365,12 @@ GRANT EXECUTE ON FUNCTION counter_trade(UUID, UUID, UUID, JSONB, JSONB, TEXT, TI
 -- exactly those parties.
 -- ============================================================================
 
+-- The league's maximum window is enforced when an offer is created or
+-- countered, not here. This recomputes the boundary from the movie's live
+-- release date without re-checking bounds, so a film delayed past the league's
+-- ceiling leaves its offer standing longer than the league would now allow.
+-- Deliberate: the offer was valid when it was made, and expiring someone's
+-- trade because a studio moved a date is a worse surprise than the overrun.
 CREATE OR REPLACE FUNCTION reresolve_release_anchored_offers()
 RETURNS TABLE (
   id UUID,

@@ -261,6 +261,9 @@ export async function resolveOfferExpiry(
   const { bounds } = context
   const now = Date.now()
   const earliest = now + bounds.minMinutes * MS_PER_MINUTE
+  // "At no moment may an offer stand more than maxDays into the future" -- the
+  // same ceiling for a hand-picked window, a release anchor and an extension.
+  const latest = now + bounds.maxDays * HOURS_PER_DAY * 60 * MS_PER_MINUTE
   let expiry: Date
   let anchorMovieId: string | null = null
 
@@ -288,10 +291,16 @@ export async function resolveOfferExpiry(
     const boundary = new Date(chosen.boundary)
     if (Number.isNaN(boundary.getTime())) return { valid: false, error: EXPIRY_ERRORS.unparseable }
     if (boundary.getTime() < earliest) return { valid: false, error: EXPIRY_ERRORS.tooSoon(bounds) }
+    // The maximum applies here too. Until this was decided the check sat only in
+    // the fixed branch below -- not as a choice, but because that is where it
+    // happened to be written -- so a league capped at three days could still
+    // carry an offer standing until a film opened months later. In a fantasy
+    // movies league most of a roster is unreleased, so that was the common case
+    // rather than an exotic one.
+    if (boundary.getTime() > latest) {
+      return { valid: false, error: EXPIRY_ERRORS.tooLate(bounds) }
+    }
 
-    // A release anchor deliberately skips the maximum. The proposer did not
-    // pick a length -- they picked an event, and the league's ceiling is a limit
-    // on how long someone may sit on an offer, not on when a movie may open.
     expiry = boundary
     anchorMovieId = chosen.movie_id
   } else {
@@ -305,7 +314,7 @@ export async function resolveOfferExpiry(
     // relative form compounds, so an offer could be walked forward in maxDays
     // chunks forever and the ceiling would stop meaning anything. Do not give
     // extend a bound of its own.
-    if (expiry.getTime() > now + bounds.maxDays * HOURS_PER_DAY * 60 * MS_PER_MINUTE) {
+    if (expiry.getTime() > latest) {
       return { valid: false, error: EXPIRY_ERRORS.tooLate(bounds) }
     }
   }
