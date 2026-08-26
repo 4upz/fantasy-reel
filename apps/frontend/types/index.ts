@@ -350,6 +350,31 @@ export interface TMDbSearchResponse {
   results: TMDbSearchResult[]
 }
 
+/** One prior film in a movie's franchise (from get-franchise-history). */
+export interface FranchiseFilm {
+  tmdb_id: number
+  title: string
+  release_date: string | null
+  poster_url: string | null
+  /** Tomatometer 0-100, or null when it has no RT score. */
+  rt_score: number | null
+}
+
+/**
+ * The Tomatometer record of the films before this one in its TMDb collection.
+ * Null from the API means the movie is standalone or the first of its series.
+ */
+export interface FranchiseHistory {
+  collection_id: number
+  collection_name: string
+  /** Where this movie falls in the series by release order, 1-based. */
+  entry_number: number
+  /** Prior released films, oldest first (capped to the most recent eight). */
+  films: FranchiseFilm[]
+  average_rt: number | null
+  last_rt: number | null
+}
+
 export interface TMDbCastMember {
   id: number
   name: string
@@ -596,6 +621,8 @@ export interface TradeMovieItem {
   title?: string
   poster_url?: string | null
   release_date?: string | null
+  /** Filled in by get-trades from the live movies table; absent on older snapshots. */
+  tmdb_id?: number | null
 }
 
 export interface TradeItems {

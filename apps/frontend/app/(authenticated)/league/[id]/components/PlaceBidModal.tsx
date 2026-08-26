@@ -9,7 +9,9 @@ import { useDraftMovies } from '../hooks/useDraftMovies'
 import { getTmdbPosterUrl, formatReleaseDateFull, isMovieBiddable, formatDeadlineShort } from './utils'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { WishlistToggle } from '@/components/WishlistToggle'
+import FranchiseSummary from '@/app/components/FranchiseSummary'
 import { useWishlist } from '@/hooks/useWishlist'
+import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 
 interface PlaceBidModalProps {
   isOpen: boolean
@@ -270,6 +272,7 @@ export default function PlaceBidModal({
   }, [activeBidsByTmdbId])
 
   const selectedBidInfo = selectedMovie ? activeBidsByTmdbId.get(selectedMovie.tmdb_id) : undefined
+  const { history: selectedFranchise } = useFranchiseHistory(selectedMovie?.tmdb_id)
   const highestBid = selectedBidInfo?.high ?? null
 
   const submitBidAction = useCallback(async () => {
@@ -650,6 +653,12 @@ export default function PlaceBidModal({
                     )}
                   </div>
                 </div>
+                {selectedFranchise && (
+                  <FranchiseSummary
+                    history={selectedFranchise}
+                    className="mt-4 pt-3 border-t border-border"
+                  />
+                )}
               </div>
 
               {/* Sits above the amount step on purpose: whether this bid can

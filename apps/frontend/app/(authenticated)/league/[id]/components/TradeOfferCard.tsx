@@ -25,6 +25,8 @@ import {
   type ResolvedExpiry,
 } from '@/utils/tradeExpiry'
 import CounterpickMark from './CounterpickMark'
+import FranchiseSummary from '@/app/components/FranchiseSummary'
+import { useFranchiseHistories } from '@/hooks/useFranchiseHistory'
 
 interface Props {
   trade: TradeOfferWithTeams
@@ -559,6 +561,16 @@ function TeamAvatar({ team }: { team: { name: string; avatar_url: string | null 
   )
 }
 
+/**
+ * The movie a trade item's franchise line should describe, or null when it has
+ * none. A counterpick is a bet against a movie, so its series' record reads the
+ * wrong way round there -- only roster holdings get the line.
+ */
+function franchiseTmdbId(movie: TradeMovieItem): number | null {
+  if (movie.source === 'counterpick') return null
+  return movie.tmdb_id ?? null
+}
+
 function TradeItemsSection({
   title,
   items,
@@ -572,6 +584,12 @@ function TradeItemsSection({
   contestedSourceIds: ReadonlySet<string>
 }) {
   const hasItems = items.movies.length > 0 || items.faab > 0
+  const franchises = useFranchiseHistories(
+    items.movies.flatMap((movie) => {
+      const tmdbId = franchiseTmdbId(movie)
+      return tmdbId == null ? [] : [tmdbId]
+    })
+  )
 
   return (
     <div className={`p-3 rounded-lg ${isYours ? 'bg-crimson/10' : 'bg-success/10'}`}>
@@ -581,46 +599,54 @@ function TradeItemsSection({
         <p className="text-sm text-foreground-muted italic">Nothing</p>
       ) : (
         <div className="space-y-2">
-          {items.movies.map((movie: TradeMovieItem) => (
-            <div key={movie.source_id} className="flex items-center gap-2">
-              <div className="relative shrink-0">
-                {movie.poster_url ? (
-                  <Image
-                    src={movie.poster_url}
-                    alt={movie.title || 'Movie'}
-                    width={32}
-                    height={48}
-                    className="w-8 h-12 object-cover rounded"
-                  />
-                ) : (
-                  <div className="w-8 h-12 bg-surface-hover rounded flex items-center justify-center">
-                    <span className="text-xs text-foreground-muted">?</span>
+          {items.movies.map((movie: TradeMovieItem) => {
+            const tmdbId = franchiseTmdbId(movie)
+            const franchise = tmdbId == null ? null : franchises.get(tmdbId)
+
+            return (
+              <div key={movie.source_id}>
+                <div className="flex items-center gap-2">
+                  <div className="relative shrink-0">
+                    {movie.poster_url ? (
+                      <Image
+                        src={movie.poster_url}
+                        alt={movie.title || 'Movie'}
+                        width={32}
+                        height={48}
+                        className="w-8 h-12 object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-8 h-12 bg-surface-hover rounded flex items-center justify-center">
+                        <span className="text-xs text-foreground-muted">?</span>
+                      </div>
+                    )}
+                    {movie.source === 'counterpick' && <CounterpickMark />}
                   </div>
-                )}
-                {movie.source === 'counterpick' && <CounterpickMark />}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {movie.title || 'Unknown Movie'}
+                    </p>
+                    {/* Without this the row is indistinguishable from the movie
+                        itself -- same title, same poster, opposite meaning. */}
+                    {movie.source === 'counterpick' && (
+                      <p className="text-xs text-crimson">Counterpick</p>
+                    )}
+                    {movie.release_date && (
+                      <p className="text-xs text-foreground-muted">
+                        {new Date(movie.release_date).getFullYear()}
+                      </p>
+                    )}
+                    {/* The card badge says the deal is contested; this says which
+                        movie, which is the part that matters on a multi-movie offer. */}
+                    {contestedSourceIds.has(movie.source_id) && (
+                      <p className="text-xs text-warning">Also in another trade</p>
+                    )}
+                  </div>
+                </div>
+                {franchise && <FranchiseSummary history={franchise} className="mt-2 pl-10" />}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {movie.title || 'Unknown Movie'}
-                </p>
-                {/* Without this the row is indistinguishable from the movie
-                    itself -- same title, same poster, opposite meaning. */}
-                {movie.source === 'counterpick' && (
-                  <p className="text-xs text-crimson">Counterpick</p>
-                )}
-                {movie.release_date && (
-                  <p className="text-xs text-foreground-muted">
-                    {new Date(movie.release_date).getFullYear()}
-                  </p>
-                )}
-                {/* The card badge says the deal is contested; this says which
-                    movie, which is the part that matters on a multi-movie offer. */}
-                {contestedSourceIds.has(movie.source_id) && (
-                  <p className="text-xs text-warning">Also in another trade</p>
-                )}
-              </div>
-            </div>
-          ))}
+            )
+          })}
 
           {items.faab > 0 && (
             <div className="flex items-center gap-2">
