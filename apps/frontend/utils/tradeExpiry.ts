@@ -283,17 +283,30 @@ export function resolveReleaseAnchor(
     return { available: false, reason: 'Nothing in this trade is still unreleased', candidates: [] }
   }
 
-  // The soonest release could be minutes away. Deliberately not bumped up to
-  // the minimum -- the chip would then be lying about what it does -- but the
-  // later candidates are still perfectly good choices, so the option stays open.
-  const usable = candidates.filter(
-    (candidate) => new Date(candidate.boundary).getTime() >= now + bounds.minMinutes * MS_PER_MINUTE
-  )
+  // Both ends of the league's range apply. The soonest release could be minutes
+  // away and the furthest could be past the league's ceiling; neither is bumped
+  // or clamped, because a chip that named a movie it no longer waits for would
+  // be lying about what it does. Whatever survives is still a real choice.
+  const earliest = now + bounds.minMinutes * MS_PER_MINUTE
+  const latest = now + bounds.maxDays * 24 * 60 * MS_PER_MINUTE
+
+  const usable = candidates.filter((candidate) => {
+    const at = new Date(candidate.boundary).getTime()
+    return at >= earliest && at <= latest
+  })
 
   if (usable.length === 0) {
+    // Say which end ruled it out. "Out too soon" and "not for months" are
+    // opposite problems and send the proposer to different fixes.
+    const soonest = new Date(candidates[0].boundary).getTime()
     return {
       available: false,
-      reason: `${candidates[0].title} is out too soon`,
+      reason:
+        soonest > latest
+          ? `Nothing in this trade releases within ${bounds.maxDays} ${
+              bounds.maxDays === 1 ? 'day' : 'days'
+            }`
+          : `${candidates[0].title} is out too soon`,
       candidates: [],
     }
   }
