@@ -36,6 +36,9 @@ per the ordering in CLAUDE.md.
 | `supabase/functions/extend-trade-offer/` | extend-dev |
 | `supabase/config.toml` | extend-dev |
 | `.../components/TradeOfferCard.tsx` | extend-dev |
+| `.../components/TradingPanel.tsx` | extend-dev |
+| `.../trading/TradingClient.tsx` | extend-dev (wave 1), config-frontend (wave 2) |
+| `apps/frontend/utils/analytics.ts` | extend-dev |
 | `supabase/functions/update-league/index.ts` | config-backend |
 | `supabase/functions/_shared/trade-expiry.ts` | config-backend |
 | `apps/discord-bot/src/commands/league-options.ts` | config-backend |
@@ -126,6 +129,21 @@ columns arrive with no extra query. The plumbing is prop-drilling only —
 `TradingClient` -> `ProposeTradeModal` -> `useOfferExpiry`, and
 `TradeOfferCard` -> `CounterTradeModal` -> `useOfferExpiry`. Derive the bounds
 once in `TradingClient` rather than in each modal.
+
+## Decisions taken mid-flight
+
+- **Extend needs three more files than the table listed** (`TradingPanel.tsx`,
+  `TradingClient.tsx`, `analytics.ts`) — the card is fed through the panel from
+  the client, so an `onExtend` prop cannot reach it otherwise. Granted to
+  extend-dev in wave 1. `TradingClient.tsx` changes hands to config-frontend in
+  wave 2, which is sequential and therefore safe; config-frontend should expect
+  an extend prop already threaded through it.
+- **No notification when an offer is extended.** An extension only ever moves in
+  the recipient's favour, and they already see the new clock through the
+  existing `trade_offers` realtime subscription, so a "you have more time" ping
+  is noise. The edge case — a recipient who already got an expiring-soon nudge —
+  is covered because `extend_trade_offer` resets `expiry_reminder_sent_at`, so a
+  fresh nudge fires against the new window.
 
 ## Loose end (lead)
 
