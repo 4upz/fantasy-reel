@@ -51,6 +51,12 @@ export interface CollectionRecord {
   collection_name: string
   /** Every released part with a known release date, oldest first. */
   films: FranchiseFilm[]
+  /**
+   * True when a score that should be here is missing for a reason that may
+   * clear -- a failed lookup, or the daily budget ran out -- as opposed to
+   * MDBList simply having no Tomatometer for the film. Decides the cache TTL.
+   */
+  incomplete?: boolean
 }
 
 /**
@@ -59,6 +65,24 @@ export interface CollectionRecord {
  * history and cost a score lookup per film on first sight.
  */
 export const MAX_PRIOR_FILMS = 8
+
+/**
+ * A week for a complete record: which films a collection has does not change,
+ * and a settled Tomatometer moves a point or two at most.
+ */
+export const COMPLETE_RECORD_TTL_SECONDS = 7 * 24 * 60 * 60
+
+/**
+ * An hour for an incomplete one. A rate limit or a spent budget must not bake
+ * "not rated" into a week of cache; the record is retried once the condition
+ * has had time to clear.
+ */
+export const INCOMPLETE_RECORD_TTL_SECONDS = 60 * 60
+
+/** How long a collection record stays fresh, by whether its scores all landed. */
+export function recordTtlSeconds(record: CollectionRecord): number {
+  return record.incomplete ? INCOMPLETE_RECORD_TTL_SECONDS : COMPLETE_RECORD_TTL_SECONDS
+}
 
 /**
  * The parts of a collection that have already released, oldest first. A part

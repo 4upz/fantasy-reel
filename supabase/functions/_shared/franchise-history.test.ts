@@ -2,6 +2,9 @@ import { assertEquals } from '@std/assert'
 import {
   historyForMovie,
   releasedParts,
+  recordTtlSeconds,
+  COMPLETE_RECORD_TTL_SECONDS,
+  INCOMPLETE_RECORD_TTL_SECONDS,
   MAX_PRIOR_FILMS,
   type CollectionRecord,
   type FranchiseFilm,
@@ -23,6 +26,13 @@ const SHREK: CollectionRecord = {
     film(10192, '2010-05-21', 58),
   ],
 }
+
+Deno.test('recordTtlSeconds: a complete record caches for a week, an incomplete one for an hour', () => {
+  const record: CollectionRecord = { collection_id: 1, collection_name: 'x', films: [] }
+  assertEquals(recordTtlSeconds(record), COMPLETE_RECORD_TTL_SECONDS)
+  assertEquals(recordTtlSeconds({ ...record, incomplete: false }), COMPLETE_RECORD_TTL_SECONDS)
+  assertEquals(recordTtlSeconds({ ...record, incomplete: true }), INCOMPLETE_RECORD_TTL_SECONDS)
+})
 
 Deno.test('releasedParts keeps only dated, already-released parts, oldest first', () => {
   const parts = releasedParts(
