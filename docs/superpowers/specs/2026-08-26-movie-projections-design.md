@@ -118,9 +118,10 @@ Two rules make the quota safe:
 1. **User traffic never spends MDBList.** On-demand projection requests
    compute from what is already in the corpus. Gaps are *enqueued* for the
    paced job (by inserting stub `film_corpus` rows) — never fetched inline.
-2. **One shared daily budget with priority.** Every MDBList caller reserves
-   calls through `_shared/mdblist-budget.ts`. Scoring is first in line,
-   pre-release polling second, backfill last.
+2. **A per-feature daily budget.** Every projections MDBList call reserves
+   through `_shared/mdblist-budget.ts` → `reserve_external_api_calls`
+   under the `mdblist:projections` key (§4.2). Scoring is first in line by
+   schedule, pre-release polling second, backfill last.
 
 ---
 
@@ -151,7 +152,7 @@ Seed rows:
 
 | key | enabled | config | description |
 |---|---|---|---|
-| `projections_ingestion` | `true` | `{"mdblist_daily_budget": 600, "per_run_cap": 300}` | Corpus backfill and pre-release score polling may spend MDBList quota. |
+| `projections_ingestion` | `true` | `{"mdblist_daily_budget": 500, "per_run_cap": 300}` | Corpus backfill and pre-release score polling may spend MDBList quota. |
 | `projections_display` | `false` | `{}` | Show projected scores (Beta) in the app. Stays off until the backtest gate in §9 passes. |
 
 **Editing workflow (no SQL):** Supabase Studio → Table Editor →
@@ -167,23 +168,36 @@ Read helpers:
   (RLS permits it), `dedupingInterval: 60_000`. Returns `{ enabled, config,
   isLoading }`; while loading, `enabled` is `false` so a chip never flashes.
 
-### 4.2 `api_usage` (budget ledger)
+### 4.2 Budget ledger — reuse `external_api_budgets` (PR #72)
 
-```sql
-CREATE TABLE api_usage (
-  service   text NOT NULL,
-  day       date NOT NULL,
-  used      integer NOT NULL DEFAULT 0,
-  PRIMARY KEY (service, day)
-);
--- RLS on, no policies (service role only).
-```
+The franchise-history feature (PR #72, `20260827120000_external_api_budgets.sql`)
+already ships exactly this mechanism: `external_api_budgets(api, day, calls)`
+plus `reserve_external_api_calls(p_api text, p_requested int, p_daily_limit int)
+RETURNS int` — an atomic, row-locked per-UTC-day grant, service-role only.
+**Projections reuse it rather than adding a second ledger.**
 
-RPC `reserve_api_calls(p_service text, p_day date, p_requested int, p_cap int)
-RETURNS int` — an atomic `INSERT … ON CONFLICT DO UPDATE` that grants
-`LEAST(p_requested, p_cap - used)` (min 0) and increments `used` by the
-grant. `REVOKE ALL … FROM PUBLIC, anon, authenticated; GRANT EXECUTE … TO
-service_role`.
+Each feature reserves under its own `api` key with its own daily limit, so
+one feature cannot consume another's slice:
+
+| `api` key | Daily limit | Spender |
+|---|---|---|
+| `mdblist:franchise-history` | 300 (PR #72) | `get-franchise-history`, user-driven |
+| `mdblist:projections` | 500 (`feature_flags.projections_ingestion.config.mdblist_daily_budget`) | `ingest-film-corpus`, pre-release polling in `update-scores` |
+| *(unreserved)* | ≈ 60–120 | nightly scoring, first in line by schedule (06:00 / 18:00 UTC) |
+
+Worst case 300 + 500 + 120 = 920 < 1,000. The ingestion job additionally
+reconciles against MDBList's own `/user` counter before reserving, so a
+day where scoring or manual use ran hot shrinks the projections slice
+automatically.
+
+Because PR #72 may merge before or after this work, the projections
+migration carries an **idempotent copy** of the table and function
+(`CREATE TABLE IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, identical
+definition, later timestamp). Whichever lands second is a no-op.
+
+Follow-up for PR #72 (not in this scope): once `film_corpus` holds
+Tomatometers for franchise entries, `get-franchise-history` can read them
+there before spending MDBList — its lookups and ours target the same films.
 
 ### 4.3 Corpus
 
@@ -348,10 +362,11 @@ not `cachedTmdbFetch`, because these payloads are consumed once and persisted.
 ### 5.4 Stage C — ratings (MDBList, budget-paced)
 
 ```
-cap      = flag.config.mdblist_daily_budget   (default 600)
+cap      = flag.config.mdblist_daily_budget   (default 500)
 perRun   = flag.config.per_run_cap            (default 300)
 remote   = GET /user → api_requests_count      (1 call; counted)
-granted  = reserve_api_calls('mdblist', today, min(perRun, cap - remote), cap)
+headroom = min(perRun, cap - 1, 1000 - remote - 100)   -- keep 100 for the evening score sync
+granted  = reserve_external_api_calls('mdblist:projections', headroom, cap)
 ```
 
 Fetch ratings for `granted` rows ordered by `idx_film_corpus_needs_ratings`,
@@ -373,7 +388,7 @@ mdblist_used_today, budget_cap } })`. `remaining_*` in-band, per the
 progress without querying.
 
 **Expected backfill duration:** ~3,000 corpus rows + ~2,000 predecessor
-rows ≈ 5,000 MDBList calls ≈ **9–10 days at 600/day**, with the current
+rows ≈ 5,000 MDBList calls ≈ **10–12 days at 500/day**, with the current
 season's slate complete in the first 2–3 days because of the priority order.
 
 ---
@@ -529,8 +544,9 @@ tmdb_id. One extra update in the existing per-movie loop.
 
 Add a third selection branch: movies with `status = 'upcoming'`,
 `release_date` within the next 30 days, and `scores_updated_at` older than
-24 h, capped at 60/run and reserved through `reserve_api_calls` (priority:
-after the nightly branch, before ingestion). A Tomatometer found here is
+24 h, capped at 60/run and reserved through `reserve_external_api_calls`
+under `mdblist:projections` (it shares the projections slice; the nightly
+branch stays unreserved and first by schedule). A Tomatometer found here is
 written exactly as a post-release score is; the movie's status is unchanged.
 This surfaces festival and embargo-lift scores while players are still
 trading and bidding — the strongest "projection" there is.
@@ -681,8 +697,9 @@ multiply.
 1. **Vote-count floor for the historical seed** — `300` keeps the corpus to
    wide, reviewed releases (~2.5–3k). Lowering to `100` roughly doubles it
    and the backfill time.
-2. **Daily MDBList budget** — `600` leaves 400 for scoring, pre-release
-   polling, and manual use. Adjustable in Studio without a deploy.
+2. **Daily MDBList budget** — `500` for projections, beside PR #72's 300
+   for franchise history and ~120 for scoring (920 worst case). Adjustable
+   in Studio without a deploy.
 3. **Ship gate** — ρ ≥ 0.40 / MAE ≤ 16. A stricter gate delays the feature;
    a looser one risks the "confidently wrong" outcome the Beta label is
    meant to soften, not excuse.
