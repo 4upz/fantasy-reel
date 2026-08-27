@@ -42,7 +42,12 @@ const CONCURRENCY = 4
  * render unscored and the record is retried in an hour.
  */
 const MDBLIST_DAILY_BUDGET = 300
-const MDBLIST_BUDGET_API = 'mdblist'
+/**
+ * Per-feature key, not a shared 'mdblist' row: each MDBList consumer owns a
+ * slice (movie projections reserve under 'mdblist:projections'), so one
+ * feature's spend can never exhaust another's before it asks.
+ */
+const MDBLIST_BUDGET_API = 'mdblist:franchise-history'
 
 /**
  * Which collection a movie belongs to never changes, so that layer keeps a
