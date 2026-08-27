@@ -14,7 +14,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isAuthorizedCronRequest, internalErrorResponse } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
-import { getFlag, flagNumber, type FlagClient } from '../_shared/feature-flags.ts'
+import { getFlag, flagNumber, asFlagClient } from '../_shared/feature-flags.ts'
 import { utcDay } from '../_shared/mdblist-budget.ts'
 import { runIngestFilmCorpus, DEFAULT_INGEST_CONFIG } from './handler.ts'
 
@@ -50,12 +50,7 @@ Deno.serve(async (req) => {
     const serviceClient = createClient(supabaseUrl, serviceRoleKey)
     runClient = serviceClient
 
-    // `serviceClient` is a real, richly-generic SupabaseClient; comparing it
-    // structurally against FlagClient's plain interface trips TS2589 ("type
-    // instantiation excessively deep") in the postgrest-js filter builder
-    // types. Route through `unknown` to skip that structural check -- the
-    // interface only names methods the real client genuinely has.
-    const flag = await getFlag(serviceClient as unknown as FlagClient, 'projections_ingestion')
+    const flag = await getFlag(asFlagClient(serviceClient), 'projections_ingestion')
     if (!flag.enabled) {
       log.info('projections_ingestion flag disabled; skipping run')
       const job_status = await run.finish(serviceClient, { processed: 0, failed: 0, metadata: { skipped: 'flag_disabled' } })

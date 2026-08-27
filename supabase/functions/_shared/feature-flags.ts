@@ -30,6 +30,16 @@ export interface FlagClient {
   }
 }
 
+/**
+ * Adapts a real SupabaseClient to the structural FlagClient. The cast exists
+ * because TypeScript hits TS2589 ("excessively deep") comparing supabase-js's
+ * generic query builders against the narrow structural type; the runtime
+ * shape is identical. Use this at every getFlag call site instead of casting.
+ */
+export function asFlagClient(client: { from: unknown }): FlagClient {
+  return client as unknown as FlagClient
+}
+
 const DISABLED: FeatureFlag = { enabled: false, config: {} }
 
 const cache = new Map<string, { flag: FeatureFlag; fetchedAt: number }>()
