@@ -52,31 +52,31 @@ export async function fetchMdblistUsage(apiKey: string, fetchImpl: typeof fetch 
     if (typeof body.api_requests !== 'number' || typeof body.api_requests_count !== 'number') return null
     return { cap: body.api_requests, used: body.api_requests_count }
   } catch (err) {
-    log.warn('MDBList /user error', { error: serializeError(err) })
+    log.warn('MDBList /user error', { error_name: err instanceof Error ? err.name : typeof err })
     return null
   }
 }
 
 /**
- * Reserves up to `requested` calls under `apiKey` for today against
+ * Reserves up to `requested` calls under `budgetKey` for today against
  * `dailyLimit`. Returns the number actually granted (0 when the limit is
  * reached or the ledger is unreachable -- never spend on a failed
  * reservation).
  */
 export async function reserveApiCalls(
   client: BudgetClient,
-  apiKey: string,
+  budgetKey: string,
   requested: number,
   dailyLimit: number
 ): Promise<number> {
   if (requested <= 0) return 0
   const { data, error } = await client.rpc('reserve_external_api_calls', {
-    p_api: apiKey,
+    p_api: budgetKey,
     p_requested: requested,
     p_daily_limit: dailyLimit,
   })
   if (error) {
-    log.error('reserve_external_api_calls failed; granting 0', { api: apiKey, error: serializeError(error) })
+    log.error('reserve_external_api_calls failed; granting 0', { budget_key: budgetKey, error: serializeError(error) })
     return 0
   }
   return typeof data === 'number' ? data : 0
