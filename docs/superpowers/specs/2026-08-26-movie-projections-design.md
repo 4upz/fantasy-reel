@@ -94,7 +94,7 @@ Deno-tested.
    ┌──────────────────────▼──────────────────────┐
    │ ingest-film-corpus (cron, daily)            │  MDBList ratings for
    │   seed → credits → ratings (budget-paced)   │◄─ historical films
-   └──────────────────────┬──────────────────────┘  (paced by api_usage)
+   └──────────────────────┬──────────────────────┘  (external_api_budgets)
                           ▼
         film_corpus · film_people · film_credits · film_collections
                           │
@@ -656,7 +656,7 @@ join yet). Listed in §12.
 - `get-movie-projections.test.ts` — seeded corpus → deterministic
   projection; scored movie → `null`; unknown target enqueues stubs; batch of
   50 ok, 51 rejected.
-- `reserve_api_calls` concurrency: two parallel reservations never exceed cap.
+- `reserve_external_api_calls` presence + service-role-only grant (its cap/concurrency semantics are covered by PR #72's `tests/reserve-external-api-calls.test.ts`).
 
 **Playwright:** with `projections_display` on, the draft grid shows a
 `[data-testid="projection-chip"]` containing "Beta"; with it off, none

@@ -645,7 +645,7 @@ export interface BudgetClient {
   rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>
 }
 
-/** YYYY-MM-DD for the UTC day, matching api_usage.day and MDBList's daily reset. */
+/** YYYY-MM-DD for the UTC day, matching external_api_budgets.day and MDBList's daily reset. */
 export function utcDay(date: Date = new Date()): string {
   return date.toISOString().slice(0, 10)
 }
