@@ -67,6 +67,24 @@ Deno.test('ingest-film-corpus: seed', async (t) => {
       restore()
     }
   })
+
+  await t.step('an upcoming movie with no release date yet is still seeded (not dropped by the date filter)', async () => {
+    const db: MockDb = {
+      film_corpus: [],
+      movies: [{ tmdb_id: 10, title: 'Undated', release_date: null, status: 'upcoming', vote_count: 5 }],
+    }
+    const client = createMockDbClient(db, { unique: { film_corpus: ['tmdb_id'] } })
+    const { restore } = stubFetch(() => new Response(JSON.stringify({ total_pages: 1, results: [] }), { status: 200 }))
+    try {
+      await seedCorpus(client, DEPS, { ...CONFIG, discoverFromYear: 2026 })
+      const row = db.film_corpus.find((r) => r.tmdb_id === 10)
+      assertEquals(row?.seed_source, 'upcoming')
+      assertEquals(row?.priority, 100)
+      assertEquals(row?.release_date, null)
+    } finally {
+      restore()
+    }
+  })
 })
 
 import { fetchMetadataStage } from '../ingest-film-corpus/handler.ts'
@@ -139,6 +157,37 @@ Deno.test('ingest-film-corpus: metadata', async (t) => {
       assert(db.film_corpus[0].metadata_fetched_at)
       assertEquals(db.film_corpus[0].ratings_absent, true)
       assertEquals(result.remaining_metadata, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('a write failure while dead-ending a 404 is recorded, not silently dropped', async () => {
+    const db: MockDb = {
+      film_corpus: [{ tmdb_id: 404, title: 'Gone', seed_source: 'discover', priority: 0, metadata_fetched_at: null, ratings_fetched_at: null }],
+      film_people: [], film_credits: [], film_collections: [],
+    }
+    const client = createMockDbClient(db, { unique: { film_corpus: ['tmdb_id'] } })
+    const originalFrom = client.from.bind(client)
+    // deno-lint-ignore no-explicit-any
+    client.from = (table: string): any => {
+      const real = originalFrom(table)
+      if (table !== 'film_corpus') return real
+      return {
+        ...real,
+        update: (_patch: Record<string, unknown>) => ({
+          eq: (_col: string, _val: unknown) => Promise.resolve({ data: null, error: { message: 'boom' } }),
+        }),
+      }
+    }
+    const { restore } = stubFetch(tmdbResponder)
+    try {
+      const result = await fetchMetadataStage(client, DEPS, CONFIG)
+      assertEquals(result.metadata_fetched, 0)
+      assertEquals(result.errors, [{ stage: 'metadata', id: 404, error: '[object Object]' }])
+      // The row was never actually stamped -- the failed write must not be
+      // mistaken for a completed dead-end.
+      assertEquals(db.film_corpus[0].metadata_fetched_at, null)
     } finally {
       restore()
     }

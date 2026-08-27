@@ -156,16 +156,30 @@ export async function seedCorpus(
   }
 
   // A2: everything in a league now (upcoming, or released recently) at top priority.
-  const { data: leagueMovies, error: moviesError } = await client
+  // Two queries, unioned by tmdb_id, because the shared mock has no `.or()`:
+  // status='upcoming' catches undated upcoming movies that a release_date
+  // filter would silently drop (undated upcoming is a real draftable state
+  // in this app), and the second query catches recent/near-term releases
+  // that already carry a status other than 'upcoming'.
+  type LeagueMovieRow = { tmdb_id: number; title: string; release_date: string | null; vote_count: number | null }
+  const { data: upcomingMovies, error: upcomingError } = await client
+    .from('movies')
+    .select('tmdb_id, title, release_date, status, vote_count')
+    .eq('status', 'upcoming')
+  if (upcomingError) throw upcomingError
+  const { data: recentMovies, error: recentError } = await client
     .from('movies')
     .select('tmdb_id, title, release_date, status, vote_count')
     .neq('status', 'canceled')
     .gte('release_date', daysBefore(config.today, RECENT_RELEASE_DAYS))
-  if (moviesError) throw moviesError
+  if (recentError) throw recentError
 
-  const upcomingStubs: CorpusStub[] = ((leagueMovies ?? []) as Array<{
-    tmdb_id: number; title: string; release_date: string | null; vote_count: number | null
-  }>)
+  const leagueMoviesById = new Map<number, LeagueMovieRow>()
+  for (const m of [...(upcomingMovies ?? []), ...(recentMovies ?? [])] as LeagueMovieRow[]) {
+    leagueMoviesById.set(m.tmdb_id, m)
+  }
+
+  const upcomingStubs: CorpusStub[] = [...leagueMoviesById.values()]
     .filter((m) => m.tmdb_id > 0)
     .map((m) => ({
       tmdb_id: m.tmdb_id,
@@ -221,9 +235,10 @@ export async function fetchMetadataStage(
       const meta = await fetchMovieMetadata(row.tmdb_id, deps.tmdbToken)
       if (!meta) {
         // Gone from TMDb: never fetch again, and don't spend MDBList on it.
-        await client.from('film_corpus')
+        const { error: deadEndError } = await client.from('film_corpus')
           .update({ metadata_fetched_at: now, ratings_fetched_at: now, ratings_absent: true })
           .eq('tmdb_id', row.tmdb_id)
+        if (deadEndError) throw deadEndError
         continue
       }
 
@@ -275,19 +290,27 @@ export async function fetchMetadataStage(
   }
 
   // Expansion: prior films of the people/franchises behind priority rows.
+  // Skip the query entirely on an empty set rather than calling `.in()`
+  // with `[]` -- harmless against the mock, but the real client sends a
+  // malformed filter for an empty IN list.
   const expansionCap = Math.floor(config.metadataPerRun / METADATA_MULTIPLIER)
-  const { data: peopleRows, error: peopleRowsError } = await client
-    .from('film_people')
-    .select('tmdb_person_id, credits_fetched_at')
-    .is('credits_fetched_at', null)
-    .in('tmdb_person_id', [...expandPeople])
-  if (peopleRowsError) throw peopleRowsError
+  let peopleRows: Array<{ tmdb_person_id: number }> = []
+  if (expandPeople.size > 0) {
+    const { data, error: peopleRowsError } = await client
+      .from('film_people')
+      .select('tmdb_person_id, credits_fetched_at')
+      .is('credits_fetched_at', null)
+      .in('tmdb_person_id', [...expandPeople])
+    if (peopleRowsError) throw peopleRowsError
+    peopleRows = (data ?? []) as Array<{ tmdb_person_id: number }>
+  }
 
-  for (const person of ((peopleRows ?? []) as Array<{ tmdb_person_id: number }>).slice(0, expansionCap)) {
+  for (const person of peopleRows.slice(0, expansionCap)) {
     try {
       const stubs = await fetchPersonPriorFilms(person.tmdb_person_id, deps.tmdbToken, 100)
       await upsertStubs(client, stubs, { promote: false })
-      await client.from('film_people').update({ credits_fetched_at: now }).eq('tmdb_person_id', person.tmdb_person_id)
+      const { error: stampError } = await client.from('film_people').update({ credits_fetched_at: now }).eq('tmdb_person_id', person.tmdb_person_id)
+      if (stampError) throw stampError
       people_expanded++
     } catch (err) {
       log.warn('Person expansion failed', { person_id: person.tmdb_person_id, error: serializeError(err) })
@@ -295,18 +318,23 @@ export async function fetchMetadataStage(
     }
   }
 
-  const { data: collRows, error: collRowsError } = await client
-    .from('film_collections')
-    .select('collection_id, parts_fetched_at')
-    .is('parts_fetched_at', null)
-    .in('collection_id', [...expandCollections])
-  if (collRowsError) throw collRowsError
+  let collRows: Array<{ collection_id: number }> = []
+  if (expandCollections.size > 0) {
+    const { data, error: collRowsError } = await client
+      .from('film_collections')
+      .select('collection_id, parts_fetched_at')
+      .is('parts_fetched_at', null)
+      .in('collection_id', [...expandCollections])
+    if (collRowsError) throw collRowsError
+    collRows = (data ?? []) as Array<{ collection_id: number }>
+  }
 
-  for (const coll of ((collRows ?? []) as Array<{ collection_id: number }>).slice(0, expansionCap)) {
+  for (const coll of collRows.slice(0, expansionCap)) {
     try {
       const { name, stubs } = await fetchCollectionParts(coll.collection_id, deps.tmdbToken)
       await upsertStubs(client, stubs, { promote: false })
-      await client.from('film_collections').update({ name, parts_fetched_at: now }).eq('collection_id', coll.collection_id)
+      const { error: stampError } = await client.from('film_collections').update({ name, parts_fetched_at: now }).eq('collection_id', coll.collection_id)
+      if (stampError) throw stampError
       people_expanded++
     } catch (err) {
       log.warn('Collection expansion failed', { collection_id: coll.collection_id, error: serializeError(err) })
