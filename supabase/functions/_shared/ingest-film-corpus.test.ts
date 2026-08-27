@@ -10,7 +10,7 @@ function discoverResponse(url: string): Response | undefined {
   const page = new URL(url).searchParams.get('page')
   const year = new URL(url).searchParams.get('primary_release_date.gte')!.slice(0, 4)
   const id = Number(`${year}${page}`)
-  return new Response(JSON.stringify({ total_pages: 2, results: [{ id, title: `Film ${id}`, release_date: `${year}-05-01`, vote_count: 500 }] }), { status: 200 })
+  return new Response(JSON.stringify({ total_pages: 2, total_results: 2, results: [{ id, title: `Film ${id}`, release_date: `${year}-05-01`, vote_count: 500 }] }), { status: 200 })
 }
 
 Deno.test('ingest-film-corpus: seed', async (t) => {
@@ -29,18 +29,28 @@ Deno.test('ingest-film-corpus: seed', async (t) => {
     }
   })
 
-  await t.step('skips years that already have 50+ discover stubs', async () => {
+  await t.step('a year whose stub count has caught up to total_results fetches only page 1; a year still short pages through', async () => {
+    // discoverResponse mocks total_results: 2 for every year. 2024 already
+    // has 2 discover stubs (caught up); 2025 has only 1 (still short).
     const db: MockDb = {
-      film_corpus: Array.from({ length: 50 }, (_, i) => ({ tmdb_id: i + 1, seed_source: 'discover', release_date: '2024-01-01' })),
+      film_corpus: [
+        { tmdb_id: 1, seed_source: 'discover', release_date: '2024-01-01' },
+        { tmdb_id: 2, seed_source: 'discover', release_date: '2024-06-01' },
+        { tmdb_id: 3, seed_source: 'discover', release_date: '2025-01-01' },
+      ],
       movies: [],
     }
     const client = createMockDbClient(db, { unique: { film_corpus: ['tmdb_id'] } })
     const { calls, restore } = stubFetch(discoverResponse)
     try {
       await seedCorpus(client, DEPS, CONFIG)
-      const years = calls.map((c) => new URL(c.url).searchParams.get('primary_release_date.gte')!.slice(0, 4))
-      assert(!years.includes('2024'))
-      assert(years.includes('2025'))
+      const pagesFetched = (year: string) =>
+        calls
+          .filter((c) => c.url.includes('/discover/movie') && new URL(c.url).searchParams.get('primary_release_date.gte')!.startsWith(year))
+          .map((c) => new URL(c.url).searchParams.get('page'))
+      assertEquals(pagesFetched('2024'), ['1'])
+      assertEquals(pagesFetched('2025'), ['1', '2'])
+      assertEquals(pagesFetched('2026'), ['1', '2'])
     } finally {
       restore()
     }

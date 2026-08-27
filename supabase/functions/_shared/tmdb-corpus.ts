@@ -153,7 +153,7 @@ export async function fetchDiscoverPage(
   page: number,
   token: string,
   minVotes: number
-): Promise<{ stubs: CorpusStub[]; totalPages: number }> {
+): Promise<{ stubs: CorpusStub[]; totalPages: number; totalResults: number }> {
   const url = new URL(`${TMDB}/discover/movie`)
   url.searchParams.set('region', 'US')
   url.searchParams.set('with_release_type', '3')
@@ -164,9 +164,10 @@ export async function fetchDiscoverPage(
   url.searchParams.set('language', 'en-US')
   url.searchParams.set('include_adult', 'false')
   url.searchParams.set('page', String(page))
-  const data = await tmdbGetJson<{ total_pages: number; results: TMDbListMovie[] }>(url.toString(), token)
+  const data = await tmdbGetJson<{ total_pages: number; total_results: number; results: TMDbListMovie[] }>(url.toString(), token)
   return {
     totalPages: data.total_pages,
+    totalResults: data.total_results,
     stubs: data.results.map((m) => stub(m, 'discover', 0)),
   }
 }

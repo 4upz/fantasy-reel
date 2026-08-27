@@ -59,12 +59,13 @@ Deno.test('tmdb-corpus', async (t) => {
   await t.step('fetchDiscoverPage builds stubs with seed_source discover', async () => {
     const { calls, restore } = stubFetch((url) =>
       url.includes('/discover/movie')
-        ? new Response(JSON.stringify({ total_pages: 3, results: [{ id: 1, title: 'A', release_date: '2024-03-01', vote_count: 400 }] }), { status: 200 })
+        ? new Response(JSON.stringify({ total_pages: 3, total_results: 55, results: [{ id: 1, title: 'A', release_date: '2024-03-01', vote_count: 400 }] }), { status: 200 })
         : undefined
     )
     try {
       const page = await fetchDiscoverPage(2024, 2, 'tok', 300)
       assertEquals(page.totalPages, 3)
+      assertEquals(page.totalResults, 55)
       assertEquals(page.stubs, [{ tmdb_id: 1, title: 'A', release_date: '2024-03-01', vote_count: 400, seed_source: 'discover', priority: 0 }])
       const url = new URL(calls[0].url)
       assertEquals(url.searchParams.get('vote_count.gte'), '300')

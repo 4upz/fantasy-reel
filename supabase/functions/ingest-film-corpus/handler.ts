@@ -38,8 +38,6 @@ import {
 
 const log = createLogger('ingest-film-corpus')
 
-/** A year counts as seeded once it has this many discover stubs. */
-const SEEDED_YEAR_THRESHOLD = 50
 /** League movies released within this many days are still worth projecting/freezing. */
 const RECENT_RELEASE_DAYS = 60
 /** Spec §5.3: TMDb is cheap, so metadata runs at 3× the ratings cap. */
@@ -138,17 +136,22 @@ export async function seedCorpus(
     stubsPerYear.set(year, (stubsPerYear.get(year) ?? 0) + 1)
   }
 
+  // Always fetch page 1 for every year, even one already marked complete --
+  // it's one cheap TMDb call and is how a year's completeness gets
+  // re-verified (TMDb's total_results is the source of truth, not a
+  // hardcoded stub-count heuristic). Only page past it while this year's
+  // existing stub count hasn't caught up to that total; a year that falls
+  // short keeps retrying on subsequent runs since its count stays below
+  // total_results until it does.
   for (let year = config.discoverFromYear; year <= currentYear; year++) {
-    if ((stubsPerYear.get(year) ?? 0) >= SEEDED_YEAR_THRESHOLD) continue
     try {
-      let page = 1
-      let totalPages = 1
-      do {
+      const page1 = await fetchDiscoverPage(year, 1, deps.tmdbToken, config.minVotes)
+      seeded += await upsertStubs(client, page1.stubs, { promote: false })
+      if ((stubsPerYear.get(year) ?? 0) >= page1.totalResults) continue
+      for (let page = 2; page <= page1.totalPages; page++) {
         const result = await fetchDiscoverPage(year, page, deps.tmdbToken, config.minVotes)
-        totalPages = result.totalPages
         seeded += await upsertStubs(client, result.stubs, { promote: false })
-        page++
-      } while (page <= totalPages)
+      }
     } catch (err) {
       log.warn('Discover sweep failed', { year, error: serializeError(err) })
       errors.push({ stage: 'seed:discover', id: year, error: String(err) })
