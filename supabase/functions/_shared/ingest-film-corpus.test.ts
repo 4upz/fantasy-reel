@@ -163,3 +163,119 @@ Deno.test('ingest-film-corpus: metadata', async (t) => {
     }
   })
 })
+
+import { fetchRatingsStage, runIngestFilmCorpus } from '../ingest-film-corpus/handler.ts'
+
+function mdblistResponder(payloads: Record<number, Response>) {
+  return (url: string): Response | undefined => {
+    const m = url.match(/api\.mdblist\.com\/tmdb\/movie\/(\d+)/)
+    if (m) return payloads[Number(m[1])] ?? new Response('', { status: 404 })
+    if (url.includes('api.mdblist.com/user')) return new Response(JSON.stringify({ api_requests: 1000, api_requests_count: 100 }), { status: 200 })
+    return undefined
+  }
+}
+
+const ok = (rt: number | null) =>
+  new Response(JSON.stringify({
+    title: 't', budget: 5, certification: 'R', production_companies: [{ id: 9, name: 'S' }],
+    ratings: [
+      ...(rt === null ? [] : [{ source: 'tomatoes', value: rt, score: rt, votes: 120 }]),
+      { source: 'metacritic', value: 61, score: 61, votes: 40 },
+      { source: 'imdb', value: 7.4, score: 74, votes: 1000 },
+    ],
+  }), { status: 200 })
+
+function ratingsDb(): MockDb {
+  return {
+    film_corpus: [
+      { tmdb_id: 1, priority: 100, metadata_fetched_at: 'x', ratings_fetched_at: null, budget: null, certification: null, company_ids: [] },
+      { tmdb_id: 2, priority: 50, metadata_fetched_at: 'x', ratings_fetched_at: null, budget: 99, certification: 'PG', company_ids: [1] },
+      { tmdb_id: 3, priority: 0, metadata_fetched_at: 'x', ratings_fetched_at: null },
+      { tmdb_id: 4, priority: 0, metadata_fetched_at: null, ratings_fetched_at: null },
+    ],
+  }
+}
+
+Deno.test('ingest-film-corpus: ratings', async (t) => {
+  await t.step('fetches ratings for granted rows in priority order and stores details', async () => {
+    const db = ratingsDb()
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => args!.p_requested } })
+    const { calls, restore } = stubFetch(mdblistResponder({ 1: ok(88), 2: ok(null), 3: ok(40) }))
+    try {
+      const result = await fetchRatingsStage(client, DEPS, { ...CONFIG, perRunCap: 2 })
+      assertEquals(result.mdblist_granted, 2)
+      assertEquals(result.ratings_fetched, 1)
+      assertEquals(result.ratings_absent, 1)
+      assertEquals(result.remaining_ratings, 1)
+      const one = db.film_corpus.find((r) => r.tmdb_id === 1)!
+      assertEquals(one.rt_critic, 88)
+      assertEquals(one.rt_critic_votes, 120)
+      assertEquals(one.metacritic, 61)
+      assertEquals(one.imdb, 7.4)
+      assertEquals(one.budget, 5)
+      assertEquals(one.company_ids, [9])
+      const two = db.film_corpus.find((r) => r.tmdb_id === 2)!
+      assertEquals(two.ratings_absent, true)
+      assertEquals(two.budget, 99) // existing details kept
+      assert(two.ratings_fetched_at)
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 3)!.ratings_fetched_at, null)
+      assertEquals(calls.filter((c) => c.url.includes('/tmdb/movie/')).length, 2)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('headroom respects the remote counter, the scoring reserve, and the daily budget', async () => {
+    const db = ratingsDb()
+    const seen: Array<Record<string, unknown>> = []
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => { seen.push(args!); return 0 } } })
+    const fetchUsage = () => Promise.resolve({ cap: 1000, used: 890 })
+    const { restore } = stubFetch(mdblistResponder({}))
+    try {
+      const result = await fetchRatingsStage(client, { ...DEPS, fetchUsage }, { ...CONFIG, dailyBudget: 500, perRunCap: 300 })
+      // 1000 - 890 used - 100 scoring reserve - 1 for the /user call = 9
+      assertEquals(seen[0], { p_api: 'mdblist:projections', p_requested: 9, p_daily_limit: 500 })
+      assertEquals(result.mdblist_used_today, 890)
+      assertEquals(result.ratings_fetched, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('a 429 stops the stage and is reported', async () => {
+    const db = ratingsDb()
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => args!.p_requested } })
+    const { restore } = stubFetch(mdblistResponder({ 1: new Response('', { status: 429 }), 2: ok(70) }))
+    try {
+      const result = await fetchRatingsStage(client, DEPS, CONFIG)
+      assertEquals(result.mdblist_429, true)
+      assertEquals(result.ratings_fetched, 0)
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 1)!.ratings_fetched_at, null) // not stamped: retry tomorrow
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 2)!.ratings_fetched_at, null) // loop stopped
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('runIngestFilmCorpus runs all stages and totals errors', async () => {
+    const db: MockDb = { ...ratingsDb(), movies: [], film_people: [], film_credits: [], film_collections: [] }
+    const client = createMockDbClient(db, {
+      unique: { film_corpus: ['tmdb_id'], film_people: ['tmdb_person_id'], film_credits: ['tmdb_id', 'tmdb_person_id', 'role'], film_collections: ['collection_id'] },
+      rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => args!.p_requested },
+    })
+    const { restore } = stubFetch((url) =>
+      url.includes('/discover/movie') ? new Response(JSON.stringify({ total_pages: 1, results: [] }), { status: 200 })
+      : url.includes('/movie/4?') ? new Response('{}', { status: 404 })
+      : mdblistResponder({ 1: ok(80), 2: ok(60), 3: ok(50) })(url)
+    )
+    try {
+      const result = await runIngestFilmCorpus(client, DEPS, { ...CONFIG, discoverFromYear: 2026 })
+      assertEquals(result.ratings_fetched, 3)
+      assertEquals(result.failed, 0)
+      assertEquals(result.remaining_metadata, 0)
+      assertEquals(result.remaining_ratings, 0)
+    } finally {
+      restore()
+    }
+  })
+})

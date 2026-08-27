@@ -321,3 +321,140 @@ export async function fetchMetadataStage(
 
   return { metadata_fetched, people_expanded, remaining_metadata: count ?? 0, errors }
 }
+
+// ---------------------------------------------------------------------------
+// Stage C: ratings (MDBList, budget-paced)
+// ---------------------------------------------------------------------------
+
+interface PendingRatingsRow {
+  tmdb_id: number
+  budget: number | null
+  certification: string | null
+  company_ids: number[] | null
+}
+
+export async function fetchRatingsStage(
+  client: SupabaseClient,
+  deps: IngestDeps,
+  config: IngestConfig
+): Promise<{
+  ratings_fetched: number
+  ratings_absent: number
+  remaining_ratings: number
+  mdblist_used_today: number | null
+  mdblist_granted: number
+  mdblist_429: boolean
+  errors: IngestError[]
+}> {
+  const errors: IngestError[] = []
+  let ratings_fetched = 0
+  let ratings_absent = 0
+  let mdblist_429 = false
+
+  // One /user call to reconcile against MDBList's own counter (it counts too).
+  // Whatever the flag allows, always leave MDBLIST_SCORING_RESERVE calls on
+  // the account for the evening score sync.
+  const usage = await (deps.fetchUsage ?? fetchMdblistUsage)(deps.mdblistApiKey)
+  const headroom = usage
+    ? Math.max(0, Math.min(
+        config.perRunCap,
+        config.dailyBudget - 1,
+        MDBLIST_ACCOUNT_CAP - usage.used - MDBLIST_SCORING_RESERVE - 1
+      ))
+    : config.perRunCap
+  const granted = await reserveApiCalls(client, MDBLIST_PROJECTIONS_KEY, headroom, config.dailyBudget)
+
+  if (granted > 0) {
+    const { data: pending, error: pendingError } = await client
+      .from('film_corpus')
+      .select('tmdb_id, budget, certification, company_ids')
+      .is('ratings_fetched_at', null)
+      .not('metadata_fetched_at', 'is', null)
+      .order('priority', { ascending: false })
+      .order('release_date', { ascending: false, nullsFirst: false })
+      .limit(granted)
+    if (pendingError) throw pendingError
+
+    for (const row of (pending ?? []) as PendingRatingsRow[]) {
+      const result = await fetchMDBListRatings(row.tmdb_id, deps.mdblistApiKey)
+      if (result.status === 429) {
+        mdblist_429 = true
+        log.warn('MDBList 429; stopping ratings stage for this run')
+        break
+      }
+      if (result.error && result.status !== 404) {
+        errors.push({ stage: 'ratings', id: row.tmdb_id, error: result.error })
+        continue
+      }
+
+      const now = new Date().toISOString()
+      const bySource = new Map(result.ratings.map((r) => [r.source, r.score]))
+      const rt = bySource.get('rotten_tomatoes') ?? null
+      const patch: Record<string, unknown> = {
+        ratings_fetched_at: now,
+        ratings_absent: rt === null,
+        rt_critic: rt,
+        rt_critic_votes: result.details?.rt_critic_votes ?? null,
+        metacritic: bySource.get('metacritic') ?? null,
+        imdb: bySource.has('imdb') ? Math.round(bySource.get('imdb')!) / 10 : null,
+      }
+      if (result.details) {
+        if (row.budget == null && result.details.budget !== null) patch.budget = result.details.budget
+        if (!row.certification && result.details.certification) patch.certification = result.details.certification
+        if ((row.company_ids ?? []).length === 0 && result.details.company_ids.length > 0) patch.company_ids = result.details.company_ids
+      }
+      const { error: updateError } = await client.from('film_corpus').update(patch).eq('tmdb_id', row.tmdb_id)
+      if (updateError) {
+        errors.push({ stage: 'ratings', id: row.tmdb_id, error: String(updateError) })
+        continue
+      }
+      if (rt === null) ratings_absent++
+      else ratings_fetched++
+    }
+  }
+
+  const { count } = await client
+    .from('film_corpus')
+    .select('tmdb_id', { count: 'exact', head: true })
+    .is('ratings_fetched_at', null)
+    .not('metadata_fetched_at', 'is', null)
+
+  return {
+    ratings_fetched,
+    ratings_absent,
+    remaining_ratings: count ?? 0,
+    mdblist_used_today: usage?.used ?? null,
+    mdblist_granted: granted,
+    mdblist_429,
+    errors,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Runner
+// ---------------------------------------------------------------------------
+
+export async function runIngestFilmCorpus(
+  client: SupabaseClient,
+  deps: IngestDeps,
+  config: IngestConfig
+): Promise<IngestResult> {
+  const seed = await seedCorpus(client, deps, config)
+  const metadata = await fetchMetadataStage(client, deps, config)
+  const ratings = await fetchRatingsStage(client, deps, config)
+  const errors = [...seed.errors, ...metadata.errors, ...ratings.errors]
+  return {
+    seeded: seed.seeded,
+    metadata_fetched: metadata.metadata_fetched,
+    people_expanded: metadata.people_expanded,
+    ratings_fetched: ratings.ratings_fetched,
+    ratings_absent: ratings.ratings_absent,
+    remaining_metadata: metadata.remaining_metadata,
+    remaining_ratings: ratings.remaining_ratings,
+    mdblist_used_today: ratings.mdblist_used_today,
+    mdblist_granted: ratings.mdblist_granted,
+    mdblist_429: ratings.mdblist_429,
+    failed: errors.length,
+    errors,
+  }
+}
