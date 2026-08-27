@@ -155,15 +155,34 @@ export function createMockDbClient(db: MockDb, options: MockClientOptions = {}) 
           return Promise.resolve({ data: arr, error: null })
         },
         update: (patch: Row) => {
-          const apply = (pred: (row: Row) => boolean) => {
-            for (const row of db[table]) if (pred(row)) Object.assign(row, patch)
-            return Promise.resolve({ data: null, error: null })
+          // Chainable + thenable: eq/is/in each add an AND-ed predicate and
+          // return the same builder, so `.update(p).eq(a, 1).is(b, null)`
+          // matches rows satisfying both -- and a single call like
+          // `.update(p).eq(a, 1)` still works because the builder itself is
+          // awaitable (has `.then`), same as a real PostgREST query builder.
+          const preds: Array<(row: Row) => boolean> = []
+          const builder = {
+            eq: (col: string, val: unknown) => {
+              preds.push((r) => r[col] === val)
+              return builder
+            },
+            is: (col: string, val: unknown) => {
+              preds.push((r) => (val === null ? r[col] == null : r[col] === val))
+              return builder
+            },
+            in: (col: string, vals: unknown[]) => {
+              preds.push((r) => vals.includes(r[col]))
+              return builder
+            },
+            then: <TResult1 = { data: null; error: null }, TResult2 = never>(
+              onFulfilled?: ((value: { data: null; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+              onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+            ) => {
+              for (const row of db[table]) if (preds.every((p) => p(row))) Object.assign(row, patch)
+              return Promise.resolve({ data: null, error: null } as const).then(onFulfilled, onRejected)
+            },
           }
-          return {
-            eq: (col: string, val: unknown) => apply((r) => r[col] === val),
-            is: (col: string, val: unknown) => apply((r) => (val === null ? r[col] == null : r[col] === val)),
-            in: (col: string, vals: unknown[]) => apply((r) => vals.includes(r[col])),
-          }
+          return builder
         },
       }
     },

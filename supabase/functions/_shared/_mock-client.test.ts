@@ -32,4 +32,11 @@ Deno.test('_mock-client extensions', async (t) => {
     await client.from('t').update({ x: 'in' }).in('id', [2, 3])
     assertEquals(db.t.map((r) => r.x), ['now', 'in', 'in'])
   })
+
+  await t.step('update() chains multiple predicates as AND', async () => {
+    const db: MockDb = { t: [{ id: 1, x: 1 }, { id: 2, x: null }, { id: 3, x: null }] }
+    const client = createMockDbClient(db)
+    await client.from('t').update({ x: 1 }).eq('id', 2).is('x', null)
+    assertEquals(db.t, [{ id: 1, x: 1 }, { id: 2, x: 1 }, { id: 3, x: null }])
+  })
 })

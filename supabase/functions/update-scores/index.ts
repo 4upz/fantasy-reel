@@ -7,6 +7,7 @@ import { createLogger, serializeError } from '../_shared/logger.ts'
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 import { getFlag, flagNumber, asFlagClient } from '../_shared/feature-flags.ts'
 import { reserveApiCalls, MDBLIST_PROJECTIONS_KEY } from '../_shared/mdblist-budget.ts'
+import { freezeProjection } from '../_shared/projection-freeze.ts'
 
 const log = createLogger('update-scores')
 
@@ -341,15 +342,7 @@ Deno.serve(async (req) => {
 
             // Freeze the projection (if any) at the first real Tomatometer so
             // projected-vs-actual is never rewritten. No row is fine.
-            const rt = ratings.find((r) => r.source === 'rotten_tomatoes')?.score
-            if (rt != null) {
-              const { error: freezeError } = await serviceClient
-                .from('movie_projections')
-                .update({ frozen_at: new Date().toISOString(), actual_rt: Math.round(rt) })
-                .eq('tmdb_id', movie.tmdb_id)
-                .is('frozen_at', null)
-              if (freezeError) log.warn('Projection freeze failed', { tmdb_id: movie.tmdb_id, error: serializeError(freezeError) })
-            }
+            await freezeProjection(serviceClient, movie.tmdb_id, ratings)
           }
         }
 
