@@ -56,6 +56,27 @@ Deno.test('ingest-film-corpus: seed', async (t) => {
     }
   })
 
+  await t.step('a discover page failure is isolated to its year and does not abort the sweep', async () => {
+    const db: MockDb = { film_corpus: [], movies: [] }
+    const client = createMockDbClient(db, { unique: { film_corpus: ['tmdb_id'] } })
+    const responder = (url: string): Response | undefined => {
+      if (!url.includes('/discover/movie')) return undefined
+      const year = new URL(url).searchParams.get('primary_release_date.gte')!.slice(0, 4)
+      return year === '2025' ? new Response('', { status: 500 }) : discoverResponse(url)
+    }
+    const { restore } = stubFetch(responder)
+    try {
+      const result = await seedCorpus(client, DEPS, { ...CONFIG, discoverFromYear: 2025 })
+      assertEquals(result.errors.length, 1)
+      assertEquals(result.errors[0].stage, 'seed:discover')
+      assertEquals(result.errors[0].id, 2025)
+      assert(!db.film_corpus.some((r) => r.release_date?.startsWith('2025')))
+      assert(db.film_corpus.some((r) => r.release_date?.startsWith('2026')))
+    } finally {
+      restore()
+    }
+  })
+
   await t.step('upcoming and recently released league movies are seeded at priority 100', async () => {
     const db: MockDb = {
       film_corpus: [{ tmdb_id: 7, title: 'Already', seed_source: 'discover', priority: 0, release_date: '2026-09-01' }],
