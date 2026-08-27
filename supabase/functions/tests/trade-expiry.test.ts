@@ -273,6 +273,24 @@ Deno.test({
         assert(error?.includes('at least 12 hours'), `unexpected error: ${error}`)
       })
 
+      await t.step('accepts a window EXACTLY at the league minimum', async () => {
+        // The case every other bounds test misses, because they all use round
+        // values well inside the range. The picker offers a chip when
+        // `hours >= minimum` and sends client_now + hours; the resolver compares
+        // against server_now + minimum, and server_now is always later. Without
+        // the grace in resolveOfferExpiry this is refused 100% of the time, not
+        // intermittently -- and a league at min 24h / default 24h / max 1d,
+        // which every validator accepts, offers only that one chip and so could
+        // not make a timed offer at all.
+        const { data, error } = await proposeBounded({
+          expires_at: inHours(12),
+          expiry_anchor: 'fixed',
+        })
+        assertEquals(error, null)
+        assertExists(data!.trade_offer.expires_at)
+        await cleanupBounded()
+      })
+
       await t.step('accepts a window inside the league\'s range', async () => {
         const { data, error } = await proposeBounded({
           expires_at: inHours(48),
