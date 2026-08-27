@@ -68,3 +68,98 @@ Deno.test('ingest-film-corpus: seed', async (t) => {
     }
   })
 })
+
+import { fetchMetadataStage } from '../ingest-film-corpus/handler.ts'
+
+function tmdbResponder(url: string): Response | undefined {
+  if (url.includes('/movie/404?')) return new Response('{}', { status: 404 })
+  if (url.includes('/movie/10?')) {
+    return new Response(JSON.stringify({
+      id: 10, title: 'Sequel', release_date: '2026-12-15', vote_average: 0, vote_count: 0, budget: 0, runtime: 0,
+      belongs_to_collection: { id: 500, name: 'Saga' },
+      genres: [{ id: 28, name: 'Action' }], production_companies: [{ id: 33, name: 'Studio' }],
+      credits: { cast: [{ id: 1001, name: 'Lead', order: 0 }], crew: [{ id: 2001, name: 'Dir', job: 'Director' }] },
+      release_dates: { results: [{ iso_3166_1: 'US', release_dates: [{ type: 3, release_date: '', certification: 'PG-13' }] }] },
+    }), { status: 200 })
+  }
+  if (url.includes('/person/2001/movie_credits')) {
+    return new Response(JSON.stringify({ cast: [], crew: [{ id: 11, title: 'Prior', release_date: '2020-01-01', vote_count: 5000, job: 'Director' }] }), { status: 200 })
+  }
+  if (url.includes('/person/1001/movie_credits')) {
+    return new Response(JSON.stringify({ cast: [{ id: 12, title: 'LeadPrior', release_date: '2018-01-01', vote_count: 5000, order: 1 }], crew: [] }), { status: 200 })
+  }
+  if (url.includes('/collection/500')) {
+    return new Response(JSON.stringify({ name: 'Saga', parts: [{ id: 13, title: 'Saga 1', release_date: '2015-01-01', vote_count: 9000 }, { id: 10, title: 'Sequel', release_date: '2026-12-15', vote_count: 0 }] }), { status: 200 })
+  }
+  return undefined
+}
+
+Deno.test('ingest-film-corpus: metadata', async (t) => {
+  await t.step('fills metadata, credits, and expands people + franchise for priority rows', async () => {
+    const db: MockDb = {
+      film_corpus: [{ tmdb_id: 10, title: 'Sequel', seed_source: 'upcoming', priority: 100, metadata_fetched_at: null, ratings_fetched_at: null, release_date: '2026-12-15' }],
+      film_people: [], film_credits: [], film_collections: [],
+    }
+    const client = createMockDbClient(db, {
+      unique: { film_corpus: ['tmdb_id'], film_people: ['tmdb_person_id'], film_credits: ['tmdb_id', 'tmdb_person_id', 'role'], film_collections: ['collection_id'] },
+    })
+    const { restore } = stubFetch(tmdbResponder)
+    try {
+      const result = await fetchMetadataStage(client, DEPS, CONFIG)
+      assertEquals(result.metadata_fetched, 1)
+      assertEquals(result.people_expanded, 3) // 2 people + 1 collection
+      const row = db.film_corpus.find((r) => r.tmdb_id === 10)!
+      assertEquals(row.collection_id, 500)
+      assertEquals(row.us_release_type, 3)
+      assert(row.metadata_fetched_at)
+      assertEquals(db.film_credits.length, 2)
+      assertEquals(db.film_people.map((p) => p.tmdb_person_id).sort(), [1001, 2001])
+      assert(db.film_people.every((p) => p.credits_fetched_at))
+      assertEquals(db.film_collections[0].parts_fetched_at !== null, true)
+      const ids = db.film_corpus.map((r) => r.tmdb_id).sort()
+      assertEquals(ids, [10, 11, 12, 13])
+      const prior = db.film_corpus.find((r) => r.tmdb_id === 11)!
+      assertEquals(prior.priority, 50)
+      assertEquals(prior.seed_source, 'person')
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('a TMDb 404 dead-ends the row instead of retrying forever', async () => {
+    const db: MockDb = {
+      film_corpus: [{ tmdb_id: 404, title: 'Gone', seed_source: 'discover', priority: 0, metadata_fetched_at: null, ratings_fetched_at: null }],
+      film_people: [], film_credits: [], film_collections: [],
+    }
+    const client = createMockDbClient(db, { unique: { film_corpus: ['tmdb_id'] } })
+    const { restore } = stubFetch(tmdbResponder)
+    try {
+      const result = await fetchMetadataStage(client, DEPS, CONFIG)
+      assertEquals(result.metadata_fetched, 0)
+      assert(db.film_corpus[0].metadata_fetched_at)
+      assertEquals(db.film_corpus[0].ratings_absent, true)
+      assertEquals(result.remaining_metadata, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('does not expand people credited only on low-priority films', async () => {
+    const db: MockDb = {
+      film_corpus: [{ tmdb_id: 10, title: 'Sequel', seed_source: 'discover', priority: 0, metadata_fetched_at: null, ratings_fetched_at: null }],
+      film_people: [], film_credits: [], film_collections: [],
+    }
+    const client = createMockDbClient(db, {
+      unique: { film_corpus: ['tmdb_id'], film_people: ['tmdb_person_id'], film_credits: ['tmdb_id', 'tmdb_person_id', 'role'], film_collections: ['collection_id'] },
+    })
+    const { calls, restore } = stubFetch(tmdbResponder)
+    try {
+      const result = await fetchMetadataStage(client, DEPS, CONFIG)
+      assertEquals(result.people_expanded, 0)
+      assertEquals(calls.filter((c) => c.url.includes('/person/')).length, 0)
+      assertEquals(db.film_people.length, 2) // still recorded, just not expanded
+    } finally {
+      restore()
+    }
+  })
+})
