@@ -552,6 +552,13 @@ Due to an [ES256 JWT verification bug in Supabase CLI](https://github.com/supaba
    npx supabase db push
    ```
 
+   **Migration timestamps must sort after every migration already on main.** `db push`
+   refuses a migration file that sorts before the last one applied in production, and the
+   deploy workflow fails until it's renumbered. When a feature branch merges after other
+   migrations have landed, renumber its migration past the newest one (precedents:
+   `20260823130000_pickup_bid_priority_and_conditional_drops.sql`,
+   `20260824120000_trade_offer_expiry.sql`).
+
 **Common error if you skip step 1:** `{"code":401,"message":"Invalid JWT"}` even with valid auth token.
 
 ### RLS Best Practices
