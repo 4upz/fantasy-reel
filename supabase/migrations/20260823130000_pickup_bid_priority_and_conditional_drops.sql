@@ -1,5 +1,11 @@
 -- Pickup bid priority and conditional drops
 --
+-- Renumbered from 20260820120000: by the time this merged, production had
+-- already applied 20260822120000 and 20260823120000, and `supabase db push`
+-- refuses migrations that sort before the last applied one. The statements
+-- are idempotent, so a database that already ran it under the old number
+-- re-applies this harmlessly.
+--
 -- A team may now bid past a full roster. Two mechanisms make that safe, both
 -- mirroring what counterpick_bids already does (20260805150000):
 --

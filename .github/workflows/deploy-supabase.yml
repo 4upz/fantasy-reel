@@ -11,6 +11,9 @@ on:
 
 permissions:
   contents: read
+  # The changes job reads this workflow's own run history to find the last
+  # successful deploy.
+  actions: read
 
 concurrency:
   group: supabase-deploy
@@ -28,9 +31,25 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      # Diff against what actually reached production, not just the previous
+      # push. When a run fails (e.g. db push refusing an out-of-order
+      # migration), its function changes are otherwise never retried: the next
+      # push only sees its own files and production stays stale.
+      - name: Find last successful deploy
+        id: last-deploy
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FALLBACK_BASE: ${{ github.event.before }}
+        run: |
+          sha=$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-supabase.yml/runs?branch=main&status=success&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty' || true)
+          echo "base=${sha:-$FALLBACK_BASE}" >> "$GITHUB_OUTPUT"
+
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          base: ${{ steps.last-deploy.outputs.base }}
           list-files: json
           filters: |
             migrations:
@@ -47,11 +66,13 @@ jobs:
               - 'supabase/functions/deno.json'
               - 'supabase/config.toml'
 
+  # A manual run (workflow_dispatch) skips the filters and deploys everything:
+  # it is the recovery lever for a production that has drifted from main.
   deploy-migrations:
     name: Deploy migrations
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.migrations == 'true'
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.migrations == 'true'
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -80,7 +101,8 @@ jobs:
     if: |
       !cancelled() &&
       (needs.deploy-migrations.result == 'success' || needs.deploy-migrations.result == 'skipped') &&
-      (needs.changes.outputs.functions == 'true' || needs.changes.outputs.shared == 'true')
+      (github.event_name == 'workflow_dispatch' ||
+       needs.changes.outputs.functions == 'true' || needs.changes.outputs.shared == 'true')
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
@@ -89,15 +111,17 @@ jobs:
           # Pinned on purpose, not stale — see e2e-tests.yml for the rationale.
           version: 2.111.0
 
-      - name: Deploy all functions (shared code changed)
-        if: needs.changes.outputs.shared == 'true'
+      - name: Deploy all functions (shared code changed, or manual run)
+        if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.shared == 'true'
         run: supabase functions deploy --project-ref "$PROJECT_REF"
         env:
           PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Deploy changed functions
-        if: needs.changes.outputs.shared != 'true' && needs.changes.outputs.functions == 'true'
+        if: |
+          github.event_name != 'workflow_dispatch' &&
+          needs.changes.outputs.shared != 'true' && needs.changes.outputs.functions == 'true'
         run: |
           # Extract unique function directory names from changed files (filter non-function paths)
           FUNCTIONS=$(echo "$CHANGED_FILES" | jq -r '.[]' | grep '^supabase/functions/' | sed 's|supabase/functions/||' | cut -d'/' -f1 | sort -u)
