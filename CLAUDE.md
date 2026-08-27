@@ -948,7 +948,7 @@ Edge Functions use **Deno's native testing framework**. Tests are located alongs
 supabase/functions/
 ├── deno.json                    # Test config with imports
 ├── _shared/
-│   ├── _mock-client.ts          # createMockDbClient (filtering in-memory client), stubFetch
+│   ├── _mock-client.ts          # createMockDbClient (in-memory client: filters, upsert, neq, not-is-null, chainable update().eq().is().in()), stubFetch
 │   ├── utils.ts
 │   ├── utils.test.ts            # Shared utility tests
 │   └── email.test.ts            # Email module tests
