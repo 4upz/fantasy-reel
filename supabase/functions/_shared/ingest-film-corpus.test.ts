@@ -5,6 +5,16 @@ import { createMockDbClient, stubFetch, type MockDb } from './_mock-client.ts'
 const CONFIG: IngestConfig = { ...DEFAULT_INGEST_CONFIG, discoverFromYear: 2024, today: '2026-08-26' }
 const DEPS = { tmdbToken: 'tok', mdblistApiKey: 'key' }
 
+/** A clock that jumps `stepMs` on every read, so stage deadlines are reachable. */
+function steppingClock(stepMs: number): () => number {
+  let t = 0
+  return () => {
+    const value = t
+    t += stepMs
+    return value
+  }
+}
+
 function discoverResponse(url: string): Response | undefined {
   if (!url.includes('/discover/movie')) return undefined
   const page = new URL(url).searchParams.get('page')
@@ -29,14 +39,16 @@ Deno.test('ingest-film-corpus: seed', async (t) => {
     }
   })
 
-  await t.step('a year whose stub count has caught up to total_results fetches only page 1; a year still short pages through', async () => {
-    // discoverResponse mocks total_results: 2 for every year. 2024 already
-    // has 2 discover stubs (caught up); 2025 has only 1 (still short).
+  await t.step('a year whose row count has caught up to total_results fetches only page 1; a year still short pages through', async () => {
+    // discoverResponse mocks total_results: 2 for every year. 2024 already has
+    // 2 rows dated in it (caught up); 2025 has only 1 (still short). The count
+    // is over every seed source, not just 'discover': a film first seen as a
+    // person's prior work still covers its year.
     const db: MockDb = {
       film_corpus: [
         { tmdb_id: 1, seed_source: 'discover', release_date: '2024-01-01' },
-        { tmdb_id: 2, seed_source: 'discover', release_date: '2024-06-01' },
-        { tmdb_id: 3, seed_source: 'discover', release_date: '2025-01-01' },
+        { tmdb_id: 2, seed_source: 'person', release_date: '2024-06-01' },
+        { tmdb_id: 3, seed_source: 'collection', release_date: '2025-01-01' },
       ],
       movies: [],
     }
@@ -94,6 +106,32 @@ Deno.test('ingest-film-corpus: seed', async (t) => {
       assertEquals(byId[7].priority, 100)
       assertEquals(byId[8].seed_source, 'upcoming')
       assertEquals(byId[9], undefined)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('promoting a league movie keeps the columns already fetched from TMDb', async () => {
+    const db: MockDb = {
+      film_corpus: [{
+        tmdb_id: 7, title: 'From TMDb', release_date: '2026-09-04', vote_count: 812,
+        seed_source: 'discover', priority: 0, metadata_fetched_at: '2026-08-20T00:00:00Z', runtime: 121,
+      }],
+      // The movies table's copy is staler: a placeholder title, no votes, and
+      // a release date that has since moved. Promotion must not write it back.
+      movies: [{ tmdb_id: 7, title: 'Untitled Sequel', release_date: '2026-09-01', status: 'upcoming', vote_count: null }],
+    }
+    const client = createMockDbClient(db, { unique: { film_corpus: ['tmdb_id'] } })
+    const { restore } = stubFetch(() => new Response(JSON.stringify({ total_pages: 1, results: [] }), { status: 200 }))
+    try {
+      await seedCorpus(client, DEPS, { ...CONFIG, discoverFromYear: 2026 })
+      const row = db.film_corpus.find((r) => r.tmdb_id === 7)!
+      assertEquals(row.priority, 100)
+      assertEquals(row.title, 'From TMDb')
+      assertEquals(row.release_date, '2026-09-04')
+      assertEquals(row.vote_count, 812)
+      assertEquals(row.runtime, 121)
+      assertEquals(row.metadata_fetched_at, '2026-08-20T00:00:00Z')
     } finally {
       restore()
     }
@@ -175,6 +213,32 @@ Deno.test('ingest-film-corpus: metadata', async (t) => {
     }
   })
 
+  await t.step('a predecessor already seeded by the discover sweep is promoted, and a league movie is not demoted', async () => {
+    const db: MockDb = {
+      film_corpus: [
+        { tmdb_id: 10, title: 'Sequel', seed_source: 'upcoming', priority: 100, metadata_fetched_at: null, ratings_fetched_at: null, release_date: '2026-12-15' },
+        // Already in the corpus at the back of the queue; it is also the prior
+        // film of the sequel's director, so this run should move it forward.
+        { tmdb_id: 11, title: 'Prior', seed_source: 'discover', priority: 0, metadata_fetched_at: null, ratings_fetched_at: null, release_date: '2020-01-01' },
+      ],
+      film_people: [], film_credits: [], film_collections: [],
+    }
+    const client = createMockDbClient(db, {
+      unique: { film_corpus: ['tmdb_id'], film_people: ['tmdb_person_id'], film_credits: ['tmdb_id', 'tmdb_person_id', 'role'], film_collections: ['collection_id'] },
+    })
+    const { restore } = stubFetch(tmdbResponder)
+    try {
+      await fetchMetadataStage(client, DEPS, CONFIG)
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 11)!.priority, 50)
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 11)!.seed_source, 'discover')
+      // 10 is also a part of collection 500: promotion must never pull a
+      // league movie back down to the expansion priority.
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 10)!.priority, 100)
+    } finally {
+      restore()
+    }
+  })
+
   await t.step('a TMDb 404 dead-ends the row instead of retrying forever', async () => {
     const db: MockDb = {
       film_corpus: [{ tmdb_id: 404, title: 'Gone', seed_source: 'discover', priority: 0, metadata_fetched_at: null, ratings_fetched_at: null }],
@@ -215,7 +279,11 @@ Deno.test('ingest-film-corpus: metadata', async (t) => {
     try {
       const result = await fetchMetadataStage(client, DEPS, CONFIG)
       assertEquals(result.metadata_fetched, 0)
-      assertEquals(result.errors, [{ stage: 'metadata', id: 404, error: '[object Object]' }])
+      assertEquals(result.errors.length, 1)
+      assertEquals(result.errors[0].stage, 'metadata')
+      assertEquals(result.errors[0].id, 404)
+      // Serialized, not String()'d: a persisted '[object Object]' is undiagnosable.
+      assertEquals((result.errors[0].error as { message: string }).message, 'boom')
       // The row was never actually stamped -- the failed write must not be
       // mistaken for a completed dead-end.
       assertEquals(db.film_corpus[0].metadata_fetched_at, null)
@@ -268,10 +336,10 @@ const ok = (rt: number | null) =>
 function ratingsDb(): MockDb {
   return {
     film_corpus: [
-      { tmdb_id: 1, priority: 100, metadata_fetched_at: 'x', ratings_fetched_at: null, budget: null, certification: null, company_ids: [] },
-      { tmdb_id: 2, priority: 50, metadata_fetched_at: 'x', ratings_fetched_at: null, budget: 99, certification: 'PG', company_ids: [1] },
-      { tmdb_id: 3, priority: 0, metadata_fetched_at: 'x', ratings_fetched_at: null },
-      { tmdb_id: 4, priority: 0, metadata_fetched_at: null, ratings_fetched_at: null },
+      { tmdb_id: 1, priority: 100, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: '2026-08-01', budget: null, certification: null, company_ids: [] },
+      { tmdb_id: 2, priority: 50, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: '2026-08-02', budget: 99, certification: 'PG', company_ids: [1] },
+      { tmdb_id: 3, priority: 0, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: '2026-08-03' },
+      { tmdb_id: 4, priority: 0, metadata_fetched_at: null, ratings_fetched_at: null, release_date: '2026-08-04' },
     ],
   }
 }
@@ -337,6 +405,23 @@ Deno.test('ingest-film-corpus: ratings', async (t) => {
     }
   })
 
+  await t.step('a 401 stops the stage and is reported as an auth failure', async () => {
+    const db = ratingsDb()
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => args!.p_requested } })
+    const { restore } = stubFetch(mdblistResponder({ 1: new Response('', { status: 401 }), 2: ok(70) }))
+    try {
+      const result = await fetchRatingsStage(client, DEPS, CONFIG)
+      assertEquals(result.mdblist_auth_failed, true)
+      assertEquals(result.ratings_fetched, 0)
+      // A bad or expired key fails every row: burning the rest of the grant on
+      // it is pointless, and none of them may be stamped.
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 1)!.ratings_fetched_at, null)
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 2)!.ratings_fetched_at, null)
+    } finally {
+      restore()
+    }
+  })
+
   await t.step('runIngestFilmCorpus runs all stages and totals errors', async () => {
     const db: MockDb = { ...ratingsDb(), movies: [], film_people: [], film_credits: [], film_collections: [] }
     const client = createMockDbClient(db, {
@@ -354,6 +439,38 @@ Deno.test('ingest-film-corpus: ratings', async (t) => {
       assertEquals(result.failed, 0)
       assertEquals(result.remaining_metadata, 0)
       assertEquals(result.remaining_ratings, 0)
+      assertEquals(result.deadlines, { seed: false, metadata: false, ratings: false })
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('each stage gets its own slice of the run budget: a slow Stage A cannot starve Stage C', async () => {
+    // The whole run must fit inside the cron proxy's 55s abort. With a clock
+    // that jumps 5s per read and a 10s seed budget, Stage A runs out during its
+    // first year -- and Stage C must still get its own 17s and do work.
+    const db: MockDb = {
+      film_corpus: [
+        { tmdb_id: 1, priority: 100, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: '2026-08-01', budget: null, certification: null, company_ids: [] },
+      ],
+      movies: [], film_people: [], film_credits: [], film_collections: [],
+    }
+    const client = createMockDbClient(db, {
+      unique: { film_corpus: ['tmdb_id'], film_people: ['tmdb_person_id'], film_collections: ['collection_id'] },
+      rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => args!.p_requested },
+    })
+    const { calls, restore } = stubFetch((url) =>
+      url.includes('/discover/movie') ? discoverResponse(url)
+      : url.includes('/movie/') && url.includes('api.themoviedb.org') ? new Response('{}', { status: 404 })
+      : mdblistResponder({ 1: ok(88) })(url)
+    )
+    try {
+      const result = await runIngestFilmCorpus(client, { ...DEPS, now: steppingClock(5_000) }, CONFIG)
+      assertEquals(result.deadlines.seed, true)
+      // 2024 page 1, then the deadline lands before page 2 of the same year.
+      assertEquals(calls.filter((c) => c.url.includes('/discover/movie')).length, 1)
+      assertEquals(result.deadlines.ratings, false)
+      assertEquals(result.ratings_fetched, 1)
     } finally {
       restore()
     }

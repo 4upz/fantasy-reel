@@ -64,7 +64,10 @@ Deno.serve(async (req) => {
       {
         ...DEFAULT_INGEST_CONFIG,
         perRunCap,
-        metadataPerRun: perRunCap * 3,
+        // TMDb is free but not instant, and the whole run shares one 55s cron
+        // window: the metadata stage is capped at the ratings cap, and its own
+        // wall-clock slice (config.stageBudgetMs.metadata) stops it there.
+        metadataPerRun: perRunCap,
         dailyBudget: flagNumber(flag, 'mdblist_daily_budget', DEFAULT_INGEST_CONFIG.dailyBudget),
         today: utcDay(),
       }
@@ -73,8 +76,9 @@ Deno.serve(async (req) => {
     const { errors, failed, ...metadata } = result
     const job_status = await run.finish(serviceClient, {
       processed: result.metadata_fetched + result.ratings_fetched + result.ratings_absent + failed,
-      // A 429 is a degraded run even when nothing else failed: surface it in the ops channel.
-      failed: failed + (result.mdblist_429 ? 1 : 0),
+      // A 429 or a rejected key is a degraded run even when nothing else
+      // failed: surface either in the ops channel.
+      failed: failed + (result.mdblist_429 ? 1 : 0) + (result.mdblist_auth_failed ? 1 : 0),
       errors,
       metadata,
     })

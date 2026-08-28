@@ -19,7 +19,7 @@
  * Spec: docs/superpowers/specs/2026-08-26-movie-projections-design.md §5
  */
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { createLogger, serializeError } from '../_shared/logger.ts'
+import { createLogger, serializeError, type SerializedError } from '../_shared/logger.ts'
 import {
   fetchDiscoverPage,
   fetchMovieMetadata,
@@ -40,8 +40,30 @@ const log = createLogger('ingest-film-corpus')
 
 /** League movies released within this many days are still worth projecting/freezing. */
 const RECENT_RELEASE_DAYS = 60
-/** Spec §5.3: TMDb is cheap, so metadata runs at 3× the ratings cap. */
-const METADATA_MULTIPLIER = 3
+/** Spec §5.3: TMDb is cheap, so expansion runs at a third of the metadata cap. */
+const EXPANSION_DIVISOR = 3
+
+/**
+ * Wall-clock slice each stage may spend, in ms.
+ *
+ * The cron proxy aborts the request at 55s, and an aborted run loses the whole
+ * run's work -- including Stage C, which is last and is the only stage that
+ * spends money. Fixed per-stage slices (45s total, 10s of slack) mean a slow
+ * TMDb or a wide discover sweep can only eat its own budget: Stage C is always
+ * reached with its full share intact.
+ */
+export interface StageBudgetMs {
+  seed: number
+  metadata: number
+  ratings: number
+}
+
+/** Which stages ran out of their slice this run; surfaced in job_runs metadata. */
+export interface StageDeadlines {
+  seed: boolean
+  metadata: boolean
+  ratings: boolean
+}
 
 export interface IngestConfig {
   minVotes: number
@@ -49,6 +71,7 @@ export interface IngestConfig {
   perRunCap: number
   dailyBudget: number
   metadataPerRun: number
+  stageBudgetMs: StageBudgetMs
   /** YYYY-MM-DD; injected so tests are deterministic. */
   today: string
 }
@@ -58,19 +81,23 @@ export const DEFAULT_INGEST_CONFIG: Omit<IngestConfig, 'today'> = {
   discoverFromYear: 2012,
   perRunCap: 300,
   dailyBudget: 500,
-  metadataPerRun: 300 * METADATA_MULTIPLIER,
+  metadataPerRun: 300,
+  stageBudgetMs: { seed: 10_000, metadata: 18_000, ratings: 17_000 },
 }
 
 export interface IngestDeps {
   tmdbToken: string
   mdblistApiKey: string
   fetchUsage?: typeof fetchMdblistUsage
+  /** Injectable clock so stage deadlines are testable without real waiting. */
+  now?: () => number
 }
 
 export interface IngestError {
   stage: string
   id: number
-  error: string
+  /** `serializeError` output, or the API's own message string. */
+  error: SerializedError | string | unknown
 }
 
 export interface IngestResult {
@@ -84,15 +111,10 @@ export interface IngestResult {
   mdblist_used_today: number | null
   mdblist_granted: number
   mdblist_429: boolean
+  mdblist_auth_failed: boolean
+  deadlines: StageDeadlines
   failed: number
   errors: IngestError[]
-}
-
-interface CorpusRow {
-  tmdb_id: number
-  seed_source: string
-  release_date: string | null
-  priority: number
 }
 
 function daysBefore(today: string, days: number): string {
@@ -101,13 +123,34 @@ function daysBefore(today: string, days: number): string {
   return d.toISOString().slice(0, 10)
 }
 
-async function upsertStubs(client: SupabaseClient, stubs: CorpusStub[], opts: { promote: boolean }): Promise<number> {
+/** Inserts stubs, never touching a column an existing row already filled. */
+async function upsertStubs(client: SupabaseClient, stubs: CorpusStub[]): Promise<number> {
   if (stubs.length === 0) return 0
   const { error } = await client
     .from('film_corpus')
-    .upsert(stubs, { onConflict: 'tmdb_id', ignoreDuplicates: !opts.promote })
+    .upsert(stubs, { onConflict: 'tmdb_id', ignoreDuplicates: true })
   if (error) throw error
   return stubs.length
+}
+
+/**
+ * Raises `priority` on rows that are already in the corpus, without writing any
+ * other column. An upsert cannot do this: its payload is stub-shaped, so
+ * merging it would overwrite the richer TMDb-sourced title/date/vote_count an
+ * existing row may already carry.
+ */
+async function promoteExisting(
+  client: SupabaseClient,
+  tmdbIds: number[],
+  priority: number,
+  onlyUnprioritized: boolean
+): Promise<void> {
+  if (tmdbIds.length === 0) return
+  const query = client.from('film_corpus').update({ priority }).in('tmdb_id', tmdbIds)
+  // Priorities are only ever 0, 50 or 100, so eq(0) is a safe "below 50" and
+  // keeps an expansion from demoting a league movie already at 100.
+  const { error } = onlyUnprioritized ? await query.eq('priority', 0) : await query
+  if (error) throw error
 }
 
 // ---------------------------------------------------------------------------
@@ -118,43 +161,57 @@ export async function seedCorpus(
   client: SupabaseClient,
   deps: IngestDeps,
   config: IngestConfig
-): Promise<{ seeded: number; errors: IngestError[] }> {
+): Promise<{ seeded: number; deadline_hit: boolean; errors: IngestError[] }> {
   const errors: IngestError[] = []
+  const now = deps.now ?? Date.now
+  const deadline = now() + config.stageBudgetMs.seed
+  let deadline_hit = false
   let seeded = 0
 
   // A1: historical wide releases, one discover sweep per un-seeded year.
-  const currentYear = Number(config.today.slice(0, 4))
-  const { data: discoverRows, error: rowsError } = await client
-    .from('film_corpus')
-    .select('tmdb_id, seed_source, release_date, priority')
-    .eq('seed_source', 'discover')
-  if (rowsError) throw rowsError
-  const stubsPerYear = new Map<number, number>()
-  for (const row of (discoverRows ?? []) as CorpusRow[]) {
-    if (!row.release_date) continue
-    const year = Number(row.release_date.slice(0, 4))
-    stubsPerYear.set(year, (stubsPerYear.get(year) ?? 0) + 1)
-  }
-
+  //
   // Always fetch page 1 for every year, even one already marked complete --
   // it's one cheap TMDb call and is how a year's completeness gets
   // re-verified (TMDb's total_results is the source of truth, not a
   // hardcoded stub-count heuristic). Only page past it while this year's
-  // existing stub count hasn't caught up to that total; a year that falls
+  // existing row count hasn't caught up to that total; a year that falls
   // short keeps retrying on subsequent runs since its count stays below
   // total_results until it does.
-  for (let year = config.discoverFromYear; year <= currentYear; year++) {
+  const currentYear = Number(config.today.slice(0, 4))
+  yearSweep: for (let year = config.discoverFromYear; year <= currentYear; year++) {
+    if (now() >= deadline) {
+      deadline_hit = true
+      log.info('seed deadline reached', { stopped_at_year: year })
+      break
+    }
     try {
+      // An exact head count of every row dated in this year, whatever seeded
+      // it -- a film first seen as a person's prior work still covers its
+      // year. Counted server-side and never fetched: PostgREST caps a select
+      // at max_rows (1000), so counting returned rows would call a year with
+      // more than that complete when it isn't.
+      const { count: existingForYear, error: countError } = await client
+        .from('film_corpus')
+        .select('tmdb_id', { count: 'exact', head: true })
+        .gte('release_date', `${year}-01-01`)
+        .lte('release_date', `${year}-12-31`)
+      if (countError) throw countError
+
       const page1 = await fetchDiscoverPage(year, 1, deps.tmdbToken, config.minVotes)
-      seeded += await upsertStubs(client, page1.stubs, { promote: false })
-      if ((stubsPerYear.get(year) ?? 0) >= page1.totalResults) continue
+      seeded += await upsertStubs(client, page1.stubs)
+      if ((existingForYear ?? 0) >= page1.totalResults) continue
       for (let page = 2; page <= page1.totalPages; page++) {
+        if (now() >= deadline) {
+          deadline_hit = true
+          log.info('seed deadline reached', { stopped_at_year: year, stopped_at_page: page })
+          break yearSweep
+        }
         const result = await fetchDiscoverPage(year, page, deps.tmdbToken, config.minVotes)
-        seeded += await upsertStubs(client, result.stubs, { promote: false })
+        seeded += await upsertStubs(client, result.stubs)
       }
     } catch (err) {
       log.warn('Discover sweep failed', { year, error: serializeError(err) })
-      errors.push({ stage: 'seed:discover', id: year, error: String(err) })
+      errors.push({ stage: 'seed:discover', id: year, error: serializeError(err) })
     }
   }
 
@@ -192,11 +249,14 @@ export async function seedCorpus(
       seed_source: 'upcoming' as const,
       priority: 100,
     }))
-  // Promote: an existing row keeps its metadata but moves to the front of the queue.
-  // Only stub columns are in the payload, so nothing fetched is overwritten.
-  seeded += await upsertStubs(client, upcomingStubs, { promote: true })
+  // Insert the ones we've never seen, then raise priority on all of them. Two
+  // steps, because a merging upsert would write the whole stub payload over an
+  // existing row -- replacing a title, release_date and vote_count already
+  // refreshed from TMDb's details endpoint with the movies table's copy.
+  seeded += await upsertStubs(client, upcomingStubs)
+  await promoteExisting(client, upcomingStubs.map((s) => s.tmdb_id), 100, false)
 
-  return { seeded, errors }
+  return { seeded, deadline_hit, errors }
 }
 
 // ---------------------------------------------------------------------------
@@ -215,8 +275,11 @@ export async function fetchMetadataStage(
   client: SupabaseClient,
   deps: IngestDeps,
   config: IngestConfig
-): Promise<{ metadata_fetched: number; people_expanded: number; remaining_metadata: number; errors: IngestError[] }> {
+): Promise<{ metadata_fetched: number; people_expanded: number; remaining_metadata: number; deadline_hit: boolean; errors: IngestError[] }> {
   const errors: IngestError[] = []
+  const clock = deps.now ?? Date.now
+  const deadline = clock() + config.stageBudgetMs.metadata
+  let deadline_hit = false
   let metadata_fetched = 0
   let people_expanded = 0
   const now = new Date().toISOString()
@@ -234,6 +297,11 @@ export async function fetchMetadataStage(
   const expandCollections = new Set<number>()
 
   for (const row of (pending ?? []) as PendingMetadataRow[]) {
+    if (clock() >= deadline) {
+      deadline_hit = true
+      log.info('metadata deadline reached', { fetched: metadata_fetched, stopped_at: row.tmdb_id })
+      break
+    }
     try {
       const meta = await fetchMovieMetadata(row.tmdb_id, deps.tmdbToken)
       if (!meta) {
@@ -288,7 +356,7 @@ export async function fetchMetadataStage(
       metadata_fetched++
     } catch (err) {
       log.warn('Metadata fetch failed', { tmdb_id: row.tmdb_id, error: serializeError(err) })
-      errors.push({ stage: 'metadata', id: row.tmdb_id, error: String(err) })
+      errors.push({ stage: 'metadata', id: row.tmdb_id, error: serializeError(err) })
     }
   }
 
@@ -296,7 +364,7 @@ export async function fetchMetadataStage(
   // Skip the query entirely on an empty set rather than calling `.in()`
   // with `[]` -- harmless against the mock, but the real client sends a
   // malformed filter for an empty IN list.
-  const expansionCap = Math.floor(config.metadataPerRun / METADATA_MULTIPLIER)
+  const expansionCap = Math.floor(config.metadataPerRun / EXPANSION_DIVISOR)
   let peopleRows: Array<{ tmdb_person_id: number }> = []
   if (expandPeople.size > 0) {
     const { data, error: peopleRowsError } = await client
@@ -309,15 +377,24 @@ export async function fetchMetadataStage(
   }
 
   for (const person of peopleRows.slice(0, expansionCap)) {
+    if (clock() >= deadline) {
+      deadline_hit = true
+      log.info('metadata deadline reached during person expansion', { expanded: people_expanded })
+      break
+    }
     try {
       const stubs = await fetchPersonPriorFilms(person.tmdb_person_id, deps.tmdbToken, 100)
-      await upsertStubs(client, stubs, { promote: false })
+      await upsertStubs(client, stubs)
+      // A predecessor already in the corpus at priority 0 (from the discover
+      // sweep) is worth as much as a newly inserted one: promote it too, or a
+      // league movie's history stays stuck behind the whole backlog.
+      await promoteExisting(client, stubs.map((s) => s.tmdb_id), EXPAND_PRIORITY, true)
       const { error: stampError } = await client.from('film_people').update({ credits_fetched_at: now }).eq('tmdb_person_id', person.tmdb_person_id)
       if (stampError) throw stampError
       people_expanded++
     } catch (err) {
       log.warn('Person expansion failed', { person_id: person.tmdb_person_id, error: serializeError(err) })
-      errors.push({ stage: 'expand:person', id: person.tmdb_person_id, error: String(err) })
+      errors.push({ stage: 'expand:person', id: person.tmdb_person_id, error: serializeError(err) })
     }
   }
 
@@ -333,15 +410,21 @@ export async function fetchMetadataStage(
   }
 
   for (const coll of collRows.slice(0, expansionCap)) {
+    if (clock() >= deadline) {
+      deadline_hit = true
+      log.info('metadata deadline reached during collection expansion', { expanded: people_expanded })
+      break
+    }
     try {
       const { name, stubs } = await fetchCollectionParts(coll.collection_id, deps.tmdbToken)
-      await upsertStubs(client, stubs, { promote: false })
+      await upsertStubs(client, stubs)
+      await promoteExisting(client, stubs.map((s) => s.tmdb_id), EXPAND_PRIORITY, true)
       const { error: stampError } = await client.from('film_collections').update({ name, parts_fetched_at: now }).eq('collection_id', coll.collection_id)
       if (stampError) throw stampError
       people_expanded++
     } catch (err) {
       log.warn('Collection expansion failed', { collection_id: coll.collection_id, error: serializeError(err) })
-      errors.push({ stage: 'expand:collection', id: coll.collection_id, error: String(err) })
+      errors.push({ stage: 'expand:collection', id: coll.collection_id, error: serializeError(err) })
     }
   }
 
@@ -350,7 +433,7 @@ export async function fetchMetadataStage(
     .select('tmdb_id', { count: 'exact', head: true })
     .is('metadata_fetched_at', null)
 
-  return { metadata_fetched, people_expanded, remaining_metadata: count ?? 0, errors }
+  return { metadata_fetched, people_expanded, remaining_metadata: count ?? 0, deadline_hit, errors }
 }
 
 // ---------------------------------------------------------------------------
@@ -375,12 +458,18 @@ export async function fetchRatingsStage(
   mdblist_used_today: number | null
   mdblist_granted: number
   mdblist_429: boolean
+  mdblist_auth_failed: boolean
+  deadline_hit: boolean
   errors: IngestError[]
 }> {
   const errors: IngestError[] = []
+  const clock = deps.now ?? Date.now
+  const deadline = clock() + config.stageBudgetMs.ratings
+  let deadline_hit = false
   let ratings_fetched = 0
   let ratings_absent = 0
   let mdblist_429 = false
+  let mdblist_auth_failed = false
 
   // One /user call to reconcile against MDBList's own counter (it counts too).
   // Whatever the flag allows, always leave MDBLIST_SCORING_RESERVE calls on
@@ -407,10 +496,19 @@ export async function fetchRatingsStage(
     if (pendingError) throw pendingError
 
     for (const row of (pending ?? []) as PendingRatingsRow[]) {
+      if (clock() >= deadline) {
+        deadline_hit = true
+        log.info('ratings deadline reached', { fetched: ratings_fetched + ratings_absent, stopped_at: row.tmdb_id })
+        break
+      }
       const result = await fetchMDBListRatings(row.tmdb_id, deps.mdblistApiKey)
-      if (result.status === 429) {
-        mdblist_429 = true
-        log.warn('MDBList 429; stopping ratings stage for this run')
+      // 429 and 401 are both whole-run conditions, not per-row ones: the rest
+      // of the grant would fail identically, and a stopped stage retries
+      // tomorrow with nothing stamped.
+      if (result.status === 429 || result.status === 401) {
+        if (result.status === 429) mdblist_429 = true
+        else mdblist_auth_failed = true
+        log.warn('MDBList refused the request; stopping ratings stage for this run', { status: result.status })
         break
       }
       if (result.error && result.status !== 404) {
@@ -436,7 +534,7 @@ export async function fetchRatingsStage(
       }
       const { error: updateError } = await client.from('film_corpus').update(patch).eq('tmdb_id', row.tmdb_id)
       if (updateError) {
-        errors.push({ stage: 'ratings', id: row.tmdb_id, error: String(updateError) })
+        errors.push({ stage: 'ratings', id: row.tmdb_id, error: serializeError(updateError) })
         continue
       }
       if (rt === null) ratings_absent++
@@ -457,6 +555,8 @@ export async function fetchRatingsStage(
     mdblist_used_today: usage?.used ?? null,
     mdblist_granted: granted,
     mdblist_429,
+    mdblist_auth_failed,
+    deadline_hit,
     errors,
   }
 }
@@ -485,6 +585,12 @@ export async function runIngestFilmCorpus(
     mdblist_used_today: ratings.mdblist_used_today,
     mdblist_granted: ratings.mdblist_granted,
     mdblist_429: ratings.mdblist_429,
+    mdblist_auth_failed: ratings.mdblist_auth_failed,
+    deadlines: {
+      seed: seed.deadline_hit,
+      metadata: metadata.deadline_hit,
+      ratings: ratings.deadline_hit,
+    },
     failed: errors.length,
     errors,
   }
