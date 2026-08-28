@@ -128,8 +128,9 @@ Two rules make the quota safe:
 ## 4. Schema
 
 All new tables are created in one migration, timestamp **after**
-`20260827120000` (the newest on any branch; pick `20260828120000` and check
-for collisions before merge — duplicates are skipped silently).
+`20260827130000` (PR #72's, renamed from `…120000` after a collision with
+another branch; ours is `20260828120000` — check for collisions before merge,
+duplicates are skipped silently).
 
 ### 4.1 `feature_flags`
 
@@ -152,7 +153,7 @@ Seed rows:
 
 | key | enabled | config | description |
 |---|---|---|---|
-| `projections_ingestion` | `true` | `{"mdblist_daily_budget": 500, "per_run_cap": 300}` | Corpus backfill and pre-release score polling may spend MDBList quota. |
+| `projections_ingestion` | `false` | `{"mdblist_daily_budget": 500, "per_run_cap": 300}` | Corpus backfill and pre-release score polling may spend MDBList quota. Turn ON in Studio after the first supervised run; the ingest cron is a no-op while off. |
 | `projections_display` | `false` | `{}` | Show projected scores (Beta) in the app. Stays off until the backtest gate in §9 passes. |
 
 **Editing workflow (no SQL):** Supabase Studio → Table Editor →
@@ -170,7 +171,7 @@ Read helpers:
 
 ### 4.2 Budget ledger — reuse `external_api_budgets` (PR #72)
 
-The franchise-history feature (PR #72, `20260827120000_external_api_budgets.sql`)
+The franchise-history feature (PR #72, `20260827130000_external_api_budgets.sql`)
 already ships exactly this mechanism: `external_api_budgets(api, day, calls)`
 plus `reserve_external_api_calls(p_api text, p_requested int, p_daily_limit int)
 RETURNS int` — an atomic, row-locked per-UTC-day grant, service-role only.
@@ -387,9 +388,11 @@ mdblist_used_today, budget_cap } })`. `remaining_*` in-band, per the
 `update-scores` truncation convention, so the ops channel can see backfill
 progress without querying.
 
-**Expected backfill duration:** ~3,000 corpus rows + ~2,000 predecessor
-rows ≈ 5,000 MDBList calls ≈ **10–12 days at 500/day**, with the current
-season's slate complete in the first 2–3 days because of the priority order.
+**Expected backfill duration:** the first real seed produced ~6,200 discover
+stubs at `vote_count >= 300`, plus predecessors; expect **20+ days at 500/day**,
+with the current season complete in the first few days because of priority
+order. Raise `mdblist_daily_budget` in Studio (up to ~600 while franchise
+history stays under 300) or raise the vote floor to shorten it.
 
 ---
 
@@ -670,9 +673,10 @@ render. (Flag flipped through the service client in the test setup.)
 ## 12. Rollout and follow-ups
 
 **Phase 1 — plumbing (dark):** migration, `feature_flags` + helpers,
-budget guard, `ingest-film-corpus`, cron wiring, ops metadata. Turn
-`projections_ingestion` on; let the backfill run ~10 days. Pre-release
-polling ships here too — it is useful on its own.
+budget guard, `ingest-film-corpus`, cron wiring, ops metadata. Ships with
+`projections_ingestion` off: turn it on in Studio after a supervised first
+run, then let the backfill run its 20+ days. Pre-release polling ships here
+too — it is useful on its own.
 
 **Phase 2 — model:** curve mirror, factors, ridge, `fit-projection-model`,
 `get-movie-projections`, backtest script. Run the gate (§9); commit the

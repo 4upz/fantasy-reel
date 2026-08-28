@@ -8,7 +8,7 @@
 -- film_credits, film_collections), the projection tables
 -- (projection_models, movie_projections) that Phase 2 fills, and an
 -- IDEMPOTENT copy of external_api_budgets + reserve_external_api_calls()
--- from PR #72 (20260827120000_external_api_budgets.sql) so this migration
+-- from PR #72 (20260827130000_external_api_budgets.sql) so this migration
 -- works whether it lands before or after that one.
 --
 -- Access model: feature_flags and movie_projections are readable by any
@@ -43,16 +43,16 @@ CREATE POLICY "Service role can manage feature flags"
   ON feature_flags FOR ALL USING (auth.role() = 'service_role');
 
 INSERT INTO feature_flags (key, enabled, config, description) VALUES
-  ('projections_ingestion', true,
+  ('projections_ingestion', false,
    '{"mdblist_daily_budget": 500, "per_run_cap": 300}'::jsonb,
-   'Corpus backfill (ingest-film-corpus) and pre-release score polling (update-scores) may spend MDBList quota under the mdblist:projections budget key. Turn OFF to hand that slice back to nightly scoring. mdblist_daily_budget = MDBList calls/day these two jobs may use (franchise history has its own 300; scoring is unreserved); per_run_cap = max ratings fetched per ingest run.'),
+   'Corpus backfill (ingest-film-corpus) and pre-release score polling (update-scores) may spend MDBList quota under the mdblist:projections budget key. Turn ON in Supabase Studio after the first supervised run; the ingest cron is a no-op while off. Turn OFF to hand that slice back to nightly scoring. mdblist_daily_budget = MDBList calls/day these two jobs may use (franchise history has its own 300; scoring is unreserved); per_run_cap = max ratings fetched per ingest run.'),
   ('projections_display', false,
    '{}'::jsonb,
    'Show projected scores (Beta) in the app. Keep OFF until the backtest gate in the projections spec (Spearman >= 0.40, MAE <= 16) has passed.');
 
 -- ---------------------------------------------------------------------------
 -- external_api_budgets + reserve_external_api_calls -- IDEMPOTENT COPY of
--- PR #72's 20260827120000_external_api_budgets.sql. Keep byte-identical to
+-- PR #72's 20260827130000_external_api_budgets.sql. Keep byte-identical to
 -- that file's definitions; whichever migration runs second is a no-op.
 -- Projections reserve under the key 'mdblist:projections'; franchise history
 -- under 'mdblist:franchise-history'.
