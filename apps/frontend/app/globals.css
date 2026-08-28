@@ -674,12 +674,6 @@
     display: none;
     width: 1px;
     height: 20px;
-    /*
-      Asymmetric on purpose. The bell button carries 8px of its own padding,
-      the avatar trigger only 2px, so equal margins here leave the divider
-      visibly crowding the avatar. The trailing 8px pays that difference back
-      and lands both sides at 12px from the glyph.
-    */
     margin-inline: 0.125rem 0.5rem;
     background: var(--color-border);
   }
