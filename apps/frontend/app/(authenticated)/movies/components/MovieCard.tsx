@@ -16,8 +16,9 @@ export default function MovieCard({ movie, onClick, index }: Props) {
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="group relative text-left w-full rounded-xl overflow-hidden bg-surface border border-border transition-all duration-300 hover:border-gold/50 hover:shadow-glow-gold hover:-translate-y-1 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold-muted animate-fade-in"
+      className="group relative cursor-pointer text-left w-full rounded-xl overflow-hidden bg-surface border border-border transition-all duration-300 hover:border-gold/50 hover:shadow-glow-gold hover:-translate-y-1 focus:outline-none focus:border-gold focus:ring-2 focus:ring-gold-muted animate-fade-in"
       style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'both' }}
     >
       {/* Poster container with aspect ratio */}

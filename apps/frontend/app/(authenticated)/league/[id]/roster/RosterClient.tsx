@@ -317,7 +317,7 @@ function MovieCard({
       data-testid="roster-movie-card"
       data-locked={isLocked ? 'true' : 'false'}
       aria-label={`View ${movie.title}${isLocked ? ' (locked)' : ''}`}
-      className="card card-interactive flex flex-col overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+      className="card card-interactive flex cursor-pointer flex-col overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
     >
       <div className="relative aspect-[2/3] bg-elevated">
         <Poster movie={movie} />

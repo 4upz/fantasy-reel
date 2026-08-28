@@ -67,7 +67,7 @@ export default function MovieScoreCard({
         : {})}
       className={`flex flex-none items-center gap-3 rounded-xl border border-border bg-background p-2.5 text-left ${
         onSelect
-          ? 'w-full transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold'
+          ? 'group w-full cursor-pointer transition-colors hover:border-border-hover hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold'
           : ''
       }`}
       data-testid={`movie-score-card-${badge.type}`}
@@ -141,7 +141,10 @@ export default function MovieScoreCard({
 
       {/* Title, date, Tomatometer */}
       <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
-        <div className="truncate text-sm font-semibold text-foreground" title={movie.title}>
+        <div
+          className="truncate text-sm font-semibold text-foreground transition-colors group-hover:text-gold"
+          title={movie.title}
+        >
           {movie.title}
         </div>
         <div className="truncate text-xs text-foreground-muted">
