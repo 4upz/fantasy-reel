@@ -635,8 +635,6 @@ export interface TradeMovieItem {
   title?: string
   poster_url?: string | null
   release_date?: string | null
-  /** Filled in by get-trades from the live movies table; absent on older snapshots. */
-  tmdb_id?: number | null
 }
 
 export interface TradeItems {

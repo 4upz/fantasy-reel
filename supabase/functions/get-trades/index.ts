@@ -90,62 +90,14 @@ async function getAnchorTitles(
 }
 
 interface TradeItemsShape {
-  movies?: Array<{ source_id?: string; movie_id?: string }>
-}
-
-/** Both sides' item snapshots on one offer row. */
-interface TradeWithItems {
-  initiator_items?: TradeItemsShape
-  recipient_items?: TradeItemsShape
-}
-
-/**
- * TMDb ids for every movie these offers name, in one query. The items JSONB
- * snapshot predates franchise history and carries only the movie's row id;
- * the client needs the TMDb id to ask for the series' track record.
- */
-async function getMovieTmdbIds(
-  supabase: ReturnType<typeof createServiceClient>,
-  trades: TradeWithItems[]
-): Promise<Map<string, number>> {
-  const movies = trades.flatMap((trade) => [
-    ...(trade.initiator_items?.movies ?? []),
-    ...(trade.recipient_items?.movies ?? []),
-  ])
-  const ids = [...new Set(movies.flatMap((movie) => (movie?.movie_id ? [movie.movie_id] : [])))]
-
-  if (ids.length === 0) return new Map()
-
-  const { data, error } = await supabase.from('movies').select('id, tmdb_id').in('id', ids)
-
-  if (error) {
-    // Only costs the rows their franchise line, so degrade rather than fail the list.
-    log.warn('Failed to resolve trade item tmdb ids', { error: error.message })
-    return new Map()
-  }
-
-  return new Map(
-    (data ?? []).map((movie: { id: string; tmdb_id: number }) => [movie.id, movie.tmdb_id])
-  )
-}
-
-/** The offer's items with `tmdb_id` filled in from the live movies table. */
-function withTmdbIds<T extends TradeItemsShape | undefined>(
-  items: T,
-  tmdbIds: Map<string, number>
-): T {
-  if (!items?.movies) return items
-  return {
-    ...items,
-    movies: items.movies.map((movie) => ({
-      ...movie,
-      tmdb_id: movie.movie_id ? (tmdbIds.get(movie.movie_id) ?? null) : null,
-    })),
-  }
+  movies?: Array<{ source_id?: string }>
 }
 
 /** The source_ids in this offer that other open offers also name. */
-function contestedSourceIdsFor(trade: TradeWithItems, contested: ContestedMap): string[] {
+function contestedSourceIdsFor(
+  trade: { initiator_items?: TradeItemsShape; recipient_items?: TradeItemsShape },
+  contested: ContestedMap
+): string[] {
   if (contested.size === 0) return []
 
   const ids = [
@@ -246,12 +198,8 @@ Deno.serve(async (req) => {
     // this cannot be used to infer the contents of someone else's trade.
     const contested = await getContestedSourceIds(serviceClient, league_id)
 
-    const tmdbIds = await getMovieTmdbIds(serviceClient, trades ?? [])
-
     const tradesWithContest = (trades ?? []).map((trade) => ({
       ...trade,
-      initiator_items: withTmdbIds(trade.initiator_items, tmdbIds),
-      recipient_items: withTmdbIds(trade.recipient_items, tmdbIds),
       contested_source_ids: contestedSourceIdsFor(trade, contested),
       anchor_movie_title: trade.expiry_anchor_movie_id
         ? anchorTitles.get(trade.expiry_anchor_movie_id) ?? null
