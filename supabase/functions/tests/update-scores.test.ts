@@ -326,8 +326,50 @@ Deno.test('update-scores: pre-release polling is flag- and budget-gated', async 
         const data = await response.json()
         assertEquals(data.prerelease_polled, 0)
         assertEquals(data.prerelease_granted, 0)
+        assertEquals(data.prerelease_unscored, 0)
       } finally {
         await service.from('feature_flags').update({ enabled: true }).eq('key', 'projections_ingestion')
+      }
+    },
+  })
+
+  await t.step({
+    name: 'an upcoming movie inside the window is selected and polled, and prerelease_unscored is reported',
+    ignore: !RUN_EXTERNAL_API_TESTS,
+    fn: async () => {
+      const SERVICE_ROLE_KEY = await getEdgeFunctionServiceRoleKey()
+      // Dated inside the 30-day pre-release window so the polling branch picks
+      // it up. What the MDBList answer *means* (404/no ratings/no Tomatometer
+      // = expected, not a failure) is classified by `isUnratedPrerelease` and
+      // unit-tested in ../_shared/update-scores.test.ts: this suite runs
+      // against a deliberately invalid MDBList key so it spends no quota, and
+      // an invalid key answers 401 -- a real failure -- for every lookup.
+      const tmdbId = 900400001
+      const releaseDate = new Date(Date.now() + 10 * 86_400_000).toISOString().split('T')[0]
+      const { data: movie, error: seedError } = await service
+        .from('movies')
+        .upsert(
+          { tmdb_id: tmdbId, title: 'Unrated Upcoming', release_date: releaseDate, status: 'upcoming', scores_updated_at: null },
+          { onConflict: 'tmdb_id' }
+        )
+        .select('id')
+        .single()
+      assertEquals(seedError, null)
+      await service.from('feature_flags').update({ enabled: true }).eq('key', 'projections_ingestion')
+      try {
+        const response = await fetch(FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        const data = await response.json()
+        assertEquals(response.status, 200)
+        assert(data.prerelease_polled >= 1, `expected the upcoming movie to be polled, got ${data.prerelease_polled}`)
+        assertEquals(typeof data.prerelease_unscored, 'number')
+      } finally {
+        await service.from('movies').delete().eq('id', movie!.id)
       }
     },
   })

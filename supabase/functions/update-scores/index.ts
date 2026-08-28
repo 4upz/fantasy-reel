@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse } from '../_shared/utils.ts'
-import { fetchMDBListRatings } from '../_shared/scoring.ts'
+import { fetchMDBListRatings, isUnratedPrerelease } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
 import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
@@ -116,6 +116,12 @@ Deno.serve(async (req) => {
     let truncation: Truncation | undefined
     let prereleasePolled = 0
     let prereleaseGranted = 0
+    /**
+     * Movie ids added by the pre-release branch. A movie polled before release
+     * usually has no Tomatometer yet, which is the expected outcome, not a
+     * failure -- see `isUnratedPrerelease` and the per-movie loop below.
+     */
+    const prereleaseIds = new Set<string>()
 
     if (params.movie_ids && params.movie_ids.length > 0) {
       // Update specific movies
@@ -203,6 +209,9 @@ Deno.serve(async (req) => {
           .from('movies')
           .select('id, tmdb_id, imdb_id, title')
           .eq('status', 'upcoming')
+          // Strictly after today: a movie releasing today is already covered by
+          // the released selection above, and polling it twice in one run would
+          // spend two MDBList calls on the same title.
           .gt('release_date', today)
           .lte('release_date', windowEnd.toISOString().split('T')[0])
           .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
@@ -219,6 +228,7 @@ Deno.serve(async (req) => {
           )
           const polled = (upcoming as MovieRecord[]).slice(0, prereleaseGranted)
           prereleasePolled = polled.length
+          for (const m of polled) prereleaseIds.add(m.id)
           moviesToUpdate = [...moviesToUpdate, ...polled]
         }
       }
@@ -232,6 +242,7 @@ Deno.serve(async (req) => {
         errors: [],
         prerelease_polled: prereleasePolled,
         prerelease_granted: prereleaseGranted,
+        prerelease_unscored: 0,
         job_status
       })
     }
@@ -243,10 +254,17 @@ Deno.serve(async (req) => {
       log.error('MDBLIST_API_KEY not configured')
       return errorResponse('Score update service not configured', 503)
     }
+    // Narrowed after the guard above: every movie that reaches a lookup has a
+    // tmdb_id, and the guard already returned 503 if any of them does while the
+    // key is unset. The '' fallback is therefore only ever reached by a batch
+    // whose movies all short-circuit on `!movie.tmdb_id` below.
+    const apiKey: string = mdblistApiKey ?? ''
 
     const results = {
       movies_fetched: 0,
       scores_updated: 0,
+      /** Pre-release movies with no Tomatometer yet -- expected, not failures. */
+      prerelease_unscored: 0,
       errors: [] as Array<{ movie_id: string; title: string; error: string }>
     }
 
@@ -269,7 +287,16 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const { ratings, error: fetchError } = await fetchMDBListRatings(movie.tmdb_id, mdblistApiKey)
+        const outcome = await fetchMDBListRatings(movie.tmdb_id, apiKey)
+        const { ratings, error: fetchError } = outcome
+
+        // A movie polled before release usually has no Tomatometer yet. That is
+        // the point of polling daily, not a failure: counting it in `errors`
+        // would mark every nightly run degraded (and alert ops) forever.
+        if (prereleaseIds.has(movie.id) && isUnratedPrerelease(outcome)) {
+          results.prerelease_unscored++
+          continue
+        }
 
         if (fetchError) {
           results.errors.push({
@@ -371,6 +398,7 @@ Deno.serve(async (req) => {
         scores_updated: results.scores_updated,
         prerelease_polled: prereleasePolled,
         prerelease_granted: prereleaseGranted,
+        prerelease_unscored: results.prerelease_unscored,
         notifications,
         ...truncation,
       },

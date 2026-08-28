@@ -130,6 +130,26 @@ export async function fetchMDBListRatings(
   }
 }
 
+/**
+ * True when a lookup for a movie polled *before* release simply has no
+ * Tomatometer yet: MDBList has no entry for it (404), has an entry with no
+ * ratings, or has ratings from other sources only.
+ *
+ * Spec §8.1: pre-release polling asks MDBList every day about movies that are
+ * mostly in exactly that state, so all three are the expected steady state
+ * rather than failures. Recording them in a run's `errors` would mark every
+ * nightly run degraded and bury the failures that do need an operator --
+ * auth (401), rate limiting (429), server errors, network errors -- which all
+ * stay failures here.
+ */
+export function isUnratedPrerelease(
+  outcome: { ratings: NormalizedRating[]; status?: number; error?: string }
+): boolean {
+  if (outcome.error) return outcome.status === 404
+  if (outcome.ratings.length === 0) return true
+  return !outcome.ratings.some((r) => r.source === 'rotten_tomatoes')
+}
+
 function toDetails(data: MDBListResponse): MDBListDetails {
   const tomatoes = Array.isArray(data.ratings) ? data.ratings.find((r) => r.source === 'tomatoes') : undefined
   return {
