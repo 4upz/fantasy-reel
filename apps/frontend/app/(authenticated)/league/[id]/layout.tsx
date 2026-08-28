@@ -56,6 +56,13 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
 
   const accessLabel = typedLeague.invite_only ? 'Invite Only' : 'Open'
 
+  // Only a league still in setup can be joined, so the open slots are only news
+  // while they can be filled. After that, show the roster of players who are in.
+  const participantLabel =
+    typedLeague.status === 'setup'
+      ? `${participantCount} / ${typedLeague.max_participants} participants`
+      : `${participantCount} ${participantCount === 1 ? 'participant' : 'participants'}`
+
   return (
     <div className="min-h-screen bg-background">
       {/*
@@ -80,9 +87,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
             <div className="flex basis-full items-center gap-1.5 text-xs text-foreground-muted lg:basis-auto lg:gap-3 lg:text-sm">
               <span>{accessLabel}</span>
               <span className="lg:hidden">·</span>
-              <span>
-                {participantCount} / {typedLeague.max_participants} participants
-              </span>
+              <span>{participantLabel}</span>
             </div>
           </div>
 
