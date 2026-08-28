@@ -84,9 +84,15 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
               {getStatusLabel(typedLeague.status)}
             </span>
 
-            <div className="flex basis-full items-center gap-1.5 text-xs text-foreground-muted lg:basis-auto lg:gap-3 lg:text-sm">
+            {/*
+              Dots tie the badge and the two facts into one metadata strip. The
+              leading one is desktop-only: on mobile the badge sits up on the
+              title line, so it would dangle at the end of a row.
+            */}
+            <div className="flex basis-full items-center gap-1.5 text-xs text-foreground-muted lg:basis-auto lg:gap-2 lg:text-sm">
+              <span aria-hidden className="hidden text-foreground-muted/50 lg:inline">·</span>
               <span>{accessLabel}</span>
-              <span className="lg:hidden">·</span>
+              <span aria-hidden className="text-foreground-muted/50">·</span>
               <span>{participantLabel}</span>
             </div>
           </div>
