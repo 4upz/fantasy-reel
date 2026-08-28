@@ -111,11 +111,14 @@ export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
             onClick={() => setSelected(movie)}
             aria-label={`View ${movie.title}`}
             data-testid="rail-movie-button"
-            className="flex w-full items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px] text-left transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            className="group flex w-full cursor-pointer items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px] text-left transition-colors hover:border-border-hover hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
           >
             <RailPoster movie={movie} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold text-foreground" title={movie.title}>
+              <div
+                className="truncate text-[13px] font-semibold text-foreground transition-colors group-hover:text-gold"
+                title={movie.title}
+              >
                 {movie.title}
               </div>
               <div className="mt-0.5 text-[11px] text-foreground-muted">

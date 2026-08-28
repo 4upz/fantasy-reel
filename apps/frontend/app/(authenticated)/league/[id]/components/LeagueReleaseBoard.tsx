@@ -87,7 +87,7 @@ function ReleaseRow({
       // matches an accessible name by substring - so "View {title}" here would
       // make every such lookup ambiguous and fail on strict mode.
       aria-label={`Details for ${release.title}, held by ${release.team_name}`}
-      className={`flex w-full items-center gap-3 border-l-2 py-2.5 pl-2.5 pr-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold ${
+      className={`group flex w-full cursor-pointer items-center gap-3 border-l-2 py-2.5 pl-2.5 pr-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold ${
         isYours ? 'border-l-gold' : 'border-l-transparent'
       } ${withRule ? 'border-t border-t-border' : ''}`}
     >
@@ -96,7 +96,10 @@ function ReleaseRow({
       </span>
 
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold text-foreground" title={release.title}>
+        <span
+          className="block truncate text-sm font-semibold text-foreground transition-colors group-hover:text-gold"
+          title={release.title}
+        >
           {release.title}
         </span>
         <span
@@ -180,7 +183,7 @@ export default function LeagueReleaseBoard({ releases, todayIso }: Props) {
             onClick={() => setExpanded((prev) => !prev)}
             aria-expanded={expanded}
             data-testid="league-release-expand"
-            className="w-full border-t border-border py-2.5 text-sm font-medium text-gold transition-colors hover:bg-surface-hover hover:text-gold-hover"
+            className="w-full cursor-pointer border-t border-border py-2.5 text-sm font-medium text-gold transition-colors hover:bg-surface-hover hover:text-gold-hover"
           >
             {expanded ? 'Show less' : `Show all ${releases.length} releases`}
           </button>
