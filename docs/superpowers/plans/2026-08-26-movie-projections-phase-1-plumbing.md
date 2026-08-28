@@ -17,7 +17,7 @@
 - Cron functions: `handleCorsPreflightRequest` first, `isAuthorizedCronRequest` before `startJobRun`, outer catch ends with `run.fail` + `internalErrorResponse`, response includes `job_status`. Truncation/remaining counts are reported **in-band** in `metadata`.
 - Outbound HTTP only via `fetchWithRetry` / `fetchWithTimeout` (`_shared/http.ts`) or `tmdbGetJson` (`_shared/tmdb.ts`). Never bare `fetch`.
 - No `console.*`; use `createLogger('<fn>')` and `serializeError`.
-- User traffic must never spend MDBList quota. Only `ingest-film-corpus` and `update-scores` call MDBList for projections, and both reserve through `reserveApiCalls` (→ RPC `reserve_external_api_calls`, key `mdblist:projections`) first. The budget table/RPC definition is **copied verbatim from PR #72** (`origin/claude/franchise-history:supabase/migrations/20260827120000_external_api_budgets.sql`); do not alter its signature.
+- User traffic must never spend MDBList quota. Only `ingest-film-corpus` and `update-scores` call MDBList for projections, and both reserve through `reserveApiCalls` (→ RPC `reserve_external_api_calls`, key `mdblist:projections`) first. The budget table/RPC definition is **copied verbatim from PR #72** (`origin/claude/franchise-history:supabase/migrations/20260827130000_external_api_budgets.sql`); do not alter its signature.
 - Flag keys are exactly `projections_ingestion` and `projections_display`. Flag config keys: `mdblist_daily_budget` (default 500), `per_run_cap` (default 300).
 - Feature flags are edited in Supabase Studio → Table Editor → `feature_flags`; no SQL workflow is documented for operators.
 - Unit tests live in `supabase/functions/_shared/*.test.ts` (run `cd supabase/functions && deno task test:unit`); integration tests in `supabase/functions/tests/` (run `npm run test:functions`, needs local Supabase). New third-party-API tests must be gated behind `RUN_EXTERNAL_API_TESTS`.
@@ -110,7 +110,7 @@ Expected: FAIL — `relation "feature_flags" does not exist` / RPC not found.
 -- film_credits, film_collections), the projection tables
 -- (projection_models, movie_projections) that Phase 2 fills, and an
 -- IDEMPOTENT copy of external_api_budgets + reserve_external_api_calls()
--- from PR #72 (20260827120000_external_api_budgets.sql) so this migration
+-- from PR #72 (20260827130000_external_api_budgets.sql) so this migration
 -- works whether it lands before or after that one.
 --
 -- Access model: feature_flags and movie_projections are readable by any
@@ -154,7 +154,7 @@ INSERT INTO feature_flags (key, enabled, config, description) VALUES
 
 -- ---------------------------------------------------------------------------
 -- external_api_budgets + reserve_external_api_calls -- IDEMPOTENT COPY of
--- PR #72's 20260827120000_external_api_budgets.sql. Keep byte-identical to
+-- PR #72's 20260827130000_external_api_budgets.sql. Keep byte-identical to
 -- that file's definitions; whichever migration runs second is a no-op.
 -- Projections reserve under the key 'mdblist:projections'; franchise history
 -- under 'mdblist:franchise-history'.
@@ -342,7 +342,7 @@ Run:
 npx supabase migration up
 cd supabase/functions && deno test --allow-all --env-file=.env.test tests/feature-flags-rls.test.ts
 ```
-Expected: PASS (2 steps). If `migration up` reports nothing to apply, confirm with `docker exec supabase_db_fantasy-reel psql -U postgres -d postgres -c "select version from supabase_migrations.schema_migrations order by version desc limit 3"` that `20260828120000` is present. Also verify idempotency against PR #72 by applying its migration file on top: `docker exec -i supabase_db_fantasy-reel psql -U postgres -d postgres < <(git show origin/claude/franchise-history:supabase/migrations/20260827120000_external_api_budgets.sql)` — it must fail only on `CREATE TABLE external_api_budgets` already existing (theirs lacks `IF NOT EXISTS`; that is the expected order-dependence and is why our copy is the idempotent one). If the local DB was already migrated from a checkout containing #72, `migration up` applying ours must succeed silently.
+Expected: PASS (2 steps). If `migration up` reports nothing to apply, confirm with `docker exec supabase_db_fantasy-reel psql -U postgres -d postgres -c "select version from supabase_migrations.schema_migrations order by version desc limit 3"` that `20260828120000` is present. Also verify idempotency against PR #72 by applying its migration file on top: `docker exec -i supabase_db_fantasy-reel psql -U postgres -d postgres < <(git show origin/claude/franchise-history:supabase/migrations/20260827130000_external_api_budgets.sql)` — it must now succeed silently: PR #72's `CREATE TABLE` carries `IF NOT EXISTS` as of the rename, so neither migration depends on landing first. If the local DB was already migrated from a checkout containing #72, `migration up` applying ours must succeed silently.
 
 - [ ] **Step 5: Commit**
 
