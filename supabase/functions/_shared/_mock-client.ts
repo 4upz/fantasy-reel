@@ -7,7 +7,7 @@
  * Not a test file itself (no `.test.ts` suffix), so `deno task test:unit`
  * does not execute it directly -- it's imported by the test files that do.
  *
- * Filters (`eq`/`is`/`in`/`gt`/`gte`/`lte`) actually filter the seeded rows,
+ * Filters (`eq`/`is`/`in`/`gt`/`gte`/`lt`/`lte`) actually filter the seeded rows,
  * so tests can assert on realistic query results (e.g. per-league discord
  * channel filtering, notification-log dedup across two handler calls)
  * instead of returning one canned response regardless of arguments.
@@ -51,6 +51,9 @@ function chain(rows: Row[]) {
     is: (col: string, val: unknown) => chain(applyIs(rows, col, val)),
     in: (col: string, vals: unknown[]) => chain(applyIn(rows, col, vals)),
     gt: (col: string, val: string | number) => chain(rows.filter((r) => r[col] > val)),
+    // Guarded against null explicitly: `null < 'anything'` is true in JS but
+    // NULL never satisfies a comparison in Postgres.
+    lt: (col: string, val: string | number) => chain(rows.filter((r) => r[col] != null && r[col] < val)),
     gte: (col: string, val: string | number) => chain(rows.filter((r) => r[col] >= val)),
     lte: (col: string, val: string | number) => chain(rows.filter((r) => r[col] <= val)),
     neq: (col: string, val: unknown) => chain(rows.filter((r) => r[col] !== val)),

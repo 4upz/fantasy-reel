@@ -442,9 +442,58 @@ export async function fetchMetadataStage(
 
 interface PendingRatingsRow {
   tmdb_id: number
+  priority: number
+  release_date: string | null
   budget: number | null
   certification: string | null
   company_ids: number[] | null
+}
+
+const RATINGS_COLUMNS = 'tmdb_id, priority, release_date, budget, certification, company_ids'
+
+/**
+ * A PostgREST filter builder. Typed loosely on purpose: the eligibility filters
+ * below are shared verbatim between the head counts and the row fetches, and
+ * the generated builder type cannot be named without the table's row type.
+ */
+// deno-lint-ignore no-explicit-any
+type FilterBuilder = any
+
+/**
+ * Never fetched, and out now: `release_date <= today` also drops undated rows,
+ * which is right -- there is nothing to ask MDBList about until a movie exists.
+ */
+function filterUnrated(query: FilterBuilder, config: IngestConfig): FilterBuilder {
+  return query
+    .is('ratings_fetched_at', null)
+    .not('metadata_fetched_at', 'is', null)
+    .lte('release_date', config.today)
+}
+
+/**
+ * Asked already, but MDBList had no Tomatometer yet and the movie is recent
+ * enough that one is still plausible. Without this, every movie polled in the
+ * days around its release would be stamped once, found unrated, and never asked
+ * again -- exactly the league movies the corpus most needs a score for. One ask
+ * per day (`ratings_fetched_at < today - 1d`), for 60 days after release.
+ */
+function filterStaleAbsent(query: FilterBuilder, config: IngestConfig): FilterBuilder {
+  return query
+    .eq('ratings_absent', true)
+    .not('metadata_fetched_at', 'is', null)
+    .gte('release_date', daysBefore(config.today, RECENT_RELEASE_DAYS))
+    .lte('release_date', config.today)
+    .lt('ratings_fetched_at', daysBefore(config.today, 1))
+}
+
+/** Exact head count of everything Stage C would fetch right now. */
+async function countEligibleRatings(client: SupabaseClient, config: IngestConfig): Promise<number> {
+  const headCount = () => client.from('film_corpus').select('tmdb_id', { count: 'exact', head: true })
+  const { count: unrated, error: unratedError } = await filterUnrated(headCount(), config)
+  if (unratedError) throw unratedError
+  const { count: staleAbsent, error: staleError } = await filterStaleAbsent(headCount(), config)
+  if (staleError) throw staleError
+  return (unrated ?? 0) + (staleAbsent ?? 0)
 }
 
 export async function fetchRatingsStage(
@@ -471,31 +520,57 @@ export async function fetchRatingsStage(
   let mdblist_429 = false
   let mdblist_auth_failed = false
 
-  // One /user call to reconcile against MDBList's own counter (it counts too).
-  // Whatever the flag allows, always leave MDBLIST_SCORING_RESERVE calls on
-  // the account for the evening score sync.
-  const usage = await (deps.fetchUsage ?? fetchMdblistUsage)(deps.mdblistApiKey)
-  const headroom = usage
-    ? Math.max(0, Math.min(
-        config.perRunCap,
-        config.dailyBudget - 1,
-        MDBLIST_ACCOUNT_CAP - usage.used - MDBLIST_SCORING_RESERVE - 1
-      ))
-    : config.perRunCap
-  const granted = await reserveApiCalls(client, MDBLIST_PROJECTIONS_KEY, headroom, config.dailyBudget)
+  // How much work there actually is, before claiming any of the day's budget:
+  // a reservation is charged whether or not it is spent, so reserving 300 to
+  // fetch 4 hands the rest of the day's quota to nobody.
+  const pendingCount = await countEligibleRatings(client, config)
+
+  // One /user call to reconcile against MDBList's own counter (it counts too),
+  // and only when there is something to spend it on. Whatever the flag allows,
+  // always leave MDBLIST_SCORING_RESERVE calls on the account for the evening
+  // score sync.
+  let usage: Awaited<ReturnType<typeof fetchMdblistUsage>> = null
+  let granted = 0
+  if (pendingCount > 0) {
+    usage = await (deps.fetchUsage ?? fetchMdblistUsage)(deps.mdblistApiKey)
+    const headroom = usage
+      ? Math.max(0, Math.min(
+          config.perRunCap,
+          config.dailyBudget - 1,
+          MDBLIST_ACCOUNT_CAP - usage.used - MDBLIST_SCORING_RESERVE - 1
+        ))
+      : config.perRunCap
+    granted = await reserveApiCalls(client, MDBLIST_PROJECTIONS_KEY, Math.min(headroom, pendingCount), config.dailyBudget)
+  }
 
   if (granted > 0) {
-    const { data: pending, error: pendingError } = await client
-      .from('film_corpus')
-      .select('tmdb_id, budget, certification, company_ids')
-      .is('ratings_fetched_at', null)
-      .not('metadata_fetched_at', 'is', null)
-      .order('priority', { ascending: false })
-      .order('release_date', { ascending: false, nullsFirst: false })
-      .limit(granted)
-    if (pendingError) throw pendingError
+    // Two queries unioned by tmdb_id, because the shared mock has no `.or()`:
+    // rows never asked about, and rows asked about before a Tomatometer
+    // existed. `.order()` is re-applied in JS because the union has to be
+    // re-sorted anyway -- priority first, newest release next.
+    // Filters first, then order/limit: PostgREST does not care, but the shared
+    // mock applies each call eagerly, so a limit ahead of the filters would
+    // slice the wrong rows.
+    const rows = () => client.from('film_corpus').select(RATINGS_COLUMNS)
+    const orderAndCap = (query: FilterBuilder) =>
+      query
+        .order('priority', { ascending: false })
+        .order('release_date', { ascending: false, nullsFirst: false })
+        .limit(granted)
+    const { data: unrated, error: unratedError } = await orderAndCap(filterUnrated(rows(), config))
+    if (unratedError) throw unratedError
+    const { data: staleAbsent, error: staleError } = await orderAndCap(filterStaleAbsent(rows(), config))
+    if (staleError) throw staleError
 
-    for (const row of (pending ?? []) as PendingRatingsRow[]) {
+    const byId = new Map<number, PendingRatingsRow>()
+    for (const row of [...(unrated ?? []), ...(staleAbsent ?? [])] as PendingRatingsRow[]) {
+      byId.set(row.tmdb_id, row)
+    }
+    const pending = [...byId.values()]
+      .sort((a, b) => b.priority - a.priority || (b.release_date ?? '').localeCompare(a.release_date ?? ''))
+      .slice(0, granted)
+
+    for (const row of pending) {
       if (clock() >= deadline) {
         deadline_hit = true
         log.info('ratings deadline reached', { fetched: ratings_fetched + ratings_absent, stopped_at: row.tmdb_id })
@@ -542,16 +617,14 @@ export async function fetchRatingsStage(
     }
   }
 
-  const { count } = await client
-    .from('film_corpus')
-    .select('tmdb_id', { count: 'exact', head: true })
-    .is('ratings_fetched_at', null)
-    .not('metadata_fetched_at', 'is', null)
+  // What is left to fetch *now*, on the same eligibility rules -- not every
+  // unstamped row: an unreleased one is not backlog, it is not due yet.
+  const remaining_ratings = await countEligibleRatings(client, config)
 
   return {
     ratings_fetched,
     ratings_absent,
-    remaining_ratings: count ?? 0,
+    remaining_ratings,
     mdblist_used_today: usage?.used ?? null,
     mdblist_granted: granted,
     mdblist_429,

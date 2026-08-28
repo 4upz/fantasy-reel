@@ -24,6 +24,13 @@ Deno.test('_mock-client extensions', async (t) => {
     assertEquals((await client.from('t').select('*').not('b', 'is', null)).data.length, 1)
   })
 
+  await t.step('lt filters strictly below, and never matches a null', async () => {
+    const db: MockDb = { t: [{ at: '2026-08-01T00:00:00Z' }, { at: '2026-08-25T00:00:00Z' }, { at: null }] }
+    const client = createMockDbClient(db)
+    const older = await client.from('t').select('*').lt('at', '2026-08-20')
+    assertEquals(older.data.map((r: { at: string | null }) => r.at), ['2026-08-01T00:00:00Z'])
+  })
+
   await t.step('update().is() and update().in() patch matching rows', async () => {
     const db: MockDb = { t: [{ id: 1, x: null }, { id: 2, x: 'set' }, { id: 3, x: null }] }
     const client = createMockDbClient(db)

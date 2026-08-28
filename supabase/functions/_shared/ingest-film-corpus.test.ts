@@ -373,8 +373,99 @@ Deno.test('ingest-film-corpus: ratings', async (t) => {
     }
   })
 
-  await t.step('headroom respects the remote counter, the scoring reserve, and the daily budget', async () => {
+  await t.step('an unreleased row is never fetched, however high its priority', async () => {
+    const db: MockDb = {
+      film_corpus: [
+        { tmdb_id: 1, priority: 100, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: '2026-12-01' },
+        { tmdb_id: 2, priority: 100, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: null },
+        { tmdb_id: 3, priority: 0, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: '2026-08-20' },
+      ],
+    }
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => args!.p_requested } })
+    const { calls, restore } = stubFetch(mdblistResponder({ 3: ok(75) }))
+    try {
+      const result = await fetchRatingsStage(client, DEPS, CONFIG)
+      const fetched = calls.filter((c) => c.url.includes('/tmdb/movie/')).map((c) => c.url.match(/movie\/(\d+)/)![1])
+      assertEquals(fetched, ['3'])
+      // Only the released row was ever eligible, so only one call was reserved.
+      assertEquals(result.mdblist_granted, 1)
+      assertEquals(result.remaining_ratings, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('a recently released row with no rating yet is re-polled; an old one is left alone', async () => {
+    const db: MockDb = {
+      film_corpus: [
+        // Released 10 days ago, MDBList had no Tomatometer then, stamped a week
+        // ago: worth asking again while the movie is still in play.
+        { tmdb_id: 1, priority: 100, metadata_fetched_at: 'x', ratings_absent: true, ratings_fetched_at: '2026-08-19T00:00:00Z', release_date: '2026-08-16' },
+        // Released 90 days ago: past the window, it is never getting a score.
+        { tmdb_id: 2, priority: 100, metadata_fetched_at: 'x', ratings_absent: true, ratings_fetched_at: '2026-06-01T00:00:00Z', release_date: '2026-05-28' },
+        // Already stamped today: one ask per day, not one per run.
+        { tmdb_id: 3, priority: 100, metadata_fetched_at: 'x', ratings_absent: true, ratings_fetched_at: '2026-08-26T09:00:00Z', release_date: '2026-08-20' },
+        // Has a Tomatometer already: never re-fetched here.
+        { tmdb_id: 4, priority: 100, metadata_fetched_at: 'x', ratings_absent: false, ratings_fetched_at: '2026-08-01T00:00:00Z', release_date: '2026-07-30' },
+      ],
+    }
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => args!.p_requested } })
+    const { calls, restore } = stubFetch(mdblistResponder({ 1: ok(64) }))
+    try {
+      const result = await fetchRatingsStage(client, DEPS, CONFIG)
+      const fetched = calls.filter((c) => c.url.includes('/tmdb/movie/')).map((c) => c.url.match(/movie\/(\d+)/)![1])
+      assertEquals(fetched, ['1'])
+      assertEquals(result.ratings_fetched, 1)
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 1)!.rt_critic, 64)
+      assertEquals(db.film_corpus.find((r) => r.tmdb_id === 1)!.ratings_absent, false)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('reserves nothing, and asks MDBList nothing, when no row is eligible', async () => {
+    const db: MockDb = {
+      film_corpus: [
+        { tmdb_id: 1, priority: 100, metadata_fetched_at: 'x', ratings_fetched_at: '2026-08-26T00:00:00Z', ratings_absent: false, release_date: '2026-08-01' },
+        { tmdb_id: 2, priority: 100, metadata_fetched_at: null, ratings_fetched_at: null, release_date: '2026-08-01' },
+      ],
+    }
+    const seen: Array<Record<string, unknown>> = []
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => { seen.push(args!); return 5 } } })
+    const { calls, restore } = stubFetch(mdblistResponder({}))
+    try {
+      const result = await fetchRatingsStage(client, DEPS, CONFIG)
+      assertEquals(seen.length, 0)
+      assertEquals(result.mdblist_granted, 0)
+      // Not even the /user reconciliation call: an empty queue costs nothing.
+      assertEquals(calls.filter((c) => c.url.includes('api.mdblist.com')).length, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('never reserves more than there is work for', async () => {
     const db = ratingsDb()
+    const seen: Array<Record<string, unknown>> = []
+    const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => { seen.push(args!); return 0 } } })
+    const { restore } = stubFetch(mdblistResponder({}))
+    try {
+      // Headroom is the full 300-per-run cap, but only 3 rows are eligible.
+      await fetchRatingsStage(client, DEPS, { ...CONFIG, perRunCap: 300 })
+      assertEquals(seen[0].p_requested, 3)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('headroom respects the remote counter, the scoring reserve, and the daily budget', async () => {
+    const db: MockDb = {
+      // 20 eligible rows, so the grant is bounded by headroom rather than by
+      // how much work there is.
+      film_corpus: Array.from({ length: 20 }, (_, i) => ({
+        tmdb_id: i + 1, priority: 0, metadata_fetched_at: 'x', ratings_fetched_at: null, release_date: '2026-08-01',
+      })),
+    }
     const seen: Array<Record<string, unknown>> = []
     const client = createMockDbClient(db, { rpc: { reserve_external_api_calls: (args?: Record<string, unknown>) => { seen.push(args!); return 0 } } })
     const fetchUsage = () => Promise.resolve({ cap: 1000, used: 890 })
