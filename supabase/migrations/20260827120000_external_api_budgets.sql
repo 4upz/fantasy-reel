@@ -9,7 +9,10 @@
 -- atomically under a row lock, so concurrent Edge Function invocations cannot
 -- collectively overshoot the limit.
 
-CREATE TABLE external_api_budgets (
+-- IF NOT EXISTS: the Movie Projections migration carries an identical copy of
+-- this table and function so either branch can merge first. Whichever lands
+-- second must be a no-op, in both directions.
+CREATE TABLE IF NOT EXISTS external_api_budgets (
   api        text NOT NULL,
   day        date NOT NULL,
   calls      integer NOT NULL DEFAULT 0 CHECK (calls >= 0),
