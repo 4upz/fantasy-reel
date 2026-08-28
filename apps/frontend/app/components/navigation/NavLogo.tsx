@@ -4,6 +4,7 @@ interface NavLogoProps {
   href?: string
 }
 
+/** @design-system Identity & brand */
 export default function NavLogo({ href = '/dashboard' }: NavLogoProps): React.ReactElement {
   return (
     <Link

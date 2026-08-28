@@ -11,6 +11,7 @@ interface Props {
   index: number
 }
 
+/** @design-system Movies */
 export default function MovieCard({ movie, onClick, index }: Props) {
   const releaseYear = getReleaseYear(movie.release_date)
 

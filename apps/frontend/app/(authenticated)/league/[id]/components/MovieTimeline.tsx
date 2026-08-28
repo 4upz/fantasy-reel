@@ -11,6 +11,7 @@ interface Props {
   onMovieClick?: (movie: MovieTimelineItem) => void
 }
 
+/** @design-system League */
 export default function MovieTimeline({ movies, leagueStatus, onMovieClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
 

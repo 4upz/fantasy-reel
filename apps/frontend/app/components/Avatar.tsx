@@ -21,6 +21,7 @@ const imageSizes = {
   lg: 96,
 } as const
 
+/** @design-system Foundation */
 export default function Avatar({ src, name, size = 'md', className = '' }: Props): React.ReactElement {
   const initial = name.charAt(0).toUpperCase()
   const sizeClass = sizeClasses[size]

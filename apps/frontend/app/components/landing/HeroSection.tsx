@@ -7,6 +7,7 @@ interface Props {
   tickerEntries: TickerEntry[]
 }
 
+/** @design-system Landing */
 export default function HeroSection({ tickerEntries }: Props): React.ReactElement {
   return (
     <section className="hero-gradient film-grain relative min-h-screen flex flex-col">

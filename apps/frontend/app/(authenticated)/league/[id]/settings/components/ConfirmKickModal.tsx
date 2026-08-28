@@ -12,6 +12,7 @@ interface Props {
   loading: boolean
 }
 
+/** @design-system Modals */
 export default function ConfirmKickModal({
   participant,
   onConfirm,

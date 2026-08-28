@@ -13,6 +13,7 @@ interface Props {
   onPreview: (movie: TMDbSearchResult) => void
 }
 
+/** @design-system Movies */
 export default function DraftMovieCard({
   movie,
   isDrafted,

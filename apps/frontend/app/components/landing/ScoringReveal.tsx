@@ -46,6 +46,7 @@ function ScoringCard({ example, variant, className = '' }: ScoringCardProps): Re
   )
 }
 
+/** @design-system Landing */
 export default function ScoringReveal(): React.ReactElement {
   const winner = SCORING_EXAMPLES.find((e) => e.isWinner)!
   const loser = SCORING_EXAMPLES.find((e) => !e.isWinner)!

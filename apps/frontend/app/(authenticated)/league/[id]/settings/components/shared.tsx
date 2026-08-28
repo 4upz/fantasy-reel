@@ -12,6 +12,7 @@ interface SectionHeaderProps {
 
 /**
  * Consistent header for settings sections with icon, title, and description
+ * @design-system Settings primitives
  */
 export function SectionHeader({
   icon: Icon,
@@ -46,6 +47,7 @@ interface LockedMessageProps {
 
 /**
  * Consistent locked state message box for settings sections
+ * @design-system Settings primitives
  */
 export function LockedMessage({ message }: LockedMessageProps): React.ReactElement {
   return (

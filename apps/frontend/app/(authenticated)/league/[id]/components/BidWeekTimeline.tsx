@@ -34,6 +34,7 @@ interface BidWeekTimelineProps {
  * `isCounterBidPhase` is left to render normally elsewhere: it compares two
  * absolute timestamps, so server and client agree except in the sub-second
  * window where the cutoff passes between them.
+ * @design-system League
  */
 export default function BidWeekTimeline({
   cutoffAt,

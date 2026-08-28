@@ -2,6 +2,7 @@ interface Props {
   className?: string
 }
 
+/** @design-system Identity & brand */
 export default function GoogleIcon({ className = 'w-5 h-5' }: Props): React.ReactElement {
   return (
     <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

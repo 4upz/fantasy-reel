@@ -42,6 +42,7 @@ interface Props {
   isHighlighted?: boolean
 }
 
+/** @design-system Identity & brand */
 export default function UserSearchResultItem({ user, onSelect, isHighlighted }: Props): React.ReactElement {
   return (
     <button
@@ -69,6 +70,7 @@ interface SelectedUserChipProps {
   onRemove: () => void
 }
 
+/** @design-system Identity & brand */
 export function SelectedUserChip({ user, onRemove }: SelectedUserChipProps): React.ReactElement {
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-elevated rounded-lg border border-border">

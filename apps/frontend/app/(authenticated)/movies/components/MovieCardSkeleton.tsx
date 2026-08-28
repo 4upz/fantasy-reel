@@ -2,6 +2,7 @@ interface Props {
   index?: number
 }
 
+/** @design-system Feedback */
 export default function MovieCardSkeleton({ index = 0 }: Props): React.ReactElement {
   return (
     <div

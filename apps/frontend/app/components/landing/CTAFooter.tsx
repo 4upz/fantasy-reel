@@ -1,5 +1,6 @@
 import Link from 'next/link'
 
+/** @design-system Landing */
 export default function CTAFooter(): React.ReactElement {
   return (
     <section className="py-24 px-6 bg-surface">

@@ -13,6 +13,7 @@ function formatReleaseDate(dateStr: string | null): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+/** @design-system Landing */
 export default function MovieShowcase({ movies }: Props): React.ReactElement {
   return (
     <section className="py-24 px-6 bg-background">

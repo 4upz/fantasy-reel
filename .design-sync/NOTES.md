@@ -187,9 +187,8 @@ The disclaimer text renders fine; the logo does not.
 **To bring it back**, a future sync needs to serve that path: add `images/**`
 to the upload plan's `writes` (and `deletes`), copy
 `apps/frontend/public/images/tmdb-logo.svg` to `ds-bundle/images/`, then
-re-add the export to `entry.tsx` and the `componentSrcMap` pin. That is a
-plan change, so it needs a fresh `finalize_plan` approval — which is why it
-was not done mid-run.
+then tag it `@design-system` and regenerate. That is a plan change, so it
+needs a fresh `finalize_plan` approval — which is why it was not done mid-run.
 
 ## `guidelinesGlob` is intentionally empty
 
@@ -212,38 +211,70 @@ These fire on every run and are **not** regressions:
 
 A warn **not** in this list is new — look at it before recording it.
 
-## The drift report (local, not CI)
+## The barrel is generated from tags in the sources
 
-`.design-sync/check-drift.mjs` lists what the curated barrel is missing.
-Dependency-free, so it needs no install:
+`entry.tsx` and `componentSrcMap` are **generated**. Do not hand-edit either;
+the next generator run overwrites them.
 
-```sh
-npm run design:drift
-npm run design:drift -- --since origin/main   # + synced sources touched since main
+Membership is declared on the component itself:
+
+```tsx
+/** @design-system Movies */
+export default function MovieCard(...)
 ```
 
-**Run it before a re-sync, not on every PR.** It used to be a required check
-(`design-sync-drift.yml`, removed). That was the wrong shape: the barrel is
-*meant* to lag the app, so every new component in a synced directory turned red
-and the fix was always the same — append a name to `drift-ignore.txt` in a
-follow-up commit that had nothing to do with the PR. Two such commits landed
-before the check was pulled. Bookkeeping is not a defect, and it does not
-belong on the critical path of unrelated work.
+```sh
+npm run design:barrel                          # regenerate both files
+npm run design:barrel:check                    # verify they are current
+npm run design:barrel -- --since origin/main   # + tagged sources touched since main
+```
 
-It still **cannot** tell you whether the design project is current — that state
-is in the uploaded `_ds_sync.json`, not in git, and a correct re-sync after a
-markup change commits nothing. What it reports:
+The tag argument is the barrel section (`GROUP_ORDER` in the generator fixes
+their order; an unknown group sorts to the end). `@design-system-provider` marks
+the context provider that must be a bundle export without being a component —
+it is pinned to `null` in `componentSrcMap` and written to `cfg.provider`.
+
+**Untagged is not synced, and that is a real default, not an omission.** A new
+component needs no entry anywhere; you only act when you want it synced, in the
+file you are already editing.
+
+### What to tag
+
+Presentational components only. Page-level containers that own data fetching
+and routing — DraftBoard, LeagueManager, DashboardClient, SideNav, ProfileMenu,
+MoviePicker, the settings form sections — stay untagged: they are app wiring,
+not design-system parts, and a preview of one is a screenshot of a page.
+
+A tagged component also needs `.design-sync/docs/<Name>.md` with a `category:`
+line, or it lands in `general` with no prose. The generator reports the ones
+that are missing.
+
+### Why it works this way
+
+There used to be three hand-written lists over the same set of files: the
+barrel, `componentSrcMap`, and `drift-ignore.txt` — the last one naming all 64
+components that were deliberately in neither of the first two. A CI check
+(`design-sync-drift.yml`) policed them, so every new component in a synced
+directory turned a PR red until someone appended its name to the ignore list.
+Two commits did exactly that (7dd74f1, 2e93718) and main was red again with six
+more when this replaced it. Three lists over one set of files drift by
+construction; the check just converted that into other people's red builds.
+
+One tag in one place removes the whole class. Both generated files are
+committed so a fresh clone builds without running the generator first, and
+`--check` catches a stale commit — but nothing runs it in CI, deliberately. Run
+it before a re-sync, when the answer is actually actionable.
+
+### What the generator reports
 
 | Report | Meaning |
 |---|---|
-| `componentSrcMap` pin points at a missing file | the sync build will die on this — fix before re-syncing |
-| Component in a synced dir, in neither barrel nor ignore list | would silently never reach the design system — sync it or ignore it |
-| Synced sources touched since `--since` | how stale the design project has gotten |
+| duplicate tag name / two providers | **fails** — the barrel would be ambiguous |
+| `overrides` naming an untagged component | notice — dead preview config, drop it or tag the component |
+| tagged sources touched since `--since` | notice — how stale the design project has gotten |
 
-`.design-sync/drift-ignore.txt` holds the deliberate exclusions (page-level
-containers, the `Icons.tsx` set, settings form sections, TMDbAttribution,
-SiteFooter). Reseed it from current state with
-`node .design-sync/check-drift.mjs --write-ignore`.
+A broken `componentSrcMap` pin is no longer possible: the map is derived from
+files the scan just read.
 
 ## Re-sync runbook
 
@@ -280,10 +311,11 @@ global config decisions early.
 
 ## Re-sync risks
 
-- **The barrel and `componentSrcMap` drift silently.** Neither is generated. A
-  component renamed, moved, or deleted in the app breaks the build (loud); a
-  component *added* to the app is simply absent from the sync (silent). Diff
-  `entry.tsx` against the app's component dirs when picking up this sync.
+- **The barrel no longer drifts** — it and `componentSrcMap` are generated from
+  `@design-system` tags, so a renamed or moved component follows its tag and an
+  added one is absent only if nobody tagged it. Run `npm run design:barrel`
+  before a sync; a non-empty diff means someone edited a tag without
+  regenerating.
 - **Poster URLs in previews are remote** (`image.tmdb.org`, curated from the
   repo's own `FALLBACK_MOVIES` fixtures). They render today. If TMDb rotates
   those paths the cards degrade to empty poster boxes — recapture would catch

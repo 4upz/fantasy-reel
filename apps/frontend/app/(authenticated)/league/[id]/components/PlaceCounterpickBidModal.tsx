@@ -55,6 +55,7 @@ interface SelectedMovieInfo {
   targetTeamName: string
 }
 
+/** @design-system Modals */
 export default function PlaceCounterpickBidModal({
   isOpen,
   onClose,

@@ -12,6 +12,7 @@ interface Props {
   onClose: () => void
 }
 
+/** @design-system Movies */
 export default function MovieDetailModal({ movie, details, loading, onClose }: Props) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

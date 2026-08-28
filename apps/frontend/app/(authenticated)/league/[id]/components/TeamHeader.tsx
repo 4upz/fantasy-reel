@@ -13,6 +13,7 @@ interface Props {
  * The overview's opening line: who you are, where you sit, what you have scored.
  * Deliberately not a card - the "next up" hero below it is the thing meant to
  * catch the eye, and two stacked panels would fight over that.
+ * @design-system League
  */
 export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }: Props) {
   const isPositive = team.total_points >= 0

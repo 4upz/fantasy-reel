@@ -7,6 +7,7 @@ interface Props {
   entries: TickerEntry[]
 }
 
+/** @design-system Landing */
 export default function DraftTicker({ entries }: Props): React.ReactElement {
   // Duplicate entries for seamless infinite scroll
   const duplicatedEntries = [...entries, ...entries]

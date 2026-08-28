@@ -9,6 +9,7 @@ interface Props {
   ownerId: string
 }
 
+/** @design-system League */
 export default function ParticipantsList({ participants, ownerId }: Props): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false)
 

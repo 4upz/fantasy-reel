@@ -51,6 +51,7 @@ function move<T>(items: T[], from: number, to: number): T[] {
   return next
 }
 
+/** @design-system League */
 export default function PriorityList({
   items,
   computeFits,

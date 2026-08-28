@@ -2,6 +2,7 @@ interface Props {
   className?: string
 }
 
+/** @design-system Identity & brand */
 export default function DiscordIcon({ className = 'w-5 h-5' }: Props): React.ReactElement {
   return (
     <svg

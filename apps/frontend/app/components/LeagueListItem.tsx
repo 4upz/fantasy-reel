@@ -8,6 +8,7 @@ interface Props {
   league: League
 }
 
+/** @design-system League */
 export default function LeagueListItem({ league }: Props): React.ReactElement {
   return (
     <Link href={`/league/${league.id}`} className="card card-interactive group block">

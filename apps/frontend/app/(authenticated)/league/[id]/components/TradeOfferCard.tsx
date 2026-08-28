@@ -133,6 +133,7 @@ function findDisplayName(
   return otherTeams.find((t) => t.id === teamId)?.display_name ?? null
 }
 
+/** @design-system League */
 export default function TradeOfferCard(props: Props) {
   const {
     trade,

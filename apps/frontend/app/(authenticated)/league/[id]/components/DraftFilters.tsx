@@ -25,6 +25,7 @@ const RELEASE_WINDOWS = [
   { value: 'year', label: 'This Year' },
 ] as const
 
+/** @design-system Movies */
 export default function DraftFilters({ onFiltersChange, totalResults, loading }: Props) {
   const [search, setSearch] = useState('')
   const [releaseWindow, setReleaseWindow] = useState<DraftFilters['releaseWindow']>('year')

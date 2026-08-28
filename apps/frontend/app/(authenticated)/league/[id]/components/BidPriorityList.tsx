@@ -19,6 +19,7 @@ function hasConditionalDrop(bid: PickupBid): boolean {
   return bid.conditional_drop_pickup_id !== null || bid.conditional_drop_draft_pick_id !== null
 }
 
+/** @design-system League */
 export default function BidPriorityList({
   bids,
   slots,
