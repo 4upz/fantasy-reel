@@ -309,12 +309,22 @@ Deno.test({
 Deno.test('update-scores: pre-release polling is flag- and budget-gated', async (t) => {
   const service = getServiceClient()
 
+  /**
+   * `getFlag` memoizes for 60s per process (_shared/feature-flags.ts), so a
+   * flag flipped in the database is invisible to a running function until that
+   * memo expires. The two steps below assert opposite flag states against one
+   * long-lived instance, so each waits the memo out after flipping. Both are
+   * gated on RUN_EXTERNAL_API_TESTS, so an ordinary run pays nothing.
+   */
+  const waitOutFlagCache = () => new Promise((resolve) => setTimeout(resolve, 61_000))
+
   await t.step({
     name: 'with projections_ingestion disabled, no upcoming movies are polled',
     ignore: !RUN_EXTERNAL_API_TESTS,
     fn: async () => {
       const SERVICE_ROLE_KEY = await getEdgeFunctionServiceRoleKey()
       await service.from('feature_flags').update({ enabled: false }).eq('key', 'projections_ingestion')
+      await waitOutFlagCache()
       try {
         const response = await fetch(FUNCTION_URL, {
           method: 'POST',
@@ -356,6 +366,7 @@ Deno.test('update-scores: pre-release polling is flag- and budget-gated', async 
         .single()
       assertEquals(seedError, null)
       await service.from('feature_flags').update({ enabled: true }).eq('key', 'projections_ingestion')
+      await waitOutFlagCache()
       try {
         const response = await fetch(FUNCTION_URL, {
           method: 'POST',
