@@ -16,8 +16,8 @@ interface Props {
 }
 
 /**
- * The compact read on a movie's franchise, for rows that have no room for a
- * chart: bid pickers, trade cards. Words plus two pills -- the series average
+ * The compact read on a movie's franchise, for surfaces with no room for a
+ * chart (the bid modal). Words plus two pills -- the series average
  * and the most recent film -- and a disclosure that opens the score-by-score
  * list in place. The last film gets its own pill because it is usually the
  * better predictor of the next one than the average is.
