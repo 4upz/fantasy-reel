@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   jsonResponse,
   errorResponse,
@@ -8,15 +8,14 @@ import {
   isValidUUID,
   internalErrorResponse,
 } from '../_shared/utils.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 import { MIN_NEW_BID_CUTOFF_HOURS, MAX_NEW_BID_CUTOFF_HOURS } from '../_shared/bid-window.ts'
-import { snapshotStandings, formatPoints } from '../_shared/score-notifications.ts'
 import { deriveExpiryBounds, type LeagueExpiryConfig } from '../_shared/trade-expiry.ts'
+import { completeLeague } from '../_shared/league-completion.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('update-league')
 
-type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'update_trade_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
+type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'update_trade_config' | 'update_season_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
 
 interface UpdateInfoRequest {
   action: 'update_info'
@@ -79,6 +78,15 @@ interface UpdateTradeConfigRequest {
   trade_offer_expiry_max_days?: number | null
 }
 
+interface UpdateSeasonConfigRequest {
+  action: 'update_season_config'
+  league_id: string
+  /** The season label, e.g. 2027. Only editable while the league is in setup. */
+  season_year?: number
+  /** Bare date (YYYY-MM-DD). The day the season stops scoring. */
+  season_end?: string
+}
+
 interface RandomizeDraftOrderRequest {
   action: 'randomize_draft_order'
   league_id: string
@@ -96,6 +104,7 @@ type UpdateLeagueRequest =
   | UpdateBiddingConfigRequest
   | UpdateCounterpickConfigRequest
   | UpdateTradeConfigRequest
+  | UpdateSeasonConfigRequest
   | RandomizeDraftOrderRequest
   | ReorderParticipantsRequest
   | KickParticipantRequest
@@ -132,6 +141,25 @@ const MIN_EXPIRY_MIN_HOURS = 1
 const MAX_EXPIRY_MIN_HOURS = 168
 const MIN_EXPIRY_MAX_DAYS = 1
 const MAX_EXPIRY_MAX_DAYS = 90
+
+// Season config constraints. The year bounds are a typo guard, not a policy --
+// a season label outside this range is a mis-typed date, not a real league.
+const MIN_SEASON_YEAR = 2000
+const MAX_SEASON_YEAR = 2100
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
+/** True for a real YYYY-MM-DD date (rejects e.g. 2026-02-31). */
+function isValidDateOnly(value: string): boolean {
+  if (!DATE_ONLY.test(value)) return false
+  const parsed = new Date(`${value}T00:00:00.000Z`)
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value)
+}
+
+/** Today in UTC as YYYY-MM-DD, so date-only values compare as strings. */
+function todayDateOnly(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 Deno.serve(async (req) => {
   const corsResponse = handleCorsPreflightRequest(req)
@@ -194,8 +222,11 @@ Deno.serve(async (req) => {
       case 'delete_league':
         return await handleDeleteLeague(supabase, league)
 
+      case 'update_season_config':
+        return await handleUpdateSeasonConfig(supabase, league, body as UpdateSeasonConfigRequest)
+
       case 'complete_league':
-        return await handleCompleteLeague(supabase, league)
+        return await handleCompleteLeague(league)
 
       default:
         return errorResponse('Invalid action', 400)
@@ -205,44 +236,79 @@ Deno.serve(async (req) => {
   }
 })
 
+/**
+ * League name and invite-only.
+ *
+ * The name belongs to the SERIES, not the season: "League" is what spans
+ * years, and renaming it has to rename every season under it or the history
+ * list reads like two different leagues. So the name is written to
+ * `league_series`, and the `sync_series_name_to_seasons` trigger pushes it down
+ * to `leagues.name` -- which is a denormalized copy, not the source of truth.
+ * `invite_only` really is per-season and stays on `leagues`.
+ */
 async function handleUpdateInfo(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
-  league: { id: string },
+  supabase: SupabaseClient,
+  league: { id: string; series_id: string },
   body: UpdateInfoRequest
 ): Promise<Response> {
-  const updates: Record<string, unknown> = {}
+  let trimmedName: string | undefined
 
-  // Validate and set name
   if (body.name !== undefined) {
-    const trimmedName = body.name.trim()
+    trimmedName = body.name.trim()
     if (trimmedName.length === 0) {
       return errorResponse('League name cannot be empty', 400)
     }
     if (trimmedName.length > MAX_NAME_LENGTH) {
       return errorResponse(`League name cannot exceed ${MAX_NAME_LENGTH} characters`, 400)
     }
-    updates.name = trimmedName
   }
 
-  // Set invite_only
+  const leagueUpdates: Record<string, unknown> = {}
   if (body.invite_only !== undefined) {
-    updates.invite_only = body.invite_only
+    leagueUpdates.invite_only = body.invite_only
   }
 
-  // Nothing to update
-  if (Object.keys(updates).length === 0) {
+  if (trimmedName === undefined && Object.keys(leagueUpdates).length === 0) {
     return errorResponse('No valid fields to update', 400)
   }
 
-  const { data: updatedLeague, error } = await supabase
+  if (trimmedName !== undefined) {
+    // RLS on league_series restricts this to the series owner, who is the
+    // league owner the caller was already checked against.
+    const { error: seriesError } = await supabase
+      .from('league_series')
+      .update({ name: trimmedName })
+      .eq('id', league.series_id)
+
+    if (seriesError) {
+      console.error('Error updating series name:', seriesError)
+      return errorResponse('Failed to update league', 500)
+    }
+  }
+
+  if (Object.keys(leagueUpdates).length > 0) {
+    const { error } = await supabase
+      .from('leagues')
+      .update(leagueUpdates)
+      .eq('id', league.id)
+
+    if (error) {
+      console.error('Error updating league:', error)
+      return errorResponse('Failed to update league', 500)
+    }
+  }
+
+  // Re-read rather than using the UPDATE's RETURNING: the name arrives on
+  // `leagues` via the trigger, so the row returned by the leagues update above
+  // would still carry the old name.
+  const { data: updatedLeague, error: readError } = await supabase
     .from('leagues')
-    .update(updates)
-    .eq('id', league.id)
     .select()
+    .eq('id', league.id)
     .single()
 
-  if (error) {
-    console.error('Error updating league:', error)
+  if (readError) {
+    console.error('Error reading updated league:', readError)
     return errorResponse('Failed to update league', 500)
   }
 
@@ -250,7 +316,7 @@ async function handleUpdateInfo(
 }
 
 async function handleUpdateDraftConfig(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  supabase: SupabaseClient,
   league: { id: string; status: string; max_participants: number },
   body: UpdateDraftConfigRequest
 ): Promise<Response> {
@@ -306,7 +372,7 @@ async function handleUpdateDraftConfig(
 }
 
 async function handleUpdateBiddingConfig(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  supabase: SupabaseClient,
   league: { id: string; status: string },
   body: UpdateBiddingConfigRequest
 ): Promise<Response> {
@@ -389,7 +455,7 @@ async function handleUpdateBiddingConfig(
 }
 
 async function handleUpdateCounterpickConfig(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  supabase: SupabaseClient,
   league: { id: string; status: string },
   body: UpdateCounterpickConfigRequest
 ): Promise<Response> {
@@ -461,8 +527,8 @@ async function handleUpdateCounterpickConfig(
  * normal case, not an escape hatch.
  */
 async function handleUpdateTradeConfig(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
-  league: LeagueExpiryConfig & { id: string },
+  supabase: SupabaseClient,
+  league: LeagueExpiryConfig & { id: string; season_end: string },
   body: UpdateTradeConfigRequest
 ): Promise<Response> {
   const updates: Record<string, unknown> = {}
@@ -488,9 +554,18 @@ async function handleUpdateTradeConfig(
       // A bare date, matching the DATE column and the inclusive end-of-day
       // reading in validateLeagueTradingEnabled. Accepting a full timestamp
       // here would store a truncated date silently different from what was sent.
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(body.trade_deadline) ||
-          Number.isNaN(new Date(`${body.trade_deadline}T00:00:00.000Z`).getTime())) {
+      if (typeof body.trade_deadline !== 'string' || !isValidDateOnly(body.trade_deadline)) {
         return errorResponse('Trade deadline must be a date in YYYY-MM-DD format', 400)
+      }
+      // Trading past the end of the season is meaningless: the standings are
+      // already frozen, and every write path is closed once the season
+      // completes. Both dates are YYYY-MM-DD, so a string compare is a date
+      // compare.
+      if (body.trade_deadline > league.season_end) {
+        return errorResponse(
+          `The trade deadline cannot fall after the season ends (${league.season_end})`,
+          400
+        )
       }
       updates.trade_deadline = body.trade_deadline
     }
@@ -588,8 +663,90 @@ async function handleUpdateTradeConfig(
   return jsonResponse({ league: updatedLeague, message: 'Trade configuration updated successfully' })
 }
 
+/**
+ * The season's own settings: which year it is, and the day it stops scoring.
+ *
+ * `season_year` is setup-only because it decides movie eligibility -- a league
+ * mid-draft that suddenly became a different year would retroactively
+ * disqualify movies already on rosters. `season_end` stays editable all
+ * season: a commissioner extending or shortening the year is a normal
+ * mid-season decision, and it is the date the completion cron reads.
+ */
+async function handleUpdateSeasonConfig(
+  supabase: SupabaseClient,
+  league: { id: string; status: string; season_year: number; season_end: string; trade_deadline: string | null },
+  body: UpdateSeasonConfigRequest
+): Promise<Response> {
+  const updates: Record<string, unknown> = {}
+
+  if (body.season_year !== undefined) {
+    if (league.status !== 'setup') {
+      return errorResponse('The season year can only be changed before the draft starts', 400)
+    }
+    if (!Number.isInteger(body.season_year) ||
+        body.season_year < MIN_SEASON_YEAR ||
+        body.season_year > MAX_SEASON_YEAR) {
+      return errorResponse(
+        `Season year must be a whole number between ${MIN_SEASON_YEAR} and ${MAX_SEASON_YEAR}`,
+        400
+      )
+    }
+    updates.season_year = body.season_year
+  }
+
+  if (body.season_end !== undefined) {
+    if (typeof body.season_end !== 'string' || !isValidDateOnly(body.season_end)) {
+      return errorResponse('Season end must be a date in YYYY-MM-DD format', 400)
+    }
+    updates.season_end = body.season_end
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return errorResponse('No valid fields to update', 400)
+  }
+
+  // Moving the year without saying anything about the end date has to move the
+  // end date too. Otherwise a league relabelled 2026 -> 2027 keeps a
+  // season_end of 2026-12-31, which is already in the past, and the completion
+  // cron ends the season the night it is created.
+  if (updates.season_year !== undefined && updates.season_end === undefined) {
+    updates.season_end = `${updates.season_year}-12-31`
+  }
+
+  const effectiveSeasonEnd = (updates.season_end ?? league.season_end) as string
+
+  // A season that ends in the past can never be played -- the cron would close
+  // it on its next run. Only checked when the date is actually being changed,
+  // so an existing league whose end date has already slipped by can still have
+  // its other settings edited.
+  if (updates.season_end !== undefined && effectiveSeasonEnd < todayDateOnly()) {
+    return errorResponse('Season end must be today or later', 400)
+  }
+
+  if (league.trade_deadline && league.trade_deadline > effectiveSeasonEnd) {
+    return errorResponse(
+      `The trade deadline (${league.trade_deadline}) would fall after the season ends (${effectiveSeasonEnd}). Move the trade deadline first.`,
+      400
+    )
+  }
+
+  const { data: updatedLeague, error } = await supabase
+    .from('leagues')
+    .update(updates)
+    .eq('id', league.id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error updating season config:', error)
+    return errorResponse('Failed to update season configuration', 500)
+  }
+
+  return jsonResponse({ league: updatedLeague, message: 'Season settings updated successfully' })
+}
+
 async function handleKickParticipant(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  supabase: SupabaseClient,
   league: { id: string; status: string },
   ownerId: string,
   body: KickParticipantRequest
@@ -654,7 +811,7 @@ async function handleKickParticipant(
 }
 
 async function handleRandomizeDraftOrder(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  supabase: SupabaseClient,
   league: { id: string; status: string }
 ): Promise<Response> {
   if (league.status !== 'setup') {
@@ -697,7 +854,7 @@ async function handleRandomizeDraftOrder(
 }
 
 async function handleReorderParticipants(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  supabase: SupabaseClient,
   league: { id: string; status: string },
   body: ReorderParticipantsRequest
 ): Promise<Response> {
@@ -766,7 +923,7 @@ async function handleReorderParticipants(
 }
 
 async function handleDeleteLeague(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
+  supabase: SupabaseClient,
   league: { id: string; status: string; name: string }
 ): Promise<Response> {
   // Only allow in setup status
@@ -788,67 +945,41 @@ async function handleDeleteLeague(
   return jsonResponse({ message: `League "${league.name}" has been deleted` })
 }
 
-const STANDING_MEDALS = ['🥇', '🥈', '🥉']
-
-async function handleCompleteLeague(
-  supabase: ReturnType<typeof import('https://esm.sh/@supabase/supabase-js@2').createClient>,
-  league: { id: string; name: string; status: string }
-): Promise<Response> {
-  // C4: season wrap-up. This is the only place leagues.status transitions to
-  // 'completed' today, so this settings action doubles as the trigger point
-  // an automated hook would otherwise need.
-  if (league.status !== 'active') {
-    return errorResponse('Only an active league can be marked completed', 400)
-  }
-
-  const { data: updatedLeague, error } = await supabase
-    .from('leagues')
-    .update({ status: 'completed' })
-    .eq('id', league.id)
-    .select()
-    .single()
-
-  if (error) {
-    console.error('Error completing league:', error)
-    return errorResponse('Failed to complete league', 500)
-  }
-
-  // Discord delivery needs the service role client -- discord_channels.webhook_url
-  // is a credential column, matching every other notification-sending function.
+/**
+ * The commissioner's "End Season" button.
+ *
+ * All of the work -- final rescore, ranking, stamping the champion, and every
+ * announcement -- lives in `completeLeague`, which the nightly
+ * `complete-seasons` cron calls with the same arguments. Ending a season by
+ * hand and ending it on schedule must do exactly the same thing, so neither
+ * path gets its own copy.
+ */
+async function handleCompleteLeague(league: { id: string }): Promise<Response> {
+  // Service role: completion reads discord_channels.webhook_url (a credential
+  // column) and writes a notifications row for every participant, neither of
+  // which the caller's own client is allowed to do.
   const serviceClient = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
   )
 
-  const standingsByLeague = await snapshotStandings(serviceClient, [league.id])
-  const standings = standingsByLeague.get(league.id) ?? []
-  const topTeams = standings.slice(0, 3)
+  const result = await completeLeague(serviceClient, league.id, { trigger: 'owner' })
 
-  if (topTeams.length > 0) {
-    const fields = topTeams.map((team, i) => ({
-      name: `${STANDING_MEDALS[i]} ${team.teamName}`,
-      value: `${formatPoints(team.points)} pts`,
-      inline: true,
-    }))
-
-    await sendDiscordNotification(serviceClient, {
-      leagueId: league.id,
-      category: 'scores',
-      embeds: [{
-        author: buildEmbedAuthor(league.name, league.id),
-        title: '🏆 Season Final Standings',
-        description: `${league.name} has wrapped up! Final standings:`,
-        fields,
-        color: DISCORD_COLORS.green,
-        footer: { text: league.name },
-        url: buildLeagueUrl(league.id, '/standings'),
-      }],
-    })
+  if (!result.ok) {
+    return result.reason === 'not_found'
+      ? errorResponse('League not found', 404)
+      : errorResponse('Only an active league can be marked completed', 400)
   }
 
   return jsonResponse({
-    league: updatedLeague,
+    league: result.league,
     message: 'League marked as completed',
-    top_teams: topTeams,
+    top_teams: result.standings.slice(0, 3).map((row) => ({
+      teamId: row.team_id,
+      teamName: row.team_name,
+      points: row.total_points,
+      rank: row.rank,
+    })),
+    winner_team_ids: result.winnerTeamIds,
   })
 }

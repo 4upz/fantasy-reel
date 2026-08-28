@@ -5,7 +5,7 @@ import {
 } from 'discord.js'
 import { getSupabase } from '../supabase.js'
 import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
-import { requireLinkedLeague } from '../utils/channel-league.js'
+import { championTeamIds, requireLinkedLeague, seasonLabel } from '../utils/channel-league.js'
 import type { Command } from './index.js'
 
 interface StandingsRow {
@@ -57,7 +57,8 @@ export const standings: Command = {
     const linked = await requireLinkedLeague(interaction, supabase)
     if (!linked) return
 
-    const { leagueId, leagueName, leagueStatus } = linked
+    const { leagueId, leagueName, leagueStatus, seasonYear } = linked
+    const season = seasonLabel(seasonYear)
 
     // Standings only exist once the draft is done (mirrors the web app)
     const preStandingsLabel = PRE_STANDINGS_STATUS_LABELS[leagueStatus]
@@ -65,7 +66,8 @@ export const standings: Command = {
       const embed = noticeEmbed(
         leagueName,
         leagueId,
-        `Standings will be available once the draft completes.\n\nLeague status: **${preStandingsLabel}**`
+        `Standings will be available once the draft completes.\n\nLeague status: **${preStandingsLabel}**` +
+          (season ? `\nSeason: **${season}**` : '')
       )
 
       await interaction.editReply({ embeds: [embed] })
@@ -113,6 +115,15 @@ export const standings: Command = {
 
     const isFinal = leagueStatus === 'completed'
 
+    // On a finished season the champions are whoever the season recorded, not
+    // whoever sorts first now: the two agree today, but winner_team_ids is the
+    // written-down answer and it is what survives a later rescore. It also
+    // carries co-champions, which a rank comparison would have to re-derive.
+    //
+    // Null means the season finished before winners were recorded, so the
+    // rank-1 fallback below stands in.
+    const champions = championTeamIds(linked)
+
     // Tied teams share a rank (1, 1, 3 -- like the web standings page)
     let currentRank = 0
     let previousPoints: number | null = null
@@ -128,7 +139,9 @@ export const standings: Command = {
       const ownerName = participant.profiles?.display_name
       const nameDisplay = ownerName ? `${teamName} (${ownerName})` : teamName
 
-      const isChampion = isFinal && currentRank === 1
+      const isChampion = isFinal && (
+        champions ? champions.has(participant.teams!.id) : currentRank === 1
+      )
       const emphasizedName = isChampion ? `__**${nameDisplay}**__` : `**${nameDisplay}**`
       const youMarker =
         invokerUserId && participant.user_id === invokerUserId ? ' *(you)*' : ''
@@ -165,7 +178,9 @@ export const standings: Command = {
       .setDescription(lines.join('\n').slice(0, 4096))
       .setColor(DISCORD_COLORS.blue)
       .setURL(leagueUrl(leagueId, '/standings'))
-      .setFooter({ text: `${footerTimestamp} -- ${leagueName}` })
+      .setFooter({
+        text: [footerTimestamp, leagueName, season].filter(Boolean).join(' -- '),
+      })
 
     await interaction.editReply({ embeds: [embed] })
   },

@@ -807,6 +807,63 @@ Deno.test({
       await cleanupOffers()
     })
 
+    // ========================================================================
+    // A season ending under an open offer
+    // ========================================================================
+
+    await t.step('offers in a finished season expire with their season', async () => {
+      // Two shapes, because they fail differently without the sweep: an
+      // unanswered offer would sit open forever, and an accepted one would
+      // reach the execution loop and be expired there as a *validation
+      // failure*, which counts into results.failed and fires the ops alert.
+      const unanswered = await propose({})
+      assertEquals(unanswered.error, null)
+      const unansweredId = unanswered.data!.trade_offer.id as string
+
+      const agreed = await propose({})
+      assertEquals(agreed.error, null)
+      const agreedId = agreed.data!.trade_offer.id as string
+
+      await serviceClient
+        .from('trade_offers')
+        .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+        .eq('id', agreedId)
+
+      // The season ends with both offers still live.
+      await serviceClient
+        .from('leagues')
+        .update({ status: 'completed', completed_at: new Date().toISOString() })
+        .eq('id', leagueId)
+
+      try {
+        const { status, data } = await runProcessTrades()
+        assertEquals(status, 200)
+        assertEquals(data.expired_by_season, 2)
+        // Not counted as failures: the season ending is not a fault, and
+        // job_status is computed from processed/failed.
+        assertEquals(data.failed, 0)
+        assertEquals(data.completed, 0)
+
+        for (const id of [unansweredId, agreedId]) {
+          const offer = await readOffer(id)
+          assertEquals(offer?.status, 'expired')
+          assertEquals(offer?.expired_reason, 'season_completed')
+        }
+
+        // Idempotent: the claim is the UPDATE, so a second run finds nothing
+        // and cannot re-notify either party.
+        const second = await runProcessTrades()
+        assertEquals(second.data.expired_by_season, 0)
+      } finally {
+        // Later steps in this file still trade in this league.
+        await serviceClient
+          .from('leagues')
+          .update({ status: 'active', completed_at: null })
+          .eq('id', leagueId)
+        await cleanupOffers()
+      }
+    })
+
     await t.step('requires authentication', async () => {
       const anonClient = getAnonClient()
       const { status } = await invokeFunction(anonClient, 'propose-trade', {

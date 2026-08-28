@@ -255,6 +255,7 @@ export default function DraftBoard({
       <div className="card p-4 sm:p-6">
         <MoviePicker
           draftedTmdbIds={draftedTmdbIds}
+          seasonYear={league.season_year}
           isMyTurn={isMyTurn}
           picking={picking}
           onPick={handleDraftPick}

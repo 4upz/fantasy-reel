@@ -21,6 +21,7 @@ import {
   internalErrorResponse,
 } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 
 const log = createLogger('set-counterpick-bid-priorities')
 
@@ -64,7 +65,7 @@ Deno.serve(async (req) => {
     // Resolve the caller's team in this league
     const { data: participant, error: participantError } = await serviceClient
       .from('league_participants')
-      .select('id, teams(id)')
+      .select('id, teams(id), leagues(status)')
       .eq('league_id', league_id)
       .eq('user_id', user.id)
       .eq('status', 'active')
@@ -73,6 +74,14 @@ Deno.serve(async (req) => {
     if (participantError || !participant) {
       return errorResponse('You are not a member of this league', 403)
     }
+
+    // The league status rides along on the membership lookup rather than
+    // costing a second round-trip: league_participants has exactly one FK to
+    // leagues, so the embed is unambiguous.
+    const writable = assertLeagueWritable(
+      participant.leagues as unknown as { status: string } | null
+    )
+    if (!writable.ok) return writable.response
 
     const team = participant.teams as unknown as { id: string }
     if (!team) {

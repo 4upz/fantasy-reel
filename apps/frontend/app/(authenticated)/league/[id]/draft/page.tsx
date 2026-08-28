@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DraftClient from './DraftClient'
+import { fetchReigningChampions } from '@/utils/seasonQueries'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
 
 // Force dynamic rendering to ensure fresh data on every request
@@ -43,8 +44,10 @@ export default async function DraftPage({ params }: PageProps) {
     redirect('/dashboard')
   }
 
+  const typedLeague = league as League
+
   // Parallelize independent queries (async-parallel optimization)
-  const [participantsResult, draftPicksResult, counterpicksResult] =
+  const [participantsResult, draftPicksResult, counterpicksResult, reigningChampions] =
     await Promise.all([
       supabase
         .from('league_participants')
@@ -65,6 +68,7 @@ export default async function DraftPage({ params }: PageProps) {
         .select('*, movies (*)')
         .eq('league_id', id)
         .order('pick_order', { ascending: true }),
+      fetchReigningChampions(supabase, typedLeague),
     ])
 
   const { data: participants } = participantsResult
@@ -75,12 +79,13 @@ export default async function DraftPage({ params }: PageProps) {
 
   return (
     <DraftClient
-      league={league as League}
+      league={typedLeague}
       participants={(participants || []) as ParticipantWithProfile[]}
       draftPicks={(draftPicks || []) as DraftPickWithDetails[]}
       counterpicks={(counterpicks || []) as CounterpickWithDetails[]}
       currentUserId={user.id}
       isOwner={isOwner}
+      reigningChampions={reigningChampions}
     />
   )
 }

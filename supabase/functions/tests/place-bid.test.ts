@@ -500,7 +500,7 @@ Deno.test({
       })
 
       assertEquals(result.status, 400)
-      assertEquals(result.error, 'Cannot bid on this movie: Movie was released in a previous year')
+      assertEquals(result.error, 'Cannot bid on this movie: Movie was released in a previous season')
 
       // No bid should have been created for the rejected movie
       const { data: bids } = await getServiceClient()

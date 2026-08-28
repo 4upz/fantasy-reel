@@ -407,6 +407,9 @@ verify_jwt = false
 [functions.update-league]
 verify_jwt = false
 
+[functions.start-next-season]
+verify_jwt = false
+
 [functions.update-scores]
 verify_jwt = false
 
@@ -491,4 +494,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.send-announcement]
+verify_jwt = false
+
+[functions.complete-seasons]
 verify_jwt = false

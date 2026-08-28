@@ -1,4 +1,4 @@
-import type { League } from '@/types'
+import type { League, LeagueStatus } from '@/types'
 
 export interface LeagueTab {
   name: string
@@ -7,8 +7,6 @@ export interface LeagueTab {
   /** Still reachable, but no longer a primary destination - see TAB_DEMOTED_IN. */
   secondary?: boolean
 }
-
-type LeagueStatus = League['status']
 
 const ALL_STATUSES: LeagueStatus[] = ['setup', 'drafting', 'counterpicking', 'active', 'completed']
 
@@ -19,6 +17,7 @@ export const TAB_VISIBILITY: Record<string, Set<LeagueStatus>> = {
   Bidding: new Set(['active']),
   Trading: new Set(['active']),
   Roster: new Set(ALL_STATUSES),
+  History: new Set(ALL_STATUSES),
   Settings: new Set(ALL_STATUSES),
 }
 
@@ -52,8 +51,21 @@ function orderDemotedLast(tabs: LeagueTab[]): LeagueTab[] {
   return [...rest.slice(0, insertAt), ...demoted, ...rest.slice(insertAt)]
 }
 
-/** Tabs the league's current status makes reachable, in canonical order. */
-export function getVisibleTabs(league: League, isOwner: boolean, outbidCount: number): LeagueTab[] {
+/**
+ * Tabs the league's current status makes reachable, in canonical order.
+ *
+ * `seasonCount` is the only input that is not about this season: History has
+ * nothing to show until a series has a second season, so the tab appears only
+ * then. It is always secondary - it sorts before Settings on desktop and drops
+ * into the mobile More sheet, rather than competing with Standings for a bar
+ * slot.
+ */
+export function getVisibleTabs(
+  league: League,
+  isOwner: boolean,
+  outbidCount: number,
+  seasonCount = 1
+): LeagueTab[] {
   const baseUrl = `/league/${league.id}`
 
   const allTabs: LeagueTab[] = [
@@ -63,6 +75,7 @@ export function getVisibleTabs(league: League, isOwner: boolean, outbidCount: nu
     { name: 'Bidding', href: `${baseUrl}/bidding`, badge: outbidCount > 0 ? outbidCount : undefined },
     { name: 'Trading', href: `${baseUrl}/trading` },
     { name: 'Roster', href: `${baseUrl}/roster` },
+    ...(seasonCount > 1 ? [{ name: 'History', href: `${baseUrl}/history`, secondary: true }] : []),
     ...(isOwner ? [{ name: 'Settings', href: `${baseUrl}/settings` }] : []),
   ]
 

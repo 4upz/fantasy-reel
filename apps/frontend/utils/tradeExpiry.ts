@@ -479,6 +479,8 @@ export function expiredReasonCopy(
       return anchorMovieTitle ? `${anchorMovieTitle} released` : 'Its first movie released'
     case 'league_deadline':
       return 'The league trade deadline passed'
+    case 'season_completed':
+      return 'The season ended'
     default:
       return null
   }

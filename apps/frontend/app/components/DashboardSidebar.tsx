@@ -3,11 +3,18 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import TrophyCase, { type Title } from './TrophyCase'
+
 interface Props {
   onCreateClick: () => void
+  /** Seasons this user has won, newest first. */
+  titles?: Title[]
 }
 
-export default function DashboardSidebar({ onCreateClick }: Props): React.ReactElement {
+export default function DashboardSidebar({
+  onCreateClick,
+  titles = [],
+}: Props): React.ReactElement {
   const router = useRouter()
   const [inviteCode, setInviteCode] = useState('')
   const [isJoining, setIsJoining] = useState(false)
@@ -22,6 +29,8 @@ export default function DashboardSidebar({ onCreateClick }: Props): React.ReactE
 
   return (
     <div className="space-y-4">
+      <TrophyCase titles={titles} />
+
       {/* Browse Movies */}
       <Link href="/movies" className="sidebar-action-card flex items-center gap-3 cursor-pointer group">
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gold-muted shrink-0">

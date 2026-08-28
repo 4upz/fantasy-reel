@@ -224,6 +224,49 @@ export interface CleanupOptions {
  * Clean up test data after tests complete
  * Deletes in correct order to respect foreign key constraints
  */
+/**
+ * Delete the `league_series` rows left behind once their seasons are gone.
+ *
+ * Every league creates a series (the `ensure_league_series` trigger), and the
+ * FK runs series -> leagues, so deleting a league leaves the series orphaned.
+ *
+ * Two things make this safe to get wrong loudly rather than quietly:
+ *
+ *   - It only deletes a series with NO leagues left. `league_series` cascades
+ *     TO `leagues`, so deleting a series that still has a season would take
+ *     that season with it -- which, for a multi-season series where the test
+ *     only cleaned up one year, would silently destroy the other years.
+ *   - It uses the service role. `league_series` has no DELETE policy by
+ *     design (series are created by trigger and removed by the auth.users
+ *     cascade), so the caller's own client cannot do this.
+ *
+ * Best-effort: leftover series rows are inert test residue, never worth
+ * failing a suite over.
+ */
+async function cleanupOrphanedSeries(seriesIds: string[]): Promise<void> {
+  if (seriesIds.length === 0) return
+
+  try {
+    const serviceClient = getServiceClient()
+
+    const { data: survivors } = await serviceClient
+      .from('leagues')
+      .select('series_id')
+      .in('series_id', seriesIds)
+
+    const stillInUse = new Set(
+      (survivors ?? []).map((l: { series_id: string }) => l.series_id)
+    )
+    const orphaned = seriesIds.filter((id) => !stillInUse.has(id))
+    if (orphaned.length === 0) return
+
+    await serviceClient.from('league_series').delete().in('id', orphaned)
+  } catch {
+    // No service role key configured, or the delete failed. Either way an
+    // orphaned series is inert -- do not fail cleanup over it.
+  }
+}
+
 export async function cleanupTestData(
   client: SupabaseClient,
   options: CleanupOptions
@@ -237,6 +280,21 @@ export async function cleanupTestData(
 
   // Delete leagues (cascades to participants, teams, draft_picks)
   if (leagueIds.length > 0) {
+    // Captured before the leagues go: series are cleaned up afterwards, and by
+    // then there is no row left to read series_id from.
+    const { data: leagueRows } = await client
+      .from('leagues')
+      .select('series_id')
+      .in('id', leagueIds)
+
+    const seriesIds = [
+      ...new Set(
+        (leagueRows ?? [])
+          .map((l: { series_id: string | null }) => l.series_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ]
+
     // Get teams for these leagues (needed for bidding table cleanup)
     const { data: participants } = await client
       .from('league_participants')
@@ -289,6 +347,8 @@ export async function cleanupTestData(
 
     // Finally delete leagues
     await client.from('leagues').delete().in('id', leagueIds)
+
+    await cleanupOrphanedSeries(seriesIds)
   }
 
   // Delete standalone movies if specified

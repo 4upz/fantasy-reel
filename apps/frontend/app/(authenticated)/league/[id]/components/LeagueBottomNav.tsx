@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   BarChart3,
   DollarSign,
+  History,
   Home,
   ListOrdered,
   MoreHorizontal,
@@ -21,6 +22,8 @@ interface Props {
   league: League
   outbidCount?: number
   isOwner?: boolean
+  /** Seasons in this league's series; more than one reveals the History tab. */
+  seasonCount?: number
 }
 
 const TAB_ICONS: Record<string, LucideIcon> = {
@@ -30,6 +33,7 @@ const TAB_ICONS: Record<string, LucideIcon> = {
   Bidding: DollarSign,
   Trading: ArrowLeftRight,
   Roster: Users,
+  History,
   Settings,
 }
 
@@ -43,11 +47,16 @@ function TabIcon({ name, className }: { name: string; className: string }) {
  * overflow was easy to miss - here every destination is either on the bar or one
  * tap away in the sheet.
  */
-export default function LeagueBottomNav({ league, outbidCount = 0, isOwner = false }: Props): React.ReactElement | null {
+export default function LeagueBottomNav({
+  league,
+  outbidCount = 0,
+  isOwner = false,
+  seasonCount = 1,
+}: Props): React.ReactElement | null {
   const pathname = usePathname()
   const [isSheetOpen, setIsSheetOpen] = useState(false)
 
-  const tabs = getVisibleTabs(league, isOwner, outbidCount)
+  const tabs = getVisibleTabs(league, isOwner, outbidCount, seasonCount)
   const { barTabs, moreTabs } = splitTabsForBottomBar(tabs)
 
   // Route changes come from taps inside the sheet, so it has to close itself.

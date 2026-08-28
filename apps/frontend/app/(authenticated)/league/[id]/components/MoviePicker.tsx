@@ -13,6 +13,8 @@ import { isWithinDays } from './utils'
 
 interface Props {
   draftedTmdbIds: Set<number>
+  /** The league's season year, which decides which movies are still in play. */
+  seasonYear: number
   isMyTurn: boolean
   picking: boolean
   onPick: (tmdbId: number, movieData: TMDbSearchResult) => void
@@ -69,6 +71,7 @@ function wishlistToTMDbResult(wm: WishlistedMovie): TMDbSearchResult {
 
 export default function MoviePicker({
   draftedTmdbIds,
+  seasonYear,
   isMyTurn,
   picking,
   onPick,
@@ -87,7 +90,7 @@ export default function MoviePicker({
     browse,
     fetchTrending,
     loadMore,
-  } = useDraftMovies({ draftedTmdbIds })
+  } = useDraftMovies({ draftedTmdbIds, seasonYear })
 
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(

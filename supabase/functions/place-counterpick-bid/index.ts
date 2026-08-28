@@ -23,6 +23,7 @@ import {
 import { sendEmail } from '../_shared/email.ts'
 import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templates/outbid.ts'
 import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, DiscordEmbed } from '../_shared/discord.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
@@ -80,6 +81,9 @@ Deno.serve(async (req) => {
     if (leagueError || !league) {
       return errorResponse('League not found', 404)
     }
+
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     if (league.status !== 'active') {
       return errorResponse('League must be active for counterpick bidding', 400)
@@ -198,7 +202,7 @@ Deno.serve(async (req) => {
       .eq('id', movie_id)
       .single()
 
-    const releaseCheck = isUpcomingMovie(movieInfo?.release_date)
+    const releaseCheck = isUpcomingMovie(movieInfo?.release_date, league.season_year)
     if (!releaseCheck.valid) {
       return errorResponse(`Cannot counterpick this movie: ${releaseCheck.reason}`, 400)
     }

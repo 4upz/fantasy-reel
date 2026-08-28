@@ -14,6 +14,7 @@ import {
   isValidJoinCode,
   isServiceRoleRequest,
   authenticateUserOrServiceRole,
+  isUpcomingMovie,
 } from './utils.ts'
 import { corsHeaders } from './cors.ts'
 
@@ -405,5 +406,61 @@ Deno.test('authenticateUserOrServiceRole', async (t) => {
       assertEquals(await result!.json(), { error: 'Unauthorized' })
       assertHasCorsHeaders(result!)
     })
+  })
+})
+
+// ============================================================================
+// isUpcomingMovie -- season-relative draft/bid eligibility
+// ============================================================================
+
+Deno.test('isUpcomingMovie', async (t) => {
+  // Fixed rather than derived from today: a relative fixture would stop
+  // exercising the season-vs-wall-clock distinction on the days they agree.
+  const THIS_YEAR = new Date().getFullYear()
+  const NEXT_YEAR = THIS_YEAR + 1
+
+  await t.step('rejects a movie with no release date', () => {
+    assertEquals(isUpcomingMovie(null, THIS_YEAR), {
+      valid: false,
+      reason: 'Movie has no release date',
+    })
+    assertEquals(isUpcomingMovie(undefined, THIS_YEAR).valid, false)
+    assertEquals(isUpcomingMovie('', THIS_YEAR).valid, false)
+  })
+
+  await t.step('rejects a movie from a year before the season', () => {
+    const result = isUpcomingMovie(`${THIS_YEAR - 1}-06-15`, THIS_YEAR)
+    assertEquals(result.valid, false)
+    assertEquals(result.reason, 'Movie was released in a previous season')
+  })
+
+  await t.step('rejects an unparseable release year', () => {
+    assertEquals(isUpcomingMovie('not-a-date', THIS_YEAR).valid, false)
+  })
+
+  await t.step('rejects a movie that is already out, even in its own season', () => {
+    const result = isUpcomingMovie(`${THIS_YEAR}-01-01`, THIS_YEAR)
+    assertEquals(result.valid, false)
+    assertEquals(result.reason, 'Movie has already been released')
+  })
+
+  await t.step('accepts a movie still to come', () => {
+    assertEquals(isUpcomingMovie(`${NEXT_YEAR}-06-15`, THIS_YEAR), { valid: true })
+  })
+
+  // The whole point of the season_year parameter: a season that runs past
+  // New Year keeps judging its own movies, and one that has not started yet
+  // does not accept last year\'s leftovers.
+  await t.step('keys the year cutoff off the season, not the wall clock', () => {
+    // A movie from this calendar year, seen by a season labelled next year:
+    // out of season, even though the calendar has not moved.
+    assertEquals(
+      isUpcomingMovie(`${THIS_YEAR}-12-31`, NEXT_YEAR).reason,
+      'Movie was released in a previous season',
+    )
+
+    // The same movie, seen by a season two years back, clears the year cutoff
+    // and is judged only on whether it has actually released.
+    assertEquals(isUpcomingMovie(`${NEXT_YEAR}-12-31`, THIS_YEAR - 1), { valid: true })
   })
 })

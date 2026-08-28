@@ -1,15 +1,19 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import DashboardClient from './DashboardClient'
-import { buildTeamInfoByTeamId, getMovieStatus } from '@/utils/league'
+import { buildTeamInfoByTeamId, getMovieStatus, getParticipantDisplayName } from '@/utils/league'
 import { holdingSourceName } from '@/utils/holdings'
+import { fetchSeriesSeasons, fetchStandings } from '@/utils/seasonQueries'
+import { championPoints, resolveChampions, seasonStandings } from '@/utils/seasons'
 import type {
   League,
   DashboardTeam,
   LeagueUpcomingRelease,
   MovieTimelineItem,
   ParticipantWithProfile,
+  Team,
   TeamHolding,
+  TeamScore,
 } from '@/types'
 
 interface PageProps {
@@ -35,6 +39,15 @@ type DashboardHolding = Pick<
   | 'combined_score'
   | 'fantasy_points'
 >
+
+/**
+ * What this page's participant query selects. Not `ParticipantWithTeamScore`:
+ * that one also promises `team_budgets`, which the dashboard has no use for and
+ * does not ask for.
+ */
+type DashboardParticipant = ParticipantWithProfile & {
+  teams: (Team & { team_scores: TeamScore | null }) | null
+}
 
 export default async function DashboardPage({ params }: PageProps) {
   const { id } = await params
@@ -62,7 +75,9 @@ export default async function DashboardPage({ params }: PageProps) {
   // anyone west of UTC.
   const todayIso = new Date().toISOString().slice(0, 10)
 
-  const [{ data: participants }, { data: holdingRows }] = await Promise.all([
+  const typedLeague = league as League
+
+  const [{ data: participants }, { data: holdingRows }, standings, seasons] = await Promise.all([
     // Fetch all participants with teams and scores
     supabase
       .from('league_participants')
@@ -87,23 +102,24 @@ export default async function DashboardPage({ params }: PageProps) {
       )
       .eq('league_id', id)
       .order('source', { ascending: true }),
+    // Only the champion banner needs a ranking here, and only a completed
+    // season has one to show - so this is skipped outright while the season is
+    // running, and again once the frozen record can answer it.
+    typedLeague.status === 'completed' && !typedLeague.final_standings?.length
+      ? fetchStandings(supabase, id)
+      : [],
+    fetchSeriesSeasons(supabase, typedLeague.series_id),
   ])
 
   // Build team data
-  const participantsData = participants || []
+  const participantsData = (participants ?? []) as DashboardParticipant[]
   const holdings = (holdingRows ?? []) as DashboardHolding[]
 
   // Calculate rankings for user's rank display
   const teamsWithScores = participantsData
-    .filter((p) => p.teams)
-    .map((p) => {
-      const team = p.teams as { id: string; name: string; avatar_url: string | null; team_scores: { total_points: number } | null }
-      return {
-        participantUserId: p.user_id,
-        teamId: team.id,
-        total_points: team.team_scores?.total_points ?? 0,
-      }
-    })
+    .flatMap((p) =>
+      p.teams ? [{ teamId: p.teams.id, total_points: p.teams.team_scores?.total_points ?? 0 }] : []
+    )
     .sort((a, b) => b.total_points - a.total_points)
 
   // Build rank map with tie handling
@@ -123,12 +139,7 @@ export default async function DashboardPage({ params }: PageProps) {
   let userTeam: DashboardTeam | null = null
 
   if (userParticipant?.teams) {
-    const team = userParticipant.teams as {
-      id: string
-      name: string
-      avatar_url: string | null
-      team_scores: { total_points: number } | null
-    }
+    const team = userParticipant.teams
 
     const movies: MovieTimelineItem[] = holdings
       .filter((holding) => holding.team_id === team.id)
@@ -159,18 +170,39 @@ export default async function DashboardPage({ params }: PageProps) {
 
   const leagueUpcoming = buildLeagueUpcoming(
     holdings,
-    buildTeamInfoByTeamId(participantsData as ParticipantWithProfile[]),
+    buildTeamInfoByTeamId(participantsData),
     userTeam?.id ?? null,
     todayIso
   )
 
+  // Season context: who won (completed seasons), and which season this one
+  // follows (so a member carried into a new one can find the old standings).
+  const ownerNameByUserId = new Map(
+    participantsData.map((p) => [p.user_id, p.profiles?.display_name ?? null])
+  )
+  const rows = seasonStandings(typedLeague.final_standings, standings)
+  const champions = resolveChampions(typedLeague.winner_team_ids, rows, ownerNameByUserId)
+  const previousSeason =
+    seasons.find(
+      (season) => season.season_year < typedLeague.season_year && season.status === 'completed'
+    ) ?? null
+
   return (
     <DashboardClient
-      league={league as League}
+      league={typedLeague}
       userTeam={userTeam}
       totalTeams={participantsData.length}
       leagueUpcoming={leagueUpcoming}
       todayIso={todayIso}
+      isOwner={typedLeague.owner_id === user.id}
+      champions={champions}
+      championPoints={championPoints(champions, rows)}
+      participantNames={participantsData.map((p) => getParticipantDisplayName(p, 'Unnamed player'))}
+      previousSeason={
+        previousSeason
+          ? { id: previousSeason.id, seasonYear: previousSeason.season_year }
+          : null
+      }
     />
   )
 }

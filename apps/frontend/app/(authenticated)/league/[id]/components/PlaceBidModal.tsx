@@ -15,6 +15,8 @@ import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 
 interface PlaceBidModalProps {
   isOpen: boolean
+  /** The league's season year, which decides which movies are still in play. */
+  seasonYear: number
   onClose: () => void
   teamId: string
   budget: TeamBudget | null
@@ -128,6 +130,7 @@ function getValidationErrorMessage(bidAmount: number, remainingBudget: number, h
 
 export default function PlaceBidModal({
   isOpen,
+  seasonYear,
   onClose,
   teamId,
   budget,
@@ -176,7 +179,11 @@ export default function PlaceBidModal({
     loading,
     search,
     clearSearch,
-  } = useDraftMovies({ draftedTmdbIds: excludedTmdbIds, enabled: !isCounterBidPhase })
+  } = useDraftMovies({
+    draftedTmdbIds: excludedTmdbIds,
+    seasonYear,
+    enabled: !isCounterBidPhase,
+  })
 
   // Lock body scroll when modal is open
   useEffect(() => {

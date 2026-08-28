@@ -10,6 +10,7 @@ import {
   MAX_EXPIRY_DAYS,
   MIN_EXPIRY_MINUTES,
 } from '@/utils/tradeExpiry'
+import { formatSeasonDate } from '@/utils/seasons'
 import { ButtonSpinner } from '../../components/Icons'
 import { SectionHeader } from './shared'
 
@@ -190,6 +191,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                 id="trade_deadline"
                 value={tradeDeadline}
                 onChange={(e) => setTradeDeadline(e.target.value)}
+                max={league.season_end}
                 className="input w-48"
                 aria-describedby="trade_deadline_help"
               />
@@ -206,7 +208,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
             <p id="trade_deadline_help" className="text-xs text-foreground-muted mt-1.5">
               {tradeDeadline
                 ? 'The last day trades can happen, inclusive. An offer running past it is cut short to it.'
-                : 'No deadline — trades stay open all season.'}
+                : `No deadline — trades stay open until the season ends on ${formatSeasonDate(league.season_end)}.`}
             </p>
           </div>
 
