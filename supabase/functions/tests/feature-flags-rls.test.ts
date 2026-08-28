@@ -26,4 +26,21 @@ Deno.test('feature_flags + external_api_budgets', async (t) => {
     const rpc = await user.rpc('reserve_external_api_calls', { p_api: 'x', p_requested: 1, p_daily_limit: 1 })
     assert(rpc.error !== null, 'authenticated must not execute reserve_external_api_calls')
   })
+
+  await t.step('corpus tables are invisible to authenticated users; movie_projections is readable', async () => {
+    const user = await getAuthenticatedClient()
+
+    // RLS on with no SELECT policy is an empty result, not an error, so assert
+    // on the rows: whichever way Postgres answers, nothing may come back.
+    for (const table of ['film_corpus', 'film_people', 'film_credits', 'film_collections', 'projection_models']) {
+      const { data, error } = await user.from(table).select('*').limit(1)
+      if (error) continue // permission denied is an equally good answer
+      assertEquals(data?.length ?? 0, 0, `${table} must not be readable by authenticated users`)
+    }
+
+    // The one table the frontend reads directly (spec §4): readable, and the
+    // read must not error.
+    const projections = await user.from('movie_projections').select('tmdb_id').limit(1)
+    assertEquals(projections.error, null)
+  })
 })
