@@ -3,10 +3,10 @@
 # fetching and routing, which are app wiring rather than design-system
 # parts. See .design-sync/NOTES.md.
 #
-# A component NOT in this list and NOT in the barrel fails the drift
-# check — that is the point: new components surface instead of being
-# silently omitted. To sync one, add it to entry.tsx + componentSrcMap.
-# To keep excluding it, add its name here.
+# A component in neither this list nor the barrel is reported by
+# `npm run design:drift` so it surfaces at re-sync time instead of being
+# silently omitted. Nothing blocks on it. To sync one, add it to
+# entry.tsx + componentSrcMap. To keep excluding it, add its name here.
 
 ActiveBidsPanel
 ArrowRightIcon

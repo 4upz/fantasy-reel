@@ -212,33 +212,38 @@ These fire on every run and are **not** regressions:
 
 A warn **not** in this list is new — look at it before recording it.
 
-## The drift check (CI)
+## The drift report (local, not CI)
 
-`.github/workflows/design-sync-drift.yml` runs `.design-sync/check-drift.mjs`
-on every PR and push to main. Dependency-free, so it needs no install step.
+`.design-sync/check-drift.mjs` lists what the curated barrel is missing.
+Dependency-free, so it needs no install:
 
-It **cannot** tell you whether the design project is current — that state is in
-the uploaded `_ds_sync.json`, not in git, and a correct re-sync after a markup
-change commits nothing. Anything built on "did `.design-sync/` change?" would
-be a false signal. What it does catch:
+```sh
+npm run design:drift
+npm run design:drift -- --since origin/main   # + synced sources touched since main
+```
 
-| Check | Severity | Why |
-|---|---|---|
-| `componentSrcMap` pin points at a missing file | **fails** | the sync build dies on this |
-| Component in a synced dir, in neither barrel nor ignore list | **fails** | the *silent* failure — it would just never reach the design system |
-| Synced sources touched in this PR | notice only | re-sync reminder |
+**Run it before a re-sync, not on every PR.** It used to be a required check
+(`design-sync-drift.yml`, removed). That was the wrong shape: the barrel is
+*meant* to lag the app, so every new component in a synced directory turned red
+and the fix was always the same — append a name to `drift-ignore.txt` in a
+follow-up commit that had nothing to do with the PR. Two such commits landed
+before the check was pulled. Bookkeeping is not a defect, and it does not
+belong on the critical path of unrelated work.
+
+It still **cannot** tell you whether the design project is current — that state
+is in the uploaded `_ds_sync.json`, not in git, and a correct re-sync after a
+markup change commits nothing. What it reports:
+
+| Report | Meaning |
+|---|---|
+| `componentSrcMap` pin points at a missing file | the sync build will die on this — fix before re-syncing |
+| Component in a synced dir, in neither barrel nor ignore list | would silently never reach the design system — sync it or ignore it |
+| Synced sources touched since `--since` | how stale the design project has gotten |
 
 `.design-sync/drift-ignore.txt` holds the deliberate exclusions (page-level
 containers, the `Icons.tsx` set, settings form sections, TMDbAttribution,
-SiteFooter). **A new component fails the check until you either sync it or add
-it to that file** — which is the whole point. Reseed the list from current
-state with `node .design-sync/check-drift.mjs --write-ignore`.
-
-Run it locally the same way CI does:
-
-```sh
-node .design-sync/check-drift.mjs --since origin/main
-```
+SiteFooter). Reseed it from current state with
+`node .design-sync/check-drift.mjs --write-ignore`.
 
 ## Re-sync runbook
 
