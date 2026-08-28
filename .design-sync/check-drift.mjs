@@ -1,29 +1,32 @@
 #!/usr/bin/env node
-// Design-sync drift check. Dependency-free; runs in CI and locally.
+// Design-sync drift report. Dependency-free; run it by hand before a re-sync.
 //
-//   node .design-sync/check-drift.mjs                 # check
-//   node .design-sync/check-drift.mjs --since <ref>   # + list touched components
+//   npm run design:drift                              # report
+//   npm run design:drift -- --since origin/main       # + list touched components
 //   node .design-sync/check-drift.mjs --write-ignore  # reseed the exclusion list
 //
-// WHAT THIS DOES AND DOES NOT CATCH
+// NOT A CI GATE. This used to run on every PR and it was the wrong shape for
+// the job: the curated barrel is meant to lag the app, so every new component
+// tripped it and the only fix was appending a name to drift-ignore.txt in a
+// follow-up commit. That is bookkeeping, not a defect, and it does not belong
+// on the critical path of an unrelated PR.
 //
-// It cannot tell you whether the design project is up to date — that state
-// lives in the uploaded `_ds_sync.json`, not in git. A correct re-sync after a
-// markup change commits nothing, so "did .design-sync/ change?" would be a
-// false signal. Instead this checks the two failure modes that ARE visible
-// from the repo:
+// What it reports, at the one moment the answer matters — when you are about
+// to re-sync:
 //
-//   1. BROKEN PIN (error)   — a componentSrcMap path that no longer exists.
-//                             The sync build fails outright on this. Loud.
-//   2. UNSYNCED (error)     — a component sitting in an already-synced
-//                             directory that is in neither the barrel nor the
-//                             ignore list. This is the SILENT failure: the
-//                             component simply never reaches the design system
-//                             and nothing complains. This check is the only
-//                             thing standing between you and that.
+//   1. BROKEN PIN  — a componentSrcMap path that no longer exists. The sync
+//                    build fails outright on this one, so fix it first.
+//   2. UNSYNCED    — a component sitting in an already-synced directory that
+//                    is in neither the barrel nor the ignore list. It would
+//                    simply never reach the design system. Decide per
+//                    component: sync it, or add it to drift-ignore.txt.
 //
-// Plus an informational note listing synced sources touched since a base ref,
-// so a PR author knows a re-sync is due. That note never fails the build.
+// Plus an informational list of synced sources touched since a base ref, so
+// you can see how stale the design project has gotten.
+//
+// It still cannot tell you whether the design project is up to date — that
+// state lives in the uploaded `_ds_sync.json`, not in git, and a correct
+// re-sync commits nothing.
 
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
@@ -78,10 +81,10 @@ if (arg('--write-ignore')) {
       '# fetching and routing, which are app wiring rather than design-system\n' +
       '# parts. See .design-sync/NOTES.md.\n' +
       '#\n' +
-      '# A component NOT in this list and NOT in the barrel fails the drift\n' +
-      '# check — that is the point: new components surface instead of being\n' +
-      '# silently omitted. To sync one, add it to entry.tsx + componentSrcMap.\n' +
-      '# To keep excluding it, add its name here.\n\n' +
+      '# A component in neither this list nor the barrel is reported by\n' +
+      '# `npm run design:drift` so it surfaces at re-sync time instead of being\n' +
+      '# silently omitted. Nothing blocks on it. To sync one, add it to\n' +
+      '# entry.tsx + componentSrcMap. To keep excluding it, add its name here.\n\n' +
       excluded.join('\n') +
       '\n'
   )
@@ -144,7 +147,7 @@ if (unsynced.length) {
   for (const c of unsynced) console.error(`    ${c.name}  (${c.path})`)
   console.error(
     '\n  These would be silently missing from the design system — the component\n' +
-      '  list is a curated barrel, not a glob, so nothing else catches this.\n' +
+      '  list is a curated barrel, not a glob, so nothing else reports this.\n' +
       '\n  To SYNC one:    add an export to .design-sync/entry.tsx and a pin to\n' +
       '                  componentSrcMap in .design-sync/config.json, then re-sync\n' +
       '                  (runbook in .design-sync/NOTES.md) so it gets a preview card.\n' +
