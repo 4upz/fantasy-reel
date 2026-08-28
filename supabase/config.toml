@@ -487,5 +487,8 @@ verify_jwt = false
 [functions.sync-release-dates]
 verify_jwt = false
 
+[functions.ingest-film-corpus]
+verify_jwt = false
+
 [functions.send-announcement]
 verify_jwt = false

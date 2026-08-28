@@ -1,10 +1,13 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse } from '../_shared/utils.ts'
-import { fetchMDBListRatings } from '../_shared/scoring.ts'
+import { fetchMDBListRatings, isUnratedPrerelease } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
 import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
+import { getFlag, flagNumber, asFlagClient } from '../_shared/feature-flags.ts'
+import { reserveApiCalls, MDBLIST_PROJECTIONS_KEY } from '../_shared/mdblist-budget.ts'
+import { freezeProjection } from '../_shared/projection-freeze.ts'
 
 const log = createLogger('update-scores')
 
@@ -40,6 +43,13 @@ function parseRequestBody(body: string): UpdateScoresRequest {
  * invoke again; nothing here is stateful across invocations.
  */
 const MAX_MOVIES_PER_RUN = 100
+
+/** Pre-release polling window (spec §8.1): upcoming movies releasing within this many days. */
+const PRERELEASE_WINDOW_DAYS = 30
+/** Cap on upcoming movies polled per run; each is one MDBList call. */
+const PRERELEASE_MAX_PER_RUN = 60
+/** Default daily MDBList budget for the projections slice when the flag has no config. */
+const DEFAULT_MDBLIST_DAILY_BUDGET = 500
 
 /**
  * Truncation is reported in-band (response body and job_runs metadata), not
@@ -104,6 +114,14 @@ Deno.serve(async (req) => {
 
     let moviesToUpdate: MovieRecord[] = []
     let truncation: Truncation | undefined
+    let prereleasePolled = 0
+    let prereleaseGranted = 0
+    /**
+     * Movie ids added by the pre-release branch. A movie polled before release
+     * usually has no Tomatometer yet, which is the expected outcome, not a
+     * failure -- see `isUnratedPrerelease` and the per-movie loop below.
+     */
+    const prereleaseIds = new Set<string>()
 
     if (params.movie_ids && params.movie_ids.length > 0) {
       // Update specific movies
@@ -176,6 +194,44 @@ Deno.serve(async (req) => {
       }
 
       moviesToUpdate = (data as MovieRecord[]) || []
+
+      // Pre-release polling: festival premieres and embargo lifts put a
+      // Tomatometer on MDBList days or weeks before wide release. Worth one
+      // budget-reserved call per upcoming movie per day while players are
+      // still trading and bidding on it. Gated by the same flag as corpus
+      // ingestion so an operator can hand the whole quota back to scoring.
+      const ingestionFlag = await getFlag(asFlagClient(serviceClient), 'projections_ingestion')
+      if (ingestionFlag.enabled) {
+        const today = new Date().toISOString().split('T')[0]
+        const windowEnd = new Date()
+        windowEnd.setDate(windowEnd.getDate() + PRERELEASE_WINDOW_DAYS)
+        const { data: upcoming, error: upcomingError } = await serviceClient
+          .from('movies')
+          .select('id, tmdb_id, imdb_id, title')
+          .eq('status', 'upcoming')
+          // Strictly after today: a movie releasing today is already covered by
+          // the released selection above, and polling it twice in one run would
+          // spend two MDBList calls on the same title.
+          .gt('release_date', today)
+          .lte('release_date', windowEnd.toISOString().split('T')[0])
+          .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
+          .order('release_date', { ascending: true })
+          .limit(PRERELEASE_MAX_PER_RUN)
+        if (upcomingError) {
+          log.warn('Pre-release selection failed', { error: serializeError(upcomingError) })
+        } else if (upcoming && upcoming.length > 0) {
+          prereleaseGranted = await reserveApiCalls(
+            serviceClient,
+            MDBLIST_PROJECTIONS_KEY,
+            upcoming.length,
+            flagNumber(ingestionFlag, 'mdblist_daily_budget', DEFAULT_MDBLIST_DAILY_BUDGET)
+          )
+          const polled = (upcoming as MovieRecord[]).slice(0, prereleaseGranted)
+          prereleasePolled = polled.length
+          for (const m of polled) prereleaseIds.add(m.id)
+          moviesToUpdate = [...moviesToUpdate, ...polled]
+        }
+      }
     }
 
     if (moviesToUpdate.length === 0) {
@@ -184,6 +240,9 @@ Deno.serve(async (req) => {
         movies_fetched: 0,
         scores_updated: 0,
         errors: [],
+        prerelease_polled: prereleasePolled,
+        prerelease_granted: prereleaseGranted,
+        prerelease_unscored: 0,
         job_status
       })
     }
@@ -195,10 +254,17 @@ Deno.serve(async (req) => {
       log.error('MDBLIST_API_KEY not configured')
       return errorResponse('Score update service not configured', 503)
     }
+    // Narrowed after the guard above: every movie that reaches a lookup has a
+    // tmdb_id, and the guard already returned 503 if any of them does while the
+    // key is unset. The '' fallback is therefore only ever reached by a batch
+    // whose movies all short-circuit on `!movie.tmdb_id` below.
+    const apiKey: string = mdblistApiKey ?? ''
 
     const results = {
       movies_fetched: 0,
       scores_updated: 0,
+      /** Pre-release movies with no Tomatometer yet -- expected, not failures. */
+      prerelease_unscored: 0,
       errors: [] as Array<{ movie_id: string; title: string; error: string }>
     }
 
@@ -221,7 +287,16 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const { ratings, error: fetchError } = await fetchMDBListRatings(movie.tmdb_id, mdblistApiKey)
+        const outcome = await fetchMDBListRatings(movie.tmdb_id, apiKey)
+        const { ratings, error: fetchError } = outcome
+
+        // A movie polled before release usually has no Tomatometer yet. That is
+        // the point of polling daily, not a failure: counting it in `errors`
+        // would mark every nightly run degraded (and alert ops) forever.
+        if (prereleaseIds.has(movie.id) && isUnratedPrerelease(outcome)) {
+          results.prerelease_unscored++
+          continue
+        }
 
         if (fetchError) {
           results.errors.push({
@@ -291,6 +366,10 @@ Deno.serve(async (req) => {
           } else {
             log.info('Calculated score', { movie_title: movie.title, fantasy_points: fantasyPts })
             results.scores_updated++
+
+            // Freeze the projection (if any) at the first real Tomatometer so
+            // projected-vs-actual is never rewritten. No row is fine.
+            await freezeProjection(serviceClient, movie.tmdb_id, ratings)
           }
         }
 
@@ -317,12 +396,22 @@ Deno.serve(async (req) => {
       metadata: {
         movies_fetched: results.movies_fetched,
         scores_updated: results.scores_updated,
+        prerelease_polled: prereleasePolled,
+        prerelease_granted: prereleaseGranted,
+        prerelease_unscored: results.prerelease_unscored,
         notifications,
         ...truncation,
       },
     })
 
-    return jsonResponse({ ...results, ...truncation, notifications, job_status })
+    return jsonResponse({
+      ...results,
+      ...truncation,
+      prerelease_polled: prereleasePolled,
+      prerelease_granted: prereleaseGranted,
+      notifications,
+      job_status,
+    })
 
   } catch (error) {
     if (run && runClient) await run.fail(runClient, error)

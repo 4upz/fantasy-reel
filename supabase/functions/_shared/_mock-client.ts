@@ -2,12 +2,12 @@
  * Shared in-memory mock Supabase client for unit-testing the scheduled
  * notification Edge Functions (release-day-announcements,
  * weekly-releases-digest, sync-release-dates, send-announcement,
- * bid-cutoff-announcement).
+ * bid-cutoff-announcement) and ingest-film-corpus.
  *
  * Not a test file itself (no `.test.ts` suffix), so `deno task test:unit`
  * does not execute it directly -- it's imported by the test files that do.
  *
- * Filters (`eq`/`is`/`in`/`gt`/`gte`/`lte`) actually filter the seeded rows,
+ * Filters (`eq`/`is`/`in`/`gt`/`gte`/`lt`/`lte`) actually filter the seeded rows,
  * so tests can assert on realistic query results (e.g. per-league discord
  * channel filtering, notification-log dedup across two handler calls)
  * instead of returning one canned response regardless of arguments.
@@ -51,8 +51,16 @@ function chain(rows: Row[]) {
     is: (col: string, val: unknown) => chain(applyIs(rows, col, val)),
     in: (col: string, vals: unknown[]) => chain(applyIn(rows, col, vals)),
     gt: (col: string, val: string | number) => chain(rows.filter((r) => r[col] > val)),
+    // Guarded against null explicitly: `null < 'anything'` is true in JS but
+    // NULL never satisfies a comparison in Postgres.
+    lt: (col: string, val: string | number) => chain(rows.filter((r) => r[col] != null && r[col] < val)),
     gte: (col: string, val: string | number) => chain(rows.filter((r) => r[col] >= val)),
     lte: (col: string, val: string | number) => chain(rows.filter((r) => r[col] <= val)),
+    neq: (col: string, val: unknown) => chain(rows.filter((r) => r[col] !== val)),
+    not: (col: string, op: string, val: unknown) => {
+      if (op === 'is' && val === null) return chain(rows.filter((r) => r[col] !== null && r[col] !== undefined))
+      throw new Error(`mock not() supports only ('col', 'is', null); got ${op}`)
+    },
     order: () => chain(rows),
     limit: (n: number) => chain(rows.slice(0, n)),
     single: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
@@ -138,14 +146,47 @@ export function createMockDbClient(db: MockDb, options: MockClientOptions = {}) 
           db[table].push(...arr)
           return Promise.resolve({ data: arr, error: null })
         },
-        update: (patch: Row) => ({
-          eq: (col: string, val: unknown) => {
-            for (const row of db[table]) {
-              if (row[col] === val) Object.assign(row, patch)
-            }
-            return Promise.resolve({ data: null, error: null })
-          },
-        }),
+        upsert: (rowsToUpsert: Row | Row[], opts: { onConflict?: string; ignoreDuplicates?: boolean } = {}) => {
+          const arr = Array.isArray(rowsToUpsert) ? rowsToUpsert : [rowsToUpsert]
+          const keyCols = opts.onConflict ? opts.onConflict.split(',').map((c) => c.trim()) : options.unique?.[table]
+          if (!keyCols) throw new Error(`mock upsert on ${table} needs onConflict or options.unique`)
+          for (const candidate of arr) {
+            const existing = db[table].find((row) => keyCols.every((col) => row[col] === candidate[col]))
+            if (!existing) db[table].push({ ...candidate })
+            else if (!opts.ignoreDuplicates) Object.assign(existing, candidate)
+          }
+          return Promise.resolve({ data: arr, error: null })
+        },
+        update: (patch: Row) => {
+          // Chainable + thenable: eq/is/in each add an AND-ed predicate and
+          // return the same builder, so `.update(p).eq(a, 1).is(b, null)`
+          // matches rows satisfying both -- and a single call like
+          // `.update(p).eq(a, 1)` still works because the builder itself is
+          // awaitable (has `.then`), same as a real PostgREST query builder.
+          const preds: Array<(row: Row) => boolean> = []
+          const builder = {
+            eq: (col: string, val: unknown) => {
+              preds.push((r) => r[col] === val)
+              return builder
+            },
+            is: (col: string, val: unknown) => {
+              preds.push((r) => (val === null ? r[col] == null : r[col] === val))
+              return builder
+            },
+            in: (col: string, vals: unknown[]) => {
+              preds.push((r) => vals.includes(r[col]))
+              return builder
+            },
+            then: <TResult1 = { data: null; error: null }, TResult2 = never>(
+              onFulfilled?: ((value: { data: null; error: null }) => TResult1 | PromiseLike<TResult1>) | null,
+              onRejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+            ) => {
+              for (const row of db[table]) if (preds.every((p) => p(row))) Object.assign(row, patch)
+              return Promise.resolve({ data: null, error: null } as const).then(onFulfilled, onRejected)
+            },
+          }
+          return builder
+        },
       }
     },
     // deno-lint-ignore no-explicit-any

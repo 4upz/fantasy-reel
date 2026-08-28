@@ -191,6 +191,21 @@ npm run build
 - When deploying Edge Functions, verify: function is deployed, config.toml has the entry, and all migrations are applied.
 - Environment variables: use NEXT_PUBLIC_SITE_URL for client-side, SITE_URL for server-side. Clarify with user before introducing new env vars like APP_URL.
 
+## Feature Flags
+
+Operator switches live in the `feature_flags` table (`key`, `enabled`, `config` JSONB, `description`). **Edit them in Supabase Studio → Table Editor → `feature_flags`** — toggle `enabled`, edit `config` inline. No deploy; Edge Functions memoize reads for 60 s (`getFlag` in `_shared/feature-flags.ts`), the frontend reads the table directly under RLS. Pass a real `SupabaseClient` through `asFlagClient(client)` (same module) — it exists to sidestep a TS2589 error and is the only sanctioned cast. A missing row or read error is `disabled`. Current flags:
+
+| Key | Gates | Config |
+|---|---|---|
+| `projections_ingestion` | `ingest-film-corpus` cron and pre-release polling in `update-scores` (the `mdblist:projections` budget slice) — **off by default; enable in Studio after the first supervised run**, the cron is a no-op while off | `mdblist_daily_budget` (500), `per_run_cap` (300) |
+| `projections_display` | Projected scores (Beta) in the UI — off until the backtest gate in the projections spec passes | — |
+
+Every new flag gets a `description` row that tells the operator what turning it off does.
+
+## Movie Projections Plumbing
+
+Spec: `docs/superpowers/specs/2026-08-26-movie-projections-design.md`. Phase 1 (shipped): `film_corpus` / `film_people` / `film_credits` / `film_collections` hold the historical corpus, filled by `ingest-film-corpus` (daily 09:00 UTC; seed → TMDb metadata → MDBList ratings). **All projections MDBList calls reserve through `reserveApiCalls` (`_shared/mdblist-budget.ts`) under the `mdblist:projections` key of `external_api_budgets`** (the ledger PR #72 introduced for franchise history, which reserves under its own `mdblist:franchise-history` key) — never call MDBList without a reservation; user traffic must never trigger one. `update-scores` also polls upcoming movies within 30 days (embargo-lift scores) and freezes `movie_projections.frozen_at/actual_rt` the first time a real Tomatometer lands. The freeze lives in `_shared/projection-freeze.ts` (`freezeProjection(client, tmdbId, ratings)`), unit-tested with the mock client. The historical sweep sizes itself from TMDb `total_results` per year (compared against an exact head count of rows dated in that year, all seed sources), so a year interrupted by a timeout resumes on the next run. Each run is sliced per stage (`IngestConfig.stageBudgetMs`, 10s/18s/17s inside the cron proxy's 55s abort) and checked at the top of every loop — the ratings stage runs last and is the only one that spends quota, so it must never be starved by a slow sweep; `job_runs.metadata.deadlines` says which stages ran out. Ratings are fetched only for released rows that have metadata and either were never asked or were asked before a Tomatometer existed (re-polled at most daily, for 60 days after release), and the run reserves `min(headroom, eligible)` rather than the whole cap. Backfill progress is in `job_runs.metadata` (`remaining_metadata`, `remaining_ratings`, `mdblist_used_today`).
+
 ---
 
 ## Observability Conventions
@@ -209,6 +224,7 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 - **Edge Function calls from the frontend:** always go through `callEdgeFunction` (`utils/supabase/functions.ts`) — never raw `fetch` to `/functions/v1/*`. It sends a client `x-request-id`, records duration/status Sentry breadcrumbs, and captures unexpected failures.
 - **Product events:** `trackEvent(name, props)` from `utils/analytics.ts` (wraps Vercel Analytics). Fire only on success paths, ids-only props (no names/emails). Canonical event names are listed in that file's doc comment — reuse them, don't invent variants.
 - **Health:** `/api/health` probes Supabase reachability (200/503) for external uptime monitors — keep it dependency-light and unauthenticated.
+- **MDBList budget:** any call to `api.mdblist.com` outside `update-scores`' nightly branch must first reserve through `reserve_external_api_calls` under a per-feature key (`_shared/mdblist-budget.ts` → `reserveApiCalls(client, MDBLIST_PROJECTIONS_KEY, n, limit)` for projections; franchise history uses `mdblist:franchise-history`). The free plan is 1,000/day: ~120 scoring + 300 franchise history + 500 projections.
 
 ---
 
@@ -938,10 +954,8 @@ Edge Functions use **Deno's native testing framework**. Tests are located alongs
 ```
 supabase/functions/
 ├── deno.json                    # Test config with imports
-├── _test_utils/
-│   ├── mocks.ts                 # Mock Supabase client & utilities
-│   └── fixtures.ts              # Test data fixtures (valid UUIDs!)
 ├── _shared/
+│   ├── _mock-client.ts          # createMockDbClient (in-memory client: filters, upsert, neq, not-is-null, chainable update().eq().is().in()), stubFetch
 │   ├── utils.ts
 │   ├── utils.test.ts            # Shared utility tests
 │   └── email.test.ts            # Email module tests
@@ -971,23 +985,12 @@ npm run test:functions:watch
 
 **1. Use the mock utilities:**
 ```typescript
-import { createMockSupabaseClient, createMockAuthRequest, mockEnvVars } from '../_test_utils/mocks.ts'
-import { mockUser, mockLeague } from '../_test_utils/fixtures.ts'
+import { createMockDbClient, stubFetch, type MockDb } from '../_shared/_mock-client.ts'
 
-// Configure mock responses
-const mockConfig = {
-  user: mockUser,
-  tables: {
-    leagues: {
-      select: { data: mockLeague, error: null },
-      insert: { data: mockLeague, error: null },
-    },
-  },
-  rpc: {
-    get_next_draft_pick: { data: [mockNextPickInfo], error: null },
-  },
-}
-const mockClient = createMockSupabaseClient(mockConfig)
+const db: MockDb = { movies: [{ id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', tmdb_id: 1, title: 'X' }] }
+const client = createMockDbClient(db, { unique: { movies: ['tmdb_id'] }, rpc: { calculate_movie_score: 12 } })
+const { calls, restore } = stubFetch((url) => url.includes('api.mdblist.com') ? new Response('{}', { status: 200 }) : undefined)
+try { /* call the handler with `client` */ } finally { restore() }
 ```
 
 **2. Test categories to cover:**

@@ -8,7 +8,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { fetchMDBListRatings } from './scoring.ts'
+import { fetchMDBListRatings, isUnratedPrerelease } from './scoring.ts'
 import type { MovieRecord, MDBListRating, MDBListResponse } from './scoring.ts'
 import { isValidUUID } from './utils.ts'
 
@@ -411,6 +411,44 @@ function mockMDBListErrorFetch(status: number, body = ''): typeof globalThis.fet
     return Promise.resolve(new Response('', { status: 200 }))
   }) as typeof globalThis.fetch
 }
+
+// ============================================================================
+// Group 0: PRE-RELEASE POLLING OUTCOME CLASSIFICATION
+//
+// Covers the real helper update-scores/index.ts uses (the mirrored handler
+// below predates pre-release polling and does not model it). Spec §8.1.
+// ============================================================================
+
+Deno.test('isUnratedPrerelease', async (t) => {
+  const rt = { source: 'rotten_tomatoes', score: 81, raw: '81%' }
+  const imdb = { source: 'imdb', score: 74, raw: '7.4' }
+
+  await t.step('a 404 from MDBList is the expected pre-release state', () => {
+    assertEquals(
+      isUnratedPrerelease({ ratings: [], status: 404, error: 'Movie not found on MDBList' }),
+      true,
+    )
+  })
+
+  await t.step('an entry with no ratings at all is unscored, not failed', () => {
+    assertEquals(isUnratedPrerelease({ ratings: [] }), true)
+  })
+
+  await t.step('ratings without a Tomatometer are unscored, not failed', () => {
+    assertEquals(isUnratedPrerelease({ ratings: [imdb] }), true)
+  })
+
+  await t.step('a Tomatometer means the movie is scored', () => {
+    assertEquals(isUnratedPrerelease({ ratings: [imdb, rt] }), false)
+  })
+
+  await t.step('auth, rate-limit, server and network failures stay real failures', () => {
+    assertEquals(isUnratedPrerelease({ ratings: [], status: 401, error: 'MDBList API authentication failed' }), false)
+    assertEquals(isUnratedPrerelease({ ratings: [], status: 429, error: 'MDBList API rate limit exceeded' }), false)
+    assertEquals(isUnratedPrerelease({ ratings: [], status: 500, error: 'MDBList API error: 500' }), false)
+    assertEquals(isUnratedPrerelease({ ratings: [], error: 'Failed to fetch ratings from MDBList' }), false)
+  })
+})
 
 // ============================================================================
 // Group 1: AUTH (4 tests)

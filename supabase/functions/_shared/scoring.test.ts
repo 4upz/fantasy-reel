@@ -5,6 +5,7 @@
 
 import { assertEquals } from '@std/assert'
 import { fetchMDBListRatings, fetchImdbId, MDBLIST_SOURCE_MAP } from './scoring.ts'
+import { stubFetch } from './_mock-client.ts'
 
 // --- Test helpers ---
 
@@ -270,6 +271,45 @@ Deno.test('fetchMDBListRatings', async (t) => {
     )
     assertEquals(result.ratings.length, 0)
     assertEquals(result.error, 'Failed to fetch ratings from MDBList')
+  })
+})
+
+Deno.test('fetchMDBListRatings details', async (t) => {
+  await t.step('returns details alongside ratings', async () => {
+    const { restore } = stubFetch((url) =>
+      url.includes('api.mdblist.com')
+        ? new Response(JSON.stringify({
+            title: 'Dune', budget: 165000000, revenue: 410668500, certification: 'PG-13', released: '2021-09-15',
+            production_companies: [{ id: 923, name: 'Legendary' }],
+            ratings: [
+              { source: 'tomatoes', value: 83, score: 83, votes: 500 },
+              { source: 'imdb', value: 8.0, score: 80, votes: 900000 },
+            ],
+          }), { status: 200 })
+        : undefined
+    )
+    try {
+      const result = await fetchMDBListRatings(438631, 'key')
+      assertEquals(result.error, undefined)
+      assertEquals(result.details, {
+        budget: 165000000, revenue: 410668500, certification: 'PG-13', released: '2021-09-15',
+        company_ids: [923], rt_critic_votes: 500,
+      })
+      assertEquals(result.ratings.length, 2)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('exposes the HTTP status on failure', async () => {
+    const { restore } = stubFetch((url) => (url.includes('api.mdblist.com') ? new Response('', { status: 404 }) : undefined))
+    try {
+      const result = await fetchMDBListRatings(1, 'key')
+      assertEquals(result.status, 404)
+      assertEquals(result.details, undefined)
+    } finally {
+      restore()
+    }
   })
 })
 

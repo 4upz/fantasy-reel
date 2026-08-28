@@ -15,7 +15,7 @@
  * Requires: npx supabase start && npx supabase functions serve
  */
 
-import { assertEquals, assertExists } from '@std/assert'
+import { assert, assertEquals, assertExists } from '@std/assert'
 import {
   getServiceClient,
   getEdgeFunctionServiceRoleKey,
@@ -23,7 +23,14 @@ import {
 } from './_setup.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
-const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/update-scores`
+/**
+ * The `supabase start` edge runtime serves the *main checkout's* functions, so
+ * a worktree change to update-scores is only exercised by pointing
+ * UPDATE_SCORES_URL at a standalone `deno run update-scores/index.ts` (which
+ * binds :8000) -- same pattern as PLACE_BID_URL in place-bid.test.ts. Unset,
+ * calls go through the shared runtime as before.
+ */
+const FUNCTION_URL = Deno.env.get('UPDATE_SCORES_URL') ?? `${SUPABASE_URL}/functions/v1/update-scores`
 
 /** A syntactically valid UUID that never matches a row. */
 const NONEXISTENT_UUID = '00000000-0000-0000-0000-000000000001'
@@ -285,4 +292,124 @@ Deno.test({
       }
     }
   },
+})
+
+// ============================================================================
+// Pre-release polling + projection freeze (Task 12)
+//
+// The flag-gated invocation step calls the live function's default (cron)
+// branch, which also selects the nightly released set -- a real MDBList call
+// if any stale released movie exists in the database. So it is gated behind
+// RUN_EXTERNAL_API_TESTS like the other live-API steps in this file, above.
+// The freeze step is pure DB and exercises the SQL contract update-scores
+// relies on (calculate_movie_score, then the conditional frozen_at update)
+// without touching the network at all, so it always runs.
+// ============================================================================
+
+Deno.test('update-scores: pre-release polling is flag- and budget-gated', async (t) => {
+  const service = getServiceClient()
+
+  /**
+   * `getFlag` memoizes for 60s per process (_shared/feature-flags.ts), so a
+   * flag flipped in the database is invisible to a running function until that
+   * memo expires. The two steps below assert opposite flag states against one
+   * long-lived instance, so each waits the memo out after flipping. Both are
+   * gated on RUN_EXTERNAL_API_TESTS, so an ordinary run pays nothing.
+   */
+  const waitOutFlagCache = () => new Promise((resolve) => setTimeout(resolve, 61_000))
+
+  await t.step({
+    name: 'with projections_ingestion disabled, no upcoming movies are polled',
+    ignore: !RUN_EXTERNAL_API_TESTS,
+    fn: async () => {
+      const SERVICE_ROLE_KEY = await getEdgeFunctionServiceRoleKey()
+      await service.from('feature_flags').update({ enabled: false }).eq('key', 'projections_ingestion')
+      await waitOutFlagCache()
+      try {
+        const response = await fetch(FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        const data = await response.json()
+        assertEquals(data.prerelease_polled, 0)
+        assertEquals(data.prerelease_granted, 0)
+        assertEquals(data.prerelease_unscored, 0)
+      } finally {
+        await service.from('feature_flags').update({ enabled: true }).eq('key', 'projections_ingestion')
+      }
+    },
+  })
+
+  await t.step({
+    name: 'an upcoming movie inside the window is selected and polled, and prerelease_unscored is reported',
+    ignore: !RUN_EXTERNAL_API_TESTS,
+    fn: async () => {
+      const SERVICE_ROLE_KEY = await getEdgeFunctionServiceRoleKey()
+      // Dated inside the 30-day pre-release window so the polling branch picks
+      // it up. What the MDBList answer *means* (404/no ratings/no Tomatometer
+      // = expected, not a failure) is classified by `isUnratedPrerelease` and
+      // unit-tested in ../_shared/update-scores.test.ts: this suite runs
+      // against a deliberately invalid MDBList key so it spends no quota, and
+      // an invalid key answers 401 -- a real failure -- for every lookup.
+      const tmdbId = 900400001
+      const releaseDate = new Date(Date.now() + 10 * 86_400_000).toISOString().split('T')[0]
+      const { data: movie, error: seedError } = await service
+        .from('movies')
+        .upsert(
+          { tmdb_id: tmdbId, title: 'Unrated Upcoming', release_date: releaseDate, status: 'upcoming', scores_updated_at: null },
+          { onConflict: 'tmdb_id' }
+        )
+        .select('id')
+        .single()
+      assertEquals(seedError, null)
+      await service.from('feature_flags').update({ enabled: true }).eq('key', 'projections_ingestion')
+      await waitOutFlagCache()
+      try {
+        const response = await fetch(FUNCTION_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        const data = await response.json()
+        assertEquals(response.status, 200)
+        assert(data.prerelease_polled >= 1, `expected the upcoming movie to be polled, got ${data.prerelease_polled}`)
+        assertEquals(typeof data.prerelease_unscored, 'number')
+      } finally {
+        await service.from('movies').delete().eq('id', movie!.id)
+      }
+    },
+  })
+
+  await t.step('freeze stamps movie_projections when a score lands', async () => {
+    // Seed a model + projection row, then a scored review, and exercise the
+    // SQL contract the function relies on: calculate_movie_score followed by
+    // the conditional frozen_at update.
+    await service.from('projection_models').upsert({ version: 0, coefficients: {}, metrics: {}, is_active: false }, { onConflict: 'version' })
+    const tmdbId = 900300001
+    const { data: movie } = await service.from('movies').upsert(
+      { tmdb_id: tmdbId, title: 'Freeze Me', release_date: '2020-01-01', status: 'released' }, { onConflict: 'tmdb_id' }
+    ).select('id').single()
+    await service.from('movie_projections').upsert({
+      tmdb_id: tmdbId, model_version: 0, projected_rt: 70, sigma: 12, p_rotten: 0.2, p_fresh: 0.7, p_club90: 0.1,
+      expected_points: 8, factors: {}, coverage: 0.5, partial: false, frozen_at: null, actual_rt: null,
+    }, { onConflict: 'tmdb_id' })
+    await service.from('reviews').upsert({ movie_id: movie!.id, source: 'rotten_tomatoes', score: 81, raw_score: '81%', fetched_at: new Date().toISOString() }, { onConflict: 'movie_id,source' })
+    try {
+      await service.rpc('calculate_movie_score', { p_movie_id: movie!.id })
+      await service.from('movie_projections').update({ frozen_at: new Date().toISOString(), actual_rt: 81 }).eq('tmdb_id', tmdbId).is('frozen_at', null)
+      const { data: frozen } = await service.from('movie_projections').select('frozen_at, actual_rt').eq('tmdb_id', tmdbId).single()
+      assertEquals(frozen?.actual_rt, 81)
+      assert(frozen?.frozen_at)
+    } finally {
+      // cleanup
+      await service.from('movie_projections').delete().eq('tmdb_id', tmdbId)
+      await service.from('reviews').delete().eq('movie_id', movie!.id)
+      await service.from('movies').delete().eq('id', movie!.id)
+    }
+  })
 })
