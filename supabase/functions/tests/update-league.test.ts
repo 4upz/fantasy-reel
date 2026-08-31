@@ -6,7 +6,24 @@
  */
 
 import { assert, assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, invokeFunction, uniqueName } from './_setup.ts'
+import {
+  createTestFactory,
+  getAnonClient,
+  getServiceClient,
+  invokeFunction,
+  uniqueName,
+} from './_setup.ts'
+
+/**
+ * A date inside a freshly created league's season.
+ *
+ * New leagues default to `season_end` = 31 December of the current year, and a
+ * trade deadline may not fall after the season ends -- so deadlines in these
+ * tests have to be anchored to the current year rather than hard-coded.
+ */
+function inSeason(monthDay: string): string {
+  return `${new Date().getUTCFullYear()}-${monthDay}`
+}
 
 Deno.test({
   name: 'update-league',
@@ -104,6 +121,39 @@ Deno.test({
     assertExists(data.league)
     assertEquals(data.league.name, 'Updated League Name')
     assertEquals(data.message, 'League updated successfully')
+  })
+
+  await t.step('update_info: a rename writes the series and every season follows', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('rename-series'))
+
+    const { data: before } = await client
+      .from('leagues')
+      .select('series_id')
+      .eq('id', leagueId)
+      .single()
+    const seriesId = before!.series_id as string
+
+    const { error } = await client.functions.invoke('update-league', {
+      body: { action: 'update_info', league_id: leagueId, name: 'Renamed Across Seasons' },
+    })
+    assertEquals(error, null)
+
+    // The series is the source of truth for the name...
+    const { data: series } = await client
+      .from('league_series')
+      .select('name')
+      .eq('id', seriesId)
+      .single()
+    assertEquals(series?.name, 'Renamed Across Seasons')
+
+    // ...and the trigger pushed it down to every season under it, so history
+    // does not read like two different leagues.
+    const { data: seasons } = await client
+      .from('leagues')
+      .select('name')
+      .eq('series_id', seriesId)
+    assertEquals(seasons?.length, 1)
+    assertEquals(seasons?.every((s: { name: string }) => s.name === 'Renamed Across Seasons'), true)
   })
 
   await t.step('update_info: trims whitespace from name', async () => {
@@ -1142,20 +1192,97 @@ Deno.test({
     const leagueId = await factory.createActiveLeague(uniqueName('complete-active'))
 
     const result = await invokeFunction<{
-      league: { status: string }
-      top_teams: Array<{ teamName: string; points: number }>
+      league: { status: string; completed_at: string | null; winner_team_ids: string[] | null }
+      top_teams: Array<{ teamId: string; teamName: string; points: number; rank: number }>
+      winner_team_ids: string[]
     }>(client, 'update-league', { action: 'complete_league', league_id: leagueId })
 
     assertEquals(result.error, null)
     assertEquals(result.data?.league.status, 'completed')
     assertExists(result.data?.top_teams)
+    assertExists(result.data?.winner_team_ids)
+
+    // Every team is on zero points at this stage, so they all tie at rank 1 and
+    // all of them are co-champions. The response and the row must agree.
+    const winners = result.data!.winner_team_ids
+    assertEquals(winners.length > 0, true)
+    assertEquals(result.data?.top_teams.every((t) => t.rank === 1), true)
 
     const { data: updatedLeague } = await client
       .from('leagues')
-      .select('status')
+      .select('status, completed_at, winner_team_ids')
       .eq('id', leagueId)
       .single()
     assertEquals(updatedLeague?.status, 'completed')
+    assertExists(updatedLeague?.completed_at)
+    assertEquals(new Set(updatedLeague?.winner_team_ids as string[]), new Set(winners))
+  })
+
+  await t.step('complete_league: voids pending bids and expires open trades', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('complete-freeze'))
+    const serviceClient = getServiceClient()
+
+    const { data: participants } = await serviceClient
+      .from('league_participants')
+      .select('id, teams(id)')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+
+    // The embed's shape varies by relationship cardinality, so read it the way
+    // cleanupTestData does rather than fighting the inferred type.
+    const teamIds = (participants ?? [])
+      .map((p) => (p.teams as unknown as { id: string } | null)?.id)
+      .filter((id): id is string => Boolean(id))
+    assertEquals(teamIds.length >= 2, true)
+
+    // Inserted directly rather than through place-bid / propose-trade: this
+    // step is about what completion does to work already in flight, and going
+    // through those endpoints would drag in the weekly bid cutoff window and
+    // the trade validators, which have nothing to do with what is being tested.
+    const { error: bidError } = await serviceClient.from('pickup_bids').insert({
+      league_id: leagueId,
+      team_id: teamIds[0],
+      tmdb_id: 424242,
+      amount: 5,
+      status: 'active',
+      processing_deadline: new Date(Date.now() + 7 * 86400000).toISOString(),
+    })
+    assertEquals(bidError, null)
+
+    const { error: tradeError } = await serviceClient.from('trade_offers').insert({
+      league_id: leagueId,
+      initiator_team_id: teamIds[0],
+      recipient_team_id: teamIds[1],
+      // check_has_items needs at least one side to actually offer something;
+      // a budget-only offer is the cheapest valid shape.
+      initiator_items: { faab: 5, movies: [] },
+      recipient_items: { faab: 0, movies: [] },
+      // 'accepted' is the dangerous one: process-trades would execute it on its
+      // next run, moving rosters after the final standings were announced.
+      status: 'accepted',
+    })
+    assertEquals(tradeError, null)
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'complete_league',
+      league_id: leagueId,
+    })
+    assertEquals(result.error, null)
+
+    const { data: bids } = await serviceClient
+      .from('pickup_bids')
+      .select('status')
+      .eq('league_id', leagueId)
+    // 'cancelled', not 'lost' -- nobody was outbid and nothing is charged.
+    assertEquals(bids?.every((b: { status: string }) => b.status === 'cancelled'), true)
+
+    const { data: trades } = await serviceClient
+      .from('trade_offers')
+      .select('status, expired_reason')
+      .eq('league_id', leagueId)
+    assertEquals(trades?.length, 1)
+    assertEquals(trades?.[0].status, 'expired')
+    assertEquals(trades?.[0].expired_reason, 'season_completed')
   })
 
   await t.step('complete_league: cannot be completed twice', async () => {
@@ -1172,6 +1299,187 @@ Deno.test({
       league_id: leagueId,
     })
     assertEquals(second.error, 'Only an active league can be marked completed')
+  })
+
+  // ============================================================================
+  // update_season_config Tests
+  //
+  // The season year is setup-only because it decides movie eligibility; the
+  // end date stays editable, because moving it is a normal mid-season call and
+  // it is what the completion cron reads.
+  // ============================================================================
+
+  await t.step('update_season_config: sets next year and moves the end date with it', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-year'))
+    const nextYear = new Date().getUTCFullYear() + 1
+
+    // The whole reason the field exists: a league created in December for the
+    // season that starts in January.
+    const { data, error } = await invokeFunction<{
+      league: { season_year: number; season_end: string }
+    }>(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_year: nextYear,
+    })
+
+    assertEquals(error, null)
+    assertEquals(data?.league.season_year, nextYear)
+    // Not asked for, but required: leaving season_end in the old year would
+    // put it in the past and the cron would close the league immediately.
+    assertEquals(data?.league.season_end, `${nextYear}-12-31`)
+  })
+
+  await t.step('update_season_config: accepts the current year', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-year-current'))
+    const currentYear = new Date().getUTCFullYear()
+
+    const { data, error } = await invokeFunction<{
+      league: { season_year: number; season_end: string }
+    }>(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_year: currentYear,
+    })
+
+    assertEquals(error, null)
+    assertEquals(data?.league.season_year, currentYear)
+    assertEquals(data?.league.season_end, `${currentYear}-12-31`)
+  })
+
+  await t.step('update_season_config: rejects a past season year', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-year-past'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_year: new Date().getUTCFullYear() - 1,
+    })
+
+    assertEquals(result.error, 'Season year can only be this year or next year')
+  })
+
+  await t.step('update_season_config: rejects a year further out than next season', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-year-far'))
+
+    // Two years out is not a thing you can reserve -- roll the season over
+    // when you get there.
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_year: new Date().getUTCFullYear() + 2,
+    })
+
+    assertEquals(result.error, 'Season year can only be this year or next year')
+  })
+
+  await t.step('update_season_config: the season year is frozen once the draft starts', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('season-year-active'))
+
+    // Setup-only is checked before the value is, so even a legal year is
+    // refused once the draft has started.
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_year: new Date().getUTCFullYear() + 1,
+    })
+
+    assertEquals(result.error, 'The season year can only be changed before the draft starts')
+  })
+
+  await t.step('update_season_config: the end date is editable on an active league', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('season-end-active'))
+    const nextYear = new Date().getUTCFullYear() + 1
+
+    const { data, error } = await invokeFunction<{ league: { season_end: string } }>(
+      client,
+      'update-league',
+      {
+        action: 'update_season_config',
+        league_id: leagueId,
+        season_end: `${nextYear}-06-30`,
+      }
+    )
+
+    assertEquals(error, null)
+    assertEquals(data?.league.season_end, `${nextYear}-06-30`)
+  })
+
+  await t.step('update_season_config: rejects an end date in the past', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-end-past'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_end: '2020-01-01',
+    })
+
+    assertEquals(result.error, 'Season end must be today or later')
+  })
+
+  await t.step('update_season_config: rejects a malformed end date', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-end-bad'))
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_end: '2027-02-31',
+    })
+
+    assertEquals(result.error, 'Season end must be a date in YYYY-MM-DD format')
+  })
+
+  await t.step('update_season_config: refuses to strand an existing trade deadline past the season end', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('season-end-deadline'))
+    const nextYear = new Date().getUTCFullYear() + 1
+
+    // Push the season out first -- a deadline may never be set past the season
+    // end, so the invalid pairing has to be created by pulling the END back in,
+    // which is exactly the case this step guards.
+    const extendResult = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_end: `${nextYear}-12-31`,
+    })
+    assertEquals(extendResult.error, null)
+
+    const deadlineResult = await invokeFunction(client, 'update-league', {
+      action: 'update_trade_config',
+      league_id: leagueId,
+      trade_deadline: `${nextYear}-11-30`,
+    })
+    assertEquals(deadlineResult.error, null)
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_end: `${nextYear}-06-30`,
+    })
+
+    assertEquals(
+      result.error,
+      `The trade deadline (${nextYear}-11-30) would fall after the season ends (${nextYear}-06-30). Move the trade deadline first.`
+    )
+  })
+
+  await t.step('update_trade_config: rejects a trade deadline after the season ends', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('deadline-after-season'))
+
+    const { data: league } = await client
+      .from('leagues')
+      .select('season_end')
+      .eq('id', leagueId)
+      .single()
+    const seasonEnd = league!.season_end as string
+    const afterSeason = `${Number(seasonEnd.slice(0, 4)) + 1}-01-15`
+
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_trade_config',
+      league_id: leagueId,
+      trade_deadline: afterSeason,
+    })
+
+    assertEquals(result.error, `The trade deadline cannot fall after the season ends (${seasonEnd})`)
   })
 
   // ============================================================================
@@ -1216,7 +1524,7 @@ Deno.test({
         trades_enabled: false,
         trade_review_enabled: false,
         trade_veto_hours: 48,
-        trade_deadline: '2027-03-01',
+        trade_deadline: inSeason('03-01'),
       },
     )
 
@@ -1224,7 +1532,7 @@ Deno.test({
     assertEquals(data!.league.trades_enabled, false)
     assertEquals(data!.league.trade_review_enabled, false)
     assertEquals(data!.league.trade_veto_hours, 48)
-    assertEquals(data!.league.trade_deadline, '2027-03-01')
+    assertEquals(data!.league.trade_deadline, inSeason('03-01'))
   })
 
   await t.step('update_trade_config: works on an active league', async () => {
@@ -1236,12 +1544,12 @@ Deno.test({
       {
         action: 'update_trade_config',
         league_id: leagueId,
-        trade_deadline: '2027-06-30',
+        trade_deadline: inSeason('06-30'),
       },
     )
 
     assertEquals(error, null)
-    assertEquals(data!.league.trade_deadline, '2027-06-30')
+    assertEquals(data!.league.trade_deadline, inSeason('06-30'))
   })
 
   await t.step('update_trade_config: a partial update leaves the other fields alone', async () => {
@@ -1406,7 +1714,7 @@ Deno.test({
     await invokeFunction(client, 'update-league', {
       action: 'update_trade_config',
       league_id: leagueId,
-      trade_deadline: '2027-03-01',
+      trade_deadline: inSeason('03-01'),
     })
 
     const { data, error } = await invokeFunction<{ league: Record<string, unknown> }>(

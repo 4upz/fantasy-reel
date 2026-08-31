@@ -15,6 +15,7 @@ import { buildTeamInfoByTeamId } from '@/utils/league'
 import InvitationsList from '../components/InvitationsList'
 import JoinLinkCard from '../components/JoinLinkCard'
 import ParticipantsList from '../components/ParticipantsList'
+import type { ReigningChampions } from '@/utils/seasonQueries'
 import { SpinnerIcon } from '../components/Icons'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
@@ -32,6 +33,8 @@ interface Props {
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
   isOwner: boolean
+  /** Last season's winners, crowned in the participants list. */
+  reigningChampions?: ReigningChampions | null
 }
 
 export default function DraftClient({
@@ -41,6 +44,7 @@ export default function DraftClient({
   counterpicks: initialCounterpicks,
   currentUserId,
   isOwner,
+  reigningChampions = null,
 }: Props): React.ReactElement {
   const [league, setLeague] = useState(initialLeague)
   const [participants, setParticipants] = useState(initialParticipants)
@@ -467,7 +471,11 @@ export default function DraftClient({
         </div>
 
         <div className="order-1 lg:order-2 space-y-6 lg:sticky lg:top-6 lg:self-start">
-          <ParticipantsList participants={participants} ownerId={league.owner_id} />
+          <ParticipantsList
+            participants={participants}
+            ownerId={league.owner_id}
+            reigningChampions={reigningChampions}
+          />
 
           {league.status === 'drafting' && draftPicks.length > 0 && (
             <div className="card p-4 lg:p-6" data-testid="draft-history">

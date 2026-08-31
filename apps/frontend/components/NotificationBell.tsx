@@ -1,7 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Bell, Check, DollarSign, TrendingDown, Gift, AlertTriangle } from 'lucide-react'
+import {
+  AlertTriangle,
+  Bell,
+  Check,
+  Clapperboard,
+  DollarSign,
+  Gift,
+  TrendingDown,
+  Trophy,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useNotifications } from '@/hooks/useNotifications'
 import type { Notification, NotificationType } from '@/types'
@@ -16,6 +25,10 @@ function getNotificationIcon(type: NotificationType) {
       return <TrendingDown className="w-4 h-4 text-error" />
     case 'pickup_available':
       return <Gift className="w-4 h-4 text-gold" />
+    case 'season_completed':
+      return <Trophy className="w-4 h-4 text-gold" />
+    case 'season_started':
+      return <Clapperboard className="w-4 h-4 text-gold" />
     default:
       return <Bell className="w-4 h-4 text-foreground-muted" />
   }
@@ -146,6 +159,12 @@ function NotificationItem({ notification, onClick }: NotificationItemProps) {
     href = `/league/${leagueId}?tab=bidding`
   } else if (notification.type === 'bid_won' && leagueId) {
     href = `/league/${leagueId}/roster`
+  } else if (notification.type === 'season_completed' && leagueId) {
+    href = `/league/${leagueId}/standings`
+  } else if (notification.type === 'season_started' && leagueId) {
+    // The row carries the NEW season's league id, so this lands on the season
+    // that just opened rather than the one that ended.
+    href = `/league/${leagueId}/dashboard`
   }
 
   return (

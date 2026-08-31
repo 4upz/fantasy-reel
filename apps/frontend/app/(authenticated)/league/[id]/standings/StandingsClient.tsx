@@ -7,18 +7,33 @@ import type {
   PickupHolding,
   CounterpickWithScores,
   RankedTeamFull,
+  StandingRow,
 } from '@/types'
+import type { ReigningChampions } from '@/utils/seasonQueries'
+import { championPoints, type Champion } from '@/utils/seasons'
 import TeamStandingCard from './TeamStandingCard'
 import TeamDetailRail from './TeamDetailRail'
+import ChampionBanner from '../components/ChampionBanner'
 
 interface Props {
   participants: ParticipantWithTeamScore[]
+  /**
+   * The `league_standings` RPC's rows, in rank order. The only source of rank -
+   * the page and the champion banner cannot disagree about who is first.
+   */
+  standings: StandingRow[]
   draftPicks: DraftHolding[]
   pickups: PickupHolding[]
   counterpicks: CounterpickWithScores[]
   currentUserId: string
   /** The league's configured starting purse; 0 means this league doesn't use a fantasy budget. */
   startingBudget: number
+  seasonYear: number
+  isCompleted: boolean
+  /** Every team at rank 1 on a completed season; empty while it is still running. */
+  champions: Champion[]
+  /** Last season's winners, crowned beside their names this season. */
+  reigningChampions: ReigningChampions | null
 }
 
 function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
@@ -33,7 +48,16 @@ function groupBy<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]> {
   return map
 }
 
-function calculateRankings(
+/**
+ * Hangs each team's rosters off the ranking the database already computed.
+ *
+ * Rank and ties are no longer worked out here: `league_standings` is the one
+ * ranking every consumer reads - this table, the champion banner, the Discord
+ * embed, the final-standings email - so a tie can never be a tie in one place
+ * and a clean win in another.
+ */
+function buildRankedTeams(
+  standings: StandingRow[],
   participants: ParticipantWithTeamScore[],
   draftPicks: DraftHolding[],
   pickups: PickupHolding[],
@@ -42,47 +66,25 @@ function calculateRankings(
   const picksByTeam = groupBy(draftPicks, (p) => p.team_id)
   const pickupsByTeam = groupBy(pickups, (p) => p.team_id)
   const counterpicksByTeam = groupBy(counterpicks, (cp) => cp.counterpicker_team_id)
+  const participantByTeamId = new Map(
+    participants.filter((p) => p.teams).map((p) => [p.teams!.id, p])
+  )
 
-  // Sort participants by total_points descending
-  const sorted = [...participants].sort((a, b) => {
-    const aPoints = a.teams?.team_scores?.total_points ?? 0
-    const bPoints = b.teams?.team_scores?.total_points ?? 0
-    return bPoints - aPoints
+  return standings.flatMap((row) => {
+    const participant = participantByTeamId.get(row.team_id)
+    if (!participant) return []
+
+    return [
+      {
+        rank: row.rank,
+        participant,
+        draftPicks: picksByTeam.get(row.team_id) ?? [],
+        pickups: pickupsByTeam.get(row.team_id) ?? [],
+        counterpicks: counterpicksByTeam.get(row.team_id) ?? [],
+        isTied: row.is_tied,
+      },
+    ]
   })
-
-  // Calculate ranks with tie handling
-  const ranked: RankedTeamFull[] = []
-  let currentRank = 1
-  let previousPoints: number | null = null
-
-  for (let i = 0; i < sorted.length; i++) {
-    const participant = sorted[i]
-    const points = participant.teams?.team_scores?.total_points ?? 0
-    const teamId = participant.teams?.id
-
-    // Check for ties
-    const isTied = previousPoints !== null && points === previousPoints
-    if (!isTied && i > 0) {
-      currentRank = i + 1
-    }
-
-    // Check if next participant has same points (also tied)
-    const nextPoints = sorted[i + 1]?.teams?.team_scores?.total_points ?? null
-    const hasTie = isTied || (nextPoints !== null && points === nextPoints)
-
-    ranked.push({
-      rank: currentRank,
-      participant,
-      draftPicks: teamId ? picksByTeam.get(teamId) || [] : [],
-      pickups: teamId ? pickupsByTeam.get(teamId) || [] : [],
-      counterpicks: teamId ? counterpicksByTeam.get(teamId) || [] : [],
-      isTied: hasTie,
-    })
-
-    previousPoints = points
-  }
-
-  return ranked
 }
 
 /** Teams normally have a row in `teams`; fall back to the participant if not. */
@@ -101,19 +103,24 @@ function SummaryCard({ value, label, tone }: { value: number; label: string; ton
 
 export default function StandingsClient({
   participants,
+  standings,
   draftPicks,
   pickups,
   counterpicks,
   currentUserId,
   startingBudget,
+  seasonYear,
+  isCompleted,
+  champions,
+  reigningChampions,
 }: Props) {
   const showBudget = startingBudget > 0
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
 
   const rankedTeams = useMemo(
-    () => calculateRankings(participants, draftPicks, pickups, counterpicks),
-    [participants, draftPicks, pickups, counterpicks]
+    () => buildRankedTeams(standings, participants, draftPicks, pickups, counterpicks),
+    [standings, participants, draftPicks, pickups, counterpicks]
   )
 
   // The rail opens on your own team - the one you came to the page to check.
@@ -122,6 +129,21 @@ export default function StandingsClient({
     if (!selectedTeamId) return own ?? rankedTeams[0] ?? null
     return rankedTeams.find((t) => teamKey(t) === selectedTeamId) ?? own ?? rankedTeams[0] ?? null
   }, [rankedTeams, selectedTeamId, currentUserId])
+
+  /**
+   * The season a row's owner wears a crown for: this one if they just won it,
+   * or last one if they are defending it. Never both - a completed season has
+   * no reigning champion to show, its own winner is the story.
+   */
+  function crownedSeason(rankedTeam: RankedTeamFull): number | null {
+    const teamId = rankedTeam.participant.teams?.id
+    if (isCompleted) {
+      return teamId && champions.some((champion) => champion.teamId === teamId) ? seasonYear : null
+    }
+    return reigningChampions?.userIds.includes(rankedTeam.participant.user_id)
+      ? reigningChampions.seasonYear
+      : null
+  }
 
   const summaryStats = useMemo(() => {
     const allMovies = [
@@ -140,15 +162,32 @@ export default function StandingsClient({
   return (
     <div className="animate-fade-in lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-5">
       <div className="flex flex-col gap-3" data-testid="standings-container">
-      {/* Summary strip */}
+      {isCompleted && (
+        <div className="flex-none">
+          <ChampionBanner
+            seasonYear={seasonYear}
+            champions={champions}
+            points={championPoints(champions, standings)}
+          />
+        </div>
+      )}
+
+      {/* Summary strip. A finished season labels its own numbers - they are a
+          record now, not a running count. */}
+      {isCompleted && (
+        <p className="flex-none font-mono text-[11px] uppercase tracking-[0.1em] text-foreground-muted">
+          Final · {seasonYear} season
+        </p>
+      )}
       <div className="grid flex-none grid-cols-3 gap-2">
         <SummaryCard value={summaryStats.totalMovies} label="Movies" tone="text-gold" />
         <SummaryCard value={summaryStats.moviesScored} label="Scored" tone="text-success" />
         <SummaryCard value={summaryStats.moviesPending} label="Pending" tone="text-foreground-secondary" />
       </div>
 
-      {/* No Scores Yet Alert */}
-      {summaryStats.moviesScored === 0 && (
+      {/* No Scores Yet Alert. Never on a completed season: nothing is coming,
+          and the banner has already said the season is over. */}
+      {summaryStats.moviesScored === 0 && !isCompleted && (
         <div className="alert alert-info flex-none">
           <div className="flex items-start gap-3">
             <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -173,6 +212,7 @@ export default function StandingsClient({
             rankedTeam={rankedTeam}
             startingBudget={showBudget ? startingBudget : null}
             isCurrentUser={rankedTeam.participant.user_id === currentUserId}
+            reigningChampionSeason={crownedSeason(rankedTeam)}
             isExpanded={expandedTeamId === teamId}
             isSelected={railTeam != null && teamKey(railTeam) === teamId}
             onActivate={() => {

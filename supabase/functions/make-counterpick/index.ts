@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
       return errorResponse('Movie not found', 404)
     }
 
-    const releaseCheck = isUpcomingMovie(movie.release_date)
+    const releaseCheck = isUpcomingMovie(movie.release_date, league.season_year)
     if (!releaseCheck.valid) {
       return errorResponse(`Cannot counterpick this movie: ${releaseCheck.reason}`, 400)
     }

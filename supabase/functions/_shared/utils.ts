@@ -194,18 +194,33 @@ export interface DraftEligibilityResult {
   reason?: string
 }
 
-export function isUpcomingMovie(releaseDate: string | null | undefined): DraftEligibilityResult {
+/**
+ * Whether a movie is still eligible to be acquired in a given season.
+ *
+ * The year cutoff is the *season's* year, not the wall-clock one. A league is
+ * one season of a series (`leagues.season_year`), and the two drift apart
+ * routinely: a 2026 season that runs into January 2027 must still judge its
+ * movies against 2026, or every remaining title in the pool becomes "released
+ * in a previous season" the moment the calendar rolls over. Callers pass
+ * `league.season_year`; the handful with no league in scope (search-movies)
+ * pass the current year explicitly, which is the old behaviour.
+ *
+ * The already-released check stays anchored to today: a movie that is out is
+ * out, whatever season it belongs to.
+ */
+export function isUpcomingMovie(
+  releaseDate: string | null | undefined,
+  seasonYear: number
+): DraftEligibilityResult {
   if (!releaseDate) {
     return { valid: false, reason: 'Movie has no release date' }
   }
 
-  const now = new Date()
-  const currentYear = now.getFullYear()
-  const today = now.toISOString().split('T')[0]
+  const today = new Date().toISOString().split('T')[0]
 
   const releaseYear = parseInt(releaseDate.split('-')[0], 10)
-  if (isNaN(releaseYear) || releaseYear < currentYear) {
-    return { valid: false, reason: 'Movie was released in a previous year' }
+  if (isNaN(releaseYear) || releaseYear < seasonYear) {
+    return { valid: false, reason: 'Movie was released in a previous season' }
   }
 
   if (releaseDate < today) {

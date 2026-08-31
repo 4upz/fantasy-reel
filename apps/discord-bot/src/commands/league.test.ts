@@ -109,3 +109,98 @@ describe('/league', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('Failed to load league info'))
   })
 })
+
+describe('/league seasons', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const leagueConfig = {
+    data: {
+      draft_slots: 5,
+      total_slots: 8,
+      drop_limit: 2,
+      draft_counterpick_slots: 1,
+      bidding_counterpick_slots: 0,
+      faab_budget: 150,
+    },
+  }
+
+  const scores = {
+    data: [
+      { total_points: 200, teams: { id: 'team-1', name: 'Alpha' } },
+      { total_points: 200, teams: { id: 'team-2', name: 'Beta' } },
+      { total_points: 100, teams: { id: 'team-3', name: 'Gamma' } },
+    ],
+  }
+
+  function linked(status: string, season: Record<string, unknown> = {}) {
+    return {
+      data: {
+        league_id: 'league-1',
+        leagues: {
+          name: 'Blockbusters',
+          status,
+          season_year: 2026,
+          winner_team_ids: null,
+          ...season,
+        },
+      },
+    }
+  }
+
+  it('names the season in the overview', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linked('active'),
+        leagues: leagueConfig,
+        league_participants: { data: null, count: 4 },
+        team_scores: scores,
+      },
+    })
+    const interaction = makeInteraction()
+
+    await league.execute(interaction)
+
+    const description: string = interaction.editReply.mock.calls[0][0].embeds[0].data.description
+    expect(description).toContain('**Season:** 2026 Season')
+  })
+
+  it('marks the recorded champions on a finished season', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linked('completed', { winner_team_ids: ['team-1', 'team-2'] }),
+        leagues: leagueConfig,
+        league_participants: { data: null, count: 4 },
+        team_scores: scores,
+      },
+    })
+    const interaction = makeInteraction()
+
+    await league.execute(interaction)
+
+    const description: string = interaction.editReply.mock.calls[0][0].embeds[0].data.description
+    expect(description).toContain('Final Standings')
+    expect(description.match(/🏆/g)).toHaveLength(2)
+    expect(description).toMatch(/Alpha.*🏆/)
+    expect(description).not.toMatch(/Gamma.*🏆/)
+  })
+
+  it('leaves a running season standings untrophied', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linked('active', { winner_team_ids: null }),
+        leagues: leagueConfig,
+        league_participants: { data: null, count: 4 },
+        team_scores: scores,
+      },
+    })
+    const interaction = makeInteraction()
+
+    await league.execute(interaction)
+
+    const description: string = interaction.editReply.mock.calls[0][0].embeds[0].data.description
+    expect(description).toContain('Top Standings')
+    expect(description).not.toContain('🏆')
+  })
+})

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { League, ParticipantWithProfile } from '@/types'
+import { getParticipantDisplayName } from '@/utils/league'
 import LeagueInfoSection from './components/LeagueInfoSection'
 import JoinLinkSection from './components/JoinLinkSection'
 import DraftConfigSection from './components/DraftConfigSection'
@@ -12,6 +13,7 @@ import BiddingConfigSection from './components/BiddingConfigSection'
 import TradeConfigSection from './components/TradeConfigSection'
 import ParticipantsSection from './components/ParticipantsSection'
 import DiscordAnnouncementSection from './components/DiscordAnnouncementSection'
+import SeasonSection from './components/SeasonSection'
 import DangerZoneSection from './components/DangerZoneSection'
 
 interface Props {
@@ -30,6 +32,10 @@ export default function SettingsClient({
   const [participants, setParticipants] = useState(initialParticipants)
 
   const isSetup = league.status === 'setup'
+
+  // Names, not ids: the rollover confirm lists who is being carried over, and
+  // "Alice Spielberg" is the only version of that a commissioner can check.
+  const participantNames = participants.map((p) => getParticipantDisplayName(p, 'Unnamed player'))
 
   function handleLeagueUpdate(updatedLeague: League): void {
     setLeague(updatedLeague)
@@ -102,6 +108,14 @@ export default function SettingsClient({
             is the whole point of a deadline and a review window. */}
         <TradeConfigSection
           league={league}
+          onUpdate={handleLeagueUpdate}
+        />
+
+        {/* Above the Danger Zone on purpose: ending a season completes a
+            record, it does not destroy one. */}
+        <SeasonSection
+          league={league}
+          participantNames={participantNames}
           onUpdate={handleLeagueUpdate}
         />
 

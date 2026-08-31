@@ -96,6 +96,42 @@ Deno.test({
   })
 
   // ============================================================================
+  // Seasons
+  // ============================================================================
+
+  await t.step('carries the season columns on every league', async () => {
+    const leagueName = uniqueName('get-leagues-season')
+    const { id: leagueId } = await factory.createLeague(leagueName)
+
+    const { data } = await client.functions.invoke('get-leagues', { body: {} })
+    const league = data.leagues.find((l: { id: string }) => l.id === leagueId)
+
+    assertExists(league.series_id)
+    assertEquals(league.season_year, new Date().getFullYear())
+    assertEquals(league.season_end, `${new Date().getFullYear()}-12-31`)
+    assertEquals(league.completed_at, null)
+    assertEquals(league.winner_team_ids, null)
+  })
+
+  await t.step('groups a league under its series, newest season first', async () => {
+    // A brand-new league is season one of a brand-new series, so `seasons`
+    // holds exactly itself -- the shape the dashboard groups on.
+    const leagueName = uniqueName('get-leagues-series')
+    const { id: leagueId } = await factory.createLeague(leagueName)
+
+    const { data } = await client.functions.invoke('get-leagues', { body: {} })
+    const league = data.leagues.find((l: { id: string }) => l.id === leagueId)
+
+    assertExists(league.series)
+    assertEquals(league.series.id, league.series_id)
+    assertEquals(league.series.name, leagueName)
+    assertEquals(league.series.seasons.length, 1)
+    assertEquals(league.series.seasons[0].id, leagueId)
+    assertEquals(league.series.seasons[0].season_year, league.season_year)
+    assertEquals(league.series.seasons[0].status, 'setup')
+  })
+
+  // ============================================================================
   // Cleanup
   // ============================================================================
 

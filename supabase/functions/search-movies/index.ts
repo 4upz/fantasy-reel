@@ -18,6 +18,13 @@ interface SearchMoviesRequest {
   page?: number
   year?: number
   upcoming_only?: boolean
+  /**
+   * The season the results are being searched for, when the caller has one.
+   * Search runs before any league context on the draft board, so this is
+   * optional; without it the filter falls back to the current calendar year,
+   * which is what it always used.
+   */
+  season_year?: number
 }
 
 interface TMDbMovie {
@@ -59,15 +66,16 @@ interface SearchPage {
 }
 
 /**
- * Filters search results to only include upcoming movies from the current year or later.
+ * Filters search results to only include movies still acquirable in `seasonYear`.
  * Only used when upcoming_only=true is explicitly passed.
  *
- * Applied *after* the cache, never before it: the cutoff is relative to today,
- * so a cached filtered page would silently keep last year's answer. Caching
+ * Applied *after* the cache, never before it: the already-released half of the
+ * cutoff is relative to today and the season half varies per caller, so a
+ * cached filtered page would silently keep another league's answer. Caching
  * the unfiltered page also lets both upcoming_only variants share one entry.
  */
-function filterUpcomingMovies(results: SearchResult[]): SearchResult[] {
-  return results.filter((movie) => isUpcomingMovie(movie.release_date).valid)
+function filterUpcomingMovies(results: SearchResult[], seasonYear: number): SearchResult[] {
+  return results.filter((movie) => isUpcomingMovie(movie.release_date, seasonYear).valid)
 }
 
 async function fetchSearchPage(url: string, tmdbToken: string): Promise<SearchPage> {
@@ -117,7 +125,7 @@ Deno.serve(async (req) => {
       return errorResponse('Invalid JSON body', 400)
     }
 
-    const { query, page = 1, year, upcoming_only = false } = params
+    const { query, page = 1, year, upcoming_only = false, season_year } = params
 
     if (!query || query.trim().length === 0) {
       return errorResponse('Query is required', 400)
@@ -148,7 +156,9 @@ Deno.serve(async (req) => {
     )
 
     // Filter to only include upcoming movies if requested (default for draft contexts)
-    const results = upcoming_only ? filterUpcomingMovies(payload.results) : payload.results
+    const results = upcoming_only
+      ? filterUpcomingMovies(payload.results, season_year ?? new Date().getFullYear())
+      : payload.results
 
     return jsonResponse({
       page: payload.page,

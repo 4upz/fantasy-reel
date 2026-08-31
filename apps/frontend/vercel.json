@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/bid-cutoff-announcement",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/complete-seasons",
+      "schedule": "0 9 * * *"
     }
   ]
 }

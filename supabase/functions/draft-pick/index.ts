@@ -150,7 +150,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const eligibility = isUpcomingMovie(movie.release_date)
+    const eligibility = isUpcomingMovie(movie.release_date, league.season_year)
     if (!eligibility.valid) {
       return errorResponse(`This movie cannot be drafted: ${eligibility.reason}`, 400)
     }

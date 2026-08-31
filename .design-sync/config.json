@@ -19,6 +19,8 @@
     "ChangePasswordModal": { "cardMode": "single", "primaryStory": "Default" },
     "ConfirmDeleteModal": { "cardMode": "single", "primaryStory": "Default" },
     "ConfirmKickModal": { "cardMode": "single", "primaryStory": "Default" },
+    "EndSeasonModal": { "cardMode": "single", "primaryStory": "Default" },
+    "ConfirmStartSeasonModal": { "cardMode": "single", "primaryStory": "Default" },
     "HeroSection": { "cardMode": "single", "primaryStory": "Default", "viewport": "1280x900" },
     "MovieShowcase": { "cardMode": "column" },
     "ScoringReveal": { "cardMode": "column" },
@@ -53,7 +55,8 @@
     "DraftFilters": "apps/frontend/app/(authenticated)/league/[id]/components/DraftFilters.tsx",
     "MovieTimelineCard": "apps/frontend/app/(authenticated)/league/[id]/components/MovieTimelineCard.tsx",
 
-    "LeagueListItem": "apps/frontend/app/components/LeagueListItem.tsx",
+    "SeriesListItem": "apps/frontend/app/components/SeriesListItem.tsx",
+    "TrophyCase": "apps/frontend/app/components/TrophyCase.tsx",
     "BidCard": "apps/frontend/app/(authenticated)/league/[id]/components/BidCard.tsx",
     "BidWeekTimeline": "apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline.tsx",
     "CounterpickBidCard": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard.tsx",
@@ -66,6 +69,10 @@
     "StandingsSidebar": "apps/frontend/app/(authenticated)/league/[id]/components/StandingsSidebar.tsx",
     "TeamHeader": "apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader.tsx",
     "MovieTimeline": "apps/frontend/app/(authenticated)/league/[id]/components/MovieTimeline.tsx",
+    "ChampionBanner": "apps/frontend/app/(authenticated)/league/[id]/components/ChampionBanner.tsx",
+    "ChampionCrown": "apps/frontend/app/(authenticated)/league/[id]/components/ChampionCrown.tsx",
+    "SeasonHistoryList": "apps/frontend/app/(authenticated)/league/[id]/components/SeasonHistoryList.tsx",
+    "SeasonWelcomeCard": "apps/frontend/app/(authenticated)/league/[id]/components/SeasonWelcomeCard.tsx",
 
     "AcceptConfirmModal": "apps/frontend/app/(authenticated)/league/[id]/components/AcceptConfirmModal.tsx",
     "PlaceBidModal": "apps/frontend/app/(authenticated)/league/[id]/components/PlaceBidModal.tsx",
@@ -73,6 +80,8 @@
     "ConfirmDeleteModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmDeleteModal.tsx",
     "ConfirmKickModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmKickModal.tsx",
     "ChangePasswordModal": "apps/frontend/app/(authenticated)/settings/components/ChangePasswordModal.tsx",
+    "EndSeasonModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/EndSeasonModal.tsx",
+    "ConfirmStartSeasonModal": "apps/frontend/app/(authenticated)/league/[id]/components/ConfirmStartSeasonModal.tsx",
 
     "NavLogo": "apps/frontend/app/components/navigation/NavLogo.tsx",
     "UserSearchResultItem": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",

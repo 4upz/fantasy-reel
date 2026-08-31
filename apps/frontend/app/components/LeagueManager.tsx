@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { createClient } from '@/utils/supabase/client'
 import type { League } from '@/types'
-import LeagueListItem from './LeagueListItem'
+import { groupLeaguesIntoSeries } from '@/utils/seasons'
+import SeriesListItem from './SeriesListItem'
 
 const CreateLeagueModal = dynamic(() => import('./CreateLeagueModal'))
 
@@ -13,59 +13,25 @@ function preloadCreateLeagueModal(): void {
 }
 
 interface Props {
+  /** Every season of every league the user is in, newest first. */
+  leagues: League[]
+  loading: boolean
   showCreateModal: boolean
   onModalClose: () => void
   onCreateClick: () => void
+  onLeagueCreated: (league: League) => void
 }
 
 export default function LeagueManager({
+  leagues,
+  loading,
   showCreateModal,
   onModalClose,
   onCreateClick,
+  onLeagueCreated,
 }: Props): React.ReactElement {
-  const [leagues, setLeagues] = useState<League[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const fetchLeagues = useCallback(async () => {
-    const supabase = createClient()
-
-    try {
-      setLoading(true)
-
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession()
-
-      if (sessionError || !session) {
-        console.error('Error getting session:', sessionError)
-        return
-      }
-
-      const { data, error } = await supabase
-        .from('leagues')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (error) {
-        console.error('Supabase error fetching leagues:', error)
-      } else {
-        setLeagues(data ?? [])
-      }
-    } catch (error) {
-      console.error('Unexpected error fetching leagues:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchLeagues()
-  }, [fetchLeagues])
-
-  function handleLeagueCreated(league: League): void {
-    setLeagues((prev) => [league, ...prev])
-  }
+  // A league with four years of history is one entry, not four.
+  const series = useMemo(() => groupLeaguesIntoSeries(leagues), [leagues])
 
   // Loading state - skeleton
   if (loading) {
@@ -89,7 +55,7 @@ export default function LeagueManager({
   }
 
   // Empty state
-  if (leagues.length === 0) {
+  if (series.length === 0) {
     return (
       <>
         <div className="text-center py-20">
@@ -119,7 +85,7 @@ export default function LeagueManager({
         <CreateLeagueModal
           isOpen={showCreateModal}
           onClose={onModalClose}
-          onSuccess={handleLeagueCreated}
+          onSuccess={onLeagueCreated}
         />
       </>
     )
@@ -128,15 +94,15 @@ export default function LeagueManager({
   return (
     <>
       <div className="space-y-3">
-        {leagues.map((league) => (
-          <LeagueListItem key={league.id} league={league} />
+        {series.map((seasons) => (
+          <SeriesListItem key={seasons[0].series_id} seasons={seasons} />
         ))}
       </div>
 
       <CreateLeagueModal
         isOpen={showCreateModal}
         onClose={onModalClose}
-        onSuccess={handleLeagueCreated}
+        onSuccess={onLeagueCreated}
       />
     </>
   )

@@ -4,32 +4,26 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { ChevronDown } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
+import { podiumChipClass } from '@/utils/league'
 import type { HoldingMovie, RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
 import TeamBudgetSummary, { budgetTone, formatBudget, remainingBudget } from './TeamBudget'
 import LeagueMovieModal from '../components/LeagueMovieModal'
+import ChampionCrown from '../components/ChampionCrown'
 
 interface Props {
   rankedTeam: RankedTeamFull
   /** The league's starting purse, or null when the league doesn't use a fantasy budget. */
   startingBudget: number | null
   isCurrentUser: boolean
+  /** The season this team's owner is defending, or null when they hold no title. */
+  reigningChampionSeason?: number | null
   /** Mobile only - above lg the roster lives in the detail rail instead. */
   isExpanded: boolean
   /** Desktop only - which team the detail rail is showing. */
   isSelected: boolean
   onActivate: () => void
   animationDelay?: number
-}
-
-/**
- * Ranks 1-3 get the medal gradient. Everything below is a plain elevated chip -
- * a podium that includes eighth place isn't a podium.
- */
-const PODIUM_CHIP: Record<number, string> = {
-  1: 'bg-[linear-gradient(135deg,#ffd700,#a88c1f)] text-background',
-  2: 'bg-[linear-gradient(135deg,#e8e8e8,#a8a8a8)] text-background',
-  3: 'bg-[linear-gradient(135deg,#cd9b61,#a56b2d)] text-background',
 }
 
 function pointsTone(points: number): string {
@@ -49,6 +43,7 @@ export default function TeamStandingCard({
   rankedTeam,
   startingBudget,
   isCurrentUser,
+  reigningChampionSeason = null,
   isExpanded,
   isSelected,
   onActivate,
@@ -100,9 +95,7 @@ export default function TeamStandingCard({
         {/* Line 1 on mobile; the whole row above lg, where the stats move inline */}
         <div className="flex items-center gap-2.5 lg:gap-3.5">
           <div
-            className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] font-display text-sm font-bold lg:h-[38px] lg:w-[38px] lg:rounded-[11px] ${
-              PODIUM_CHIP[rank] ?? 'border border-border bg-elevated text-foreground-secondary'
-            }`}
+            className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] font-display text-sm font-bold lg:h-[38px] lg:w-[38px] lg:rounded-[11px] ${podiumChipClass(rank)}`}
           >
             {isTied ? 'T' : '#'}
             {rank}
@@ -121,6 +114,7 @@ export default function TeamStandingCard({
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
               <span className="truncate font-display text-[15px] font-semibold text-foreground">{displayName}</span>
+              {reigningChampionSeason !== null && <ChampionCrown seasonYear={reigningChampionSeason} />}
               {isCurrentUser && (
                 <span className="flex-none rounded-full bg-gold-muted px-1.5 py-px text-[10px] font-semibold text-gold">
                   You

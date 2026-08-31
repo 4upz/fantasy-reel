@@ -26,6 +26,7 @@ import {
   CANCEL_IN_PROCESSING_MESSAGE,
 } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 
 const log = createLogger('cancel-counterpick-bid')
 
@@ -82,9 +83,13 @@ Deno.serve(async (req) => {
     // the phase check.
     const { data: league } = await serviceClient
       .from('leagues')
-      .select('new_bid_cutoff_hours')
+      .select('status, new_bid_cutoff_hours')
       .eq('id', bid.league_id)
       .single()
+
+    // See cancel-bid: a finished season answers before the cancel window does.
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     const bidWindow = computeBidWindow(bid.processing_deadline, league?.new_bid_cutoff_hours)
     if (!isBidCancellable(bid.processing_deadline, bidWindow)) {

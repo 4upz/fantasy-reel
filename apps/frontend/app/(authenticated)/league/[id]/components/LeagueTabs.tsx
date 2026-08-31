@@ -9,12 +9,19 @@ interface Props {
   league: League
   outbidCount?: number
   isOwner?: boolean
+  /** Seasons in this league's series; more than one reveals the History tab. */
+  seasonCount?: number
 }
 
 /** Desktop navigation. Below `lg` the bottom bar takes over - see LeagueBottomNav. */
-export default function LeagueTabs({ league, outbidCount = 0, isOwner = false }: Props): React.ReactElement {
+export default function LeagueTabs({
+  league,
+  outbidCount = 0,
+  isOwner = false,
+  seasonCount = 1,
+}: Props): React.ReactElement {
   const pathname = usePathname()
-  const tabs = getVisibleTabs(league, isOwner, outbidCount)
+  const tabs = getVisibleTabs(league, isOwner, outbidCount, seasonCount)
 
   return (
     <nav

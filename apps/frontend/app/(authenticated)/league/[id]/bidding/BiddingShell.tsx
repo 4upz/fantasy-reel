@@ -292,6 +292,7 @@ export default function BiddingShell({
 
       {isBidModalOpen && (
         <PlaceBidModal
+          seasonYear={league.season_year}
           isOpen={isBidModalOpen}
           onClose={() => {
             setIsBidModalOpen(false)

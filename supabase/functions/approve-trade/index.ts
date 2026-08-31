@@ -21,6 +21,7 @@ import {
   createServiceClient,
   TradeOffer,
 } from '../_shared/trade-validation.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 import {
   notifyTradeCompleted,
   notifyTradesInvalidated,
@@ -63,7 +64,7 @@ Deno.serve(async (req) => {
     // shape as veto-trade.
     const { data: tradeOffer, error: offerError } = await serviceClient
       .from('trade_offers')
-      .select('*, leagues(owner_id)')
+      .select('*, leagues(owner_id, status)')
       .eq('id', trade_offer_id)
       .single()
 
@@ -72,10 +73,16 @@ Deno.serve(async (req) => {
     }
 
     const { leagues, ...offer } = tradeOffer
-    const league = leagues as unknown as { owner_id: string }
+    const league = leagues as unknown as { owner_id: string; status: string }
     if (league.owner_id !== user.id) {
       return errorResponse('Only the league commissioner can approve trades', 403)
     }
+
+    // approve-trade and veto-trade do not go through getTradeOffer (they need
+    // the commissioner check on the same row), so the completed-season guard is
+    // applied here instead -- see the note in _shared/trade-validation.ts.
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     if (!APPROVABLE_STATUSES.includes(offer.status)) {
       return errorResponse(

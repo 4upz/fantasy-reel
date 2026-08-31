@@ -32,6 +32,7 @@ const place = async () => ({ success: true })
 export const Open = () => (
   <Stage width={900} height={700}>
     <PlaceBidModal
+      seasonYear={2026}
       isOpen
       onClose={noop}
       budget={budget}
@@ -48,6 +49,7 @@ export const Open = () => (
 export const CounterBidding = () => (
   <Stage width={900} height={700}>
     <PlaceBidModal
+      seasonYear={2026}
       isOpen
       onClose={noop}
       budget={budget}
@@ -76,6 +78,7 @@ export const CounterBidding = () => (
 export const NearlyBrokeTeam = () => (
   <Stage width={900} height={700}>
     <PlaceBidModal
+      seasonYear={2026}
       isOpen
       onClose={noop}
       budget={{ ...budget, remaining_budget: 3, total_spent: 97 }}

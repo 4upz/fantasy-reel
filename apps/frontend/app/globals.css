@@ -158,6 +158,20 @@
     box-shadow: var(--shadow-medium);
   }
 
+  /*
+    The one gold-lit surface. A completed season is the only thing in the app
+    that gets a gradient, and only ever one instance of it per page - the
+    standings already carry gold podium chips, a gold current-user edge and gold
+    point totals, and a second gradient flattens all of them.
+  */
+  .champion-plate {
+    background:
+      linear-gradient(135deg, oklch(0.65 0.15 85 / 0.16), transparent 62%),
+      var(--color-surface);
+    border: 1px solid oklch(0.65 0.15 85 / 0.4);
+    box-shadow: var(--shadow-soft);
+  }
+
   /* Buttons */
   .btn {
     display: inline-flex;

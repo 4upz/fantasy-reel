@@ -479,7 +479,7 @@ Deno.test({
       })
 
       assertEquals(result.status, 400)
-      assertEquals(result.error, 'Cannot counterpick this movie: Movie was released in a previous year')
+      assertEquals(result.error, 'Cannot counterpick this movie: Movie was released in a previous season')
 
       const { data: counterpicks } = await serviceClient
         .from('counterpicks')

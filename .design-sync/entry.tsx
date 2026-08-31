@@ -41,7 +41,8 @@ export { default as DraftFilters } from '../apps/frontend/app/(authenticated)/le
 export { default as MovieTimelineCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/MovieTimelineCard'
 
 // ── League ──────────────────────────────────────────────────────────────
-export { default as LeagueListItem } from '../apps/frontend/app/components/LeagueListItem'
+export { default as SeriesListItem } from '../apps/frontend/app/components/SeriesListItem'
+export { default as TrophyCase } from '../apps/frontend/app/components/TrophyCase'
 export { default as BidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidCard'
 export { default as BidWeekTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline'
 export { default as CounterpickBidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard'
@@ -54,6 +55,10 @@ export { default as PickOrderQueue } from '../apps/frontend/app/(authenticated)/
 export { default as StandingsSidebar } from '../apps/frontend/app/(authenticated)/league/[id]/components/StandingsSidebar'
 export { default as TeamHeader } from '../apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader'
 export { default as MovieTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/MovieTimeline'
+export { default as ChampionBanner } from '../apps/frontend/app/(authenticated)/league/[id]/components/ChampionBanner'
+export { default as ChampionCrown } from '../apps/frontend/app/(authenticated)/league/[id]/components/ChampionCrown'
+export { default as SeasonHistoryList } from '../apps/frontend/app/(authenticated)/league/[id]/components/SeasonHistoryList'
+export { default as SeasonWelcomeCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/SeasonWelcomeCard'
 
 // ── Modals ──────────────────────────────────────────────────────────────
 export { default as AcceptConfirmModal } from '../apps/frontend/app/(authenticated)/league/[id]/components/AcceptConfirmModal'
@@ -62,6 +67,8 @@ export { default as PlaceCounterpickBidModal } from '../apps/frontend/app/(authe
 export { default as ConfirmDeleteModal } from '../apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmDeleteModal'
 export { default as ConfirmKickModal } from '../apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmKickModal'
 export { default as ChangePasswordModal } from '../apps/frontend/app/(authenticated)/settings/components/ChangePasswordModal'
+export { default as EndSeasonModal } from '../apps/frontend/app/(authenticated)/league/[id]/settings/components/EndSeasonModal'
+export { default as ConfirmStartSeasonModal } from '../apps/frontend/app/(authenticated)/league/[id]/components/ConfirmStartSeasonModal'
 
 // ── Identity & brand ────────────────────────────────────────────────────
 export { default as NavLogo } from '../apps/frontend/app/components/navigation/NavLogo'

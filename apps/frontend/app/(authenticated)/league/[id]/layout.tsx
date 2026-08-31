@@ -2,7 +2,9 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedUser } from '@/utils/supabase/cached'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
+import { fetchSeriesSeasons, fetchWonSeasonIds } from '@/utils/seasonQueries'
 import LeagueSwitcher from './components/LeagueSwitcher'
+import SeasonSwitcher from './components/SeasonSwitcher'
 import LeagueTabs from './components/LeagueTabs'
 import LeagueBottomNav from './components/LeagueBottomNav'
 import type { League } from '@/types'
@@ -31,7 +33,9 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
     notFound()
   }
 
-  const [memberResult, countResult] = await Promise.all([
+  const typedLeague = league as League
+
+  const [memberResult, countResult, seasons] = await Promise.all([
     supabase
       .from('league_participants')
       .select('id')
@@ -44,15 +48,16 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
       .select('*', { count: 'exact', head: true })
       .eq('league_id', id)
       .eq('status', 'active'),
+    fetchSeriesSeasons(supabase, typedLeague.series_id),
   ])
 
   if (!memberResult.data) {
     redirect('/dashboard')
   }
 
-  const typedLeague = league as League
   const isOwner = typedLeague.owner_id === user.id
   const participantCount = countResult.count ?? 0
+  const wonSeasonIds = await fetchWonSeasonIds(supabase, user.id, seasons)
 
   const accessLabel = typedLeague.invite_only ? 'Invite Only' : 'Open'
 
@@ -85,12 +90,23 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
             </span>
 
             {/*
-              Dots tie the badge and the two facts into one metadata strip. The
+              Dots tie the badge and the facts into one metadata strip. The
               leading one is desktop-only: on mobile the badge sits up on the
               title line, so it would dangle at the end of a row.
+
+              The season label leads the strip, so mobile line 2 reads
+              "2026 · Invite Only · 3 participants" and desktop reads
+              "Active · 2026 · Invite Only · 3 participants".
             */}
             <div className="flex basis-full items-center gap-1.5 text-xs text-foreground-muted lg:basis-auto lg:gap-2 lg:text-sm">
               <span aria-hidden className="hidden text-foreground-muted/50 lg:inline">·</span>
+              <SeasonSwitcher
+                currentLeagueId={typedLeague.id}
+                seasonYear={typedLeague.season_year}
+                seasons={seasons}
+                wonSeasonIds={wonSeasonIds}
+              />
+              <span aria-hidden className="text-foreground-muted/50">·</span>
               <span>{accessLabel}</span>
               <span aria-hidden className="text-foreground-muted/50">·</span>
               <span>{participantLabel}</span>
@@ -98,7 +114,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
           </div>
 
           <div className="mt-3 mb-6 hidden lg:block">
-            <LeagueTabs league={typedLeague} isOwner={isOwner} />
+            <LeagueTabs league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
           </div>
         </div>
       </div>
@@ -108,7 +124,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
         {children}
       </div>
 
-      <LeagueBottomNav league={typedLeague} isOwner={isOwner} />
+      <LeagueBottomNav league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
     </div>
   )
 }
