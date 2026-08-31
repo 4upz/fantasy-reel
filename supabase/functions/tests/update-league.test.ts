@@ -1309,43 +1309,79 @@ Deno.test({
   // it is what the completion cron reads.
   // ============================================================================
 
-  await t.step('update_season_config: sets the season year and moves the end date with it', async () => {
+  await t.step('update_season_config: sets next year and moves the end date with it', async () => {
     const { id: leagueId } = await factory.createLeague(uniqueName('season-year'))
+    const nextYear = new Date().getUTCFullYear() + 1
+
+    // The whole reason the field exists: a league created in December for the
+    // season that starts in January.
+    const { data, error } = await invokeFunction<{
+      league: { season_year: number; season_end: string }
+    }>(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_year: nextYear,
+    })
+
+    assertEquals(error, null)
+    assertEquals(data?.league.season_year, nextYear)
+    // Not asked for, but required: leaving season_end in the old year would
+    // put it in the past and the cron would close the league immediately.
+    assertEquals(data?.league.season_end, `${nextYear}-12-31`)
+  })
+
+  await t.step('update_season_config: accepts the current year', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-year-current'))
+    const currentYear = new Date().getUTCFullYear()
 
     const { data, error } = await invokeFunction<{
       league: { season_year: number; season_end: string }
     }>(client, 'update-league', {
       action: 'update_season_config',
       league_id: leagueId,
-      season_year: 2030,
+      season_year: currentYear,
     })
 
     assertEquals(error, null)
-    assertEquals(data?.league.season_year, 2030)
-    // Not asked for, but required: leaving season_end in the old year would
-    // put it in the past and the cron would close the league immediately.
-    assertEquals(data?.league.season_end, '2030-12-31')
+    assertEquals(data?.league.season_year, currentYear)
+    assertEquals(data?.league.season_end, `${currentYear}-12-31`)
   })
 
-  await t.step('update_season_config: rejects a season year outside the sane range', async () => {
-    const { id: leagueId } = await factory.createLeague(uniqueName('season-year-bad'))
+  await t.step('update_season_config: rejects a past season year', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-year-past'))
 
     const result = await invokeFunction(client, 'update-league', {
       action: 'update_season_config',
       league_id: leagueId,
-      season_year: 1899,
+      season_year: new Date().getUTCFullYear() - 1,
     })
 
-    assertEquals(result.error, 'Season year must be a whole number between 2000 and 2100')
+    assertEquals(result.error, 'Season year can only be this year or next year')
+  })
+
+  await t.step('update_season_config: rejects a year further out than next season', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('season-year-far'))
+
+    // Two years out is not a thing you can reserve -- roll the season over
+    // when you get there.
+    const result = await invokeFunction(client, 'update-league', {
+      action: 'update_season_config',
+      league_id: leagueId,
+      season_year: new Date().getUTCFullYear() + 2,
+    })
+
+    assertEquals(result.error, 'Season year can only be this year or next year')
   })
 
   await t.step('update_season_config: the season year is frozen once the draft starts', async () => {
     const leagueId = await factory.createActiveLeague(uniqueName('season-year-active'))
 
+    // Setup-only is checked before the value is, so even a legal year is
+    // refused once the draft has started.
     const result = await invokeFunction(client, 'update-league', {
       action: 'update_season_config',
       league_id: leagueId,
-      season_year: 2031,
+      season_year: new Date().getUTCFullYear() + 1,
     })
 
     assertEquals(result.error, 'The season year can only be changed before the draft starts')

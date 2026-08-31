@@ -142,11 +142,6 @@ const MAX_EXPIRY_MIN_HOURS = 168
 const MIN_EXPIRY_MAX_DAYS = 1
 const MAX_EXPIRY_MAX_DAYS = 90
 
-// Season config constraints. The year bounds are a typo guard, not a policy --
-// a season label outside this range is a mis-typed date, not a real league.
-const MIN_SEASON_YEAR = 2000
-const MAX_SEASON_YEAR = 2100
-
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
 /** True for a real YYYY-MM-DD date (rejects e.g. 2026-02-31). */
@@ -683,13 +678,13 @@ async function handleUpdateSeasonConfig(
     if (league.status !== 'setup') {
       return errorResponse('The season year can only be changed before the draft starts', 400)
     }
-    if (!Number.isInteger(body.season_year) ||
-        body.season_year < MIN_SEASON_YEAR ||
-        body.season_year > MAX_SEASON_YEAR) {
-      return errorResponse(
-        `Season year must be a whole number between ${MIN_SEASON_YEAR} and ${MAX_SEASON_YEAR}`,
-        400
-      )
+    // This year or next, and nothing else. The field exists for one case: a
+    // league created in December for the season that starts in January. Any
+    // other value is a typo or a misunderstanding of what the label means --
+    // it is not a way to backfill an old season or reserve a future one.
+    const currentYear = new Date().getUTCFullYear()
+    if (body.season_year !== currentYear && body.season_year !== currentYear + 1) {
+      return errorResponse('Season year can only be this year or next year', 400)
     }
     updates.season_year = body.season_year
   }

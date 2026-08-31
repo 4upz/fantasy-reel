@@ -36,8 +36,17 @@ function seasonEndedMessage(result: CompleteLeagueResponse): string {
   return `Season ended. ${winners.map((team) => team.teamName).join(' and ')} share the title.`
 }
 
-const MIN_SEASON_YEAR = 2000
-const MAX_SEASON_YEAR = 2100
+/**
+ * A league is only ever created for the season being played or the one about to
+ * be - a 2019 or 2087 season has no movies to draft. Offering exactly those two
+ * years makes the field unmistakable and removes every value the server would
+ * refuse, so the constraint is visible in the control rather than discovered in
+ * an error.
+ */
+function seasonYearOptions(): [number, number] {
+  const currentYear = new Date().getUTCFullYear()
+  return [currentYear, currentYear + 1]
+}
 
 /**
  * The season's own settings, and the two controls that move a league between
@@ -54,7 +63,13 @@ export default function SeasonSection({
   participantNames,
   onUpdate,
 }: Props): React.ReactElement {
-  const [seasonYear, setSeasonYear] = useState(String(league.season_year))
+  const [thisYear, nextYear] = seasonYearOptions()
+  // A league already labelled something else - created before this constraint,
+  // or rolled over across a New Year - falls back to this year, which the owner
+  // then has to save deliberately.
+  const [seasonYear, setSeasonYear] = useState(
+    league.season_year === nextYear ? nextYear : thisYear
+  )
   const [seasonEnd, setSeasonEnd] = useState(league.season_end)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEnding, setIsEnding] = useState(false)
@@ -64,13 +79,9 @@ export default function SeasonSection({
   const isActive = league.status === 'active'
   const isCompleted = league.status === 'completed'
 
-  const parsedYear = Number(seasonYear)
-  const yearOutOfRange =
-    !Number.isInteger(parsedYear) || parsedYear < MIN_SEASON_YEAR || parsedYear > MAX_SEASON_YEAR
-
   const hasChanges =
-    (isSetup && parsedYear !== league.season_year) || seasonEnd !== league.season_end
-  const isSubmitDisabled = isSubmitting || !hasChanges || !seasonEnd || (isSetup && yearOutOfRange)
+    (isSetup && seasonYear !== league.season_year) || seasonEnd !== league.season_end
+  const isSubmitDisabled = isSubmitting || !hasChanges || !seasonEnd
 
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
@@ -90,7 +101,7 @@ export default function SeasonSection({
         league_id: league.id,
         // The year is only sent while it is still editable, so a later save
         // cannot resubmit a value the server would refuse.
-        ...(isSetup ? { season_year: parsedYear } : {}),
+        ...(isSetup ? { season_year: seasonYear } : {}),
         season_end: seasonEnd,
       },
     })
@@ -104,7 +115,7 @@ export default function SeasonSection({
 
     if (data?.league) {
       onUpdate(data.league)
-      setSeasonYear(String(data.league.season_year))
+      setSeasonYear(data.league.season_year)
       setSeasonEnd(data.league.season_end)
       toast.success('Season settings updated')
     }
@@ -121,33 +132,52 @@ export default function SeasonSection({
 
         <form onSubmit={handleSubmit}>
           <div className="mb-6">
-            <label
-              htmlFor="season_year"
+            {/* Not a <label>: neither branch renders a form control to point
+                at - a group of radios, or a read-only value. */}
+            <p
+              id="season_year_label"
               className="mb-2 block text-sm font-medium text-foreground-secondary"
             >
               Season Year
-            </label>
+            </p>
             {isSetup ? (
               <>
-                <input
-                  type="number"
-                  id="season_year"
-                  value={seasonYear}
-                  onChange={(e) => setSeasonYear(e.target.value)}
-                  min={MIN_SEASON_YEAR}
-                  max={MAX_SEASON_YEAR}
-                  className={`input w-40 ${yearOutOfRange ? 'border-error' : ''}`}
+                <div
+                  className="flex gap-2"
+                  role="radiogroup"
+                  aria-labelledby="season_year_label"
                   aria-describedby="season_year_help"
-                />
+                >
+                  {[thisYear, nextYear].map((year) => {
+                    const selected = seasonYear === year
+                    return (
+                      <button
+                        key={year}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setSeasonYear(year)}
+                        className={`btn px-4 py-1.5 font-mono text-sm tracking-[0.08em] ${
+                          selected
+                            ? 'btn-secondary'
+                            : 'border border-border bg-elevated text-foreground-secondary hover:border-border-hover hover:text-foreground'
+                        }`}
+                        data-testid={`season-year-${year}`}
+                      >
+                        {year}
+                      </button>
+                    )
+                  })}
+                </div>
                 <p id="season_year_help" className="mt-1.5 text-xs text-foreground-muted">
                   Decides which movies are in play — anything released before this season is off
-                  the board.
+                  the board. Creating this league for next year&apos;s movies? Pick {nextYear}.
                 </p>
               </>
             ) : (
               <div className="flex items-center gap-3">
                 <span
-                  className={`rounded-md border border-border bg-elevated px-2.5 py-1 text-sm text-foreground ${SEASON_YEAR_CLASS}`}
+                  className={`rounded-md border border-border bg-elevated px-2.5 py-1 text-foreground ${SEASON_YEAR_CLASS}`}
                 >
                   {league.season_year}
                 </span>
