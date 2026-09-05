@@ -127,6 +127,20 @@ every batch and newly released movies never received their first score.
 Transient MDBList failures (network errors, rate limits) deliberately do not
 stamp, so those movies retry on the next run.
 
+Pending is not failure: a movie MDBList has no data for yet (no entry, no
+ratings, or ratings without a Tomatometer) is reported under `unscored` in the
+run's response and `job_runs.metadata` — with a reason of `not_on_mdblist`,
+`no_ratings`, or `no_rt_score` — rather than under `errors`. Only genuine
+failures (network/auth/rate-limit errors, review upserts, RPC crashes) count
+toward `job_status`, which is what the cron proxy turns into an HTTP 500 and
+what fires ops alerts. A movie stuck pending forever is still findable:
+
+```sql
+SELECT metadata->'unscored' FROM job_runs
+WHERE job_name = 'update-scores' AND metadata ? 'unscored'
+ORDER BY started_at DESC LIMIT 1;
+```
+
 ### Reviews Table (existing)
 
 Stores individual scores from each source:
