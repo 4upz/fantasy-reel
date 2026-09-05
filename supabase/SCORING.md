@@ -376,6 +376,24 @@ SELECT COUNT(*) FROM pgmq.q_movie_scores;
 
 ## Monitoring
 
+### Backlog Visibility
+
+Each nightly (no-body) run records `eligible` (movies matching the selection
+before the 30-movie limit) and `backlog` (`eligible − selected`) in its
+`job_runs.metadata` and response body. A nonzero backlog is normal after a
+release-heavy stretch and drains at 30 per run; a backlog that **grows** run
+over run is the starvation signature throughput metrics can't show (every run
+reports 30 processed, `ok`). When the backlog exceeds a full batch *and* is
+worse than the previous instrumented run, an ops alert fires via `alertOps`.
+
+```sql
+-- Backlog trend, newest first
+SELECT started_at, metadata->>'eligible' AS eligible, metadata->>'backlog' AS backlog
+FROM job_runs
+WHERE job_name = 'update-scores' AND metadata ? 'backlog'
+ORDER BY started_at DESC LIMIT 14;
+```
+
 ### Check Cron Job Status
 
 ```sql
