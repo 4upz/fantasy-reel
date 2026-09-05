@@ -25,6 +25,7 @@ interface UpdateScoresResult {
   movies_fetched: number
   scores_updated: number
   errors: Array<{ movie_id: string; title: string; error: string }>
+  unscored: Array<{ movie_id: string; title: string; reason: string }>
 }
 
 // ============================================================================
@@ -231,6 +232,7 @@ function buildHandler(
         movies_fetched: 0,
         scores_updated: 0,
         errors: [],
+        unscored: [],
       }
 
       // Mirrors index.ts markScoreChecked: stamp a movie as checked so it
@@ -269,21 +271,27 @@ function buildHandler(
           if (fetchResult.error) {
             if (fetchResult.error === MDBLIST_NOT_FOUND) {
               await markScoreChecked(movie.id)
+              results.unscored.push({
+                movie_id: movie.id,
+                title: movie.title,
+                reason: 'not_on_mdblist',
+              })
+            } else {
+              results.errors.push({
+                movie_id: movie.id,
+                title: movie.title,
+                error: fetchResult.error,
+              })
             }
-            results.errors.push({
-              movie_id: movie.id,
-              title: movie.title,
-              error: fetchResult.error,
-            })
             continue
           }
 
           if (fetchResult.ratings.length === 0) {
             await markScoreChecked(movie.id)
-            results.errors.push({
+            results.unscored.push({
               movie_id: movie.id,
               title: movie.title,
-              error: 'No ratings available',
+              reason: 'no_ratings',
             })
             continue
           }
@@ -313,7 +321,7 @@ function buildHandler(
           }
 
           if (ratingsStored > 0) {
-            const { error: calcError } = await supabaseClient.rpc(
+            const { data: fantasyPts, error: calcError } = await supabaseClient.rpc(
               'calculate_movie_score',
               { p_movie_id: movie.id },
             )
@@ -322,6 +330,13 @@ function buildHandler(
                 movie_id: movie.id,
                 title: movie.title,
                 error: 'Score calculation failed',
+              })
+            } else if (fantasyPts === null) {
+              // Ratings stored but no Tomatometer among them (mirrors index.ts)
+              results.unscored.push({
+                movie_id: movie.id,
+                title: movie.title,
+                reason: 'no_rt_score',
               })
             } else {
               results.scores_updated++
@@ -435,10 +450,15 @@ function mockMDBListErrorFetch(status: number, body = ''): typeof globalThis.fet
  * Returns the mock client (for inspecting recorded calls) and the response.
  */
 async function runSingleMovie(
-  options: { fetchFn?: typeof globalThis.fetch; movie?: MovieRecord } = {},
+  options: {
+    fetchFn?: typeof globalThis.fetch
+    movie?: MovieRecord
+    rpc?: MockSupabaseConfig['rpc']
+  } = {},
 ): Promise<{ client: ReturnType<typeof createMockSupabaseClient>; res: Response }> {
   const client = createMockSupabaseClient({
     movies: { select: { data: [options.movie ?? testMovie()], error: null } },
+    rpc: options.rpc,
   })
   const handler = buildHandler(DEFAULT_ENV, client, options.fetchFn)
   const res = await handler(makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] }))
@@ -691,20 +711,30 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertEquals(body.errors[0].error, 'MDBList API authentication failed')
   })
 
-  await t.step('reports error when MDBList returns no ratings', async () => {
-    const movie = testMovie()
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [movie], error: null } },
+  await t.step('classifies empty MDBList ratings as unscored, not an error', async () => {
+    const { res } = await runSingleMovie({
+      fetchFn: mockMDBListFetch({ title: 'Test', ratings: [] }),
     })
 
-    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch({ title: 'Test', ratings: [] }))
-    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
-
-    const res = await handler(req)
     assertEquals(res.status, 200)
     const body: UpdateScoresResult = await res.json()
-    assertEquals(body.errors.length, 1)
-    assertEquals(body.errors[0].error, 'No ratings available')
+    assertEquals(body.errors.length, 0, 'pending movies must not count as failures')
+    assertEquals(body.unscored.length, 1)
+    assertEquals(body.unscored[0].reason, 'no_ratings')
+  })
+
+  await t.step('classifies missing Tomatometer as unscored, not a score update', async () => {
+    const { res } = await runSingleMovie({
+      fetchFn: mockMDBListFetch(mdblistSuccess([{ source: 'imdb', value: 6.5, score: 65, votes: 1200 }])),
+      rpc: { calculate_movie_score: { data: null, error: null } },
+    })
+
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.movies_fetched, 1)
+    assertEquals(body.scores_updated, 0)
+    assertEquals(body.errors.length, 0)
+    assertEquals(body.unscored.length, 1)
+    assertEquals(body.unscored[0].reason, 'no_rt_score')
   })
 
   await t.step('stamps scores_updated_at when MDBList has no ratings', async () => {
@@ -718,11 +748,13 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertExists((client._updateCalls[0].values as { scores_updated_at?: string }).scores_updated_at)
   })
 
-  await t.step('stamps scores_updated_at when movie not found on MDBList', async () => {
+  await t.step('stamps scores_updated_at and classifies 404 as unscored', async () => {
     const { client, res } = await runSingleMovie({ fetchFn: mockMDBListErrorFetch(404) })
 
     const body: UpdateScoresResult = await res.json()
-    assertEquals(body.errors[0].error, MDBLIST_NOT_FOUND)
+    assertEquals(body.errors.length, 0, 'a movie MDBList lacks must not count as a failure')
+    assertEquals(body.unscored.length, 1)
+    assertEquals(body.unscored[0].reason, 'not_on_mdblist')
     assertEquals(client._updateCalls.length, 1)
     assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
   })

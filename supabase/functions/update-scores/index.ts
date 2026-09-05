@@ -288,6 +288,7 @@ Deno.serve(async (req) => {
         movies_fetched: 0,
         scores_updated: 0,
         errors: [],
+        unscored: [],
         job_status
       })
     }
@@ -300,10 +301,18 @@ Deno.serve(async (req) => {
       return errorResponse('Score update service not configured', 503)
     }
 
+    // `errors` holds genuine failures (network, auth, rate limit, upsert, RPC)
+    // and drives job_status -- a non-ok status is relayed as HTTP 500 by the
+    // cron proxy and fires an ops alert. `unscored` holds the expected pending
+    // states: MDBList answered fine but has no score for the movie yet. A new
+    // or obscure release waiting on its Tomatometer is not a degraded run, so
+    // it must not turn the cron red; it is still reported (response body and
+    // job_runs metadata) so a movie stuck pending forever remains findable.
     const results = {
       movies_fetched: 0,
       scores_updated: 0,
-      errors: [] as Array<{ movie_id: string; title: string; error: string }>
+      errors: [] as Array<{ movie_id: string; title: string; error: string }>,
+      unscored: [] as Array<{ movie_id: string; title: string; reason: string }>
     }
 
     // Snapshot scores and standings before recalculation so we can report
@@ -332,22 +341,29 @@ Deno.serve(async (req) => {
 
         if (fetchError) {
           if (fetchError === MDBLIST_NOT_FOUND) {
+            // MDBList definitively has no entry: pending, not a failure
             await markScoreChecked(serviceClient, movie)
+            results.unscored.push({
+              movie_id: movie.id,
+              title: movie.title,
+              reason: 'not_on_mdblist'
+            })
+          } else {
+            results.errors.push({
+              movie_id: movie.id,
+              title: movie.title,
+              error: fetchError
+            })
           }
-          results.errors.push({
-            movie_id: movie.id,
-            title: movie.title,
-            error: fetchError
-          })
           continue
         }
 
         if (ratings.length === 0) {
           await markScoreChecked(serviceClient, movie)
-          results.errors.push({
+          results.unscored.push({
             movie_id: movie.id,
             title: movie.title,
-            error: 'No ratings available'
+            reason: 'no_ratings'
           })
           continue
         }
@@ -396,9 +412,14 @@ Deno.serve(async (req) => {
             })
           } else if (fantasyPts === null) {
             // Ratings were stored, but none of them was a Tomatometer score, so
-            // the movie stays unscored under RT-only scoring. Not an error - it
-            // just must not be counted as a score update.
+            // the movie stays unscored under RT-only scoring: pending, not a
+            // score update and not a failure.
             log.info('No Rotten Tomatoes score; left unscored', { movie_title: movie.title })
+            results.unscored.push({
+              movie_id: movie.id,
+              title: movie.title,
+              reason: 'no_rt_score'
+            })
           } else {
             log.info('Calculated score', { movie_title: movie.title, fantasy_points: fantasyPts })
             results.scores_updated++
@@ -435,6 +456,7 @@ Deno.serve(async (req) => {
         movies_fetched: results.movies_fetched,
         scores_updated: results.scores_updated,
         notifications,
+        ...(results.unscored.length > 0 ? { unscored: results.unscored } : {}),
         ...backlogMetrics,
         ...truncation,
       },
