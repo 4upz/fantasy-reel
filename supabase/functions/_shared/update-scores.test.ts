@@ -8,7 +8,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { fetchMDBListRatings } from './scoring.ts'
+import { fetchMDBListRatings, MDBLIST_NOT_FOUND } from './scoring.ts'
 import type { MovieRecord, MDBListRating, MDBListResponse } from './scoring.ts'
 import { isValidUUID } from './utils.ts'
 
@@ -55,6 +55,7 @@ interface MockSupabaseConfig {
 function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   const upsertCalls: unknown[] = []
   const rpcCalls: Array<{ fn: string; params: unknown }> = []
+  const updateCalls: Array<{ table: string; values: unknown; id: string }> = []
 
   function chainable(result: MockQueryResult) {
     const chain = {
@@ -73,6 +74,7 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   return {
     _upsertCalls: upsertCalls,
     _rpcCalls: rpcCalls,
+    _updateCalls: updateCalls,
     from(table: string) {
       const tableConfig = config[table as keyof MockSupabaseConfig]
       return {
@@ -81,9 +83,10 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
             { data: [], error: null }
           return chainable(result)
         },
-        update: () => {
+        update: (values: unknown) => {
           return {
-            eq: (_col: string, _id: string) => {
+            eq: (_col: string, id: string) => {
+              updateCalls.push({ table, values, id })
               const result = (tableConfig as { update?: MockQueryResult })?.update ??
                 { data: null, error: null }
               return Promise.resolve(result)
@@ -230,8 +233,19 @@ function buildHandler(
         errors: [],
       }
 
+      // Mirrors index.ts markScoreChecked: stamp a movie as checked so it
+      // rotates to the back of the stalest-first queue instead of re-qualifying
+      // (and hogging a batch slot) on every run.
+      async function markScoreChecked(movieId: string): Promise<void> {
+        await supabaseClient
+          .from('movies')
+          .update({ scores_updated_at: new Date().toISOString() })
+          .eq('id', movieId)
+      }
+
       for (const movie of moviesToUpdate) {
         if (!movie.tmdb_id) {
+          await markScoreChecked(movie.id)
           results.errors.push({
             movie_id: movie.id,
             title: movie.title,
@@ -253,6 +267,9 @@ function buildHandler(
           }
 
           if (fetchResult.error) {
+            if (fetchResult.error === MDBLIST_NOT_FOUND) {
+              await markScoreChecked(movie.id)
+            }
             results.errors.push({
               movie_id: movie.id,
               title: movie.title,
@@ -262,6 +279,7 @@ function buildHandler(
           }
 
           if (fetchResult.ratings.length === 0) {
+            await markScoreChecked(movie.id)
             results.errors.push({
               movie_id: movie.id,
               title: movie.title,
@@ -410,6 +428,21 @@ function mockMDBListErrorFetch(status: number, body = ''): typeof globalThis.fet
     }
     return Promise.resolve(new Response('', { status: 200 }))
   }) as typeof globalThis.fetch
+}
+
+/**
+ * Run the handler over a single movie in movie_ids mode.
+ * Returns the mock client (for inspecting recorded calls) and the response.
+ */
+async function runSingleMovie(
+  options: { fetchFn?: typeof globalThis.fetch; movie?: MovieRecord } = {},
+): Promise<{ client: ReturnType<typeof createMockSupabaseClient>; res: Response }> {
+  const client = createMockSupabaseClient({
+    movies: { select: { data: [options.movie ?? testMovie()], error: null } },
+  })
+  const handler = buildHandler(DEFAULT_ENV, client, options.fetchFn)
+  const res = await handler(makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] }))
+  return { client, res }
 }
 
 // ============================================================================
@@ -672,6 +705,49 @@ Deno.test('update-scores scoring logic', async (t) => {
     const body: UpdateScoresResult = await res.json()
     assertEquals(body.errors.length, 1)
     assertEquals(body.errors[0].error, 'No ratings available')
+  })
+
+  await t.step('stamps scores_updated_at when MDBList has no ratings', async () => {
+    const { client } = await runSingleMovie({
+      fetchFn: mockMDBListFetch({ title: 'Test', ratings: [] }),
+    })
+
+    assertEquals(client._updateCalls.length, 1)
+    assertEquals(client._updateCalls[0].table, 'movies')
+    assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
+    assertExists((client._updateCalls[0].values as { scores_updated_at?: string }).scores_updated_at)
+  })
+
+  await t.step('stamps scores_updated_at when movie not found on MDBList', async () => {
+    const { client, res } = await runSingleMovie({ fetchFn: mockMDBListErrorFetch(404) })
+
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.errors[0].error, MDBLIST_NOT_FOUND)
+    assertEquals(client._updateCalls.length, 1)
+    assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
+  })
+
+  await t.step('stamps scores_updated_at for movie without TMDb ID', async () => {
+    const { client } = await runSingleMovie({ movie: testMovie({ tmdb_id: 0 }) })
+
+    assertEquals(client._updateCalls.length, 1)
+    assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
+  })
+
+  await t.step('does NOT stamp scores_updated_at on transient MDBList errors', async () => {
+    // Both failures should retry on the next run, so neither may stamp.
+    const transientCases: Array<{ label: string; fetchFn: typeof globalThis.fetch }> = [
+      { label: 'rate limit (429)', fetchFn: mockMDBListErrorFetch(429) },
+      {
+        label: 'network failure',
+        fetchFn: (() => Promise.reject(new Error('Network failure'))) as typeof globalThis.fetch,
+      },
+    ]
+
+    for (const { label, fetchFn } of transientCases) {
+      const { client } = await runSingleMovie({ fetchFn })
+      assertEquals(client._updateCalls.length, 0, `${label} must not stamp scores_updated_at`)
+    }
   })
 
   await t.step('increments scores_updated only when RPC succeeds', async () => {

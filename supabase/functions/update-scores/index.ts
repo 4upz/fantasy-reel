@@ -1,6 +1,6 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse } from '../_shared/utils.ts'
-import { fetchMDBListRatings } from '../_shared/scoring.ts'
+import { fetchMDBListRatings, MDBLIST_NOT_FOUND } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
 import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
@@ -65,6 +65,28 @@ function capMovies(
     dropped: remaining,
   })
   return { movies: movies.slice(0, MAX_MOVIES_PER_RUN), truncation: { truncated: true, remaining } }
+}
+
+/**
+ * Stamp scores_updated_at without scoring: this run learned everything it can
+ * about the movie, and the answer was "no score" -- there is no TMDb id to look
+ * up, or MDBList answered authoritatively that it has no entry / no ratings.
+ *
+ * Left NULL, such a movie re-qualifies for the default batch on every run and
+ * sorts to its front under NULLS FIRST, permanently occupying a slot. Stamping
+ * sends it to the back of the queue like any processed movie, so it retries
+ * daily instead of every run. Transient failures (network errors, rate limits)
+ * deliberately stay unstamped so they retry on the next run.
+ */
+async function markScoreChecked(client: SupabaseClient, movie: MovieRecord): Promise<void> {
+  const { error } = await client
+    .from('movies')
+    .update({ scores_updated_at: new Date().toISOString() })
+    .eq('id', movie.id)
+
+  if (error) {
+    log.warn('Failed to stamp scores_updated_at', { movie_title: movie.title, error: serializeError(error) })
+  }
 }
 
 Deno.serve(async (req) => {
@@ -158,7 +180,15 @@ Deno.serve(async (req) => {
       moviesToUpdate = capped.movies
       truncation = capped.truncation
     } else {
-      // Default: find released drafted movies needing score updates
+      // Default: find released drafted movies needing score updates.
+      //
+      // The ordering is what guarantees every eligible movie eventually gets a
+      // turn. More movies can qualify than the limit allows (every released
+      // movie re-qualifies daily), and an unordered LIMIT lets Postgres return
+      // an arbitrary-but-stable subset -- in practice the oldest rows, which
+      // starved newly released movies of their first score indefinitely.
+      // NULLS FIRST puts never-checked movies at the front; processing stamps
+      // scores_updated_at, sending each movie to the back of the queue.
       const oneDayAgo = new Date()
       oneDayAgo.setDate(oneDayAgo.getDate() - 1)
 
@@ -168,6 +198,7 @@ Deno.serve(async (req) => {
         .lte('release_date', new Date().toISOString().split('T')[0])
         .neq('status', 'canceled')
         .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
+        .order('scores_updated_at', { ascending: true, nullsFirst: true })
         .limit(30)
 
       if (error) {
@@ -212,6 +243,9 @@ Deno.serve(async (req) => {
     // Process each movie
     for (const movie of moviesToUpdate) {
       if (!movie.tmdb_id) {
+        // Unscoreable until someone fixes the row; stamp so it can't hog a
+        // batch slot every run
+        await markScoreChecked(serviceClient, movie)
         results.errors.push({
           movie_id: movie.id,
           title: movie.title,
@@ -224,6 +258,9 @@ Deno.serve(async (req) => {
         const { ratings, error: fetchError } = await fetchMDBListRatings(movie.tmdb_id, mdblistApiKey)
 
         if (fetchError) {
+          if (fetchError === MDBLIST_NOT_FOUND) {
+            await markScoreChecked(serviceClient, movie)
+          }
           results.errors.push({
             movie_id: movie.id,
             title: movie.title,
@@ -233,6 +270,7 @@ Deno.serve(async (req) => {
         }
 
         if (ratings.length === 0) {
+          await markScoreChecked(serviceClient, movie)
           results.errors.push({
             movie_id: movie.id,
             title: movie.title,

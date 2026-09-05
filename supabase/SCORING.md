@@ -117,6 +117,16 @@ ALTER TABLE movies ADD COLUMN scoring_bonuses JSONB;           -- Unused; always
 ALTER TABLE movies ADD COLUMN scores_updated_at TIMESTAMPTZ;
 ```
 
+`scores_updated_at` means "last **checked**", not "last scored": `update-scores`
+also stamps it when MDBList authoritatively has nothing for a movie (no entry,
+or an entry with no ratings), leaving the movie unscored but rotating it to the
+back of the queue. The nightly batch selects eligible movies ordered by
+`scores_updated_at ASC NULLS FIRST` (never-checked first, then stalest) —
+without that ordering plus the stamp, an unordered `LIMIT` let old movies fill
+every batch and newly released movies never received their first score.
+Transient MDBList failures (network errors, rate limits) deliberately do not
+stamp, so those movies retry on the next run.
+
 ### Reviews Table (existing)
 
 Stores individual scores from each source:

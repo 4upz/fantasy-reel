@@ -59,6 +59,13 @@ const RAW_SCORE_FORMATTERS: Record<string, (value: number) => string> = {
 // --- MDBList API ---
 
 /**
+ * MDBList answered definitively that it has no entry for this TMDb ID.
+ * Callers use this to tell a permanent miss apart from a transient failure
+ * (network error, rate limit) that should retry sooner.
+ */
+export const MDBLIST_NOT_FOUND = 'Movie not found on MDBList'
+
+/**
  * Fetch ratings from MDBList for a movie identified by TMDb ID.
  * Returns normalized ratings for our 3 professional sources (IMDb, RT, Metacritic).
  * Filters out sources with null/undefined scores or zero votes.
@@ -80,7 +87,7 @@ export async function fetchMDBListRatings(
 
     if (!res.ok) {
       if (res.status === 401) return { ratings: [], error: 'MDBList API authentication failed' }
-      if (res.status === 404) return { ratings: [], error: 'Movie not found on MDBList' }
+      if (res.status === 404) return { ratings: [], error: MDBLIST_NOT_FOUND }
       if (res.status === 429) return { ratings: [], error: 'MDBList API rate limit exceeded' }
       return { ratings: [], error: `MDBList API error: ${res.status}` }
     }
