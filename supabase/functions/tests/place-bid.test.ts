@@ -72,8 +72,8 @@ async function callPlaceBid(
   body: Record<string, unknown>,
 ): Promise<PlaceBidResponse> {
   if (!PLACE_BID_URL) {
-    const { data, error } = await userClient.functions.invoke<PlaceBidResponse>('place-bid', { body })
-    if (error) return { error: String(error) }
+    const { data, error } = await invokeFunction<PlaceBidResponse>(userClient, 'place-bid', body)
+    if (error) return { error }
     return data ?? {}
   }
 

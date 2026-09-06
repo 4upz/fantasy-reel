@@ -24,10 +24,9 @@ function baseDb(): MockDb {
     movies: [
       { id: MOVIE_ID, tmdb_id: TMDB_ID, title: 'Fight Club', release_date: today },
     ],
-    draft_picks: [
-      { movie_id: MOVIE_ID, league_id: LEAGUE_ID, dropped_at: null, teams: { name: 'Team A' } },
+    team_holdings: [
+      { movie_id: MOVIE_ID, league_id: LEAGUE_ID, source: 'draft', team_name: 'Team A' },
     ],
-    pickups: [],
     discord_channels: [
       {
         id: 'ch-1',
@@ -111,7 +110,7 @@ Deno.test('sync-release-dates', async (t) => {
 
   await t.step('ignores movies with no active roster holder', async () => {
     const db = baseDb()
-    db.draft_picks = []
+    db.team_holdings = []
     const client = createMockDbClient(db)
     const { calls, restore } = stubFetch(tmdbResponder('2027-01-15'))
 

@@ -115,29 +115,16 @@ export function getServiceClient(): SupabaseClient {
 export const RUN_EXTERNAL_API_TESTS = Deno.env.get('RUN_EXTERNAL_API_TESTS') === '1'
 
 /**
- * Get the service role key that the Edge Function runtime actually uses.
- *
- * Functions with custom auth (X-Cron-Secret OR Bearer service_role) are called
- * via direct fetch() rather than client.functions.invoke(). The .env.test key
- * may not match the Docker container's key if Supabase has been restarted, so
- * query the container directly, falling back to .env.test.
+ * Use the service key supplied with this run's Supabase URL. The root runner
+ * loads these from the selected stack and its Edge Runtime; reading a fixed Docker
+ * container would mix credentials when another checkout or stack is running.
  */
 export async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+  if (!key) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY is required; run npm run test:integration to load the local stack credentials.')
   }
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  return key
 }
 
 /**

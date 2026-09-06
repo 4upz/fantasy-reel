@@ -2,6 +2,9 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // Test-owned dev servers must not share webpack output with an open dev session.
+  distDir: process.env.E2E_DIST_DIR || ".next",
+  typescript: { tsconfigPath: process.env.E2E_TSCONFIG || "tsconfig.json" },
   images: {
     remotePatterns: [
       {

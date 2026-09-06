@@ -1,3 +1,4 @@
+import { uniqueEmail } from '../../helpers/test-ids.helper'
 import { test, expect, loginAs } from '../../fixtures/league.fixture'
 import {
   generateJoinLink,
@@ -95,7 +96,7 @@ test.describe('Shareable Join Links', () => {
 
       // Add another user to fill the league
       const { data: filler } = await client.auth.admin.createUser({
-        email: `filler-${Date.now()}@test.local`,
+        email: uniqueEmail('filler'),
         password: 'Test123!',
         email_confirm: true,
       })

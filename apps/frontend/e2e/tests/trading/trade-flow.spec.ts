@@ -1,3 +1,4 @@
+import { getAdminClient } from '../../helpers/supabase.helper'
 import { test, expect } from '../../fixtures/league.fixture'
 import {
   waitForModalOpen,
@@ -223,16 +224,55 @@ test.describe('Cancel Trade @trading', () => {
 })
 
 test.describe('Veto Trade @trading', () => {
-  test.fixme('league owner sees veto option for trades in review', async ({
+  test('league owner can veto an accepted trade during review @critical', async ({
     authedPage,
+    leagueOwnerPage,
     tradingLeagueWithTrade,
   }) => {
-    // This test requires:
-    // 1. Accept trade as testUser (recipient) -> trade goes to 'review' status
-    // 2. Login as leagueOwner (proposer) -> should see veto button
-    // The accept step calls a real Edge Function (respond-trade) which may
-    // have dependencies not fully set up in the fixture.
-    // Additionally, testing as the owner requires a second browser context.
-    // Marking as fixme until multi-user trade flow testing is supported.
+    const league = tradingLeagueWithTrade
+    const admin = getAdminClient()
+    const { error } = await admin.from('leagues')
+      .update({ trade_review_enabled: true, trade_veto_hours: 24 }).eq('id', league.id)
+    expect(error).toBeNull()
+
+    await authedPage.goto(`/league/${league.id}/trading`)
+    await authedPage.getByTestId(`accept-trade-${league.tradeOfferId}`).click()
+    await waitForModalOpen(authedPage)
+    const acceptance = authedPage.waitForResponse((response) =>
+      response.url().includes('/functions/v1/respond-trade') &&
+      response.request().method() === 'POST'
+    )
+    await authedPage.getByRole('button', { name: /confirm accept/i }).click()
+    expect((await acceptance).ok()).toBe(true)
+    await waitForModalClose(authedPage)
+    await expect(authedPage.getByTestId(`veto-trade-${league.tradeOfferId}`)).not.toBeVisible()
+
+    await leagueOwnerPage.goto(`/league/${league.id}/trading`)
+    await leagueOwnerPage.getByTestId(`veto-trade-${league.tradeOfferId}`).click()
+    const dialog = leagueOwnerPage.getByRole('dialog', { name: 'Veto Trade' })
+    await dialog.getByLabel('Reason (optional)').fill('Commissioner review: unbalanced exchange')
+    const veto = leagueOwnerPage.waitForResponse((response) =>
+      response.url().includes('/functions/v1/veto-trade') &&
+      response.request().method() === 'POST'
+    )
+    await dialog.getByRole('button', { name: 'Confirm veto trade' }).click()
+    expect((await veto).ok()).toBe(true)
+    await expect(dialog).not.toBeVisible()
+
+    // Both participants see the persisted outcome, and neither movie moved.
+    for (const page of [leagueOwnerPage, authedPage]) {
+      await page.reload()
+      await page.getByRole('tab', { name: 'History' }).click()
+      const card = page.getByTestId(`trade-card-${league.tradeOfferId}`)
+      await expect(card.getByText('Vetoed', { exact: true })).toBeVisible()
+      await expect(card).toContainText('Commissioner review: unbalanced exchange')
+    }
+    const { data: holdings, error: holdingsError } = await admin.from('team_holdings')
+      .select('movie_id, team_id').eq('league_id', league.id)
+    expect(holdingsError).toBeNull()
+    expect(holdings).toEqual(expect.arrayContaining([
+      { movie_id: league.ownerMovieId, team_id: league.ownerTeamId },
+      { movie_id: league.testUserMovieId, team_id: league.testUserTeamId },
+    ]))
   })
 })

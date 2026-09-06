@@ -311,6 +311,9 @@ const config = (overrides: Partial<LeagueTradeConfig> = {}): LeagueTradeConfig =
   trade_deadline: null,
   trade_veto_hours: 24,
   trade_review_enabled: false,
+  trade_offer_expiry_default_hours: null,
+  trade_offer_expiry_min_hours: null,
+  trade_offer_expiry_max_days: null,
   total_slots: 5,
   faab_budget: 100,
   draft_counterpick_slots: 1,
@@ -387,4 +390,3 @@ Deno.test('validateCounterpickSlots - counts phases separately', async () => {
     { valid: true }
   )
 })
-

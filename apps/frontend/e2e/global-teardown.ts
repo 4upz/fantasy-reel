@@ -3,7 +3,7 @@ import { cleanupTestData } from './helpers/supabase.helper'
 
 /**
  * Global teardown runs after all tests complete
- * Cleans up test data to leave database in clean state
+ * Cleans up only this run's users, leagues and movies; other runs and manual data remain.
  */
 teardown('global teardown', async () => {
   console.log('🧹 Running E2E test teardown...')

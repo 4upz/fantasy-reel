@@ -9,29 +9,10 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { getServiceClient, createTestFactory, uniqueName } from './_setup.ts'
+import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName } from './_setup.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/release-day-announcements`
-
-/** Resolves the service role key the Edge Function runtime actually uses (see update-scores.test.ts). */
-async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
-  }
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-}
 
 Deno.test({
   name: 'release-day-announcements',

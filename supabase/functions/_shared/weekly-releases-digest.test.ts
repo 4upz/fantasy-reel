@@ -21,10 +21,9 @@ const { start: THIS_WEEK_MONDAY } = weekBounds(new Date())
 function baseDb(): MockDb {
   return {
     movies: [{ id: MOVIE_ID, title: 'Fight Club', release_date: THIS_WEEK_MONDAY }],
-    draft_picks: [
-      { movie_id: MOVIE_ID, league_id: LEAGUE_ID, dropped_at: null, teams: { name: 'Team A' } },
+    team_holdings: [
+      { movie_id: MOVIE_ID, league_id: LEAGUE_ID, source: 'draft', team_name: 'Team A' },
     ],
-    pickups: [],
     discord_channels: [
       {
         id: 'ch-1',
@@ -90,7 +89,7 @@ Deno.test('weekly-releases-digest', async (t) => {
     const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
-      db.draft_picks = []
+      db.team_holdings = []
       const client = createMockDbClient(db)
 
       const result = await runWeeklyReleasesDigest(client)
@@ -106,7 +105,11 @@ Deno.test('weekly-releases-digest', async (t) => {
     const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
-      db.draft_picks[0].dropped_at = new Date().toISOString()
+      // The view omits dropped rows even though the base row remains.
+      db.team_holdings = []
+      db.draft_picks = [
+        { movie_id: MOVIE_ID, league_id: LEAGUE_ID, dropped_at: new Date().toISOString() },
+      ]
       const client = createMockDbClient(db)
 
       const result = await runWeeklyReleasesDigest(client)

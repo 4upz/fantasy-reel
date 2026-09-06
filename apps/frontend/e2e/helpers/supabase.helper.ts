@@ -1,6 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { Page } from '@playwright/test'
-import { uniqueEmail, uniqueLeagueName } from './test-ids.helper'
+import { uniqueEmail, uniqueLeagueName, isRunEmail, movieRunMarker } from './test-ids.helper'
 import { daysFromNow } from '../fixtures/test-data'
 
 /**
@@ -318,23 +318,30 @@ export async function deleteTestLeague(leagueId: string): Promise<void> {
   }
 }
 
-/**
- * Clean up all test data (users, leagues created during tests)
- */
-export async function cleanupTestData(): Promise<void> {
+/** Delete only this run's accounts and their leagues, including UI-created custom names. */
+export async function cleanupTestData(worker?: number): Promise<void> {
   const client = getAdminClient()
+  const userIds: string[] = []
 
-  // Delete test leagues - match all E2E-prefixed names (including worker-scoped names)
-  await client.from('leagues').delete().like('name', 'E2E %')
+  // Collect every page BEFORE deletion: deleting while paging shifts later users.
+  for (let page = 1; ; page++) {
+    const { data, error } = await client.auth.admin.listUsers({ page, perPage: 100 })
+    if (error) throw new Error(`Failed to list test users: ${error.message}`)
+    userIds.push(...data.users.filter((user) => isRunEmail(user.email, worker)).map((user) => user.id))
+    if (data.users.length < 100) break
+  }
 
-  // Delete test users
-  const { data: users } = await client.auth.admin.listUsers()
-  const testUsers = users?.users.filter((u) =>
-    u.email?.includes('@test.local')
-  ) || []
+  for (const userId of userIds) {
+    const { error: leagueError } = await client.from('leagues').delete().eq('owner_id', userId)
+    if (leagueError) throw new Error(`Failed to clean test leagues: ${leagueError.message}`)
+    const { error } = await client.auth.admin.deleteUser(userId)
+    if (error) throw new Error(`Failed to clean test user: ${error.message}`)
+  }
 
-  for (const user of testUsers) {
-    await client.auth.admin.deleteUser(user.id)
+  // Shared mock movies remain until every worker is finished.
+  if (worker === undefined) {
+    const { error } = await client.from('movies').delete().like('overview', `${movieRunMarker()}%`)
+    if (error) throw new Error(`Failed to clean test movies: ${error.message}`)
   }
 }
 
@@ -494,16 +501,15 @@ export async function createTestMovie(
 
   const { data, error } = await client
     .from('movies')
-    .upsert(
+    .insert(
       {
         tmdb_id: tmdbId,
         title,
         release_date: releaseDate,
         poster_url: options?.posterUrl || `/test-poster-${tmdbId}.jpg`,
         status: options?.status || 'upcoming',
-        overview: options?.overview || `Test movie ${title}`,
-      },
-      { onConflict: 'tmdb_id' }
+        overview: `${movieRunMarker()}${options?.overview || `Test movie ${title}`}`,
+      }
     )
     .select()
     .single()
@@ -708,7 +714,7 @@ export async function createCounterpick(
  * Trade items structure for creating trade offers
  */
 interface TradeItems {
-  movies: Array<{ movie_id: string; source: 'draft_pick' | 'pickup'; source_id?: string }>
+  movies: Array<{ movie_id: string; source: 'draft_pick' | 'pickup'; source_id: string }>
   faab: number
 }
 
