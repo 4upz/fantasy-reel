@@ -69,3 +69,28 @@ reasoning effort, tools, and environment constant:
 Record correctness, wall time, token usage, tool calls, approval pauses, repeated
 checks, and unrelated edits. Repeat comparisons before attributing differences to
 the guide. No controlled before/after runs were performed as part of this change.
+
+## Follow-up skill cleanup — September 6, 2026
+
+At the user's request, redundant skills were removed and useful guidance retained:
+
+- Uninstalled `superpowers@claude-plugins-official`. The repo workflow and Codex
+  harness already cover planning, debugging, delegation, and verification without
+  the plugin's mandatory approval gates.
+- Removed the repo-local Superdesign skill and its supporting prompts. The retained
+  frontend-design plugin and Cinematic Dark conventions cover this app's UI work.
+- Removed the repo-local React skill and its compiled manual/rules. All 57 local
+  rule filenames exist in the installed Vercel plugin, which supplies React guidance.
+- Uninstalled `supabase@claude-plugins-official`, retaining the connected
+  `supabase@openai-curated-remote` plugin. Both manifests referenced the same app;
+  the canonical connected plugin remains the source of Supabase tools and skills.
+- Uninstalled `postgres-best-practices@supabase-agent-skills`. Its 34 SQL reference
+  files were byte-identical to those in the retained Supabase plugin.
+- Kept the local accessibility review skill, replacing mandatory scope questions
+  and a hardcoded fetch tool with inferred scope, available tooling, and a disclosed
+  limited-review fallback. Findings distinguish code evidence from unverified UI
+  behavior. Reviews do not silently turn into implementation tasks.
+
+Plugin removals affect this Codex installation beyond the repo. Repository changes
+are versioned; installed plugin caches were not hand-edited. Previously loaded
+instructions may remain in an existing conversation's context.

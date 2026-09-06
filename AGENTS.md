@@ -18,6 +18,14 @@ The Vercel frontend project is `fantasy-reel-frontend`.
 - Load relevant skills and reference sections on demand. Do not read every skill
   or all of `CLAUDE.md` at startup. It retains detailed domain reference material
   and Claude workflows; use this file for Codex workflow decisions.
+- Use the installed Vercel plugin's React guidance and the connected Supabase
+  plugin's Supabase/Postgres guidance; read relevant rules rather than complete
+  compiled manuals. When overlapping skills cover the same task, choose one
+  suitable entry point. Keep recommendations compatible with installed versions
+  and the repo's migration workflow; a review is not authorization to migrate
+  frameworks or change the design system. UI accessibility audits use the local
+  `web-design-guidelines` skill. Ordinary work needs no separate Superpowers or
+  Superdesign workflow.
 - Use tools available in the session. If a named plugin, agent type, or browser
   tool is unavailable, use an equivalent capability and report any verification
   gap. Do not invent tool calls or require installation when a fallback suffices.
