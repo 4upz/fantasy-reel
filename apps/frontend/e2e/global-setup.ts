@@ -1,36 +1,13 @@
 import { test as setup } from '@playwright/test'
-import { cleanupTestData, getAdminClient } from './helpers/supabase.helper'
+import { getAdminClient } from './helpers/supabase.helper'
 import { MOCK_MOVIES } from './fixtures/test-data'
-
-/**
- * Global Setup for E2E Tests
- *
- * Supabase Best Practices Applied:
- *
- * 1. CLEAN SLATE - Clean up stale test data from previous runs to prevent flakiness
- * 2. SEED DATA - Insert known test data (movies) that tests depend on
- * 3. SERVICE ROLE - Use service role key for setup (bypasses RLS)
- * 4. IDEMPOTENT - Setup can run multiple times without issues
- *
- * For CI environments, consider:
- * - Running `supabase db reset` before test suite
- * - Using separate test database
- * - Running tests with fresh migrations
- *
- * References:
- * - https://github.com/isaacharrisholt/supawright
- * - https://supabase.com/docs/guides/local-development/testing
- */
+import { movieRunMarker } from './helpers/test-ids.helper'
 
 setup('global setup', async ({ baseURL }) => {
   console.log('🔧 Running E2E test setup...')
 
   // Verify Supabase connection
   await verifySupabaseConnection()
-
-  // Clean up stale test data from previous runs
-  console.log('  Cleaning up stale test data...')
-  await cleanupTestData()
 
   // Seed mock movies to database
   console.log('  Seeding test movies...')
@@ -41,7 +18,7 @@ setup('global setup', async ({ baseURL }) => {
   // production build, which has nothing to compile.
   if (!process.env.CI) {
     console.log('  Warming up dev server routes...')
-    await warmUpRoutes(baseURL ?? 'http://localhost:3000')
+    await warmUpRoutes(baseURL ?? 'http://localhost:3100')
   }
 
   console.log('✅ E2E test setup complete')
@@ -98,16 +75,16 @@ async function seedTestMovies(): Promise<void> {
     title: m.title,
     release_date: m.release_date,
     poster_url: m.poster_url,
-    overview: m.overview,
+    overview: `${movieRunMarker()}${m.overview}`,
     status: m.status,
   }))
 
   const { error } = await client
     .from('movies')
-    .upsert(movies, { onConflict: 'tmdb_id', ignoreDuplicates: false })
+    .insert(movies)
 
   if (error) {
-    console.warn(`  Warning: Failed to seed movies: ${error.message}`)
+    throw new Error(`Failed to seed movies: ${error.message}`)
   } else {
     console.log(`  Seeded ${movies.length} test movies`)
   }

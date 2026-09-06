@@ -198,16 +198,42 @@ test.describe('Cancel Bid Flow @bidding', () => {
 })
 
 test.describe('Counter Bid Flow @bidding', () => {
-  test.fixme('shows outbid notification when another user bids higher', async ({
+  test('shows outbid notification when another user bids higher @critical', async ({
     authedPage,
-    secondUserPage,
+    leagueOwnerPage,
     biddingLeague,
   }) => {
-    // This test requires two users placing bids on the same movie in sequence.
-    // It's flaky because:
-    // 1. Both pages need TMDb mocks applied independently (secondUserPage doesn't get beforeEach mocks)
-    // 2. The place-bid Edge Function interacts with real Supabase processing_deadline
-    // 3. Outbid notification depends on email/real-time which may not propagate in test environment
-    // 4. The processing_deadline NOT NULL constraint can fail without proper league_bidding_config setup
+    // Both users belong to this league and have funded budgets. Each context
+    // mocks discovery only; the two submissions call the real place-bid function.
+    for (const [page, amount] of [[authedPage, '10'], [leagueOwnerPage, '20']] as const) {
+      await setupAllMocks(page)
+      await page.goto(`/league/${biddingLeague.id}/bidding`)
+      await page.getByTestId('place-bid-button').click()
+      await page.getByTestId('bid-movie-search-input').fill('Alpha')
+      await page.getByTestId(`bid-movie-result-${MOCK_MOVIES[0].tmdb_id}`).click()
+      await page.getByTestId('bid-amount-input').fill(amount)
+      const response = page.waitForResponse((response) =>
+        response.url().includes('/functions/v1/place-bid') &&
+        response.request().method() === 'POST'
+      )
+      await page.getByTestId('submit-bid-button').click()
+      expect((await response).ok()).toBe(true)
+      await waitForModalClose(page)
+    }
+
+    // Opening the bell refetches persisted notifications, so this assertion
+    // tests delivery without relying on an email provider or subscription race.
+    await authedPage.getByRole('button', { name: /^Notifications/ }).filter({ visible: true }).click()
+    await expect(authedPage.getByText(`You've been outbid on ${MOCK_MOVIES[0].title}`, { exact: true }))
+      .toBeVisible({ timeout: 15000 })
+    await expect(authedPage.getByText(/Someone bid \$20 on Test Movie Alpha/)).toBeVisible()
+    await authedPage.getByRole('button', { name: /^Notifications/ }).filter({ visible: true }).click()
+
+    // Reload verifies the durable actionable state, independently of realtime.
+    await authedPage.reload()
+    const outbidCard = authedPage.getByTestId(`bid-card-${MOCK_MOVIES[0].tmdb_id}`)
+      .filter({ hasText: "You've been outbid!" })
+    await expect(outbidCard).toBeVisible({ timeout: 10000 })
+    await expect(outbidCard.getByTestId(`counter-bid-${MOCK_MOVIES[0].tmdb_id}`)).toBeEnabled()
   })
 })

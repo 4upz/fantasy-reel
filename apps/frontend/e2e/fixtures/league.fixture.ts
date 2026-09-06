@@ -437,8 +437,8 @@ export const test = authTest.extend<LeagueFixtures>({
       const movie2 = await createTestMovie(uniqueTmdbId(12), 'Trade Offer Movie Beta', '2025-07-20')
 
       // Create draft picks (assign movies to teams)
-      await createDraftPick(league.id, ownerTeam.id, movie1.id, 1, 1)
-      await createDraftPick(league.id, testUserTeam.id, movie2.id, 2, 1)
+      const ownerPick = await createDraftPick(league.id, ownerTeam.id, movie1.id, 1, 1)
+      const testUserPick = await createDraftPick(league.id, testUserTeam.id, movie2.id, 2, 1)
 
       // Create pending trade offer from owner to testUser
       // Trade items are now embedded directly in the trade_offers table
@@ -446,8 +446,8 @@ export const test = authTest.extend<LeagueFixtures>({
         league.id,
         ownerTeam.id,
         testUserTeam.id,
-        { movies: [{ movie_id: movie1.id, source: 'draft_pick' }], faab: 0 },
-        { movies: [{ movie_id: movie2.id, source: 'draft_pick' }], faab: 0 }
+        { movies: [{ movie_id: movie1.id, source: 'draft_pick', source_id: ownerPick.id }], faab: 0 },
+        { movies: [{ movie_id: movie2.id, source: 'draft_pick', source_id: testUserPick.id }], faab: 0 }
       )
 
       await use({

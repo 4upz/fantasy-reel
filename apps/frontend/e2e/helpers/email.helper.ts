@@ -302,46 +302,29 @@ export function extractAuthLink(
   email: EmailContent,
   type: 'confirm' | 'reset' | 'invite'
 ): string | null {
-  // Supabase uses /auth/confirm with type query param for both confirm and reset
-  // - Email confirmation: /auth/confirm?...type=signup
-  // - Password reset: /auth/confirm?...type=recovery (or /auth/v1/verify?...type=recovery)
-  const patterns: Record<string, RegExp> = {
-    confirm: /\/auth\/(?:v1\/)?(?:confirm|verify)\?[^\s<>"'()]+type=(?:signup|email)[^\s<>"'()]*/,
-    reset: /\/auth\/(?:v1\/)?(?:confirm|verify)\?[^\s<>"'()]+type=recovery[^\s<>"'()]*/,
-    invite: /\/join\?token=[^\s<>"'()]+/,
-  }
+  const text = `${email.body} ${email.html || ''}`
+  const candidates = [
+    ...email.links,
+    ...(text.match(/(?:https?:\/\/|\/(?:auth\/|join\?))[^\s<>"'()]+/g) || []),
+  ]
+  const fallbackOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
 
-  const pattern = patterns[type]
-  const fullText = email.body + (email.html || '')
-  const match = fullText.match(pattern)
-
-  if (match) {
-    // Ensure we have a full URL - extract it properly
-    let link = match[0]
-    // Clean up any trailing parentheses or HTML artifacts
-    link = link.replace(/[)>]+$/, '')
-
-    if (link.startsWith('http')) {
-      return link
+  for (const candidate of candidates) {
+    try {
+      // Preserve the email's origin: another local Supabase instance may own
+      // this token. Only genuinely relative links need the configured fallback.
+      const url = new URL(candidate.replace(/&amp;|&#0*38;|&#x0*26;/gi, '&'), fallbackOrigin)
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') continue
+      const authType = url.searchParams.get('type')
+      const isAuthLink = /^\/auth\/(?:v1\/)?(?:confirm|verify)$/.test(url.pathname)
+      const matches = type === 'invite'
+        ? url.pathname === '/join' && url.searchParams.has('token')
+        : isAuthLink && (type === 'reset' ? authType === 'recovery' : authType === 'signup' || authType === 'email')
+      if (matches) return url.toString()
+    } catch {
+      // Ignore unrelated or malformed links in the message.
     }
-    return `http://127.0.0.1:54321${link}`
   }
 
-  // Fallback: check extracted links
-  return (
-    email.links.find((l) => {
-      if (type === 'confirm')
-        return (
-          (l.includes('/auth/confirm') || l.includes('/auth/v1/verify')) &&
-          (l.includes('type=signup') || l.includes('type=email'))
-        )
-      if (type === 'reset')
-        return (
-          (l.includes('/auth/confirm') || l.includes('/auth/v1/verify')) &&
-          l.includes('type=recovery')
-        )
-      if (type === 'invite') return l.includes('/join?token=')
-      return false
-    }) || null
-  )
+  return null
 }

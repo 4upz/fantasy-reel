@@ -1,5 +1,8 @@
 # E2E Testing Strategy for Fantasy Reel
 
+> Historical design document. For current commands, service setup, run isolation and CI behavior, use [Local testing](TESTING.md). Code examples and rollout checklists below describe the original plan.
+
+
 This document outlines a comprehensive end-to-end testing strategy for the Fantasy Reel frontend application, ensuring critical user journeys are verified before deployment.
 
 ---

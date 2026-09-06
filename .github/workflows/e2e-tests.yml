@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   e2e-tests:
-    name: E2E Tests (Chromium)
+    name: E2E Tests (desktop and mobile Chromium)
     runs-on: ubuntu-latest
     # Tests run against a production build (see the Build step below), so the
     # suite is compile-free at test time. Healthy runs finish well under 15 min
@@ -131,7 +131,7 @@ jobs:
         working-directory: apps/frontend
 
       - name: Run E2E tests
-        run: npm run test:e2e -- --project=chromium
+        run: npm run test:e2e -- --project=chromium --project=mobile-chrome
         working-directory: apps/frontend
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase-keys.outputs.service-role-key }}

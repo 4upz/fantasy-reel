@@ -1,9 +1,36 @@
 import { defineConfig, devices } from '@playwright/test'
 import dotenv from 'dotenv'
 import path from 'path'
+import { randomUUID } from 'crypto'
+import { writeFileSync } from 'fs'
+import { getRunId } from './e2e/helpers/test-ids.helper'
 
 // Load environment variables from .env.local
 dotenv.config({ path: path.resolve(__dirname, '.env.local') })
+
+process.env.E2E_RUN_ID ||= randomUUID()
+const runId = getRunId() // Reject unsafe cleanup identifiers before launching workers.
+const e2eDistDir = `.next-e2e/${runId}`
+const e2eTsconfig = `tsconfig.e2e.${runId}.json`
+
+if (!process.env.CI) {
+  // Next adds its generated-type include to its configured tsconfig. Give each
+  // test server its own root-level config so normal development stays untouched.
+  const config = {
+    extends: './tsconfig.json',
+    compilerOptions: { tsBuildInfoFile: `${e2eDistDir}/cache/tsconfig.tsbuildinfo` },
+    // TypeScript's broad globs skip hidden directories; explicitly include only
+    // this run's generated types, and omit the normal .next types from the base.
+    include: ['next-env.d.ts', '**/*.ts', '**/*.tsx', `${e2eDistDir}/types/**/*.ts`],
+    exclude: ['node_modules', '.next'],
+  }
+  try {
+    writeFileSync(path.resolve(__dirname, e2eTsconfig), `${JSON.stringify(config, null, 2)}\n`, { flag: 'wx' })
+  } catch (error) {
+    // Config is loaded again in every worker; never rewrite it while Next reads it.
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  }
+}
 
 /**
  * E2E Test Configuration for Fantasy Reel
@@ -22,10 +49,10 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') })
  */
 
 /**
- * Where the suite points. Defaults to :3000 so nothing changes for a normal
- * run; set E2E_BASE_URL to test a worktree's own server on another port.
+ * Where the suite points. Defaults to a dedicated :3100 server owned by this run.
+ * Set E2E_BASE_URL to select another local port.
  */
-const E2E_BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
+const E2E_BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3100'
 
 export default defineConfig({
   testDir: './e2e/tests',
@@ -98,7 +125,7 @@ export default defineConfig({
      * Global Setup Project
      * Runs before all tests to:
      * - Verify Supabase connection
-     * - Clean up stale test data
+     * - Scope all data to this run
      * - Seed required test data (movies)
      */
     {
@@ -119,28 +146,17 @@ export default defineConfig({
      */
     {
       name: 'chromium',
+      testIgnore: /mobile-smoke\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
       dependencies: ['setup'],
     },
 
-    // Additional browsers - run with --project flag explicitly
-    // e.g., npx playwright test --project=firefox
-    //
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    //   dependencies: ['setup'],
-    // },
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    //   dependencies: ['setup'],
-    // },
-    // {
-    //   name: 'mobile-chrome',
-    //   use: { ...devices['Pixel 5'] },
-    //   dependencies: ['setup'],
-    // },
+    {
+      name: 'mobile-chrome',
+      testMatch: /mobile-smoke\.spec\.ts/,
+      use: { ...devices['Pixel 5'] },
+      dependencies: ['setup'],
+    },
   ],
 
   /**
@@ -150,22 +166,23 @@ export default defineConfig({
    * `next build` first. A dev server compiles every route on first hit,
    * and parallel workers hitting an uncompiled app on a small runner is
    * what caused the 30s navigation timeouts and 22-28 min suite runs.
-   * Locally: reuse an already-running dev server (faster iteration).
+   * Locally: start a fresh server so tests always exercise this checkout.
    */
   webServer: {
     // Local runs use plain `next dev` (webpack), not `npm run dev`
     // (--turbopack): the Sentry SDK doesn't support Turbopack until Next
     // 15.4.1, and running the E2E suite against that combination degrades
     // the dev server app-wide. Revert after upgrading Next past 15.4.1.
-    command: process.env.CI ? 'npx next start' : 'npx next dev',
+    command: `${process.env.CI ? 'npx next start' : 'npx next dev'} --port ${new URL(E2E_BASE_URL).port || '80'}`,
     url: E2E_BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120 * 1000, // 2 minutes to start
 
     // Environment variables for the server
     env: {
       // Ensure we're using local Supabase
-      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+      NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321',
+      ...(!process.env.CI ? { E2E_DIST_DIR: e2eDistDir, E2E_TSCONFIG: e2eTsconfig } : {}),
     },
   },
 })

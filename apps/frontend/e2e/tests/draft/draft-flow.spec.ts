@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import { test, expect } from '../../fixtures/league.fixture'
 import { setupAllMocks, MOCK_MOVIES } from '../../helpers/mock-api.helper'
 import { updateLeagueStatus } from '../../helpers/supabase.helper'
@@ -20,9 +21,7 @@ import { updateLeagueStatus } from '../../helpers/supabase.helper'
  *
  * NOTE: Turn-based assertions (your turn, waiting state, making picks) rely on
  * the draft_order the draftReadyLeague fixture sets: owner=1, testUser=2,
- * secondUser=3. The tests still marked fixme need something the fixture can't
- * provide: real-time propagation across two contexts, or a real Edge Function
- * pick that passes turn validation.
+ * secondUser=3. Discovery is mocked; draft-pick and realtime use local Supabase.
  */
 test.describe('Draft Flow', () => {
   test('owner can start draft @critical', async ({ leagueOwnerPage, draftReadyLeague }) => {
@@ -131,17 +130,47 @@ test.describe('Draft Flow', () => {
   })
 })
 
-test.describe('Multi-User Draft (Real-time)', () => {
-  // Multi-user real-time tests are inherently flaky due to
-  // real-time subscription timing and multiple browser contexts.
-  test.fixme('picks propagate to all users in real-time @realtime', async () => {
-    // This test requires:
-    // 1. Two browser contexts connected via real-time subscriptions
-    // 2. Reliable real-time propagation timing
-  })
+async function makePick(page: Page, movieIndex: number) {
+  await expect(page.getByText("It's your turn!")).toBeVisible()
+  await page.getByTestId(`movie-card-${MOCK_MOVIES[movieIndex].tmdb_id}`).click()
+  const response = page.waitForResponse((response) =>
+    response.url().includes('/functions/v1/draft-pick') &&
+    response.request().method() === 'POST'
+  )
+  await page.getByTestId('draft-movie-button').click()
+  expect((await response).ok()).toBe(true)
+}
 
-  test.fixme('turn indicator updates when pick is made', async () => {
-    // Requires reliable real-time propagation across contexts.
+test.describe('Multi-User Draft (Real-time)', () => {
+  test('picks and turn changes propagate between players @realtime @critical', async ({
+    leagueOwnerPage,
+    authedPage,
+    draftReadyLeague,
+  }) => {
+    await updateLeagueStatus(draftReadyLeague.id, 'drafting')
+    for (const page of [leagueOwnerPage, authedPage]) {
+      await setupAllMocks(page)
+      await page.goto(`/league/${draftReadyLeague.id}/draft`)
+      // Wait for subscription acknowledgement before another player mutates data.
+      await expect(page.getByTitle('Real-time updates active')).toBeVisible({ timeout: 15000 })
+    }
+    await expect(authedPage.getByText("Owner Team's pick")).toBeVisible()
+    await makePick(leagueOwnerPage, 0)
+
+    await expect(authedPage.getByTestId('draft-history')
+      .getByText(MOCK_MOVIES[0].title).filter({ visible: true })).toBeVisible({ timeout: 15000 })
+    await expect(authedPage.getByText("It's your turn!")).toBeVisible()
+    await expect(leagueOwnerPage.getByText("Test Team's pick")).toBeVisible()
+    await expect(leagueOwnerPage.getByText("It's your turn!")).not.toBeVisible()
+
+    // Exercise the next player's real turn validation and propagation in reverse.
+    await makePick(authedPage, 1)
+    await expect(leagueOwnerPage.getByTestId('draft-history')
+      .getByText(MOCK_MOVIES[1].title).filter({ visible: true })).toBeVisible({ timeout: 15000 })
+    for (const page of [leagueOwnerPage, authedPage]) {
+      await expect(page.getByText("Second Team's pick")).toBeVisible()
+      await expect(page.getByText("It's your turn!")).not.toBeVisible()
+    }
   })
 })
 
@@ -159,8 +188,26 @@ test.describe('Draft Progress', () => {
     await expect(page.getByTestId('draft-progress')).toContainText(/0/)
   })
 
-  test.fixme('progress updates after each pick', async () => {
-    // Requires making a real draft pick via the Edge Function,
-    // which validates turn order.
+  test('progress updates after each pick', async ({
+    leagueOwnerPage,
+    authedPage,
+    draftReadyLeague,
+  }) => {
+    await updateLeagueStatus(draftReadyLeague.id, 'drafting')
+    for (const page of [leagueOwnerPage, authedPage]) {
+      await setupAllMocks(page)
+      await page.goto(`/league/${draftReadyLeague.id}/draft`)
+      await expect(page.getByTitle('Real-time updates active')).toBeVisible({ timeout: 15000 })
+      await expect(page.getByTestId('draft-progress')).toContainText(/0\s*\/\s*\d+\s*picks/)
+    }
+
+    await makePick(leagueOwnerPage, 0)
+    for (const page of [leagueOwnerPage, authedPage]) {
+      await expect(page.getByTestId('draft-progress')).toContainText(/1\s*\/\s*\d+\s*picks/, { timeout: 15000 })
+    }
+    await makePick(authedPage, 1)
+    for (const page of [leagueOwnerPage, authedPage]) {
+      await expect(page.getByTestId('draft-progress')).toContainText(/2\s*\/\s*\d+\s*picks/, { timeout: 15000 })
+    }
   })
 })

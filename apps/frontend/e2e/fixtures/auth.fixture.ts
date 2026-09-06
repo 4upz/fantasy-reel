@@ -5,8 +5,9 @@ import {
   deleteTestUser,
   TestUser,
   getAdminClient,
+  cleanupTestData,
 } from '../helpers/supabase.helper'
-import { setWorkerIndex, getWorkerPrefix } from '../helpers/test-ids.helper'
+import { setWorkerIndex, getWorkerIndex } from '../helpers/test-ids.helper'
 
 /**
  * Supabase E2E Testing Best Practices Applied:
@@ -69,7 +70,7 @@ export const test = base.extend<AuthFixtures>({
    * Without this, tests using only draftReadyLeague would get workerIndex=0.
    */
   _workerInit: [async ({}, use, testInfo) => {
-    setWorkerIndex(testInfo.parallelIndex)
+    setWorkerIndex(testInfo.parallelIndex, `${testInfo.testId}:${testInfo.retry}`)
     await use(undefined)
   }, { auto: true }],
 
@@ -117,9 +118,9 @@ export const test = base.extend<AuthFixtures>({
    * - https://playwright.dev/docs/auth
    * - https://www.bekapod.dev/articles/supabase-magic-login-testing-with-playwright/
    */
-  authedContext: async ({ browser, testUser }, use) => {
+  authedContext: async ({ browser, contextOptions, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, baseURL, testUser }, use) => {
     // Create new browser context
-    const context = await browser.newContext()
+    const context = await browser.newContext({ ...contextOptions, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, baseURL })
     const page = await context.newPage()
 
     // Login via UI - this ensures the browser's Supabase client
@@ -146,8 +147,8 @@ export const test = base.extend<AuthFixtures>({
    *
    * Uses UI login for proper cookie setup (same as authedContext)
    */
-  secondUserContext: async ({ browser, secondUser }, use) => {
-    const context = await browser.newContext()
+  secondUserContext: async ({ browser, contextOptions, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, baseURL, secondUser }, use) => {
+    const context = await browser.newContext({ ...contextOptions, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, baseURL })
     const page = await context.newPage()
 
     // Login via UI for proper cookie setup
@@ -176,8 +177,8 @@ export const test = base.extend<AuthFixtures>({
    *
    * Uses UI login for proper cookie setup (same as authedContext)
    */
-  leagueOwnerContext: async ({ browser, leagueOwner }, use) => {
-    const context = await browser.newContext()
+  leagueOwnerContext: async ({ browser, contextOptions, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, baseURL, leagueOwner }, use) => {
+    const context = await browser.newContext({ ...contextOptions, viewport, isMobile, hasTouch, deviceScaleFactor, userAgent, baseURL })
     const page = await context.newPage()
 
     await loginAs(page, leagueOwner)
@@ -294,27 +295,7 @@ export async function verifyRLS(options: {
  * Uses worker prefix to identify and delete only this worker's test data.
  */
 export async function cleanupWorkerData(): Promise<void> {
-  const client = getAdminClient()
-  const workerPrefix = getWorkerPrefix()
-
-  try {
-    // Delete test leagues created by this worker (cascades to participants, teams, etc.)
-    await client.from('leagues').delete().like('name', `%${workerPrefix}%`)
-
-    // Delete test users created by this worker
-    const { data: usersData } = await client.auth.admin.listUsers()
-    const workerUsers =
-      usersData?.users.filter((u) =>
-        u.email?.includes(`-${workerPrefix}-`)
-      ) || []
-
-    for (const user of workerUsers) {
-      await client.auth.admin.deleteUser(user.id)
-    }
-  } catch (error) {
-    // Log but don't fail - cleanup is best-effort
-    console.warn(`Worker ${workerPrefix} cleanup warning:`, error)
-  }
+  await cleanupTestData(getWorkerIndex())
 }
 
 // Re-export expect for convenience

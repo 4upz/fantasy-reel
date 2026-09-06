@@ -4,14 +4,19 @@ This document describes the testing infrastructure for Supabase Edge Functions i
 
 ## Quick Start
 
+Run the fast suites from the project root with `npm test`: local test-script checks,
+shared Edge Function unit tests, and Discord bot tests. Install dependencies with
+`npm ci` and Deno 2.6.4 (the version pinned in CI); these suites do not require
+Docker, Supabase services, or test credentials. The Unit Tests workflow runs each
+suite explicitly on pull requests and pushes to `main`.
+
+For backend integration tests:
+
 ```bash
 # 1. Start local Supabase
 npx supabase start
 
-# 2. (First time only) Create the .env.test file
-cp supabase/functions/.env.test.example supabase/functions/.env.test
-
-# 3. Run tests
+# 2. Run tests (preflight checks the local stack and loads its current keys)
 npm run test:functions
 ```
 
@@ -94,13 +99,20 @@ npx supabase start
 
 ### Commands
 
-**IMPORTANT:** Always use these commands - they automatically load the correct environment variables.
+Prefer the project-root commands: their preflight checks local services,
+credentials, and migrations before starting integration tests. Direct Deno
+integration tasks require a current `.env.test`; copy `.env.test.example` and
+populate it with the local stack's keys if using those tasks directly.
 
 ```bash
 # From project root (RECOMMENDED)
+npm test                        # Scripts, shared Deno units, and Discord bot
+npm run test:functions:unit      # Shared Deno units only; no local services needed
+npm run test:integration         # Alias for test:functions
 npm run test:functions           # Run integration tests
 npm run test:functions:watch     # Run in watch mode
 npm run test:functions:external  # Opt-in: also hits live MDBList/TMDb
+npm run test:all                 # Unit suites, backend integration, browser E2E
 
 # From supabase/functions directory
 deno task test                   # Integration tests only
@@ -110,7 +122,10 @@ deno task test:watch             # Integration tests with watch mode
 deno task test:external          # Opt-in: also hits live MDBList/TMDb
 ```
 
-> **Warning:** Do NOT run `deno test` directly - it won't load the `.env.test` file. Always use `deno task test` or `npm run test:functions`.
+The root commands derive local credentials automatically. Direct integration
+tasks use `.env.test`, while `deno task test:unit` needs no credentials.
+See [the local testing guide](../../docs/TESTING.md) for the full setup and
+preflight troubleshooting.
 
 ## Writing Tests
 

@@ -17,6 +17,7 @@ import {
   createTestFactory,
   getAnonClient,
   getServiceClient,
+  getEdgeFunctionServiceRoleKey,
   invokeFunction,
   uniqueName,
 } from './_setup.ts'
@@ -50,30 +51,6 @@ function assertSameInstant(actual: unknown, expected: string, msg?: string) {
     new Date(expected).getTime(),
     msg ?? `expected ${actual} to be the same instant as ${expected}`,
   )
-}
-
-/**
- * The service role key the EDGE RUNTIME actually uses, which is not the one in
- * .env.test -- the container gets its own. Cron auth compares against the
- * runtime's, so a test that sends .env.test's key gets a 403. Same approach as
- * process-bids.test.ts.
- */
-async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
-  }
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 }
 
 function isoDate(offsetDays: number): string {

@@ -1,3 +1,5 @@
+import { uniqueEmail, uniqueLeagueName, uniqueTmdbId } from '../helpers/test-ids.helper'
+
 /**
  * Shared test data constants for E2E tests
  * These match the mock responses from TMDb/MDBList APIs
@@ -21,8 +23,8 @@ export function daysFromNow(days: number): string {
  */
 export const MOCK_MOVIES = [
   {
-    id: 12345, // kept for backward compatibility with some tests
-    tmdb_id: 12345,
+    id: uniqueTmdbId(9000, true), // kept for backward compatibility with some tests
+    tmdb_id: uniqueTmdbId(9000, true),
     title: 'Test Movie Alpha',
     release_date: daysFromNow(30),
     poster_path: '/test-poster-alpha.jpg',
@@ -34,8 +36,8 @@ export const MOCK_MOVIES = [
     status: 'upcoming' as const,
   },
   {
-    id: 12346,
-    tmdb_id: 12346,
+    id: uniqueTmdbId(9001, true),
+    tmdb_id: uniqueTmdbId(9001, true),
     title: 'Test Movie Beta',
     release_date: daysFromNow(60),
     poster_path: '/test-poster-beta.jpg',
@@ -47,8 +49,8 @@ export const MOCK_MOVIES = [
     status: 'upcoming' as const,
   },
   {
-    id: 12347,
-    tmdb_id: 12347,
+    id: uniqueTmdbId(9002, true),
+    tmdb_id: uniqueTmdbId(9002, true),
     title: 'Test Movie Gamma',
     release_date: daysFromNow(90),
     poster_path: '/test-poster-gamma.jpg',
@@ -60,8 +62,8 @@ export const MOCK_MOVIES = [
     status: 'upcoming' as const,
   },
   {
-    id: 12348,
-    tmdb_id: 12348,
+    id: uniqueTmdbId(9003, true),
+    tmdb_id: uniqueTmdbId(9003, true),
     title: 'Test Movie Delta',
     release_date: daysFromNow(120),
     poster_path: '/test-poster-delta.jpg',
@@ -73,8 +75,8 @@ export const MOCK_MOVIES = [
     status: 'upcoming' as const,
   },
   {
-    id: 12349,
-    tmdb_id: 12349,
+    id: uniqueTmdbId(9004, true),
+    tmdb_id: uniqueTmdbId(9004, true),
     title: 'Test Movie Epsilon',
     release_date: daysFromNow(180),
     poster_path: '/test-poster-epsilon.jpg',
@@ -114,15 +116,15 @@ export const TEST_LEAGUE_DEFAULTS = {
 }
 
 /**
- * Generate a unique test email with timestamp
+ * Generate a test email scoped to this run and worker
  */
 export function generateTestEmail(prefix: string): string {
-  return `${prefix}-${Date.now()}@test.local`
+  return uniqueEmail(prefix)
 }
 
 /**
- * Generate a unique league name with timestamp
+ * Generate a league name scoped to this run and worker
  */
 export function generateLeagueName(prefix = 'E2E Test League'): string {
-  return `${prefix} ${Date.now()}`
+  return uniqueLeagueName(prefix)
 }

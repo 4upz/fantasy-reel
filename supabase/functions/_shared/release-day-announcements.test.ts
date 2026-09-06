@@ -19,10 +19,9 @@ const TODAY = new Date().toISOString().split('T')[0]
 function baseDb(): MockDb {
   return {
     movies: [{ id: MOVIE_ID, title: 'Fight Club', poster_url: '/poster.jpg', release_date: TODAY }],
-    draft_picks: [
-      { movie_id: MOVIE_ID, league_id: LEAGUE_ID, dropped_at: null, teams: { name: 'Team A' } },
+    team_holdings: [
+      { movie_id: MOVIE_ID, league_id: LEAGUE_ID, source: 'draft', team_name: 'Team A' },
     ],
-    pickups: [],
     discord_notification_log: [],
     discord_channels: [
       {
@@ -84,7 +83,7 @@ Deno.test('release-day-announcements', async (t) => {
     const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
-      db.draft_picks = []
+      db.team_holdings = []
       const client = createMockDbClient(db)
 
       const result = await runReleaseDayAnnouncements(client)
@@ -100,7 +99,11 @@ Deno.test('release-day-announcements', async (t) => {
     const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
-      db.draft_picks[0].dropped_at = new Date().toISOString()
+      // The view omits dropped rows even though the base row remains.
+      db.team_holdings = []
+      db.draft_picks = [
+        { movie_id: MOVIE_ID, league_id: LEAGUE_ID, dropped_at: new Date().toISOString() },
+      ]
       const client = createMockDbClient(db)
 
       const result = await runReleaseDayAnnouncements(client)
@@ -132,13 +135,12 @@ Deno.test('release-day-announcements', async (t) => {
     }
   })
 
-  await t.step('picks up movies via pickups as well as draft_picks', async () => {
+  await t.step('announces an auction pickup exposed by team_holdings', async () => {
     const { calls, restore } = stubFetch()
     try {
       const db = baseDb()
-      db.draft_picks = []
-      db.pickups = [
-        { movie_id: MOVIE_ID, league_id: LEAGUE_ID, dropped_at: null, teams: { name: 'Team B' } },
+      db.team_holdings = [
+        { movie_id: MOVIE_ID, league_id: LEAGUE_ID, source: 'pickup', team_name: 'Team B' },
       ]
       const client = createMockDbClient(db)
 

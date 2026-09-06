@@ -1060,10 +1060,9 @@ const TARGET_VOID_REASON_TEXT: Record<TargetVoidReason, string> = {
  * does: a bid that can never be awarded must not consume one of the bidder's
  * scarce counterpick slots.
  *
- * If every active bid on a contest is voided, the contest is dropped entirely
- * and any remaining 'outbid' bids on it are cancelled too, so they don't
- * strand as 'outbid' forever -- the same sweep `voidReleasedCounterpickContests`
- * does via `bidsByContest` when a whole movie goes dead.
+ * If every active bid on a contest is voided, revalidate the remaining
+ * 'outbid' bids against their own holdings and promote valid candidates.
+ * Drop the contest only when no candidate survives.
  */
 async function revalidateCounterpickTargets(
   serviceClient: ServiceClient,
@@ -1071,13 +1070,15 @@ async function revalidateCounterpickTargets(
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
 ): Promise<BidContest[]> {
-  const allActiveBids = contests.flatMap((contest) => contest.activeBids as CounterpickBid[])
+  // Outbid entries can be promoted when every leader is voided. Their target
+  // may be a different holding, so preload it before either validation pass.
+  const bidsToRevalidate = contests.flatMap((contest) => bidsByContest.get(contest.key) ?? [])
 
   const draftPickIds = [...new Set(
-    allActiveBids.filter((bid) => bid.draft_pick_id).map((bid) => bid.draft_pick_id as string),
+    bidsToRevalidate.filter((bid) => bid.draft_pick_id).map((bid) => bid.draft_pick_id as string),
   )]
   const pickupIds = [...new Set(
-    allActiveBids.filter((bid) => bid.pickup_id).map((bid) => bid.pickup_id as string),
+    bidsToRevalidate.filter((bid) => bid.pickup_id).map((bid) => bid.pickup_id as string),
   )]
 
   type TargetRow = { id: string; team_id: string; dropped_at: string | null }

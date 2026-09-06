@@ -87,11 +87,11 @@ test.describe('League Switcher', () => {
     await expect(authedPage.getByRole('listbox')).toBeVisible({ timeout: 5000 })
 
     // Current league should have aria-selected="true"
-    const currentOption = authedPage.getByRole('option', { name: new RegExp(multiLeague.league1.name) })
+    const currentOption = authedPage.getByRole('option', { name: multiLeague.league1.name })
     await expect(currentOption).toHaveAttribute('aria-selected', 'true')
 
     // Other league should have aria-selected="false"
-    const otherOption = authedPage.getByRole('option', { name: new RegExp(multiLeague.league2.name) })
+    const otherOption = authedPage.getByRole('option', { name: multiLeague.league2.name })
     await expect(otherOption).toHaveAttribute('aria-selected', 'false')
   })
 
@@ -106,7 +106,7 @@ test.describe('League Switcher', () => {
     await expect(authedPage.getByRole('listbox')).toBeVisible({ timeout: 5000 })
 
     // Click league2
-    const league2Option = authedPage.getByRole('option', { name: new RegExp(multiLeague.league2.name) })
+    const league2Option = authedPage.getByRole('option', { name: multiLeague.league2.name })
     await league2Option.click()
 
     // Wait for navigation and verify URL preserves /standings tab
@@ -123,7 +123,7 @@ test.describe('League Switcher', () => {
     await expect(authedPage.getByRole('listbox')).toBeVisible({ timeout: 5000 })
 
     // Click the current league option
-    const currentOption = authedPage.getByRole('option', { name: new RegExp(multiLeague.league1.name) })
+    const currentOption = authedPage.getByRole('option', { name: multiLeague.league1.name })
     await currentOption.click()
 
     // Dropdown should close
@@ -147,10 +147,10 @@ test.describe('League Switcher', () => {
     // Each league option should show its status badge
     // Use locator scoped to each option to avoid strict mode violations
     // (league names contain "Active"/"Setup" text too)
-    const activeOption = authedPage.getByRole('option', { name: new RegExp(multiLeague.league1.name) })
+    const activeOption = authedPage.getByRole('option', { name: multiLeague.league1.name })
     await expect(activeOption.locator('.badge')).toBeVisible()
 
-    const setupOption = authedPage.getByRole('option', { name: new RegExp(multiLeague.league2.name) })
+    const setupOption = authedPage.getByRole('option', { name: multiLeague.league2.name })
     await expect(setupOption.locator('.badge')).toBeVisible()
   })
 
