@@ -1,0 +1,37 @@
+/* Proposed roles, scoped to the review surface until the app rollout. */
+.fr-type-system {
+  --fr-display: 'Bricolage Grotesque', sans-serif;
+  --fr-body: 'DM Sans', sans-serif;
+  font-family: var(--fr-body);
+}
+.fr-type-system :is(.type-hero, .type-page, .type-section, .type-panel, .type-card) {
+  font-family: var(--fr-display);
+  font-weight: 700;
+  font-optical-sizing: auto;
+  font-stretch: 100%;
+}
+.fr-type-system .type-hero { font-size: 2.5rem; line-height: 1.05; letter-spacing: -.035em; font-stretch: 96%; }
+.fr-type-system .type-page { font-size: 1.75rem; line-height: 1.143; letter-spacing: -.025em; }
+.fr-type-system .type-section { font-size: 1.375rem; line-height: 1.273; letter-spacing: -.02em; }
+.fr-type-system .type-panel { font-size: 1.25rem; line-height: 1.3; letter-spacing: -.015em; }
+.fr-type-system .type-card { font-size: 1.125rem; line-height: 1.333; letter-spacing: -.01em; }
+.fr-type-system :is(.type-lead, .type-body, .type-body-sm, .type-row-title, .type-control, .type-input, .type-label, .type-meta) { font-family: var(--fr-body); letter-spacing: 0; }
+.fr-type-system .type-lead { font-size: 1.125rem; line-height: 1.556; font-weight: 400; }
+.fr-type-system .type-body { font-size: 1rem; line-height: 1.5; font-weight: 400; }
+.fr-type-system .type-body-sm { font-size: .875rem; line-height: 1.429; font-weight: 400; }
+.fr-type-system :is(.type-row-title, .type-control) { font-size: .875rem; line-height: 1.429; font-weight: 600; }
+.fr-type-system .type-input { font-size: 1rem; line-height: 1.5; font-weight: 400; }
+.fr-type-system .type-label { font-size: .875rem; line-height: 1.429; font-weight: 500; }
+.fr-type-system .type-meta { font-size: .75rem; line-height: 1.333; font-weight: 500; }
+.fr-type-system .type-number { font-size: 1rem; line-height: 1.375; font-weight: 700; }
+.fr-type-system .type-number-lg { font-size: 1.75rem; line-height: 1.143; font-weight: 700; }
+.fr-type-system :is(.type-number, .type-number-lg, .type-numeric) { font-family: var(--fr-display); font-variation-settings: "opsz" 12, "wdth" 100; font-optical-sizing: none; font-variant-numeric: tabular-nums lining-nums; letter-spacing: 0; }
+@media (min-width: 64rem) {
+  .fr-type-system .type-hero { font-size: 4.5rem; line-height: 1.028; }
+  .fr-type-system .type-page { font-size: 2.25rem; line-height: 1.111; }
+  .fr-type-system .type-section { font-size: 1.625rem; line-height: 1.231; }
+  .fr-type-system .type-panel { font-size: 1.375rem; line-height: 1.273; }
+  .fr-type-system .type-card { font-size: 1.25rem; line-height: 1.3; }
+  .fr-type-system .type-lead { font-size: 1.25rem; line-height: 1.5; }
+  .fr-type-system .type-number-lg { font-size: 2rem; line-height: 1.125; }
+}

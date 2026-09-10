@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fantasy Reel — brand and typography</title>
+<link rel="icon" href="../../apps/frontend/public/brand/v1/favicon.svg">
+<link rel="stylesheet" href="typography.css">
+<style>
+@font-face { font-family:'Bricolage Grotesque'; src:url('source/bricolage.ttf'); font-weight:200 800; font-stretch:75% 100%; font-style:normal; font-display:swap; }
+@font-face { font-family:'DM Sans'; src:url('source/dm-sans.ttf'); font-weight:100 1000; font-style:normal; font-display:swap; }
+:root { color-scheme:dark; background:#0f0f0f; color:#e8e8e8; font-family:'DM Sans',sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; }
+button,select,input { font:inherit; }
+button,select { cursor:pointer; }
+button:focus-visible,select:focus-visible,input:focus-visible,a:focus-visible { outline:2px solid #d4b23a; outline-offset:4px; }
+button { color:inherit; }
+a { color:#c9a227; }
+[hidden] { display:none!important; }
+.wrap { width:min(1120px,100%); padding:36px 28px 64px; margin:auto; }
+header { display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap; }
+header img { width:212px; max-width:100%; }
+.muted { color:#b8b0a4; }
+.tabs { display:flex; gap:8px; flex-wrap:wrap; margin:34px 0; }
+.tabs button { background:transparent; border:1px solid #2e2e2e; border-radius:8px; padding:12px 18px; }
+.tabs button[aria-selected=true] { background:#c9a227; color:#0f0f0f; border-color:#c9a227; font-weight:600; }
+.intro { margin:0 0 28px; max-width:66ch; color:#b8b0a4; }
+.toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:14px; margin:20px 0; }
+.toolbar label { display:flex; align-items:center; flex-wrap:wrap; gap:10px; }
+select { color:#e8e8e8; background:#262626; border:1px solid #404040; padding:10px 12px; border-radius:6px; max-width:100%; }
+.lockup { min-height:240px; padding:34px; background:#1c1c1c; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+.lockup img { width:min(740px,100%); max-height:200px; }
+.lockup.light { background:#e8e8e8; }
+.icon-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:24px; margin:28px 0; }
+figure { margin:0; }
+figcaption { font-size:14px; color:#b8b0a4; margin-top:16px; line-height:1.45; }
+.icon-frame { padding:24px; background:#161616; border-radius:12px; min-height:225px; display:flex; justify-content:center; align-items:center; }
+.icon-frame img { width:152px; max-width:100%; aspect-ratio:1; }
+.rounded { border-radius:23%; }
+.circle { border-radius:50%; }
+.favicon-examples { display:flex; flex-direction:column; gap:22px; width:100%; }
+.browser-tab { display:flex; gap:10px; align-items:center; min-width:0; background:#262626; border-radius:8px; padding:14px; }
+.browser-tab img { width:16px; height:16px; flex:none; }
+.browser-tab span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
+.sizes { display:flex; align-items:center; justify-content:center; gap:20px; }
+.sizes img { flex:none; }
+.section-top { margin:38px 0 16px; }
+.concepts { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+.concepts img { width:100%; border-radius:12px; }
+.specimen-row { display:grid; grid-template-columns:210px 1fr; gap:24px; padding:26px 0; border-top:1px solid #2e2e2e; }
+.specimen-row:first-of-type { border-top:0; }
+.specimen-row p { margin:0; }
+.specimen-row small { display:block; margin-top:5px; color:#b8b0a4; font-size:12px; line-height:1.5; }
+.sample { min-width:0; overflow-wrap:anywhere; }
+.sample p { max-width:55ch; }
+.hero-proof { background:#1c1c1c; border-radius:12px; padding:42px; margin-bottom:32px; }
+.hero-proof h1 { max-width:13ch; margin:0 0 22px; }
+.hero-proof p { max-width:45ch; color:#b8b0a4; }
+.action-proof { display:inline-block; color:#0f0f0f; background:#c9a227; border-radius:8px; padding:12px 20px; margin-top:14px; }
+.app-grid { display:grid; grid-template-columns:1.2fr 1fr; gap:24px; align-items:start; }
+.panel { padding:24px; border:1px solid #2e2e2e; border-radius:12px; background:#1c1c1c; min-width:0; }
+.panel h2 { margin:0 0 8px; }
+.panel p { color:#b8b0a4; }
+.standing { display:grid; grid-template-columns:24px 1fr auto; align-items:center; gap:14px; padding:20px 0; border-bottom:1px solid #2e2e2e; }
+.standing:last-child { border:0; }
+.standing span { min-width:0; }
+.standing small { display:block; color:#b8b0a4; margin-top:6px; }
+.score { text-align:right; color:#c9a227; white-space:nowrap; }
+.bid-movie { padding:18px 0; }
+.form-label { display:block; margin:16px 0 8px; }
+.input-proof { display:block; padding:12px; background:#2a2a2a; border:1px solid #404040; border-radius:8px; }
+.error-proof { padding:12px; background:#291b1b; color:#e8e8e8!important; border-radius:8px; }
+.error-proof strong { display:block; margin-bottom:6px; color:#d65c5c; }
+.pending { color:#b8b0a4; }
+footer { margin-top:40px; font-size:13px; color:#b8b0a4; display:flex; gap:18px; flex-wrap:wrap; }
+@media(max-width:740px) {
+  .wrap { padding:24px 18px 40px; }
+  .icon-grid,.app-grid { grid-template-columns:1fr; }
+  .icon-frame { min-height:190px; }
+  .specimen-row { grid-template-columns:1fr; gap:14px; }
+  .lockup { min-height:180px; padding:18px; }
+  .hero-proof { padding:26px; }
+  .concepts { gap:14px; }
+}
+</style>
+</head>
+<body class="fr-type-system">
+<main class="wrap">
+  <header><img src="../../apps/frontend/public/brand/v1/logo-dark.svg" alt="Fantasy Reel"><span class="type-meta muted">Brand and typography study · September 2026</span></header>
+  <nav class="tabs" role="tablist" aria-label="Design study">
+    <button type="button" role="tab" aria-selected="true" aria-controls="brand" id="tab-brand">Logo &amp; icons</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="type" id="tab-type" tabindex="-1">Type system</button>
+    <button type="button" role="tab" aria-selected="false" aria-controls="context" id="tab-context" tabindex="-1">In context</button>
+  </nav>
+  <section id="brand" role="tabpanel" aria-labelledby="tab-brand">
+    <p class="intro type-body">One identity, sized for its job. These are the actual vector and PNG candidate assets. The current app still uses its existing branding.</p>
+    <div class="toolbar"><label class="type-label" for="lockup-select">Logo treatment <select id="lockup-select"><option value="logo-dark">Primary</option><option value="logo-compact-dark">Compact lettering</option><option value="logo-gold">One-color gold</option><option value="logo-light">One-color ink</option><option value="logo-stacked-dark">Stacked</option></select></label><a id="logo-download" href="../../apps/frontend/public/brand/v1/logo-dark.svg" download>Download SVG</a></div>
+    <div class="lockup" id="lockup-frame"><img id="logo-preview" src="../../apps/frontend/public/brand/v1/logo-dark.svg" alt="Primary Fantasy Reel logo"></div>
+    <div class="toolbar"><h2 class="type-section">App and browser icons</h2><label class="type-label" for="colorway">Colorway <select id="colorway"><option value="charcoal">Gold on charcoal</option><option value="gold">Ink on gold</option></select></label></div>
+    <div class="icon-grid">
+      <figure><div class="icon-frame"><img class="rounded" data-app-icon="normal" src="../../apps/frontend/public/brand/v1/app-charcoal-512.png" alt="Rounded-square home-screen preview"></div><figcaption>Home screen · 180, 192, 512 and 1024px exports. Corner masking shown here is only a preview.</figcaption></figure>
+      <figure><div class="icon-frame"><img class="circle" data-app-icon="maskable" src="../../apps/frontend/public/brand/v1/maskable-charcoal-512.png" alt="Circular crop of the maskable icon"></div><figcaption>Maskable · extra space protects the mark through different launcher shapes.</figcaption></figure>
+      <figure><div class="icon-frame"><div class="favicon-examples"><div class="browser-tab"><img src="../../apps/frontend/public/brand/v1/favicon-16.png" alt="16px favicon"><span>Fantasy Reel — Your leagues</span></div><div class="sizes"><img style="width:16px;height:16px" src="../../apps/frontend/public/brand/v1/favicon-16.png" alt="16 pixel icon"><img style="width:32px;height:32px" src="../../apps/frontend/public/brand/v1/favicon-32.png" alt="32 pixel icon"><img style="width:48px;height:48px" src="../../apps/frontend/public/brand/v1/favicon-48.png" alt="48 pixel icon"></div></div></div><figcaption>Browser · a simplified drawing at actual 16, 32 and 48px sizes, with SVG and ICO versions.</figcaption></figure>
+    </div>
+    <h2 class="type-section section-top">High-fidelity concept variants</h2>
+    <p class="type-body-sm muted">Generated direction studies. The vector assets above use a consistent, editable drawing and exact palette.</p>
+    <div class="concepts"><figure><img src="concepts/charcoal.png" alt="High-fidelity gold-on-charcoal ribbon concept"><figcaption>Charcoal</figcaption></figure><figure><img src="concepts/gold.png" alt="High-fidelity dark-on-gold ribbon concept"><figcaption>Gold</figcaption></figure></div>
+  </section>
+  <section id="type" role="tabpanel" aria-labelledby="tab-type" hidden>
+    <p class="intro type-body">Bricolage Grotesque gives headlines their voice. DM Sans keeps the game readable. These specimens use the actual font files and proposed responsive roles.</p>
+    <div class="specimen-row"><div class="type-label">Marketing hero<small>Bricolage 700 · 40–72px</small></div><div class="sample type-hero">Good taste.<br>Friendly rivalry.</div></div>
+    <div class="specimen-row"><div class="type-label">Page title<small>Bricolage 700 · 28–36px</small></div><div class="sample type-page">Your leagues</div></div>
+    <div class="specimen-row"><div class="type-label">Section heading<small>Bricolage 700 · 22–26px</small></div><div class="sample type-section">The trading block</div></div>
+    <div class="specimen-row"><div class="type-label">Panel and card titles<small>Bricolage 700 · 18–22px</small></div><div class="sample"><p class="type-panel">Place a pickup bid</p><p class="type-card" style="margin-top:14px">The usual suspects</p></div></div>
+    <div class="specimen-row"><div class="type-label">Body copy<small>DM Sans 400 · 16 / 24px</small></div><div class="sample type-body"><p>Draft upcoming movies. Build a roster around your instincts, then see how it holds up when the reviews arrive.</p></div></div>
+    <div class="specimen-row"><div class="type-label">Movie and team names<small>DM Sans 600 · 14 / 20px</small></div><div class="sample type-row-title">Everything Everywhere All at Once<br><span class="type-meta muted">Released · 92 RT · 2022</span></div></div>
+    <div class="specimen-row"><div class="type-label">Controls and metadata<small>DM Sans 500–600 · 12–16px</small></div><div class="sample"><p class="type-control">Place bid &nbsp; Accept trade &nbsp; View roster</p><p class="type-meta muted" style="margin-top:12px">Budget remaining · Bidding closes Friday</p></div></div>
+    <div class="specimen-row"><div class="type-label">Scores and budgets<small>Bricolage 700 · optical size 12 · tabular numerals</small></div><div class="sample"><p class="type-number-lg">342 &nbsp; 128 &nbsp; −24</p><p class="type-number" style="margin-top:12px">$100 &nbsp; $75 &nbsp; $8</p></div></div>
+  </section>
+  <section id="context" role="tabpanel" aria-labelledby="tab-context" hidden>
+    <p class="intro type-body">Representative typography specimens with illustrative league data. Full app layout and interaction testing belongs to the rollout.</p>
+    <div class="hero-proof"><h1 class="type-hero">Your hot takes, finally worth something.</h1><p class="type-lead">Draft upcoming movies. Outscore your friends when the reviews drop.</p><span class="action-proof type-control">Start a league</span></div>
+    <div class="app-grid">
+      <section class="panel"><h2 class="type-section">Standings</h2><p class="type-body-sm">The usual suspects</p><div class="standing"><span class="type-number">1</span><span class="type-row-title">Director's Cut<small class="type-meta">8 movies scored</small></span><span class="type-number-lg score">342<small class="type-meta">points</small></span></div><div class="standing"><span class="type-number">2</span><span class="type-row-title">The Slow Burn<small class="type-meta">7 movies scored</small></span><span class="type-number-lg score">319<small class="type-meta">points</small></span></div><div class="standing"><span class="type-number">3</span><span class="type-row-title">Plot Twist<small class="type-meta">6 movies scored</small></span><span class="type-number-lg score">−24<small class="type-meta">points</small></span></div></section>
+      <section class="panel"><h2 class="type-panel">Place a pickup bid</h2><div class="bid-movie"><div class="type-row-title">The next sleeper hit</div><span class="type-meta pending">Release date pending · No RT score yet</span></div><div class="form-label type-label">Bid amount</div><div class="input-proof type-input type-numeric">$85</div><p class="type-meta">Fantasy Budget remaining: $75</p><p class="error-proof type-body-sm"><strong>Your bid is over budget</strong>You have $75 remaining. Lower this bid to fit your budget.</p><span class="action-proof type-control">Place bid</span></section>
+    </div>
+  </section>
+  <footer><a href="typography.md">Full typography guide</a><a href="README.md">Assets and integration notes</a><span>Design proposal · application rollout pending</span></footer>
+</main>
+<script>
+const base = '../../apps/frontend/public/brand/v1/';
+const tabs = Array.from(document.querySelectorAll('[role=tab]'));
+function selectTab(tab) {
+  tabs.forEach(item => {
+    const active = item === tab;
+    item.setAttribute('aria-selected', String(active));
+    item.tabIndex = active ? 0 : -1;
+    document.getElementById(item.getAttribute('aria-controls')).hidden = !active;
+  });
+}
+tabs.forEach((tab, index) => {
+  tab.addEventListener('click', () => selectTab(tab));
+  tab.addEventListener('keydown', event => {
+    let next;
+    if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+    if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = tabs.length - 1;
+    if (next !== undefined) { event.preventDefault(); selectTab(tabs[next]); tabs[next].focus(); }
+  });
+});
+document.getElementById('lockup-select').addEventListener('change', event => {
+  const value = event.target.value;
+  document.getElementById('logo-preview').src = base + value + '.svg';
+  document.getElementById('logo-preview').alt = event.target.selectedOptions[0].text + ' Fantasy Reel logo';
+  document.getElementById('logo-download').href = base + value + '.svg';
+  document.getElementById('lockup-frame').classList.toggle('light', value === 'logo-light');
+});
+document.getElementById('colorway').addEventListener('change', event => {
+  document.querySelector('[data-app-icon=normal]').src = base + 'app-' + event.target.value + '-512.png';
+  document.querySelector('[data-app-icon=maskable]').src = base + 'maskable-' + event.target.value + '-512.png';
+});
+Promise.all([document.fonts.load('700 36px "Bricolage Grotesque"'),document.fonts.load('600 14px "DM Sans"')]).then(fonts => {
+  document.body.dataset.fontsLoaded = fonts.every(group => group.length > 0) ? 'true' : 'false';
+});
+</script>
+</body>
+</html>
