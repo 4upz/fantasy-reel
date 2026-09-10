@@ -54,7 +54,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
   const isOwner = typedLeague.owner_id === user.id
   const participantCount = countResult.count ?? 0
 
-  const accessLabel = typedLeague.invite_only ? 'Invite Only' : 'Open'
+  const accessLabel = typedLeague.invite_only ? 'Invite only' : 'Open'
 
   // Only a league still in setup can be joined, so the open slots are only news
   // while they can be filled. After that, show the roster of players who are in.
@@ -89,10 +89,10 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
               leading one is desktop-only: on mobile the badge sits up on the
               title line, so it would dangle at the end of a row.
             */}
-            <div className="flex basis-full items-center gap-1.5 text-xs text-foreground-muted lg:basis-auto lg:gap-2 lg:text-sm">
-              <span aria-hidden className="hidden text-foreground-muted/50 lg:inline">·</span>
+            <div className="type-meta flex basis-full items-center gap-1.5 text-foreground-secondary lg:basis-auto lg:gap-2">
+              <span aria-hidden className="hidden text-foreground-secondary/50 lg:inline">·</span>
               <span>{accessLabel}</span>
-              <span aria-hidden className="text-foreground-muted/50">·</span>
+              <span aria-hidden className="text-foreground-secondary/50">·</span>
               <span>{participantLabel}</span>
             </div>
           </div>

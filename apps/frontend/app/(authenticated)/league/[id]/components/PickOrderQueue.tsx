@@ -93,8 +93,8 @@ export default function PickOrderQueue({
 
   return (
     <div className="space-y-2" data-testid="pick-order-queue">
-      <h4 className="text-xs font-medium text-foreground-muted uppercase tracking-wider">
-        Upcoming Picks
+      <h4 className="type-label text-foreground-secondary">
+        Upcoming picks
       </h4>
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none">
         {queue.map((item, index) => (
@@ -108,7 +108,7 @@ export default function PickOrderQueue({
             {/* Position indicator */}
             <div
               className={cn(
-                'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
+                'type-meta w-6 h-6 rounded-full flex items-center justify-center',
                 getPositionBadgeStyles(item.isCurrentPick, item.isCurrentUser)
               )}
             >
@@ -119,25 +119,25 @@ export default function PickOrderQueue({
             <div className="min-w-0">
               <p
                 className={cn(
-                  'text-sm font-medium truncate max-w-20 sm:max-w-32',
+                  'type-label truncate max-w-20 sm:max-w-32',
                   item.isCurrentPick ? 'text-foreground' : 'text-foreground-secondary'
                 )}
               >
                 {item.participant.teams?.name || 'Unknown'}
               </p>
               {item.participant.profiles?.display_name && (
-                <p className="text-xs text-foreground-muted truncate max-w-20 sm:max-w-32">
+                <p className="type-meta text-foreground-secondary truncate max-w-20 sm:max-w-32">
                   {item.participant.profiles.display_name}
                 </p>
               )}
-              <p className="text-xs text-foreground-muted">
+              <p className="type-meta text-foreground-secondary">
                 R{item.round} P{item.pickNumber}
               </p>
             </div>
 
             {/* Current user indicator */}
             {item.isCurrentUser && (
-              <span className="text-xs font-medium text-success">You</span>
+              <span className="type-meta text-success">You</span>
             )}
 
             {/* Current pick arrow */}
@@ -152,7 +152,7 @@ export default function PickOrderQueue({
         {/* More picks indicator */}
         {currentPickIndex + 5 < totalPicks && (
           <div className="flex-shrink-0 flex items-center px-3">
-            <span className="text-xs text-foreground-muted">
+            <span className="type-meta text-foreground-secondary">
               +{totalPicks - currentPickIndex - 5} more
             </span>
           </div>

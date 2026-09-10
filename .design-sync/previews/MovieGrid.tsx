@@ -76,6 +76,6 @@ export const ShortList = () => <MovieGrid movies={movies.slice(0, 3)} onMovieCli
 export const NoResults = () => (
   <div>
     <MovieGrid movies={[]} onMovieClick={noop} />
-    <p className="text-sm text-foreground-muted">No movies matched those filters.</p>
+    <p className="text-sm text-foreground-secondary">No movies matched those filters.</p>
   </div>
 )

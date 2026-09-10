@@ -73,9 +73,9 @@ export default function BidWeekTimeline({
   return (
     <div className="mt-4 pt-4 border-t border-border" data-testid="bid-week-timeline">
       <div className="flex items-baseline justify-between gap-3 mb-2.5">
-        <p className="text-foreground-muted text-xs uppercase tracking-wide">Bidding Week</p>
+        <p className="type-meta text-foreground-secondary">Bidding week</p>
         <p
-          className={`text-xs font-medium ${isCounterBidPhase ? 'text-gold' : 'text-foreground-secondary'}`}
+          className={`type-meta ${isCounterBidPhase ? 'text-gold' : 'text-foreground-secondary'}`}
           data-testid="bid-phase-label"
         >
           {isCounterBidPhase
@@ -116,10 +116,10 @@ export default function BidWeekTimeline({
             aria-hidden="true"
           />
           <p
-            className={`text-xs truncate ${isCounterBidPhase ? 'text-foreground-muted' : 'text-foreground-secondary'}`}
+            className="type-meta text-foreground-secondary"
           >
             Open bidding{' '}
-            <span className="text-foreground-muted">
+            <span className="text-foreground-secondary">
               {isCounterBidPhase ? 'closed' : 'to'} {formatDeadlineShort(cutoffAt)}
             </span>
           </p>
@@ -131,10 +131,10 @@ export default function BidWeekTimeline({
             aria-hidden="true"
           />
           <p
-            className={`text-xs truncate ${isCounterBidPhase ? 'text-foreground-secondary' : 'text-foreground-muted'}`}
+            className="type-meta text-foreground-secondary"
           >
             Counter bids{' '}
-            <span className="text-foreground-muted">
+            <span className="text-foreground-secondary">
               to {formatDeadlineShort(processingDeadline)}
             </span>
           </p>
@@ -142,7 +142,7 @@ export default function BidWeekTimeline({
       </div>
 
       {isCounterBidPhase && (
-        <p className="mt-2.5 text-xs text-foreground-muted animate-fade-in">
+        <p className="type-meta mt-2.5 text-foreground-secondary animate-fade-in">
           Raise or counter bids on movies already in play. Movies nobody has bid on reopen after
           this week&apos;s bids are processed, and bids placed now can&apos;t be withdrawn.
         </p>

@@ -11,7 +11,7 @@ export function formatBudget(amount: number): string {
 
 /** Money reads gold everywhere in the app; a spent-out team goes quiet instead. */
 export function budgetTone(remaining: number): string {
-  return remaining > 0 ? 'text-gold' : 'text-foreground-muted'
+  return remaining > 0 ? 'text-gold' : 'text-foreground-secondary'
 }
 
 /**
@@ -31,9 +31,9 @@ export default function TeamBudgetSummary({
 
   return (
     <div className="flex items-center justify-between gap-2 rounded-[11px] border border-border bg-background px-[11px] py-2">
-      <span className="text-[11px] uppercase tracking-[0.1em] text-foreground-muted">Budget</span>
-      <span className="text-[13px] text-foreground-muted">
-        <span className={`font-semibold ${budgetTone(remaining)}`}>{formatBudget(remaining)}</span>{' '}
+      <span className="type-meta text-foreground-secondary">Budget</span>
+      <span className="type-body-sm text-foreground-secondary">
+        <span className={`type-numeric font-semibold ${budgetTone(remaining)}`}>{formatBudget(remaining)}</span>{' '}
         left · {formatBudget(spent)} spent
       </span>
     </div>

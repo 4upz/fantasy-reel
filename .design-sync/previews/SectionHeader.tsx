@@ -45,7 +45,7 @@ export const OnASettingsCard = () => (
       title="League Info"
       description="Name, description and visibility for this league."
     />
-    <label className="block text-sm font-medium text-foreground mb-2">League name</label>
+    <label className="block type-label text-foreground mb-2">League name</label>
     <input className="input w-full" defaultValue="Summer Blockbusters" />
   </div>
 )

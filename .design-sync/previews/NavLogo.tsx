@@ -1,7 +1,7 @@
 import { NavLogo } from 'fantasy-reel'
 
-/** The film-reel mark and wordmark. "Fantasy" is bold, "Reel" light — the
-    contrast is the wordmark, do not re-set it. */
+/** The approved film-conversation symbol and outlined Bricolage wordmark.
+    Keep the vector lockup intact rather than resetting its lettering. */
 export const Default = () => (
   <div className="flex items-start">
     <NavLogo />
@@ -19,10 +19,10 @@ export const CustomTarget = () => (
 export const InANavBar = () => (
   <div className="flex items-center justify-between max-w-2xl px-4 py-3 rounded-lg bg-surface border border-border">
     <NavLogo />
-    <div className="flex items-center gap-4 text-sm text-foreground-secondary">
+    <div className="flex items-center gap-4 type-control text-foreground-secondary">
       <span>Dashboard</span>
       <span>Movies</span>
-      <span className="text-gold">My League</span>
+      <span className="text-gold">My league</span>
     </div>
   </div>
 )

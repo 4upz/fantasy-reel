@@ -109,9 +109,9 @@ export default function CounterpickConfigSection({
               <div>
                 <label
                   htmlFor="draft_counterpick_slots"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  Draft Counterpick Slots
+                  Draft counterpick slots
                 </label>
                 <input
                   type="number"
@@ -124,13 +124,13 @@ export default function CounterpickConfigSection({
                   }
                   min={MIN_DRAFT_COUNTERPICK_SLOTS}
                   max={MAX_DRAFT_COUNTERPICK_SLOTS}
-                  className={`input w-24 ${draftSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
+                  className={`type-input type-numeric input w-24 ${draftSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
                 />
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Counterpicks per team after draft (0 to disable)
                 </p>
                 {draftSlotsOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_DRAFT_COUNTERPICK_SLOTS} and{' '}
                     {MAX_DRAFT_COUNTERPICK_SLOTS}
                   </p>
@@ -141,9 +141,9 @@ export default function CounterpickConfigSection({
               <div>
                 <label
                   htmlFor="bidding_counterpick_slots"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  Bidding Counterpick Slots
+                  Bidding counterpick slots
                 </label>
                 <input
                   type="number"
@@ -156,13 +156,13 @@ export default function CounterpickConfigSection({
                   }
                   min={MIN_BIDDING_COUNTERPICK_SLOTS}
                   max={MAX_BIDDING_COUNTERPICK_SLOTS}
-                  className={`input w-24 ${biddingSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
+                  className={`type-input type-numeric input w-24 ${biddingSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
                 />
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Counterpicks per team during bidding (0 to disable)
                 </p>
                 {biddingSlotsOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_BIDDING_COUNTERPICK_SLOTS} and{' '}
                     {MAX_BIDDING_COUNTERPICK_SLOTS}
                   </p>
@@ -172,13 +172,13 @@ export default function CounterpickConfigSection({
 
             {/* Counterpick Info */}
             <div className="p-3 bg-surface-hover rounded-lg border border-border">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-foreground-secondary">Total Counterpicks Available</span>
+              <div className="type-body-sm flex items-center justify-between">
+                <span className="text-foreground-secondary">Total counterpicks available</span>
                 <span className="font-medium text-gold">
                   {draftCounterpickSlots + biddingCounterpickSlots} per team
                 </span>
               </div>
-              <p className="text-xs text-foreground-muted mt-1">
+              <p className="type-meta text-foreground-secondary mt-1">
                 {draftCounterpickSlots > 0 || biddingCounterpickSlots > 0
                   ? 'Teams can bet against opponent movies to earn points if they underperform'
                   : 'Counterpicks are disabled. Enable by setting slots above 0.'}
@@ -199,11 +199,11 @@ export default function CounterpickConfigSection({
               <div>
                 <label
                   htmlFor="counterpicks_block_drops"
-                  className="block text-sm font-medium text-foreground cursor-pointer"
+                  className="type-label block text-foreground cursor-pointer"
                 >
-                  Block Drops on Counterpicked Movies
+                  Block drops on counterpicked movies
                 </label>
-                <p className="text-xs text-foreground-muted mt-1">
+                <p className="type-meta text-foreground-secondary mt-1">
                   Prevent dropping movies that have been counterpicked by opponents
                 </p>
               </div>
@@ -217,7 +217,7 @@ export default function CounterpickConfigSection({
                 Saving...
               </>
             ) : (
-              'Save Changes'
+              'Save changes'
             )}
           </button>
         </form>

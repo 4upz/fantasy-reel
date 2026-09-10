@@ -84,10 +84,10 @@ export default function MovieDetailBody({
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground">
+            <h2 className="type-page text-foreground">
               {displayData.title}
               {releaseYear && (
-                <span className="text-foreground-muted font-normal ml-2">({releaseYear})</span>
+                <span className="type-body text-foreground-secondary ml-2">({releaseYear})</span>
               )}
             </h2>
 
@@ -95,15 +95,15 @@ export default function MovieDetailBody({
               <p className="text-gold italic mt-2">&ldquo;{details.tagline}&rdquo;</p>
             )}
 
-            <div className="flex flex-wrap items-center gap-4 mt-4 text-sm">
+            <div className="type-body-sm flex flex-wrap items-center gap-4 mt-4">
               {displayData.vote_average > 0 && (
                 <div className="flex items-center gap-1.5">
                   <span className="text-gold text-lg">★</span>
-                  <span className="text-foreground font-semibold">
+                  <span className="type-number text-foreground">
                     {displayData.vote_average.toFixed(1)}
                   </span>
                   {details?.vote_count && (
-                    <span className="text-foreground-muted">
+                    <span className="text-foreground-secondary">
                       ({details.vote_count.toLocaleString()} votes)
                     </span>
                   )}
@@ -138,7 +138,7 @@ export default function MovieDetailBody({
                 {details.genres.map((genre) => (
                   <span
                     key={genre.id}
-                    className="px-3 py-1 rounded-full text-xs font-medium bg-elevated border border-border text-foreground-secondary"
+                    className="type-meta px-3 py-1 rounded-full bg-elevated border border-border text-foreground-secondary"
                   >
                     {genre.name}
                   </span>
@@ -147,15 +147,15 @@ export default function MovieDetailBody({
             )}
 
             {details?.director && (
-              <p className="mt-4 text-sm text-foreground-secondary">
-                <span className="text-foreground-muted">Directed by</span>{' '}
+              <p className="type-body-sm mt-4 text-foreground-secondary">
+                <span className="text-foreground-secondary">Directed by</span>{' '}
                 <span className="text-foreground">{details.director}</span>
               </p>
             )}
 
             {displayData.overview && (
               <div className="mt-6">
-                <h3 className="font-display font-semibold text-foreground mb-2">Overview</h3>
+                <h3 className="type-panel text-foreground mb-2">Overview</h3>
                 <p className="text-foreground-secondary leading-relaxed">{displayData.overview}</p>
               </div>
             )}
@@ -178,7 +178,7 @@ export default function MovieDetailBody({
               href={`https://www.imdb.com/title/${details.imdb_id}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 text-sm text-gold hover:text-gold-hover transition-colors"
+              className="type-control inline-flex items-center gap-2 text-gold hover:text-gold-hover transition-colors"
             >
               View on IMDb
               <ExternalLink className="w-4 h-4" />
@@ -212,9 +212,9 @@ function CastSection({ cast, collapsible }: { cast: CastMember[]; collapsible: b
           data-testid="cast-toggle"
           className="flex w-full items-center justify-between gap-2 rounded-lg border border-border bg-elevated/40 px-3 py-2 text-left transition-colors hover:border-border-hover"
         >
-          <span className="font-display font-semibold text-foreground">
-            Top Cast{' '}
-            <span className="font-body text-sm font-normal text-foreground-muted">
+          <span className="type-control text-foreground">
+            Top cast{' '}
+            <span className="type-body-sm text-foreground-secondary">
               ({cast.length})
             </span>
           </span>
@@ -224,7 +224,7 @@ function CastSection({ cast, collapsible }: { cast: CastMember[]; collapsible: b
           />
         </button>
       ) : (
-        <h3 className="font-display font-semibold text-foreground mb-4">Top Cast</h3>
+        <h3 className="type-panel text-foreground mb-4">Top cast</h3>
       )}
 
       {open && (
@@ -244,13 +244,13 @@ function CastSection({ cast, collapsible }: { cast: CastMember[]; collapsible: b
                     className="object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-foreground-muted">
+                  <div className="w-full h-full flex items-center justify-center text-foreground-secondary">
                     <User className="w-8 h-8" />
                   </div>
                 )}
               </div>
-              <p className="mt-2 text-sm font-medium text-foreground truncate">{actor.name}</p>
-              <p className="text-xs text-foreground-muted truncate">{actor.character}</p>
+              <p className="type-label mt-2 text-foreground truncate">{actor.name}</p>
+              <p className="type-meta text-foreground-secondary truncate">{actor.character}</p>
             </div>
           ))}
         </div>

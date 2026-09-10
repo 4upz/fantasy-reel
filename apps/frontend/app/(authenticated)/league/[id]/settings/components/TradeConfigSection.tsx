@@ -164,11 +164,11 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
             <div>
               <label
                 htmlFor="trades_enabled"
-                className="block text-sm font-medium text-foreground cursor-pointer"
+                className="type-label block text-foreground cursor-pointer"
               >
-                Allow Trading
+                Allow trading
               </label>
-              <p className="text-xs text-foreground-muted mt-1">
+              <p className="type-meta text-foreground-secondary mt-1">
                 {tradesEnabled
                   ? 'Teams can propose trades to each other while the league is active.'
                   : 'Trading is off — new offers are refused, and offers already open cannot be accepted.'}
@@ -180,9 +180,9 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
           <div>
             <label
               htmlFor="trade_deadline"
-              className="block text-sm font-medium text-foreground-secondary mb-2"
+              className="type-label block text-foreground-secondary mb-2"
             >
-              Trade Deadline
+              Trade deadline
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -197,13 +197,13 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                 <button
                   type="button"
                   onClick={() => setTradeDeadline('')}
-                  className="btn btn-ghost px-3 py-1 text-sm"
+                  className="type-control btn btn-ghost px-3 py-1"
                 >
                   Clear
                 </button>
               )}
             </div>
-            <p id="trade_deadline_help" className="text-xs text-foreground-muted mt-1.5">
+            <p id="trade_deadline_help" className="type-meta text-foreground-secondary mt-1.5">
               {tradeDeadline
                 ? 'The last day trades can happen, inclusive. An offer running past it is cut short to it.'
                 : 'No deadline — trades stay open all season.'}
@@ -225,11 +225,11 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               <div>
                 <label
                   htmlFor="trade_review_enabled"
-                  className="block text-sm font-medium text-foreground cursor-pointer"
+                  className="type-label block text-foreground cursor-pointer"
                 >
-                  Commissioner Review
+                  Commissioner review
                 </label>
-                <p className="text-xs text-foreground-muted mt-1">
+                <p className="type-meta text-foreground-secondary mt-1">
                   {reviewEnabled
                     ? 'An accepted trade waits before it executes, so you can veto or approve it early.'
                     : 'An accepted trade executes on the next processing run with no review.'}
@@ -241,9 +241,9 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               <div>
                 <label
                   htmlFor="trade_veto_hours"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  Review Window
+                  Review window
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -253,17 +253,17 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                     onChange={(e) => setVetoHours(parseInt(e.target.value, 10) || MIN_VETO_HOURS)}
                     min={MIN_VETO_HOURS}
                     max={MAX_VETO_HOURS}
-                    className={`input w-24 ${vetoOutOfRange ? 'border-error focus:border-error' : ''}`}
+                    className={`type-input type-numeric input w-24 ${vetoOutOfRange ? 'border-error focus:border-error' : ''}`}
                   />
-                  <span className="text-sm text-foreground-secondary">hours</span>
+                  <span className="type-body-sm text-foreground-secondary">hours</span>
                 </div>
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   {vetoHours === 0
                     ? 'No waiting — an accepted trade executes on the next run (0 turns the window off).'
                     : `How long you have to veto after both teams agree (${MIN_VETO_HOURS}-${MAX_VETO_HOURS}h).`}
                 </p>
                 {vetoOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_VETO_HOURS} and {MAX_VETO_HOURS} hours
                   </p>
                 )}
@@ -274,8 +274,8 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
           {/* Offer windows. A different clock from both of the above: how long
               an UNANSWERED offer stands before it lapses. */}
           <div className="pt-2 border-t border-border">
-            <h3 className="text-sm font-medium text-foreground mt-4">Offer Windows</h3>
-            <p className="text-xs text-foreground-muted mt-1">
+            <h3 className="type-label text-foreground mt-4">Offer windows</h3>
+            <p className="type-meta text-foreground-secondary mt-1">
               How long an offer can stand before it expires unanswered. Leave a field blank to use
               the app default.
             </p>
@@ -284,7 +284,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               <div>
                 <label
                   htmlFor="expiry_default_hours"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
                   Default
                 </label>
@@ -297,15 +297,15 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                     placeholder={String(DEFAULT_EXPIRY_HOURS)}
                     min={MIN_DEFAULT_HOURS}
                     max={MAX_DEFAULT_HOURS}
-                    className={`input w-24 ${defaultOutOfRange ? 'border-error focus:border-error' : ''}`}
+                    className={`type-input type-numeric input w-24 ${defaultOutOfRange ? 'border-error focus:border-error' : ''}`}
                   />
-                  <span className="text-sm text-foreground-secondary">hours</span>
+                  <span className="type-body-sm text-foreground-secondary">hours</span>
                 </div>
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Preselected in the picker ({MIN_DEFAULT_HOURS}-{MAX_DEFAULT_HOURS}h)
                 </p>
                 {defaultOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be a whole number between {MIN_DEFAULT_HOURS} and {MAX_DEFAULT_HOURS}
                   </p>
                 )}
@@ -314,7 +314,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               <div>
                 <label
                   htmlFor="expiry_min_hours"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
                   Minimum
                 </label>
@@ -327,15 +327,15 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                     placeholder={String(APP_DEFAULT_MIN_HOURS)}
                     min={MIN_MIN_HOURS}
                     max={MAX_MIN_HOURS}
-                    className={`input w-24 ${minOutOfRange ? 'border-error focus:border-error' : ''}`}
+                    className={`type-input type-numeric input w-24 ${minOutOfRange ? 'border-error focus:border-error' : ''}`}
                   />
-                  <span className="text-sm text-foreground-secondary">hours</span>
+                  <span className="type-body-sm text-foreground-secondary">hours</span>
                 </div>
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Shortest window allowed ({MIN_MIN_HOURS}-{MAX_MIN_HOURS}h)
                 </p>
                 {minOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be a whole number between {MIN_MIN_HOURS} and {MAX_MIN_HOURS}
                   </p>
                 )}
@@ -344,7 +344,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               <div>
                 <label
                   htmlFor="expiry_max_days"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
                   Maximum
                 </label>
@@ -357,15 +357,15 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                     placeholder={String(MAX_EXPIRY_DAYS)}
                     min={MIN_MAX_DAYS}
                     max={MAX_MAX_DAYS}
-                    className={`input w-24 ${maxOutOfRange ? 'border-error focus:border-error' : ''}`}
+                    className={`type-input type-numeric input w-24 ${maxOutOfRange ? 'border-error focus:border-error' : ''}`}
                   />
-                  <span className="text-sm text-foreground-secondary">days</span>
+                  <span className="type-body-sm text-foreground-secondary">days</span>
                 </div>
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Longest window allowed ({MIN_MAX_DAYS}-{MAX_MAX_DAYS}d)
                 </p>
                 {maxOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be a whole number between {MIN_MAX_DAYS} and {MAX_MAX_DAYS}
                   </p>
                 )}
@@ -375,7 +375,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
             {/* Narrowing one field alone is the mistake this catches, and the
                 blank fields make it invisible -- hence the effective numbers. */}
             {boundsOutOfOrder && (
-              <p role="alert" className="text-xs text-error mt-3">
+              <p role="alert" className="type-meta text-error mt-3">
                 The default offer window ({effectiveDefault} hours) must be between the minimum (
                 {effectiveMin} hours) and the maximum ({effectiveMax} days).
               </p>
@@ -390,7 +390,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               Saving...
             </>
           ) : (
-            'Save Changes'
+            'Save changes'
           )}
         </button>
       </form>

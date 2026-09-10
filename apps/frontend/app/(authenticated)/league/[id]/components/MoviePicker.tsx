@@ -169,12 +169,12 @@ export default function MoviePicker({
     <div className="space-y-6" data-testid="movie-picker">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-display font-semibold text-foreground">
+        <h3 className="type-panel text-foreground">
           {isMyTurn ? 'Select Your Movie' : 'Browse Movies'}
         </h3>
         {isMyTurn && (
           <span className="badge bg-success-bg text-success border border-success">
-            Your Turn
+            Your turn
           </span>
         )}
       </div>
@@ -185,7 +185,7 @@ export default function MoviePicker({
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`type-control flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
               activeTab === tab.id
                 ? 'bg-gold text-background shadow-md'
                 : 'text-foreground-secondary hover:text-foreground hover:bg-surface'
@@ -195,7 +195,7 @@ export default function MoviePicker({
             <span>{tab.label}</span>
             {tab.id === 'wishlist' && wishlistedIds.size > 0 && (
               <span
-                className={`px-1.5 py-0.5 rounded-full text-xs ${
+                className={`type-meta px-1.5 py-0.5 rounded-full ${
                   activeTab === tab.id ? 'bg-background/20 text-background' : 'bg-crimson text-white'
                 }`}
               >
@@ -240,7 +240,7 @@ export default function MoviePicker({
           {activeTab !== 'all' && (
             <button
               onClick={() => setActiveTab('all')}
-              className="mt-3 text-sm text-gold hover:text-gold-hover transition-colors"
+              className="type-control mt-3 text-gold hover:text-gold-hover transition-colors"
             >
               View all movies
             </button>

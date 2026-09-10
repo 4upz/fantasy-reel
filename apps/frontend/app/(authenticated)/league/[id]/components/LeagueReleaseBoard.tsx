@@ -91,26 +91,26 @@ function ReleaseRow({
         isYours ? 'border-l-gold' : 'border-l-transparent'
       } ${withRule ? 'border-t border-t-border' : ''}`}
     >
-      <span className="w-6 flex-none text-center font-mono text-[17px] font-semibold leading-none tabular-nums text-foreground-secondary">
+      <span className="type-number w-8 flex-none text-center text-foreground-secondary">
         {Number(release.release_date.slice(8, 10))}
       </span>
 
       <span className="min-w-0 flex-1">
         <span
-          className="block truncate text-sm font-semibold text-foreground transition-colors group-hover:text-gold"
+          className="type-row-title block truncate text-foreground transition-colors group-hover:text-gold"
           title={release.title}
         >
           {release.title}
         </span>
         <span
-          className={`mt-[3px] block truncate text-xs ${isYours ? 'text-gold' : 'text-foreground-muted'}`}
+          className={`type-meta mt-[3px] block truncate ${isYours ? 'text-gold' : 'text-foreground-secondary'}`}
         >
           {holderLine(release)}
         </span>
       </span>
 
       {imminence && (
-        <span className="flex-none text-[11px] font-bold uppercase tracking-[0.08em] text-foreground-secondary">
+        <span className="type-meta flex-none text-foreground-secondary">
           {imminence}
         </span>
       )}
@@ -158,7 +158,7 @@ export default function LeagueReleaseBoard({ releases, todayIso }: Props) {
           {months.map((month, monthIndex) => (
             <div key={month.key}>
               <div className={`flex items-center gap-2.5 px-3 pb-1.5 ${monthIndex === 0 ? 'pt-3' : 'pt-4'}`}>
-                <h4 className="font-display text-[11px] font-bold uppercase tracking-[0.14em] text-foreground-muted">
+                <h4 className="type-label text-foreground-secondary">
                   {month.label}
                 </h4>
                 <span className="h-px flex-1 bg-border" aria-hidden="true" />
@@ -183,7 +183,7 @@ export default function LeagueReleaseBoard({ releases, todayIso }: Props) {
             onClick={() => setExpanded((prev) => !prev)}
             aria-expanded={expanded}
             data-testid="league-release-expand"
-            className="w-full cursor-pointer border-t border-border py-2.5 text-sm font-medium text-gold transition-colors hover:bg-surface-hover hover:text-gold-hover"
+            className="type-control w-full cursor-pointer border-t border-border py-2.5 text-gold transition-colors hover:bg-surface-hover hover:text-gold-hover"
           >
             {expanded ? 'Show less' : `Show all ${releases.length} releases`}
           </button>

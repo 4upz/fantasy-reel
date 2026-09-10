@@ -55,6 +55,7 @@ export default function FranchiseHistoryPanel({
 }: Props) {
   const { films } = history
   const columns = films.length + 1
+  const chartMinWidth = `${columns * 6}rem`
   const scored: ChartPoint[] = films.flatMap((film, index) =>
     film.rt_score == null
       ? []
@@ -73,25 +74,25 @@ export default function FranchiseHistoryPanel({
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-foreground-muted">
+          <p className="type-meta text-foreground-secondary">
             Franchise history
           </p>
-          <h3 className="font-display text-[15px] font-semibold text-foreground">
+          <h3 className="type-row-title text-foreground">
             {history.collection_name}
-            <span className="font-normal text-foreground-muted"> · {ordinal(history.entry_number)} film</span>
+            <span className="font-normal text-foreground-secondary"> · {ordinal(history.entry_number)} film</span>
           </h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-foreground-muted">Series avg</span>
+          <span className="type-meta text-foreground-secondary">Series avg</span>
           <TomatometerScore score={history.average_rt} size="md" showAccolade={false} />
         </div>
       </div>
 
-      <div className="mt-3.5">
+      <div className="mt-3.5 overflow-x-auto">
         {/* No viewBox on purpose: x is in percentages and y in px, so the
             chart stretches to the row of labels under it without distorting
             the marks. */}
-        <svg width="100%" height={CHART_HEIGHT} className="block" aria-hidden="true">
+        <svg width="100%" height={CHART_HEIGHT} className="block" style={{ minWidth: chartMinWidth }} aria-hidden="true">
           <line x1="0" x2="100%" y1={yFor(BREAK_EVEN)} y2={yFor(BREAK_EVEN)} stroke="var(--color-border-hover)" strokeWidth="1" strokeDasharray="3 4" />
           {scored.slice(1).map((point, i) => (
             <line
@@ -137,31 +138,31 @@ export default function FranchiseHistoryPanel({
           />
         </svg>
 
-        <div className="mt-1.5 flex items-start gap-3">
+        <div className="mt-1.5 flex items-start gap-3" style={{ minWidth: chartMinWidth }}>
           {films.map((film) => (
             <div key={film.tmdb_id} className="flex-1 min-w-0 flex flex-col items-center gap-1 text-center">
               <TomatometerScore score={film.rt_score} size="sm" showAccolade={false} />
-              <span className="max-w-full truncate text-xs font-medium text-foreground" title={film.title}>
+              <span className="type-meta max-w-full break-words text-foreground">
                 {film.title}
               </span>
               {film.release_date && (
-                <span className="text-[11px] text-foreground-muted">{getReleaseYear(film.release_date)}</span>
+                <span className="type-meta text-foreground-secondary">{getReleaseYear(film.release_date)}</span>
               )}
             </div>
           ))}
           <div className="flex-1 min-w-0 flex flex-col items-center gap-1 text-center">
             <TomatometerScore score={null} size="sm" showAccolade={false} />
-            <span className="max-w-full truncate text-xs font-semibold text-gold" title={movieTitle}>
+            <span className="type-meta max-w-full break-words text-gold">
               {movieTitle}
             </span>
-            <span className="text-[11px] text-foreground-muted">
+            <span className="type-meta text-foreground-secondary">
               {movieReleaseDate ? `${getReleaseYear(movieReleaseDate)} · this pick` : 'this pick'}
             </span>
           </div>
         </div>
       </div>
 
-      <p className="mt-3 pt-3 border-t border-border flex items-center gap-2 text-xs text-foreground-secondary">
+      <p className="type-meta mt-3 pt-3 border-t border-border flex items-center gap-2 text-foreground-secondary">
         <TrendingUp className="w-3.5 h-3.5 shrink-0 text-foreground-muted" />
         <span>
           Dashed line is the {BREAK_EVEN}% break-even.{' '}

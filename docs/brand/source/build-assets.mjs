@@ -88,7 +88,7 @@ await save('favicon.ico', Buffer.concat([header, ...icoBuffers.map(x => x.buffer
 await save('pinned-tab.svg', svg(16, 16, 'Fantasy Reel', `<path fill="#000" fill-rule="evenodd" d="${microPath}"/>`));
 
 await save('asset-index.json', JSON.stringify({
-  status: 'Candidate assets; app metadata and navigation are not switched to these files.',
+  status: 'Active brand assets. The charcoal icon and primary logo are the app defaults.',
   colors: { gold, dark, charcoal, white },
   pngs,
   recommended: {
@@ -97,4 +97,14 @@ await save('asset-index.json', JSON.stringify({
     large: 'app-charcoal-512.png', maskable: 'maskable-charcoal-512.png',
   },
 }, null, 2) + '\n');
+
+// Keep Next's file-based icon metadata in sync with the approved exports.
+const app = path.resolve(out, '../../../app');
+for (const [asset, destination] of [
+  ['favicon.svg', 'icon.svg'],
+  ['favicon.ico', 'favicon.ico'],
+  ['app-charcoal-180.png', 'apple-icon.png'],
+]) {
+  await fs.copyFile(path.join(out, asset), path.join(app, destination));
+}
 console.log(`Built vector logos and ${pngs.length} PNG exports in ${out}`);

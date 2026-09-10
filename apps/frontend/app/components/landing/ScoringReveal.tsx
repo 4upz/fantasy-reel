@@ -33,7 +33,7 @@ function ScoringCard({ example, variant, className = '' }: ScoringCardProps): Re
       </div>
 
       <div className="scoring-result">
-        <p className="text-foreground-muted text-sm">Drafted at ${example.draftPrice}</p>
+        <p className="type-body-sm text-foreground-secondary">Drafted at ${example.draftPrice}</p>
         <p className={`scoring-points ${pointsClass}`}>
           {pointsPrefix}{example.fantasyPoints} pts
         </p>
@@ -53,8 +53,8 @@ export default function ScoringReveal(): React.ReactElement {
   return (
     <section className="scoring-spotlight py-24 px-6">
       <div className="max-w-5xl mx-auto">
-        <h2 className="font-display text-3xl md:text-4xl font-bold text-center text-foreground mb-4">
-          The Critics Have Spoken
+        <h2 className="type-section text-center text-foreground mb-4">
+          The critics have spoken
         </h2>
         <p className="text-foreground-secondary text-center mb-16 max-w-2xl mx-auto">
           Your score comes straight from the Rotten Tomatoes Tomatometer. Pick
@@ -67,7 +67,7 @@ export default function ScoringReveal(): React.ReactElement {
           <ScoringCard example={loser} variant="loser" className="stagger-2" />
         </div>
 
-        <p className="text-center text-foreground-muted mt-12 max-w-xl mx-auto">
+        <p className="text-center text-foreground-secondary mt-12 max-w-xl mx-auto">
           No complex math. No spreadsheets. Just taste.
         </p>
       </div>

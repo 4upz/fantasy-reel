@@ -11,8 +11,8 @@ export const Default = () => (
 export const AboveAForm = () => (
   <div className="max-w-lg">
     <ErrorAlert message="Could not place that bid — your remaining budget is $18." />
-    <label className="block text-sm font-medium text-foreground mb-2">Bid amount</label>
-    <input className="input w-full" defaultValue="25" />
+    <label className="block type-label text-foreground mb-2">Bid amount</label>
+    <input className="input type-numeric w-full" defaultValue="25" />
   </div>
 )
 

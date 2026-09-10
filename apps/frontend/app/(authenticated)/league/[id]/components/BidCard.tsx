@@ -89,8 +89,8 @@ function CancelBidModal({
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 id="cancel-bid-title" className="font-display text-lg font-semibold text-foreground">
-            Cancel Bid
+          <h2 id="cancel-bid-title" className="type-section text-foreground">
+            Cancel bid
           </h2>
           <button
             onClick={onClose}
@@ -124,17 +124,17 @@ function CancelBidModal({
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-display font-semibold text-foreground truncate">
+                <p className="type-row-title text-foreground break-words">
                   {movieTitle}
                 </p>
-                <p className="bid-amount-display text-lg">
+                <p className="type-number bid-amount-display">
                   ${bidAmount}
                 </p>
               </div>
             </div>
           </div>
 
-          <p className="text-foreground-muted text-sm mb-4">
+          <p className="type-body-sm text-foreground-secondary mb-4">
             ${bidAmount} will be returned to your budget.
           </p>
 
@@ -144,7 +144,7 @@ function CancelBidModal({
               onClick={onClose}
               className="btn btn-ghost flex-1"
             >
-              Keep Bid
+              Keep bid
             </button>
             <button
               onClick={() => {
@@ -154,7 +154,7 @@ function CancelBidModal({
               className="btn btn-danger flex-1"
               data-testid="confirm-cancel-bid"
             >
-              Cancel Bid
+              Cancel bid
             </button>
           </div>
         </div>
@@ -178,7 +178,7 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
   const typeClass = getBidTypeClass(bidType)
 
-  // An outbid bid gets a prominent "Counter Bid" prompt; an active one gets a
+  // An outbid bid gets a prominent "Counter bid" prompt; an active one gets a
   // quieter option to raise your own bid or outbid a rival's.
   const showRecoverButton = isOutbid && isOwner && !!onCounter
   const showRaiseButton = isActive && !!onCounter
@@ -212,12 +212,12 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
           {/* Bid Info */}
           <div className="flex-1 min-w-0">
-            <h4 className="font-display font-semibold text-foreground truncate">
+            <h4 className="type-row-title text-foreground truncate">
               {movieTitle}
             </h4>
 
             {movieData?.release_date && (
-              <p className="text-sm text-foreground-secondary mt-0.5">
+              <p className="type-body-sm text-foreground-secondary mt-0.5">
                 {new Date(movieData.release_date).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
@@ -236,7 +236,7 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
             {dropTitle && (
               <span
-                className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full text-xs font-medium bg-warning-bg/30 text-warning border border-warning/20"
+                className="type-meta inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full bg-warning-bg/30 text-warning border border-warning/20"
                 data-testid="conditional-drop-chip"
               >
                 <Scissors className="w-3 h-3 shrink-0" />
@@ -245,7 +245,7 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
             )}
 
             {isOutbid && (
-              <div className="flex items-center gap-1.5 mt-2 text-warning text-sm font-medium">
+              <div className="type-label flex items-center gap-1.5 mt-2 text-warning">
                 <AlertTriangle className="w-4 h-4" />
                 <span>You&apos;ve been outbid!</span>
               </div>
@@ -258,27 +258,27 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
               {showRecoverButton && (
                 <button
                   onClick={onCounter}
-                  className="btn btn-primary text-sm px-4"
+                  className="type-control btn btn-primary px-4"
                   data-testid={`counter-bid-${bid.tmdb_id}`}
                 >
-                  Counter Bid
+                  Counter bid
                 </button>
               )}
 
               {showRaiseButton && (
                 <button
                   onClick={onCounter}
-                  className="btn btn-secondary text-sm px-4"
+                  className="type-control btn btn-secondary px-4"
                   data-testid={isOwner ? `raise-bid-${bid.tmdb_id}` : `counter-bid-${bid.tmdb_id}`}
                 >
-                  {isOwner ? 'Raise Bid' : 'Counter Bid'}
+                  {isOwner ? 'Raise bid' : 'Counter bid'}
                 </button>
               )}
 
               {showCancelButton && (
                 <button
                   onClick={() => setShowCancelModal(true)}
-                  className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-crimson/10"
+                  className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-crimson/10"
                   data-testid={`cancel-bid-${bid.tmdb_id}`}
                 >
                   <Trash2 className="w-4 h-4 mr-1.5" />
@@ -288,7 +288,7 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
               {showCancelLock && (
                 <p
-                  className="flex items-center gap-1.5 text-xs text-foreground-muted px-2"
+                  className="type-meta flex items-center gap-1.5 text-foreground-secondary px-2"
                   data-testid={`bid-locked-${bid.tmdb_id}`}
                 >
                   <Lock className="w-3.5 h-3.5" aria-hidden="true" />

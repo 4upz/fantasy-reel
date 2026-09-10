@@ -270,12 +270,12 @@ export default function ProposeTradeModal({
       >
         {/* Header */}
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 id="propose-trade-title" className="text-lg font-display font-bold text-foreground">
+          <h2 id="propose-trade-title" className="type-panel text-foreground">
             {step === 'select-team' ? 'Select Trade Partner' : `Trade with ${selectedTeam?.name}`}
           </h2>
           <button
             onClick={onClose}
-            className="text-foreground-muted hover:text-foreground transition-colors"
+            className="text-foreground-secondary hover:text-foreground transition-colors"
             aria-label="Close trade proposal"
           >
             ✕
@@ -286,7 +286,7 @@ export default function ProposeTradeModal({
         <div className="flex-1 overflow-y-auto p-4">
           {step === 'select-team' ? (
             <div className="space-y-2">
-              <p id="team-selection-label" className="text-sm text-foreground-secondary mb-4">
+              <p id="team-selection-label" className="type-body-sm text-foreground-secondary mb-4">
                 Choose a team to trade with:
               </p>
               <div role="listbox" aria-labelledby="team-selection-label">
@@ -308,12 +308,12 @@ export default function ProposeTradeModal({
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <span className="text-sm font-medium text-foreground-muted" aria-hidden="true">
+                        <span className="type-label text-foreground-secondary" aria-hidden="true">
                           {otherTeam.name.charAt(0).toUpperCase()}
                         </span>
                       )}
                     </div>
-                    <span className="font-medium text-foreground">{otherTeam.name}</span>
+                    <span className="type-row-title text-foreground">{otherTeam.name}</span>
                   </button>
                 ))}
               </div>
@@ -334,14 +334,14 @@ export default function ProposeTradeModal({
                   setError(null)
                   setInvalidSourceIds(EMPTY_INVALID)
                 }}
-                className="text-sm text-gold hover:text-gold-hover transition-colors"
+                className="type-control text-gold hover:text-gold-hover transition-colors"
               >
                 ← Change trade partner
               </button>
 
               {/* Your side */}
               <div>
-                <h3 className="text-sm font-medium text-foreground mb-3">
+                <h3 className="type-label text-foreground mb-3">
                   You give ({team.name})
                 </h3>
                 <MovieSelector
@@ -351,7 +351,7 @@ export default function ProposeTradeModal({
                   invalidIds={invalidSourceIds}
                 />
                 <div className="mt-3">
-                  <label className="text-sm text-foreground-secondary">
+                  <label className="type-label text-foreground-secondary">
                     Budget (max ${budget?.remaining_budget ?? 0})
                   </label>
                   <input
@@ -360,14 +360,14 @@ export default function ProposeTradeModal({
                     max={budget?.remaining_budget ?? 0}
                     value={offeredBudget}
                     onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="input mt-1 w-24"
+                    className="type-input type-numeric input mt-1 w-24"
                   />
                 </div>
               </div>
 
               {/* Their side */}
               <div>
-                <h3 className="text-sm font-medium text-foreground mb-3">
+                <h3 className="type-label text-foreground mb-3">
                   You receive ({selectedTeam?.name})
                 </h3>
                 {isLoadingRecipient ? (
@@ -381,7 +381,7 @@ export default function ProposeTradeModal({
                       invalidIds={invalidSourceIds}
                     />
                     <div className="mt-3">
-                      <label className="text-sm text-foreground-secondary">
+                      <label className="type-label text-foreground-secondary">
                         Budget (max ${recipientBudget?.remaining_budget ?? 0})
                       </label>
                       <input
@@ -392,7 +392,7 @@ export default function ProposeTradeModal({
                         onChange={(e) =>
                           setRequestedBudget(Math.max(0, parseInt(e.target.value) || 0))
                         }
-                        className="input mt-1 w-24"
+                        className="type-input type-numeric input mt-1 w-24"
                       />
                     </div>
                   </>
@@ -411,7 +411,7 @@ export default function ProposeTradeModal({
 
               {/* Message */}
               <div>
-                <label className="text-sm text-foreground-secondary">
+                <label className="type-label text-foreground-secondary">
                   Message (optional)
                 </label>
                 <textarea
@@ -448,7 +448,7 @@ export default function ProposeTradeModal({
               aria-label={isLoading ? 'Proposing trade...' : 'Submit trade proposal'}
               aria-busy={isLoading}
             >
-              {isLoading ? 'Proposing...' : 'Propose Trade'}
+              {isLoading ? 'Proposing...' : 'Propose trade'}
             </button>
           </div>
         )}
@@ -564,8 +564,8 @@ function MovieSelector({
             />
           </svg>
         </div>
-        <p className="text-sm font-medium text-foreground-secondary mb-1">{message}</p>
-        <p className="text-xs text-foreground-muted">
+        <p className="type-label text-foreground-secondary mb-1">{message}</p>
+        <p className="type-meta text-foreground-secondary">
           Draft movies or pick them up during the bidding phase to start trading.
         </p>
       </div>
@@ -613,14 +613,14 @@ function MovieSelector({
                 />
               ) : (
                 <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
-                  <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
+                  <span className="type-meta text-foreground-secondary" aria-hidden="true">?</span>
                 </div>
               )}
               {movie.source === 'counterpick' && <CounterpickMark />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground truncate">{movie.title}</p>
-              <div className="flex items-center gap-2 text-xs text-foreground-muted">
+              <p className="type-row-title text-foreground break-words">{movie.title}</p>
+              <div className="type-meta flex items-center gap-2 text-foreground-secondary">
                 {/* The alert above carries the reason; this only says which row
                     it meant, and carries it in text rather than colour alone. */}
                 {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
@@ -636,7 +636,7 @@ function MovieSelector({
                 )}
                 {movie.fantasy_points !== null ? (
                   <>
-                    <span className={movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}>
+                    <span className={`type-numeric ${movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}>
                       {formatFantasyPoints(movie.fantasy_points)} pts
                     </span>
                     {movie.combined_score !== null && (

@@ -117,7 +117,7 @@ export default function RosterClient({
       <div className="flex items-center justify-between">
         <div>
           <h1
-            className="font-display text-2xl font-bold text-foreground"
+            className="type-page text-foreground"
             data-testid="roster-team-name"
           >
             {team.name}&apos;s Roster
@@ -128,12 +128,12 @@ export default function RosterClient({
         </div>
 
         <div className="text-right">
-          <p className="text-foreground-muted text-sm">Budget Remaining</p>
-          <p className="font-display text-2xl font-semibold text-gold">
+          <p className="type-body-sm text-foreground-secondary">Budget remaining</p>
+          <p className="type-number-lg text-gold">
             ${budget?.remaining_budget ?? 100}
           </p>
           <p
-            className={`text-sm ${dropsRemaining > 0 ? 'text-foreground-muted' : 'text-crimson'}`}
+            className={`type-body-sm ${dropsRemaining > 0 ? 'text-foreground-secondary' : 'text-crimson'}`}
             data-testid="drops-summary"
           >
             {dropsRemaining > 0
@@ -163,35 +163,35 @@ export default function RosterClient({
 
       {/* Counterpicks Section */}
       <div>
-        <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
+        <h2 className="type-section text-foreground flex items-center gap-2 mb-4">
           <Target className="w-5 h-5 text-crimson" />
           Counterpicks ({counterpicks.length})
         </h2>
 
         {counterpicks.length === 0 ? (
-          <p className="text-foreground-muted">No counterpicks claimed yet.</p>
+          <p className="text-foreground-secondary">No counterpicks claimed yet.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {counterpicks.map((cp) => (
               <div key={cp.id} className="card overflow-hidden">
                 <div className="relative aspect-[2/3] bg-elevated">
                   <Poster movie={cp.movies} />
-                  <div className="absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-xs font-medium text-white flex items-center gap-1">
+                  <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-white flex items-center gap-1">
                     <Target className="w-3 h-3" />
                     Counterpick
                   </div>
                 </div>
 
                 <div className="p-3">
-                  <h3 className="font-semibold text-foreground text-sm truncate">
+                  <h3 className="type-label text-foreground truncate">
                     {cp.movies.title}
                   </h3>
-                  <p className="text-foreground-muted text-xs">
+                  <p className="type-meta text-foreground-secondary">
                     vs. {cp.target_team.name} ({cp.phase})
                   </p>
                   {cp.fantasy_points !== null && (
                     <p
-                      className={`text-sm font-semibold mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}
+                      className={`type-number mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}
                     >
                       {formatFantasyPoints(cp.fantasy_points)} pts
                     </p>
@@ -246,13 +246,13 @@ function RosterSection({
 }) {
   return (
     <div>
-      <h2 className="font-display font-semibold text-lg text-foreground flex items-center gap-2 mb-4">
+      <h2 className="type-section text-foreground flex items-center gap-2 mb-4">
         {icon}
         {title} ({holdings.length})
       </h2>
 
       {holdings.length === 0 ? (
-        <p className="text-foreground-muted">{emptyText}</p>
+        <p className="text-foreground-secondary">{emptyText}</p>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {holdings.map((holding) => (
@@ -325,7 +325,7 @@ function MovieCard({
         {isLocked && (
           <span
             data-testid="roster-lock-badge"
-            className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-[11px] font-medium text-foreground-secondary backdrop-blur-sm"
+            className="type-meta absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground-secondary backdrop-blur-sm"
           >
             <Lock className="h-3 w-3" aria-hidden="true" />
             Locked
@@ -334,21 +334,21 @@ function MovieCard({
       </div>
 
       <div className="flex flex-1 flex-col p-3">
-        <h3 className="truncate text-sm font-semibold text-foreground">{movie.title}</h3>
-        <p className="text-xs text-foreground-muted">{label}</p>
+        <h3 className="type-row-title truncate text-foreground">{movie.title}</h3>
+        <p className="type-meta text-foreground-secondary">{label}</p>
         {movie.fantasy_points !== null ? (
-          <p className="mt-1 flex items-baseline gap-1.5 text-sm font-semibold">
-            <span className={movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}>
+          <p className="type-number mt-1 flex items-baseline gap-1.5">
+            <span className={`type-numeric ${movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}>
               {formatFantasyPoints(movie.fantasy_points)} pts
             </span>
             {movie.combined_score !== null && (
-              <span className="text-xs font-normal text-foreground-muted">
+              <span className="type-numeric type-meta text-foreground-secondary">
                 {formatCriticScore(movie.combined_score)}
               </span>
             )}
           </p>
         ) : (
-          <p className="mt-1 text-xs text-foreground-muted">Pending</p>
+          <p className="type-meta mt-1 text-foreground-secondary">Pending</p>
         )}
       </div>
     </button>

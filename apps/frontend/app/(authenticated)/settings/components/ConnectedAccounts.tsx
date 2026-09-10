@@ -112,10 +112,10 @@ export default function ConnectedAccounts({
           <Link2 className="w-5 h-5 text-foreground-secondary" />
         </div>
         <div>
-          <h2 className="text-lg font-display font-semibold text-foreground">
-            Connected Accounts
+          <h2 className="type-section text-foreground">
+            Connected accounts
           </h2>
-          <p className="text-sm text-foreground-muted">Manage your sign-in methods</p>
+          <p className="type-body-sm text-foreground-secondary">Manage your sign-in methods</p>
         </div>
       </div>
 
@@ -131,16 +131,16 @@ export default function ConnectedAccounts({
             </div>
             <div>
               <p className="font-medium text-foreground">Email & Password</p>
-              <p className="text-sm text-foreground-muted">{email}</p>
+              <p className="type-body-sm text-foreground-secondary">{email}</p>
             </div>
           </div>
           {hasPassword ? (
-            <div className="flex items-center gap-2 text-sm text-foreground-muted">
+            <div className="type-body-sm flex items-center gap-2 text-foreground-secondary">
               <Check className="w-4 h-4 text-success" />
               <span>Primary</span>
             </div>
           ) : (
-            <span className="text-sm text-foreground-muted">No password set</span>
+            <span className="type-body-sm text-foreground-secondary">No password set</span>
           )}
         </div>
 
@@ -160,7 +160,7 @@ export default function ConnectedAccounts({
                 </div>
                 <div>
                   <p className="font-medium text-foreground">{config.name}</p>
-                  <p className="text-sm text-foreground-muted">
+                  <p className="type-body-sm text-foreground-secondary">
                     {isConnected ? config.getDisplayInfo(identity) : 'Not connected'}
                   </p>
                 </div>
@@ -171,7 +171,7 @@ export default function ConnectedAccounts({
                   onClick={() => handleUnlink(provider)}
                   disabled={isUnlinking}
                   data-testid={`disconnect-${provider}-button`}
-                  className="btn btn-ghost text-sm text-foreground-muted hover:text-error disabled:opacity-50"
+                  className="type-control btn btn-ghost text-foreground-secondary hover:text-error disabled:opacity-50"
                 >
                   {isUnlinking ? (
                     <>

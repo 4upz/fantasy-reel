@@ -41,8 +41,8 @@ export const WithoutAccolade = () => (
 
 export const OnACard = () => (
   <div className="max-w-sm p-4 rounded-lg bg-surface border border-border">
-    <h3 className="font-display font-semibold text-foreground">Dune: Part Two</h3>
-    <p className="mt-1 text-sm text-foreground-muted">Released 27 Feb 2024</p>
+    <h3 className="type-row-title text-foreground">Dune: Part Two</h3>
+    <p className="mt-1 type-meta text-foreground-secondary">Released 27 Feb 2024</p>
     <div className="mt-3">
       <TomatometerScore score={92} />
     </div>

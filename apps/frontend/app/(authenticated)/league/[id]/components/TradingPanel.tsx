@@ -114,20 +114,20 @@ export default function TradingPanel({
   ]
 
   return (
-    <div className="space-y-4" role="region" aria-label="Trading Block" data-testid="trading-panel">
+    <div className="space-y-4" role="region" aria-label="Trading block" data-testid="trading-panel">
       {/* Header */}
       <div className="card p-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-display font-bold text-foreground">Trading Block</h2>
-            <p className="text-sm text-foreground-secondary mt-1">
+            <h2 className="type-section text-foreground">Trading block</h2>
+            <p className="type-body-sm text-foreground-secondary mt-1">
               Trade movies and budget with other teams
             </p>
           </div>
 
           <div className="flex items-center gap-4">
             {actionNeededCount > 0 && (
-              <span className="text-sm text-crimson font-medium" role="status" aria-live="polite">
+              <span className="type-label text-crimson" role="status" aria-live="polite">
                 {actionNeededCount} trade{actionNeededCount !== 1 ? 's' : ''} need your response
               </span>
             )}
@@ -137,7 +137,7 @@ export default function TradingPanel({
               aria-label="Propose a new trade"
               data-testid="propose-trade-button"
             >
-              Propose Trade
+              Propose trade
             </button>
           </div>
         </div>
@@ -145,8 +145,8 @@ export default function TradingPanel({
         {/* Budget display */}
         {budget && (
           <div className="mt-4 pt-4 border-t border-border">
-            <p className="text-sm text-foreground-secondary">
-              Available Budget: <span className="text-gold font-medium" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
+            <p className="type-body-sm text-foreground-secondary">
+              Available budget: <span className="type-number text-gold" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
             </p>
           </div>
         )}
@@ -168,7 +168,7 @@ export default function TradingPanel({
                 aria-selected={activeTab === tab.id}
                 aria-controls={`trade-panel-${tab.id}`}
                 id={`trade-tab-${tab.id}`}
-                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
+                className={`type-control px-4 py-3 border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
                   activeTab === tab.id
                     ? 'text-gold border-gold'
                     : 'text-foreground-secondary hover:text-foreground border-transparent'
@@ -177,7 +177,7 @@ export default function TradingPanel({
                 {tab.label}
                 {tab.count !== undefined && tab.count > 0 && (
                   <span
-                    className="bg-surface-hover text-foreground-secondary text-xs px-1.5 py-0.5 rounded-full"
+                    className="type-meta type-numeric bg-surface-hover text-foreground-secondary px-1.5 py-0.5 rounded-full"
                     aria-label={`${tab.count} ${tab.label.toLowerCase()}`}
                   >
                     {tab.count}
@@ -197,7 +197,7 @@ export default function TradingPanel({
         >
           {filteredTrades.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-foreground-muted" role="status">
+              <p className="text-foreground-secondary" role="status">
                 {activeTab === 'pending' && 'No pending trades'}
                 {activeTab === 'my-trades' && 'You have no active trades'}
                 {activeTab === 'all' && 'No active trades in this league'}

@@ -61,7 +61,7 @@ function ActiveBidChip({ tmdbId, info }: ActiveBidChipProps): React.ReactElement
 
   return (
     <span
-      className={`inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${
+      className={`type-meta inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full border ${
         info.mine
           ? 'bg-gold-muted text-gold border-gold/30'
           : 'bg-warning-bg/30 text-warning border-warning/20'
@@ -81,10 +81,10 @@ function getModalTitle(
   isCounterBidPhase: boolean,
 ): string {
   if (counterBidTarget) {
-    return counterBidTarget.team_id === teamId ? 'Raise Your Bid' : 'Counter Bid'
+    return counterBidTarget.team_id === teamId ? 'Raise your bid' : 'Counter bid'
   }
-  if (hasSelectedMovie) return 'Set Your Bid'
-  return isCounterBidPhase ? 'Counter a Bid' : 'Place a Bid'
+  if (hasSelectedMovie) return 'Set your bid'
+  return isCounterBidPhase ? 'Counter a bid' : 'Place a bid'
 }
 
 type BidResultsState = 'loading' | 'no-contests' | 'no-results' | 'no-wishlist-matches' | 'list'
@@ -337,7 +337,7 @@ export default function PlaceBidModal({
 
       // A released movie can no longer be bid on, so listing one here would be
       // a dead end -- the server rejects it once the amount is filled in. The
-      // bid cards gate their "Counter Bid" button the same way.
+      // bid cards gate their "Counter bid" button the same way.
       if (!isMovieBiddable(data?.release_date ?? null)) continue
 
       byTmdbId.set(bid.tmdb_id, {
@@ -379,25 +379,25 @@ export default function PlaceBidModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="place-bid-title"
-        className="glass modal-panel max-w-2xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col rounded-2xl border border-border shadow-heavy"
+        className="glass modal-panel max-w-2xl w-[calc(100%-32px)] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-2xl border border-border shadow-heavy [overflow-wrap:anywhere]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-3 p-[min(1.25rem,20px)] border-b border-border">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
             {selectedMovie && !counterBidTarget && (
               <button
                 onClick={() => setSelectedMovie(null)}
-                className="btn btn-ghost p-2 -ml-2"
+                className="btn btn-ghost shrink-0 p-[8px] -ml-[8px]"
                 aria-label="Back to search"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
             )}
-            <div>
-              <h2 id="place-bid-title" className="font-display text-xl font-semibold text-foreground">
+            <div className="min-w-0 flex-1">
+              <h2 id="place-bid-title" className="type-panel break-words text-foreground">
                 {getModalTitle(counterBidTarget, teamId, !!selectedMovie, isCounterBidPhase)}
               </h2>
-              <p className="text-sm text-foreground-muted mt-0.5">
+              <p className="type-body-sm text-foreground-secondary mt-0.5">
                 {selectedMovie
                   ? 'Choose your bid amount'
                   : isCounterBidPhase
@@ -408,27 +408,27 @@ export default function PlaceBidModal({
           </div>
           <button
             onClick={onClose}
-            className="btn btn-ghost p-2 hover:bg-surface-hover rounded-full"
+            className="btn btn-ghost min-h-[44px] min-w-[44px] shrink-0 p-[8px] hover:bg-surface-hover rounded-full"
             aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-[20px] h-[20px]" />
           </button>
         </div>
 
-        {/* Budget Display - Always visible */}
-        <div className="px-5 py-3 bg-elevated/30 border-b border-border">
-          <div className="flex items-center justify-between">
-            <span className="text-foreground-secondary text-sm">Available Budget</span>
-            <span className="bid-amount-display text-xl">
+        {/* Budget display */}
+        <div className="px-[min(1.25rem,20px)] py-3 bg-elevated/30 border-b border-border">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="type-body-sm text-foreground-secondary">Available budget</span>
+            <span className="type-number bid-amount-display whitespace-nowrap">
               ${remainingBudget}
             </span>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* One scroll region keeps content and actions reachable with enlarged text. */}
+        <div className="min-w-0">
           {!selectedMovie ? (
-            <div className="p-5">
+            <div className="p-[min(1.25rem,20px)]">
               {isCounterBidPhase ? (
                 /* No search: after the cutoff the only legal targets are the
                    movies already in play, so those are what the modal offers. */
@@ -438,10 +438,10 @@ export default function PlaceBidModal({
                 >
                   <Swords className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" aria-hidden="true" />
                   <div>
-                    <p className="text-sm font-medium text-foreground">
+                    <p className="type-label text-foreground">
                       New bids closed{newBidCutoffAt ? ` ${formatDeadlineShort(newBidCutoffAt)}` : ''}
                     </p>
-                    <p className="text-xs text-foreground-secondary mt-1 leading-relaxed">
+                    <p className="type-meta text-foreground-secondary mt-1">
                       Raise your bid or counter another team&apos;s on the movies below. Movies
                       nobody has bid on reopen once this week&apos;s bids are processed.
                     </p>
@@ -458,7 +458,7 @@ export default function PlaceBidModal({
                       value={searchQuery}
                       onChange={(e) => handleSearchChange(e.target.value)}
                       placeholder="Search for a movie..."
-                      className="input w-full pl-12 py-3 text-base"
+                      className="type-input input w-full pl-12 py-3"
                       data-testid="bid-movie-search-input"
                     />
                     {searchQuery && (
@@ -475,10 +475,10 @@ export default function PlaceBidModal({
                   <div className="flex items-center gap-2 mb-4">
                     <button
                       onClick={() => setShowWishlistedOnly(prev => !prev)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm transition-all ${
+                      className={`type-control flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all ${
                         showWishlistedOnly
                           ? 'bg-crimson/20 text-crimson border border-crimson/30'
-                          : 'bg-elevated text-foreground-muted border border-border hover:border-border-hover'
+                          : 'bg-elevated text-foreground-secondary border border-border hover:border-border-hover'
                       }`}
                       aria-pressed={showWishlistedOnly}
                     >
@@ -494,7 +494,7 @@ export default function PlaceBidModal({
                 {resultsState === 'loading' && (
                   <div className="flex flex-col items-center justify-center py-12">
                     <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin mb-3" />
-                    <p className="text-foreground-muted">Searching movies...</p>
+                    <p className="text-foreground-secondary">Searching movies...</p>
                   </div>
                 )}
 
@@ -502,7 +502,7 @@ export default function PlaceBidModal({
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Swords className="w-12 h-12 text-foreground-muted mb-4" />
                     <p className="text-foreground-secondary font-medium">No bids in play</p>
-                    <p className="text-foreground-muted text-sm mt-1 max-w-xs">
+                    <p className="type-body-sm text-foreground-secondary mt-1 max-w-xs">
                       Nobody placed a bid before the deadline. Bidding reopens once this
                       week&apos;s bids are processed.
                     </p>
@@ -515,7 +515,7 @@ export default function PlaceBidModal({
                     <p className="text-foreground-secondary font-medium">
                       {searchQuery ? 'No movies found' : 'Search for a movie'}
                     </p>
-                    <p className="text-foreground-muted text-sm mt-1">
+                    <p className="type-body-sm text-foreground-secondary mt-1">
                       {searchQuery
                         ? 'Try a different search term'
                         : 'Type a movie title above to get started'}
@@ -527,7 +527,7 @@ export default function PlaceBidModal({
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Heart className="w-12 h-12 text-foreground-muted mb-4" />
                     <p className="text-foreground-secondary font-medium">No wishlisted movies found</p>
-                    <p className="text-foreground-muted text-sm mt-1">
+                    <p className="type-body-sm text-foreground-secondary mt-1">
                       Add movies to your wishlist first, then filter here
                     </p>
                   </div>
@@ -535,7 +535,7 @@ export default function PlaceBidModal({
 
                 {resultsState === 'list' && (
                   <>
-                    <p className="text-foreground-muted text-sm mb-3">
+                    <p className="type-body-sm text-foreground-secondary mb-3">
                       {isCounterBidPhase
                         ? `${displayedResults.length} ${displayedResults.length === 1 ? 'movie' : 'movies'} still being bid on`
                         : `${displayedResults.length} movies found`}
@@ -572,10 +572,10 @@ export default function PlaceBidModal({
                           <WishlistToggle movie={movie} size="sm" variant="overlay" className="absolute top-0.5 right-0.5" />
                         </div>
                         <div className="flex-1 min-w-0 py-0.5">
-                          <h4 className="font-display font-semibold text-foreground truncate group-hover:text-gold transition-colors">
+                          <h4 className="type-row-title text-foreground truncate group-hover:text-gold transition-colors">
                             {movie.title}
                           </h4>
-                          <div className="flex items-center gap-3 mt-1.5 text-sm text-foreground-secondary">
+                          <div className="type-body-sm flex min-w-0 flex-1 items-start gap-3 mt-1.5 text-foreground-secondary">
                             {movie.release_date && (
                               <span className="flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5" />
@@ -594,7 +594,7 @@ export default function PlaceBidModal({
                             info={activeBidsByTmdbId.get(movie.tmdb_id)}
                           />
                         </div>
-                        <div className="flex items-center text-foreground-muted group-hover:text-gold transition-colors">
+                        <div className="flex items-center text-foreground-secondary group-hover:text-gold transition-colors">
                           <TrendingUp className="w-5 h-5" />
                         </div>
                       </div>
@@ -604,11 +604,11 @@ export default function PlaceBidModal({
               </div>
             </div>
           ) : (
-            <div className="p-5">
+            <div className="p-[min(1.25rem,20px)]">
               {/* Selected Movie Card */}
-              <div className="card p-4 mb-6 bg-surface/50">
-                <div className="flex gap-4">
-                  <div className="relative w-24 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-medium">
+              <div className="card p-[min(1rem,16px)] mb-6 bg-surface/50">
+                <div className="flex flex-wrap gap-4">
+                  <div className="relative w-[min(6rem,96px)] aspect-[2/3] flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-medium">
                     {selectedMovie.poster_url ? (
                       <Image
                         src={getTmdbPosterUrl(selectedMovie.poster_url, 'w154')!}
@@ -622,8 +622,8 @@ export default function PlaceBidModal({
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-display font-bold text-xl text-foreground">
+                  <div className="flex-1 min-w-[min(100%,8rem)]">
+                    <h3 className="type-card break-words text-foreground">
                       {selectedMovie.title}
                     </h3>
                     <p className="text-foreground-secondary mt-1 flex items-center gap-1.5">
@@ -639,7 +639,7 @@ export default function PlaceBidModal({
                     {highestBid !== null && (
                       <div className="mt-3 px-3 py-1.5 bg-warning-bg/30 border border-warning/20 rounded-lg inline-flex items-center gap-1.5">
                         <DollarSign className="w-4 h-4 text-warning" />
-                        <span className="text-warning text-sm font-medium">
+                        <span className="type-label text-warning">
                           {selectedBidInfo?.mine
                             ? `Your current bid: $${highestBid}`
                             : `Current high bid: $${highestBid}`}
@@ -647,7 +647,7 @@ export default function PlaceBidModal({
                       </div>
                     )}
                     {selectedMovie.overview && (
-                      <p className="text-foreground-muted text-sm mt-3 line-clamp-2">
+                      <p className="type-body-sm text-foreground-secondary mt-3 line-clamp-2">
                         {selectedMovie.overview}
                       </p>
                     )}
@@ -663,9 +663,7 @@ export default function PlaceBidModal({
 
               {/* Sits above the amount step on purpose: whether this bid can
                   land at all matters more than what it costs, and below the
-                  amount input it fell under the sticky footer at common
-                  viewport heights -- a warning you have to scroll for is not
-                  doing its job. */}
+                  amount input it was easy to miss at common viewport heights. */}
               {freeRosterSlots === 0 && !dropHoldingId && (
                 <div className="alert alert-warning mb-6" data-testid="full-roster-warning">
                   {myHoldings.length > 0
@@ -676,8 +674,8 @@ export default function PlaceBidModal({
 
               {/* Bid Amount Section */}
               <div className="space-y-4">
-                <label className="block text-foreground font-semibold">
-                  Your Bid Amount
+                <label className="type-label block text-foreground">
+                  Your bid amount
                 </label>
 
                 {/* Quick Amount Buttons */}
@@ -686,7 +684,7 @@ export default function PlaceBidModal({
                     <button
                       key={amount}
                       onClick={() => setBidAmount(amount)}
-                      className={`btn text-sm px-4 py-2 ${
+                      className={`type-numeric type-control btn px-4 py-2 ${
                         bidAmount === amount
                           ? 'btn-primary'
                           : 'btn-secondary'
@@ -699,14 +697,14 @@ export default function PlaceBidModal({
 
                 {/* Custom Amount Input */}
                 <div className="relative">
-                  <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gold" />
+                  <DollarSign className="absolute left-[16px] top-1/2 -translate-y-1/2 w-[24px] h-[24px] text-gold" />
                   <input
                     type="number"
                     value={bidAmount}
                     onChange={(e) => setBidAmount(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
                     min={0}
                     max={Math.min(100, remainingBudget)}
-                    className={`input w-full pl-14 py-4 text-2xl font-display font-bold text-center ${
+                    className={`type-input type-numeric input w-full pl-[56px] py-4 text-center ${
                       !isValidBid ? 'border-error focus:border-error' : 'focus:border-gold'
                     }`}
                     data-testid="bid-amount-input"
@@ -714,11 +712,11 @@ export default function PlaceBidModal({
                 </div>
 
                 {!isValidBid ? (
-                  <p className="text-error text-sm flex items-center gap-1.5">
+                  <p className="type-body-sm text-error flex items-center gap-1.5">
                     {getValidationErrorMessage(bidAmount, remainingBudget, highestBid)}
                   </p>
                 ) : (
-                  <p className="text-foreground-muted text-sm">
+                  <p className="type-body-sm text-foreground-secondary">
                     {bidAmount === 0
                       ? 'Claim this movie for free if no one else bids'
                       : `You'll spend $${bidAmount} from your budget if you win`}
@@ -735,7 +733,7 @@ export default function PlaceBidModal({
                 <div className="mt-6 space-y-2">
                   <label
                     htmlFor="conditional-drop"
-                    className="block text-sm font-medium text-foreground"
+                    className="type-label block text-foreground"
                   >
                     If this bid wins, also drop
                   </label>
@@ -761,7 +759,7 @@ export default function PlaceBidModal({
 
         {/* Footer - Submit Button */}
         {selectedMovie && (
-          <div className="p-5 border-t border-border bg-elevated/30">
+          <div className="p-[min(1.25rem,20px)] border-t border-border bg-elevated/30">
             <button
               onClick={handleSubmit}
               disabled={!isValidBid || isSubmitting}
@@ -769,12 +767,12 @@ export default function PlaceBidModal({
               data-testid="submit-bid-button"
             >
               {isSubmitting ? (
-                <span className="flex items-center justify-center gap-2">
+                <span className="flex min-w-0 flex-wrap items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-foreground-inverse border-t-transparent rounded-full animate-spin" />
                   Placing Bid...
                 </span>
               ) : (
-                <span className="flex items-center justify-center gap-2">
+                <span className="flex min-w-0 flex-wrap items-center justify-center gap-2">
                   <DollarSign className="w-5 h-5" />
                   Place ${bidAmount} Bid
                 </span>

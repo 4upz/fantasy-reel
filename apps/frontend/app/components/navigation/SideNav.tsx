@@ -7,6 +7,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/types'
 import NotificationBell from '@/components/NotificationBell'
 import ProfileMenu from './ProfileMenu'
+import BrandLogo from '../BrandLogo'
 import {
   LayoutDashboard,
   Film,
@@ -86,7 +87,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
     { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { label: 'Movies', href: '/movies', icon: <Film className="w-5 h-5" /> },
     { label: 'Wishlist', href: '/wishlist', icon: <Heart className="w-5 h-5" /> },
-    { label: 'How to Play', href: '/help', icon: <HelpCircle className="w-5 h-5" /> },
+    { label: 'How to play', href: '/help', icon: <HelpCircle className="w-5 h-5" /> },
   ]
 
   function isActive(href: string): boolean {
@@ -137,22 +138,11 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
           className="sidenav-brand"
           title="Fantasy Reel"
         >
-          <div className="sidenav-brand-icon">
-            <svg viewBox="0 0 24 24" className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="12" cy="12" r="10" />
-              <circle cx="12" cy="12" r="3" />
-              <circle cx="12" cy="5" r="1.5" fill="currentColor" />
-              <circle cx="12" cy="19" r="1.5" fill="currentColor" />
-              <circle cx="5" cy="12" r="1.5" fill="currentColor" />
-              <circle cx="19" cy="12" r="1.5" fill="currentColor" />
-            </svg>
-          </div>
-          {showLabels && (
-            <span className="sidenav-brand-text">
-              <span className="font-semibold">Fantasy</span>
-              <span className="font-light">Reel</span>
-            </span>
-          )}
+          <BrandLogo
+            compact
+            markOnly={!showLabels}
+            className={showLabels ? 'h-auto w-44 max-w-full' : 'h-auto w-7 shrink-0'}
+          />
         </Link>
 
         <nav className="sidenav-section">
@@ -213,7 +203,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         </button>
 
         <Link href="/dashboard" className="sidenav-mobile-brand">
-          <span className="sidenav-mobile-title">Fantasy Reel</span>
+          <BrandLogo compact className="h-auto w-36 max-w-full" />
         </Link>
 
       </header>

@@ -93,8 +93,8 @@ function teamKey(rankedTeam: RankedTeamFull): string {
 function SummaryCard({ value, label, tone }: { value: number; label: string; tone: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface px-2 py-2.5 text-center">
-      <div className={`font-display text-xl font-bold ${tone}`}>{value}</div>
-      <div className="mt-px text-[11px] text-foreground-muted">{label}</div>
+      <div className={`type-number ${tone}`}>{value}</div>
+      <div className="type-meta mt-px text-foreground-secondary">{label}</div>
     </div>
   )
 }
@@ -156,7 +156,7 @@ export default function StandingsClient({
             </svg>
             <div>
               <p className="font-medium">No scores available yet</p>
-              <p className="text-sm mt-1 opacity-80">
+              <p className="type-body-sm mt-1 opacity-80">
                 Scores are calculated nightly for released movies. Check back after movies in your draft have been released!
               </p>
             </div>
@@ -193,8 +193,8 @@ export default function StandingsClient({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
-          <h3 className="text-lg font-display font-semibold text-foreground">No teams yet</h3>
-          <p className="mt-2 text-foreground-muted">Teams will appear here once the draft begins.</p>
+          <h3 className="type-panel text-foreground">No teams yet</h3>
+          <p className="mt-2 text-foreground-secondary">Teams will appear here once the draft begins.</p>
         </div>
       )}
       </div>

@@ -49,7 +49,7 @@ export default function SignupPage() {
           </div>
 
           <div className="card p-8">
-            <h2 className="text-2xl font-bold font-display text-foreground">Check your email</h2>
+            <h2 className="type-panel text-foreground">Check your email</h2>
             <div className="mt-6 space-y-4">
               <p className="text-foreground-secondary">
                 We sent a confirmation link to <strong className="text-foreground">{email}</strong>
@@ -59,7 +59,7 @@ export default function SignupPage() {
               </p>
               {process.env.NODE_ENV === 'development' && (
                 <div className="alert alert-info mt-6">
-                  <p className="text-sm">
+                  <p className="type-body-sm">
                     <strong>Using local Supabase?</strong>
                     <br />
                     Check Mailpit at{' '}
@@ -93,7 +93,7 @@ export default function SignupPage() {
         </div>
 
         <div className="text-center">
-          <h1 className="text-3xl font-bold font-display text-foreground">Join Fantasy Reel</h1>
+          <h1 className="type-page text-foreground">Join Fantasy Reel</h1>
           <p className="mt-3 text-foreground-secondary">Create your account</p>
         </div>
 
@@ -104,7 +104,7 @@ export default function SignupPage() {
             <div className="space-y-4">
               <div>
                 <label htmlFor="displayName" className="sr-only">
-                  Display Name
+                  Display name
                 </label>
                 <input
                   id="displayName"
@@ -113,7 +113,7 @@ export default function SignupPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Display Name"
+                  placeholder="Display name"
                   data-testid="display-name-input"
                 />
               </div>
@@ -151,7 +151,7 @@ export default function SignupPage() {
               </div>
               <div>
                 <label htmlFor="confirmPassword" className="sr-only">
-                  Confirm Password
+                  Confirm password
                 </label>
                 <input
                   id="confirmPassword"
@@ -161,7 +161,7 @@ export default function SignupPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Confirm Password"
+                  placeholder="Confirm password"
                 />
               </div>
             </div>
@@ -174,8 +174,8 @@ export default function SignupPage() {
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-foreground-muted/30" />
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background-elevated px-4 text-foreground-muted">or</span>
+              <div className="type-body-sm relative flex justify-center">
+                <span className="bg-background-elevated px-4 text-foreground-secondary">or</span>
               </div>
             </div>
 
@@ -185,7 +185,7 @@ export default function SignupPage() {
             </div>
 
             <div className="text-center">
-              <p className="text-sm text-foreground-secondary">
+              <p className="type-body-sm text-foreground-secondary">
                 Already have an account?{' '}
                 <Link
                   href="/login"

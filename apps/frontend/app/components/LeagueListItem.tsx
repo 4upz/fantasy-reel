@@ -13,15 +13,15 @@ export default function LeagueListItem({ league }: Props): React.ReactElement {
     <Link href={`/league/${league.id}`} className="card card-interactive group block">
       <div className="p-4 flex items-center justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 mb-1">
-            <h3 className="font-display font-semibold text-foreground group-hover:text-gold transition-colors truncate">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+            <h3 className="type-card min-w-0 max-w-full break-words line-clamp-2 text-foreground group-hover:text-gold transition-colors">
               {league.name}
             </h3>
             <span className={`badge ${STATUS_BADGE_CLASS[league.status]} shrink-0`}>
               {getStatusLabel(league.status)}
             </span>
           </div>
-          <p className="text-foreground-muted text-sm">
+          <p className="type-body-sm text-foreground-secondary">
             {league.invite_only ? 'Private' : 'Open'} · {league.max_participants} participants · Created{' '}
             {new Date(league.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
           </p>

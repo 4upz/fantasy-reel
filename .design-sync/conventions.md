@@ -1,9 +1,9 @@
 # Fantasy Reel — Cinematic Dark
 
 A fantasy-sports app for movies: you draft upcoming releases and score on their
-Rotten Tomatoes Tomatometer. The look is premium streaming service meets awards
-show — a near-black canvas, gold as the single accent, muted burgundy for
-danger, and a display face for anything that acts as a title.
+Rotten Tomatoes Tomatometer. The identity feels like an independent cinema: a charcoal canvas, matte-gold
+film-conversation mark, expressive Bricolage headings, and DM Sans gameplay
+text. Burgundy retains its danger/negative-score meaning.
 
 ## The canvas is dark, and it is not optional
 
@@ -13,9 +13,9 @@ starts correct. **Do not put these components on a light surface** — the
 borders, the gold, and the muted text are all tuned for dark, and they wash out
 on white.
 
-Depth is four flat steps, not shadows: `background` (page) → `surface` (cards)
-→ `surface-hover` → `elevated` (inputs, wells). Reach for the next step up
-rather than a border when you need separation.
+Depth uses four surface steps: `background` (page) → `surface` (cards)
+→ `surface-hover` → `elevated` (inputs, wells). Preserve the component classes
+for their existing borders and shadows instead of inventing new treatments.
 
 ## Styling idiom: Tailwind utilities over semantic tokens
 
@@ -36,10 +36,30 @@ utilities:
 | League status | `status-setup`, `status-drafting`, `status-active`, `status-completed`, each with a `-bg` pair |
 | Feedback | `success`, `error`, `warning`, `info`, each with a `-bg` pair |
 
-Typography is three families: `font-display` (Montserrat — every heading and
-any title-like label), `font-body` (DM Sans — the default, already on `body`),
-`font-mono`. **Headings need `font-display` explicitly**; it is not applied by
-element type.
+Typography uses the active roles from `docs/brand/typography.md`, included as a
+curated guideline. `styles.css` imports the app's actual role implementation;
+do not reconstruct the scale in a design.
+
+- Bricolage: `type-hero`, `type-page`, `type-section`, `type-panel`, `type-card`.
+- DM Sans: `type-lead`, `type-body`, `type-body-sm`, `type-row-title`,
+  `type-control`, `type-input`, `type-label`, `type-meta`.
+- Bricolage figures: `type-number`, `type-number-lg` use weight 700, optical
+  size 12, width 100, and tabular lining digits. `type-numeric` preserves an
+  existing size and weight for a clock or numeric input. DM Sans has no
+  `tnum` substitution in the bundled font.
+- `font-mono` is a system stack for join codes and diagnostics.
+
+Choose the role independently of heading semantics: dense movie/team titles
+use `type-row-title` even when they are h2/h3 elements. Functional metadata is
+at least 12px; inputs are 16px. Use sentence case and allow wrapping before
+shrinking text. Meaningful small text on cards/inputs uses
+`foreground-secondary` because `foreground-muted` has insufficient contrast
+on those surfaces.
+
+Use `NavLogo` for a linked identity or `BrandLogo` for its lockup/symbol alone.
+Their SVG lettering is outlined: preserve the artwork and aspect ratio rather
+than resetting the wordmark. The build embeds the approved logo routes, so
+these components work without a Next.js public directory.
 
 Motion: `animate-fade-in` for content arriving, `animate-slide-up` for panels,
 `animate-glow-pulse` for a "your turn" state, `animate-shimmer` for skeletons.
@@ -51,7 +71,7 @@ re-deriving the same look from utilities — they are what keeps screens
 consistent:
 
 - **Cards** — `.card`, and `.card-interactive` when the whole card is a link or
-  button (adds lift, gold border and glow on hover).
+  button (adds lift and stronger surface/shadow treatment on hover).
 - **Buttons** — `.btn` plus one of `.btn-primary` (gold, the page's single main
   action), `.btn-secondary` (gold outline), `.btn-danger` (crimson),
   `.btn-ghost` (quiet/cancel). **`.btn` sets no gap** — add `gap-2` yourself
@@ -81,8 +101,8 @@ the utilities above.
 
 ```jsx
 <div className="max-w-2xl p-6 rounded-lg bg-surface border border-border">
-  <h2 className="font-display font-semibold text-foreground mb-1">Your team</h2>
-  <p className="text-sm text-foreground-muted mb-4">3 movies drafted</p>
+  <h2 className="type-panel text-foreground mb-1">Your team</h2>
+  <p className="type-body-sm text-foreground-secondary mb-4">3 movies drafted</p>
 
   <div className="flex items-center gap-3 mb-4">
     <Avatar name="Carol Coppola" src={null} size="md" />

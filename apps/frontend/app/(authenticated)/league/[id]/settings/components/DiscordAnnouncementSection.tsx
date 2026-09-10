@@ -63,7 +63,7 @@ export default function DiscordAnnouncementSection({ leagueId }: Props): React.R
         <div className="mb-4">
           <label
             htmlFor="announcement_message"
-            className="block text-sm font-medium text-foreground-secondary mb-2"
+            className="type-label block text-foreground-secondary mb-2"
           >
             Message
           </label>
@@ -77,16 +77,16 @@ export default function DiscordAnnouncementSection({ leagueId }: Props): React.R
             maxLength={MAX_MESSAGE_LENGTH + 100}
           />
           <div className="flex justify-between mt-2">
-            <p className="text-xs text-foreground-muted">
+            <p className="type-meta text-foreground-secondary">
               Sent as an embed to every linked channel, regardless of their notification settings
             </p>
-            <span className={`text-xs ${isOverLimit ? 'text-error' : 'text-foreground-muted'}`}>
+            <span className={`type-numeric type-meta ${isOverLimit ? 'text-error' : 'text-foreground-secondary'}`}>
               {charCount}/{MAX_MESSAGE_LENGTH}
             </span>
           </div>
         </div>
 
-        {error && <p className="text-sm text-error mb-4">{error}</p>}
+        {error && <p className="type-body-sm text-error mb-4">{error}</p>}
 
         <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary">
           {isLoading ? (

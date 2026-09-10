@@ -293,11 +293,11 @@ export default function TradeOfferCard(props: Props) {
               {initiatorTeam.name} <span aria-label="to">→</span> {recipientTeam.name}
             </p>
             {initiatorDisplayName && recipientDisplayName && (
-              <p className="text-xs text-foreground-muted">
+              <p className="type-meta text-foreground-secondary">
                 {initiatorDisplayName} <span aria-label="to">→</span> {recipientDisplayName}
               </p>
             )}
-            <p className="text-sm text-foreground-muted">
+            <p className="type-body-sm text-foreground-secondary">
               <time dateTime={trade.proposed_at}>{formatRelativeDate(trade.proposed_at)}</time>
             </p>
           </div>
@@ -305,7 +305,7 @@ export default function TradeOfferCard(props: Props) {
 
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <span
-            className={`px-2 py-1 text-xs font-medium rounded ${statusStyle.bg} ${statusStyle.text}`}
+            className={`type-meta px-2 py-1 rounded ${statusStyle.bg} ${statusStyle.text}`}
             role="status"
             aria-live="polite"
           >
@@ -314,7 +314,7 @@ export default function TradeOfferCard(props: Props) {
 
           {showExpiry && trade.expires_at && (
             <span
-              className={`px-2 py-0.5 text-xs font-medium rounded ${
+              className={`type-meta px-2 py-0.5 rounded ${
                 URGENCY_STYLES[urgency]
               } ${
                 // An offer about to lapse on YOUR desk is a "your turn" state,
@@ -333,7 +333,7 @@ export default function TradeOfferCard(props: Props) {
 
           {isContested && (
             <span
-              className="px-2 py-0.5 text-xs font-medium rounded bg-warning-bg text-warning"
+              className="type-meta px-2 py-0.5 rounded bg-warning-bg text-warning"
               data-testid={`trade-contested-${trade.id}`}
             >
               Contested
@@ -365,7 +365,7 @@ export default function TradeOfferCard(props: Props) {
       {/* Messages */}
       {trade.initiator_message && (
         <div className="mb-4 p-3 bg-surface-hover rounded-lg">
-          <p className="text-sm text-foreground-secondary">
+          <p className="type-body-sm text-foreground-secondary">
             <span className="font-medium">{initiatorTeam.name}:</span> {trade.initiator_message}
           </p>
         </div>
@@ -373,7 +373,7 @@ export default function TradeOfferCard(props: Props) {
 
       {trade.response_message && (
         <div className="mb-4 p-3 bg-surface-hover rounded-lg">
-          <p className="text-sm text-foreground-secondary">
+          <p className="type-body-sm text-foreground-secondary">
             <span className="font-medium">{recipientTeam.name}:</span> {trade.response_message}
           </p>
         </div>
@@ -382,11 +382,11 @@ export default function TradeOfferCard(props: Props) {
       {/* Review countdown */}
       {trade.status === 'review' && trade.review_ends_at && (
         <div className="mb-4 p-3 bg-warning-bg rounded-lg">
-          <p className="text-sm text-warning">
+          <p className="type-body-sm text-warning">
             Review period ends {formatRelativeDate(trade.review_ends_at)}
           </p>
           {isOwner && (
-            <p className="text-xs text-warning/80 mt-1">
+            <p className="type-meta text-warning/80 mt-1">
               It processes automatically then — approve to process it now, or veto to block it.
             </p>
           )}
@@ -400,7 +400,7 @@ export default function TradeOfferCard(props: Props) {
       */}
       {trade.status === 'expired' && (expiredReason || trade.veto_reason) && (
         <div className="mb-4 p-3 bg-surface-hover rounded-lg">
-          <p className="text-sm text-foreground-secondary">
+          <p className="type-body-sm text-foreground-secondary">
             <span className="font-medium">Expired:</span> {expiredReason ?? trade.veto_reason}
           </p>
         </div>
@@ -409,7 +409,7 @@ export default function TradeOfferCard(props: Props) {
       {/* Veto reason */}
       {trade.status === 'vetoed' && trade.veto_reason && (
         <div className="mb-4 p-3 bg-error-bg rounded-lg">
-          <p className="text-sm text-error">
+          <p className="type-body-sm text-error">
             <span className="font-medium">Veto reason:</span> {trade.veto_reason}
           </p>
         </div>
@@ -505,7 +505,7 @@ export default function TradeOfferCard(props: Props) {
               aria-label="Veto trade"
               data-testid={`veto-trade-${trade.id}`}
             >
-              Veto Trade
+              Veto trade
             </button>
           )}
         </div>
@@ -595,7 +595,7 @@ function TeamAvatar({ team }: { team: { name: string; avatar_url: string | null 
           className="w-full h-full object-cover"
         />
       ) : (
-        <span className="text-xs font-medium text-foreground-muted">
+        <span className="type-meta text-foreground-secondary">
           {team.name.charAt(0).toUpperCase()}
         </span>
       )}
@@ -619,10 +619,10 @@ function TradeItemsSection({
 
   return (
     <div className={`p-3 rounded-lg ${isYours ? 'bg-crimson/10' : 'bg-success/10'}`}>
-      <p className="text-sm font-medium text-foreground-secondary mb-2">{title}</p>
+      <p className="type-label text-foreground-secondary mb-2">{title}</p>
 
       {!hasItems ? (
-        <p className="text-sm text-foreground-muted italic">Nothing</p>
+        <p className="type-body-sm text-foreground-secondary italic">Nothing</p>
       ) : (
         <div className="space-y-2">
           {items.movies.map((movie: TradeMovieItem) => (
@@ -638,29 +638,29 @@ function TradeItemsSection({
                   />
                 ) : (
                   <div className="w-8 h-12 bg-surface-hover rounded flex items-center justify-center">
-                    <span className="text-xs text-foreground-muted">?</span>
+                    <span className="type-meta text-foreground-secondary">?</span>
                   </div>
                 )}
                 {movie.source === 'counterpick' && <CounterpickMark />}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground truncate">
+                <p className="type-row-title text-foreground break-words">
                   {movie.title || 'Unknown Movie'}
                 </p>
                 {/* Without this the row is indistinguishable from the movie
                     itself -- same title, same poster, opposite meaning. */}
                 {movie.source === 'counterpick' && (
-                  <p className="text-xs text-crimson">Counterpick</p>
+                  <p className="type-meta text-crimson">Counterpick</p>
                 )}
                 {movie.release_date && (
-                  <p className="text-xs text-foreground-muted">
+                  <p className="type-meta text-foreground-secondary">
                     {new Date(movie.release_date).getFullYear()}
                   </p>
                 )}
                 {/* The card badge says the deal is contested; this says which
                     movie, which is the part that matters on a multi-movie offer. */}
                 {contestedSourceIds.has(movie.source_id) && (
-                  <p className="text-xs text-warning">Also in another trade</p>
+                  <p className="type-meta text-warning">Also in another trade</p>
                 )}
               </div>
             </div>
@@ -669,9 +669,9 @@ function TradeItemsSection({
           {items.faab > 0 && (
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-gold/20 rounded flex items-center justify-center">
-                <span className="text-gold font-bold text-sm">$</span>
+                <span className="type-row-title text-gold">$</span>
               </div>
-              <p className="text-sm font-medium text-gold">${items.faab} budget</p>
+              <p className="type-number text-gold">${items.faab} budget</p>
             </div>
           )}
         </div>
@@ -856,12 +856,12 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
       />
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 id="counter-trade-title" className="text-lg font-display font-bold text-foreground">
-            Counter Trade with {initiatorTeam.name}
+          <h2 id="counter-trade-title" className="type-panel text-foreground">
+            Counter trade with {initiatorTeam.name}
           </h2>
           <button
             onClick={onClose}
-            className="text-foreground-muted hover:text-foreground transition-colors"
+            className="text-foreground-secondary hover:text-foreground transition-colors"
             aria-label="Close counter trade modal"
           >
             ✕
@@ -871,7 +871,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {/* Your side - what you offer */}
           <div>
-            <h3 id="counter-offer-section" className="text-sm font-medium text-foreground mb-3">You give ({recipientTeam.name})</h3>
+            <h3 id="counter-offer-section" className="type-label text-foreground mb-3">You give ({recipientTeam.name})</h3>
             <MovieSelector
               movies={tradeableMovies}
               selectedIds={offeredMovies}
@@ -879,7 +879,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               invalidIds={invalidSourceIds}
             />
             <div className="mt-3">
-              <label htmlFor="counter-offered-budget" className="text-sm text-foreground-secondary">Budget (max ${budget?.remaining_budget ?? 0})</label>
+              <label htmlFor="counter-offered-budget" className="type-label text-foreground-secondary">Budget (max ${budget?.remaining_budget ?? 0})</label>
               <input
                 id="counter-offered-budget"
                 type="number"
@@ -887,14 +887,14 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
                 max={budget?.remaining_budget ?? 0}
                 value={offeredBudget}
                 onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
-                className="input mt-1 w-24"
+                className="type-input type-numeric input mt-1 w-24"
               />
             </div>
           </div>
 
           {/* Their side - what you request */}
           <div>
-            <h3 id="counter-request-section" className="text-sm font-medium text-foreground mb-3">You receive ({initiatorTeam.name})</h3>
+            <h3 id="counter-request-section" className="type-label text-foreground mb-3">You receive ({initiatorTeam.name})</h3>
             <MovieSelector
               movies={otherTeamMovies}
               selectedIds={requestedMovies}
@@ -902,7 +902,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               invalidIds={invalidSourceIds}
             />
             <div className="mt-3">
-              <label htmlFor="counter-requested-budget" className="text-sm text-foreground-secondary">Budget</label>
+              <label htmlFor="counter-requested-budget" className="type-label text-foreground-secondary">Budget</label>
               <input
                 id="counter-requested-budget"
                 type="number"
@@ -910,7 +910,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
                 max={100}
                 value={requestedBudget}
                 onChange={(e) => setRequestedBudget(Math.max(0, parseInt(e.target.value) || 0))}
-                className="input mt-1 w-24"
+                className="type-input type-numeric input mt-1 w-24"
               />
             </div>
           </div>
@@ -926,7 +926,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
           />
 
           <div>
-            <label htmlFor="counter-message" className="text-sm text-foreground-secondary">Message (optional)</label>
+            <label htmlFor="counter-message" className="type-label text-foreground-secondary">Message (optional)</label>
             <textarea
               id="counter-message"
               value={message}
@@ -958,7 +958,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
             aria-label={isLoading ? 'Submitting counter offer...' : 'Submit counter offer'}
             aria-busy={isLoading}
           >
-            {isLoading ? 'Submitting...' : 'Submit Counter'}
+            {isLoading ? 'Submitting...' : 'Submit counter'}
           </button>
         </div>
       </div>
@@ -1002,7 +1002,7 @@ function MovieSelector({
             />
           </svg>
         </div>
-        <p className="text-sm text-foreground-muted">No movies available to trade</p>
+        <p className="type-body-sm text-foreground-secondary">No movies available to trade</p>
       </div>
     )
   }
@@ -1049,14 +1049,14 @@ function MovieSelector({
                 />
               ) : (
                 <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
-                  <span className="text-xs text-foreground-muted" aria-hidden="true">?</span>
+                  <span className="type-meta text-foreground-secondary" aria-hidden="true">?</span>
                 </div>
               )}
               {movie.source === 'counterpick' && <CounterpickMark />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground truncate">{movie.title}</p>
-              <div className="flex items-center gap-2 text-xs text-foreground-muted">
+              <p className="type-row-title text-foreground break-words">{movie.title}</p>
+              <div className="type-meta flex items-center gap-2 text-foreground-secondary">
                 {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
                 {movie.source === 'counterpick' && (
                   <span className="text-crimson">
@@ -1186,17 +1186,17 @@ function ExtendOfferModal({
     >
       <div className="modal-panel bg-surface rounded-lg shadow-heavy max-w-md w-full border border-border">
         <div className="p-4 border-b border-border">
-          <h2 id="extend-offer-title" className="text-lg font-display font-bold text-foreground">
-            Extend Offer
+          <h2 id="extend-offer-title" className="type-panel text-foreground">
+            Extend offer
           </h2>
-          <p className="text-sm text-foreground-secondary mt-1">
+          <p className="type-body-sm text-foreground-secondary mt-1">
             Give {recipientTeam.name} more time to answer. An offer can only be extended, never
             shortened.
           </p>
         </div>
 
         <div className="p-4 space-y-4">
-          <p className="text-sm text-foreground-muted">
+          <p className="type-body-sm text-foreground-secondary">
             Currently expires{' '}
             <time dateTime={expiresAt} className="text-foreground-secondary">
               {formatExpiryAbsolute(expiresAt)}
@@ -1205,7 +1205,7 @@ function ExtendOfferModal({
 
           {atCeiling ? (
             <div className="alert alert-info" role="status">
-              <p className="text-sm">
+              <p className="type-body-sm">
                 This offer already runs as long as the league allows — no more than{' '}
                 {expiryBounds.maxDays} {expiryBounds.maxDays === 1 ? 'day' : 'days'} from now.
               </p>
@@ -1213,7 +1213,7 @@ function ExtendOfferModal({
           ) : (
             <>
               <div>
-                <span className="text-sm text-foreground-secondary">Extend by</span>
+                <span className="type-body-sm text-foreground-secondary">Extend by</span>
                 <div className="mt-1 flex flex-wrap gap-2">
                   {presets.map((preset) => (
                     <Chip
@@ -1233,7 +1233,7 @@ function ExtendOfferModal({
               </div>
 
               {/* A chip alone never says when. Same rule as the proposal picker. */}
-              <p className="text-sm text-foreground-muted">
+              <p className="type-body-sm text-foreground-secondary">
                 New expiry:{' '}
                 <time dateTime={newExpiresAt.toISOString()} className="text-foreground-secondary">
                   {formatExpiryAbsolute(newExpiresAt.toISOString())}
@@ -1250,7 +1250,7 @@ function ExtendOfferModal({
           */}
           {!atCeiling && trade.expiry_anchor === 'movie_release' && (
             <div className="alert alert-warning" role="alert">
-              <p className="text-sm">
+              <p className="type-body-sm">
                 This offer runs until {trade.anchor_movie_title ?? 'its movie'} releases. Extending
                 it past that replaces the release anchor with a fixed time, so it will stop
                 following the movie&apos;s schedule.
@@ -1282,7 +1282,7 @@ function ExtendOfferModal({
             aria-busy={isLoading}
             data-testid={`confirm-extend-trade-${trade.id}`}
           >
-            {isLoading ? 'Extending...' : 'Extend Offer'}
+            {isLoading ? 'Extending...' : 'Extend offer'}
           </button>
         </div>
       </div>
@@ -1332,10 +1332,10 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
       />
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-md w-full">
         <div className="p-4 border-b border-border">
-          <h2 id="approve-modal-title" className="text-lg font-display font-bold text-foreground">
-            Approve Trade
+          <h2 id="approve-modal-title" className="type-panel text-foreground">
+            Approve trade
           </h2>
-          <p className="text-sm text-foreground-secondary mt-1">
+          <p className="type-body-sm text-foreground-secondary mt-1">
             Process the trade between {initiatorTeam.name} and {recipientTeam.name} now, without
             waiting for the review period to end?
           </p>
@@ -1343,7 +1343,7 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
 
         <div className="p-4 space-y-3">
           <div className="p-3 rounded-lg bg-surface-hover">
-            <p className="text-sm text-foreground-secondary">
+            <p className="type-body-sm text-foreground-secondary">
               Movies and budget change hands immediately, and both teams are notified that you
               approved the trade.
             </p>
@@ -1351,7 +1351,7 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
 
           {trade.contested_source_ids && trade.contested_source_ids.length > 0 && (
             <div className="alert alert-warning" role="alert">
-              <p className="text-sm">
+              <p className="type-body-sm">
                 A movie in this trade is also in another open offer. Approving settles it here and
                 expires the competing offer.
               </p>
@@ -1359,7 +1359,7 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
           )}
 
           <div className="bg-warning-bg p-3 rounded-lg" role="alert">
-            <p className="text-sm text-warning">
+            <p className="type-body-sm text-warning">
               This action cannot be undone — the trade can no longer be vetoed once processed.
             </p>
           </div>
@@ -1441,15 +1441,15 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
       />
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-md w-full">
         <div className="p-4 border-b border-border">
-          <h2 id="veto-modal-title" className="text-lg font-display font-bold text-foreground">Veto Trade</h2>
-          <p className="text-sm text-foreground-secondary mt-1">
+          <h2 id="veto-modal-title" className="type-panel text-foreground">Veto trade</h2>
+          <p className="type-body-sm text-foreground-secondary mt-1">
             Are you sure you want to veto the trade between {initiatorTeam.name} and {recipientTeam.name}?
           </p>
         </div>
 
         <div className="p-4 space-y-4">
           <div>
-            <label htmlFor="veto-reason" className="text-sm text-foreground-secondary">Reason (optional)</label>
+            <label htmlFor="veto-reason" className="type-label text-foreground-secondary">Reason (optional)</label>
             <textarea
               id="veto-reason"
               value={reason}
@@ -1460,7 +1460,7 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
           </div>
 
           <div className="bg-error-bg p-3 rounded-lg" role="alert">
-            <p className="text-sm text-error">
+            <p className="type-body-sm text-error">
               This action cannot be undone. The trade will be cancelled and both teams will be notified.
             </p>
           </div>
@@ -1482,7 +1482,7 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
             aria-label="Confirm veto trade"
             aria-busy={isLoading}
           >
-            {isLoading ? 'Vetoing...' : 'Veto Trade'}
+            {isLoading ? 'Vetoing...' : 'Veto trade'}
           </button>
         </div>
       </div>

@@ -7,8 +7,8 @@
 <link rel="icon" href="../../apps/frontend/public/brand/v1/favicon.svg">
 <link rel="stylesheet" href="typography.css">
 <style>
-@font-face { font-family:'Bricolage Grotesque'; src:url('source/bricolage.ttf'); font-weight:200 800; font-stretch:75% 100%; font-style:normal; font-display:swap; }
-@font-face { font-family:'DM Sans'; src:url('source/dm-sans.ttf'); font-weight:100 1000; font-style:normal; font-display:swap; }
+@font-face { font-family:'Bricolage Grotesque'; src:url('../../apps/frontend/app/fonts/bricolage.woff2') format('woff2'); font-weight:200 800; font-stretch:75% 100%; font-style:normal; font-display:swap; }
+@font-face { font-family:'DM Sans'; src:url('../../apps/frontend/app/fonts/dm-sans.woff2') format('woff2'); font-weight:100 1000; font-style:normal; font-display:swap; }
 :root { color-scheme:dark; background:#0f0f0f; color:#e8e8e8; font-family:'DM Sans',sans-serif; }
 * { box-sizing:border-box; }
 body { margin:0; }
@@ -87,14 +87,14 @@ footer { margin-top:40px; font-size:13px; color:#b8b0a4; display:flex; gap:18px;
 </head>
 <body class="fr-type-system">
 <main class="wrap">
-  <header><img src="../../apps/frontend/public/brand/v1/logo-dark.svg" alt="Fantasy Reel"><span class="type-meta muted">Brand and typography study · September 2026</span></header>
+  <header><img src="../../apps/frontend/public/brand/v1/logo-dark.svg" alt="Fantasy Reel"><span class="type-meta muted">Brand and typography · September 2026</span></header>
   <nav class="tabs" role="tablist" aria-label="Design study">
     <button type="button" role="tab" aria-selected="true" aria-controls="brand" id="tab-brand">Logo &amp; icons</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="type" id="tab-type" tabindex="-1">Type system</button>
     <button type="button" role="tab" aria-selected="false" aria-controls="context" id="tab-context" tabindex="-1">In context</button>
   </nav>
   <section id="brand" role="tabpanel" aria-labelledby="tab-brand">
-    <p class="intro type-body">One identity, sized for its job. These are the actual vector and PNG candidate assets. The current app still uses its existing branding.</p>
+    <p class="intro type-body">One identity, sized for its job. These are the approved vector and PNG assets; the primary logo, charcoal app icons, and simplified browser mark are the app defaults.</p>
     <div class="toolbar"><label class="type-label" for="lockup-select">Logo treatment <select id="lockup-select"><option value="logo-dark">Primary</option><option value="logo-compact-dark">Compact lettering</option><option value="logo-gold">One-color gold</option><option value="logo-light">One-color ink</option><option value="logo-stacked-dark">Stacked</option></select></label><a id="logo-download" href="../../apps/frontend/public/brand/v1/logo-dark.svg" download>Download SVG</a></div>
     <div class="lockup" id="lockup-frame"><img id="logo-preview" src="../../apps/frontend/public/brand/v1/logo-dark.svg" alt="Primary Fantasy Reel logo"></div>
     <div class="toolbar"><h2 class="type-section">App and browser icons</h2><label class="type-label" for="colorway">Colorway <select id="colorway"><option value="charcoal">Gold on charcoal</option><option value="gold">Ink on gold</option></select></label></div>
@@ -108,7 +108,7 @@ footer { margin-top:40px; font-size:13px; color:#b8b0a4; display:flex; gap:18px;
     <div class="concepts"><figure><img src="concepts/charcoal.png" alt="High-fidelity gold-on-charcoal ribbon concept"><figcaption>Charcoal</figcaption></figure><figure><img src="concepts/gold.png" alt="High-fidelity dark-on-gold ribbon concept"><figcaption>Gold</figcaption></figure></div>
   </section>
   <section id="type" role="tabpanel" aria-labelledby="tab-type" hidden>
-    <p class="intro type-body">Bricolage Grotesque gives headlines their voice. DM Sans keeps the game readable. These specimens use the actual font files and proposed responsive roles.</p>
+    <p class="intro type-body">Bricolage Grotesque gives headlines their voice. DM Sans keeps the game readable. These specimens use the same local font files and responsive role stylesheet as the app.</p>
     <div class="specimen-row"><div class="type-label">Marketing hero<small>Bricolage 700 · 40–72px</small></div><div class="sample type-hero">Good taste.<br>Friendly rivalry.</div></div>
     <div class="specimen-row"><div class="type-label">Page title<small>Bricolage 700 · 28–36px</small></div><div class="sample type-page">Your leagues</div></div>
     <div class="specimen-row"><div class="type-label">Section heading<small>Bricolage 700 · 22–26px</small></div><div class="sample type-section">The trading block</div></div>
@@ -119,14 +119,14 @@ footer { margin-top:40px; font-size:13px; color:#b8b0a4; display:flex; gap:18px;
     <div class="specimen-row"><div class="type-label">Scores and budgets<small>Bricolage 700 · optical size 12 · tabular numerals</small></div><div class="sample"><p class="type-number-lg">342 &nbsp; 128 &nbsp; −24</p><p class="type-number" style="margin-top:12px">$100 &nbsp; $75 &nbsp; $8</p></div></div>
   </section>
   <section id="context" role="tabpanel" aria-labelledby="tab-context" hidden>
-    <p class="intro type-body">Representative typography specimens with illustrative league data. Full app layout and interaction testing belongs to the rollout.</p>
+    <p class="intro type-body">Representative typography specimens with illustrative league data. These examples explain the type system; the verification notes record completed app checks.</p>
     <div class="hero-proof"><h1 class="type-hero">Your hot takes, finally worth something.</h1><p class="type-lead">Draft upcoming movies. Outscore your friends when the reviews drop.</p><span class="action-proof type-control">Start a league</span></div>
     <div class="app-grid">
       <section class="panel"><h2 class="type-section">Standings</h2><p class="type-body-sm">The usual suspects</p><div class="standing"><span class="type-number">1</span><span class="type-row-title">Director's Cut<small class="type-meta">8 movies scored</small></span><span class="type-number-lg score">342<small class="type-meta">points</small></span></div><div class="standing"><span class="type-number">2</span><span class="type-row-title">The Slow Burn<small class="type-meta">7 movies scored</small></span><span class="type-number-lg score">319<small class="type-meta">points</small></span></div><div class="standing"><span class="type-number">3</span><span class="type-row-title">Plot Twist<small class="type-meta">6 movies scored</small></span><span class="type-number-lg score">−24<small class="type-meta">points</small></span></div></section>
       <section class="panel"><h2 class="type-panel">Place a pickup bid</h2><div class="bid-movie"><div class="type-row-title">The next sleeper hit</div><span class="type-meta pending">Release date pending · No RT score yet</span></div><div class="form-label type-label">Bid amount</div><div class="input-proof type-input type-numeric">$85</div><p class="type-meta">Fantasy Budget remaining: $75</p><p class="error-proof type-body-sm"><strong>Your bid is over budget</strong>You have $75 remaining. Lower this bid to fit your budget.</p><span class="action-proof type-control">Place bid</span></section>
     </div>
   </section>
-  <footer><a href="typography.md">Full typography guide</a><a href="README.md">Assets and integration notes</a><span>Design proposal · application rollout pending</span></footer>
+  <footer><a href="typography.md">Full typography guide</a><a href="README.md">Assets and integration notes</a><span>Approved identity · shared app typography</span></footer>
 </main>
 <script>
 const base = '../../apps/frontend/public/brand/v1/';

@@ -17,8 +17,8 @@ export default function MovieShowcase({ movies }: Props): React.ReactElement {
   return (
     <section className="py-24 px-6 bg-background">
       <div className="max-w-7xl mx-auto">
-        <h2 className="font-display text-3xl md:text-4xl font-bold text-center text-foreground mb-4">
-          Now Drafting
+        <h2 className="type-section text-center text-foreground mb-4">
+          Now drafting
         </h2>
         <p className="text-foreground-secondary text-center mb-12 max-w-2xl mx-auto">
           Coming soon to a league near you. The question is: will you call it?
@@ -41,7 +41,7 @@ export default function MovieShowcase({ movies }: Props): React.ReactElement {
                   />
                 ) : (
                   <div className="showcase-poster bg-surface flex items-center justify-center">
-                    <span className="text-foreground-muted text-sm text-center px-4">
+                    <span className="type-body-sm text-foreground-secondary text-center px-4">
                       {movie.title}
                     </span>
                   </div>

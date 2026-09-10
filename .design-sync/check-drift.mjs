@@ -117,8 +117,15 @@ if (since && typeof since === 'string') {
     })
       .split('\n')
       .filter(Boolean)
-    const extra = [cfg.cssEntry, 'apps/frontend/app/globals.css', 'apps/frontend/types/index.ts']
-    touched = changed.filter((f) => syncedPaths.has(f) || extra.includes(f))
+    const extra = [
+      cfg.cssEntry,
+      'apps/frontend/app/globals.css',
+      'apps/frontend/app/typography.css',
+      'apps/frontend/types/index.ts',
+      'docs/brand/typography.md',
+    ]
+    touched = changed.filter((f) => syncedPaths.has(f) || extra.includes(f) ||
+      f.startsWith('apps/frontend/app/fonts/') || f.startsWith('apps/frontend/public/brand/v1/'))
   } catch {
     /* base ref unavailable (shallow clone) — skip the notice, never fail on it */
   }

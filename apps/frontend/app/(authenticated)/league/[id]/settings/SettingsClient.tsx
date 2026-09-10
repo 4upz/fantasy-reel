@@ -51,8 +51,8 @@ export default function SettingsClient({
     <div className="animate-fade-in">
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-3xl sm:text-4xl font-display font-bold text-foreground">
-          League Settings
+        <h1 className="type-page text-foreground">
+          League settings
         </h1>
         <p className="text-foreground-secondary mt-2">
           Manage settings for <span className="text-foreground font-medium">{league.name}</span>

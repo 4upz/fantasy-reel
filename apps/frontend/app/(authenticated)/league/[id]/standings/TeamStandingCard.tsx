@@ -39,8 +39,8 @@ function pointsTone(points: number): string {
 /** One segment of the points total. Value colour tells you which way it pulled. */
 function BreakdownChip({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
-    <span className="rounded-lg bg-elevated px-2 py-[3px] text-[11px] text-foreground-secondary">
-      {label} <span className={`font-semibold ${tone}`}>{formatFantasyPoints(value)}</span>
+    <span className="type-meta rounded-lg bg-elevated px-2 py-[3px] text-foreground-secondary">
+      {label} <span className={`type-numeric font-semibold ${tone}`}>{formatFantasyPoints(value)}</span>
     </span>
   )
 }
@@ -100,7 +100,7 @@ export default function TeamStandingCard({
         {/* Line 1 on mobile; the whole row above lg, where the stats move inline */}
         <div className="flex items-center gap-2.5 lg:gap-3.5">
           <div
-            className={`flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] font-display text-sm font-bold lg:h-[38px] lg:w-[38px] lg:rounded-[11px] ${
+            className={`type-number flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] lg:h-[38px] lg:w-[38px] lg:rounded-[11px] ${
               PODIUM_CHIP[rank] ?? 'border border-border bg-elevated text-foreground-secondary'
             }`}
           >
@@ -112,7 +112,7 @@ export default function TeamStandingCard({
             {team?.avatar_url ? (
               <Image src={team.avatar_url} alt={displayName} fill sizes="38px" className="object-cover" unoptimized />
             ) : (
-              <div className="flex h-full w-full items-center justify-center font-display text-xs font-bold text-gold lg:text-[13px]">
+              <div className="type-meta flex h-full w-full items-center justify-center text-gold">
                 {initials}
               </div>
             )}
@@ -120,53 +120,53 @@ export default function TeamStandingCard({
 
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate font-display text-[15px] font-semibold text-foreground">{displayName}</span>
+              <span className="type-row-title truncate text-foreground">{displayName}</span>
               {isCurrentUser && (
-                <span className="flex-none rounded-full bg-gold-muted px-1.5 py-px text-[10px] font-semibold text-gold">
+                <span className="type-meta flex-none rounded-full bg-gold-muted px-1.5 py-px text-gold">
                   You
                 </span>
               )}
             </div>
-            {ownerHandle && <div className="truncate text-xs text-foreground-muted">{ownerHandle}</div>}
+            {ownerHandle && <div className="type-meta truncate text-foreground-secondary">{ownerHandle}</div>}
           </div>
 
           {/* Above lg there is room for the stat strip to become columns */}
-          <div className="hidden flex-none text-center lg:block lg:w-[72px]">
-            <div className="text-[11px] text-foreground-muted">Movies</div>
-            <div className="text-[15px] font-semibold text-foreground-secondary">{movieCount}</div>
+          <div className="hidden flex-none text-right lg:block lg:w-[72px]">
+            <div className="type-meta text-foreground-secondary">Movies</div>
+            <div className="type-number text-foreground-secondary">{movieCount}</div>
           </div>
 
           {/* Spending power is only useful next to everyone else's, so it sits in
               the collapsed row rather than behind an expand. */}
           {budgetLeft !== null && (
-            <div className="hidden flex-none text-center lg:block lg:w-[72px]">
-              <div className="text-[11px] text-foreground-muted">Budget</div>
-              <div className={`text-[15px] font-semibold ${budgetTone(budgetLeft)}`}>{formatBudget(budgetLeft)}</div>
+            <div className="hidden flex-none text-right lg:block lg:w-[72px]">
+              <div className="type-meta text-foreground-secondary">Budget</div>
+              <div className={`type-number ${budgetTone(budgetLeft)}`}>{formatBudget(budgetLeft)}</div>
             </div>
           )}
 
-          <div className="flex-none text-right lg:w-[86px]">
+          <div className="flex-none text-right lg:min-w-[86px]">
             <div
-              className={`font-display text-[28px] font-bold leading-none lg:text-[26px] ${pointsTone(totalPoints)}`}
+              className={`type-number-lg ${pointsTone(totalPoints)}`}
             >
               {formatFantasyPoints(totalPoints)}
             </div>
-            <div className="mt-0.5 text-[9px] uppercase tracking-[0.1em] text-foreground-muted">Points</div>
+            <div className="type-meta mt-0.5 text-foreground-secondary">Points</div>
           </div>
         </div>
 
         {/* Line 2 - stat strip, on its own line so nothing collides with the points */}
         <div className="flex items-center gap-2 border-t border-border pt-[9px] lg:hidden">
-          <span className="text-xs text-foreground-secondary">{movieCount} movies</span>
+          <span className="type-meta text-foreground-secondary">{movieCount} movies</span>
           <span className="h-[3px] w-[3px] flex-none rounded-full bg-border-hover" />
-          <span className="truncate text-xs text-foreground-muted">
+          <span className="type-meta truncate text-foreground-secondary">
             {moviesScored} scored · {moviesPending} pending
           </span>
           <span className="flex-1" />
           {/* flex-none so the purse survives the truncation the scored/pending
               text takes when a team name pushes the row wide */}
           {budgetLeft !== null && (
-            <span className={`flex-none text-xs font-semibold ${budgetTone(budgetLeft)}`}>
+            <span className={`type-meta type-numeric flex-none ${budgetTone(budgetLeft)}`}>
               {formatBudget(budgetLeft)}
             </span>
           )}
@@ -227,7 +227,7 @@ export default function TeamStandingCard({
           ))}
 
           {movieCount === 0 && counterpicks.length === 0 && (
-            <p className="py-3 text-center text-sm text-foreground-muted">No movies drafted yet</p>
+            <p className="type-body-sm py-3 text-center text-foreground-secondary">No movies drafted yet</p>
           )}
         </div>
       )}

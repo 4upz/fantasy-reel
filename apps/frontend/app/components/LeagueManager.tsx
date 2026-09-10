@@ -98,8 +98,8 @@ export default function LeagueManager({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
             </svg>
           </div>
-          <h3 className="font-display text-2xl text-foreground mb-3">Start your cinematic journey</h3>
-          <p className="text-foreground-muted mb-8 max-w-md mx-auto">
+          <h3 className="type-panel text-foreground mb-3">Start your cinematic journey</h3>
+          <p className="text-foreground-secondary mb-8 max-w-md mx-auto">
             Create your first fantasy movie league and invite friends to compete. Draft upcoming releases and score points based on reviews.
           </p>
           <button
@@ -112,7 +112,7 @@ export default function LeagueManager({
             <svg className="w-5 h-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Create Your First League
+            Create your first league
           </button>
         </div>
 

@@ -88,9 +88,17 @@ creating a test worktree; never print or commit secrets.
   validation/external APIs, and Realtime for updates. No separate backend service.
 
 For UI changes use the `frontend-design` skill first and inspect existing
-components. Follow Cinematic Dark tokens in `apps/frontend/app/globals.css`:
-semantic colors, `font-display` headings, gold interactive accents, existing
-animations, and `.card`, `.btn-*`, `.input`, `.badge-*`, `.alert-*` classes.
+components. Follow Cinematic Dark tokens in `apps/frontend/app/globals.css` and
+the canonical [typography guide](docs/brand/typography.md), implemented in
+`apps/frontend/app/typography.css`. Use role-based `type-*` classes: Bricolage for
+expressive headings and tabular numeric roles; DM Sans for body, controls,
+compact movie/team titles, and metadata. Do not assign `font-display` by heading
+tag alone. Numeric roles use optical size 12 and width 100; DM Sans does not
+provide tabular digits in the bundled file. Use `foreground-secondary` for
+meaningful small text on cards/inputs and keep functional metadata at least 12px.
+Keep gold interactive accents, existing animations, and `.card`, `.btn-*`,
+`.input`, `.badge-*`, `.alert-*` classes. Reuse the approved logo/icon assets in
+`apps/frontend/public/brand/v1/`; see [brand guidance](docs/brand/README.md).
 Use `hooks/useAsyncAction.ts` for async submissions to prevent duplicate requests;
 wrap actions in `useCallback`. Keep both error boundaries in sync with design
 changes. Display “Fantasy Budget” or “Budget”; retain existing `faab` schema/JSON
@@ -156,6 +164,8 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 
 - `CLAUDE.md`: detailed design, draft discovery, bidding, trading, and counterpick
   policy. Current code/migrations establish implementation facts.
+- `docs/brand/typography.md`: canonical role scale, font settings, accessibility,
+  and component mapping; `docs/brand/README.md`: approved logo/icon use.
 - `supabase/functions/TESTING.md`: Deno testing setup and commands.
 - `supabase/README.md`: local Supabase setup.
 - `supabase/SCORING.md`: scoring architecture.

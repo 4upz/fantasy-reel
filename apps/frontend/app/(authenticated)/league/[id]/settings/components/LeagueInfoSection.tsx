@@ -69,9 +69,9 @@ export default function LeagueInfoSection({ league, onUpdate }: Props): React.Re
         <div className="mb-6">
           <label
             htmlFor="league_name"
-            className="block text-sm font-medium text-foreground-secondary mb-2"
+            className="type-label block text-foreground-secondary mb-2"
           >
-            League Name
+            League name
           </label>
           <input
             type="text"
@@ -83,10 +83,10 @@ export default function LeagueInfoSection({ league, onUpdate }: Props): React.Re
             maxLength={MAX_NAME_LENGTH + 10}
           />
           <div className="flex justify-between mt-2">
-            <p className="text-xs text-foreground-muted">
+            <p className="type-meta text-foreground-secondary">
               The name displayed to all participants
             </p>
-            <span className={`text-xs ${isOverLimit ? 'text-error' : 'text-foreground-muted'}`}>
+            <span className={`type-numeric type-meta ${isOverLimit ? 'text-error' : 'text-foreground-secondary'}`}>
               {charCount}/{MAX_NAME_LENGTH}
             </span>
           </div>
@@ -94,12 +94,12 @@ export default function LeagueInfoSection({ league, onUpdate }: Props): React.Re
 
         {/* Invite Only Toggle */}
         <div className="mb-6">
-          <label className="flex items-center justify-between cursor-pointer">
+          <label className="type-label flex items-center justify-between cursor-pointer">
             <div>
-              <span className="block text-sm font-medium text-foreground-secondary">
-                Invite Only
+              <span className="type-label block text-foreground-secondary">
+                Invite only
               </span>
-              <span className="block text-xs text-foreground-muted mt-0.5">
+              <span className="type-meta block text-foreground-secondary mt-0.5">
                 {inviteOnly
                   ? 'Only invited users can join this league'
                   : 'Anyone with the link can join this league'}
@@ -134,7 +134,7 @@ export default function LeagueInfoSection({ league, onUpdate }: Props): React.Re
               Saving...
             </>
           ) : (
-            'Save Changes'
+            'Save changes'
           )}
         </button>
       </form>

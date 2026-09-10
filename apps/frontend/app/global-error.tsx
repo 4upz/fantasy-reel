@@ -30,6 +30,9 @@ export default function GlobalError({
           color: '#e8e8e8',
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          fontSize: '1rem',
+          lineHeight: 1.5,
+          boxSizing: 'border-box',
           padding: '1rem',
         }}
       >
@@ -42,11 +45,14 @@ export default function GlobalError({
             border: '1px solid #2e2e2e',
             borderRadius: '0.75rem',
             padding: '2rem',
+            boxSizing: 'border-box',
           }}
         >
           <h1
             style={{
-              fontSize: '1.5rem',
+              fontSize: '1.25rem',
+              lineHeight: 1.3,
+              letterSpacing: '-0.015em',
               fontWeight: 700,
               margin: '0 0 0.5rem',
               color: '#e8e8e8',
@@ -69,6 +75,9 @@ export default function GlobalError({
               onClick={reset}
               style={{
                 padding: '0.5rem 1rem',
+                fontFamily: 'inherit',
+                fontSize: '0.875rem',
+                lineHeight: 1.429,
                 fontWeight: 600,
                 borderRadius: '0.5rem',
                 border: 'none',
@@ -85,6 +94,8 @@ export default function GlobalError({
               href="/"
               style={{
                 padding: '0.5rem 1rem',
+                fontSize: '0.875rem',
+                lineHeight: 1.429,
                 fontWeight: 600,
                 borderRadius: '0.5rem',
                 color: '#b8b0a4',

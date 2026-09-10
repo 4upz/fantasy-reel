@@ -35,7 +35,7 @@ function Section({
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gold-muted text-gold">
           {icon}
         </div>
-        <h2 className="text-2xl font-display font-bold text-foreground">{title}</h2>
+        <h2 className="type-section text-foreground">{title}</h2>
       </div>
       <div className="space-y-4 text-foreground-secondary">{children}</div>
     </section>
@@ -57,16 +57,16 @@ function ScoreExample({
 }) {
   return (
     <div className={`card p-4 border-l-4 ${isPositive ? 'border-l-success' : 'border-l-crimson'}`}>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between gap-3 mb-2">
         <span className="font-semibold text-foreground">{title}</span>
-        <span className={`font-display font-bold text-lg ${isPositive ? 'text-success' : 'text-crimson'}`}>
+        <span className={`type-number whitespace-nowrap text-right ${isPositive ? 'text-success' : 'text-crimson'}`}>
           {total}
         </span>
       </div>
-      <div className="text-sm space-y-1">
-        <div className="text-foreground-muted">{avgScore}</div>
+      <div className="type-body-sm space-y-1">
+        <div className="text-foreground-secondary">{avgScore}</div>
         {bonuses.map((bonus, i) => (
-          <div key={i} className="text-foreground-muted">{bonus}</div>
+          <div key={i} className="text-foreground-secondary">{bonus}</div>
         ))}
       </div>
     </div>
@@ -79,10 +79,10 @@ export default function HelpPage() {
       <div className="max-w-4xl mx-auto px-4 py-8 lg:py-12">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl lg:text-5xl font-display font-bold text-foreground mb-4">
-            How to Play Fantasy Reel
+          <h1 className="type-page text-foreground mb-4">
+            How to play Fantasy Reel
           </h1>
-          <p className="text-lg text-foreground-secondary max-w-2xl mx-auto">
+          <p className="type-lead text-foreground-secondary max-w-2xl mx-auto">
             Draft upcoming movies, compete with friends, and earn points based on real critic reviews.
             The manager with the highest-scoring roster wins!
           </p>
@@ -90,8 +90,8 @@ export default function HelpPage() {
 
         {/* Quick Navigation */}
         <nav className="card p-6 mb-12">
-          <h3 className="text-sm font-semibold text-foreground-muted uppercase tracking-wide mb-4">
-            Jump to Section
+          <h3 className="type-row-title text-foreground-secondary mb-4">
+            Jump to section
           </h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
@@ -99,7 +99,7 @@ export default function HelpPage() {
               { href: '#leagues', label: 'Leagues', icon: <Users className="w-4 h-4" /> },
               { href: '#drafting', label: 'Drafting', icon: <GalleryVerticalEnd className="w-4 h-4" /> },
               { href: '#scoring', label: 'Scoring', icon: <Trophy className="w-4 h-4" /> },
-              { href: '#pickups', label: 'Pickups & Drops', icon: <CircleDollarSign className="w-4 h-4" /> },
+              { href: '#pickups', label: 'Pickups & drops', icon: <CircleDollarSign className="w-4 h-4" /> },
               { href: '#trading', label: 'Trading', icon: <Handshake className="w-4 h-4" /> },
             ].map(item => (
               <a
@@ -121,40 +121,40 @@ export default function HelpPage() {
         <div className="space-y-16">
           {/* Overview */}
           <Section id="overview" icon={<Film className="w-5 h-5" />} title="What is Fantasy Reel?">
-            <p className="text-lg">
+            <p className="type-lead">
               Fantasy Reel works just like fantasy sports, but for films! Instead of drafting athletes,
               you draft upcoming movies. When those movies release and get reviewed by critics, you earn
               fantasy points based on their scores.
             </p>
             <div className="card p-6 bg-surface-hover">
-              <h4 className="font-semibold text-foreground mb-3">The Basic Flow</h4>
+              <h4 className="type-label text-foreground mb-3">The basic flow</h4>
               <ol className="space-y-3">
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse text-sm font-bold flex-shrink-0">
+                  <span className="type-number flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse flex-shrink-0">
                     1
                   </span>
                   <span>Join or create a league with friends</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse text-sm font-bold flex-shrink-0">
+                  <span className="type-number flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse flex-shrink-0">
                     2
                   </span>
                   <span>Draft movies you think will be critically acclaimed</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse text-sm font-bold flex-shrink-0">
+                  <span className="type-number flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse flex-shrink-0">
                     3
                   </span>
                   <span>Wait for your movies to release and get reviewed</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse text-sm font-bold flex-shrink-0">
+                  <span className="type-number flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse flex-shrink-0">
                     4
                   </span>
                   <span>Earn fantasy points based on the Rotten Tomatoes Tomatometer</span>
                 </li>
                 <li className="flex items-start gap-3">
-                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse text-sm font-bold flex-shrink-0">
+                  <span className="type-number flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse flex-shrink-0">
                     5
                   </span>
                   <span>The manager with the most points at the end wins!</span>
@@ -172,8 +172,8 @@ export default function HelpPage() {
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="card p-5">
-                <h4 className="font-semibold text-foreground mb-2">Creating a League</h4>
-                <ul className="space-y-2 text-sm">
+                <h4 className="type-label text-foreground mb-2">Creating a league</h4>
+                <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                     <span>Set a name and configure draft settings</span>
@@ -194,8 +194,8 @@ export default function HelpPage() {
               </div>
 
               <div className="card p-5">
-                <h4 className="font-semibold text-foreground mb-2">Joining a League</h4>
-                <ul className="space-y-2 text-sm">
+                <h4 className="type-label text-foreground mb-2">Joining a league</h4>
+                <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                     <span>Accept an email invitation</span>
@@ -232,23 +232,23 @@ export default function HelpPage() {
             </p>
 
             <div className="card p-5 mb-4">
-              <h4 className="font-semibold text-foreground mb-3">Snake Draft Format</h4>
-              <p className="text-sm mb-3">
+              <h4 className="type-label text-foreground mb-3">Snake draft format</h4>
+              <p className="type-body-sm mb-3">
                 Most leagues use a &quot;snake&quot; draft, where the pick order reverses each round:
               </p>
-              <div className="bg-elevated rounded-lg p-4 font-mono text-sm">
-                <div className="text-foreground-muted mb-1">Round 1: Team A → Team B → Team C → Team D</div>
-                <div className="text-foreground-muted mb-1">Round 2: Team D → Team C → Team B → Team A</div>
-                <div className="text-foreground-muted">Round 3: Team A → Team B → Team C → Team D</div>
+              <div className="type-body-sm bg-elevated rounded-lg p-4">
+                <div className="text-foreground-secondary mb-1">Round 1: Team A → Team B → Team C → Team D</div>
+                <div className="text-foreground-secondary mb-1">Round 2: Team D → Team C → Team B → Team A</div>
+                <div className="text-foreground-secondary">Round 3: Team A → Team B → Team C → Team D</div>
               </div>
-              <p className="text-sm text-foreground-muted mt-3">
+              <p className="type-body-sm text-foreground-secondary mt-3">
                 This ensures fairness - the team that picks last in round 1 picks first in round 2.
               </p>
             </div>
 
             <div className="card p-5">
-              <h4 className="font-semibold text-foreground mb-3">Draft Strategy Tips</h4>
-              <ul className="space-y-2 text-sm">
+              <h4 className="type-label text-foreground mb-3">Draft strategy tips</h4>
+              <ul className="type-body-sm space-y-2">
                 <li className="flex items-start gap-2">
                   <Star className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                   <span>
@@ -280,8 +280,8 @@ export default function HelpPage() {
             </div>
 
             <div className="card p-5 border-gold/30">
-              <h4 className="font-semibold text-foreground mb-3">Counterpick Rounds (Optional)</h4>
-              <p className="text-sm">
+              <h4 className="type-label text-foreground mb-3">Counterpick rounds (optional)</h4>
+              <p className="type-body-sm">
                 Some leagues enable counterpick rounds after the main draft. In counterpick mode, you can assign
                 movies from your roster to opponents. If a counterpicked movie scores poorly, your opponent
                 takes the hit instead of you!
@@ -290,7 +290,7 @@ export default function HelpPage() {
           </Section>
 
           {/* Scoring */}
-          <Section id="scoring" icon={<Trophy className="w-5 h-5" />} title="Scoring System">
+          <Section id="scoring" icon={<Trophy className="w-5 h-5" />} title="Scoring system">
             <p>
               Fantasy points come from a single number: the <strong>Rotten Tomatoes Tomatometer</strong>.
               The baseline is <strong>60%</strong> - RT&apos;s own &ldquo;Fresh&rdquo; line. Fresh movies earn
@@ -298,7 +298,7 @@ export default function HelpPage() {
             </p>
 
             <div className="card p-6 mb-6">
-              <h4 className="font-semibold text-foreground mb-4">How Points Are Calculated</h4>
+              <h4 className="type-label text-foreground mb-4">How points are calculated</h4>
 
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
@@ -307,7 +307,7 @@ export default function HelpPage() {
                   </div>
                   <div>
                     <div className="font-semibold text-foreground">90%+ - The 90% Club</div>
-                    <div className="text-sm">+30 base points + 2 points for each point above 90</div>
+                    <div className="type-body-sm">+30 base points + 2 points for each point above 90</div>
                   </div>
                 </div>
 
@@ -317,7 +317,7 @@ export default function HelpPage() {
                   </div>
                   <div>
                     <div className="font-semibold text-foreground">60-89% - Fresh</div>
-                    <div className="text-sm">+1 point for each point above 60</div>
+                    <div className="type-body-sm">+1 point for each point above 60</div>
                   </div>
                 </div>
 
@@ -327,7 +327,7 @@ export default function HelpPage() {
                   </div>
                   <div>
                     <div className="font-semibold text-foreground">Below 60% - Rotten</div>
-                    <div className="text-sm">
+                    <div className="type-body-sm">
                       -1 point for each point below 60. Below 50%, the losses taper off - each 10
                       points deeper costs half as much - bottoming out near -20 points.
                     </div>
@@ -336,7 +336,7 @@ export default function HelpPage() {
               </div>
             </div>
 
-            <h4 className="font-semibold text-foreground mb-4">Example Scores</h4>
+            <h4 className="type-label text-foreground mb-4">Example scores</h4>
             <div className="grid md:grid-cols-2 gap-4">
               <ScoreExample
                 title="The 90% Club"
@@ -378,20 +378,20 @@ export default function HelpPage() {
             </div>
           </Section>
 
-          {/* Pickups & Drops */}
-          <Section id="pickups" icon={<CircleDollarSign className="w-5 h-5" />} title="Pickups & Drops">
+          {/* Pickups & drops */}
+          <Section id="pickups" icon={<CircleDollarSign className="w-5 h-5" />} title="Pickups & drops">
             <p>
               After the draft, you can still acquire new movies through the pickup (waiver) system.
               Use your fantasy budget to bid on undrafted movies.
             </p>
 
             <div className="card p-5 mb-4">
-              <h4 className="font-semibold text-foreground mb-3">Fantasy Budget Bidding</h4>
-              <p className="text-sm mb-3">
+              <h4 className="type-label text-foreground mb-3">Fantasy Budget bidding</h4>
+              <p className="type-body-sm mb-3">
                 Your <strong>Fantasy Budget</strong> is your currency for pickups.
                 Each league sets a budget amount (e.g., $100) that you can use throughout the season.
               </p>
-              <ul className="space-y-2 text-sm">
+              <ul className="type-body-sm space-y-2">
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                   <span>Place blind bids on available movies</span>
@@ -412,12 +412,12 @@ export default function HelpPage() {
             </div>
 
             <div className="card p-5">
-              <h4 className="font-semibold text-foreground mb-3">Dropping Movies</h4>
-              <p className="text-sm">
+              <h4 className="type-label text-foreground mb-3">Dropping movies</h4>
+              <p className="type-body-sm">
                 You can drop movies from your roster to make room for pickups. Dropped movies
                 become available for other teams to claim. Consider dropping movies that:
               </p>
-              <ul className="mt-3 space-y-2 text-sm">
+              <ul className="type-body-sm mt-3 space-y-2">
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                   <span>Have been indefinitely delayed</span>
@@ -443,8 +443,8 @@ export default function HelpPage() {
 
             <div className="grid md:grid-cols-2 gap-4 mb-4">
               <div className="card p-5">
-                <h4 className="font-semibold text-foreground mb-3">Proposing a Trade</h4>
-                <ul className="space-y-2 text-sm">
+                <h4 className="type-label text-foreground mb-3">Proposing a trade</h4>
+                <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                     <span>Select movies from your roster to offer</span>
@@ -461,8 +461,8 @@ export default function HelpPage() {
               </div>
 
               <div className="card p-5">
-                <h4 className="font-semibold text-foreground mb-3">Responding to Trades</h4>
-                <ul className="space-y-2 text-sm">
+                <h4 className="type-label text-foreground mb-3">Responding to trades</h4>
+                <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                     <span><strong>Accept:</strong> Trade executes immediately</span>
@@ -489,18 +489,18 @@ export default function HelpPage() {
 
           {/* CTA */}
           <div className="card p-8 text-center border-gold/30 bg-gradient-to-br from-surface to-gold-muted/10">
-            <h3 className="text-2xl font-display font-bold text-foreground mb-3">
-              Ready to Play?
+            <h3 className="type-panel text-foreground mb-3">
+              Ready to play?
             </h3>
             <p className="text-foreground-secondary mb-6 max-w-md mx-auto">
               Create a league and invite your friends, or join an existing league to start drafting movies!
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <Link href="/dashboard" className="btn btn-primary">
-                Go to Dashboard
+                Go to dashboard
               </Link>
               <Link href="/movies" className="btn btn-secondary">
-                Browse Movies
+                Browse movies
               </Link>
             </div>
           </div>

@@ -25,8 +25,8 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       {/* Hero Section */}
       <div className="mb-8 text-center lg:text-left">
-        <h1 className="text-3xl sm:text-4xl font-bold font-display text-foreground">
-          Your Leagues
+        <h1 className="type-page text-foreground">
+          Your leagues
         </h1>
         <p className="text-foreground-secondary mt-2 max-w-xl lg:max-w-none">
           Draft upcoming movies, compete with friends, and score points based on reviews.

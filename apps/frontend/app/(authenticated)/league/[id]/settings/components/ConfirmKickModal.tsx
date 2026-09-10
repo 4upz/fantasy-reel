@@ -29,15 +29,15 @@ export default function ConfirmKickModal({
             <div className="p-2 rounded-lg bg-crimson/10">
               <AlertTriangle className="w-5 h-5 text-crimson" />
             </div>
-            <h2 className="text-xl font-display font-bold text-foreground">
-              Remove Participant
+            <h2 className="type-panel text-foreground">
+              Remove participant
             </h2>
           </div>
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="p-1 text-foreground-muted hover:text-foreground transition-colors"
+            className="p-1 text-foreground-secondary hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -50,7 +50,7 @@ export default function ConfirmKickModal({
             <span className="text-foreground font-medium">{displayName}</span>{' '}
             from the league?
           </p>
-          <p className="text-sm text-foreground-muted mt-2">
+          <p className="type-body-sm text-foreground-secondary mt-2">
             They will need a new invitation to rejoin.
           </p>
         </div>

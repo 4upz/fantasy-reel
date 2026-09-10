@@ -64,6 +64,7 @@ export { default as ConfirmKickModal } from '../apps/frontend/app/(authenticated
 export { default as ChangePasswordModal } from '../apps/frontend/app/(authenticated)/settings/components/ChangePasswordModal'
 
 // ── Identity & brand ────────────────────────────────────────────────────
+export { default as BrandLogo } from '../apps/frontend/app/components/BrandLogo'
 export { default as NavLogo } from '../apps/frontend/app/components/navigation/NavLogo'
 export {
   default as UserSearchResultItem,

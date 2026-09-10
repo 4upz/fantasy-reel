@@ -347,7 +347,7 @@ export default function DraftClient({
       {isOwner && league.status === 'setup' && (
         <div className="mb-6 flex items-center gap-3">
           <button onClick={() => setShowInviteModal(true)} className="btn btn-secondary">
-            Invite Players
+            Invite players
           </button>
           <button
             onClick={handleStartDraft}
@@ -357,7 +357,7 @@ export default function DraftClient({
           >
             {startingDraft ? 'Starting...' : 'Start Draft'}
           </button>
-          {error && <span className="text-sm text-error">{error}</span>}
+          {error && <span className="type-body-sm text-error">{error}</span>}
         </div>
       )}
 
@@ -371,8 +371,8 @@ export default function DraftClient({
                   <Target className="w-5 h-5 text-crimson" />
                 </div>
                 <div>
-                  <p className="font-semibold text-foreground">Draft Complete!</p>
-                  <p className="text-sm text-foreground-muted">
+                  <p className="font-semibold text-foreground">Draft complete!</p>
+                  <p className="type-body-sm text-foreground-secondary">
                     Ready to start the counterpick round ({league.draft_counterpick_slots} pick{league.draft_counterpick_slots !== 1 ? 's' : ''} per team)
                   </p>
                 </div>
@@ -391,7 +391,7 @@ export default function DraftClient({
                   ) : (
                     <>
                       <Target className="w-4 h-4" />
-                      Start Counterpick Round
+                      Start counterpick round
                     </>
                   )}
                 </button>
@@ -399,7 +399,7 @@ export default function DraftClient({
                   <button
                     onClick={() => setShowSkipConfirm(true)}
                     disabled={startingCounterpick || skipping}
-                    className="text-sm text-foreground-muted hover:text-foreground-secondary transition-colors"
+                    className="type-control text-foreground-secondary hover:text-foreground-secondary transition-colors"
                   >
                     Skip &amp; activate league
                   </button>
@@ -410,14 +410,14 @@ export default function DraftClient({
             {/* Inline skip confirmation */}
             {showSkipConfirm && (
               <div className="mt-3 p-3 bg-elevated rounded-lg border border-border animate-fade-in">
-                <p className="text-sm text-foreground-secondary mb-3">
+                <p className="type-body-sm text-foreground-secondary mb-3">
                   Skip counterpick round? Teams won&apos;t be able to claim draft-phase counterpicks.
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleSkipCounterpick()}
                     disabled={skipping}
-                    className="btn btn-danger text-sm py-1.5 px-4"
+                    className="type-control btn btn-danger py-1.5 px-4"
                   >
                     {skipping ? (
                       <>
@@ -431,7 +431,7 @@ export default function DraftClient({
                   <button
                     onClick={() => setShowSkipConfirm(false)}
                     disabled={skipping}
-                    className="btn btn-ghost text-sm py-1.5 px-4"
+                    className="type-control btn btn-ghost py-1.5 px-4"
                   >
                     Cancel
                   </button>
@@ -439,7 +439,7 @@ export default function DraftClient({
               </div>
             )}
 
-            {(error || skipError) && <p className="mt-3 text-sm text-error">{error || skipError}</p>}
+            {(error || skipError) && <p className="type-body-sm mt-3 text-error">{error || skipError}</p>}
           </div>
         </div>
       )}
@@ -448,7 +448,7 @@ export default function DraftClient({
         <div className="mb-4 flex items-center justify-between">
           <ConnectionStatusIndicator status={realtimeStatus} />
           {realtimeStatus === 'error' && (
-            <span className="text-xs text-foreground-muted">Updates every 10s</span>
+            <span className="type-meta text-foreground-secondary">Updates every 10s</span>
           )}
         </div>
       )}
@@ -471,8 +471,8 @@ export default function DraftClient({
 
           {league.status === 'drafting' && draftPicks.length > 0 && (
             <div className="card p-4 lg:p-6" data-testid="draft-history">
-              <h3 className="text-lg font-display font-semibold text-foreground mb-4">
-                Pick History
+              <h3 className="type-panel text-foreground mb-4">
+                Pick history
               </h3>
               <div className="hidden lg:block">
                 <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
@@ -487,7 +487,7 @@ export default function DraftClient({
                 {draftPicks.length > 3 && (
                   <button
                     onClick={() => setPickHistoryExpanded((prev) => !prev)}
-                    className="w-full mt-3 text-sm text-gold hover:text-gold-hover font-medium transition-colors"
+                    className="type-control w-full mt-3 text-gold hover:text-gold-hover transition-colors"
                     aria-expanded={pickHistoryExpanded}
                     data-testid="pick-history-expand"
                   >

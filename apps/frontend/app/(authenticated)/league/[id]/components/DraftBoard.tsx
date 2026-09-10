@@ -125,16 +125,16 @@ export default function DraftBoard({
   if (league.status === 'setup') {
     return (
       <div className="card p-6">
-        <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
+        <h2 className="type-section text-foreground mb-4">Draft board</h2>
         <div className="text-center py-8">
           <div className="flex justify-center mb-4">
             <ClapperboardIcon className="w-16 h-16 text-foreground-muted" />
           </div>
           <p className="text-foreground-secondary mb-2">The draft hasn&apos;t started yet.</p>
-          <p className="text-sm text-foreground-muted">
+          <p className="type-body-sm text-foreground-secondary">
             Waiting for the league owner to start the draft.
           </p>
-          <p className="text-sm text-foreground-muted mt-2">
+          <p className="type-body-sm text-foreground-secondary mt-2">
             {participants.length} / {league.max_participants} participants joined
           </p>
         </div>
@@ -159,7 +159,7 @@ export default function DraftBoard({
     return (
       <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold font-display text-foreground">Draft Results</h2>
+          <h2 className="type-section text-foreground">Draft results</h2>
           <DraftProgressRing current={picksMade} total={totalPicks} size="sm" showLabel={false} />
         </div>
         <p className="text-foreground-secondary mb-4">The draft is complete!</p>
@@ -176,7 +176,7 @@ export default function DraftBoard({
           {/* Left: Title and Status */}
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-xl font-semibold font-display text-foreground">Draft Board</h2>
+              <h2 className="type-section text-foreground">Draft board</h2>
             </div>
 
             {/* Current Turn Indicator */}
@@ -201,18 +201,18 @@ export default function DraftBoard({
                     )}
                   </div>
                   <div>
-                    <p className="text-sm text-foreground-muted">
+                    <p className="type-body-sm text-foreground-secondary">
                       Round {nextPick.round}, Pick {nextPick.pick_number}
                     </p>
                     <p
-                      className={`text-lg font-semibold ${
+                      className={`type-card ${
                         isMyTurn ? 'text-success' : 'text-foreground'
                       }`}
                     >
                       {isMyTurn ? "It's your turn!" : `${getTeamName(nextPick.user_id)}'s pick`}
                     </p>
                     {!isMyTurn && getOwnerName(nextPick.user_id) && (
-                      <p className="text-xs text-foreground-muted">
+                      <p className="type-meta text-foreground-secondary">
                         {getOwnerName(nextPick.user_id)}
                       </p>
                     )}
@@ -223,7 +223,7 @@ export default function DraftBoard({
 
             {isDraftComplete && (
               <div className="p-4 rounded-xl bg-info-bg border-2 border-info">
-                <p className="text-info font-semibold text-lg">
+                <p className="type-card text-info">
                   Draft complete! Finalizing results...
                 </p>
               </div>
@@ -271,7 +271,7 @@ export interface PickHistoryProps {
 
 export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): React.ReactElement {
   if (draftPicks.length === 0) {
-    return <p className="text-foreground-muted">No picks yet</p>
+    return <p className="text-foreground-secondary">No picks yet</p>
   }
 
   // Sort by most recent first
@@ -317,10 +317,10 @@ export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): Rea
 
             {/* Pick Info */}
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-foreground truncate">{pick.movies?.title}</p>
-              <p className="text-sm text-foreground-muted truncate">{pick.teams?.name}</p>
+              <p className="type-row-title text-foreground truncate">{pick.movies?.title}</p>
+              <p className="type-body-sm text-foreground-secondary truncate">{pick.teams?.name}</p>
               {pickerInfo?.ownerName && (
-                <p className="text-xs text-foreground-muted truncate">{pickerInfo.ownerName}</p>
+                <p className="type-meta text-foreground-secondary truncate">{pickerInfo.ownerName}</p>
               )}
             </div>
 
@@ -337,8 +337,8 @@ export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): Rea
             {/* Round/Pick Badge */}
             <div className="flex-shrink-0 text-right">
               <span
-                className={`inline-block px-2 py-1 rounded-lg text-xs font-medium ${
-                  index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-muted'
+                className={`type-meta inline-block px-2 py-1 rounded-lg ${
+                  index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-secondary'
                 }`}
               >
                 R{pick.round} P{pick.pick_number}

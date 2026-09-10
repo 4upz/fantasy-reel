@@ -17,8 +17,8 @@ export default function StandingsSidebar({ leagueId, standings }: Props) {
   if (standings.length === 0) {
     return (
       <div className="card p-4">
-        <h3 className="font-display font-semibold text-foreground mb-4">Standings</h3>
-        <p className="text-sm text-foreground-muted">
+        <h3 className="type-panel text-foreground mb-4">Standings</h3>
+        <p className="type-body-sm text-foreground-secondary">
           Standings will appear once the draft is complete.
         </p>
       </div>
@@ -27,7 +27,7 @@ export default function StandingsSidebar({ leagueId, standings }: Props) {
 
   return (
     <div className="card p-4">
-      <h3 className="font-display font-semibold text-foreground mb-4">Standings</h3>
+      <h3 className="type-panel text-foreground mb-4">Standings</h3>
 
       <div className="space-y-3">
         {standings.map((entry) => {
@@ -43,22 +43,22 @@ export default function StandingsSidebar({ leagueId, standings }: Props) {
             >
               <div className="flex items-center gap-3">
                 {/* Rank */}
-                <div className={`font-display font-bold text-lg w-6 ${RANK_COLORS[entry.rank] || 'text-foreground-muted'}`}>
+                <div className={`type-number w-6 ${RANK_COLORS[entry.rank] || 'text-foreground-secondary'}`}>
                   {entry.isTied ? `T${entry.rank}` : entry.rank}
                 </div>
 
                 {/* Team Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className={`font-medium truncate ${entry.isCurrentUser ? 'text-gold' : 'text-foreground'}`}>
+                    <span className={`type-row-title truncate ${entry.isCurrentUser ? 'text-gold' : 'text-foreground'}`}>
                       {entry.team.name}
                     </span>
                     {entry.isCurrentUser && (
-                      <span className="text-gold text-xs">★</span>
+                      <span className="type-meta text-gold">★</span>
                     )}
                   </div>
                   {entry.topMovie && (
-                    <p className="text-xs text-foreground-muted truncate mt-0.5">
+                    <p className="type-meta text-foreground-secondary truncate mt-0.5">
                       Top: {entry.topMovie.title} ({entry.topMovie.score >= 0 ? '+' : ''}{entry.topMovie.score}pts)
                     </p>
                   )}
@@ -66,10 +66,10 @@ export default function StandingsSidebar({ leagueId, standings }: Props) {
 
                 {/* Points */}
                 <div className="text-right">
-                  <span className={`font-display font-bold ${isPositive ? 'text-foreground' : 'text-crimson'}`}>
+                  <span className={`type-number ${isPositive ? 'text-foreground' : 'text-crimson'}`}>
                     {formatFantasyPoints(entry.total_points)}
                   </span>
-                  <span className="text-xs text-foreground-muted ml-1">pts</span>
+                  <span className="type-meta text-foreground-secondary ml-1">pts</span>
                 </div>
               </div>
             </div>
@@ -79,9 +79,9 @@ export default function StandingsSidebar({ leagueId, standings }: Props) {
 
       <Link
         href={`/league/${leagueId}/standings`}
-        className="mt-4 block text-center text-sm text-gold hover:text-gold-hover transition-colors"
+        className="type-control mt-4 block text-center text-gold hover:text-gold-hover transition-colors"
       >
-        View Full Standings →
+        View full standings
       </Link>
     </div>
   )

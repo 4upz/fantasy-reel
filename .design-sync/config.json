@@ -5,12 +5,12 @@
   "globalName": "FantasyReel",
   "entry": ".design-sync/entry.tsx",
   "tsconfig": ".design-sync/tsconfig.build.json",
-  "buildCmd": "node .ds-sync/node_modules/@tailwindcss/cli/dist/index.mjs -i .design-sync/tailwind-entry.css -o .design-sync/.cache/styles.css",
+  "buildCmd": "node .design-sync/build-styles.mjs",
   "cssEntry": ".design-sync/.cache/styles.css",
   "extraFonts": [".design-sync/fonts/brand-fonts.css"],
   "docsDir": ".design-sync/docs",
   "readmeHeader": ".design-sync/conventions.md",
-  "guidelinesGlob": [],
+  "guidelinesGlob": ["docs/brand/typography.md"],
   "overrides": {
     "MovieDetailModal": { "cardMode": "single", "primaryStory": "Loaded", "viewport": "1100x820" },
     "AcceptConfirmModal": { "cardMode": "single", "primaryStory": "Default" },
@@ -25,6 +25,7 @@
     "CTAFooter": { "cardMode": "column" },
     "DraftTicker": { "cardMode": "column" },
     "NavLogo": { "cardMode": "column" },
+    "BrandLogo": { "cardMode": "column" },
     "TeamHeader": { "cardMode": "column" },
     "MovieTimelineCard": { "cardMode": "column" }
   },
@@ -75,6 +76,7 @@
     "ChangePasswordModal": "apps/frontend/app/(authenticated)/settings/components/ChangePasswordModal.tsx",
 
     "NavLogo": "apps/frontend/app/components/navigation/NavLogo.tsx",
+    "BrandLogo": "apps/frontend/app/components/BrandLogo.tsx",
     "UserSearchResultItem": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
     "SelectedUserChip": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
     "DiscordIcon": "apps/frontend/app/components/icons/DiscordIcon.tsx",

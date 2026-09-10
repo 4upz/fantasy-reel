@@ -441,9 +441,9 @@ export default function WishlistClient({ userId }: { userId: string }) {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
       {/* Page header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-8">
-        <h1 className="font-display text-3xl font-bold text-foreground">
+        <h1 className="type-page text-foreground">
           Wishlist
-          <span className="ml-2 text-foreground-muted font-normal text-xl">
+          <span className="type-number ml-2 text-foreground-secondary">
             ({movies.length})
           </span>
         </h1>
@@ -454,10 +454,10 @@ export default function WishlistClient({ userId }: { userId: string }) {
             <div className="relative" ref={leagueRef}>
               <button
                 onClick={() => setLeagueDropdownOpen(!leagueDropdownOpen)}
-                className="btn btn-ghost text-sm gap-2 border border-border hover:border-border-hover"
+                className="type-control btn btn-ghost gap-2 border border-border hover:border-border-hover"
               >
                 <span className="truncate max-w-[160px]">
-                  {selectedLeague ? selectedLeague.name : 'All Leagues'}
+                  {selectedLeague ? selectedLeague.name : 'All leagues'}
                 </span>
                 <ChevronDown className="w-4 h-4 flex-shrink-0" />
               </button>
@@ -466,9 +466,9 @@ export default function WishlistClient({ userId }: { userId: string }) {
                 <div className="absolute right-0 top-full mt-1 w-56 bg-elevated border border-border rounded-lg shadow-heavy z-30 animate-fade-in overflow-hidden">
                   <button
                     onClick={() => handleLeagueSelect(null)}
-                    className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-surface-hover transition-colors flex items-center justify-between"
+                    className="type-control w-full px-4 py-2.5 text-left text-foreground hover:bg-surface-hover transition-colors flex items-center justify-between"
                   >
-                    All Leagues
+                    All leagues
                     {!selectedLeagueId && <Check className="w-4 h-4 text-gold" />}
                   </button>
                   <div className="h-px bg-border" />
@@ -476,7 +476,7 @@ export default function WishlistClient({ userId }: { userId: string }) {
                     <button
                       key={league.id}
                       onClick={() => handleLeagueSelect(league.id)}
-                      className="w-full px-4 py-2.5 text-left text-sm text-foreground hover:bg-surface-hover transition-colors flex items-center justify-between"
+                      className="type-control w-full px-4 py-2.5 text-left text-foreground hover:bg-surface-hover transition-colors flex items-center justify-between"
                     >
                       <span className="truncate">{league.name}</span>
                       {selectedLeagueId === league.id && (
@@ -493,7 +493,7 @@ export default function WishlistClient({ userId }: { userId: string }) {
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="input text-sm py-1.5 px-3 w-auto"
+            className="input py-1.5 px-3 w-auto"
           >
             {Object.entries(SORT_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -514,8 +514,8 @@ export default function WishlistClient({ userId }: { userId: string }) {
 
             {settingsOpen && (
               <div className="absolute right-0 top-full mt-1 w-64 bg-elevated border border-border rounded-lg shadow-heavy z-30 animate-fade-in p-4">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm text-foreground">
+                <label className="type-label flex items-center justify-between cursor-pointer">
+                  <span className="type-body-sm text-foreground">
                     Share with league-mates
                   </span>
                   <button
@@ -534,7 +534,7 @@ export default function WishlistClient({ userId }: { userId: string }) {
                     />
                   </button>
                 </label>
-                <p className="text-xs text-foreground-muted mt-2">
+                <p className="type-meta text-foreground-secondary mt-2">
                   When enabled, other players in your leagues can see your wishlist.
                 </p>
               </div>
@@ -548,28 +548,28 @@ export default function WishlistClient({ userId }: { userId: string }) {
         <div className="flex gap-1 bg-elevated rounded-lg p-1 mb-6 w-fit">
           <button
             onClick={() => setActiveTab('my')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md type-control transition-colors ${
               activeTab === 'my'
                 ? 'bg-surface text-foreground shadow-soft'
-                : 'text-foreground-muted hover:text-foreground'
+                : 'text-foreground-secondary hover:text-foreground'
             }`}
           >
-            My Wishlist
+            My wishlist
           </button>
           <button
             onClick={() => setActiveTab('league')}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-md type-control transition-colors ${
               activeTab === 'league'
                 ? 'bg-surface text-foreground shadow-soft'
-                : 'text-foreground-muted hover:text-foreground'
+                : 'text-foreground-secondary hover:text-foreground'
             }`}
           >
-            League Wishlists
+            League wishlists
           </button>
         </div>
       )}
 
-      {/* My Wishlist tab content */}
+      {/* My wishlist tab content */}
       {activeTab === 'my' && (
         <>
           {movies.length === 0 && (
@@ -578,14 +578,14 @@ export default function WishlistClient({ userId }: { userId: string }) {
                 <Heart className="w-12 h-12 text-foreground-muted" />
                 <Film className="w-12 h-12 text-foreground-muted" />
               </div>
-              <h2 className="font-display text-xl font-semibold text-foreground mb-2">
+              <h2 className="type-section text-foreground mb-2">
                 Your wishlist is empty
               </h2>
               <p className="text-foreground-secondary max-w-md mx-auto mb-6">
                 Browse upcoming movies and heart the ones you want to track.
               </p>
               <Link href="/movies" className="btn btn-primary px-6 py-2.5">
-                Explore Movies
+                Explore movies
               </Link>
             </div>
           )}
@@ -619,7 +619,7 @@ export default function WishlistClient({ userId }: { userId: string }) {
         </>
       )}
 
-      {/* League Wishlists tab content */}
+      {/* League wishlists tab content */}
       {activeTab === 'league' && selectedLeagueId && (
         <LeagueMateWishlists
           leagueMates={leagueMates}
@@ -686,7 +686,7 @@ function WishlistMovieCard({
       {/* Overlap indicator */}
       {isOverlap && (
         <div className="absolute top-2 right-2 z-10">
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gold/20 text-gold border border-gold/30 backdrop-blur-sm">
+          <span className="type-meta flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/20 text-gold border border-gold/30 backdrop-blur-sm">
             <Heart className="w-3 h-3 fill-current" />
             Both
           </span>
@@ -704,9 +704,9 @@ function WishlistMovieCard({
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-foreground-muted">
+          <div className="w-full h-full flex flex-col items-center justify-center text-foreground-secondary">
             <Film className="w-12 h-12 mb-2" />
-            <span className="text-xs">No poster</span>
+            <span className="type-meta">No poster</span>
           </div>
         )}
 
@@ -722,12 +722,12 @@ function WishlistMovieCard({
       {/* Movie info */}
       <div className="p-3">
         <h3
-          className="font-display font-semibold text-sm text-foreground truncate group-hover:text-gold transition-colors"
+          className="type-row-title text-foreground truncate group-hover:text-gold transition-colors"
           title={movie.title}
         >
           {movie.title}
         </h3>
-        <p className="text-xs text-foreground-muted mt-1">
+        <p className="type-meta text-foreground-secondary mt-1">
           Added {formatCompactDate(movie.added_at)}
         </p>
       </div>
@@ -739,12 +739,12 @@ function DraftStatusBadge({ status, label }: { status: DraftStatus; label: strin
   const colorClasses: Record<DraftStatus, string> = {
     available: 'bg-success-bg text-success border-success',
     yours: 'bg-gold-muted text-gold border-gold',
-    drafted: 'bg-elevated text-foreground-muted border-border',
+    drafted: 'bg-elevated text-foreground-secondary border-border',
   }
 
   return (
     <span
-      className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold border ${colorClasses[status]}`}
+      className={`inline-block px-2 py-0.5 rounded-full type-meta border ${colorClasses[status]}`}
     >
       {label}
     </span>
@@ -794,7 +794,7 @@ function LeagueMateWishlists({
     return (
       <div className="text-center py-20 animate-fade-in">
         <Users className="w-12 h-12 text-foreground-muted mx-auto mb-4" />
-        <h2 className="font-display text-xl font-semibold text-foreground mb-2">
+        <h2 className="type-section text-foreground mb-2">
           No shared wishlists yet
         </h2>
         <p className="text-foreground-secondary max-w-md mx-auto">
@@ -827,12 +827,12 @@ function LeagueMateWishlists({
                 size="sm"
               />
               <div className="flex-1 min-w-0">
-                <span className={`text-sm font-medium truncate block ${
+                <span className={`type-row-title truncate block ${
                   isSelected ? 'text-gold' : 'text-foreground'
                 }`}>
                   {mate.displayName}
                 </span>
-                <span className="text-xs text-foreground-muted">
+                <span className="type-meta text-foreground-secondary">
                   {mate.wishlistCount} {mate.wishlistCount === 1 ? 'movie' : 'movies'}
                 </span>
               </div>
@@ -849,7 +849,7 @@ function LeagueMateWishlists({
       {/* Selected league-mate's wishlist */}
       {selectedMateId && selectedMate && (
         <div className="animate-fade-in">
-          <h3 className="font-display text-lg font-semibold text-foreground mb-4">
+          <h3 className="type-panel text-foreground mb-4">
             {selectedMate.displayName}&apos;s Wishlist
           </h3>
 
