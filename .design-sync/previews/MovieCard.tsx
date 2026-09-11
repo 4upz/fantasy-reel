@@ -1,7 +1,7 @@
 import { MovieCard } from 'fantasy-reel'
 
-// Curated from the repo's own FALLBACK_MOVIES fixtures
-// (apps/frontend/app/components/landing/data.ts).
+// Curated from the retired homepage's FALLBACK_MOVIES fixtures; these records
+// remain local preview data.
 const dune = {
   tmdb_id: 693134,
   title: 'Dune: Part Two',
