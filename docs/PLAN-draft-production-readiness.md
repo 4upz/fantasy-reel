@@ -1,7 +1,7 @@
 # Draft production readiness: implementation plan
 
 Status: implementation in progress on `codex/draft-production-readiness`, based
-on main `2ca91c4`. DRAFT-02 is verified; DRAFT-01 and DRAFT-03/04 are in progress.
+on main `2ca91c4`. DRAFT-01/02 are implemented; DRAFT-03 through DRAFT-08 are in progress.
 No deployment has been performed.
 
 The goal is a dependable first production draft: participants can find eligible
@@ -19,6 +19,10 @@ Next.js/Supabase architecture.
 - Retain snake drafting and the existing upcoming-date eligibility policy for
   this first release. Make discovery scope explicit. Do not silently introduce
   timers, auto-picks, linear drafts, or different film-eligibility rules.
+- If no eligible counterpick remains, provide a confirmed owner action to end
+  the remaining counterpicks and activate the league while preserving picks
+  already made. This is the stated implementation assumption after the optional
+  product clarification; it never runs automatically.
 - The initial audit reviewed `93a4f54523bf47b5e85d343f712ddddd8882cae5`.
   Production subsequently inspected was `2ca91c4767db7b739243e7943629a54f9dfbbf06`.
   **Revalidate every finding against the implementation branch before editing.**
@@ -38,6 +42,13 @@ Implementation evidence (in progress):
 - DRAFT-01 now also guards direct participant membership/order writes after
   review found that self-enrollment/deletion could change the active turn count.
   Join/kick/start share the league lock; verification uses an isolated local DB.
+  Direct PostgreSQL role checks passed for anonymous/member/outsider denials,
+  owner setup/start, direct-table bypasses, active membership/order protections,
+  and four independent-connection start/reorder races. Exact unchanged HTTP
+  handlers against real Auth/Postgres passed 163 integration steps; seven failed
+  in fixture/Auth setup under resource pressure. Full start/create/join suites
+  passed in that run. Actual Edge retry also hit Auth 504; the complete HTTP
+  suite remains a DRAFT-09 gate, not a claimed pass.
 - DRAFT-02 rendering/filter changes passed simplification review, affected-file
   ESLint, the 95-test bot suite/build, and 21 existing mocked cache tests.
   Browser checks passed at 1280px and 390px across movie cards/shared details,
@@ -57,10 +68,32 @@ Implementation evidence (in progress):
 - The initial local two-browser observation delivered a real pick to both UIs
   in 1.9 seconds while Live. The ongoing development-server observation includes
   HMR interruptions; it is not a clean production-build uptime measurement.
+- DRAFT-04 resolves canonical cached/TMDb metadata before persisting a movie;
+  malformed identity/date and failed lookups cannot create incomplete records.
+  Shared metadata unit checks pass; real Auth/Postgres integration is underway.
+  A read-only production audit found 65 movies, zero missing release dates,
+  zero missing TMDb identities, and zero empty titles. No production backfill
+  is indicated by that completeness check; it does not validate each date.
+- DRAFT-05's durable notification outbox preserves per-channel event order,
+  leases deliveries, and records bounded retries outside pick requests. Delivery
+  preference changes and provider failures are exercised with stubs; no external
+  Discord message or deployed schedule has been created during implementation.
+- DRAFT-08 calendar helpers pass boundary checks in UTC, New York, Los Angeles,
+  and Kiritimati, including January 1, invalid dates, and windows crossing years.
+- Verification limitation: the isolated local stack shares an exhausted Docker
+  VM (7.65 GiB RAM, almost all 1 GiB swap used; sampled full memory stalls 72%).
+  Actual Auth requests returned 504 and a direct draft-pick fixture insert hit a
+  PostgreSQL statement timeout. No database lock blockers were found. Browser
+  runs under this pressure are diagnostic, not a passing release gate. The
+  second 241-second run had no page errors and real Auth refresh, but failed
+  four scenarios including an initial fixture timeout and online recovery.
+- Read-only production publication inspection confirms all four draft state
+  tables are included in `supabase_realtime`; missing publication is excluded
+  as the cause in the inspected production project.
 
 | ID | Priority | Deliverable | Dependencies |
 | --- | --- | --- | --- |
-| DRAFT-01 | Release blocker | Protect draft-order mutations | None |
+| DRAFT-01 | Implemented; final HTTP gate pending | Protect draft-order mutations | None |
 | DRAFT-02 | Verified | Remove TMDb ratings app-wide | None |
 | DRAFT-03 | Release blocker | Diagnose socket failures and make state recovery reliable | Can begin immediately; integrate with DRAFT-05 |
 | DRAFT-04 | Release blocker | Validate canonical movie metadata and repair wishlist picks | None; coordinate contracts with DRAFT-05/06/07 |
