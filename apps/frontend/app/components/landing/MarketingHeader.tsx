@@ -46,12 +46,12 @@ export default function MarketingHeader({ currentPage }: MarketingHeaderProps): 
       <nav id="marketing-mobile-navigation" popover="auto" className={styles.mobileMenu} aria-label="Mobile navigation">
         <Link
           href="/how-to-play"
-          className="btn btn-ghost min-h-11 justify-start px-3"
+          className="btn btn-ghost min-h-11 justify-end px-3 text-right"
           aria-current={currentPage === 'how-to-play' ? 'page' : undefined}
         >
           How to play
         </Link>
-        <Link href="/login" className="btn btn-ghost min-h-11 justify-start px-3">
+        <Link href="/login" className="btn btn-ghost min-h-11 justify-end px-3 text-right">
           Sign in
         </Link>
       </nav>

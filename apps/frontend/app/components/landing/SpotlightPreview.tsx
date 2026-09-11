@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { Maximize2, X } from 'lucide-react'
 import styles from './landing.module.css'
 
 interface PreviewDetail {
@@ -188,47 +187,26 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
 
 export default function SpotlightPreview({ title, width, height, details, children, layout = 'stacked' }: SpotlightPreviewProps) {
   const [active, setActive] = useState(0)
-  const [expanded, setExpanded] = useState(false)
-  const dialogRef = useRef<HTMLDialogElement>(null)
-  const enlargeRef = useRef<HTMLButtonElement>(null)
   const id = useId()
   const selected = details[active]
 
-  useLayoutEffect(() => {
-    if (!expanded) return
-    const dialog = dialogRef.current
-    const trigger = enlargeRef.current
-    const previousOverflow = document.documentElement.style.overflow
-    dialog?.showModal()
-    document.documentElement.style.overflow = 'hidden'
-    return () => {
-      document.documentElement.style.overflow = previousOverflow
-      dialog?.close()
-      trigger?.focus({ preventScroll: true })
-    }
-  }, [expanded])
-
-  const controls = (inDialog: boolean) => (
-    <div className={styles.previewControls} role="group" aria-label={`${title} highlights`}>
-      {details.map((detail, index) => (
-        <button
-          key={detail.label}
-          type="button"
-          className={styles.previewControl}
-          aria-pressed={active === index}
-          aria-controls={`${id}-${inDialog ? 'large' : 'inline'}`}
-          onClick={() => setActive(index)}
-        >
-          <span className="type-control">{detail.label}</span>
-          {layout === 'beside' && !inDialog && <span className={`type-body-sm ${styles.controlDescription}`}>{detail.description}</span>}
-        </button>
-      ))}
-    </div>
-  )
-
   const notes = (
     <div className={styles.previewNotes}>
-      {controls(false)}
+      <div className={styles.previewControls} role="group" aria-label={`${title} highlights`}>
+        {details.map((detail, index) => (
+          <button
+            key={detail.label}
+            type="button"
+            className={styles.previewControl}
+            aria-pressed={active === index}
+            aria-controls={id}
+            onClick={() => setActive(index)}
+          >
+            <span className="type-control">{detail.label}</span>
+            {layout === 'beside' && <span className={`type-body-sm ${styles.controlDescription}`}>{detail.description}</span>}
+          </button>
+        ))}
+      </div>
       <p className={`type-body-sm ${styles.caption}`} aria-live="polite" aria-atomic="true">{selected.description}</p>
     </div>
   )
@@ -236,52 +214,10 @@ export default function SpotlightPreview({ title, width, height, details, childr
   return (
     <div className={layout === 'beside' ? styles.previewBeside : styles.previewStacked}>
       {layout === 'stacked' && notes}
-      <figure className={styles.previewFrame}>
-        <div className={styles.previewBar}>
-          <span className="type-meta">{title} <span className={styles.exampleLabel}>· Example</span></span>
-          <button ref={enlargeRef} type="button" className={`btn btn-ghost ${styles.enlarge}`} onClick={() => setExpanded(true)} aria-label={`View ${title.toLowerCase()} larger`}>
-            <Maximize2 size={15} aria-hidden="true" /><span>View larger</span>
-          </button>
-        </div>
-        <div id={`${id}-inline`} role="img" aria-label={`${title}. ${selected.description}`}>
-          <PreviewSurface width={width} height={height} focus={selected.focus}>{children}</PreviewSurface>
-        </div>
-      </figure>
+      <div id={id} className={styles.preview} role="img" aria-label={`${title} example. ${selected.description}`}>
+        <PreviewSurface width={width} height={height} focus={selected.focus}>{children}</PreviewSurface>
+      </div>
       {layout === 'beside' && notes}
-      <dialog
-        ref={dialogRef}
-        className={styles.dialog}
-        aria-labelledby={`${id}-title`}
-        onClose={() => setExpanded(false)}
-        onClick={event => { if (event.target === event.currentTarget) dialogRef.current?.close() }}
-        onKeyDown={event => {
-          if (event.key !== 'Tab') return
-          const buttons = event.currentTarget.querySelectorAll<HTMLButtonElement>('button')
-          const first = buttons[0]
-          const last = buttons[buttons.length - 1]
-          if (event.shiftKey && (event.target === first || event.target === event.currentTarget)) {
-            event.preventDefault()
-            last?.focus()
-          } else if (!event.shiftKey && event.target === last) {
-            event.preventDefault()
-            first?.focus()
-          }
-        }}
-      >
-        {expanded && <div className={styles.dialogPanel}>
-          <div className={styles.dialogHeader}>
-            <h2 id={`${id}-title`} className="type-panel">{title}</h2>
-            <button type="button" className="btn btn-ghost min-h-11 min-w-11" aria-label="Close preview" onClick={() => dialogRef.current?.close()}><X size={22} aria-hidden="true" /></button>
-          </div>
-          <div className={styles.dialogScene} style={{ '--scene-ratio': width / height } as CSSProperties}>
-            <div id={`${id}-large`} role="img" aria-label={`${title}. ${selected.description}`}>
-              <PreviewSurface width={width} height={height} focus={selected.focus}>{children}</PreviewSurface>
-            </div>
-          </div>
-          {controls(true)}
-          <p className={`type-body-sm ${styles.caption}`} aria-live="polite" aria-atomic="true">{selected.description}</p>
-        </div>}
-      </dialog>
     </div>
   )
 }
