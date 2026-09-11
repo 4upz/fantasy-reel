@@ -3,14 +3,15 @@
 Status: implementation and release verification in progress on
 `codex/draft-production-readiness`, based on main `2ca91c4`. DRAFT-01/02 and the
 shared DRAFT-08 date corrections are committed. DRAFT-03 through DRAFT-08 are
-implemented and committed; final integration checks are underway. No deployment has been
-performed; DRAFT-09 remains open.
+implemented and committed; final integration checks are underway. No deployment
+has been performed; DRAFT-09 remains open.
 
 Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
 start, `7c14975` fixes calendar dates, `06a18a6` adds canonical metadata,
 transactional picks, and their notification outbox, and `0e5aa97` fixes discovery
 paging. `bbdee1e` integrates synchronization, discovery, accessible selection,
-mobile turns, and bounded request recovery.
+mobile turns, and bounded request recovery. `ea5dca3` refreshes the shared header
+and navigation after draft phase changes.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -137,8 +138,8 @@ Implementation evidence (in progress):
   scenarios passing: initial/later picks, remount, focus/visibility, offline
   recovery, slot-count updates, and a round boundary. Both sessions performed a
   real token refresh. No hot reloads were involved. Its scoped fixtures were
-  removed after the REST cleanup timed out; the exact-ID SQL cleanup succeeded. The local build
-  also exposed unavailable Vercel telemetry scripts redirecting to login HTML;
+  removed after the REST cleanup timed out; the exact-ID SQL cleanup succeeded.
+  The local build also exposed unavailable Vercel telemetry scripts redirecting to login HTML;
   those two hosting-specific errors are recorded separately from draft behavior.
   A fetch of main still resolved to `2ca91c4`; all three new migration timestamps
   sort after its latest migration, `20260911153843`.
@@ -163,7 +164,8 @@ Implementation evidence (in progress):
   login failures, the final 320px browser probe passed the real 30-second request
   deadline plus bounded reconciliation (45 seconds total), single pending
   submission, same-key retry, restored dismissal/scroll, and zero page errors.
-  The global footer clears the fixed turn bar by 29px at the bottom of the page. The real waiting-player test passed in the full
+  The global footer clears the fixed turn bar by 29px at the bottom of the page.
+  The real waiting-player test passed in the full
   suite (preview available, submission disabled, zero persisted picks).
 
 - A real owner-start screenshot exposed a stale shared league header still
@@ -171,6 +173,26 @@ Implementation evidence (in progress):
   the server-rendered header/navigation once, without reloading on ordinary picks.
   Simplification review and the final build pass. A real Realtime phase-change
   browser probe verified Setup becomes Drafting without manual refresh.
+
+- Edge runtime logs confirm seven CPU-limit terminations and two worker acquisition
+  timeouts during the browser run. Some line up with `start-draft` and
+  `get-movie-details` 546 responses; isolate IDs are not linked to request IDs,
+  so individual attribution is temporal. Modified handlers have no apparent new
+  unbounded CPU work, and the cache implementation is unchanged, but local VM
+  pressure does not establish healthy-runtime CPU compliance. These failures
+  remain a release gate until a healthy-runtime HTTP/browser run succeeds or
+  profiling identifies and resolves the cause.
+
+- The full-suite traces exposed a separate confirmed error-classification bug:
+  the shared authentication helper converted Auth 504/network failures to 401
+  Unauthorized. The shared helper now returns a safe retryable
+  503 for upstream 5xx/retryable-fetch failures while preserving denied access
+  and all missing/invalid-token 401 behavior. The frontend already displays the
+  response text; no sign-out or token handling change is required. Simplification
+  review, Deno typecheck, and the shared utility suite pass: 11 tests/42 steps.
+  Auth transport was stubbed through the real SDK without network permission;
+  valid/missing/rejected credentials, 500/502/503/504, and network failures were
+  covered. The active browser run retains its original backend snapshot.
 
 | ID | Status | Deliverable | Dependencies |
 | --- | --- | --- | --- |

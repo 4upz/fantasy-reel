@@ -13,10 +13,12 @@ import {
   generateJoinCode,
   isValidJoinCode,
   isServiceRoleRequest,
+  authenticateRequest,
   authenticateUserOrServiceRole,
   isUpcomingMovie,
 } from './utils.ts'
 import { corsHeaders } from './cors.ts'
+import { stubFetch } from './_mock-client.ts'
 
 // ============================================================================
 // Test Fixtures
@@ -324,9 +326,8 @@ Deno.test('isValidJoinCode', async (t) => {
 // ============================================================================
 // isServiceRoleRequest / authenticateUserOrServiceRole Tests
 //
-// Only the paths that need no network are unit tested here: a real user JWT
-// has to be verified against Supabase Auth, so "valid session succeeds" and
-// "garbage token is rejected" live in tests/movie-endpoints-auth.test.ts.
+// Stubbed Auth HTTP responses exercise the real SDK's error classification.
+// Real JWT validation also lives in tests/movie-endpoints-auth.test.ts.
 // ============================================================================
 
 const TEST_SERVICE_ROLE_KEY = 'test-service-role-key-abcdef0123456789'
@@ -407,6 +408,98 @@ Deno.test('authenticateUserOrServiceRole', async (t) => {
       assertHasCorsHeaders(result!)
     })
   })
+})
+
+Deno.test({
+  name: 'authenticateRequest distinguishes rejected credentials from Auth outages',
+  sanitizeResources: false, // The real SDK clients own auth refresh intervals.
+  sanitizeOps: false,
+  fn: async (t) => {
+    const keys = ['SUPABASE_URL', 'SUPABASE_ANON_KEY'] as const
+    const previous = keys.map(key => Deno.env.get(key))
+    Deno.env.set('SUPABASE_URL', 'http://127.0.0.1:1')
+    Deno.env.set('SUPABASE_ANON_KEY', 'unit-test-anon-key')
+    try {
+      await t.step('missing credentials fail without contacting Auth', async () => {
+        const { calls, restore } = stubFetch(() => { throw new Error('Auth must not be called') })
+        try {
+          const result = await authenticateRequest(requestWithAuthorization())
+          assertEquals(result instanceof Response, true)
+          assertEquals((result as Response).status, 401)
+          assertEquals(await (result as Response).json(), { error: 'Unauthorized' })
+          assertEquals(calls.length, 0)
+        } finally { restore() }
+      })
+
+      await t.step('valid credentials return the verified user', async () => {
+        const { calls, restore } = stubFetch(() => Response.json({ id: VALID_UUID, aud: 'authenticated' }))
+        try {
+          const result = await authenticateRequest(requestWithAuthorization('Bearer test-user-token'))
+          if (result instanceof Response) throw new Error(`Unexpected status ${result.status}`)
+          assertEquals(result.user.id, VALID_UUID)
+          assertEquals(calls.length, 1)
+          assertEquals(calls[0].url, 'http://127.0.0.1:1/auth/v1/user')
+          await result.supabase.auth.stopAutoRefresh()
+        } finally { restore() }
+      })
+
+      await t.step('invalid and expired credentials keep the standard 401', async () => {
+        for (const status of [401, 403]) {
+          const { restore } = stubFetch(() => Response.json({ message: 'Invalid or expired token' }, { status }))
+          try {
+            const result = await authenticateRequest(requestWithAuthorization('Bearer rejected-token'))
+            assertEquals(result instanceof Response, true)
+            assertEquals((result as Response).status, 401)
+            assertEquals(await (result as Response).json(), { error: 'Unauthorized' })
+          } finally { restore() }
+        }
+      })
+
+      await t.step('Auth 5xx and network failures return safe retryable errors', async () => {
+        for (const status of [500, 502, 503, 504, 0]) {
+          const { calls, restore } = stubFetch(() => {
+            if (status === 0) throw new TypeError('unit-test network failure')
+            return Response.json({ message: 'private upstream diagnostic' }, { status })
+          })
+          const originalConsoleError = console.error
+          const logs: unknown[] = []
+          console.error = (...args: unknown[]) => { logs.push(...args) }
+          try {
+            const req = requestWithAuthorization('Bearer test-user-token')
+            handleCorsPreflightRequest(req)
+            const result = await authenticateUserOrServiceRole(req)
+            assertExists(result)
+            assertEquals(result.status, 503)
+            assertHasCorsHeaders(result)
+            const requestId = result.headers.get('X-Request-Id')
+            assertExists(requestId)
+            assertEquals(await result.json(), {
+              error: 'Authentication service is temporarily unavailable. Please try again.',
+              request_id: requestId,
+            })
+            assertEquals(calls.length, 1)
+            const entry = logs.filter((value): value is string => typeof value === 'string')
+              .map(value => JSON.parse(value)).find(value => value.fn === 'auth')
+            assertExists(entry)
+            assertEquals(entry.level, 'error')
+            assertEquals(entry.status, status)
+            assertEquals(entry.request_id, requestId)
+            assertEquals('message' in entry, false)
+            assertEquals(JSON.stringify(entry).includes('test-user-token'), false)
+            assertEquals(JSON.stringify(entry).includes('private upstream diagnostic'), false)
+          } finally {
+            console.error = originalConsoleError
+            restore()
+          }
+        }
+      })
+    } finally {
+      keys.forEach((key, index) => {
+        if (previous[index] === undefined) Deno.env.delete(key)
+        else Deno.env.set(key, previous[index]!)
+      })
+    }
+  },
 })
 
 // ============================================================================

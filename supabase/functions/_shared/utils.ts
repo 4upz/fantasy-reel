@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, isAuthRetryableFetchError, SupabaseClient, User } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders, getCorsHeaders } from './cors.ts'
 import { getCurrentRequest, getRequestId, setRequestContext } from './request-context.ts'
 import { createLogger, serializeError, type Logger } from './logger.ts'
@@ -39,17 +39,30 @@ export interface AuthResult {
 }
 
 export async function authenticateRequest(req: Request): Promise<AuthResult | Response> {
+  const authorization = req.headers.get('Authorization')
+  if (!authorization) return errorResponse('Unauthorized', 401)
+
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
     Deno.env.get('SUPABASE_ANON_KEY') ?? '',
     {
       global: {
-        headers: { Authorization: req.headers.get('Authorization')! },
+        headers: { Authorization: authorization },
       },
     }
   )
 
   const { data: { user }, error } = await supabase.auth.getUser()
+
+  if (error && (isAuthRetryableFetchError(error) || (error.status !== undefined && error.status >= 500 && error.status < 600))) {
+    // An unavailable identity provider cannot establish whether a token is valid.
+    // Keep upstream response bodies and credentials out of logs and responses.
+    createLogger('auth').error('Authentication service unavailable', {
+      error_type: error.name,
+      status: error.status,
+    })
+    return errorResponse('Authentication service is temporarily unavailable. Please try again.', 503)
+  }
 
   if (error || !user) {
     return errorResponse('Unauthorized', 401)
@@ -101,11 +114,10 @@ export function isServiceRoleRequest(req: Request): boolean {
  * them carries `verify_jwt = false` (the CLI's ES256 bug), so without this
  * anyone holding the public anon key could drive TMDb traffic through them.
  *
- * Returns null when the request may proceed, or the 401 Response to return.
+ * Returns null when the request may proceed, or the authentication error response.
  */
 export async function authenticateUserOrServiceRole(req: Request): Promise<Response | null> {
-  // Answered here rather than by authenticateRequest, which assumes the header
-  // is present and would otherwise build its client with a null Authorization.
+  // A missing header never reaches Auth or the service-role comparison.
   if (!req.headers.get('Authorization')) return errorResponse('Unauthorized', 401)
   if (isServiceRoleRequest(req)) return null
 
