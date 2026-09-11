@@ -6,6 +6,8 @@
  */
 
 import { createClient, SupabaseClient, FunctionsHttpError } from '@supabase/supabase-js'
+import { buildCacheKey } from '../_shared/tmdb-cache.ts'
+import type { MovieDetailsResponse } from '../_shared/movie-details.ts'
 
 // Test user credentials - created on first run
 export const TEST_USER = {
@@ -488,6 +490,7 @@ export class TestDataFactory {
   private thirdClient: SupabaseClient | null = null
   private leagueIds: string[] = []
   private movieIds: string[] = []
+  private draftMovieTmdbIds = new Set<number>()
 
   constructor(client: SupabaseClient, secondClient?: SupabaseClient) {
     this.client = client
@@ -502,6 +505,24 @@ export class TestDataFactory {
       this.thirdClient = await getThirdAuthenticatedClient()
     }
     return this.thirdClient
+  }
+
+  /** Trusted metadata for synthetic draft fixtures; ordinary clients cannot write this cache. */
+  async cacheDraftMovie(tmdbId: number, overrides: Partial<MovieDetailsResponse> = {}): Promise<void> {
+    this.draftMovieTmdbIds.add(tmdbId)
+    const now = new Date()
+    const payload: MovieDetailsResponse = {
+      title: `Draft Movie ${tmdbId}`, imdb_id: null, tagline: null,
+      overview: 'Test movie for draft', release_date: new Date(now.getTime() + 30 * 86400_000).toISOString().slice(0, 10),
+      runtime: null, status: 'Planned', poster_url: null, backdrop_url: null,
+      vote_average: 0, vote_count: 0, genres: [], cast: [], director: null,
+      ...overrides, tmdb_id: tmdbId,
+    }
+    const { error } = await getServiceClient().from('tmdb_cache').upsert({
+      cache_key: buildCacheKey('movie_details', { tmdb_id: tmdbId }), payload,
+      fetched_at: now.toISOString(), expires_at: new Date(now.getTime() + 3600_000).toISOString(),
+    })
+    if (error) throw new Error(`Failed to seed draft movie metadata: ${error.message}`)
   }
 
   /**
@@ -680,7 +701,7 @@ export class TestDataFactory {
     // movies' fake future dates to the real films' past dates, breaking
     // every later draft with "Movie was released in a previous year".
     let tmdbIdCounter = nextDraftPoolTmdbId()
-    const currentYear = new Date().getFullYear()
+    const releaseDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10)
 
     for (let pickNum = 1; pickNum <= totalPicks; pickNum++) {
       const round = Math.ceil(pickNum / numParticipants)
@@ -700,12 +721,13 @@ export class TestDataFactory {
         title: `Draft Movie ${tmdbIdCounter}`,
         overview: 'Test movie for draft',
         poster_url: '/test-poster.jpg',
-        release_date: `${currentYear}-12-15`,
+        release_date: releaseDate,
         vote_average: 7.5,
         popularity: 100,
         genre_ids: [28, 12],
       }
 
+      await this.cacheDraftMovie(tmdbIdCounter, movieData)
       const result = await invokeFunction(currentClient, 'draft-pick', {
         league_id: leagueId,
         tmdb_id: tmdbIdCounter,
@@ -1137,6 +1159,16 @@ export class TestDataFactory {
       leagueIds: this.leagueIds,
       movieIds: this.movieIds,
     })
+    if (this.draftMovieTmdbIds.size) {
+      const service = getServiceClient()
+      const ids = [...this.draftMovieTmdbIds]
+      const { error: movieError } = await service.from('movies').delete().in('tmdb_id', ids)
+      if (movieError) throw new Error(`Failed to clean up draft movies: ${movieError.message}`)
+      const { error: cacheError } = await service.from('tmdb_cache').delete()
+        .in('cache_key', ids.map(tmdb_id => buildCacheKey('movie_details', { tmdb_id })))
+      if (cacheError) throw new Error(`Failed to clean up draft movie cache: ${cacheError.message}`)
+      this.draftMovieTmdbIds.clear()
+    }
     this.leagueIds = []
     this.movieIds = []
   }

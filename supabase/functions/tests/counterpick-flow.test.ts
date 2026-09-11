@@ -78,7 +78,16 @@ async function createLeagueWithDraftPicks(
     .update({ draft_slots: draftSlotsPerPlayer })
     .eq('id', leagueId)
 
-  // Start the draft (randomizes draft_order via randomize_draft_order_if_needed)
+  // Save deterministic order while the league is still in setup.
+  const clientUserId = await getUserId(client)
+  const { data: participants, error: participantsError } = await client.from('league_participants')
+    .select('id,user_id').eq('league_id', leagueId).eq('status', 'active')
+  if (participantsError || !participants) throw new Error('Failed to load draft participants')
+  const order = participants.sort((a, b) => Number(b.user_id === clientUserId) - Number(a.user_id === clientUserId))
+  const { error: orderError } = await client.rpc('reorder_draft_order', {
+    p_league_id: leagueId, p_participant_order: order.map(p => p.id),
+  })
+  if (orderError) throw orderError
   const startResult = await invokeFunction(client, 'start-draft', { league_id: leagueId })
   if (startResult.error) throw new Error(`Failed to start draft: ${startResult.error}`)
 
@@ -102,8 +111,8 @@ async function createLeagueWithDraftPicks(
   )
   const numParticipants = 2
   const totalPicks = draftSlotsPerPlayer * numParticipants
-  let tmdbIdCounter = 300001 + Math.floor(Math.random() * 100000) // Random offset to avoid conflicts
-  const currentYear = new Date().getFullYear()
+  let tmdbIdCounter = 1_900_000_000 + Math.floor(Math.random() * 50_000_000) // Random offset to avoid conflicts
+  const releaseDate = new Date(Date.now() + 30 * 86400_000).toISOString().slice(0, 10)
 
   // Make all draft picks (snake draft)
   for (let pickNum = 1; pickNum <= totalPicks; pickNum++) {
@@ -124,12 +133,13 @@ async function createLeagueWithDraftPicks(
       title: `Counterpick Test Movie ${tmdbIdCounter}`,
       overview: 'Test movie for counterpick flow',
       poster_url: '/test-poster.jpg',
-      release_date: `${currentYear}-12-15`,
+      release_date: releaseDate,
       vote_average: 7.5,
       popularity: 100,
       genre_ids: [28, 12],
     }
 
+    await factory.cacheDraftMovie(tmdbIdCounter, { title: movieData.title, release_date: movieData.release_date })
     const result = await invokeFunction(currentClient, 'draft-pick', {
       league_id: leagueId,
       tmdb_id: tmdbIdCounter,
@@ -142,31 +152,6 @@ async function createLeagueWithDraftPicks(
 
     tmdbIdCounter++
   }
-
-  // Force deterministic draft order for tests: client=1, secondClient=2.
-  // start-draft randomizes via randomize_draft_order_if_needed().
-  const clientUserId = await getUserId(client)
-  const secondUserId = await getUserId(secondClient)
-
-  await serviceClient
-    .from('league_participants')
-    .update({ draft_order: 1 })
-    .eq('league_id', leagueId)
-    .eq('user_id', clientUserId)
-
-  await serviceClient
-    .from('league_participants')
-    .update({ draft_order: 2 })
-    .eq('league_id', leagueId)
-    .eq('user_id', secondUserId)
-
-  // The draft-pick function auto-transitions to 'active' when draft completes.
-  // For counterpick testing, we need to reset the status to 'drafting' to simulate
-  // a completed draft that's ready for the counterpick round.
-  await serviceClient
-    .from('leagues')
-    .update({ status: 'drafting' })
-    .eq('id', leagueId)
 
   return leagueId
 }

@@ -1,8 +1,15 @@
 # Draft production readiness: implementation plan
 
-Status: implementation in progress on `codex/draft-production-readiness`, based
-on main `2ca91c4`. DRAFT-01/02 are implemented; DRAFT-03 through DRAFT-08 are in progress.
-No deployment has been performed.
+Status: implementation and release verification in progress on
+`codex/draft-production-readiness`, based on main `2ca91c4`. DRAFT-01/02 and the
+shared DRAFT-08 date corrections are committed. DRAFT-03 through DRAFT-08 are
+implemented and undergoing final integration checks. No deployment has been
+performed; DRAFT-09 remains open.
+
+Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
+start, and `7c14975` fixes calendar dates. Canonical metadata, transactional picks,
+and their notification outbox form the next combined backend batch because
+they share mutation contracts. Discovery and the integrated draft UI follow.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -78,6 +85,22 @@ Implementation evidence (in progress):
   leases deliveries, and records bounded retries outside pick requests. Delivery
   preference changes and provider failures are exercised with stubs; no external
   Discord message or deployed schedule has been created during implementation.
+  Nine delivery tests pass, including delayed turn pings and final-pick cues.
+  The worker preserves next-player mentions only when that player is still on
+  the clock. Counterpick-start instructions are suppressed once the phase moves.
+- DRAFT-05 passes all 81 new pgTAP assertions and all 36 existing season-integrity
+  assertions in the isolated database. Independent connections also passed
+  same-key replay, competing same-slot requests, final-counterpick replay after
+  activation, and notification lease/order races. Activation, configured budgets,
+  score rows, receipts, and outbox writes commit together. HTTP verification
+  remains separate: the latest real Edge run failed before assertions on Auth
+  504. A local mixed-CLI service-token mismatch was independently found and
+  corrected in ignored test configuration; no authentication code was bypassed.
+- DRAFT-06 backend checks passed four tests with six actual-handler steps for
+  raw trending pages, empty eligible pages, filter windows, invalid requests,
+  and truthful upstream totals. Browser discovery assertions are included in
+  the new DRAFT-09 suite. Eleven draft browser tests are enabled, replacing the
+  previously disabled multiplayer coverage.
 - DRAFT-08 calendar helpers pass boundary checks in UTC, New York, Los Angeles,
   and Kiritimati, including January 1, invalid dates, and windows crossing years.
   Shared movie details and trading/bidding date consumers now use the calendar
@@ -101,6 +124,14 @@ Implementation evidence (in progress):
 - Read-only production publication inspection confirms all four draft state
   tables are included in `supabase_realtime`; missing publication is excluded
   as the cause in the inspected production project.
+- The final production build passes, as do ESLint on 22 changed frontend files
+  and all six state/date regression tests. A fresh 30-minute production-build
+  WebSocket observation is running with two real local sessions; no hot reloads
+  are involved. Initial picks and real token refresh succeeded. The local build
+  also exposed unavailable Vercel telemetry scripts redirecting to login HTML;
+  those two hosting-specific errors are recorded separately from draft behavior.
+  A fetch of main still resolved to `2ca91c4`; all three new migration timestamps
+  sort after its latest migration, `20260911153843`.
 
 | ID | Priority | Deliverable | Dependencies |
 | --- | --- | --- | --- |
