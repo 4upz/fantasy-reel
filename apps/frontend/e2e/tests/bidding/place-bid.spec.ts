@@ -1,4 +1,5 @@
 import { test, expect } from '../../fixtures/league.fixture'
+import { createPickupBid, getTeamId } from '../../helpers/supabase.helper'
 import { setupAllMocks, MOCK_MOVIES } from '../../helpers/mock-api.helper'
 import { waitForModalOpen, waitForModalClose, waitForPageSettle } from '../../helpers/ui.helper'
 
@@ -140,6 +141,58 @@ test.describe('Place Bid Flow @bidding', () => {
 
     // Submit button should be enabled for a valid bid
     await expect(authedPage.getByTestId('submit-bid-button')).toBeEnabled()
+  })
+
+  test('preserves a new bid when delayed bids arrive and revalidates the amount', async ({
+    authedPage,
+    biddingLeague,
+  }) => {
+    const movie = MOCK_MOVIES[0]
+    const ownerTeamId = await getTeamId(biddingLeague.id, biddingLeague.ownerId)
+    await createPickupBid(biddingLeague.id, ownerTeamId, movie.tmdb_id, 15, {
+      title: movie.title,
+      releaseDate: movie.release_date,
+    })
+
+    // Let the user start before the initial bid query returns, as on a slow
+    // connection. Keep the real database response and release it deliberately.
+    let releaseBids!: () => void
+    const bidsGate = new Promise<void>((resolve) => { releaseBids = resolve })
+    await authedPage.route('**/rest/v1/pickup_bids?**', async (route) => {
+      const response = await route.fetch()
+      await bidsGate
+      await route.fulfill({ response })
+    })
+
+    try {
+      await authedPage.goto(`/league/${biddingLeague.id}/bidding`)
+      await authedPage.getByTestId('place-bid-button').click()
+      await waitForModalOpen(authedPage)
+      await authedPage.getByTestId('bid-movie-search-input').fill('Alpha')
+      await authedPage.getByTestId(`bid-movie-result-${movie.tmdb_id}`).click()
+      const amountInput = authedPage.getByTestId('bid-amount-input')
+      await amountInput.fill('10')
+
+      releaseBids()
+      // The new high-bid warning proves React has consumed the delayed data;
+      // waiting only for its HTTP response can precede the reset effect.
+      await expect(authedPage.getByRole('dialog').getByText('Must be higher than current bid of $15')).toBeVisible()
+      await expect(amountInput).toHaveValue('10')
+      await expect(authedPage.getByTestId('submit-bid-button')).toBeDisabled()
+
+      await amountInput.fill('16')
+      await expect(authedPage.getByTestId('submit-bid-button')).toBeEnabled()
+      await authedPage.getByTestId('submit-bid-button').click()
+      await waitForModalClose(authedPage)
+
+      // Opening an existing bid must still initialize from the latest high bid.
+      await authedPage.getByTestId(`raise-bid-${movie.tmdb_id}`).click()
+      await waitForModalOpen(authedPage)
+      await expect(authedPage.getByTestId('bid-amount-input')).toHaveValue('17')
+    } finally {
+      releaseBids()
+      await authedPage.unrouteAll({ behavior: 'wait' })
+    }
   })
 
   test('can submit a valid bid @critical', async ({ authedPage, biddingLeague }) => {

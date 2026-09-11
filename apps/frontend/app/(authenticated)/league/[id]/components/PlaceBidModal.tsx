@@ -225,6 +225,11 @@ export default function PlaceBidModal({
   const clearSearchRef = useRef(clearSearch)
   clearSearchRef.current = clearSearch
 
+  // Initialization reads the current high bid once. Later bid refreshes still
+  // revalidate the amount below, but must not discard the user's selection.
+  const activeBidsRef = useRef(activeBidsByTmdbId)
+  activeBidsRef.current = activeBidsByTmdbId
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -250,7 +255,7 @@ export default function PlaceBidModal({
           genre_ids: movieData.genre_ids || [],
         })
         // Open at the smallest amount that takes the lead.
-        const highBid = activeBidsByTmdbId.get(counterBidTarget.tmdb_id)?.high ?? 0
+        const highBid = activeBidsRef.current.get(counterBidTarget.tmdb_id)?.high ?? 0
         setBidAmount(highBid + 1)
       } else {
         setSelectedMovie(null)
@@ -263,7 +268,7 @@ export default function PlaceBidModal({
       setSearchQuery('')
       clearSearchRef.current()
     }
-  }, [isOpen, counterBidTarget, activeBidsByTmdbId])
+  }, [isOpen, counterBidTarget])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)
