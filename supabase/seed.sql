@@ -66,7 +66,8 @@ INSERT INTO leagues (id, name, owner_id, invite_only, status, max_participants, 
   -- options seeded below (f0000031 / f0000032, see sections 6/12).
   ('22222222-bbbb-bbbb-bbbb-222222222222', 'Oscar Contenders', 'a1111111-1111-1111-1111-111111111111', true, 'active', 6, NOW() - INTERVAL '30 days', NOW() - INTERVAL '23 days', 2),
   ('33333333-cccc-cccc-cccc-333333333333', 'Summer Blockbusters', 'b2222222-2222-2222-2222-222222222222', false, 'setup', 6, NOW() + INTERVAL '7 days', NOW() + INTERVAL '14 days', 0),
-  ('44444444-dddd-dddd-dddd-444444444444', 'Completed Season 2024', 'c3333333-3333-3333-3333-333333333333', true, 'completed', 4, NOW() - INTERVAL '180 days', NOW() - INTERVAL '173 days', 0);
+  -- Populate its roster before finalizing it at the end of this seed.
+  ('44444444-dddd-dddd-dddd-444444444444', 'Completed Season 2024', 'c3333333-3333-3333-3333-333333333333', true, 'active', 4, NOW() - INTERVAL '180 days', NOW() - INTERVAL '173 days', 0);
 
 -- ============================================================
 -- 3. LEAGUE PARTICIPANTS
@@ -427,6 +428,16 @@ INSERT INTO notifications (id, user_id, league_id, type, title, body, data, read
    'Someone bid $7 on Luca 2. You have 24 hours to counter.',
    '{"bid_id": "0b000004-0001-0001-0001-000000000001", "tmdb_id": 508943}'::jsonb,
    NOW() - INTERVAL '2 days', NOW() - INTERVAL '4 days');
+
+-- Finalize through the same transaction as real seasons, after all roster and
+-- score inserts. Completed seasons reject subsequent gameplay writes.
+UPDATE leagues SET season_year = 2024, season_end = '2024-12-31'
+WHERE id = '44444444-dddd-dddd-dddd-444444444444';
+
+SELECT calculate_movie_score(movie_id)
+FROM team_holdings WHERE league_id = '44444444-dddd-dddd-dddd-444444444444';
+
+SELECT complete_league_season('44444444-dddd-dddd-dddd-444444444444', 'owner');
 
 -- ============================================================
 -- SUMMARY: 6 users, 4 leagues, 10 participants, 10 teams,
