@@ -205,7 +205,8 @@ Deno.test({
         league_id: leagueId,
         movie_id: '00000000-0000-0000-0000-000000000099',
       })
-      assertEquals(result.error, 'Movie not found in this league draft')
+      assertEquals(result.status, 404)
+      assertEquals(result.error, 'Movie not found')
     })
 
     // ============================================================================

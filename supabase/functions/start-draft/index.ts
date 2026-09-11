@@ -5,11 +5,11 @@ import {
   authenticateRequest,
   isAuthError,
   isValidUUID,
-  createServiceClient,
   internalErrorResponse,
 } from '../_shared/utils.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+
+import { DraftSubmissionError, readDraftBody } from '../_shared/draft-submissions.ts'
 
 const log = createLogger('start-draft')
 
@@ -26,10 +26,10 @@ Deno.serve(async (req) => {
     if (isAuthError(authResult)) return authResult
     const { user, supabase: supabaseClient } = authResult
 
-    const { league_id }: StartDraftRequest = await req.json()
+    const { league_id }: StartDraftRequest = await readDraftBody<StartDraftRequest>(req)
 
     // Validate required fields
-    if (!league_id || !isValidUUID(league_id)) {
+    if (typeof league_id !== 'string' || !isValidUUID(league_id)) {
       return errorResponse('Valid league_id is required', 400)
     }
 
@@ -69,30 +69,6 @@ Deno.serve(async (req) => {
 
     const { league: updatedLeague, participant_count: participantCount } = started
 
-    // Discord notification: draft started
-    const serviceClient = createServiceClient()
-    const { data: firstPickData } = await supabaseClient.rpc('get_next_draft_pick', { p_league_id: league_id })
-    const firstPickTeamId = firstPickData?.[0]?.team_id
-    let firstTeamName = 'TBD'
-    if (firstPickTeamId) {
-      const { data: firstTeam } = await supabaseClient.from('teams').select('name').eq('id', firstPickTeamId).single()
-      firstTeamName = firstTeam?.name ?? 'TBD'
-    }
-    const leagueName = updatedLeague.name ?? 'Fantasy Reel League'
-
-    await sendDiscordNotification(serviceClient, {
-      leagueId: league_id,
-      category: 'drafts',
-      embeds: [{
-        author: buildEmbedAuthor(leagueName, league_id),
-        title: 'The Draft Is Open',
-        description: `${participantCount} teams on the clock. First pick: ${firstTeamName}.`,
-        color: DISCORD_COLORS.gold,
-        footer: { text: `Round 1 of ${updatedLeague.draft_slots}` },
-        url: buildLeagueUrl(league_id, '/draft'),
-      }],
-    })
-
     return jsonResponse({
       league: updatedLeague,
       message: 'Draft started successfully',
@@ -100,6 +76,7 @@ Deno.serve(async (req) => {
     }, 200)
 
   } catch (error) {
+    if (error instanceof DraftSubmissionError) return errorResponse(error.message, error.status)
     return internalErrorResponse(error, log)
   }
 })

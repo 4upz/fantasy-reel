@@ -39,7 +39,7 @@ export interface DiscordEmbed {
   author?: { name: string; icon_url?: string; url?: string }
 }
 
-interface DiscordChannel {
+export interface DiscordChannel {
   id: string
   webhook_url: string
   thread_id: string | null
@@ -167,7 +167,7 @@ export async function sendDiscordNotification(
 // Webhook Delivery
 // ============================================================================
 
-async function sendToWebhook(
+export async function sendToWebhook(
   supabase: SupabaseClient,
   channel: DiscordChannel,
   payload: {
@@ -175,7 +175,7 @@ async function sendToWebhook(
     embeds?: DiscordEmbed[]
     mentionRole?: boolean
   }
-): Promise<void> {
+): Promise<boolean> {
   const { content, embeds, mentionRole } = payload
 
   // Build content with optional role mention
@@ -221,13 +221,16 @@ async function sendToWebhook(
           .update({ consecutive_failures: 0, last_error_at: null })
           .eq('id', channel.id)
       }
+      return true
     } else {
       log.error('Discord webhook returned non-OK status', { channel_id: channel.id, status: response.status })
       await trackFailure(supabase, channel.id)
+      return false
     }
   } catch (error) {
     log.error('Discord webhook network error', { channel_id: channel.id, error: serializeError(error) })
     await trackFailure(supabase, channel.id)
+    return false
   }
 }
 
