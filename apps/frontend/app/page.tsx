@@ -29,7 +29,7 @@ export default function LandingPage(): React.ReactElement {
             <p className={`type-lead ${styles.intro}`}>Draft upcoming movies. Compete with friends.<br className="hidden sm:block" /> Let the critics settle it.</p>
             <div className={styles.heroActions}>
               <Link href="/signup" className="btn btn-primary">Start a league <ArrowRight size={16} className="ml-2" aria-hidden="true" /></Link>
-              <Link href="#your-roster" className="btn btn-secondary">Take a closer look</Link>
+              <Link href="/how-to-play" className="btn btn-secondary">How to play</Link>
             </div>
           </div>
           <div id="your-roster" className={styles.heroPreview}>
