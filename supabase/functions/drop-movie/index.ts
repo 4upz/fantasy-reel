@@ -7,6 +7,7 @@ import {
   internalErrorResponse,
 } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 
 const log = createLogger('drop-movie')
 
@@ -172,6 +173,9 @@ Deno.serve(async (req) => {
     if (leagueError || !league) {
       return errorResponse('League not found', 404)
     }
+
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     if (league.status !== 'active') {
       return errorResponse('Drops are only allowed while the league is active', 400)

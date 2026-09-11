@@ -114,29 +114,9 @@ export function getServiceClient(): SupabaseClient {
  */
 export const RUN_EXTERNAL_API_TESTS = Deno.env.get('RUN_EXTERNAL_API_TESTS') === '1'
 
-/**
- * Get the service role key that the Edge Function runtime actually uses.
- *
- * Functions with custom auth (X-Cron-Secret OR Bearer service_role) are called
- * via direct fetch() rather than client.functions.invoke(). The .env.test key
- * may not match the Docker container's key if Supabase has been restarted, so
- * query the container directly, falling back to .env.test.
- */
+/** Use the same configured stack credentials as the REST test clients.
+ * Looking up a fixed Docker container can authenticate against another stack. */
 export async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
-  }
   return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 }
 
@@ -152,7 +132,15 @@ async function authenticateUser(user: { email: string; password: string }): Prom
   const { error: signInError } = await client.auth.signInWithPassword(user)
 
   if (signInError) {
-    // User doesn't exist or isn't confirmed - use admin API
+    // A gateway or auth-service failure does not mean the account needs repair.
+    if (!['invalid_credentials', 'email_not_confirmed'].includes(signInError.code ?? '')) {
+      throw new Error(
+        `Failed to sign in test user (status ${signInError.status ?? 'unknown'}, ` +
+          `code ${signInError.code ?? 'unknown'}): ${signInError.message}`
+      )
+    }
+
+    // The user may be missing, unconfirmed, or have an outdated fixture password.
     if (!serviceRoleKey) {
       throw new Error(
         'SUPABASE_SERVICE_ROLE_KEY is required to create test users with email confirmation enabled.\n' +
@@ -162,16 +150,22 @@ async function authenticateUser(user: { email: string; password: string }): Prom
 
     const adminClient = createClient(url, serviceRoleKey, TEST_CLIENT_OPTIONS)
 
-    // Check if user exists but needs confirmation
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find((u) => u.email === user.email)
+    // Search every page before deciding that a fixture account is missing.
+    let existingUser: { id: string } | undefined
+    for (let page = 1; !existingUser; page++) {
+      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 })
+      if (error) throw new Error(`Failed to list test users: ${error.message}`)
+      existingUser = data.users.find((u) => u.email === user.email)
+      if (data.users.length < 100) break
+    }
 
     if (existingUser) {
       // User exists - update to confirm email and reset password
-      await adminClient.auth.admin.updateUserById(existingUser.id, {
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(existingUser.id, {
         email_confirm: true,
         password: user.password,
       })
+      if (updateError) throw new Error(`Failed to update test user: ${updateError.message}`)
     } else {
       // Create new user with pre-confirmed email
       const { error: createError } = await adminClient.auth.admin.createUser({
@@ -188,7 +182,10 @@ async function authenticateUser(user: { email: string; password: string }): Prom
     // Sign in with the user
     const { error: retrySignInError } = await client.auth.signInWithPassword(user)
     if (retrySignInError) {
-      throw new Error(`Failed to sign in after setup: ${retrySignInError.message}`)
+      throw new Error(
+        `Failed to sign in after setup (status ${retrySignInError.status ?? 'unknown'}, ` +
+          `code ${retrySignInError.code ?? 'unknown'}): ${retrySignInError.message}`
+      )
     }
   }
 
@@ -224,6 +221,49 @@ export interface CleanupOptions {
  * Clean up test data after tests complete
  * Deletes in correct order to respect foreign key constraints
  */
+/**
+ * Delete the `league_series` rows left behind once their seasons are gone.
+ *
+ * Every league creates a series (the `ensure_league_series` trigger), and the
+ * FK runs series -> leagues, so deleting a league leaves the series orphaned.
+ *
+ * Two things make this safe to get wrong loudly rather than quietly:
+ *
+ *   - It only deletes a series with NO leagues left. `league_series` cascades
+ *     TO `leagues`, so deleting a series that still has a season would take
+ *     that season with it -- which, for a multi-season series where the test
+ *     only cleaned up one year, would silently destroy the other years.
+ *   - It uses the service role. `league_series` has no DELETE policy by
+ *     design (series are created by trigger and removed by the auth.users
+ *     cascade), so the caller's own client cannot do this.
+ *
+ * Best-effort: leftover series rows are inert test residue, never worth
+ * failing a suite over.
+ */
+async function cleanupOrphanedSeries(seriesIds: string[]): Promise<void> {
+  if (seriesIds.length === 0) return
+
+  try {
+    const serviceClient = getServiceClient()
+
+    const { data: survivors } = await serviceClient
+      .from('leagues')
+      .select('series_id')
+      .in('series_id', seriesIds)
+
+    const stillInUse = new Set(
+      (survivors ?? []).map((l: { series_id: string }) => l.series_id)
+    )
+    const orphaned = seriesIds.filter((id) => !stillInUse.has(id))
+    if (orphaned.length === 0) return
+
+    await serviceClient.from('league_series').delete().in('id', orphaned)
+  } catch {
+    // No service role key configured, or the delete failed. Either way an
+    // orphaned series is inert -- do not fail cleanup over it.
+  }
+}
+
 export async function cleanupTestData(
   client: SupabaseClient,
   options: CleanupOptions
@@ -237,6 +277,21 @@ export async function cleanupTestData(
 
   // Delete leagues (cascades to participants, teams, draft_picks)
   if (leagueIds.length > 0) {
+    // Captured before the leagues go: series are cleaned up afterwards, and by
+    // then there is no row left to read series_id from.
+    const { data: leagueRows } = await client
+      .from('leagues')
+      .select('series_id')
+      .in('id', leagueIds)
+
+    const seriesIds = [
+      ...new Set(
+        (leagueRows ?? [])
+          .map((l: { series_id: string | null }) => l.series_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ]
+
     // Get teams for these leagues (needed for bidding table cleanup)
     const { data: participants } = await client
       .from('league_participants')
@@ -289,6 +344,8 @@ export async function cleanupTestData(
 
     // Finally delete leagues
     await client.from('leagues').delete().in('id', leagueIds)
+
+    await cleanupOrphanedSeries(seriesIds)
   }
 
   // Delete standalone movies if specified
@@ -673,6 +730,14 @@ export class TestDataFactory {
     if (updatedLeague?.status !== 'active') {
       throw new Error(`League is not active after draft completion. Status: ${updatedLeague?.status}`)
     }
+
+    // General bidding fixtures must work on every weekday. Tests that exercise
+    // the cutoff explicitly configure their own window after creating a league.
+    const { error: cutoffError } = await serviceClient
+      .from('leagues')
+      .update({ new_bid_cutoff_hours: 0 })
+      .eq('id', leagueId)
+    if (cutoffError) throw new Error(`Failed to configure test bid window: ${cutoffError.message}`)
 
     return leagueId
   }

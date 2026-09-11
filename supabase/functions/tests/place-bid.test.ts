@@ -72,8 +72,8 @@ async function callPlaceBid(
   body: Record<string, unknown>,
 ): Promise<PlaceBidResponse> {
   if (!PLACE_BID_URL) {
-    const { data, error } = await userClient.functions.invoke<PlaceBidResponse>('place-bid', { body })
-    if (error) return { error: String(error) }
+    const { data, error } = await invokeFunction<PlaceBidResponse>(userClient, 'place-bid', body)
+    if (error) return { error }
     return data ?? {}
   }
 
@@ -500,7 +500,7 @@ Deno.test({
       })
 
       assertEquals(result.status, 400)
-      assertEquals(result.error, 'Cannot bid on this movie: Movie was released in a previous year')
+      assertEquals(result.error, 'Cannot bid on this movie: Movie was released in a previous season')
 
       // No bid should have been created for the rejected movie
       const { data: bids } = await getServiceClient()

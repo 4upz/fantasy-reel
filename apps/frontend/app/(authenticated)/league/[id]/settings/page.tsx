@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import SettingsClient from './SettingsClient'
+import { fetchSeriesSeasons } from '@/utils/seasonQueries'
 import type { League, ParticipantWithProfile } from '@/types'
 
 interface PageProps {
@@ -40,6 +41,8 @@ export default async function LeagueSettingsPage({ params }: PageProps) {
     .eq('status', 'active')
     .order('draft_order', { ascending: true })
 
+  const seasons = league.status === 'completed' ? await fetchSeriesSeasons(supabase, league.series_id) : []
+
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8 sm:py-12">
       <div className="max-w-2xl mx-auto">
@@ -47,6 +50,7 @@ export default async function LeagueSettingsPage({ params }: PageProps) {
           league={league as League}
           participants={(participants || []) as ParticipantWithProfile[]}
           currentUserId={user.id}
+          nextSeasonId={seasons.find((season) => season.season_year === league.season_year + 1)?.id}
         />
       </div>
     </div>

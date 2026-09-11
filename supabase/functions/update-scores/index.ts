@@ -1,4 +1,4 @@
-import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse } from '../_shared/utils.ts'
 import { fetchMDBListRatings, MDBLIST_NOT_FOUND } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
@@ -239,7 +239,9 @@ Deno.serve(async (req) => {
       moviesToUpdate = capped.movies
       truncation = capped.truncation
     } else {
-      // Default: find released drafted movies needing score updates.
+      // The view excludes movies that only affect completed seasons before the
+      // limit and count are applied. It also includes retained counterpicks
+      // after the original owner drops the movie.
       //
       // The ordering is what guarantees every eligible movie eventually gets a
       // turn. More movies can qualify than the limit allows (every released
@@ -254,12 +256,13 @@ Deno.serve(async (req) => {
       // count: 'exact' rides along on the same request and reports how many
       // rows matched BEFORE the limit -- the eligible set this run can see.
       const { data, error, count } = await serviceClient
-        .from('movies')
+        .from('score_update_candidates')
         .select('id, tmdb_id, imdb_id, title', { count: 'exact' })
         .lte('release_date', new Date().toISOString().split('T')[0])
         .neq('status', 'canceled')
         .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
         .order('scores_updated_at', { ascending: true, nullsFirst: true })
+        .order('id', { ascending: true })
         .limit(AUTO_BATCH_LIMIT)
 
       if (error) {
@@ -294,7 +297,7 @@ Deno.serve(async (req) => {
     }
 
     // Only require MDBLIST_API_KEY when there are movies that need external score lookups
-    const mdblistApiKey = Deno.env.get('MDBLIST_API_KEY')
+    const mdblistApiKey = Deno.env.get('MDBLIST_API_KEY') ?? ''
     const needsApiKey = moviesToUpdate.some(m => m.tmdb_id > 0)
     if (needsApiKey && !mdblistApiKey) {
       log.error('MDBLIST_API_KEY not configured')

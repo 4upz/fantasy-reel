@@ -13,6 +13,8 @@ interface Props {
   /** The league's starting purse, or null when the league doesn't use a fantasy budget. */
   startingBudget: number | null
   isCurrentUser: boolean
+  /** The season this team's owner is defending, or null when they hold no title. */
+  reigningChampionSeason?: number | null
   /** Mobile only - above lg the roster lives in the detail rail instead. */
   isExpanded: boolean
   /** Desktop only - which team the detail rail is showing. */
@@ -38,6 +40,7 @@ export default function TeamStandingCard({
   rankedTeam,
   startingBudget,
   isCurrentUser,
+  reigningChampionSeason = null,
   isExpanded,
   isSelected,
   onActivate,
@@ -86,6 +89,7 @@ export default function TeamStandingCard({
           ownerHandle={ownerHandle}
           avatarUrl={team?.avatar_url}
           isCurrentUser={isCurrentUser}
+          reigningChampionSeason={reigningChampionSeason}
           movieCount={movieCount}
           moviesScored={moviesScored}
           moviesPending={moviesPending}

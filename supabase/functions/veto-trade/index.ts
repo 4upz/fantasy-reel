@@ -15,6 +15,7 @@ import {
   sendTradeEmailNotifications,
   TradeOffer,
 } from '../_shared/trade-validation.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { createLogger } from '../_shared/logger.ts'
 
@@ -51,7 +52,7 @@ Deno.serve(async (req) => {
     // Get the trade offer with league info for owner check (without locking)
     const { data: tradeOffer, error: offerError } = await serviceClient
       .from('trade_offers')
-      .select('*, leagues(owner_id)')
+      .select('*, leagues(owner_id, status)')
       .eq('id', trade_offer_id)
       .single()
 
@@ -60,10 +61,16 @@ Deno.serve(async (req) => {
     }
 
     // Verify user is the league owner
-    const league = tradeOffer.leagues as unknown as { owner_id: string }
+    const league = tradeOffer.leagues as unknown as { owner_id: string; status: string }
     if (league.owner_id !== user.id) {
       return errorResponse('Only the league commissioner can veto trades', 403)
     }
+
+    // approve-trade and veto-trade do not go through getTradeOffer (they need
+    // the commissioner check on the same row), so the completed-season guard is
+    // applied here instead -- see the note in _shared/trade-validation.ts.
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     // Use the atomic database function with row-level locking
     const { data: rpcResult, error: rpcError } = await serviceClient.rpc('veto_trade', {

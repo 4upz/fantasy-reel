@@ -39,12 +39,21 @@ type Request =
   | { mode: 'search'; query: string }
   | { mode: 'trending' }
 
-function buildPageKey(request: Request, page: number): MoviePageKey {
+/**
+ * `season_year` is what makes "upcoming" mean the season rather than the wall
+ * clock. A 2026 season running into January 2027 still wants 2026's slate, so
+ * eligibility is decided by the league's season, not by today's date - the same
+ * rule `isUpcomingMovie` applies server-side when the pick is actually made.
+ *
+ * It is part of the SWR key, so two leagues in different seasons cannot share
+ * one cached page of results.
+ */
+function buildPageKey(request: Request, page: number, seasonYear?: number): MoviePageKey {
   switch (request.mode) {
     case 'search':
-      return ['search-movies', { query: request.query, page, upcoming_only: true }]
+      return ['search-movies', { query: request.query, page, upcoming_only: true, season_year: seasonYear }]
     case 'trending':
-      return ['browse-movies', { page, trending: true }]
+      return ['browse-movies', { page, trending: true, season_year: seasonYear }]
     case 'browse':
       return [
         'browse-movies',
@@ -54,6 +63,7 @@ function buildPageKey(request: Request, page: number): MoviePageKey {
           genres: request.filters.genres.length > 0 ? request.filters.genres : undefined,
           min_rating: request.filters.minRating > 0 ? request.filters.minRating : undefined,
           sort_by: 'popularity',
+          season_year: seasonYear,
         },
       ]
   }
@@ -64,6 +74,8 @@ const fetcher = ([functionName, body]: MoviePageKey): Promise<PaginatedResponse>
 
 interface UseDraftMoviesOptions {
   draftedTmdbIds: Set<number>
+  /** The league's season, so eligibility follows the season and not today's date. */
+  seasonYear?: number
   /**
    * Skip the initial browse. Set false where the movie list is supplied from
    * elsewhere -- e.g. the bid modal past the new-bid cutoff, which offers only
@@ -87,7 +99,11 @@ interface UseDraftMoviesReturn {
   clearSearch: () => void
 }
 
-export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMoviesOptions): UseDraftMoviesReturn {
+export function useDraftMovies({
+  draftedTmdbIds,
+  seasonYear,
+  enabled = true,
+}: UseDraftMoviesOptions): UseDraftMoviesReturn {
   const [request, setRequest] = useState<Request>({ mode: 'browse', filters: DEFAULT_FILTERS })
 
   const currentFiltersRef = useRef<BrowseFilters>(DEFAULT_FILTERS)
@@ -96,8 +112,9 @@ export function useDraftMovies({ draftedTmdbIds, enabled = true }: UseDraftMovie
   // A null key is SWR's "don't fetch": a hook that starts disabled sits idle
   // and fetches the moment its owner turns it on.
   const getKey = useCallback(
-    (index: number): MoviePageKey | null => (enabled ? buildPageKey(request, index + 1) : null),
-    [enabled, request]
+    (index: number): MoviePageKey | null =>
+      enabled ? buildPageKey(request, index + 1, seasonYear) : null,
+    [enabled, request, seasonYear]
   )
 
   const { data, error, isLoading, size, setSize } = useSWRInfinite(getKey, fetcher, MOVIE_PAGE_SWR_CONFIG)

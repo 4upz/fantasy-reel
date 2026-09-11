@@ -15,6 +15,8 @@ import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 
 interface PlaceBidModalProps {
   isOpen: boolean
+  /** The league's season year, which decides which movies are still in play. */
+  seasonYear: number
   onClose: () => void
   teamId: string
   budget: TeamBudget | null
@@ -128,6 +130,7 @@ function getValidationErrorMessage(bidAmount: number, remainingBudget: number, h
 
 export default function PlaceBidModal({
   isOpen,
+  seasonYear,
   onClose,
   teamId,
   budget,
@@ -176,7 +179,11 @@ export default function PlaceBidModal({
     loading,
     search,
     clearSearch,
-  } = useDraftMovies({ draftedTmdbIds: excludedTmdbIds, enabled: !isCounterBidPhase })
+  } = useDraftMovies({
+    draftedTmdbIds: excludedTmdbIds,
+    seasonYear,
+    enabled: !isCounterBidPhase,
+  })
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -218,6 +225,11 @@ export default function PlaceBidModal({
   const clearSearchRef = useRef(clearSearch)
   clearSearchRef.current = clearSearch
 
+  // Initialization reads the current high bid once. Later bid refreshes still
+  // revalidate the amount below, but must not discard the user's selection.
+  const activeBidsRef = useRef(activeBidsByTmdbId)
+  activeBidsRef.current = activeBidsByTmdbId
+
   // Reset state when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -243,7 +255,7 @@ export default function PlaceBidModal({
           genre_ids: movieData.genre_ids || [],
         })
         // Open at the smallest amount that takes the lead.
-        const highBid = activeBidsByTmdbId.get(counterBidTarget.tmdb_id)?.high ?? 0
+        const highBid = activeBidsRef.current.get(counterBidTarget.tmdb_id)?.high ?? 0
         setBidAmount(highBid + 1)
       } else {
         setSelectedMovie(null)
@@ -256,7 +268,7 @@ export default function PlaceBidModal({
       setSearchQuery('')
       clearSearchRef.current()
     }
-  }, [isOpen, counterBidTarget, activeBidsByTmdbId])
+  }, [isOpen, counterBidTarget])
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value)

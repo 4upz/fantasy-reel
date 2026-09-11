@@ -15,6 +15,8 @@ import { track } from '@vercel/analytics'
  * - `trade_accepted`        — { league_id }
  * - `trade_rejected`        — { league_id }
  * - `trade_offer_extended`  — { league_id }
+ * - `season_completed`      — { league_id }
+ * - `season_started`        — { league_id }
  * - `realtime_degraded`     — { league_id, status }
  * - `realtime_recovered`    — { league_id }
  *

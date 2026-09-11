@@ -12,6 +12,22 @@ export const STATUS_BADGE_CLASS: Record<League['status'], string> = {
 }
 
 /**
+ * Ranks 1-3 get the medal gradient. Everything below is a plain elevated chip -
+ * a podium that includes eighth place isn't a podium. Shared so the standings
+ * table and the end-of-season champion preview show the same three medals.
+ */
+export const PODIUM_CHIP: Record<number, string> = {
+  1: 'bg-[linear-gradient(135deg,#ffd700,#a88c1f)] text-background',
+  2: 'bg-[linear-gradient(135deg,#e8e8e8,#a8a8a8)] text-background',
+  3: 'bg-[linear-gradient(135deg,#cd9b61,#a56b2d)] text-background',
+}
+
+/** The chip for any rank, medal or not. */
+export function podiumChipClass(rank: number): string {
+  return PODIUM_CHIP[rank] ?? 'border border-border bg-elevated text-foreground-secondary'
+}
+
+/**
  * Get display label for league status (capitalized)
  */
 export function getStatusLabel(status: League['status']): string {
@@ -19,10 +35,17 @@ export function getStatusLabel(status: League['status']): string {
 }
 
 /**
- * Get display name for a participant, preferring profile name over team name
+ * Get display name for a participant, preferring profile name over team name.
+ *
+ * `fallback` is for the surfaces that name people in a sentence rather than in
+ * a row - "Unknown" reads as a data error in a list of who is being carried
+ * into next season.
  */
-export function getParticipantDisplayName(participant: ParticipantWithProfile): string {
-  return participant.profiles?.display_name || participant.teams?.name || 'Unknown'
+export function getParticipantDisplayName(
+  participant: ParticipantWithProfile,
+  fallback = 'Unknown'
+): string {
+  return participant.profiles?.display_name || participant.teams?.name || fallback
 }
 
 /**

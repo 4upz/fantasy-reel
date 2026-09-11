@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createClient } from '@/utils/supabase/client'
 import LeagueManager from './LeagueManager'
 import PendingInvitations from './PendingInvitations'
 import DashboardSidebar from './DashboardSidebar'
-import type { InvitationWithLeague } from '@/types'
+import type { InvitationWithLeague, League } from '@/types'
 
 interface Props {
   pendingInvitations: InvitationWithLeague[]
@@ -12,14 +13,74 @@ interface Props {
 
 export default function DashboardClient({ pendingInvitations }: Props): React.ReactElement {
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [leagues, setLeagues] = useState<League[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
+  const [userId, setUserId] = useState<string | null>(null)
 
-  function openModal(): void {
-    setShowCreateModal(true)
-  }
+  const supabase = useMemo(() => createClient(), [])
 
-  function closeModal(): void {
-    setShowCreateModal(false)
-  }
+  // One read for the whole page. The league list and the trophy case are the
+  // same rows counted two ways, so fetching them separately would put two
+  // queries and two loading states on one screen - and `final_standings` rides
+  // along on each row, so champions need no lookup of their own.
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadLeagues(): Promise<void> {
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError) throw sessionError
+        if (!session) throw new Error('Your session has expired. Sign in again to load your leagues.')
+        if (cancelled) return
+        setUserId(session.user.id)
+
+        const { data, error } = await supabase
+          .from('leagues')
+          .select('*')
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        if (!cancelled) setLeagues((data ?? []) as League[])
+      } catch (error) {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load your leagues. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadLeagues()
+    return () => {
+      cancelled = true
+    }
+  }, [supabase, retry])
+
+  const handleLeagueCreated = useCallback((league: League) => {
+    setLeagues((prev) => [league, ...prev])
+  }, [])
+
+  /**
+   * A title is a season whose final standings put this user's own team at the
+   * top. Reading the frozen record means no lookup of the user's teams: the row
+   * already carries the user id beside the winning team id.
+   */
+  const titles = useMemo(() => {
+    if (!userId) return []
+    return leagues
+      .filter((league) =>
+        (league.final_standings ?? []).some(
+          (row) => row.user_id === userId && (league.winner_team_ids ?? []).includes(row.team_id)
+        )
+      )
+      .map((league) => ({
+        leagueId: league.id,
+        seriesName: league.name,
+        seasonYear: league.season_year,
+      }))
+      .sort((a, b) => b.seasonYear - a.seasonYear)
+  }, [leagues, userId])
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -44,16 +105,26 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
       <div className="dashboard-grid">
         {/* Main column - Leagues */}
         <div>
-          <LeagueManager
-            showCreateModal={showCreateModal}
-            onModalClose={closeModal}
-            onCreateClick={openModal}
-          />
+          {loadError ? (
+            <div className="alert alert-error" role="alert">
+              <p>{loadError}</p>
+              <button type="button" className="btn btn-secondary mt-3" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+            </div>
+          ) : (
+            <LeagueManager
+              leagues={leagues}
+              loading={loading}
+              showCreateModal={showCreateModal}
+              onModalClose={() => setShowCreateModal(false)}
+              onCreateClick={() => setShowCreateModal(true)}
+              onLeagueCreated={handleLeagueCreated}
+            />
+          )}
         </div>
 
         {/* Sidebar - Actions and Stats */}
         <div>
-          <DashboardSidebar onCreateClick={openModal} />
+          <DashboardSidebar onCreateClick={() => setShowCreateModal(true)} titles={titles} />
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
+import { currentSeasonOf, groupLeaguesIntoSeries } from '@/utils/seasons'
 import type { League } from '@/types'
 
 const CACHE_TTL_MS = 60_000
@@ -15,7 +16,7 @@ interface LeagueSwitcherProps {
   currentLeagueName: string
 }
 
-type LeagueSummary = Pick<League, 'id' | 'name' | 'status'>
+type LeagueSummary = Pick<League, 'id' | 'name' | 'status' | 'series_id' | 'season_year'>
 
 export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: LeagueSwitcherProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false)
@@ -37,7 +38,7 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
 
     const { data, error: fetchError } = await supabase
       .from('leagues')
-      .select('id, name, status')
+      .select('id, name, status, series_id, season_year')
       .order('created_at', { ascending: false })
 
     if (fetchError) {
@@ -46,10 +47,12 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
       return
     }
 
-    setLeagues(data as LeagueSummary[])
+    setLeagues(groupLeaguesIntoSeries((data ?? []) as LeagueSummary[]).map((seasons) =>
+      seasons.find((season) => season.id === currentLeagueId) ?? currentSeasonOf(seasons)!
+    ))
     fetchedAtRef.current = now
     setIsLoading(false)
-  }, [])
+  }, [currentLeagueId])
 
   // Fetch leagues when dropdown opens
   useEffect(() => {

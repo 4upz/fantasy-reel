@@ -21,6 +21,14 @@ interface UpdateScoresRequest {
   league_id?: string
 }
 
+/** The team_holdings columns the nightly run reads. */
+interface HoldingRow {
+  movie_id: string
+  tmdb_id: number
+  imdb_id: string | null
+  title: string
+}
+
 interface UpdateScoresResult {
   movies_fetched: number
   scores_updated: number
@@ -42,7 +50,11 @@ interface MockSupabaseConfig {
     select?: MockQueryResult
     update?: MockQueryResult
   }
-  draft_picks?: {
+  score_update_candidates?: {
+    select?: MockQueryResult
+  }
+  /** Active rosters for explicit league refreshes. */
+  team_holdings?: {
     select?: MockQueryResult
   }
   reviews?: {
@@ -56,6 +68,7 @@ interface MockSupabaseConfig {
 function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   const upsertCalls: unknown[] = []
   const rpcCalls: Array<{ fn: string; params: unknown }> = []
+  const selectedTables: string[] = []
   const updateCalls: Array<{ table: string; values: unknown; id: string }> = []
 
   function chainable(result: MockQueryResult) {
@@ -66,6 +79,8 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
       in: () => chain,
       lte: () => chain,
       or: () => chain,
+      order: () => chain,
+      range: () => chain,
       limit: () => chain,
       single: () => Promise.resolve(result),
     }
@@ -75,11 +90,14 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   return {
     _upsertCalls: upsertCalls,
     _rpcCalls: rpcCalls,
+    /** Which tables the run actually read, in order. */
+    _selectedTables: selectedTables,
     _updateCalls: updateCalls,
     from(table: string) {
       const tableConfig = config[table as keyof MockSupabaseConfig]
       return {
         select: () => {
+          selectedTables.push(table)
           const result = (tableConfig as { select?: MockQueryResult })?.select ??
             { data: [], error: null }
           return chainable(result)
@@ -202,16 +220,18 @@ function buildHandler(
           })
         }
 
-        const { data, error } = await supabaseClient.from('draft_picks').select().single()
+        const { data, error } = await supabaseClient.from('team_holdings').select().single()
         if (error) {
-          return new Response(JSON.stringify({ error: 'Failed to fetch drafted movies' }), {
+          return new Response(JSON.stringify({ error: 'Failed to fetch rostered movies' }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' },
           })
         }
-        moviesToUpdate = (data as MovieRecord[]) || []
+        moviesToUpdate = ((data ?? []) as HoldingRow[]).map((row) => ({
+          id: row.movie_id, tmdb_id: row.tmdb_id, imdb_id: row.imdb_id, title: row.title,
+        }))
       } else {
-        const { data, error } = await supabaseClient.from('movies').select().single()
+        const { data, error } = await supabaseClient.from('score_update_candidates').select().single()
         if (error) {
           return new Response(JSON.stringify({ error: 'Failed to fetch movies' }), {
             status: 500,
@@ -823,7 +843,7 @@ Deno.test('update-scores scoring logic', async (t) => {
     const movie1 = testMovie()
     const movie2 = testMovie({ id: VALID_MOVIE_ID_2, tmdb_id: 680, imdb_id: 'tt0110912', title: 'Pulp Fiction' })
     const client = createMockSupabaseClient({
-      draft_picks: { select: { data: [movie1, movie2], error: null } },
+      team_holdings: { select: { data: [movie1, movie2].map((movie) => ({ ...movie, movie_id: movie.id })), error: null } },
       rpc: { calculate_movie_score: { data: 25, error: null } },
     })
 
@@ -868,5 +888,36 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertExists(res.headers.get('Access-Control-Allow-Origin'))
     assertExists(res.headers.get('Access-Control-Allow-Headers'))
     assertExists(res.headers.get('Access-Control-Allow-Methods'))
+  })
+})
+
+// The view's season/counterpick filtering is exercised against PostgreSQL in
+// the season integration suite; these cases cover the handler's view contract.
+Deno.test('update-scores nightly candidate query', async (t) => {
+  await t.step('refreshes movies returned by the scoring candidate view', async () => {
+    const client = createMockSupabaseClient({
+      score_update_candidates: { select: { data: [testMovie()], error: null } },
+      rpc: { calculate_movie_score: { data: 25, error: null } },
+    })
+
+    const res = await buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))(
+      makeRequest('POST', {}),
+    )
+
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.movies_fetched, 1)
+    assertEquals(body.scores_updated, 1)
+    assertEquals(client._selectedTables, ['score_update_candidates'])
+  })
+
+  await t.step('fails the run when the candidate query errors', async () => {
+    const client = createMockSupabaseClient({
+      score_update_candidates: { select: { data: null, error: { message: 'boom' } } },
+    })
+
+    const res = await buildHandler(DEFAULT_ENV, client)(makeRequest('POST', {}))
+
+    assertEquals(res.status, 500)
+    assertEquals((await res.json()).error, 'Failed to fetch movies')
   })
 })

@@ -64,6 +64,9 @@ PickHistory
 PlusIcon
 ProposeTradeModal
 SearchIcon
+SeasonSection
+SeasonSwitcher
+StartNextSeasonButton
 SideNav
 SiteFooter
 SpinnerIcon

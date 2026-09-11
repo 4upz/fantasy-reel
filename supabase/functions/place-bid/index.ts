@@ -13,6 +13,7 @@ import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, Discor
 import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 
 const log = createLogger('place-bid')
 
@@ -102,6 +103,9 @@ Deno.serve(async (req) => {
     if (leagueError || !league) {
       return errorResponse('League not found', 404)
     }
+
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     if (league.status !== 'active') {
       return errorResponse('League is not active', 400)
@@ -199,7 +203,7 @@ Deno.serve(async (req) => {
     // this caller, so trusting it would reopen the release-date exploit this
     // guard exists to close.
     const releaseDateToCheck = existingMovie ? existingMovie.release_date : movie_data?.release_date
-    const releaseCheck = isUpcomingMovie(releaseDateToCheck)
+    const releaseCheck = isUpcomingMovie(releaseDateToCheck, league.season_year)
     if (!releaseCheck.valid) {
       return errorResponse(`Cannot bid on this movie: ${releaseCheck.reason}`, 400)
     }

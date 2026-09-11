@@ -315,6 +315,9 @@ const config = (overrides: Partial<LeagueTradeConfig> = {}): LeagueTradeConfig =
   faab_budget: 100,
   draft_counterpick_slots: 1,
   bidding_counterpick_slots: 0,
+  trade_offer_expiry_default_hours: null,
+  trade_offer_expiry_min_hours: null,
+  trade_offer_expiry_max_days: null,
   ...overrides,
 })
 
@@ -387,4 +390,3 @@ Deno.test('validateCounterpickSlots - counts phases separately', async () => {
     { valid: true }
   )
 })
-

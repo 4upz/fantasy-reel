@@ -1,11 +1,18 @@
 // TypeScript interfaces for Fantasy Reel data types
 
+/**
+ * The lifecycle of one season. Exported because season-aware surfaces (the
+ * switcher, the history rows, the tab visibility map) reason about a status
+ * without holding a whole `League`.
+ */
+export type LeagueStatus = 'setup' | 'drafting' | 'counterpicking' | 'active' | 'completed'
+
 export interface League {
   id: string
   name: string
   owner_id: string
   invite_only: boolean
-  status: 'setup' | 'drafting' | 'counterpicking' | 'active' | 'completed'
+  status: LeagueStatus
   max_participants: number
   draft_start_date: string | null
   draft_end_date: string | null
@@ -43,8 +50,68 @@ export interface League {
   // Shareable join link
   join_code: string | null
   join_token: string | null
+  // Season identity. A league row is one season of a series; `league_series`
+  // carries the identity that survives across them.
+  series_id: string
+  /** The season label, e.g. 2026. Drives movie eligibility, not the wall clock. */
+  season_year: number
+  /** `YYYY-MM-DD`. The day scores freeze and the champion is recorded. */
+  season_end: string
+  /** Stamped once, when the season completes. */
+  completed_at: string | null
+  /** Every team tied at rank 1 when the season completed - co-champions share the title. */
+  winner_team_ids: string[] | null
+  /**
+   * The final table, frozen at completion. Null while the season is running.
+   *
+   * It is a snapshot, not a view: it keeps the owner names inline and keeps
+   * teams whose participant has since left, both of which the live
+   * `league_standings` RPC drops. Every completed-season surface reads this
+   * and falls back to the RPC only when it is null.
+   */
+  final_standings: FinalStandingRow[] | null
   created_at: string
   updated_at: string
+}
+
+/** One season of a series, as the switcher and the history page list them. */
+export interface SeasonSummary {
+  id: string
+  season_year: number
+  status: LeagueStatus
+  completed_at: string | null
+  winner_team_ids: string[] | null
+}
+
+/** The durable league identity across seasons. */
+export interface LeagueSeries {
+  id: string
+  name: string
+  owner_id: string
+  seasons: SeasonSummary[]
+}
+
+/**
+ * One row of the `league_standings(p_league_id)` RPC - the only source of rank
+ * in the app. Competition ranking (1, 2, 2, 4); `is_tied` marks a rank shared
+ * with another team, which is what makes a champion a co-champion.
+ */
+export interface StandingRow {
+  team_id: string
+  team_name: string
+  participant_id: string
+  user_id: string
+  total_points: number
+  rank: number
+  is_tied: boolean
+}
+
+/**
+ * A standings row with the owner's name resolved, as the completion notifiers
+ * (email, Discord) send it. The RPC itself returns no profile columns.
+ */
+export interface FinalStandingRow extends StandingRow {
+  display_name: string | null
 }
 
 export interface LeagueParticipant {
@@ -510,6 +577,8 @@ export type NotificationType =
   | 'trade_cancelled'
   | 'trade_completed'
   | 'trade_vetoed'
+  | 'season_completed'
+  | 'season_started'
 
 export interface Notification {
   id: string
@@ -722,7 +791,7 @@ export interface TradeOffer {
 }
 
 export type ExpiryAnchor = 'fixed' | 'movie_release'
-export type ExpiredReason = 'offer_window' | 'movie_released' | 'league_deadline'
+export type ExpiredReason = 'offer_window' | 'movie_released' | 'league_deadline' | 'season_completed'
 
 export interface TradeAsset {
   id: string

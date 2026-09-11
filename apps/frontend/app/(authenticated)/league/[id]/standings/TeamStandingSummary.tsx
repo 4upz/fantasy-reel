@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import ChampionCrown from '../components/ChampionCrown'
 import { ChevronDown } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
 import { budgetTone, formatBudget } from './TeamBudget'
@@ -10,6 +11,7 @@ interface Props {
   ownerHandle?: string | null
   avatarUrl?: string | null
   isCurrentUser: boolean
+  reigningChampionSeason?: number | null
   movieCount: number
   moviesScored: number
   moviesPending: number
@@ -36,6 +38,7 @@ export default function TeamStandingSummary({
   ownerHandle,
   avatarUrl,
   isCurrentUser,
+  reigningChampionSeason = null,
   movieCount,
   moviesScored,
   moviesPending,
@@ -70,6 +73,7 @@ export default function TeamStandingSummary({
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
             <span className="type-row-title truncate text-foreground">{displayName}</span>
+            {reigningChampionSeason !== null && <ChampionCrown seasonYear={reigningChampionSeason} />}
             {isCurrentUser && <span className="type-meta flex-none rounded-full bg-gold-muted px-1.5 py-px text-gold">You</span>}
           </div>
           {ownerHandle && <div className="type-meta truncate text-foreground-secondary">{ownerHandle}</div>}

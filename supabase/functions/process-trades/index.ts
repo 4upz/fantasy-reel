@@ -19,9 +19,11 @@ import {
   type ExecuteTradeResult,
 } from '../_shared/trade-completion.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { COMPLETED_STATUS } from '../_shared/league-status.ts'
 import {
   anchorMovieTitle,
   expiredReasonText,
+  OPEN_TRADE_STATUSES,
   remainingText,
   EXPIRY_REMINDER,
 } from '../_shared/trade-expiry.ts'
@@ -50,7 +52,7 @@ interface TradeRecord {
   expired_reason: ExpiredReason | null
 }
 
-type ExpiredReason = 'offer_window' | 'movie_released' | 'league_deadline'
+type ExpiredReason = 'offer_window' | 'movie_released' | 'league_deadline' | 'season_completed'
 
 /** One offer whose release anchor moved with its movie. */
 interface ReresolvedOffer {
@@ -73,6 +75,8 @@ interface ProcessResults {
   invalidated: number
   /** Unanswered offers whose own clock ran out. */
   expired_by_clock: number
+  /** Open offers dropped because their season finished under them. */
+  expired_by_season: number
   /** Release-anchored offers whose movie moved, so their clock moved with it. */
   reresolved: number
   /** Open offers nudged because their clock is nearly out. One per window. */
@@ -104,6 +108,7 @@ Deno.serve(async (req) => {
       failed: 0,
       invalidated: 0,
       expired_by_clock: 0,
+      expired_by_season: 0,
       reresolved: 0,
       expiry_reminders_sent: 0,
       errors: [],
@@ -116,6 +121,16 @@ Deno.serve(async (req) => {
     // Neither step can block trade execution: an expiry failure counts toward
     // results.failed -- which is what computeStatus reads, so the run lands
     // non-ok and fires the existing ops alert -- rather than aborting the run.
+    // First of the maintenance steps: an offer in a season that has ended must
+    // not have its anchor re-resolved, must not earn an "expiring soon" nudge,
+    // and must never reach the execution loop. Taking it out here means the
+    // other three steps never see it.
+    //
+    // Without this the offer would still not execute -- validateTradeProposal
+    // refuses a completed league (see _shared/league-status.ts) -- but it would
+    // be expired down in the loop as a *validation failure*, which counts into
+    // results.failed and fires the ops alert for something that is not a fault.
+    await expireFinishedSeasonOffers(serviceClient, results)
     await reresolveReleaseAnchors(serviceClient, results)
     await sweepExpiredOffers(serviceClient, results)
     // Reminders run LAST of the three, and the order is load-bearing:
@@ -146,6 +161,7 @@ Deno.serve(async (req) => {
         errors: results.errors,
         metadata: {
           expired_by_clock: results.expired_by_clock,
+          expired_by_season: results.expired_by_season,
           reresolved: results.reresolved,
           expiry_reminders_sent: results.expiry_reminders_sent,
         },
@@ -246,6 +262,7 @@ Deno.serve(async (req) => {
         completed: results.completed,
         invalidated: results.invalidated,
         expired_by_clock: results.expired_by_clock,
+        expired_by_season: results.expired_by_season,
         reresolved: results.reresolved,
         expiry_reminders_sent: results.expiry_reminders_sent,
       },
@@ -256,6 +273,9 @@ Deno.serve(async (req) => {
         `Processed ${results.processed} trades: ${results.completed} completed, ${results.failed} failed` +
         (results.invalidated > 0 ? `, ${results.invalidated} competing offers expired` : '') +
         (results.expired_by_clock > 0 ? `, ${results.expired_by_clock} offers lapsed` : '') +
+        (results.expired_by_season > 0
+          ? `, ${results.expired_by_season} offers ended with their season`
+          : '') +
         (results.expiry_reminders_sent > 0
           ? `, ${results.expiry_reminders_sent} expiry reminders sent`
           : ''),
@@ -331,6 +351,112 @@ async function getAnchorTitles(
   }
 
   return new Map((data ?? []).map((m: { id: string; title: string }) => [m.id, m.title]))
+}
+
+/**
+ * Tell both sides an offer expired, in-app and by email.
+ *
+ * Shared by every sweep that ends an offer wholesale -- the clock running out,
+ * and the season closing under it. The two differ only in which sentence
+ * `expiredReasonText` produces, and they must not differ in anything else: the
+ * same event described two ways is how a user learns to distrust the wording.
+ *
+ * 'trade_cancelled' with expiry wording rather than a dedicated type: no
+ * trade_expired notification type exists, and adding an enum value costs two
+ * migrations because a new value cannot be used in the transaction that adds
+ * it. This is what the pre-existing expiry path already did.
+ */
+async function notifyOfferExpired(
+  supabase: ReturnType<typeof createServiceClient>,
+  trade: TradeRecord,
+  reason: string
+): Promise<void> {
+  await notifyTradeParties(supabase, {
+    tradeOffer: trade,
+    notifyInitiator: {
+      type: 'trade_cancelled',
+      title: 'Trade Offer Expired',
+      bodyFn: (other) => `Your trade offer to ${other} expired. ${reason}`,
+      data: { expired_reason: trade.expired_reason },
+    },
+    notifyRecipient: {
+      type: 'trade_cancelled',
+      title: 'Trade Offer Expired',
+      bodyFn: (other) => `The trade offer from ${other} expired. ${reason}`,
+      data: { expired_reason: trade.expired_reason },
+    },
+  })
+
+  await sendTradeEmailNotifications(supabase, trade, 'expired', {
+    notifyInitiator: true,
+    notifyRecipient: true,
+    expiredReason: reason,
+  })
+}
+
+/**
+ * End every open offer in a season that has finished.
+ *
+ * `completeLeague()` closes out open offers when a season ends; this is the
+ * second line, for one proposed in the gap or left behind by a season completed
+ * some other way. An offer that outlived its season cannot be honoured -- the
+ * standings are final and the champions are recorded -- and leaving it open
+ * would keep it rendering as live and keep it coming back every five minutes.
+ *
+ * Unlike the finished-season skip in process-bids, this one *does* notify.
+ * A pending bid is one team's private intent; a trade offer is an obligation
+ * between two named people, one of whom is sitting on an unanswered request.
+ * "The season ended before it was answered" is the sentence they need, and
+ * `expiredReasonText` already carries it.
+ *
+ * The claim is the UPDATE, not the SELECT: re-filtering on the open statuses
+ * and returning the flipped rows means only rows this call actually changed are
+ * notified, so two overlapping cron runs cannot both announce the same offer --
+ * the same shape `expire_lapsed_trade_offers` uses.
+ */
+async function expireFinishedSeasonOffers(
+  supabase: ReturnType<typeof createServiceClient>,
+  results: ProcessResults
+): Promise<void> {
+  // `!inner` plus a filter on the embedded column: trade_offers has exactly one
+  // FK to leagues, so the embed is unambiguous.
+  const { data: candidates, error: findError } = await supabase
+    .from('trade_offers')
+    .select('id, leagues!inner(status)')
+    .in('status', OPEN_TRADE_STATUSES)
+    .eq('leagues.status', COMPLETED_STATUS)
+
+  if (findError) {
+    log.error('Failed to find offers in finished seasons', { error: serializeError(findError) })
+    recordStepFailure(results, 'Finished-season offer sweep', findError)
+    return
+  }
+
+  const ids = (candidates ?? []).map((offer: { id: string }) => offer.id)
+  if (ids.length === 0) return
+
+  const { data: claimed, error: claimError } = await supabase
+    .from('trade_offers')
+    .update({ status: 'expired', expired_reason: 'season_completed' })
+    .in('id', ids)
+    .in('status', OPEN_TRADE_STATUSES)
+    .select('*')
+
+  if (claimError) {
+    log.error('Failed to expire offers in finished seasons', { error: serializeError(claimError) })
+    recordStepFailure(results, 'Finished-season offer sweep', claimError)
+    return
+  }
+
+  const expired = (claimed ?? []) as TradeRecord[]
+  if (expired.length === 0) return
+
+  results.expired_by_season = expired.length
+  log.info('Trade offers ended with their season', { count: expired.length })
+
+  await forEachWithConcurrency(expired, (trade) =>
+    notifyOfferExpired(supabase, trade, expiredReasonText(trade))
+  )
 }
 
 /**
@@ -412,40 +538,18 @@ async function sweepExpiredOffers(
 
   const titles = await getAnchorTitles(supabase, expired)
 
-  await forEachWithConcurrency(expired, async (trade) => {
-    const reason = expiredReasonText({
-      ...trade,
-      anchor_movie_title: trade.expiry_anchor_movie_id
-        ? titles.get(trade.expiry_anchor_movie_id) ?? null
-        : null,
-    })
-
-    await notifyTradeParties(supabase, {
-      tradeOffer: trade,
-      // No trade_expired notification type exists, and adding an enum value
-      // costs two migrations because a new value cannot be used in the
-      // transaction that adds it. trade_cancelled with expiry wording is what
-      // the pre-existing expiry path already does.
-      notifyInitiator: {
-        type: 'trade_cancelled',
-        title: 'Trade Offer Expired',
-        bodyFn: (other) => `Your trade offer to ${other} expired. ${reason}`,
-        data: { expired_reason: trade.expired_reason },
-      },
-      notifyRecipient: {
-        type: 'trade_cancelled',
-        title: 'Trade Offer Expired',
-        bodyFn: (other) => `The trade offer from ${other} expired. ${reason}`,
-        data: { expired_reason: trade.expired_reason },
-      },
-    })
-
-    await sendTradeEmailNotifications(supabase, trade, 'expired', {
-      notifyInitiator: true,
-      notifyRecipient: true,
-      expiredReason: reason,
-    })
-  })
+  await forEachWithConcurrency(expired, (trade) =>
+    notifyOfferExpired(
+      supabase,
+      trade,
+      expiredReasonText({
+        ...trade,
+        anchor_movie_title: trade.expiry_anchor_movie_id
+          ? titles.get(trade.expiry_anchor_movie_id) ?? null
+          : null,
+      })
+    )
+  )
 }
 
 /**

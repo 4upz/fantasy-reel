@@ -2,6 +2,7 @@ import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { isValidUUID, errorResponse, createServiceClient } from './utils.ts'
 import { sendTradeEmail, formatTradeItemsForEmail, TradeEmailData, TradeEmailType } from './email.ts'
 import { logNotificationDelivery, statusFromEmailResult } from './notification-log.ts'
+import { assertLeagueWritable, COMPLETED_STATUS, SEASON_FINISHED_MESSAGE } from './league-status.ts'
 
 // ============================================================================
 // Types
@@ -133,7 +134,7 @@ export interface TradeOffer {
   /** The movie a 'movie_release' offer waits on. */
   expiry_anchor_movie_id?: string | null
   /** Why an expired offer expired; NULL when it ended for a reason veto_reason explains. */
-  expired_reason?: 'offer_window' | 'movie_released' | 'league_deadline' | null
+  expired_reason?: 'offer_window' | 'movie_released' | 'league_deadline' | 'season_completed' | null
 }
 
 export interface TradeNotification {
@@ -147,6 +148,20 @@ export interface TradeNotification {
 
 // Re-export for backwards compatibility with existing imports
 export { createServiceClient } from './utils.ts'
+
+// The completed-season guard lives in two places in this module, and nowhere
+// in the individual trade functions:
+//
+//   * getTradeOffer      -- every function that acts on an existing offer
+//                           (respond, counter, cancel, extend) reads it here,
+//                           so the league status rides along on that same row.
+//   * validateLeagueTradingEnabled
+//                        -- propose-trade has no offer yet; it reaches the
+//                           league only through validateTradeProposal.
+//
+// approve-trade and veto-trade are the exceptions: they fetch the offer
+// themselves (with a `leagues(owner_id)` embed for the commissioner check) and
+// call assertLeagueWritable inline, right after that fetch.
 
 // ============================================================================
 // Trade Offer Operations
@@ -163,9 +178,13 @@ export async function getTradeOffer(
     return { offer: null, error: errorResponse('Valid trade_offer_id is required', 400) }
   }
 
+  // The league's status is embedded rather than fetched separately: every
+  // caller needs the completed-season guard and none of them needs a second
+  // round-trip for it. trade_offers has exactly one FK to leagues, so the
+  // embed is unambiguous.
   const { data, error } = await supabase
     .from('trade_offers')
-    .select('*')
+    .select('*, leagues(status)')
     .eq('id', tradeOfferId)
     .single()
 
@@ -173,7 +192,15 @@ export async function getTradeOffer(
     return { offer: null, error: errorResponse('Trade offer not found', 404) }
   }
 
-  return { offer: data as TradeOffer, error: null }
+  // Stripped off before the offer is returned: TradeOffer is the row shape
+  // callers write back and pass to notification helpers, and an embedded
+  // object in it would leak into those.
+  const { leagues, ...offer } = data as Record<string, unknown>
+
+  const writable = assertLeagueWritable(leagues as { status: string } | null)
+  if (!writable.ok) return { offer: null, error: writable.response }
+
+  return { offer: offer as unknown as TradeOffer, error: null }
 }
 
 /**
@@ -405,6 +432,13 @@ export function validateLeagueTradingEnabled(
   config: LeagueTradeConfig,
   leagueStatus: string
 ): ValidationResult {
+  // Ahead of the trades_enabled check: a finished season is finished whether or
+  // not the commissioner ever switched trading on, and "trading is not enabled"
+  // would send them to a settings page that can no longer change anything.
+  if (leagueStatus === COMPLETED_STATUS) {
+    return { valid: false, error: SEASON_FINISHED_MESSAGE }
+  }
+
   if (!config.trades_enabled) {
     return { valid: false, error: 'Trading is not enabled for this league' }
   }

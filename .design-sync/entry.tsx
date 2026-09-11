@@ -45,7 +45,8 @@ export { default as FranchiseSummary } from '../apps/frontend/app/components/Fra
 export { default as FranchiseHistoryPanel } from '../apps/frontend/app/components/FranchiseHistoryPanel'
 
 // ── League ──────────────────────────────────────────────────────────────
-export { default as LeagueListItem } from '../apps/frontend/app/components/LeagueListItem'
+export { default as SeriesListItem } from '../apps/frontend/app/components/SeriesListItem'
+export { default as TrophyCase } from '../apps/frontend/app/components/TrophyCase'
 export { default as BidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidCard'
 export { default as BidSummary, BidAmountDisplay } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidSummary'
 export { default as BidWeekTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline'
@@ -62,6 +63,10 @@ export { default as PickOrderQueue } from '../apps/frontend/app/(authenticated)/
 export { default as StandingsSidebar } from '../apps/frontend/app/(authenticated)/league/[id]/components/StandingsSidebar'
 export { default as TeamHeader } from '../apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader'
 export { default as MovieTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/MovieTimeline'
+export { default as ChampionBanner } from '../apps/frontend/app/(authenticated)/league/[id]/components/ChampionBanner'
+export { default as ChampionCrown } from '../apps/frontend/app/(authenticated)/league/[id]/components/ChampionCrown'
+export { default as SeasonHistoryList } from '../apps/frontend/app/(authenticated)/league/[id]/components/SeasonHistoryList'
+export { default as SeasonWelcomeCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/SeasonWelcomeCard'
 export { RosterHeader, RosterPoster, RosterMovieCard } from '../apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation'
 export { default as TeamStandingSummary } from '../apps/frontend/app/(authenticated)/league/[id]/standings/TeamStandingSummary'
 export { default as MovieScoreCard } from '../apps/frontend/app/(authenticated)/league/[id]/standings/MovieScoreCard'
@@ -74,6 +79,8 @@ export { default as PlaceCounterpickBidModal } from '../apps/frontend/app/(authe
 export { default as ConfirmDeleteModal } from '../apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmDeleteModal'
 export { default as ConfirmKickModal } from '../apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmKickModal'
 export { default as ChangePasswordModal } from '../apps/frontend/app/(authenticated)/settings/components/ChangePasswordModal'
+export { default as EndSeasonModal } from '../apps/frontend/app/(authenticated)/league/[id]/settings/components/EndSeasonModal'
+export { default as ConfirmStartSeasonModal } from '../apps/frontend/app/(authenticated)/league/[id]/components/ConfirmStartSeasonModal'
 
 // ── Identity & brand ────────────────────────────────────────────────────
 export { default as BrandLogo } from '../apps/frontend/app/components/BrandLogo'

@@ -13,6 +13,7 @@ import {
   CANCEL_IN_PROCESSING_MESSAGE,
 } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 
 const log = createLogger('cancel-bid')
 
@@ -98,9 +99,15 @@ Deno.serve(async (req) => {
     // only guard when a league has the cutoff disabled (hours = 0).
     const { data: league } = await serviceClient
       .from('leagues')
-      .select('new_bid_cutoff_hours')
+      .select('status, new_bid_cutoff_hours')
       .eq('id', bid.league_id)
       .single()
+
+    // A finished season answers before the cancel window does: the bid can
+    // neither be processed nor withdrawn, and "the counter-bid phase has
+    // started" would be a confusing thing to tell someone whose season ended.
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     const bidWindow = computeBidWindow(bid.processing_deadline, league?.new_bid_cutoff_hours)
     if (!isBidCancellable(bid.processing_deadline, bidWindow)) {
