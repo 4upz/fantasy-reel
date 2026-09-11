@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { Clapperboard, Clock, User, ExternalLink, ChevronDown } from 'lucide-react'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
-import { getReleaseYear, formatRuntime } from '@/utils/date'
+import { getReleaseYear, formatRuntime, formatReleaseDateFull } from '@/utils/date'
 
 interface MovieDetailBodyProps {
   /** What is known before the details request lands, so the panel is never empty. */
@@ -106,11 +106,7 @@ export default function MovieDetailBody({
 
                 {displayData.release_date && (
                   <div className="text-foreground-secondary">
-                    {new Date(displayData.release_date).toLocaleDateString('en-US', {
-                      month: 'long',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })}
+                    {formatReleaseDateFull(displayData.release_date)}
                   </div>
                 )}
               </div>

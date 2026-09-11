@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { getReleaseYear } from '@/utils/date'
 import type { TradeItems, TradeMovieItem } from '@/types'
 import CounterpickMark from './CounterpickMark'
 
@@ -56,7 +57,7 @@ export default function TradeItemsSection({
                 )}
                 {movie.release_date && (
                   <p className="type-meta text-foreground-secondary">
-                    {new Date(movie.release_date).getFullYear()}
+                    {getReleaseYear(movie.release_date)}
                   </p>
                 )}
                 {/* The card badge says the deal is contested; this says which

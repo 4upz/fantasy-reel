@@ -1,6 +1,12 @@
 /** A bare calendar date, e.g. a movie's release_date, with no time attached. */
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 
+function parseReleaseDate(date: string | null): Date | null {
+  if (!date || !DATE_ONLY.test(date)) return null
+  const parsed = new Date(date)
+  return Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date ? null : parsed
+}
+
 /**
  * Parse a date for display.
  *
@@ -47,8 +53,30 @@ export function isExpired(dateString: string): boolean {
  * Get the year from a release date string
  */
 export function getReleaseYear(date: string | null): number | null {
-  if (!date) return null
-  return new Date(date).getFullYear()
+  return parseReleaseDate(date)?.getUTCFullYear() ?? null
+}
+
+/** Movie releases are calendar dates; never shift them into a viewer's timezone. */
+function formatReleaseDate(date: string | null, options: Intl.DateTimeFormatOptions): string {
+  const parsed = parseReleaseDate(date)
+  if (!parsed) return 'TBA'
+  return parsed.toLocaleDateString('en-US', { ...options, timeZone: 'UTC' })
+}
+
+export function formatReleaseDateShort(date: string | null): string {
+  return formatReleaseDate(date, { month: 'short', day: 'numeric' })
+}
+
+export function formatReleaseDateFull(date: string | null): string {
+  return formatReleaseDate(date, { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+/** Includes today, matching the server's UTC calendar-date eligibility policy. */
+export function isWithinDays(date: string | null, days: number, now: Date = new Date()): boolean {
+  if (!date || !parseReleaseDate(date)) return false
+  const today = now.toISOString().slice(0, 10)
+  const end = new Date(Date.parse(today) + days * 86_400_000).toISOString().slice(0, 10)
+  return date >= today && date <= end
 }
 
 /**

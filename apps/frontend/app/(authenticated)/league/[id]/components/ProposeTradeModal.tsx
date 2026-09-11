@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
+import { getReleaseYear } from '@/utils/date'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import type {
   Team,
@@ -632,7 +633,7 @@ function MovieSelector({
                   </span>
                 )}
                 {movie.release_date && (
-                  <span>{new Date(movie.release_date).getFullYear()}</span>
+                  <span>{getReleaseYear(movie.release_date)}</span>
                 )}
                 {movie.fantasy_points !== null ? (
                   <>

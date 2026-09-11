@@ -1,5 +1,5 @@
 // Re-export shared utilities for convenience
-export { formatRuntime, getReleaseYear } from '@/utils/date'
+export { formatRuntime, getReleaseYear, formatReleaseDateShort, formatReleaseDateFull, isWithinDays } from '@/utils/date'
 
 /** A bidding week runs from one processing deadline to the next. */
 export const BID_CYCLE_HOURS = 168
@@ -104,37 +104,6 @@ export function latestOpenCounterWindow(
 }
 
 /**
- * Format a release date for short display (e.g., "Jan 15")
- */
-export function formatReleaseDateShort(date: string | null): string {
-  if (!date) return 'TBA'
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-/**
- * Format a release date for full display (e.g., "January 15, 2026")
- */
-export function formatReleaseDateFull(date: string | null): string {
-  if (!date) return 'TBA'
-  return new Date(date).toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
-
-/**
- * Check if a date is within the next N days from now
- */
-export function isWithinDays(date: string | null, days: number): boolean {
-  if (!date) return false
-  const releaseDate = new Date(date)
-  const now = new Date()
-  const futureDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000)
-  return releaseDate >= now && releaseDate <= futureDate
-}
-
-/**
  * Check if a movie is still eligible to bid or counterpick on: it must have a
  * known release date that has not yet passed. Mirrors the server-side release
  * guard (`isUpcomingMovie` in supabase/functions/_shared/utils.ts) so a stale
@@ -149,12 +118,10 @@ export function isMovieBiddable(releaseDate: string | null): boolean {
 /**
  * Check if a date is before end of current year
  */
-export function isThisYear(date: string | null): boolean {
+export function isThisYear(date: string | null, now: Date = new Date()): boolean {
   if (!date) return false
-  const releaseDate = new Date(date)
-  const now = new Date()
-  const endOfYear = new Date(now.getFullYear(), 11, 31)
-  return releaseDate >= now && releaseDate <= endOfYear
+  const today = now.toISOString().slice(0, 10)
+  return date >= today && date <= `${now.getUTCFullYear()}-12-31`
 }
 
 /**

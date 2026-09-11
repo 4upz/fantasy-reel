@@ -80,6 +80,17 @@ Implementation evidence (in progress):
   Discord message or deployed schedule has been created during implementation.
 - DRAFT-08 calendar helpers pass boundary checks in UTC, New York, Los Angeles,
   and Kiritimati, including January 1, invalid dates, and windows crossing years.
+  Shared movie details and trading/bidding date consumers now use the calendar
+  formatter/year helper. The mobile draft order and preview footer are part of
+  the following UI batch.
+- DRAFT-07 preview interaction checks passed at 1280×844, 390×844, and 320×640:
+  keyboard opening, native focus containment, metadata retry, pending duplicate
+  and dismissal guards, inline rejected-pick errors, stable-key retry, focus and
+  scroll restoration, turn loss, and unknown dates. Scrolled mobile previews
+  retain the selected title and action. A targeted occupied-slot check proved
+  that retrying the same movie on a later turn starts a new key/slot once the old
+  slot is authoritatively occupied. These use response stubs for failure cases;
+  the real multiplayer mutation gate is still separate.
 - Verification limitation: the isolated local stack shares an exhausted Docker
   VM (7.65 GiB RAM, almost all 1 GiB swap used; sampled full memory stalls 72%).
   Actual Auth requests returned 504 and a direct draft-pick fixture insert hit a

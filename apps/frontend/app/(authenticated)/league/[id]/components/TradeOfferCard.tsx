@@ -12,7 +12,7 @@ import type {
   TradeableMovie,
   TeamBudget,
 } from '@/types'
-import { formatRelativeDate } from '@/utils/date'
+import { formatRelativeDate, getReleaseYear } from '@/utils/date'
 import AcceptConfirmModal from './AcceptConfirmModal'
 import OfferExpiryPicker, { Chip } from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
@@ -989,7 +989,7 @@ function MovieSelector({
                       : 'Counterpick'}
                   </span>
                 )}
-                {movie.release_date && <span>{new Date(movie.release_date).getFullYear()}</span>}
+                {movie.release_date && <span>{getReleaseYear(movie.release_date)}</span>}
               </div>
             </div>
             <div
