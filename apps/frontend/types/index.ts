@@ -425,6 +425,9 @@ export interface WishlistedMovie {
 }
 
 export interface TMDbSearchResponse {
+  /** Counts/paging belong to the upstream query, before eligibility exclusions. */
+  has_more?: boolean
+  total_results_scope?: 'upstream'
   page: number
   total_pages: number
   total_results: number

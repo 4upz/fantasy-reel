@@ -8,14 +8,14 @@
  * (the frontend, via callEdgeFunction) and the service role key (the Discord
  * bot, apps/discord-bot/src/utils/functions-client.ts) -- and nobody else.
  *
- * Success steps assert only that the caller got *past* auth, not that TMDb
- * answered: a rate limit or an unset TMDB_API_KEY is not an auth regression,
- * and these tests must not start failing for it.
+ * Authorized callers reach deterministic body validation. Deliberately invalid
+ * bodies avoid spending TMDb quota, and exact responses keep a worker failure
+ * from being mistaken for successful authorization.
  *
  * Requires: npx supabase start
  */
 
-import { assertEquals, assertNotEquals } from '@std/assert'
+import { assertEquals } from '@std/assert'
 import {
   createTestFactory,
   getAnonClient,
@@ -25,14 +25,26 @@ import {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
 
-/** The three endpoints and a minimal valid body for each. */
-const ENDPOINTS: Array<{ name: string; body: Record<string, unknown> }> = [
-  { name: 'browse-movies', body: {} },
-  { name: 'search-movies', body: { query: 'dune' } },
-  // A real TMDb id (Dune: Part Two) so the request can reach a 200 rather than
-  // a 404 -- either way it proves auth let the caller through.
-  { name: 'get-movie-details', body: { tmdb_id: 693134 } },
+/** All validation runs after authentication and before any TMDb lookup. */
+const ENDPOINTS = [
+  { name: 'browse-movies', body: { page: 0 }, validationError: 'Page must be between 1 and 500', unconfiguredError: 'Browse service not configured' },
+  { name: 'search-movies', body: { query: '' }, validationError: 'Query is required', unconfiguredError: 'Search service not configured' },
+  { name: 'get-movie-details', body: { tmdb_id: 0 }, validationError: 'Valid tmdb_id is required', unconfiguredError: null },
 ]
+
+function assertAuthorizedResponse(
+  status: number | undefined,
+  error: unknown,
+  endpoint: typeof ENDPOINTS[number],
+): void {
+  // Browse/search check configuration before parsing the body.
+  if (status === 503 && endpoint.unconfiguredError) {
+    assertEquals(error, endpoint.unconfiguredError)
+  } else {
+    assertEquals(status, 400)
+    assertEquals(error, endpoint.validationError)
+  }
+}
 
 async function callWithHeaders(
   functionName: string,
@@ -55,7 +67,8 @@ Deno.test({
     const { client } = await createTestFactory()
     const serviceRoleKey = await getEdgeFunctionServiceRoleKey()
 
-    for (const { name, body } of ENDPOINTS) {
+    for (const endpoint of ENDPOINTS) {
+      const { name, body } = endpoint
       await t.step(`${name} - 401 with no Authorization header`, async () => {
         const { status, data } = await callWithHeaders(name, {}, body)
         assertEquals(status, 401)
@@ -77,8 +90,7 @@ Deno.test({
 
       await t.step(`${name} - a signed-in user is let through`, async () => {
         const result = await invokeFunction(client, name, body)
-        assertNotEquals(result.error, 'Unauthorized')
-        assertNotEquals(result.status, 401)
+        assertAuthorizedResponse(result.status, result.error, endpoint)
       })
 
       await t.step(`${name} - the service role key is let through`, async () => {
@@ -87,8 +99,7 @@ Deno.test({
           { Authorization: `Bearer ${serviceRoleKey}` },
           body
         )
-        assertNotEquals(status, 401)
-        assertNotEquals(data.error, 'Unauthorized')
+        assertAuthorizedResponse(status, data.error, endpoint)
       })
 
       await t.step(`${name} - CORS preflight still works unauthenticated`, async () => {
