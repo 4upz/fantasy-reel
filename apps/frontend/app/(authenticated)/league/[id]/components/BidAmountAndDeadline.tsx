@@ -1,6 +1,7 @@
 'use client'
 
-import { Clock, DollarSign } from 'lucide-react'
+import { Clock } from 'lucide-react'
+import { BidAmountDisplay } from './BidSummary'
 import { formatTimeRemaining } from './utils'
 
 interface BidAmountAndDeadlineProps {
@@ -36,10 +37,7 @@ export default function BidAmountAndDeadline({
   return (
     <>
       <div className="flex items-center gap-4 mt-2">
-        <div className="type-number flex items-center gap-1.5 bid-amount-display">
-          <DollarSign className="w-5 h-5" />
-          <span>{amount}</span>
-        </div>
+        <BidAmountDisplay amount={amount} />
 
         <div
           className={`type-body-sm flex items-center gap-1.5 ${

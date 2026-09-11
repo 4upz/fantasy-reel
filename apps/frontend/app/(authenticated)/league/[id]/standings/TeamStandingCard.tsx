@@ -1,12 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
-import { ChevronDown } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
 import type { HoldingMovie, RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
-import TeamBudgetSummary, { budgetTone, formatBudget, remainingBudget } from './TeamBudget'
+import TeamBudgetSummary, { remainingBudget } from './TeamBudget'
+import TeamStandingSummary from './TeamStandingSummary'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 
 interface Props {
@@ -20,16 +19,6 @@ interface Props {
   isSelected: boolean
   onActivate: () => void
   animationDelay?: number
-}
-
-/**
- * Ranks 1-3 get the medal gradient. Everything below is a plain elevated chip -
- * a podium that includes eighth place isn't a podium.
- */
-const PODIUM_CHIP: Record<number, string> = {
-  1: 'bg-[linear-gradient(135deg,#ffd700,#a88c1f)] text-background',
-  2: 'bg-[linear-gradient(135deg,#e8e8e8,#a8a8a8)] text-background',
-  3: 'bg-[linear-gradient(135deg,#cd9b61,#a56b2d)] text-background',
 }
 
 function pointsTone(points: number): string {
@@ -72,13 +61,6 @@ export default function TeamStandingCard({
   const displayName = team?.name || profile?.display_name || 'Unnamed Team'
   const ownerHandle = team?.name ? profile?.display_name : null
 
-  const initials = displayName
-    .split(' ')
-    .map((word) => word[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
-
   const panelId = `team-movies-${team?.id}`
 
   // Your own team keeps a faint gold edge; the row feeding the rail is brighter
@@ -97,85 +79,20 @@ export default function TeamStandingCard({
         aria-controls={panelId}
         className="flex w-full flex-col gap-2.5 p-3.5 text-left transition-colors hover:bg-surface-hover lg:gap-0 lg:px-4"
       >
-        {/* Line 1 on mobile; the whole row above lg, where the stats move inline */}
-        <div className="flex items-center gap-2.5 lg:gap-3.5">
-          <div
-            className={`type-number flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] lg:h-[38px] lg:w-[38px] lg:rounded-[11px] ${
-              PODIUM_CHIP[rank] ?? 'border border-border bg-elevated text-foreground-secondary'
-            }`}
-          >
-            {isTied ? 'T' : '#'}
-            {rank}
-          </div>
-
-          <div className="relative h-[34px] w-[34px] flex-none overflow-hidden rounded-full border-[1.5px] border-gold bg-gold-muted lg:h-[38px] lg:w-[38px]">
-            {team?.avatar_url ? (
-              <Image src={team.avatar_url} alt={displayName} fill sizes="38px" className="object-cover" unoptimized />
-            ) : (
-              <div className="type-meta flex h-full w-full items-center justify-center text-gold">
-                {initials}
-              </div>
-            )}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="type-row-title truncate text-foreground">{displayName}</span>
-              {isCurrentUser && (
-                <span className="type-meta flex-none rounded-full bg-gold-muted px-1.5 py-px text-gold">
-                  You
-                </span>
-              )}
-            </div>
-            {ownerHandle && <div className="type-meta truncate text-foreground-secondary">{ownerHandle}</div>}
-          </div>
-
-          {/* Above lg there is room for the stat strip to become columns */}
-          <div className="hidden flex-none text-right lg:block lg:w-[72px]">
-            <div className="type-meta text-foreground-secondary">Movies</div>
-            <div className="type-number text-foreground-secondary">{movieCount}</div>
-          </div>
-
-          {/* Spending power is only useful next to everyone else's, so it sits in
-              the collapsed row rather than behind an expand. */}
-          {budgetLeft !== null && (
-            <div className="hidden flex-none text-right lg:block lg:w-[72px]">
-              <div className="type-meta text-foreground-secondary">Budget</div>
-              <div className={`type-number ${budgetTone(budgetLeft)}`}>{formatBudget(budgetLeft)}</div>
-            </div>
-          )}
-
-          <div className="flex-none text-right lg:min-w-[86px]">
-            <div
-              className={`type-number-lg ${pointsTone(totalPoints)}`}
-            >
-              {formatFantasyPoints(totalPoints)}
-            </div>
-            <div className="type-meta mt-0.5 text-foreground-secondary">Points</div>
-          </div>
-        </div>
-
-        {/* Line 2 - stat strip, on its own line so nothing collides with the points */}
-        <div className="flex items-center gap-2 border-t border-border pt-[9px] lg:hidden">
-          <span className="type-meta text-foreground-secondary">{movieCount} movies</span>
-          <span className="h-[3px] w-[3px] flex-none rounded-full bg-border-hover" />
-          <span className="type-meta truncate text-foreground-secondary">
-            {moviesScored} scored · {moviesPending} pending
-          </span>
-          <span className="flex-1" />
-          {/* flex-none so the purse survives the truncation the scored/pending
-              text takes when a team name pushes the row wide */}
-          {budgetLeft !== null && (
-            <span className={`type-meta type-numeric flex-none ${budgetTone(budgetLeft)}`}>
-              {formatBudget(budgetLeft)}
-            </span>
-          )}
-          <ChevronDown
-            className={`h-4 w-4 flex-none text-foreground-muted transition-transform duration-300 ${
-              isExpanded ? 'rotate-180' : ''
-            }`}
-          />
-        </div>
+        <TeamStandingSummary
+          rank={rank}
+          isTied={isTied}
+          displayName={displayName}
+          ownerHandle={ownerHandle}
+          avatarUrl={team?.avatar_url}
+          isCurrentUser={isCurrentUser}
+          movieCount={movieCount}
+          moviesScored={moviesScored}
+          moviesPending={moviesPending}
+          budgetLeft={budgetLeft}
+          totalPoints={totalPoints}
+          isExpanded={isExpanded}
+        />
       </button>
 
       {isExpanded && (

@@ -15,8 +15,9 @@ const EXPECTED_AUTH_ERROR_CODES = new Set([
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/auth', '/forgot-password', '/reset-password', '/join']
 
 function isPublicPath(pathname: string): boolean {
-  return PUBLIC_PATHS.some(
-    (path) => pathname === path || pathname.startsWith(`${path}/`)
+  return (
+    pathname === '/how-to-play' ||
+    PUBLIC_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`))
   )
 }
 

@@ -1,18 +1,21 @@
-'use client'
-
 import { ArrowRightIcon } from './Icons'
 import { cn } from './utils'
-import type { ParticipantWithProfile } from '@/types'
+import type { ParticipantWithProfile, Team, Profile } from '@/types'
+
+export type PickQueueParticipant = Pick<ParticipantWithProfile, 'user_id' | 'draft_order'> & {
+  teams: Pick<Team, 'name'> | null
+  profiles: Pick<Profile, 'display_name'> | null
+}
 
 interface Props {
-  participants: ParticipantWithProfile[]
+  participants: readonly PickQueueParticipant[]
   currentPickIndex: number
   currentUserId: string
   rounds: number
 }
 
 interface QueueItem {
-  participant: ParticipantWithProfile
+  participant: PickQueueParticipant
   round: number
   pickNumber: number
   isCurrentPick: boolean
@@ -20,7 +23,7 @@ interface QueueItem {
 }
 
 function calculatePickOrder(
-  participants: ParticipantWithProfile[],
+  participants: readonly PickQueueParticipant[],
   currentPickIndex: number,
   rounds: number,
   currentUserId: string
@@ -86,6 +89,7 @@ export default function PickOrderQueue({
 }: Props) {
   const totalPicks = participants.length * rounds
   const queue = calculatePickOrder(participants, currentPickIndex, rounds, currentUserId)
+  const nextUserPickIndex = queue.findIndex((item) => item.isCurrentUser)
 
   if (queue.length === 0) {
     return null
@@ -100,6 +104,7 @@ export default function PickOrderQueue({
         {queue.map((item, index) => (
           <div
             key={`${item.round}-${item.pickNumber}`}
+            data-preview-focus={index === nextUserPickIndex ? 'queue' : undefined}
             className={cn(
               'flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border transition-all',
               getQueueItemStyles(item.isCurrentPick, item.isCurrentUser)
