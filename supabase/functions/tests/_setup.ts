@@ -132,7 +132,15 @@ async function authenticateUser(user: { email: string; password: string }): Prom
   const { error: signInError } = await client.auth.signInWithPassword(user)
 
   if (signInError) {
-    // User doesn't exist or isn't confirmed - use admin API
+    // A gateway or auth-service failure does not mean the account needs repair.
+    if (!['invalid_credentials', 'email_not_confirmed'].includes(signInError.code ?? '')) {
+      throw new Error(
+        `Failed to sign in test user (status ${signInError.status ?? 'unknown'}, ` +
+          `code ${signInError.code ?? 'unknown'}): ${signInError.message}`
+      )
+    }
+
+    // The user may be missing, unconfirmed, or have an outdated fixture password.
     if (!serviceRoleKey) {
       throw new Error(
         'SUPABASE_SERVICE_ROLE_KEY is required to create test users with email confirmation enabled.\n' +
@@ -142,16 +150,22 @@ async function authenticateUser(user: { email: string; password: string }): Prom
 
     const adminClient = createClient(url, serviceRoleKey, TEST_CLIENT_OPTIONS)
 
-    // Check if user exists but needs confirmation
-    const { data: existingUsers } = await adminClient.auth.admin.listUsers()
-    const existingUser = existingUsers?.users?.find((u) => u.email === user.email)
+    // Search every page before deciding that a fixture account is missing.
+    let existingUser: { id: string } | undefined
+    for (let page = 1; !existingUser; page++) {
+      const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage: 100 })
+      if (error) throw new Error(`Failed to list test users: ${error.message}`)
+      existingUser = data.users.find((u) => u.email === user.email)
+      if (data.users.length < 100) break
+    }
 
     if (existingUser) {
       // User exists - update to confirm email and reset password
-      await adminClient.auth.admin.updateUserById(existingUser.id, {
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(existingUser.id, {
         email_confirm: true,
         password: user.password,
       })
+      if (updateError) throw new Error(`Failed to update test user: ${updateError.message}`)
     } else {
       // Create new user with pre-confirmed email
       const { error: createError } = await adminClient.auth.admin.createUser({
@@ -168,7 +182,10 @@ async function authenticateUser(user: { email: string; password: string }): Prom
     // Sign in with the user
     const { error: retrySignInError } = await client.auth.signInWithPassword(user)
     if (retrySignInError) {
-      throw new Error(`Failed to sign in after setup: ${retrySignInError.message}`)
+      throw new Error(
+        `Failed to sign in after setup (status ${retrySignInError.status ?? 'unknown'}, ` +
+          `code ${retrySignInError.code ?? 'unknown'}): ${retrySignInError.message}`
+      )
     }
   }
 
