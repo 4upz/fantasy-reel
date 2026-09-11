@@ -6,6 +6,7 @@ import { getTmdbPosterUrl } from '../components/utils'
 
 type RosterMovie = Pick<HoldingMovie, 'title' | 'poster_url' | 'fantasy_points' | 'combined_score'>
 
+/** @design-system League */
 export function RosterHeader({
   teamName,
   slotsFilled,
@@ -47,6 +48,7 @@ export function RosterHeader({
   )
 }
 
+/** @design-system League */
 export function RosterPoster({
   movie,
   src,
@@ -70,6 +72,7 @@ export function RosterPoster({
 }
 
 /** The same movie presentation serves playable rosters and read-only examples. */
+/** @design-system League */
 export function RosterMovieCard({
   movie,
   label,

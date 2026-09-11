@@ -22,6 +22,7 @@ interface Props {
  * list in place. The last film gets its own pill because it is usually the
  * better predictor of the next one than the average is.
  */
+/** @design-system Movies */
 export default function FranchiseSummary({ history, defaultOpen = false, className = '' }: Props) {
   const [open, setOpen] = useState(defaultOpen)
   const listId = useId()

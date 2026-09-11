@@ -15,6 +15,7 @@ interface CounterpickPriorityListProps {
   onReorder: (bidIds: string[]) => Promise<{ success: boolean; error?: string }>
 }
 
+/** @design-system League */
 export default function CounterpickPriorityList({
   bids,
   slots,

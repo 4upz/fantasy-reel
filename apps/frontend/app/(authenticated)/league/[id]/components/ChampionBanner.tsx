@@ -23,6 +23,7 @@ interface Props {
  * `.champion-plate` is the only gradient allowed on any page, which is why this
  * component owns it and nothing else does.
  */
+/** @design-system League */
 export default function ChampionBanner({
   seasonYear,
   champions,

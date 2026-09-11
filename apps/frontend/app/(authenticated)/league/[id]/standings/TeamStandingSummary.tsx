@@ -31,6 +31,7 @@ const PODIUM_CHIP: Record<number, string> = {
 }
 
 /** The display-only part of a standings row, shared with public examples. */
+/** @design-system League */
 export default function TeamStandingSummary({
   rank,
   isTied,

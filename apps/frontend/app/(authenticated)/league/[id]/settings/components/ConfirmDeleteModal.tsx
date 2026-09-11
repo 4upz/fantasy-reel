@@ -11,6 +11,7 @@ interface Props {
   loading: boolean
 }
 
+/** @design-system Modals */
 export default function ConfirmDeleteModal({
   leagueName,
   onConfirm,

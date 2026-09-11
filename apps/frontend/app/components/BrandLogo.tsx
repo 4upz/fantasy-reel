@@ -7,6 +7,7 @@ interface BrandLogoProps {
 }
 
 /** Approved outlined artwork; text stays consistent without a font request. */
+/** @design-system Identity & brand */
 export default function BrandLogo({ className, compact = false, markOnly = false }: BrandLogoProps) {
   const asset = markOnly ? 'mark-gold' : compact ? 'logo-compact-dark' : 'logo-dark'
 

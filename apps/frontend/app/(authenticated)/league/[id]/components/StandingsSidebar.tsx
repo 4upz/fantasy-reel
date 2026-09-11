@@ -13,6 +13,7 @@ const RANK_COLORS: Record<number, string> = {
   3: 'text-[#cd7f32]',
 }
 
+/** @design-system League */
 export default function StandingsSidebar({ leagueId, standings }: Props) {
   if (standings.length === 0) {
     return (

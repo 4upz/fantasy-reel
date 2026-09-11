@@ -11,6 +11,7 @@ interface Props {
 /**
  * Pure controlled movie search input.
  * All debouncing and search logic is handled by the parent component.
+ * @design-system Movies
  */
 export default function MovieSearchBar({
   value,

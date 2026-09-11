@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import Image from 'next/image'
 import { DollarSign, Film } from 'lucide-react'
 
+/** @design-system League */
 export function BidAmountDisplay({ amount }: { amount: number }) {
   return (
     <div className="type-number flex items-center gap-1.5 bid-amount-display">
@@ -12,6 +13,7 @@ export function BidAmountDisplay({ amount }: { amount: number }) {
 }
 
 /** Movie identity and bid details without cancellation or counterbid behavior. */
+/** @design-system League */
 export default function BidSummary({
   title,
   posterUrl,

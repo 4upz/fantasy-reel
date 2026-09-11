@@ -7,6 +7,7 @@ interface MarketingHeaderProps {
   currentPage?: 'how-to-play'
 }
 
+/** @design-system Landing */
 export default function MarketingHeader({ currentPage }: MarketingHeaderProps): React.ReactElement {
   return (
     <header className="border-b border-border/50 bg-background">

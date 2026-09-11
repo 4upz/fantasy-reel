@@ -12,6 +12,7 @@ interface Props {
   reigningChampions?: { seasonYear: number; userIds: string[] } | null
 }
 
+/** @design-system League */
 export default function ParticipantsList({
   participants,
   ownerId,

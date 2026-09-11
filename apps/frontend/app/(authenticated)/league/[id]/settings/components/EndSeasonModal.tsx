@@ -41,6 +41,7 @@ interface Props {
  * is the one value that distinguishes this season from its siblings, so it
  * makes ending the wrong season impossible rather than merely tedious.
  */
+/** @design-system Modals */
 export default function EndSeasonModal({
   leagueId,
   seasonYear,

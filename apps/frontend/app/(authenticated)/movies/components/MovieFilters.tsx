@@ -6,6 +6,7 @@ interface Props {
   totalResults: number
 }
 
+/** @design-system Movies */
 export default function MovieFilters({ year, onYearChange, totalResults }: Props) {
   const currentYear = new Date().getFullYear()
   const years = [

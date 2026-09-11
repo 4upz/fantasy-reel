@@ -19,6 +19,7 @@ export function budgetTone(remaining: number): string {
  * detail views pair what is left with what is gone. A depleted team reads muted -
  * "can't outbid me" is the fact you came for, and it should be visible at a glance.
  */
+/** @design-system League */
 export default function TeamBudgetSummary({
   budget,
   startingBudget,

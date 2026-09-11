@@ -18,6 +18,7 @@ interface Props {
   layout?: 'responsive' | 'wide'
 }
 
+/** @design-system League */
 export default function DraftBoardHeader({
   picksMade,
   totalPicks,

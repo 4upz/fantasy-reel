@@ -31,6 +31,7 @@ interface Props {
   status: RealtimeStatus
 }
 
+/** @design-system Feedback */
 export default function ConnectionStatusIndicator({ status }: Props): React.ReactElement {
   const config = STATUS_CONFIG[status]
 

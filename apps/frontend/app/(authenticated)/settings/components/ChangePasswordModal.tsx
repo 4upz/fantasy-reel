@@ -9,6 +9,7 @@ interface Props {
   onSubmit: (formData: FormData) => Promise<{ success: boolean; error?: string }>
 }
 
+/** @design-system Modals */
 export default function ChangePasswordModal({
   onClose,
   onSubmit,

@@ -22,6 +22,7 @@ interface CounterpickBidCardProps {
   counterWindowClosesAt?: string | null
 }
 
+/** @design-system League */
 export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt }: CounterpickBidCardProps) {
   const isOutbid = bid.status === 'outbid'
   const isActive = bid.status === 'active'

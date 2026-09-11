@@ -7,111 +7,169 @@
   "tsconfig": ".design-sync/tsconfig.build.json",
   "buildCmd": "node .design-sync/build-styles.mjs",
   "cssEntry": ".design-sync/.cache/styles.css",
-  "extraFonts": [".design-sync/fonts/brand-fonts.css"],
+  "extraFonts": [
+    ".design-sync/fonts/brand-fonts.css"
+  ],
   "docsDir": ".design-sync/docs",
   "readmeHeader": ".design-sync/conventions.md",
-  "guidelinesGlob": ["docs/brand/typography.md"],
+  "guidelinesGlob": [
+    "docs/brand/typography.md"
+  ],
   "overrides": {
-    "MovieDetailModal": { "cardMode": "single", "primaryStory": "Loaded", "viewport": "1100x820" },
-    "AcceptConfirmModal": { "cardMode": "single", "primaryStory": "Default" },
-    "PlaceBidModal": { "cardMode": "single", "primaryStory": "CounterBidding" },
-    "PlaceCounterpickBidModal": { "cardMode": "single", "primaryStory": "CounterTarget" },
-    "ChangePasswordModal": { "cardMode": "single", "primaryStory": "Default" },
-    "ConfirmDeleteModal": { "cardMode": "single", "primaryStory": "Default" },
-    "ConfirmKickModal": { "cardMode": "single", "primaryStory": "Default" },
-    "EndSeasonModal": { "cardMode": "single", "primaryStory": "Default" },
-    "ConfirmStartSeasonModal": { "cardMode": "single", "primaryStory": "Default" },
-    "MarketingHeader": { "cardMode": "single", "primaryStory": "Default", "viewport": "1280x220" },
-    "DraftBoardHeader": { "cardMode": "column" },
-    "RosterHeader": { "cardMode": "column" },
-    "TeamStandingSummary": { "cardMode": "column" },
-    "OfferExpiryPicker": { "cardMode": "column" },
-    "FranchiseHistoryPanel": { "cardMode": "column" },
-    "FranchiseSummary": { "cardMode": "column" },
-    "NavLogo": { "cardMode": "column" },
-    "BrandLogo": { "cardMode": "column" },
-    "TeamHeader": { "cardMode": "column" },
-    "MovieTimelineCard": { "cardMode": "column" }
+    "MovieDetailModal": {
+      "cardMode": "single",
+      "primaryStory": "Loaded",
+      "viewport": "1100x820"
+    },
+    "AcceptConfirmModal": {
+      "cardMode": "single",
+      "primaryStory": "Default"
+    },
+    "PlaceBidModal": {
+      "cardMode": "single",
+      "primaryStory": "CounterBidding"
+    },
+    "PlaceCounterpickBidModal": {
+      "cardMode": "single",
+      "primaryStory": "CounterTarget"
+    },
+    "ChangePasswordModal": {
+      "cardMode": "single",
+      "primaryStory": "Default"
+    },
+    "ConfirmDeleteModal": {
+      "cardMode": "single",
+      "primaryStory": "Default"
+    },
+    "ConfirmKickModal": {
+      "cardMode": "single",
+      "primaryStory": "Default"
+    },
+    "EndSeasonModal": {
+      "cardMode": "single",
+      "primaryStory": "Default"
+    },
+    "ConfirmStartSeasonModal": {
+      "cardMode": "single",
+      "primaryStory": "Default"
+    },
+    "MarketingHeader": {
+      "cardMode": "single",
+      "primaryStory": "Default",
+      "viewport": "1280x220"
+    },
+    "DraftBoardHeader": {
+      "cardMode": "column"
+    },
+    "RosterHeader": {
+      "cardMode": "column"
+    },
+    "TeamStandingSummary": {
+      "cardMode": "column"
+    },
+    "OfferExpiryPicker": {
+      "cardMode": "column"
+    },
+    "FranchiseHistoryPanel": {
+      "cardMode": "column"
+    },
+    "FranchiseSummary": {
+      "cardMode": "column"
+    },
+    "NavLogo": {
+      "cardMode": "column"
+    },
+    "BrandLogo": {
+      "cardMode": "column"
+    },
+    "TeamHeader": {
+      "cardMode": "column"
+    },
+    "MovieTimelineCard": {
+      "cardMode": "column"
+    }
   },
-  "provider": { "component": "WishlistProvider" },
+  "provider": {
+    "component": "WishlistProvider"
+  },
   "componentSrcMap": {
     "WishlistProvider": null,
 
     "Avatar": "apps/frontend/app/components/Avatar.tsx",
-    "LoadingSpinner": "apps/frontend/app/components/LoadingSpinner.tsx",
-    "TomatometerScore": "apps/frontend/app/components/TomatometerScore.tsx",
-    "DraftProgressRing": "apps/frontend/app/(authenticated)/league/[id]/components/DraftProgressRing.tsx",
     "CounterpickMark": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickMark.tsx",
     "DateTimeField": "apps/frontend/app/components/DateTimeField.tsx",
+    "DraftProgressRing": "apps/frontend/app/(authenticated)/league/[id]/components/DraftProgressRing.tsx",
+    "LoadingSpinner": "apps/frontend/app/components/LoadingSpinner.tsx",
+    "TomatometerScore": "apps/frontend/app/components/TomatometerScore.tsx",
 
+    "ConnectionStatusIndicator": "apps/frontend/app/(authenticated)/league/[id]/components/ConnectionStatusIndicator.tsx",
+    "ErrorAlert": "apps/frontend/app/components/FormError.tsx",
     "FormError": "apps/frontend/app/components/FormError.tsx",
     "FormSuccess": "apps/frontend/app/components/FormError.tsx",
-    "ErrorAlert": "apps/frontend/app/components/FormError.tsx",
-    "ConnectionStatusIndicator": "apps/frontend/app/(authenticated)/league/[id]/components/ConnectionStatusIndicator.tsx",
     "MovieCardSkeleton": "apps/frontend/app/(authenticated)/movies/components/MovieCardSkeleton.tsx",
     "MovieGridSkeleton": "apps/frontend/app/(authenticated)/movies/components/MovieGridSkeleton.tsx",
 
-    "MovieCard": "apps/frontend/app/(authenticated)/movies/components/MovieCard.tsx",
-    "MovieGrid": "apps/frontend/app/(authenticated)/movies/components/MovieGrid.tsx",
-    "MovieDetailModal": "apps/frontend/app/(authenticated)/movies/components/MovieDetailModal.tsx",
-    "MovieSearchBar": "apps/frontend/app/(authenticated)/movies/components/MovieSearchBar.tsx",
-    "MovieFilters": "apps/frontend/app/(authenticated)/movies/components/MovieFilters.tsx",
-    "DraftMovieCard": "apps/frontend/app/(authenticated)/league/[id]/components/DraftMovieCard.tsx",
     "DraftFilters": "apps/frontend/app/(authenticated)/league/[id]/components/DraftFilters.tsx",
-    "MovieTimelineCard": "apps/frontend/app/(authenticated)/league/[id]/components/MovieTimelineCard.tsx",
-    "FranchiseSummary": "apps/frontend/app/components/FranchiseSummary.tsx",
+    "DraftMovieCard": "apps/frontend/app/(authenticated)/league/[id]/components/DraftMovieCard.tsx",
     "FranchiseHistoryPanel": "apps/frontend/app/components/FranchiseHistoryPanel.tsx",
+    "FranchiseSummary": "apps/frontend/app/components/FranchiseSummary.tsx",
+    "MovieCard": "apps/frontend/app/(authenticated)/movies/components/MovieCard.tsx",
+    "MovieDetailModal": "apps/frontend/app/(authenticated)/movies/components/MovieDetailModal.tsx",
+    "MovieFilters": "apps/frontend/app/(authenticated)/movies/components/MovieFilters.tsx",
+    "MovieGrid": "apps/frontend/app/(authenticated)/movies/components/MovieGrid.tsx",
+    "MovieSearchBar": "apps/frontend/app/(authenticated)/movies/components/MovieSearchBar.tsx",
+    "MovieTimelineCard": "apps/frontend/app/(authenticated)/league/[id]/components/MovieTimelineCard.tsx",
 
-    "SeriesListItem": "apps/frontend/app/components/SeriesListItem.tsx",
-    "TrophyCase": "apps/frontend/app/components/TrophyCase.tsx",
-    "BidCard": "apps/frontend/app/(authenticated)/league/[id]/components/BidCard.tsx",
-    "BidSummary": "apps/frontend/app/(authenticated)/league/[id]/components/BidSummary.tsx",
     "BidAmountDisplay": "apps/frontend/app/(authenticated)/league/[id]/components/BidSummary.tsx",
-    "BidWeekTimeline": "apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline.tsx",
-    "CounterpickBidCard": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard.tsx",
-    "PriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/PriorityList.tsx",
+    "BidCard": "apps/frontend/app/(authenticated)/league/[id]/components/BidCard.tsx",
     "BidPriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/BidPriorityList.tsx",
-    "CounterpickPriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickPriorityList.tsx",
-    "TradeOfferCard": "apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard.tsx",
-    "TradeItemsSection": "apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection.tsx",
-    "OfferExpiryPicker": "apps/frontend/app/(authenticated)/league/[id]/components/OfferExpiryPicker.tsx",
-    "Chip": "apps/frontend/app/(authenticated)/league/[id]/components/OfferExpiryPicker.tsx",
-    "DraftBoardHeader": "apps/frontend/app/(authenticated)/league/[id]/components/DraftBoardHeader.tsx",
-    "ParticipantsList": "apps/frontend/app/(authenticated)/league/[id]/components/ParticipantsList.tsx",
-    "PickOrderQueue": "apps/frontend/app/(authenticated)/league/[id]/components/PickOrderQueue.tsx",
-    "StandingsSidebar": "apps/frontend/app/(authenticated)/league/[id]/components/StandingsSidebar.tsx",
-    "TeamHeader": "apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader.tsx",
-    "MovieTimeline": "apps/frontend/app/(authenticated)/league/[id]/components/MovieTimeline.tsx",
+    "BidSummary": "apps/frontend/app/(authenticated)/league/[id]/components/BidSummary.tsx",
+    "BidWeekTimeline": "apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline.tsx",
     "ChampionBanner": "apps/frontend/app/(authenticated)/league/[id]/components/ChampionBanner.tsx",
     "ChampionCrown": "apps/frontend/app/(authenticated)/league/[id]/components/ChampionCrown.tsx",
+    "Chip": "apps/frontend/app/(authenticated)/league/[id]/components/OfferExpiryPicker.tsx",
+    "CounterpickBidCard": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard.tsx",
+    "CounterpickPriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/CounterpickPriorityList.tsx",
+    "DraftBoardHeader": "apps/frontend/app/(authenticated)/league/[id]/components/DraftBoardHeader.tsx",
+    "MovieScoreCard": "apps/frontend/app/(authenticated)/league/[id]/standings/MovieScoreCard.tsx",
+    "MovieTimeline": "apps/frontend/app/(authenticated)/league/[id]/components/MovieTimeline.tsx",
+    "OfferExpiryPicker": "apps/frontend/app/(authenticated)/league/[id]/components/OfferExpiryPicker.tsx",
+    "ParticipantsList": "apps/frontend/app/(authenticated)/league/[id]/components/ParticipantsList.tsx",
+    "PickOrderQueue": "apps/frontend/app/(authenticated)/league/[id]/components/PickOrderQueue.tsx",
+    "PriorityList": "apps/frontend/app/(authenticated)/league/[id]/components/PriorityList.tsx",
+    "RosterHeader": "apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation.tsx",
+    "RosterMovieCard": "apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation.tsx",
+    "RosterPoster": "apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation.tsx",
     "SeasonHistoryList": "apps/frontend/app/(authenticated)/league/[id]/components/SeasonHistoryList.tsx",
     "SeasonWelcomeCard": "apps/frontend/app/(authenticated)/league/[id]/components/SeasonWelcomeCard.tsx",
-    "RosterHeader": "apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation.tsx",
-    "RosterPoster": "apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation.tsx",
-    "RosterMovieCard": "apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation.tsx",
-    "TeamStandingSummary": "apps/frontend/app/(authenticated)/league/[id]/standings/TeamStandingSummary.tsx",
-    "MovieScoreCard": "apps/frontend/app/(authenticated)/league/[id]/standings/MovieScoreCard.tsx",
+    "SeriesListItem": "apps/frontend/app/components/SeriesListItem.tsx",
+    "StandingsSidebar": "apps/frontend/app/(authenticated)/league/[id]/components/StandingsSidebar.tsx",
     "TeamBudgetSummary": "apps/frontend/app/(authenticated)/league/[id]/standings/TeamBudget.tsx",
+    "TeamHeader": "apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader.tsx",
+    "TeamStandingSummary": "apps/frontend/app/(authenticated)/league/[id]/standings/TeamStandingSummary.tsx",
+    "TradeItemsSection": "apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection.tsx",
+    "TradeOfferCard": "apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard.tsx",
+    "TrophyCase": "apps/frontend/app/components/TrophyCase.tsx",
 
     "AcceptConfirmModal": "apps/frontend/app/(authenticated)/league/[id]/components/AcceptConfirmModal.tsx",
-    "PlaceBidModal": "apps/frontend/app/(authenticated)/league/[id]/components/PlaceBidModal.tsx",
-    "PlaceCounterpickBidModal": "apps/frontend/app/(authenticated)/league/[id]/components/PlaceCounterpickBidModal.tsx",
+    "ChangePasswordModal": "apps/frontend/app/(authenticated)/settings/components/ChangePasswordModal.tsx",
     "ConfirmDeleteModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmDeleteModal.tsx",
     "ConfirmKickModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmKickModal.tsx",
-    "ChangePasswordModal": "apps/frontend/app/(authenticated)/settings/components/ChangePasswordModal.tsx",
-    "EndSeasonModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/EndSeasonModal.tsx",
     "ConfirmStartSeasonModal": "apps/frontend/app/(authenticated)/league/[id]/components/ConfirmStartSeasonModal.tsx",
+    "EndSeasonModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/EndSeasonModal.tsx",
+    "PlaceBidModal": "apps/frontend/app/(authenticated)/league/[id]/components/PlaceBidModal.tsx",
+    "PlaceCounterpickBidModal": "apps/frontend/app/(authenticated)/league/[id]/components/PlaceCounterpickBidModal.tsx",
 
-    "NavLogo": "apps/frontend/app/components/navigation/NavLogo.tsx",
     "BrandLogo": "apps/frontend/app/components/BrandLogo.tsx",
-    "UserSearchResultItem": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
-    "SelectedUserChip": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
     "DiscordIcon": "apps/frontend/app/components/icons/DiscordIcon.tsx",
     "GoogleIcon": "apps/frontend/app/components/icons/GoogleIcon.tsx",
+    "NavLogo": "apps/frontend/app/components/navigation/NavLogo.tsx",
+    "SelectedUserChip": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
+    "UserSearchResultItem": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
 
     "MarketingHeader": "apps/frontend/app/components/landing/MarketingHeader.tsx",
 
-    "SectionHeader": "apps/frontend/app/(authenticated)/league/[id]/settings/components/shared.tsx",
-    "LockedMessage": "apps/frontend/app/(authenticated)/league/[id]/settings/components/shared.tsx"
+    "LockedMessage": "apps/frontend/app/(authenticated)/league/[id]/settings/components/shared.tsx",
+    "SectionHeader": "apps/frontend/app/(authenticated)/league/[id]/settings/components/shared.tsx"
   }
 }

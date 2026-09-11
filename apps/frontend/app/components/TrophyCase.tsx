@@ -25,6 +25,7 @@ interface Props {
  * this feature does not fund. The sidebar is already the "about you" column,
  * and it is the screen people land on.
  */
+/** @design-system League */
 export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactElement {
   const visible = titles.slice(0, limit)
   const hidden = titles.length - visible.length

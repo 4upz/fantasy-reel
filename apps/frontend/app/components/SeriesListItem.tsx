@@ -30,6 +30,7 @@ function championsOf(season: League): string[] {
  * card it replaced - so the common case looks unchanged and only a league with
  * history grows the extra row.
  */
+/** @design-system League */
 export default function SeriesListItem({ seasons }: Props): React.ReactElement | null {
   const [isExpanded, setIsExpanded] = useState(false)
 

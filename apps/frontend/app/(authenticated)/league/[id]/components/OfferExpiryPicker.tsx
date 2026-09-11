@@ -31,6 +31,7 @@ interface Props {
  * row of choices -- two copies of this className pair drift the moment a token
  * changes in one of them.
  */
+/** @design-system League */
 export function Chip({
   selected,
   disabled,
@@ -187,6 +188,7 @@ function ReleaseChip({
  * is always spelled out underneath -- `datetime-local` shows no timezone, and
  * "3 days" is otherwise date math the user has to do themselves.
  */
+/** @design-system League */
 export default function OfferExpiryPicker({
   releaseAnchor,
   value,

@@ -29,6 +29,13 @@ function clearLegacyLocalStorageFavorites(): void {
 /**
  * Provider that manages wishlist state. Mount once in the authenticated layout
  * so all consumers share the same data.
+ *
+ * Not a design-system component, but it must still be a bundle export so
+ * design-sync can wrap every preview in it — anything rendering WishlistToggle
+ * (DraftMovieCard, MovieQuickPreview) throws without it. That is what
+ * `-provider` means: exported, pinned to null in componentSrcMap, and written
+ * to `cfg.provider` rather than given a preview card of its own.
+ * @design-system-provider
  */
 export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [wishlistedIds, setWishlistedIds] = useState<Set<number>>(new Set())

@@ -29,6 +29,7 @@ interface Props {
  * only thing that says how the movie was acquired, so the row itself carries no
  * section heading - the three of them read as one list.
  */
+/** @design-system League */
 export default function MovieScoreCard({
   movie,
   badge,

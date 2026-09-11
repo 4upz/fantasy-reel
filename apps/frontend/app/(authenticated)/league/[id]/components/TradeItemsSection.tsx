@@ -2,6 +2,7 @@ import Image from 'next/image'
 import type { TradeItems, TradeMovieItem } from '@/types'
 import CounterpickMark from './CounterpickMark'
 
+/** @design-system League */
 export default function TradeItemsSection({
   title,
   items,

@@ -26,6 +26,7 @@ interface Props {
  * over someone who left, and the only place a member's exit is mentioned
  * before it becomes their problem.
  */
+/** @design-system Modals */
 export default function ConfirmStartSeasonModal({
   seasonYear,
   previousSeasonYear,

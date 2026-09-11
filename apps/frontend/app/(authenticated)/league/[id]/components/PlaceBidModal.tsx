@@ -128,6 +128,7 @@ function getValidationErrorMessage(bidAmount: number, remainingBudget: number, h
   return 'Bid must be $0 or more'
 }
 
+/** @design-system Modals */
 export default function PlaceBidModal({
   isOpen,
   seasonYear,

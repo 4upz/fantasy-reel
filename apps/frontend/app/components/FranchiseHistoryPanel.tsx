@@ -47,6 +47,7 @@ interface ChartPoint {
  * drawn. The line is the signature -- it shows a series drifting below
  * break-even in a way a lone average never can.
  */
+/** @design-system Movies */
 export default function FranchiseHistoryPanel({
   history,
   movieTitle,

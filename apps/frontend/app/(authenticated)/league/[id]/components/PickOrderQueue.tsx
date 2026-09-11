@@ -81,6 +81,7 @@ function getPositionBadgeStyles(isCurrentPick: boolean, isCurrentUser: boolean):
   return 'bg-border text-foreground-muted'
 }
 
+/** @design-system League */
 export default function PickOrderQueue({
   participants,
   currentPickIndex,

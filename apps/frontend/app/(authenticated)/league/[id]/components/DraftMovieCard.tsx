@@ -19,6 +19,7 @@ interface Props {
 /** Points are RT - 60, so 60 is where a series average turns from gold to crimson. */
 const BREAK_EVEN = 60
 
+/** @design-system Movies */
 export default function DraftMovieCard({
   movie,
   isDrafted,

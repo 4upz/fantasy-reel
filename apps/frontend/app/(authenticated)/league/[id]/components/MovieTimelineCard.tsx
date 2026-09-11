@@ -36,6 +36,7 @@ function formatCountdown(releaseDate: string | null): string {
   return 'TBD'
 }
 
+/** @design-system Movies */
 export default function MovieTimelineCard({ movie, onClick }: Props) {
   const indicator = getStatusIndicator(movie.status)
   const isScored = movie.status === 'scored'

@@ -156,6 +156,7 @@ function TomatoMark({ fill, className }: { fill: number | null; className?: stri
   )
 }
 
+/** @design-system Foundation */
 export default function TomatometerScore({
   score,
   size = 'md',

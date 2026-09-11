@@ -13,6 +13,7 @@ const SIZES = {
   lg: { ring: 80, stroke: 6, text: 'type-body' },
 }
 
+/** @design-system Foundation */
 export default function DraftProgressRing({
   current,
   total,

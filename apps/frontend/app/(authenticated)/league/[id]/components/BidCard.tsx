@@ -164,6 +164,7 @@ function CancelBidModal({
   )
 }
 
+/** @design-system League */
 export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt, dropTitle }: BidCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false)
 

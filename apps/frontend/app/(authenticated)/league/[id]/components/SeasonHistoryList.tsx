@@ -37,6 +37,7 @@ function ordinal(rank: number): string {
  * repeating down the page. That is the only ornament: the list grows by one row
  * a year forever, so it has to stay readable at fifteen rows, not just three.
  */
+/** @design-system League */
 export default function SeasonHistoryList({ rows }: Props): React.ReactElement {
   return (
     <ol className="space-y-2.5" data-testid="season-history-list">

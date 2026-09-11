@@ -31,6 +31,7 @@ interface Props {
  * are trivially edited and are not honored uniformly. Callers must validate the
  * value themselves, and the server must validate it again.
  */
+/** @design-system Foundation */
 export default function DateTimeField({
   label,
   value,

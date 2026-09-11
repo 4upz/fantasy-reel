@@ -26,6 +26,7 @@ const STORAGE_PREFIX = 'fr:season-welcome-dismissed:'
  * Dismissal is per league id in `localStorage` - a preference this local is not
  * worth a table, and it correctly reappears for the next season's card.
  */
+/** @design-system League */
 export default function SeasonWelcomeCard({
   leagueId,
   seasonYear,

@@ -12,6 +12,7 @@ interface Props {
   onConfirm: () => Promise<void>
 }
 
+/** @design-system Modals */
 export default function AcceptConfirmModal({
   trade,
   currentTeamId,

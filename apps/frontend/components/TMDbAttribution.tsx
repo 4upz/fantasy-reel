@@ -6,6 +6,10 @@
  *
  * @see https://www.themoviedb.org/about/logos-attribution
  * @see https://developer.themoviedb.org/docs/faq#what-are-the-attribution-requirements
+ *
+ * Deliberately NOT tagged `@design-system`: its entire visual is a logo served
+ * from the app's public/ dir, which cannot ship in a component bundle, so its
+ * preview card would be a broken image in every design built from it.
  */
 
 import Image from 'next/image'

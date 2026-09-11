@@ -15,6 +15,7 @@ interface Props {
  * flatten all three. It is a footnote on a name, not an award in its own right
  * - the champion banner is where a title gets celebrated.
  */
+/** @design-system League */
 export default function ChampionCrown({ seasonYear, className = '' }: Props): React.ReactElement {
   const label = `${seasonYear} champion`
 
