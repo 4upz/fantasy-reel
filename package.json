@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "brand:assets": "node docs/brand/source/build-assets.mjs",
     "dev": "npm run dev --workspace=apps/frontend",
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "build": "npm run build --workspace=apps/frontend",
@@ -16,6 +17,7 @@
     "test": "npm run test --workspace=apps/frontend",
     "design:barrel": "node .design-sync/generate-barrel.mjs",
     "design:barrel:check": "node .design-sync/generate-barrel.mjs --check",
+    "design:barrel:test": "node --test .design-sync/generate-barrel.test.mjs",
     "test:functions": "./scripts/check-supabase.sh && cd supabase/functions && deno task test",
     "test:functions:watch": "./scripts/check-supabase.sh && cd supabase/functions && deno task test:watch",
     "test:functions:external": "./scripts/check-supabase.sh && cd supabase/functions && deno task test:external",

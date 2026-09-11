@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { updatePassword } from './actions'
 import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
+import NavLogo from '../../components/navigation/NavLogo'
 import { createClient } from '@/utils/supabase/client'
 import { toast } from 'sonner'
 
@@ -75,11 +76,11 @@ export default function ResetPasswordPage() {
   if (!isValidSession) {
     return (
       <div className="w-full max-w-md space-y-8 px-4">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
+        <div className="flex justify-center">
+          <NavLogo href="/" />
         </div>
         <div className="card p-8 text-center">
-          <h2 className="text-2xl font-bold font-display text-foreground mb-4">Invalid or Expired Link</h2>
+          <h1 className="type-panel text-foreground mb-4">Invalid or expired link</h1>
           <p className="text-foreground-secondary mb-6">
             This password reset link is invalid or has expired. Please request a new one.
           </p>
@@ -108,9 +109,11 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="w-full max-w-md space-y-8 px-4">
+      <div className="flex justify-center">
+        <NavLogo href="/" />
+      </div>
       <div className="text-center">
-        <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
-        <p className="mt-3 text-foreground-secondary">Set your new password</p>
+        <h1 className="type-page text-foreground">Set your new password</h1>
       </div>
 
       <div className="card p-8">
@@ -120,7 +123,7 @@ export default function ResetPasswordPage() {
           <div className="space-y-4">
             <div>
               <label htmlFor="password" className="sr-only">
-                New Password
+                New password
               </label>
               <input
                 id="password"
@@ -136,7 +139,7 @@ export default function ResetPasswordPage() {
             </div>
             <div>
               <label htmlFor="confirmPassword" className="sr-only">
-                Confirm New Password
+                Confirm new password
               </label>
               <input
                 id="confirmPassword"

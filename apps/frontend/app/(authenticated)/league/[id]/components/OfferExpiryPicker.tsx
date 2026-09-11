@@ -31,6 +31,7 @@ interface Props {
  * row of choices -- two copies of this className pair drift the moment a token
  * changes in one of them.
  */
+/** @design-system League */
 export function Chip({
   selected,
   disabled,
@@ -51,7 +52,7 @@ export function Chip({
       disabled={disabled}
       title={title}
       aria-pressed={selected}
-      className={`btn px-3 py-1 text-sm ${
+      className={`type-control btn px-3 py-1 ${
         selected
           ? 'btn-secondary'
           : 'bg-elevated border border-border text-foreground-secondary hover:border-border-hover hover:text-foreground'
@@ -123,7 +124,7 @@ function ReleaseChip({
         disabled={!anchor.available}
         title={anchor.reason}
         aria-pressed={selected}
-        className={`btn px-3 py-1 text-sm ${segment} ${
+        className={`type-control btn px-3 py-1 ${segment} ${
           hasChoice ? 'rounded-r-none border-r-0' : ''
         }`}
       >
@@ -138,7 +139,7 @@ function ReleaseChip({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label="Choose which release to wait for"
-          className={`btn px-2 py-1 text-sm rounded-l-none border-l border-l-border ${segment}`}
+          className={`type-control btn px-2 py-1 rounded-l-none border-l border-l-border ${segment}`}
         >
           <span aria-hidden="true">{open ? '▴' : '▾'}</span>
         </button>
@@ -163,12 +164,12 @@ function ReleaseChip({
                   setOpen(false)
                   caretRef.current?.focus()
                 }}
-                className={`w-full flex items-baseline justify-between gap-4 px-3 py-2 rounded text-left text-sm transition-colors ${
+                className={`type-control w-full flex items-baseline justify-between gap-4 px-3 py-2 rounded text-left transition-colors ${
                   isChosen ? 'bg-surface-hover text-gold' : 'text-foreground hover:bg-surface-hover'
                 }`}
               >
                 <span>{candidate.title}</span>
-                <span className="text-xs text-foreground-muted shrink-0">
+                <span className="type-meta text-foreground-secondary shrink-0">
                   {formatReleaseDate(candidate.releaseDate)}
                 </span>
               </button>
@@ -187,6 +188,7 @@ function ReleaseChip({
  * is always spelled out underneath -- `datetime-local` shows no timezone, and
  * "3 days" is otherwise date math the user has to do themselves.
  */
+/** @design-system League */
 export default function OfferExpiryPicker({
   releaseAnchor,
   value,
@@ -216,7 +218,7 @@ export default function OfferExpiryPicker({
 
   return (
     <div>
-      <span className="text-sm text-foreground-secondary">Offer expires</span>
+      <span className="type-body-sm text-foreground-secondary">Offer expires</span>
 
       <div className="mt-1 flex flex-wrap gap-2">
         {presets.map((preset) => (
@@ -270,17 +272,17 @@ export default function OfferExpiryPicker({
 
       {/* The resolved instant, always. A chip alone never says when. */}
       {resolvedAt && (
-        <p className="mt-2 text-sm text-foreground-muted">
+        <p className="type-body-sm mt-2 text-foreground-secondary">
           Expires <time dateTime={resolvedAt}>{formatExpiryAbsolute(resolvedAt)}</time>
         </p>
       )}
 
       {value.kind === 'none' && (
-        <p className="mt-2 text-sm text-foreground-muted">This offer will stand until answered.</p>
+        <p className="type-body-sm mt-2 text-foreground-secondary">This offer will stand until answered.</p>
       )}
 
       {fellBack && (
-        <p role="status" className="mt-2 text-sm text-warning">
+        <p role="status" className="type-body-sm mt-2 text-warning">
           {value.kind === 'release'
             ? `That movie left the trade — now waiting on ${chosenAnchor?.title ?? 'the soonest release'}.`
             : `${releaseAnchor.reason ?? 'That release no longer applies'} — switched to ${bounds.defaultHours} hours.`}
@@ -288,7 +290,7 @@ export default function OfferExpiryPicker({
       )}
 
       {error && value.kind !== 'custom' && (
-        <p role="alert" className="mt-2 text-sm text-error">
+        <p role="alert" className="type-body-sm mt-2 text-error">
           {error}
         </p>
       )}

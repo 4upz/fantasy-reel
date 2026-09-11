@@ -65,7 +65,9 @@ claude.local.md
 .drafts/
 
 # SuperDesign
-.superdesign/
+.superdesign/*
+!.superdesign/design-system.md
+!.superdesign/init/
 
 # design-sync (staged converter, build output, machine state)
 .ds-sync/

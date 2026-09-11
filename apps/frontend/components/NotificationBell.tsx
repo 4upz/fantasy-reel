@@ -1,7 +1,16 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { Bell, Check, DollarSign, TrendingDown, Gift, AlertTriangle } from 'lucide-react'
+import {
+  AlertTriangle,
+  Bell,
+  Check,
+  Clapperboard,
+  DollarSign,
+  Gift,
+  TrendingDown,
+  Trophy,
+} from 'lucide-react'
 import Link from 'next/link'
 import { useNotifications } from '@/hooks/useNotifications'
 import type { Notification, NotificationType } from '@/types'
@@ -16,6 +25,10 @@ function getNotificationIcon(type: NotificationType) {
       return <TrendingDown className="w-4 h-4 text-error" />
     case 'pickup_available':
       return <Gift className="w-4 h-4 text-gold" />
+    case 'season_completed':
+      return <Trophy className="w-4 h-4 text-gold" />
+    case 'season_started':
+      return <Clapperboard className="w-4 h-4 text-gold" />
     default:
       return <Bell className="w-4 h-4 text-foreground-muted" />
   }
@@ -82,21 +95,21 @@ export default function NotificationBell() {
       >
         <Bell className="w-5 h-5 text-foreground-secondary" />
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-crimson rounded-full flex items-center justify-center text-xs font-semibold text-white">
+          <span className="type-numeric absolute -top-1 -right-1 w-5 h-5 bg-crimson rounded-full flex items-center justify-center text-xs font-bold text-white">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 max-h-[70vh] overflow-hidden bg-surface border border-border rounded-lg shadow-heavy animate-fade-in z-50">
+        <div className="absolute right-0 mt-2 flex max-h-[70vh] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden bg-surface border border-border rounded-lg shadow-heavy animate-fade-in z-50">
           {/* Header */}
-          <div className="flex items-center justify-between p-3 border-b border-border">
-            <h3 className="font-display font-semibold text-foreground">Notifications</h3>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 p-3 border-b border-border">
+            <h3 className="type-panel text-foreground">Notifications</h3>
             {unreadCount > 0 && (
               <button
                 onClick={markAllAsRead}
-                className="text-sm text-gold hover:underline flex items-center gap-1"
+                className="type-control text-gold hover:underline flex items-center gap-1"
               >
                 <Check className="w-4 h-4" />
                 Mark all read
@@ -105,13 +118,13 @@ export default function NotificationBell() {
           </div>
 
           {/* Notifications List */}
-          <div className="overflow-y-auto max-h-[calc(70vh-60px)]">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             {loading ? (
-              <div className="p-4 text-center text-foreground-muted">Loading...</div>
+              <div className="p-4 text-center text-foreground-secondary">Loading...</div>
             ) : notifications.length === 0 ? (
               <div className="p-8 text-center">
                 <Bell className="w-8 h-8 text-foreground-muted mx-auto mb-2" />
-                <p className="text-foreground-muted">No notifications yet</p>
+                <p className="text-foreground-secondary">No notifications yet</p>
               </div>
             ) : (
               notifications.map((notification) => (
@@ -146,6 +159,12 @@ function NotificationItem({ notification, onClick }: NotificationItemProps) {
     href = `/league/${leagueId}?tab=bidding`
   } else if (notification.type === 'bid_won' && leagueId) {
     href = `/league/${leagueId}/roster`
+  } else if (notification.type === 'season_completed' && leagueId) {
+    href = `/league/${leagueId}/standings`
+  } else if (notification.type === 'season_started' && leagueId) {
+    // The row carries the NEW season's league id, so this lands on the season
+    // that just opened rather than the one that ended.
+    href = `/league/${leagueId}/dashboard`
   }
 
   return (
@@ -164,10 +183,10 @@ function NotificationItem({ notification, onClick }: NotificationItemProps) {
           <p className={`text-sm ${isUnread ? 'font-semibold text-foreground' : 'text-foreground-secondary'}`}>
             {notification.title}
           </p>
-          <p className="text-xs text-foreground-muted mt-1 line-clamp-2">
+          <p className="type-meta text-foreground-secondary mt-1 line-clamp-2">
             {notification.body}
           </p>
-          <p className="text-xs text-foreground-muted mt-1">
+          <p className="type-meta text-foreground-secondary mt-1">
             {formatTimeAgo(notification.created_at)}
           </p>
         </div>

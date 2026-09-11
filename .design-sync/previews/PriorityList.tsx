@@ -3,7 +3,7 @@ import { PriorityList } from 'fantasy-reel'
 const item = (id: string, title: string, meta: string) => ({
   id,
   title,
-  meta: <span className="text-foreground-muted">{meta}</span>,
+  meta: <span className="text-foreground-secondary">{meta}</span>,
 })
 
 const items = [

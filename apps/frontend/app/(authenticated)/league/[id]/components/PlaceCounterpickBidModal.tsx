@@ -29,9 +29,9 @@ function getModalTitle(
   step: 1 | 2,
 ): string {
   if (counterTarget) {
-    return counterTarget.team_id === teamId ? 'Raise Your Bid' : 'Counter Counterpick Bid'
+    return counterTarget.team_id === teamId ? 'Raise your bid' : 'Counter Counterpick Bid'
   }
-  return step === 2 ? 'Set Your Bid' : 'Place Counterpick Bid'
+  return step === 2 ? 'Set your bid' : 'Place counterpick bid'
 }
 
 function getValidationErrorMessage(bidAmount: number, remainingBudget: number, highestBid: number | null): string {
@@ -189,28 +189,28 @@ export default function PlaceCounterpickBidModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="place-counterpick-bid-title"
-        className="glass modal-panel max-w-2xl w-full mx-4 max-h-[85vh] overflow-hidden flex flex-col rounded-2xl border border-border shadow-heavy"
+        className="glass modal-panel max-w-2xl w-[calc(100%-32px)] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-2xl border border-border shadow-heavy [overflow-wrap:anywhere]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-3 p-[min(1.25rem,20px)] border-b border-border">
+          <div className="flex min-w-0 flex-1 items-start gap-3">
             {step === 2 && !counterTarget && (
               <button
                 onClick={() => {
                   setStep(1)
                   setSelectedMovie(null)
                 }}
-                className="btn btn-ghost p-2 -ml-2"
+                className="btn btn-ghost shrink-0 p-[8px] -ml-[8px]"
                 aria-label="Back to movie selection"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
             )}
-            <div>
-              <h2 id="place-counterpick-bid-title" className="font-display text-xl font-semibold text-foreground">
+            <div className="min-w-0 flex-1">
+              <h2 id="place-counterpick-bid-title" className="type-panel break-words text-foreground">
                 {getModalTitle(counterTarget, teamId, step)}
               </h2>
-              <p className="text-sm text-foreground-muted mt-0.5">
+              <p className="type-body-sm text-foreground-secondary mt-0.5">
                 {step === 2
                   ? 'Choose your bid amount'
                   : 'Select an opponent movie to counterpick'}
@@ -219,27 +219,27 @@ export default function PlaceCounterpickBidModal({
           </div>
           <button
             onClick={onClose}
-            className="btn btn-ghost p-2 hover:bg-surface-hover rounded-full"
+            className="btn btn-ghost min-h-[44px] min-w-[44px] shrink-0 p-[8px] hover:bg-surface-hover rounded-full"
             aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="w-[20px] h-[20px]" />
           </button>
         </div>
 
-        {/* Budget Display - Always visible */}
-        <div className="px-5 py-3 bg-elevated/30 border-b border-border">
-          <div className="flex items-center justify-between">
-            <span className="text-foreground-secondary text-sm">Available Budget</span>
-            <span className="bid-amount-display text-xl">
+        {/* Budget display */}
+        <div className="px-[min(1.25rem,20px)] py-3 bg-elevated/30 border-b border-border">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="type-body-sm text-foreground-secondary">Available budget</span>
+            <span className="type-number bid-amount-display whitespace-nowrap">
               ${remainingBudget}
             </span>
           </div>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        {/* One scroll region keeps content and actions reachable with enlarged text. */}
+        <div className="min-w-0">
           {step === 1 ? (
-            <div className="p-5">
+            <div className="p-[min(1.25rem,20px)]">
               <CounterpickPicker
                 leagueId={leagueId}
                 teamId={teamId}
@@ -249,11 +249,11 @@ export default function PlaceCounterpickBidModal({
               />
             </div>
           ) : selectedMovie ? (
-            <div className="p-5">
+            <div className="p-[min(1.25rem,20px)]">
               {/* Selected Movie Card */}
-              <div className="card p-4 mb-6 bg-surface/50">
-                <div className="flex gap-4">
-                  <div className="relative w-24 h-36 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-medium">
+              <div className="card p-[min(1rem,16px)] mb-6 bg-surface/50">
+                <div className="flex flex-wrap gap-4">
+                  <div className="relative w-[min(6rem,96px)] aspect-[2/3] flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-medium">
                     {selectedMovie.posterUrl ? (
                       <Image
                         src={getTmdbPosterUrl(selectedMovie.posterUrl, 'w154')!}
@@ -267,8 +267,8 @@ export default function PlaceCounterpickBidModal({
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-display font-bold text-xl text-foreground">
+                  <div className="flex-1 min-w-[min(100%,8rem)]">
+                    <h3 className="type-card break-words text-foreground">
                       {selectedMovie.title}
                     </h3>
                     <p className="text-foreground-secondary mt-1 flex items-center gap-1.5">
@@ -276,14 +276,14 @@ export default function PlaceCounterpickBidModal({
                       vs {selectedMovie.targetTeamName}
                     </p>
                     {selectedMovie.releaseDate && (
-                      <p className="text-foreground-muted text-sm mt-1">
+                      <p className="type-body-sm text-foreground-secondary mt-1">
                         {formatReleaseDateFull(selectedMovie.releaseDate)}
                       </p>
                     )}
                     {highestBid !== null && (
                       <div className="mt-3 px-3 py-1.5 bg-warning-bg/30 border border-warning/20 rounded-lg inline-flex items-center gap-1.5">
                         <DollarSign className="w-4 h-4 text-warning" />
-                        <span className="text-warning text-sm font-medium">
+                        <span className="type-label text-warning">
                           Current high bid: ${highestBid}
                         </span>
                       </div>
@@ -294,8 +294,8 @@ export default function PlaceCounterpickBidModal({
 
               {/* Bid Amount Section */}
               <div className="space-y-4">
-                <label className="block text-foreground font-semibold">
-                  Your Bid Amount
+                <label className="type-label block text-foreground">
+                  Your bid amount
                 </label>
 
                 {/* Quick Amount Buttons */}
@@ -304,7 +304,7 @@ export default function PlaceCounterpickBidModal({
                     <button
                       key={amount}
                       onClick={() => setBidAmount(amount)}
-                      className={`btn text-sm px-4 py-2 ${
+                      className={`type-numeric type-control btn px-4 py-2 ${
                         bidAmount === amount
                           ? 'btn-primary'
                           : 'btn-secondary'
@@ -317,14 +317,14 @@ export default function PlaceCounterpickBidModal({
 
                 {/* Custom Amount Input */}
                 <div className="relative">
-                  <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gold" />
+                  <DollarSign className="absolute left-[16px] top-1/2 -translate-y-1/2 w-[24px] h-[24px] text-gold" />
                   <input
                     type="number"
                     value={bidAmount}
                     onChange={(e) => setBidAmount(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
                     min={0}
                     max={Math.min(100, remainingBudget)}
-                    className={`input w-full pl-14 py-4 text-2xl font-display font-bold text-center ${
+                    className={`type-input type-numeric input w-full pl-[56px] py-4 text-center ${
                       !isValidBid ? 'border-error focus:border-error' : 'focus:border-gold'
                     }`}
                     data-testid="counterpick-bid-amount-input"
@@ -332,11 +332,11 @@ export default function PlaceCounterpickBidModal({
                 </div>
 
                 {!isValidBid ? (
-                  <p className="text-error text-sm flex items-center gap-1.5">
+                  <p className="type-body-sm text-error flex items-center gap-1.5">
                     {getValidationErrorMessage(bidAmount, remainingBudget, highestBid)}
                   </p>
                 ) : (
-                  <p className="text-foreground-muted text-sm">
+                  <p className="type-body-sm text-foreground-secondary">
                     {bidAmount === 0
                       ? 'Claim this counterpick for free if no one else bids'
                       : `You'll spend $${bidAmount} from your budget if you win`}
@@ -349,7 +349,7 @@ export default function PlaceCounterpickBidModal({
 
         {/* Footer - Submit Button */}
         {step === 2 && selectedMovie && (
-          <div className="p-5 border-t border-border bg-elevated/30">
+          <div className="p-[min(1.25rem,20px)] border-t border-border bg-elevated/30">
             <button
               onClick={handleSubmit}
               disabled={!isValidBid || isSubmitting}
@@ -357,12 +357,12 @@ export default function PlaceCounterpickBidModal({
               data-testid="submit-counterpick-bid-button"
             >
               {isSubmitting ? (
-                <span className="flex items-center justify-center gap-2">
+                <span className="flex min-w-0 flex-wrap items-center justify-center gap-2">
                   <div className="w-5 h-5 border-2 border-foreground-inverse border-t-transparent rounded-full animate-spin" />
                   Placing Bid...
                 </span>
               ) : (
-                <span className="flex items-center justify-center gap-2">
+                <span className="flex min-w-0 flex-wrap items-center justify-center gap-2">
                   <Target className="w-5 h-5" />
                   Place ${bidAmount} Counterpick Bid
                 </span>

@@ -6,7 +6,7 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import { SupabaseClient } from '@supabase/supabase-js'
-import { getServiceClient, createTestFactory, uniqueName, getUserId } from './_setup.ts'
+import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName, getUserId } from './_setup.ts'
 
 /**
  * Generate a tmdb_id well outside both the real TMDb ID range and the shared
@@ -62,27 +62,6 @@ const FUNCTION_URL = STANDALONE_URL || `${SUPABASE_URL}/functions/v1/process-bid
  * loopback instead.
  */
 const CALLBACK_HOST = STANDALONE_URL ? '127.0.0.1' : 'host.docker.internal'
-
-/**
- * Get the service role key that the Edge Function runtime actually uses.
- */
-async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
-  }
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-}
 
 Deno.test({
   name: 'process-bids',
@@ -273,6 +252,150 @@ Deno.test({
           .eq('league_id', leagueId)
           .eq('type', 'bid_won')
         assertEquals(wonNotifications, 1)
+      })
+
+      // ============================================================================
+      // Finished seasons
+      // ============================================================================
+      //
+      // completeLeague() cancels pending bids when a season ends, so in practice
+      // process-bids should find nothing here. These cover the gap case: a bid
+      // that outlived completion must not be awarded into a season whose
+      // standings are already final and whose champions are recorded.
+
+      await t.step('does not award a pickup into a finished season', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('pu-completed'), 2)
+        const team = await factory.getTeamForUser(leagueId, client)
+        const teamId = team!.teamId
+
+        const { data: budgetBefore } = await serviceClient
+          .from('team_budgets')
+          .select('remaining_budget')
+          .eq('team_id', teamId)
+          .single()
+
+        const tmdbId = 900_800_001 + Math.floor(Math.random() * 100_000)
+        const { data: bidRow, error: bidError } = await serviceClient
+          .from('pickup_bids')
+          .insert({
+            league_id: leagueId,
+            team_id: teamId,
+            tmdb_id: tmdbId,
+            movie_data: {
+              title: 'Finished Season Pickup',
+              poster_url: null,
+              release_date: `${new Date().getFullYear() + 1}-12-15`,
+              vote_average: 6,
+              popularity: 20,
+            },
+            amount: 7,
+            status: 'active',
+            processing_deadline: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+            response_deadline: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          })
+          .select('id')
+          .single()
+        assertEquals(bidError, null)
+        assertExists(bidRow)
+
+        // The season ends after the bid was placed but before processing runs.
+        await serviceClient
+          .from('leagues')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', leagueId)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.processed, 0, 'a finished season awards nothing')
+
+        // The bid is closed out rather than left pending, so it cannot be
+        // reconsidered on a later run or keep rendering as live.
+        const { data: bidAfter } = await serviceClient
+          .from('pickup_bids')
+          .select('status')
+          .eq('id', bidRow!.id)
+          .single()
+        assertEquals(bidAfter?.status, 'cancelled')
+
+        // No pickup, and the budget was never charged.
+        const { count: pickupCount } = await serviceClient
+          .from('pickups')
+          .select('id', { count: 'exact', head: true })
+          .eq('league_id', leagueId)
+        assertEquals(pickupCount, 0)
+
+        const { data: budgetAfter } = await serviceClient
+          .from('team_budgets')
+          .select('remaining_budget')
+          .eq('team_id', teamId)
+          .single()
+        assertEquals(budgetAfter?.remaining_budget, budgetBefore?.remaining_budget)
+      })
+
+      await t.step('does not award a counterpick into a finished season', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('cp-completed'), 2)
+        await serviceClient.from('leagues').update({ bidding_counterpick_slots: 2 }).eq('id', leagueId)
+
+        const targetTeam = await factory.getTeamForUser(leagueId, secondClient)
+        const bidderTeam = await factory.getTeamForUser(leagueId, client)
+        if (!targetTeam || !bidderTeam) throw new Error('Team not found')
+
+        // See seedDecoyPickupBid: without a pending pickup bid in this league,
+        // process-bids short-circuits before it ever looks at counterpick_bids.
+        await seedDecoyPickupBid(serviceClient, leagueId, targetTeam.teamId)
+
+        const tmdbId = uniqueVoidTestTmdbId()
+        const draftPickId = await factory.createDraftPickForUser(leagueId, secondClient, {
+          tmdb_id: tmdbId,
+          title: `Finished Season CP Movie ${tmdbId}`,
+          release_date: '2099-01-01',
+        })
+
+        const { data: draftPick } = await serviceClient
+          .from('draft_picks')
+          .select('movie_id')
+          .eq('id', draftPickId)
+          .single()
+        assertExists(draftPick)
+
+        const { data: bidRow, error: bidInsertError } = await serviceClient
+          .from('counterpick_bids')
+          .insert({
+            league_id: leagueId,
+            team_id: bidderTeam.teamId,
+            movie_id: draftPick!.movie_id,
+            target_team_id: targetTeam.teamId,
+            draft_pick_id: draftPickId,
+            amount: 7,
+            status: 'active',
+            processing_deadline: new Date(Date.now() - 60_000).toISOString(),
+          })
+          .select('id')
+          .single()
+        assertEquals(bidInsertError, null)
+        assertExists(bidRow)
+
+        await serviceClient
+          .from('leagues')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', leagueId)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.counterpick_processed, 0)
+
+        const { data: bidAfter } = await serviceClient
+          .from('counterpick_bids')
+          .select('status')
+          .eq('id', bidRow!.id)
+          .single()
+        assertEquals(bidAfter?.status, 'cancelled')
+
+        const { count: counterpickCount } = await serviceClient
+          .from('counterpicks')
+          .select('id', { count: 'exact', head: true })
+          .eq('league_id', leagueId)
+        assertEquals(counterpickCount, 0)
       })
 
       await t.step('extended mode awards a bid group whose counter window has closed', async () => {

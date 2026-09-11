@@ -5,8 +5,21 @@ vi.mock('../supabase.js', () => ({ getSupabase: vi.fn() }))
 
 import { standings } from './standings.js'
 
-const linkedChannel = (status = 'active') => ({
-  data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status } },
+const linkedChannel = (
+  status = 'active',
+  season: { season_year?: number | null; winner_team_ids?: string[] | null; final_standings?: unknown[]; completed_at?: string } = {}
+) => ({
+  data: {
+    league_id: 'league-1',
+    leagues: {
+      name: 'Blockbusters',
+      status,
+      season_year: season.season_year ?? 2026,
+      winner_team_ids: season.winner_team_ids ?? null,
+      final_standings: season.final_standings ?? null,
+      completed_at: season.completed_at ?? null,
+    },
+  },
 })
 
 function participantRow(
@@ -211,5 +224,149 @@ describe('/standings', () => {
     const payload = interaction.editReply.mock.calls[0][0]
     const embed = payload.embeds[0].data
     expect(embed.description).toContain('No teams')
+  })
+})
+
+describe('/standings seasons', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  const twoTeams = {
+    data: [
+      participantRow('team-1', 'Winner', 'Alice', 'user-1', {
+        total_points: 200, movies_scored: 5, movies_pending: 0,
+      }),
+      participantRow('team-2', 'Runner Up', 'Bob', 'user-2', {
+        total_points: 150, movies_scored: 5, movies_pending: 0,
+      }),
+    ],
+  }
+
+  it('labels the season in the footer', async () => {
+    mockSupabase({
+      tables: { discord_channels: linkedChannel('active'), league_participants: twoTeams },
+      rpc: { get_user_by_discord_id: { data: null } },
+    })
+    const interaction = makeInteraction()
+
+    await standings.execute(interaction)
+
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.footer.text).toContain('2026 Season')
+  })
+
+  it('names the season in the pre-draft notice too', async () => {
+    mockSupabase({ tables: { discord_channels: linkedChannel('drafting') } })
+    const interaction = makeInteraction()
+
+    await standings.execute(interaction)
+
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toContain('2026 Season')
+  })
+
+  it('crowns every recorded champion, not just whoever sorts first', async () => {
+    // Co-champions: both teams tied at the top and the season recorded both.
+    // A rank-1 comparison would have to re-derive this; winner_team_ids says it.
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel('completed', {
+          winner_team_ids: ['team-1', 'team-2'],
+        }),
+        league_participants: {
+          data: [
+            participantRow('team-1', 'Alpha', 'Alice', 'user-1', {
+              total_points: 200, movies_scored: 5, movies_pending: 0,
+            }),
+            participantRow('team-2', 'Beta', 'Bob', 'user-2', {
+              total_points: 200, movies_scored: 5, movies_pending: 0,
+            }),
+            participantRow('team-3', 'Gamma', 'Carol', 'user-3', {
+              total_points: 100, movies_scored: 5, movies_pending: 0,
+            }),
+          ],
+        },
+      },
+      rpc: { get_user_by_discord_id: { data: null } },
+    })
+    const interaction = makeInteraction()
+
+    await standings.execute(interaction)
+
+    const description: string = interaction.editReply.mock.calls[0][0].embeds[0].data.description
+    expect(description.match(/🏆/g)).toHaveLength(2)
+    expect(description).toMatch(/Alpha.*🏆/)
+    expect(description).toMatch(/Beta.*🏆/)
+    expect(description).not.toMatch(/Gamma.*🏆/)
+  })
+
+  it('trusts the recorded winner over the current sort order', async () => {
+    // The recorded champion is not the team leading the live scores. The season
+    // is over, so what it recorded wins -- this is the case a rank comparison
+    // would get wrong after any later rescore.
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel('completed', { winner_team_ids: ['team-2'] }),
+        league_participants: twoTeams,
+      },
+      rpc: { get_user_by_discord_id: { data: null } },
+    })
+    const interaction = makeInteraction()
+
+    await standings.execute(interaction)
+
+    const description: string = interaction.editReply.mock.calls[0][0].embeds[0].data.description
+    expect(description).toMatch(/Runner Up.*🏆/)
+    expect(description.match(/🏆/g)).toHaveLength(1)
+  })
+
+  it('falls back to rank 1 on a season that recorded no winner', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel('completed', { winner_team_ids: null }),
+        league_participants: twoTeams,
+      },
+      rpc: { get_user_by_discord_id: { data: null } },
+    })
+    const interaction = makeInteraction()
+
+    await standings.execute(interaction)
+
+    const description: string = interaction.editReply.mock.calls[0][0].embeds[0].data.description
+    expect(description.split('\n')[0]).toContain('🏆')
+  })
+})
+
+
+describe('/standings frozen results', () => {
+  it('keeps final names, ranks and points even after live teams disappear or change', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel('completed', {
+          winner_team_ids: ['team-1'],
+          completed_at: '2026-12-31T12:00:00Z',
+          final_standings: [
+            { team_id: 'team-1', team_name: 'Original Champion', user_id: 'user-1', total_points: 200, rank: 1, is_tied: false },
+            { team_id: 'team-2', team_name: 'Original Runner', user_id: 'user-2', total_points: 100, rank: 2, is_tied: false },
+          ],
+        }),
+        league_participants: { data: [
+          participantRow('team-2', 'Renamed Runner', 'Bob', 'user-2', { total_points: 999 }),
+        ] },
+      },
+      rpc: { get_user_by_discord_id: { data: 'user-1' } },
+    })
+    const interaction = makeInteraction()
+    await standings.execute(interaction)
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toContain('Original Champion')
+    expect(embed.description).toContain('**200 pts**')
+    expect(embed.description).toContain('Original Runner')
+    expect(embed.description).toContain('**100 pts**')
+    expect(embed.description).not.toContain('999')
+    expect(embed.description).not.toContain('Renamed Runner')
+    expect(embed.description).toContain('(you)')
+    expect(embed.footer.text).toContain('Dec 31, 2026')
   })
 })

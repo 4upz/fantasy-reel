@@ -139,9 +139,9 @@ export default function BiddingConfigSection({
               <div>
                 <label
                   htmlFor="total_slots"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  Total Roster Slots
+                  Total roster slots
                 </label>
                 <input
                   type="number"
@@ -150,13 +150,13 @@ export default function BiddingConfigSection({
                   onChange={(e) => setTotalSlots(parseInt(e.target.value, 10) || MIN_TOTAL_SLOTS)}
                   min={MIN_TOTAL_SLOTS}
                   max={MAX_TOTAL_SLOTS}
-                  className={`input w-24 ${totalSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
+                  className={`type-input type-numeric input w-24 ${totalSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
                 />
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Total movies per team ({MIN_TOTAL_SLOTS}-{MAX_TOTAL_SLOTS})
                 </p>
                 {totalSlotsOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_TOTAL_SLOTS} and {MAX_TOTAL_SLOTS}
                   </p>
                 )}
@@ -166,9 +166,9 @@ export default function BiddingConfigSection({
               <div>
                 <label
                   htmlFor="draft_slots"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  Draft Slots
+                  Draft slots
                 </label>
                 <input
                   type="number"
@@ -177,13 +177,13 @@ export default function BiddingConfigSection({
                   onChange={(e) => setDraftSlots(parseInt(e.target.value, 10) || MIN_DRAFT_SLOTS)}
                   min={MIN_DRAFT_SLOTS}
                   max={totalSlots}
-                  className={`input w-24 ${draftSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
+                  className={`type-input type-numeric input w-24 ${draftSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
                 />
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Movies to draft (also = draft rounds)
                 </p>
                 {draftSlotsOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_DRAFT_SLOTS} and {totalSlots}
                   </p>
                 )}
@@ -193,11 +193,11 @@ export default function BiddingConfigSection({
             {/* Roster slots are pooled: the draft fills some, bidding fills the
                 rest, and a drop returns a slot to the same pool. */}
             <div className="p-3 bg-surface-hover rounded-lg border border-border">
-              <div className="flex items-center justify-between text-sm">
+              <div className="type-body-sm flex items-center justify-between">
                 <span className="text-foreground-secondary">Open after the draft</span>
                 <span className="font-medium text-gold">{pickupSlots} slots</span>
               </div>
-              <p className="text-xs text-foreground-muted mt-1">
+              <p className="type-meta text-foreground-secondary mt-1">
                 {pickupSlots > 0
                   ? `Teams draft ${draftSlots} and fill the remaining ${pickupSlots} of ${totalSlots} roster slots by bidding — or by dropping a movie and bidding on a replacement.`
                   : `The draft fills all ${totalSlots} roster slots. Teams can still bid by dropping a movie first.`}
@@ -210,9 +210,9 @@ export default function BiddingConfigSection({
               <div>
                 <label
                   htmlFor="drop_limit"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  Drop Limit
+                  Drop limit
                 </label>
                 <input
                   type="number"
@@ -221,13 +221,13 @@ export default function BiddingConfigSection({
                   onChange={(e) => setDropLimit(parseInt(e.target.value, 10) || MIN_DROP_LIMIT)}
                   min={MIN_DROP_LIMIT}
                   max={MAX_DROP_LIMIT}
-                  className={`input w-24 ${dropLimitOutOfRange ? 'border-error focus:border-error' : ''}`}
+                  className={`type-input type-numeric input w-24 ${dropLimitOutOfRange ? 'border-error focus:border-error' : ''}`}
                 />
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Max drops per team per season ({MIN_DROP_LIMIT}-{MAX_DROP_LIMIT})
                 </p>
                 {dropLimitOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_DROP_LIMIT} and {MAX_DROP_LIMIT}
                   </p>
                 )}
@@ -237,9 +237,9 @@ export default function BiddingConfigSection({
               <div>
                 <label
                   htmlFor="counterbid_hours"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  Counterbid Window
+                  Counterbid window
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -249,15 +249,15 @@ export default function BiddingConfigSection({
                     onChange={(e) => setCounterbidHours(parseInt(e.target.value, 10) || MIN_COUNTERBID_HOURS)}
                     min={MIN_COUNTERBID_HOURS}
                     max={MAX_COUNTERBID_HOURS}
-                    className={`input w-24 ${counterbidHoursOutOfRange ? 'border-error focus:border-error' : ''}`}
+                    className={`type-input type-numeric input w-24 ${counterbidHoursOutOfRange ? 'border-error focus:border-error' : ''}`}
                   />
-                  <span className="text-sm text-foreground-secondary">hours</span>
+                  <span className="type-body-sm text-foreground-secondary">hours</span>
                 </div>
-                <p className="text-xs text-foreground-muted mt-1.5">
+                <p className="type-meta text-foreground-secondary mt-1.5">
                   Time to counter when outbid ({MIN_COUNTERBID_HOURS}-{MAX_COUNTERBID_HOURS}h)
                 </p>
                 {counterbidHoursOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_COUNTERBID_HOURS} and {MAX_COUNTERBID_HOURS} hours
                   </p>
                 )}
@@ -267,9 +267,9 @@ export default function BiddingConfigSection({
               <div>
                 <label
                   htmlFor="new_bid_cutoff_hours"
-                  className="block text-sm font-medium text-foreground-secondary mb-2"
+                  className="type-label block text-foreground-secondary mb-2"
                 >
-                  New Bid Cutoff
+                  New bid cutoff
                 </label>
                 <div className="flex items-center gap-2">
                   <input
@@ -279,20 +279,20 @@ export default function BiddingConfigSection({
                     onChange={(e) => setNewBidCutoffHours(parseInt(e.target.value, 10) || MIN_NEW_BID_CUTOFF_HOURS)}
                     min={MIN_NEW_BID_CUTOFF_HOURS}
                     max={MAX_NEW_BID_CUTOFF_HOURS}
-                    className={`input w-24 ${newBidCutoffOutOfRange ? 'border-error focus:border-error' : ''}`}
+                    className={`type-input type-numeric input w-24 ${newBidCutoffOutOfRange ? 'border-error focus:border-error' : ''}`}
                     aria-describedby="new_bid_cutoff_help"
                   />
-                  <span className="text-sm text-foreground-secondary">
+                  <span className="type-body-sm text-foreground-secondary">
                     hours before processing
                   </span>
                 </div>
-                <p id="new_bid_cutoff_help" className="text-xs text-foreground-muted mt-1.5">
+                <p id="new_bid_cutoff_help" className="type-meta text-foreground-secondary mt-1.5">
                   {newBidCutoffHours === 0
                     ? 'New bids stay open all week (0 turns the cutoff off)'
                     : `After this point teams can only raise or counter bids already placed. ${newBidCutoffHours} puts the cutoff at ${cutoffDayLabel(newBidCutoffHours)}.`}
                 </p>
                 {newBidCutoffOutOfRange && (
-                  <p className="text-xs text-error mt-1">
+                  <p className="type-meta text-error mt-1">
                     Must be between {MIN_NEW_BID_CUTOFF_HOURS} and {MAX_NEW_BID_CUTOFF_HOURS} hours
                   </p>
                 )}
@@ -311,7 +311,7 @@ export default function BiddingConfigSection({
                 Saving...
               </>
             ) : (
-              'Save Changes'
+              'Save changes'
             )}
           </button>
         </form>

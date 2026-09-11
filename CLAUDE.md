@@ -214,7 +214,7 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 
 ## Design System: Cinematic Dark
 
-The app uses a **Cinematic Dark** theme inspired by premium streaming services and awards show aesthetics. All UI should feel like a high-end cinema experience.
+The app uses **Cinematic Dark** with the warmth and personality of an independent cinema: a charcoal canvas, matte gold film-conversation mark, expressive headings, and clear gameplay information. [The typography guide](docs/brand/typography.md) is the canonical scale and role reference; [brand guidance](docs/brand/README.md) covers approved logos and icons.
 
 ### Design Tokens (defined in `globals.css` via Tailwind v4 `@theme`)
 
@@ -231,7 +231,7 @@ The app uses a **Cinematic Dark** theme inspired by premium streaming services a
 | `crimson-hover` | `#b85c68` | Crimson hover state |
 | `foreground` | `#e8e8e8` | Primary text |
 | `foreground-secondary` | `#b8b0a4` | Secondary text (warm gray) |
-| `foreground-muted` | `#8a8078` | Muted/placeholder text (warm taupe) |
+| `foreground-muted` | `#8a8078` | De-emphasized text where contrast permits; use secondary for meaningful small text on cards/inputs |
 | `border` | `#2e2e2e` | Default borders |
 | `border-hover` | `#404040` | Hover borders |
 | `error` | `#d65c5c` | Error states (muted red) |
@@ -249,9 +249,11 @@ The app uses a **Cinematic Dark** theme inspired by premium streaming services a
 - `info` / `info-bg` - Blue
 
 **Typography:**
-- `font-display` - Montserrat (headings, titles)
-- `font-body` - DM Sans (body text, default)
-- `font-mono` - Geist Mono (code)
+- `font-display` - Bricolage Grotesque; prefer the role classes in `app/typography.css` for size, weight, spacing, and optical settings.
+- `font-body` - DM Sans (body, controls, compact movie/team titles, metadata).
+- `type-number`, `type-number-lg`, `type-numeric` - Bricolage with tabular lining digits, optical size 12, width 100. The bundled DM Sans has no `tnum` substitution.
+- `font-mono` - system monospace for join codes and diagnostics.
+- Both brand families load locally from `app/fonts/` through `next/font/local`; do not restore network font imports or a separate display family.
 
 **Shadows:**
 - `shadow-soft` - Subtle elevation
@@ -315,7 +317,7 @@ The app uses a **Cinematic Dark** theme inspired by premium streaming services a
 
 1. **Always use semantic color tokens** - Use `bg-surface` not `bg-[#1c1c1c]`
 2. **Use component classes** - Use `.card` not manual `bg-surface border border-border rounded-lg`
-3. **Headings use `font-display`** - Add `font-display` to h1, h2, h3 elements
+3. **Choose typography by role** - Use `type-page`, `type-section`, `type-panel`, and other canonical roles. Dense movie/team headings use DM Sans `type-row-title` even when their semantic element is h1–h3. Keep functional metadata at least 12px, and meaningful small text on cards/inputs in `foreground-secondary`.
 4. **Gold for interactive elements** - Links, buttons, focus states
 5. **Animations for state changes** - Use `animate-fade-in` for appearing content
 6. **"Your turn" glow** - Use `animate-glow-pulse` with `bg-success-bg border-success`
@@ -375,7 +377,9 @@ const { execute, isLoading, error, reset } = useAsyncAction(myAction)
 ```
 apps/frontend/app/
 ├── globals.css                    # @theme tokens, @layer base, @layer components
-├── layout.tsx                     # Font imports (Montserrat, DM Sans)
+├── typography.css                 # Canonical type-* role implementation
+├── fonts/                         # Local Bricolage Grotesque and DM Sans WOFF2
+├── layout.tsx                     # next/font/local loading and metadata
 ├── components/                    # Shared components
 │   ├── FormError.tsx              # Uses .alert-* classes
 │   ├── LoadingSpinner.tsx         # Uses border-gold
@@ -419,7 +423,8 @@ apps/frontend/app/
 
 - **User:** Managed by Supabase Auth (`auth.users`)
 - **profiles:** id, user_id, display_name, avatar_url, discord_id, discord_username (extends auth.users)
-- **leagues:** id, name, owner_id, invite_only, draft config, status
+- **league_series:** id, name, owner_id — the league's durable identity across years; **owns the name**
+- **leagues:** id, name, owner_id, invite_only, draft config, status, series_id, season_year, season_end, completed_at, winner_team_ids, final_standings — **one season**, not a permanent league
 - **league_participants:** id, league_id, user_id, role, status
 - **league_bidding_config:** league_id, bidding_enabled, bidding_start_date, bidding_end_date, min_bid, max_bid
 - **teams:** id, participant_id, name, avatar_url, faab_budget
@@ -435,6 +440,82 @@ apps/frontend/app/
 ### Key Relationships
 
 `auth.users` → `profiles` (1:1) → `league_participants` (1:N) → `teams` (1:1 per league) → `draft_picks`/`pickup_bids`/`trades`/`team_scores`. Movies have reviews (1:N). Leagues have bidding config (1:1).
+
+### Series and Seasons
+
+A `leagues` row is **one season**. `league_series` is the identity that spans
+years — the name people mean when they say "my league". Season-scoped settings
+(slots, budget, counterpick and trade config, draft dates) stay on `leagues`
+and are copied forward on rollover; nothing else moved, so `team_holdings`, the
+RLS helpers, and every write path are unchanged. Rosters belong to a season, not
+to the series.
+
+- `leagues(series_id, season_year)` is unique. `series_id` is filled by the
+  `ensure_league_series` BEFORE INSERT trigger when absent, which also defaults
+  `season_year` (current year) and `season_end` (31 Dec) — that is what keeps
+  `create-league` working without knowing seasons exist.
+- **`league_standings(p_league_id)`** is the only ranking. Competition ranks
+  (1,2,2,4) with an `is_tied` flag; teams with no `team_scores` row count as 0.
+  Champions, the Discord embed, emails and the standings page all read it, so
+  they cannot disagree about who won.
+- `series_seasons` (security_invoker view) lists a series' seasons — filter
+  `series_id`, order `season_year DESC`. It inherits the `leagues` SELECT
+  policy, so a member sees only the seasons they were part of.
+- `is_series_member(series_id)` is the RLS helper for `league_series`
+  (membership of *any* season grants read on the series).
+- **`leagues.name` is a denormalized copy — `league_series.name` is the source
+  of truth.** Renaming a league writes the series (`update-league`
+  `update_info`), and the `sync_series_name_to_seasons` trigger pushes it down
+  to every season; otherwise the 2026 season keeps the old name forever and the
+  history list reads like two different leagues. Keep reading `leagues.name`
+  wherever you already have a `league_id` — the copy exists precisely so
+  embeds, emails and queries don't need a second join — but **never write it
+  directly.**
+- **UI terminology:** "League" = the series, "Season" = one `leagues` row. Year
+  appears only as a season label ("2026 Season").
+
+### Season completion
+
+`_shared/league-completion.ts` `completeLeague()` is the single definition of
+"the season is over", called by exactly two things: the commissioner's
+`update-league` `complete_league` action and the `complete-seasons` cron. It
+calls the service-role-only `complete_league_season` RPC. One transaction locks
+the season, rescores, ranks via `league_standings`, cancels pending activity, and
+records the result. A competing completion gets `not_active` and announces
+nothing; a scoring or cleanup failure rolls back the entire completion. The
+cron also rechecks `season_end` under the lock before closing a season.
+Announcements (Discord final standings with 👑 for the previous
+season's champion, in-app `season_completed`, the `season-final-standings`
+email) run after the state change and never roll it back.
+
+- `winner_team_ids` holds **every** team at rank 1 — ties are co-champions, not
+  a tiebreak to be invented.
+- **`final_standings` is the snapshot history reads** — the full table at
+  completion, with `display_name` denormalized in. Do not recompute standings
+  for a completed season: `league_standings()` reads live participants, so a
+  champion who later leaves the league would vanish from their own history.
+- **Completion freezes what was in flight.** Every pending pickup and
+  counterpick bid goes to `cancelled` (uncharged — `lost` would falsely mean
+  "outbid"), and every open trade offer (`proposed`/`countered`/`review`/
+  `accepted`) goes to `expired` with `expired_reason = 'season_completed'`.
+  Without this, the next `process-bids` / `process-trades` run would move
+  rosters *after* the final standings were announced.
+- Database guards keep `completed_at` / `winner_team_ids` / `final_standings`
+  write-once, reject gameplay writes after completion, and preserve finished
+  team totals during shared-movie score updates. There is no reopen path.
+- `score_update_candidates` filters movies belonging only to completed seasons
+  before the nightly score batch limit/count. Active counterpicks count even
+  after their original holding is dropped; the view is service-role-only.
+- `complete-seasons` (Vercel Cron, `0 9 * * *`) ends any active season past
+  `season_end` and posts a 7-day heads-up, made idempotent by a
+  `discord_notification_log` row with `movie_id IS NULL` (partial unique index
+  `uq_discord_notification_log_no_movie`). The type is
+  `season_end_reminder:<season_end>` — **the date is part of the key**, so a
+  commissioner who moves `season_end` gets a fresh warning instead of having it
+  swallowed by the one sent for the old date.
+- `update-league` `update_season_config` edits `season_year` (setup only — it
+  decides movie eligibility) and `season_end` (editable all season). A trade
+  deadline may never fall after `season_end`; both handlers enforce it.
 
 ### Reading Rosters: the `team_holdings` View
 

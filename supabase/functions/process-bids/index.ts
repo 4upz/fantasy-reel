@@ -24,6 +24,7 @@ import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { COMPLETED_STATUS } from '../_shared/league-status.ts'
 import {
   type BidContest,
   type BidLossReason,
@@ -359,6 +360,102 @@ async function selectByIdBatches<T>(
   }
 
   return { rows, unreadIds }
+}
+
+/** The season year to judge a movie against, defaulting to the current year. */
+function seasonYearFor(seasonYears: Map<string, number>, leagueId: string): number {
+  return seasonYears.get(leagueId) ?? new Date().getFullYear()
+}
+
+/** What survives the season filter, plus the season each survivor belongs to. */
+interface LiveSeasonBids<T> {
+  bids: T[]
+  /** Season years for release-date validation after the calendar rolls over. */
+  seasonYears: Map<string, number>
+}
+
+/**
+ * Drop every due bid belonging to a season that has finished, cancelling it.
+ *
+ * A completed season's standings are final and its champions are recorded, so
+ * awarding a pickup or a counterpick into one would move `team_scores` under a
+ * result that has already been published. `completeLeague()` cancels pending
+ * bids at completion; this is the second line, for a bid that arrived or
+ * survived in the gap, and for any season completed by a path that forgets.
+ *
+ * Applied to the raw due-bid list rather than to assembled contests, and that
+ * placement is the point: a bid group whose counter window is still open never
+ * becomes a contest at all -- it is deferred. Filtering later would leave those
+ * bids 'active' in a finished season forever, reconsidered on every run and
+ * still rendering as live, and would announce the deferral to a Discord channel
+ * that (after a rollover) now belongs to the *next* season.
+ *
+ * Deliberately quieter than the other void paths: bids are cancelled and
+ * logged, but no notification is sent and nothing is added to `voided`, since
+ * those feed the end-of-run emails and that same channel. `completeLeague()`
+ * owns telling people the season ended.
+ *
+ * An unreadable league is deferred without cancelling its bids. Its status
+ * must be known before any award, even if later capacity queries succeed.
+ */
+async function excludeFinishedSeasonBids<T extends { id: string; league_id: string }>(
+  serviceClient: ServiceClient,
+  bids: T[],
+  table: 'pickup_bids' | 'counterpick_bids',
+  errors: ProcessingError[],
+): Promise<LiveSeasonBids<T>> {
+  const seasonYears = new Map<string, number>()
+  if (bids.length === 0) return { bids, seasonYears }
+
+  const leagueIds = [...new Set(bids.map((bid) => bid.league_id))]
+  const { rows: leagues } = await selectByIdBatches<
+    { id: string; status: string; season_year: number | null }
+  >(
+    leagueIds,
+    'Failed to read league status for the completed-season check:',
+    (batch) => serviceClient.from('leagues').select('id, status, season_year').in('id', batch),
+  )
+
+  const completed = new Set<string>()
+  const readable = new Set(leagues.map((league) => league.id))
+  for (const leagueId of leagueIds) {
+    if (!readable.has(leagueId)) {
+      errors.push({ movie_key: leagueId, error: 'Failed to read league status before processing bids' })
+    }
+  }
+  for (const league of leagues) {
+    if (league.status === COMPLETED_STATUS) completed.add(league.id)
+    if (league.season_year != null) seasonYears.set(league.id, league.season_year)
+  }
+  const surviving: T[] = []
+  const cancelled: T[] = []
+  for (const bid of bids) {
+    if (completed.has(bid.league_id)) cancelled.push(bid)
+    else if (readable.has(bid.league_id)) surviving.push(bid)
+  }
+
+  for (let offset = 0; offset < cancelled.length; offset += ID_BATCH_SIZE) {
+    const batch = cancelled.slice(offset, offset + ID_BATCH_SIZE)
+    const { data: claimed, error } = await serviceClient
+      .from(table)
+      .update({ status: 'cancelled' })
+      .in('id', batch.map((bid) => bid.id))
+      .in('status', ['active', 'outbid'])
+      .select('id')
+
+    if (error) {
+      log.error('Failed to cancel bids in finished seasons', { bid_type: table, error: serializeError(error) })
+      errors.push({ movie_key: batch[0].league_id, error: 'Failed to cancel bids in finished seasons' })
+      continue
+    }
+
+    log.info('Cancelled bids in finished seasons', {
+      bid_type: table,
+      bids_cancelled: claimed?.length ?? 0,
+    })
+  }
+
+  return { bids: surviving, seasonYears }
 }
 
 /**
@@ -964,6 +1061,7 @@ async function voidReleasedCounterpickContests(
   contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
+  seasonYears: Map<string, number>,
 ): Promise<BidContest[]> {
   const movieIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
 
@@ -979,7 +1077,7 @@ async function voidReleasedCounterpickContests(
   const surviving: BidContest[] = []
 
   for (const contest of contests) {
-    const [, movieId] = contest.key.split(':')
+    const [leagueId, movieId] = contest.key.split(':')
     const movie = moviesById.get(movieId)
 
     // A movie we could not read is left in place so the awarding loop reports it
@@ -989,7 +1087,7 @@ async function voidReleasedCounterpickContests(
       continue
     }
 
-    const releaseCheck = isUpcomingMovie(movie.release_date)
+    const releaseCheck = isUpcomingMovie(movie.release_date, seasonYearFor(seasonYears, leagueId))
     if (releaseCheck.valid) {
       surviving.push(contest)
       continue
@@ -1060,10 +1158,9 @@ const TARGET_VOID_REASON_TEXT: Record<TargetVoidReason, string> = {
  * does: a bid that can never be awarded must not consume one of the bidder's
  * scarce counterpick slots.
  *
- * If every active bid on a contest is voided, the contest is dropped entirely
- * and any remaining 'outbid' bids on it are cancelled too, so they don't
- * strand as 'outbid' forever -- the same sweep `voidReleasedCounterpickContests`
- * does via `bidsByContest` when a whole movie goes dead.
+ * If every active bid is voided, remaining 'outbid' bids are revalidated
+ * against their own holdings and promoted if still valid. A movie may have
+ * been dropped and acquired again since the leading bid was placed.
  */
 async function revalidateCounterpickTargets(
   serviceClient: ServiceClient,
@@ -1071,13 +1168,18 @@ async function revalidateCounterpickTargets(
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
 ): Promise<BidContest[]> {
-  const allActiveBids = contests.flatMap((contest) => contest.activeBids as CounterpickBid[])
+  // Trailing bids can target a different holding from the active leader.
+  // Load their targets too so promotion does not mistake an unread row for
+  // a holding that no longer exists.
+  const allBids = contests.flatMap((contest) =>
+    bidsByContest.get(contest.key) ?? contest.activeBids as CounterpickBid[]
+  )
 
   const draftPickIds = [...new Set(
-    allActiveBids.filter((bid) => bid.draft_pick_id).map((bid) => bid.draft_pick_id as string),
+    allBids.filter((bid) => bid.draft_pick_id).map((bid) => bid.draft_pick_id as string),
   )]
   const pickupIds = [...new Set(
-    allActiveBids.filter((bid) => bid.pickup_id).map((bid) => bid.pickup_id as string),
+    allBids.filter((bid) => bid.pickup_id).map((bid) => bid.pickup_id as string),
   )]
 
   type TargetRow = { id: string; team_id: string; dropped_at: string | null }
@@ -1268,9 +1370,19 @@ async function processCounterpickBids(
   const results: CounterpickProcessResult[] = []
   if (dueBids.length === 0) return results
 
-  const { contests: settledContests, bidsByContest } = await loadSettledCounterpickContests(
+  // Before contest assembly, so a bid still inside its counter window is
+  // cancelled too rather than deferred into a season that has ended.
+  const { bids: liveSeasonBids, seasonYears } = await excludeFinishedSeasonBids(
     serviceClient,
     dueBids,
+    'counterpick_bids',
+    errors,
+  )
+  if (liveSeasonBids.length === 0) return results
+
+  const { contests: settledContests, bidsByContest } = await loadSettledCounterpickContests(
+    serviceClient,
+    liveSeasonBids,
     now,
     errors,
     deferred
@@ -1281,7 +1393,8 @@ async function processCounterpickBids(
     serviceClient,
     settledContests,
     bidsByContest,
-    voided
+    voided,
+    seasonYears
   )
   if (unreleasedContests.length === 0) return results
 
@@ -1689,12 +1802,19 @@ Deno.serve(async (req) => {
     // empty input, and the "no bids placed" Discord notification still goes out at
     // the end for leagues that saw nothing at all.
 
+    // Before the keys are built, so a group still inside its counter window is
+    // cancelled rather than deferred into a season that has ended.
+    const errors: ProcessingError[] = []
+    const { bids: liveSeasonBidsToProcess, seasonYears: pickupSeasonYears } =
+      await excludeFinishedSeasonBids(serviceClient, bidsToProcess, 'pickup_bids', errors)
+
     // One entry per contested movie (league_id + tmdb_id). Each movie's full bid
     // set is re-read below, so only the key is needed here.
-    const contestedKeys = new Set(bidsToProcess.map((bid) => `${bid.league_id}:${bid.tmdb_id}`))
+    const contestedKeys = new Set(
+      liveSeasonBidsToProcess.map((bid) => `${bid.league_id}:${bid.tmdb_id}`),
+    )
 
     const results: ProcessResult[] = []
-    const errors: ProcessingError[] = []
     const voidedPickupResults: VoidedBidResult[] = []
     const deferred: DeferredGroup[] = []
 
@@ -1765,6 +1885,7 @@ Deno.serve(async (req) => {
 
     for (const contest of pickupContests) {
       const key = contest.key
+      const contestLeagueId = key.split(':')[0]
       const allBidsForMovie = bidsByKey.get(key) ?? []
 
       try {
@@ -1829,7 +1950,10 @@ Deno.serve(async (req) => {
         // itself - it does not independently verify it. Closing that gap would
         // need a TMDb round-trip at movie-creation time (draft-pick has the same
         // trust model); out of scope here.
-        const releaseCheck = isUpcomingMovie(movieReleaseDate)
+        const releaseCheck = isUpcomingMovie(
+          movieReleaseDate,
+          seasonYearFor(pickupSeasonYears, contestLeagueId),
+        )
         if (!releaseCheck.valid) {
           const reason = releaseCheck.reason ?? 'Movie has already been released'
 

@@ -29,8 +29,8 @@ test.describe('League Switcher', () => {
     // Verify dropdown with role="listbox" appears
     await expect(authedPage.getByRole('listbox')).toBeVisible({ timeout: 5000 })
 
-    // Verify "Your Leagues" header text
-    await expect(authedPage.getByText('Your Leagues')).toBeVisible()
+    // Verify "Your leagues" header text
+    await expect(authedPage.getByText('Your leagues', { exact: true })).toBeVisible()
   })
 
   test('dropdown closes on toggle click', async ({ authedPage, multiLeague }) => {

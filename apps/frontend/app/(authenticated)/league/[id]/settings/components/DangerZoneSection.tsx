@@ -58,10 +58,10 @@ export default function DangerZoneSection({
             <AlertTriangle className="w-5 h-5 text-crimson" />
           </div>
           <div>
-            <h2 className="text-lg font-display font-semibold text-foreground">
-              Danger Zone
+            <h2 className="type-section text-foreground">
+              Danger zone
             </h2>
-            <p className="text-sm text-foreground-muted">
+            <p className="type-body-sm text-foreground-secondary">
               Irreversible actions
             </p>
           </div>
@@ -72,8 +72,8 @@ export default function DangerZoneSection({
         ) : (
           <div className="flex items-center justify-between p-4 bg-crimson/5 rounded-lg border border-crimson/20">
             <div>
-              <p className="text-sm font-medium text-foreground">Delete League</p>
-              <p className="text-xs text-foreground-muted mt-0.5">
+              <p className="type-label text-foreground">Delete league</p>
+              <p className="type-meta text-foreground-secondary mt-0.5">
                 Permanently delete this league and all its data
               </p>
             </div>

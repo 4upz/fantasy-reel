@@ -45,7 +45,7 @@ export default function MovieDetailModal({ movie, details, loading, onClose }: P
           {/* Close button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-background/50 backdrop-blur-sm border border-border text-foreground-muted hover:text-foreground hover:border-border-hover transition-all z-10"
+            className="absolute top-4 right-4 p-2 rounded-full bg-background/50 backdrop-blur-sm border border-border text-foreground-secondary hover:text-foreground hover:border-border-hover transition-all z-10"
             aria-label="Close modal"
           >
             <X className="w-5 h-5" />

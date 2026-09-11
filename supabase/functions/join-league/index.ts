@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidJoinCode, internalErrorResponse } from '../_shared/utils.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
 
 const log = createLogger('join-league')
 
@@ -144,6 +145,13 @@ Deno.serve(async (req) => {
     if (leagueError || !league) {
       return errorResponse('League not found', 404)
     }
+
+    // Before the invite-only check: someone holding a stale invite to a season
+    // that has since ended should be told the season is over, not that they are
+    // not on the guest list. The generic status check below would otherwise
+    // claim the draft has started, which is true but a year out of date.
+    const writable = assertLeagueWritable(league)
+    if (!writable.ok) return writable.response
 
     // For direct join (not via invitation or join_code), check if league is open
     if (!invitation_token && !join_code && league.invite_only) {

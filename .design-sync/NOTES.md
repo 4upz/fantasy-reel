@@ -5,13 +5,13 @@ Repo-specific gotchas for future syncs. Read this before re-running the sync.
 ## Shape: this repo is an app, not a component package
 
 There is no `dist/` and no published package, so the converter runs in
-`--entry` mode against a **hand-maintained barrel**, `.design-sync/entry.tsx`.
-It re-exports the app's real shipped components under stable names. Adding or
-removing a design-system component means editing **two** files:
-
-1. `.design-sync/entry.tsx` — the export (most app components are
-   `export default`, so they need `export { default as X } from '…'`).
-2. `.design-sync/config.json` → `componentSrcMap` — the name → src path pin.
+`--entry` mode against a **generated barrel**, `.design-sync/entry.tsx`.
+It re-exports the app's real shipped components under stable names. Declare
+membership with `@design-system` on the exported component, then run
+`npm run design:barrel` to update the barrel and `.design-sync/config.json`'s
+`componentSrcMap`. Commit the tag and generated changes together; do not
+hand-edit those generated sections. Other config fields, documentation, and
+previews remain authored inputs. See the tag workflow below.
 
 Scope is deliberately presentational. Page-level containers that own data
 fetching and routing (DraftBoard, LeagueManager, DashboardClient, SideNav,
@@ -60,7 +60,7 @@ shims so components render statically:
 | `next/image` | `<img>` (honours `fill`) | real Image needs the optimizer endpoint + build config |
 | `next/navigation` | no-op router | nothing to navigate to |
 | `@/utils/supabase/client` | inert client, chainable, resolves empty | no project, no session |
-| `@/utils/supabase/functions` | `callEdgeFunction` → `{data:null,error:null}` | write actions no-op instead of throwing |
+| `@/utils/supabase/functions` | inert write helper and `edgeFetcher` | writes no-op; browse/search return empty pages; details report unavailable without a fixture |
 
 These replace the **host**, never a component — every component in the bundle
 is the app's real shipped code.
@@ -73,7 +73,8 @@ extension list tries the bare path first and would return the directory.
 ## Tailwind: compile before every bundle build
 
 `cssEntry` is a **compiled** artifact (`.design-sync/.cache/styles.css`), not a
-source file. `cfg.buildCmd` is the Tailwind CLI invocation. Run it **before**
+source file. `cfg.buildCmd` runs `node .design-sync/build-styles.mjs`, using the app's existing PostCSS/Tailwind dependencies. It refreshes local fonts and embedded
+brand assets as well as CSS. Run it **before**
 `package-build.mjs` — `package-build` only copies the CSS, and
 `preview-rebuild.mjs` does not touch it at all. Symptom of forgetting: cards
 render with correct markup but missing utilities.
@@ -111,8 +112,10 @@ renders fine and only the available ones go blank.
 
 `WishlistProvider` is exported from `entry.tsx` purely so `cfg.provider` can
 reach it, and excluded from the component list with
-`componentSrcMap: {"WishlistProvider": null}` — bundle export, not a card. It
-is the only React context in the app, so it is the only provider needed.
+`componentSrcMap: {"WishlistProvider": null}` — bundle export, not a card.
+Its `@design-system-provider` tag generates that export and null pin, and
+selects it as `cfg.provider.component`. Existing provider props are preserved.
+Recheck provider needs when adding components that consume other contexts.
 
 ## Authoring previews: three traps worth knowing
 
@@ -161,136 +164,191 @@ here, and validate re-flagged all six.
   ln -sfn ../../apps/frontend/node_modules/@types/react     node_modules/@types/react
   ln -sfn ../../apps/frontend/node_modules/@types/react-dom node_modules/@types/react-dom
   ```
-- Install the Tailwind CLI alongside the staged converter:
-  `(cd .ds-sync && npm i @tailwindcss/cli)`.
+- Prepare CSS, fonts, and embedded brand SVGs with
+  `node .design-sync/build-styles.mjs`; no separate Tailwind CLI install is needed.
 - Chromium for the render check: `node_modules/.bin/playwright install chromium`
   (the repo pins playwright 1.58.1).
 
-## Fonts are vendored, deliberately
+## Fonts, typography, and brand assets follow the app
 
-The app loads Montserrat and DM Sans through `next/font/google`, which does not
-exist outside Next. `.design-sync/fonts/` holds latin + latin-ext woff2 files
-and a hand-written `brand-fonts.css`, wired via `cfg.extraFonts`, so rendered
-designs get the real brand faces with no network dependency. Regenerate only
-if the brand faces change.
+The canonical specification is [docs/brand/typography.md](../docs/brand/typography.md).
+The app loads Bricolage Grotesque and DM Sans through `next/font/local`.
+`build-styles.mjs` copies those exact WOFF2 files from `apps/frontend/app/fonts/`
+to `.design-sync/fonts/`; `brand-fonts.css` declares the same variable axes and
+CSS variables through `cfg.extraFonts`. Do not download separate font builds
+or restore the old per-weight font cache. Font licenses remain in
+`docs/brand/source/OFL.txt` and `OFL-DM-Sans.txt`; preserve them with any export
+that redistributes the fonts.
+
+`tailwind-entry.css` imports the app's real `globals.css`, which imports
+`app/typography.css`. All `type-*` roles therefore share one implementation.
+Bricolage numeric roles use optical size 12 and tabular lining digits;
+`tabular-nums` alone does not equalize the bundled DM Sans digits.
+
+The same build embeds `logo-dark.svg`, `logo-compact-dark.svg`, and
+`mark-gold.svg` from `apps/frontend/public/brand/v1/` into
+`.design-sync/assets/brand.json`. The `next/image` host shim maps only those
+approved `/brand/v1/` paths to SVG data URLs. `BrandLogo` and `NavLogo` remain
+the actual app components; the asset mapping supplies the missing public-file
+host. Regenerate before bundling after any artwork/font change. The mapping
+and font copies are reproducible checked-in inputs for the standalone bundle.
+
+Updating these local files does not update an external design project. Any
+external sync is a separate publishing operation; retain its actual validation
+and upload record rather than claiming the design project is current from git
+state alone.
 
 ## Deliberately excluded: TMDbAttribution
 
 `TMDbAttribution` is a real, shipped component and is legally required wherever
 TMDb data is shown — but it is **not** in this sync. Its logo is
 `<Image src="/images/tmdb-logo.svg">`, a root-absolute path into the app's
-`public/` directory. Nothing in `public/` is part of a component bundle, and
+`public/` directory. That path is not included in the brand asset mapping, and
 the design project has no `/images/` route, so the mark resolves to a broken
 image — in the preview card *and* in every design the agent builds with it.
 The disclaimer text renders fine; the logo does not.
 
-**To bring it back**, a future sync needs to serve that path: add `images/**`
-to the upload plan's `writes` (and `deletes`), copy
-`apps/frontend/public/images/tmdb-logo.svg` to `ds-bundle/images/`, then
-then tag it `@design-system` and regenerate. That is a plan change, so it
-needs a fresh `finalize_plan` approval — which is why it was not done mid-run.
+**To bring it back**, first add its exact public image path to the embedded
+asset mapping and validate the resulting image in the standalone renderer.
+Then tag the component with `@design-system`, regenerate the barrel and source
+pin, and add its documentation and preview. The current brand mapping
+intentionally covers only the approved Fantasy Reel SVGs.
 
-## `guidelinesGlob` is intentionally empty
+## Curated typography guideline
 
-The default glob picked up `docs/*.md` — deployment runbooks, E2E test plans,
-and a QA bug report. Those are developer docs, not design guidance, and they
-would have shipped into the design agent's context. Design guidance belongs in
-`.design-sync/conventions.md` (the `readmeHeader`).
+`guidelinesGlob` includes only `docs/brand/typography.md`. Do not broaden it to
+`docs/*.md`: deployment runbooks, E2E plans, and QA reports are not design
+guidelines. The short usage summary stays in `.design-sync/conventions.md`
+(`readmeHeader`); the complete active type scale stays in the canonical guide.
 
-## Known render warns (triaged, expected)
+## Historical render warnings
 
-These fire on every run and are **not** regressions:
+The previous converter run triaged these warnings. Recheck them when the
+components or renderer change; this list does not establish that the current
+bundle has passed browser validation:
 
 - `[RENDER_THIN] DiscordIcon`, `GoogleIcon` — brand glyphs are pure SVG with no
   text; "no text and paints nothing" is a false positive on an icon. Verified
   visually in the review sheet.
 - `[RENDER_THIN] SectionHeader` — a title-only primitive; with default props
   its entire content legitimately is its own name.
-- `[RENDER_BLANK] DraftTicker` — a marquee whose content is animated in; a
-  static screenshot catches it mid-transform.
 
-A warn **not** in this list is new — look at it before recording it.
+Inspect any additional warning before recording it; do not suppress a new
+blank or broken-asset result by extending this list without evidence.
 
 ## The barrel is generated from tags in the sources
 
-`entry.tsx` and `componentSrcMap` are **generated**. Do not hand-edit either;
-the next generator run overwrites them.
+`.design-sync/generate-barrel.mjs` generates `entry.tsx`, `componentSrcMap`,
+and the selected provider from tags on exported declarations. It scans `.tsx`
+implementation files under `apps/frontend/app`, `apps/frontend/components`,
+and `apps/frontend/hooks`; it skips tests, stories, and build directories.
+The parser uses the repo's installed TypeScript dependency, so run `npm ci`
+on a fresh clone first.
 
-Membership is declared on the component itself:
+Membership is opt-in and belongs on the component itself:
 
 ```tsx
 /** @design-system Movies */
-export default function MovieCard(...)
+export default function MovieCard(props: MovieCardProps) {
+  // ...
+}
 ```
+
+Place the tag in JSDoc directly attached to an exported named/default function
+or a single initialized exported `const` declaration, with an uppercase
+component name. Exported const components wrapped in
+`memo(...)` are supported. A tag on a local declaration followed by a separate
+export, a re-export, or an anonymous default export is unsupported; the
+generator reports it instead of silently dropping or misassigning membership.
+Mentions of the tag in prose or string literals do not opt a component in.
+
+The tag argument controls the **barrel section**, with `GROUP_ORDER` in the
+generator fixing section order and unknown groups sorting alphabetically at
+the end. It does not replace the converter's doc `category:` frontmatter.
+`@design-system-provider` marks the single provider needed as a bundle export:
+it receives a null source pin, and `cfg.provider.component` is generated while
+existing provider props are preserved.
 
 ```sh
-npm run design:barrel                          # regenerate both files
-npm run design:barrel:check                    # verify they are current
-npm run design:barrel -- --since origin/main   # + tagged sources touched since main
+npm run design:barrel                         # regenerate the barrel and config
+npm run design:barrel:check                   # verify generated files are current
+npm run design:barrel:test                    # exercise parser and generator behavior
+npm run design:barrel -- --since origin/main  # also report touched synced sources
 ```
-
-The tag argument is the barrel section (`GROUP_ORDER` in the generator fixes
-their order; an unknown group sorts to the end). `@design-system-provider` marks
-the context provider that must be a bundle export without being a component —
-it is pinned to `null` in `componentSrcMap` and written to `cfg.provider`.
-
-**Untagged is not synced, and that is a real default, not an omission.** A new
-component needs no entry anywhere; you only act when you want it synced, in the
-file you are already editing.
 
 ### What to tag
 
-Presentational components only. Page-level containers that own data fetching
-and routing — DraftBoard, LeagueManager, DashboardClient, SideNav, ProfileMenu,
-MoviePicker, the settings form sections — stay untagged: they are app wiring,
-not design-system parts, and a preview of one is a screenshot of a page.
+Tag presentational components that belong in the library. Page-level
+containers that own fetching, routing, or persisted settings stay untagged.
+A new app component does not need an exclusion entry or a design-sync edit.
 
-A tagged component also needs `.design-sync/docs/<Name>.md` with a `category:`
-line, or it lands in `general` with no prose. The generator reports the ones
-that are missing.
+Each tagged component also needs `.design-sync/docs/<Name>.md` with a
+`category:` line and an appropriate preview. The generator reports missing
+doc files, but does not validate their frontmatter or preview rendering.
 
-### Why it works this way
+### Local checks and their limits
 
-There used to be three hand-written lists over the same set of files: the
-barrel, `componentSrcMap`, and `drift-ignore.txt` — the last one naming all 64
-components that were deliberately in neither of the first two. A CI check
-(`design-sync-drift.yml`) policed them, so every new component in a synced
-directory turned a PR red until someone appended its name to the ignore list.
-Two commits did exactly that (7dd74f1, 2e93718) and main was red again with six
-more when this replaced it. Three lists over one set of files drift by
-construction; the check just converted that into other people's red builds.
-
-One tag in one place removes the whole class. Both generated files are
-committed so a fresh clone builds without running the generator first, and
-`--check` catches a stale commit — but nothing runs it in CI, deliberately. Run
-it before a re-sync, when the answer is actually actionable.
-
-### What the generator reports
+This replaces the former hand-maintained barrel, source map, and exclusion
+list. The old drift checker, ignore file, and CI workflow are removed. There
+is deliberately **no design-sync membership gate in CI**. The generated files
+are committed so a fresh clone can build, and the local check belongs in the
+pre-sync workflow below.
 
 | Report | Meaning |
 |---|---|
-| duplicate tag name / two providers | **fails** — the barrel would be ambiguous |
-| `overrides` naming an untagged component | notice — dead preview config, drop it or tag the component |
-| tagged sources touched since `--since` | notice — how stale the design project has gotten |
+| orphaned/unsupported tag, duplicate export name, or multiple providers | **fails** — resolve the ambiguous or unsupported declaration before generating |
+| generated files differ during `--check` | **fails** — regenerate and commit the resulting changes |
+| `overrides` naming an untagged component | notice — review stale preview config |
+| tagged component missing its doc file | notice — add docs before syncing |
+| synced sources touched since `--since` | notice — review whether an external re-sync is needed |
 
-A broken `componentSrcMap` pin is no longer possible: the map is derived from
-files the scan just read.
+Generation derives source pins from the files it scans. Renames, moves, and
+removals still require regeneration; `--check` detects stale generated output.
+Neither command verifies whether the external design project is current, and
+`--since` is only a reminder based on the tracked source paths it watches.
+
+### Homepage presentation registry (PR #89)
+
+The native homepage registers its shared bid, draft, roster, standings and
+trade presentations, plus `MarketingHeader`. The complete `HowToPlayContent`,
+fixed-data preview scenes and `SpotlightPreview` camera composition remain
+outside the component library and remain untagged. The retired homepage
+exports, pins, overrides and previews have been removed.
+
+`MovieScoreCard` and `TeamBudgetSummary` are tagged alongside the
+shared counterpick mark, date/time field, offer-expiry controls and franchise
+summaries. `ProfileMenu` and `TradeConfigSection` follow the existing exclusion
+policy: they own account actions and persisted commissioner settings.
+
+Standalone rendering needs both the compiled shared stylesheet (`cssEntry`)
+and CSS emitted from component module imports. In particular,
+`MarketingHeader.module.css` supplies the mobile popover placement. Verify
+that popover in a small viewport, with one header mounted at the top of the
+page. The primary story intentionally renders only one header.
+
+Local registry, type and render checks do not publish or update the external
+design project. An authorized external re-sync still follows the runbook below.
 
 ## Re-sync runbook
 
 From the repo root, after the fresh-clone setup above:
 
 ```sh
-# 1. stage the converter (a stale .ds-sync/ runs an old converter)
+# 1. regenerate and verify membership before building a sync bundle
+npm run design:barrel
+npm run design:barrel:check
+npm run design:barrel:test
+# Review the generated diff and commit task-related tag/barrel/config changes.
+
+# 2. stage the converter (a stale .ds-sync/ runs an old converter)
 mkdir -p .ds-sync && cp -r "<skill-dir>"/{package-build.mjs,package-validate.mjs,package-capture.mjs,resync.mjs,lib,storybook} .ds-sync/
 echo '{"name":"ds-sync-deps","private":true}' > .ds-sync/package.json
-(cd .ds-sync && npm i esbuild ts-morph @types/react @tailwindcss/cli)
+(cd .ds-sync && npm i esbuild ts-morph @types/react)
 
-# 2. compile the stylesheet FIRST (cfg.buildCmd)
-node .ds-sync/node_modules/@tailwindcss/cli/dist/index.mjs \
-  -i .design-sync/tailwind-entry.css -o .design-sync/.cache/styles.css
+# 3. prepare shared styles, local fonts, and brand assets before bundling (cfg.buildCmd)
+node .design-sync/build-styles.mjs
 
-# 3. fetch the anchor, then run the driver
+# 4. fetch the anchor, then run the driver
 #    (get _ds_sync.json from the project → .design-sync/.cache/remote-sync.json)
 node .ds-sync/resync.mjs --config .design-sync/config.json \
   --node-modules ./node_modules --out ./ds-bundle \
@@ -311,14 +369,13 @@ global config decisions early.
 
 ## Re-sync risks
 
-- **The barrel no longer drifts** — it and `componentSrcMap` are generated from
-  `@design-system` tags, so a renamed or moved component follows its tag and an
-  added one is absent only if nobody tagged it. Run `npm run design:barrel`
-  before a sync; a non-empty diff means someone edited a tag without
-  regenerating.
+- **Generated files can be stale until regeneration.** Run the local barrel
+  commands before a sync and review changes after renaming, moving, deleting,
+  or tagging components. Untagged components stay outside the library by
+  design; adding a component to the app alone does not enroll it.
 - **Poster URLs in previews are remote** (`image.tmdb.org`, curated from the
-  repo's own `FALLBACK_MOVIES` fixtures). They render today. If TMDb rotates
-  those paths the cards degrade to empty poster boxes — recapture would catch
+  repo's own `FALLBACK_MOVIES` fixtures). If TMDb rotates those paths, the
+  cards degrade to empty poster boxes — recapture would catch
   it, a carried-forward grade would not.
 - **The shims freeze an API shape.** If `callEdgeFunction`'s signature or the
   Supabase client surface changes, the shims still compile but no longer

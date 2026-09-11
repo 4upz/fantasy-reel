@@ -46,7 +46,7 @@ export default function Avatar({ src, name, size = 'md', className = '' }: Props
     <div
       className={`${sizeClass} rounded-full bg-gold-muted border-2 border-gold flex items-center justify-center ${className}`}
     >
-      <span className="font-display font-bold text-gold">{initial}</span>
+      <span className="font-body font-semibold text-gold">{initial}</span>
     </div>
   )
 }

@@ -33,6 +33,7 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join, relative, resolve } from 'node:path'
+import ts from 'typescript'
 
 const ROOT = resolve(import.meta.dirname, '..')
 const ENTRY = join(ROOT, '.design-sync/entry.tsx')
@@ -75,27 +76,48 @@ function* walk(dir) {
   }
 }
 
-// A tag, the rest of its line, then up to a few more comment lines (the tail of
-// a JSDoc block), then the export it annotates. Both tag styles are supported:
-//
-//   /** @design-system Movies */          ← one-liner above a bare declaration
-//   ...prose...                           ← or a line inside an existing block
-//    * @design-system Movies
-//    */
-//
-// The group capture runs to end-of-line and a trailing `*/` is stripped after,
-// rather than excluded here — excluding `*` is what made an earlier version
-// silently match only the block-comment style.
-//
-// The tag must OPEN a comment line — `/**` or `*`, whitespace, then the tag.
-// Prose that merely mentions the tag ("deliberately not tagged `@design-system`")
-// sits mid-line and is correctly ignored; without this the exclusion notes on
-// SiteFooter and TMDbAttribution tagged themselves.
-//
-// The intervening-lines quantifier is lazy AND bounded: an orphaned tag with no
-// export beneath it must not reach down the file and mis-tag something else.
-const TAG_RX =
-  /(?:^|\n)[^\S\n]*(?:\/\*\*|\*)[^\S\n]*@design-system(?<provider>-provider)?(?<group>[^\n]*)\n(?:[^\n]*\n){0,10}?export\s+(?<def>default\s+)?(?:function|const)\s+(?<name>[A-Z][A-Za-z0-9]*)/g
+// Use the project's TypeScript parser so tags belong to real declarations,
+// never code examples in strings or the next export after an unrelated node.
+const problems = []
+const isDesignTag = (tag) => ['design-system', 'design-system-provider'].includes(tag.tagName.text)
+
+function scanSource(text, file) {
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const found = []
+  function visit(node) {
+    const tags = (node.jsDoc ?? []).flatMap((doc) => [...(doc.tags ?? [])]).filter(isDesignTag)
+    if (tags.length) {
+      const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) ?? [] : []
+      const exported = node.parent === source && modifiers.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)
+      let name
+      if (ts.isFunctionDeclaration(node) && node.body) name = node.name
+      if (ts.isVariableStatement(node) && (node.declarationList.flags & ts.NodeFlags.Const)) {
+        const declarations = node.declarationList.declarations
+        if (declarations.length === 1 && declarations[0].initializer) name = declarations[0].name
+      }
+
+      if (tags.length !== 1 || !exported || !name || !ts.isIdentifier(name) || !/^[A-Z]/.test(name.text)) {
+        const { line } = source.getLineAndCharacterOfPosition(tags[0].pos)
+        problems.push(`${file}:${line + 1}: @design-system tags require one top-level exported, named function or const with an uppercase name`)
+      } else {
+        const tag = tags[0]
+        const isProvider = tag.tagName.text === 'design-system-provider'
+        // The section occupies the tag's first line; remaining JSDoc is prose.
+        const group = ts.getTextOfJSDocComment(tag.comment)?.split(/\r?\n/)[0].trim() || 'Components'
+        found.push({
+          name: name.text,
+          path: file,
+          viaDefault: modifiers.some((m) => m.kind === ts.SyntaxKind.DefaultKeyword),
+          isProvider,
+          group: isProvider ? PROVIDER_GROUP : group,
+        })
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return found
+}
 
 function scan() {
   const found = []
@@ -103,16 +125,7 @@ function scan() {
     for (const file of walk(root)) {
       const text = readFileSync(join(ROOT, file), 'utf8')
       if (!text.includes('@design-system')) continue
-      for (const m of text.matchAll(TAG_RX)) {
-        const { provider, group, def, name } = m.groups
-        found.push({
-          name,
-          path: file,
-          viaDefault: !!def,
-          isProvider: !!provider,
-          group: provider ? PROVIDER_GROUP : group.trim().replace(/\s*\*\/\s*$/, '') || 'Components',
-        })
-      }
+      found.push(...scanSource(text, file))
     }
   }
   return found.sort((a, b) => a.name.localeCompare(b.name))
@@ -121,8 +134,6 @@ function scan() {
 const components = scan()
 
 // ── validate ────────────────────────────────────────────────────────────────
-
-const problems = []
 
 const byName = new Map()
 for (const c of components) {
@@ -188,7 +199,7 @@ const entryBody = groupNames.map((g) => {
         ...cs.filter((c) => c.viaDefault).map((c) => `default as ${c.name}`),
         ...cs.filter((c) => !c.viaDefault).map((c) => c.name),
       ]
-      const from = `'../${path.replace(/\.tsx$/, '')}'`
+      const from = JSON.stringify(`../${path.replace(/\.tsx$/, '')}`)
       const one = `export { ${specs.join(', ')} } from ${from}`
       // Paths here are long and unshortenable, so a single re-export stays on
       // one line however wide it gets; only multi-specifier statements wrap.
@@ -217,12 +228,12 @@ groupNames.forEach((g, gi) => {
 })
 // drop the trailing comma from the final entry
 const lastIdx = mapLines.findLastIndex((l) => l.trim())
-mapLines[lastIdx] = mapLines[lastIdx].replace(/,$/, '')
+if (lastIdx >= 0) mapLines[lastIdx] = mapLines[lastIdx].replace(/,$/, '')
 
 const provider = providers[0]
 const rest = { ...cfg }
 delete rest.componentSrcMap
-if (provider) rest.provider = { component: provider.name }
+if (provider) rest.provider = { ...cfg.provider, component: provider.name }
 else delete rest.provider
 
 const restJson = JSON.stringify(rest, null, 2)
@@ -248,7 +259,7 @@ const missingDocs = components
 
 // ── write / check ───────────────────────────────────────────────────────────
 
-const currentEntry = readFileSync(ENTRY, 'utf8')
+const currentEntry = existsSync(ENTRY) ? readFileSync(ENTRY, 'utf8') : ''
 const currentConfig = readFileSync(CONFIG, 'utf8')
 const stale = [
   currentEntry !== entryText && relative(ROOT, ENTRY),

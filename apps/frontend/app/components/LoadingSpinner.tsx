@@ -12,7 +12,7 @@ export function LoadingSpinner({ message, size = 'sm' }: Props): React.ReactElem
       <div
         className={`inline-block animate-spin rounded-full ${sizeClass} border-b-2 border-gold`}
       ></div>
-      {message && <p className="mt-2 text-sm text-foreground-secondary">{message}</p>}
+      {message && <p className="type-body-sm mt-2 text-foreground-secondary">{message}</p>}
     </div>
   )
 }

@@ -45,8 +45,8 @@ function RailPoster({ movie }: { movie: HoldingMovie }) {
 function BreakdownTile({ value, label, tone }: { value: number; label: string; tone: string }) {
   return (
     <div className="rounded-[10px] border border-border bg-background p-[9px] text-center">
-      <div className={`font-display text-[15px] font-bold ${tone}`}>{formatFantasyPoints(value)}</div>
-      <div className="mt-0.5 text-[10px] text-foreground-muted">{label}</div>
+      <div className={`type-number ${tone}`}>{formatFantasyPoints(value)}</div>
+      <div className="type-meta mt-0.5 text-foreground-secondary">{label}</div>
     </div>
   )
 }
@@ -87,8 +87,8 @@ export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
       data-testid="team-detail-rail"
     >
       <div>
-        <div className="truncate font-display text-[15px] font-semibold text-foreground">{displayName}</div>
-        <div className="mt-0.5 truncate text-xs text-foreground-muted">{subline}</div>
+        <div className="type-row-title truncate text-foreground">{displayName}</div>
+        <div className="type-meta mt-0.5 truncate text-foreground-secondary">{subline}</div>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -111,20 +111,23 @@ export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
             onClick={() => setSelected(movie)}
             aria-label={`View ${movie.title}`}
             data-testid="rail-movie-button"
-            className="flex w-full items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px] text-left transition-colors hover:border-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            className="group flex w-full cursor-pointer items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px] text-left transition-colors hover:border-border-hover hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
           >
             <RailPoster movie={movie} />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold text-foreground" title={movie.title}>
+              <div
+                className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
+                title={movie.title}
+              >
                 {movie.title}
               </div>
-              <div className="mt-0.5 text-[11px] text-foreground-muted">
+              <div className="type-meta mt-0.5 text-foreground-secondary">
                 {movie.release_date ? formatDate(movie.release_date) : 'TBA'}
               </div>
             </div>
             <div
-              className={`flex-none font-display text-base font-bold ${
-                points == null ? 'text-foreground-muted' : points >= 0 ? 'text-gold' : 'text-crimson'
+              className={`type-number flex-none ${
+                points == null ? 'text-foreground-secondary' : points >= 0 ? 'text-gold' : 'text-crimson'
               }`}
             >
               {formatFantasyPoints(points)}
@@ -132,7 +135,7 @@ export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
           </button>
         ))
       ) : (
-        <p className="py-2 text-center text-[13px] text-foreground-muted">No movies drafted yet</p>
+        <p className="type-body-sm py-2 text-center text-foreground-secondary">No movies drafted yet</p>
       )}
 
       {/* Read-only: these are whoever's roster you are inspecting, not yours. */}

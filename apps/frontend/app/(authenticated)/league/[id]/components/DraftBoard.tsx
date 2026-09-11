@@ -10,8 +10,9 @@ import { buildTeamInfoByUserId, buildTeamInfoByTeamId, type TeamDisplayInfo } fr
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
+import DraftBoardHeader from './DraftBoardHeader'
 import CounterpickRound from './CounterpickRound'
-import { ClapperboardIcon, ArrowUpIcon, ClockIcon } from './Icons'
+import { ClapperboardIcon } from './Icons'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, CounterpickWithDetails } from '@/types'
 
 interface Props {
@@ -125,16 +126,16 @@ export default function DraftBoard({
   if (league.status === 'setup') {
     return (
       <div className="card p-6">
-        <h2 className="text-xl font-semibold font-display text-foreground mb-4">Draft Board</h2>
+        <h2 className="type-section text-foreground mb-4">Draft board</h2>
         <div className="text-center py-8">
           <div className="flex justify-center mb-4">
             <ClapperboardIcon className="w-16 h-16 text-foreground-muted" />
           </div>
           <p className="text-foreground-secondary mb-2">The draft hasn&apos;t started yet.</p>
-          <p className="text-sm text-foreground-muted">
+          <p className="type-body-sm text-foreground-secondary">
             Waiting for the league owner to start the draft.
           </p>
-          <p className="text-sm text-foreground-muted mt-2">
+          <p className="type-body-sm text-foreground-secondary mt-2">
             {participants.length} / {league.max_participants} participants joined
           </p>
         </div>
@@ -159,7 +160,7 @@ export default function DraftBoard({
     return (
       <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold font-display text-foreground">Draft Results</h2>
+          <h2 className="type-section text-foreground">Draft results</h2>
           <DraftProgressRing current={picksMade} total={totalPicks} size="sm" showLabel={false} />
         </div>
         <p className="text-foreground-secondary mb-4">The draft is complete!</p>
@@ -170,84 +171,26 @@ export default function DraftBoard({
 
   return (
     <div className="space-y-6" data-testid="draft-board">
-      {/* Draft Header Card */}
-      <div className="card p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
-          {/* Left: Title and Status */}
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-xl font-semibold font-display text-foreground">Draft Board</h2>
-            </div>
-
-            {/* Current Turn Indicator */}
-            {nextPick && (
-              <div
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  isMyTurn
-                    ? 'bg-success-bg border-success shadow-glow-gold animate-glow-pulse'
-                    : 'bg-elevated border-border'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      isMyTurn ? 'bg-success text-background' : 'bg-gold text-background'
-                    }`}
-                  >
-                    {isMyTurn ? (
-                      <ArrowUpIcon className="w-6 h-6" />
-                    ) : (
-                      <ClockIcon className="w-6 h-6" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm text-foreground-muted">
-                      Round {nextPick.round}, Pick {nextPick.pick_number}
-                    </p>
-                    <p
-                      className={`text-lg font-semibold ${
-                        isMyTurn ? 'text-success' : 'text-foreground'
-                      }`}
-                    >
-                      {isMyTurn ? "It's your turn!" : `${getTeamName(nextPick.user_id)}'s pick`}
-                    </p>
-                    {!isMyTurn && getOwnerName(nextPick.user_id) && (
-                      <p className="text-xs text-foreground-muted">
-                        {getOwnerName(nextPick.user_id)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {isDraftComplete && (
-              <div className="p-4 rounded-xl bg-info-bg border-2 border-info">
-                <p className="text-info font-semibold text-lg">
-                  Draft complete! Finalizing results...
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Progress Ring */}
-          <div className="flex-shrink-0 self-center sm:self-start">
-            <DraftProgressRing current={picksMade} total={totalPicks} size="lg" />
-          </div>
-        </div>
-
-        {/* Pick Order Queue */}
-        {nextPick && (
-          <div className="mt-4 pt-4 sm:mt-6 sm:pt-6 border-t border-border">
-            <PickOrderQueue
-              participants={participants}
-              currentPickIndex={picksMade}
-              currentUserId={currentUserId}
-              rounds={league.draft_slots}
-            />
-          </div>
-        )}
-      </div>
+      <DraftBoardHeader
+        picksMade={picksMade}
+        totalPicks={totalPicks}
+        turn={nextPick ? {
+          round: nextPick.round,
+          pickNumber: nextPick.pick_number,
+          teamName: getTeamName(nextPick.user_id),
+          ownerName: getOwnerName(nextPick.user_id),
+        } : null}
+        isMyTurn={isMyTurn}
+        isDraftComplete={isDraftComplete}
+        queue={nextPick ? (
+          <PickOrderQueue
+            participants={participants}
+            currentPickIndex={picksMade}
+            currentUserId={currentUserId}
+            rounds={league.draft_slots}
+          />
+        ) : null}
+      />
 
       {error && <div className="alert alert-error">{error}</div>}
 
@@ -255,6 +198,7 @@ export default function DraftBoard({
       <div className="card p-4 sm:p-6">
         <MoviePicker
           draftedTmdbIds={draftedTmdbIds}
+          seasonYear={league.season_year}
           isMyTurn={isMyTurn}
           picking={picking}
           onPick={handleDraftPick}
@@ -271,7 +215,7 @@ export interface PickHistoryProps {
 
 export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): React.ReactElement {
   if (draftPicks.length === 0) {
-    return <p className="text-foreground-muted">No picks yet</p>
+    return <p className="text-foreground-secondary">No picks yet</p>
   }
 
   // Sort by most recent first
@@ -317,10 +261,10 @@ export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): Rea
 
             {/* Pick Info */}
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-foreground truncate">{pick.movies?.title}</p>
-              <p className="text-sm text-foreground-muted truncate">{pick.teams?.name}</p>
+              <p className="type-row-title text-foreground truncate">{pick.movies?.title}</p>
+              <p className="type-body-sm text-foreground-secondary truncate">{pick.teams?.name}</p>
               {pickerInfo?.ownerName && (
-                <p className="text-xs text-foreground-muted truncate">{pickerInfo.ownerName}</p>
+                <p className="type-meta text-foreground-secondary truncate">{pickerInfo.ownerName}</p>
               )}
             </div>
 
@@ -337,8 +281,8 @@ export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): Rea
             {/* Round/Pick Badge */}
             <div className="flex-shrink-0 text-right">
               <span
-                className={`inline-block px-2 py-1 rounded-lg text-xs font-medium ${
-                  index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-muted'
+                className={`type-meta inline-block px-2 py-1 rounded-lg ${
+                  index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-secondary'
                 }`}
               >
                 R{pick.round} P{pick.pick_number}

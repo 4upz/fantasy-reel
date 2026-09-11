@@ -199,7 +199,7 @@ export default function EditTeamModal({
       <div className="glass card p-6 w-full max-w-md animate-slide-up">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-display font-bold text-foreground">Edit Team</h2>
+          <h2 className="type-panel text-foreground">Edit team</h2>
           <button
             type="button"
             onClick={onClose}
@@ -254,7 +254,7 @@ export default function EditTeamModal({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isBusy}
-              className="btn btn-secondary text-sm"
+              className="type-control btn btn-secondary"
             >
               {isUploading ? (
                 <>
@@ -264,7 +264,7 @@ export default function EditTeamModal({
               ) : (
                 <>
                   <Camera className="w-4 h-4 mr-2" />
-                  Upload Photo
+                  Upload photo
                 </>
               )}
             </button>
@@ -274,7 +274,7 @@ export default function EditTeamModal({
                 type="button"
                 onClick={handleRemoveAvatar}
                 disabled={isBusy}
-                className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-error-bg"
+                className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-error-bg"
                 data-testid="team-avatar-remove"
               >
                 {isRemoving ? (
@@ -291,14 +291,14 @@ export default function EditTeamModal({
               </button>
             )}
 
-            <p className="text-xs text-foreground-muted">PNG, JPEG, WebP or GIF. Max 2MB.</p>
+            <p className="type-meta text-foreground-secondary">PNG, JPEG, WebP or GIF. Max 2MB.</p>
           </div>
         </div>
 
         {/* Team Name */}
         <div className="mb-6">
-          <label htmlFor="team-name" className="block text-sm font-medium text-foreground-secondary mb-2">
-            Team Name
+          <label htmlFor="team-name" className="type-label block text-foreground-secondary mb-2">
+            Team name
           </label>
           <input
             id="team-name"
@@ -312,7 +312,7 @@ export default function EditTeamModal({
           />
           <div className="flex justify-end mt-1">
             <span
-              className={`text-xs ${trimmedName.length > MAX_NAME_LENGTH ? 'text-error' : 'text-foreground-muted'}`}
+              className={`type-meta ${trimmedName.length > MAX_NAME_LENGTH ? 'text-error' : 'text-foreground-secondary'}`}
               data-testid="team-name-char-count"
             >
               {trimmedName.length}/{MAX_NAME_LENGTH}

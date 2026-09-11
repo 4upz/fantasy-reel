@@ -2,6 +2,7 @@
 // optimizer endpoint and build-time config. Renders a plain <img> with the
 // same intrinsic sizing props so cards lay out exactly as in the app.
 import React from 'react'
+import brandAssets from '../assets/brand.json'
 
 type ImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'width' | 'height'> & {
   src: string | { src: string }
@@ -36,7 +37,8 @@ const Image = React.forwardRef<HTMLImageElement, ImageProps>(function Image(
   },
   ref
 ) {
-  const url = typeof src === 'string' ? src : (src?.src ?? '')
+  const originalUrl = typeof src === 'string' ? src : (src?.src ?? '')
+  const url = (brandAssets as Record<string, string>)[originalUrl] ?? originalUrl
   // `fill` is absolute-positioned cover in Next; reproduce that contract so
   // parents with `relative` size their children identically.
   const fillStyle: React.CSSProperties = fill

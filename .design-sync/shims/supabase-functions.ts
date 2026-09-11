@@ -10,3 +10,21 @@ export async function callEdgeFunction<T>(
 ): Promise<{ data: T | null; error: string | null }> {
   return { data: null, error: null }
 }
+
+// SWR movie reads need the same export as the app. Browsing has an honest
+// empty result offline; detail reads require a supplied fixture or show the
+// component's normal error state instead of inventing a movie response.
+export async function edgeFetcher<T>(
+  functionName: string,
+  body: Record<string, unknown>
+): Promise<T> {
+  if (functionName === 'browse-movies' || functionName === 'search-movies') {
+    return {
+      results: [],
+      page: typeof body.page === 'number' ? body.page : 1,
+      total_pages: 0,
+      total_results: 0,
+    } as T
+  }
+  throw new Error('Live movie details are unavailable in the standalone design preview.')
+}

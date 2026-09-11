@@ -41,7 +41,7 @@ export default function ConnectionStatusIndicator({ status }: Props): React.Reac
       title={config.title}
     >
       <span className={`w-2 h-2 rounded-full ${config.dot}`} />
-      <span className={`text-xs font-medium ${config.textColor}`}>{config.text}</span>
+      <span className={`type-meta ${config.textColor}`}>{config.text}</span>
     </div>
   )
 }

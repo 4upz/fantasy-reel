@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import type { TMDbSearchResult, WishlistedMovie } from '@/types'
 import { useWishlist } from '@/hooks/useWishlist'
+import { useFranchiseHistories } from '@/hooks/useFranchiseHistory'
 import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
 import DraftFilters from './DraftFilters'
 import DraftMovieCard from './DraftMovieCard'
@@ -12,6 +13,8 @@ import { isWithinDays } from './utils'
 
 interface Props {
   draftedTmdbIds: Set<number>
+  /** The league's season year, which decides which movies are still in play. */
+  seasonYear: number
   isMyTurn: boolean
   picking: boolean
   onPick: (tmdbId: number, movieData: TMDbSearchResult) => void
@@ -68,6 +71,7 @@ function wishlistToTMDbResult(wm: WishlistedMovie): TMDbSearchResult {
 
 export default function MoviePicker({
   draftedTmdbIds,
+  seasonYear,
   isMyTurn,
   picking,
   onPick,
@@ -86,7 +90,7 @@ export default function MoviePicker({
     browse,
     fetchTrending,
     loadMore,
-  } = useDraftMovies({ draftedTmdbIds })
+  } = useDraftMovies({ draftedTmdbIds, seasonYear })
 
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useCallback(
@@ -122,6 +126,8 @@ export default function MoviePicker({
         return movies
     }
   }, [movies, activeTab, wishlistMovies])
+
+  const franchises = useFranchiseHistories(filteredMovies.map((m) => m.tmdb_id))
 
   const handleTabChange = useCallback(
     (tab: TabType) => {
@@ -166,12 +172,12 @@ export default function MoviePicker({
     <div className="space-y-6" data-testid="movie-picker">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-display font-semibold text-foreground">
+        <h3 className="type-panel text-foreground">
           {isMyTurn ? 'Select Your Movie' : 'Browse Movies'}
         </h3>
         {isMyTurn && (
           <span className="badge bg-success-bg text-success border border-success">
-            Your Turn
+            Your turn
           </span>
         )}
       </div>
@@ -182,7 +188,7 @@ export default function MoviePicker({
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
+            className={`type-control flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
               activeTab === tab.id
                 ? 'bg-gold text-background shadow-md'
                 : 'text-foreground-secondary hover:text-foreground hover:bg-surface'
@@ -192,7 +198,7 @@ export default function MoviePicker({
             <span>{tab.label}</span>
             {tab.id === 'wishlist' && wishlistedIds.size > 0 && (
               <span
-                className={`px-1.5 py-0.5 rounded-full text-xs ${
+                className={`type-meta px-1.5 py-0.5 rounded-full ${
                   activeTab === tab.id ? 'bg-background/20 text-background' : 'bg-crimson text-white'
                 }`}
               >
@@ -237,7 +243,7 @@ export default function MoviePicker({
           {activeTab !== 'all' && (
             <button
               onClick={() => setActiveTab('all')}
-              className="mt-3 text-sm text-gold hover:text-gold-hover transition-colors"
+              className="type-control mt-3 text-gold hover:text-gold-hover transition-colors"
             >
               View all movies
             </button>
@@ -251,6 +257,7 @@ export default function MoviePicker({
                 key={movie.tmdb_id}
                 movie={movie}
                 isDrafted={draftedTmdbIds.has(movie.tmdb_id)}
+                franchise={franchises.get(movie.tmdb_id) ?? null}
                 onPreview={setPreviewMovie}
               />
             ))}

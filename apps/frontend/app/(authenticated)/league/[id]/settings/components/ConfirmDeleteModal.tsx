@@ -32,15 +32,15 @@ export default function ConfirmDeleteModal({
             <div className="p-2 rounded-lg bg-crimson/10">
               <AlertTriangle className="w-5 h-5 text-crimson" />
             </div>
-            <h2 className="text-xl font-display font-bold text-foreground">
-              Delete League
+            <h2 className="type-panel text-foreground">
+              Delete league
             </h2>
           </div>
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="p-1 text-foreground-muted hover:text-foreground transition-colors"
+            className="p-1 text-foreground-secondary hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -52,7 +52,7 @@ export default function ConfirmDeleteModal({
             This action <span className="text-crimson font-medium">cannot be undone</span>.
             This will permanently delete the league and all associated data including:
           </p>
-          <ul className="mt-3 space-y-1 text-sm text-foreground-muted">
+          <ul className="type-body-sm mt-3 space-y-1 text-foreground-secondary">
             <li>• All participants and teams</li>
             <li>• All draft picks</li>
             <li>• All invitations</li>
@@ -63,9 +63,9 @@ export default function ConfirmDeleteModal({
         <div className="mb-6">
           <label
             htmlFor="confirm_delete"
-            className="block text-sm text-foreground-secondary mb-2"
+            className="type-label block text-foreground-secondary mb-2"
           >
-            Type <span className="font-mono text-foreground bg-elevated px-1.5 py-0.5 rounded">{leagueName}</span> to confirm
+            Type <span className="type-row-title text-foreground bg-elevated px-1.5 py-0.5 rounded">{leagueName}</span> to confirm
           </label>
           <input
             type="text"
@@ -101,7 +101,7 @@ export default function ConfirmDeleteModal({
                 Deleting...
               </>
             ) : (
-              'Delete League'
+              'Delete league'
             )}
           </button>
         </div>

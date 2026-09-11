@@ -3,8 +3,8 @@
 //
 // Names and teams follow the repo's own seeded test users
 // (supabase/seed.sql): Alice Spielberg, Bob Nolan, Carol Coppola,
-// Dave Kubrick. Movie data is curated from FALLBACK_MOVIES in
-// apps/frontend/app/components/landing/data.ts.
+// Dave Kubrick. Movie data was curated from the retired homepage's
+// FALLBACK_MOVIES and remains local preview data.
 
 /** Dates that stay correct under any clock — the screenshot harness pins the
     browser clock to a different date than the live design pane uses. */

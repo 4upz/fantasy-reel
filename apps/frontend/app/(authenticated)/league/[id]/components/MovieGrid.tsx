@@ -14,7 +14,14 @@ interface Props {
   leagueStatus: League['status']
 }
 
-/** Opens a movie's details. Every row and tile on this page is one of these. */
+/**
+ * Opens a movie's details. Every row and tile on this page is one of these.
+ *
+ * `group` is what lets the poster and title inside react to a hover on the
+ * whole target rather than only the few pixels under the pointer, and
+ * `cursor-pointer` is not redundant: Tailwind v4's preflight leaves a button on
+ * the browser's default arrow, so without it nothing here reads as clickable.
+ */
 function MovieButton({
   movie,
   onSelect,
@@ -32,7 +39,7 @@ function MovieButton({
       onClick={() => onSelect(movie)}
       data-testid="overview-movie-button"
       aria-label={`View ${movie.title}`}
-      className={`text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold ${className}`}
+      className={`group cursor-pointer text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold ${className}`}
     >
       {children}
     </button>
@@ -77,7 +84,11 @@ function Poster({
           alt={movie.title}
           fill
           sizes={sizes}
-          className="object-cover"
+          // The poster pushes very slightly past its frame on hover. The frame
+          // already clips, so this reads as the artwork leaning forward rather
+          // than the card moving - which keeps the horizontal shelf from
+          // jittering the way a lift on the tile itself would.
+          className="object-cover transition-transform duration-300 ease-out motion-safe:group-hover:scale-[1.06]"
           onError={() => setFailed(true)}
         />
       ) : (
@@ -141,12 +152,12 @@ function NextUpHero({
       onSelect={onSelect}
       className={`mx-4 mb-[18px] block w-[calc(100%-2rem)] overflow-hidden rounded-[18px] p-3.5 ${
         isImminent
-          ? 'border border-gold/30 bg-[linear-gradient(160deg,rgba(201,162,39,0.12),var(--color-surface)_60%)]'
-          : 'border border-border bg-surface hover:border-border-hover'
+          ? 'border border-gold/30 bg-[linear-gradient(160deg,rgba(201,162,39,0.12),var(--color-surface)_60%)] hover:border-gold/60'
+          : 'border border-border bg-surface hover:border-border-hover hover:bg-surface-hover'
       }`}
     >
       <div
-        className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] ${
+        className={`type-meta flex items-center gap-1.5 ${
           isImminent ? 'text-gold' : 'text-foreground-secondary'
         }`}
       >
@@ -162,11 +173,11 @@ function NextUpHero({
           iconClassName="h-[22px] w-[22px]"
         />
         <div className="min-w-0 flex-1">
-          <h3 className="font-display text-[19px] font-bold leading-[1.25] text-foreground">{movie.title}</h3>
-          <p className="mt-1 text-[13px] text-foreground-secondary">
+          <h3 className="type-card text-foreground">{movie.title}</h3>
+          <p className="type-body-sm mt-1 text-foreground-secondary">
             {shortDate(movie.release_date)} · {acquisitionLabel(movie)}
           </p>
-          <p className="mt-2 text-xs leading-[1.5] text-foreground-muted">
+          <p className="type-meta mt-2 text-foreground-secondary">
             Not rated yet. Scores land the night after release.
           </p>
         </div>
@@ -179,8 +190,8 @@ function NextUpHero({
 export function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
     <div className="flex items-baseline gap-2 px-4 pb-2">
-      <h3 className="font-display text-[15px] font-semibold text-foreground">{title}</h3>
-      <span className="text-xs text-foreground-muted">{count}</span>
+      <h3 className="type-section text-foreground">{title}</h3>
+      <span className="type-meta type-numeric text-foreground-secondary">{count}</span>
     </div>
   )
 }
@@ -207,13 +218,16 @@ function UpcomingShelf({
             <Poster
               movie={movie}
               sizes="118px"
-              className="h-[177px] w-[118px] rounded-xl border border-border"
+              className="h-[177px] w-[118px] rounded-xl border border-border transition-colors group-hover:border-border-hover"
               iconClassName="h-[22px] w-[22px]"
             />
-            <div className="truncate text-[13px] font-semibold text-foreground" title={movie.title}>
+            <div
+              className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
+              title={movie.title}
+            >
               {movie.title}
             </div>
-            <div className="text-[11px] text-foreground-muted">{shortDate(movie.release_date)}</div>
+            <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
           </MovieButton>
         ))}
       </div>
@@ -237,7 +251,7 @@ function ScoredList({
             key={movie.id}
             movie={movie}
             onSelect={onSelect}
-            className="flex flex-none items-center gap-3 rounded-[14px] border border-border bg-surface px-3 py-[11px] hover:border-border-hover"
+            className="flex flex-none items-center gap-3 rounded-[14px] border border-border bg-surface px-3 py-[11px] hover:border-border-hover hover:bg-surface-hover"
           >
             <Poster
               movie={movie}
@@ -246,17 +260,20 @@ function ScoredList({
               iconClassName="h-[15px] w-[15px]"
             />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-semibold text-foreground" title={movie.title}>
+              <div
+                className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
+                title={movie.title}
+              >
                 {movie.title}
               </div>
-              <div className="mt-[3px] text-xs text-foreground-muted">
+              <div className="type-meta mt-[3px] text-foreground-secondary">
                 {movie.combined_score != null ? `${Math.round(movie.combined_score)}% Tomatometer` : 'Not rated yet'}
               </div>
             </div>
             <div
-              className={`flex-none font-display text-xl font-bold ${
+              className={`type-number flex-none ${
                 movie.fantasy_points == null
-                  ? 'text-foreground-muted'
+                  ? 'text-foreground-secondary'
                   : movie.fantasy_points >= 0
                     ? 'text-gold'
                     : 'text-crimson'
@@ -302,7 +319,7 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
             <div key={i} className="aspect-[2/3] animate-pulse rounded-lg border border-border bg-elevated" />
           ))}
         </div>
-        <p className="text-foreground-muted">Your movies will appear here after the draft</p>
+        <p className="text-foreground-secondary">Your movies will appear here after the draft</p>
       </div>
     )
   }
@@ -310,7 +327,7 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
   if (movies.length === 0) {
     return (
       <div className="card mx-4 p-8 text-center">
-        <p className="text-foreground-muted">
+        <p className="text-foreground-secondary">
           {leagueStatus === 'drafting'
             ? 'Draft your first movie to see it here'
             : 'No movies on your roster yet'}

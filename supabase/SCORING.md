@@ -117,6 +117,30 @@ ALTER TABLE movies ADD COLUMN scoring_bonuses JSONB;           -- Unused; always
 ALTER TABLE movies ADD COLUMN scores_updated_at TIMESTAMPTZ;
 ```
 
+`scores_updated_at` means "last **checked**", not "last scored": `update-scores`
+also stamps it when MDBList authoritatively has nothing for a movie (no entry,
+or an entry with no ratings), leaving the movie unscored but rotating it to the
+back of the queue. The nightly batch selects eligible movies ordered by
+`scores_updated_at ASC NULLS FIRST` (never-checked first, then stalest) —
+without that ordering plus the stamp, an unordered `LIMIT` let old movies fill
+every batch and newly released movies never received their first score.
+Transient MDBList failures (network errors, rate limits) deliberately do not
+stamp, so those movies retry on the next run.
+
+Pending is not failure: a movie MDBList has no data for yet (no entry, no
+ratings, or ratings without a Tomatometer) is reported under `unscored` in the
+run's response and `job_runs.metadata` — with a reason of `not_on_mdblist`,
+`no_ratings`, or `no_rt_score` — rather than under `errors`. Only genuine
+failures (network/auth/rate-limit errors, review upserts, RPC crashes) count
+toward `job_status`, which is what the cron proxy turns into an HTTP 500 and
+what fires ops alerts. A movie stuck pending forever is still findable:
+
+```sql
+SELECT metadata->'unscored' FROM job_runs
+WHERE job_name = 'update-scores' AND metadata ? 'unscored'
+ORDER BY started_at DESC LIMIT 1;
+```
+
 ### Reviews Table (existing)
 
 Stores individual scores from each source:
@@ -365,6 +389,24 @@ SELECT COUNT(*) FROM pgmq.q_movie_scores;
 ```
 
 ## Monitoring
+
+### Backlog Visibility
+
+Each nightly (no-body) run records `eligible` (movies matching the selection
+before the 30-movie limit) and `backlog` (`eligible − selected`) in its
+`job_runs.metadata` and response body. A nonzero backlog is normal after a
+release-heavy stretch and drains at 30 per run; a backlog that **grows** run
+over run is the starvation signature throughput metrics can't show (every run
+reports 30 processed, `ok`). When the backlog exceeds a full batch *and* is
+worse than the previous instrumented run, an ops alert fires via `alertOps`.
+
+```sql
+-- Backlog trend, newest first
+SELECT started_at, metadata->>'eligible' AS eligible, metadata->>'backlog' AS backlog
+FROM job_runs
+WHERE job_name = 'update-scores' AND metadata ? 'backlog'
+ORDER BY started_at DESC LIMIT 14;
+```
 
 ### Check Cron Job Status
 

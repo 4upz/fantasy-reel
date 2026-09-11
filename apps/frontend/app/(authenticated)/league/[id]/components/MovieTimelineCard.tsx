@@ -68,34 +68,34 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
             sizes="128px"
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-foreground-muted">
-            No Poster
+          <div className="absolute inset-0 flex items-center justify-center text-foreground-secondary">
+            No poster
           </div>
         )}
 
         {/* Hover Overlay with the Tomatometer */}
         {isScored && movie.combined_score != null && (
           <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
-            <div className="text-xs text-foreground-muted">Tomatometer</div>
+            <div className="type-meta text-foreground-secondary">Tomatometer</div>
             <TomatometerScore score={movie.combined_score} size="sm" showAccolade={false} />
           </div>
         )}
       </div>
 
       {/* Title */}
-      <p className="mt-2 text-sm font-medium text-foreground truncate text-center">
+      <p className="type-row-title mt-2 text-foreground truncate text-center">
         {movie.title}
       </p>
 
       {/* Fantasy Points or Countdown */}
-      <p className={`text-sm text-center font-semibold ${
+      <p className={`type-number text-center ${
         isScored
           ? hasFantasyPoints && isPositive
             ? 'text-gold'
             : hasFantasyPoints
               ? 'text-crimson'
-              : 'text-foreground-muted'
-          : 'text-foreground-muted font-normal'
+              : 'text-foreground-secondary'
+          : 'text-foreground-secondary'
       }`}>
         {isScored && hasFantasyPoints
           ? `${formatFantasyPoints(movie.fantasy_points!)} pts`

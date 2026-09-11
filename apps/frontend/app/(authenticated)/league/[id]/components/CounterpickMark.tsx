@@ -11,6 +11,7 @@ import { Target } from 'lucide-react'
  *
  * Sits in the poster's top-left corner, so its container needs `relative`.
  */
+/** @design-system Foundation */
 export default function CounterpickMark({ label = 'Counterpick' }: { label?: string }) {
   return (
     <div

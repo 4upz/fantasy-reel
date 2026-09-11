@@ -17,10 +17,10 @@ jobs:
   e2e-tests:
     name: E2E Tests (Chromium)
     runs-on: ubuntu-latest
-    # Tests run against a production build (see the Build step below), so the
-    # suite is compile-free at test time. Healthy runs finish well under 15 min
-    # including the ~2-3 min build; 25 catches a truly hung run early.
-    timeout-minutes: 25
+    # Run API integration tests before the production build and browser suite,
+    # so their fixtures never compete. The API step has its own 15-minute cap;
+    # retain another 25 minutes for stack startup, the build, and browser tests.
+    timeout-minutes: 40
 
     steps:
       - name: Checkout repository
@@ -42,6 +42,11 @@ jobs:
           # silent breakage (version: latest broke CI when the CLI flipped
           # [api].auto_expose_new_tables — see supabase/cli#5524). Bump on purpose.
           version: 2.111.0
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2
+        with:
+          deno-version: '2.6.4'
 
       - name: Start Supabase
         # The CLI intermittently 502s while the stack is coming up
@@ -82,6 +87,22 @@ jobs:
           done
           echo "supabase db reset failed after 3 attempts"
           exit 1
+
+      - name: Verify database integrity
+        run: supabase test db
+
+      - name: Run API integration tests
+        timeout-minutes: 15
+        # The task expects this ignored file; credentials come from the same
+        # local CI stack environment already used by the browser tests below.
+        run: |
+          touch .env.test
+          deno task test --reporter=tap
+        working-directory: supabase/functions
+        env:
+          SUPABASE_URL: ${{ env.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ env.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase-keys.outputs.service-role-key }}
 
       # Cache the browser bundle so most runs skip the CDN download entirely.
       # Keyed on the installed Playwright version so upgrades refresh it.

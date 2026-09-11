@@ -18,6 +18,8 @@
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { COMPLETED_STATUS } from './league-status.ts'
+import { createLogger, serializeError } from './logger.ts'
 import {
   sendDiscordNotification,
   DISCORD_COLORS,
@@ -25,6 +27,8 @@ import {
   buildEmbedAuthor,
   type DiscordEmbed,
 } from './discord.ts'
+
+const log = createLogger('score-notifications')
 
 // ============================================================================
 // Types
@@ -847,6 +851,31 @@ export async function sendScoreNotifications(
   if (context.leagueIds.length === 0) return summary
 
   try {
+    // A shared movie can keep scoring for another season after this snapshot
+    // was taken. Recheck at dispatch so completed seasons stay quiet, including
+    // the notable-miss path for movies their teams dropped.
+    const { data: completedLeagues, error } = await supabase
+      .from('leagues')
+      .select('id')
+      .in('id', context.leagueIds)
+      .eq('status', COMPLETED_STATUS)
+
+    if (error) {
+      log.warn('Could not check completed seasons before score notifications', {
+        error: serializeError(error),
+      })
+      return summary
+    }
+
+    const completedIds = new Set((completedLeagues ?? []).map((league: { id: string }) => league.id))
+    context = {
+      ...context,
+      leagueIds: context.leagueIds.filter((id) => !completedIds.has(id)),
+      placements: context.placements.filter((placement) => !completedIds.has(placement.leagueId)),
+      droppedPlacements: context.droppedPlacements.filter((placement) => !completedIds.has(placement.leagueId)),
+    }
+    if (context.leagueIds.length === 0) return summary
+
     const movieChanges = await loadMovieScoreChanges(supabase, context)
 
     summary.notable_misses = await sendNotableMissNotifications(supabase, context, movieChanges)

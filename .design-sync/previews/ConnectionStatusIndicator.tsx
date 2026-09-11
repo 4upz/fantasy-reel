@@ -22,7 +22,7 @@ export const Connected = () => (
 /** Where it actually sits: trailing a draft board header. */
 export const InAHeader = () => (
   <div className="flex items-center justify-between max-w-lg p-3 rounded-lg bg-surface border border-border">
-    <h3 className="font-display font-semibold text-foreground">Round 3 · Pick 5</h3>
+    <h3 className="type-panel text-foreground">Round 3 · Pick 5</h3>
     <ConnectionStatusIndicator status="connected" />
   </div>
 )

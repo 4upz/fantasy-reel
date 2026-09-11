@@ -75,7 +75,7 @@ export default function LoginPage() {
         </div>
 
         <div className="text-center">
-          <h1 className="text-3xl font-bold font-display text-foreground">Welcome Back</h1>
+          <h1 className="type-page text-foreground">Welcome back</h1>
           <p className="mt-3 text-foreground-secondary">Sign in to your account</p>
         </div>
 
@@ -94,7 +94,7 @@ export default function LoginPage() {
                   type="button"
                   onClick={handleResend}
                   disabled={isResending}
-                  className="text-sm font-semibold text-gold hover:text-gold-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="type-control text-gold hover:text-gold-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {isResending ? 'Sending...' : 'Resend confirmation email'}
                 </button>
@@ -144,8 +144,8 @@ export default function LoginPage() {
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-foreground-muted/30" />
               </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-background-elevated px-4 text-foreground-muted">or</span>
+              <div className="type-body-sm relative flex justify-center">
+                <span className="bg-background-elevated px-4 text-foreground-secondary">or</span>
               </div>
             </div>
 
@@ -155,16 +155,16 @@ export default function LoginPage() {
             </div>
 
             <div className="text-center space-y-3">
-              <p className="text-sm">
+              <p className="type-body-sm">
                 <Link
                   href="/forgot-password"
-                  className="text-foreground-muted hover:text-gold transition-colors"
+                  className="text-foreground-secondary hover:text-gold transition-colors"
                   data-testid="forgot-password-link"
                 >
                   Forgot your password?
                 </Link>
               </p>
-              <p className="text-sm text-foreground-secondary">
+              <p className="type-body-sm text-foreground-secondary">
                 Don&apos;t have an account?{' '}
                 <Link
                   href="/signup"
@@ -173,10 +173,10 @@ export default function LoginPage() {
                   Sign up
                 </Link>
               </p>
-              <p className="text-sm">
+              <p className="type-body-sm">
                 <Link
                   href="/auth/auth-code-error"
-                  className="text-foreground-muted hover:text-gold transition-colors"
+                  className="text-foreground-secondary hover:text-gold transition-colors"
                 >
                   Didn&apos;t receive confirmation email?
                 </Link>

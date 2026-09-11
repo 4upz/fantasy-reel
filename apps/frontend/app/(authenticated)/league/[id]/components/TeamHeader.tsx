@@ -23,7 +23,7 @@ export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }:
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
           <h2
-            className="truncate font-display text-lg font-semibold text-foreground"
+            className="type-row-title truncate text-foreground"
             data-testid="team-name"
           >
             {team.name}
@@ -32,7 +32,7 @@ export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }:
             <button
               type="button"
               onClick={onEditTeam}
-              className="flex-none rounded-md p-1 text-foreground-muted transition-colors hover:text-gold"
+              className="flex-none rounded-md p-1 text-foreground-secondary transition-colors hover:text-gold"
               aria-label="Edit team"
               data-testid="edit-team-button"
             >
@@ -40,18 +40,18 @@ export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }:
             </button>
           )}
         </div>
-        <p className="mt-0.5 truncate text-xs text-foreground-muted">
+        <p className="type-meta mt-0.5 truncate text-foreground-secondary">
           #{team.rank} of {totalTeams} · {leagueName}
         </p>
       </div>
 
       <div className="flex-none text-right">
         <div
-          className={`font-display text-[30px] font-bold leading-none ${isPositive ? 'text-gold' : 'text-crimson'}`}
+          className={`type-number-lg ${isPositive ? 'text-gold' : 'text-crimson'}`}
         >
           {formatFantasyPoints(team.total_points)}
         </div>
-        <div className="mt-0.5 text-[9px] uppercase tracking-[0.1em] text-foreground-muted">Points</div>
+        <div className="type-meta mt-0.5 text-foreground-secondary">Points</div>
       </div>
     </div>
   )

@@ -115,23 +115,23 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
                 <Link2 className="w-10 h-10 text-gold" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold font-display text-foreground">Join a League</h1>
+            <h1 className="type-page text-foreground">Join a league</h1>
             <p className="text-foreground-secondary mt-2">
               Enter the 6-character code shared by your league commissioner
             </p>
             {userDisplayName && (
-              <p className="text-sm text-foreground-muted mt-1">Joining as {userDisplayName}</p>
+              <p className="type-body-sm text-foreground-secondary mt-1">Joining as {userDisplayName}</p>
             )}
           </div>
 
           <form onSubmit={handleSubmit}>
-            {/* Join Code Input */}
+            {/* Join code Input */}
             <div className="mb-6">
               <label
                 htmlFor="joinCode"
-                className="block text-sm font-medium text-foreground-secondary mb-2"
+                className="type-label block text-foreground-secondary mb-2"
               >
-                Join Code
+                Join code
               </label>
               <input
                 type="text"
@@ -147,13 +147,13 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
               />
             </div>
 
-            {/* Team Name Input */}
+            {/* Team name Input */}
             <div className="mb-6">
               <label
                 htmlFor="teamName"
-                className="block text-sm font-medium text-foreground-secondary mb-1"
+                className="type-label block text-foreground-secondary mb-1"
               >
-                Team Name <span className="text-foreground-muted">(optional)</span>
+                Team name <span className="text-foreground-secondary">(optional)</span>
               </label>
               <input
                 type="text"
@@ -164,7 +164,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
                 placeholder="My Production Company"
                 className="input"
               />
-              <p className="text-xs text-foreground-muted mt-1">
+              <p className="type-meta text-foreground-secondary mt-1">
                 Leave blank to use a default name based on your username
               </p>
             </div>
@@ -172,7 +172,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             {joinError && (
               <div id="join-error" className="alert alert-error mb-4" role="alert" data-testid="form-error">
                 <p className="font-medium">Unable to join</p>
-                <p className="text-sm opacity-90">{joinError}</p>
+                <p className="type-body-sm opacity-90">{joinError}</p>
               </div>
             )}
 
@@ -182,10 +182,10 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
               className="btn btn-primary w-full py-3 text-lg"
               data-testid="join-league-button"
             >
-              {isLoading ? 'Joining...' : 'Join League'}
+              {isLoading ? 'Joining...' : 'Join league'}
             </button>
 
-            <p className="text-center text-sm text-foreground-muted mt-4">
+            <p className="type-body-sm text-center text-foreground-secondary mt-4">
               <Link href="/dashboard" className="text-gold hover:text-gold-hover transition-colors">
                 Cancel and go to dashboard
               </Link>
@@ -204,20 +204,20 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
           <div className="flex justify-center mb-3">
             <Clapperboard className="w-12 h-12 text-gold" />
           </div>
-          <h1 className="text-2xl font-bold font-display text-foreground">Join League</h1>
+          <h1 className="type-page text-foreground">Join league</h1>
           <p className="text-foreground-secondary mt-2">
             {hasToken
               ? "You've been invited to join a fantasy movie league!"
               : "You're about to join a fantasy movie league!"}
           </p>
           {userDisplayName && (
-            <p className="text-sm text-foreground-muted mt-1">Joining as {userDisplayName}</p>
+            <p className="type-body-sm text-foreground-secondary mt-1">Joining as {userDisplayName}</p>
           )}
         </div>
 
         {hasCode && (
           <div className="mb-6 text-center">
-            <p className="text-xs text-foreground-muted mb-1">Joining with code</p>
+            <p className="type-meta text-foreground-secondary mb-1">Joining with code</p>
             <div className="font-mono text-xl font-bold tracking-[0.3em] text-gold">
               {code?.toUpperCase()}
             </div>
@@ -228,9 +228,9 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
           <div className="mb-6">
             <label
               htmlFor="teamNameToken"
-              className="block text-sm font-medium text-foreground-secondary mb-1"
+              className="type-label block text-foreground-secondary mb-1"
             >
-              Team Name <span className="text-foreground-muted">(optional)</span>
+              Team name <span className="text-foreground-secondary">(optional)</span>
             </label>
             <input
               type="text"
@@ -241,7 +241,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
               placeholder="My Production Company"
               className="input"
             />
-            <p className="text-xs text-foreground-muted mt-1">
+            <p className="type-meta text-foreground-secondary mt-1">
               Leave blank to use a default name based on your username
             </p>
           </div>
@@ -249,7 +249,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
           {joinError && (
             <div id="join-error" className="alert alert-error mb-4" role="alert" data-testid="form-error">
               <p className="font-medium">Unable to join</p>
-              <p className="text-sm opacity-90">{joinError}</p>
+              <p className="type-body-sm opacity-90">{joinError}</p>
             </div>
           )}
 
@@ -259,10 +259,10 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             className="btn btn-primary w-full py-3 text-lg"
             data-testid="join-league-button"
           >
-            {isLoading ? 'Joining...' : 'Join League'}
+            {isLoading ? 'Joining...' : 'Join league'}
           </button>
 
-          <p className="text-center text-sm text-foreground-muted mt-4">
+          <p className="type-body-sm text-center text-foreground-secondary mt-4">
             <Link href="/dashboard" className="text-gold hover:text-gold-hover transition-colors">
               Cancel and go to dashboard
             </Link>

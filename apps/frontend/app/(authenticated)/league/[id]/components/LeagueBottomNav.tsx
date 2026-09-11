@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   BarChart3,
   DollarSign,
+  History,
   Home,
   ListOrdered,
   MoreHorizontal,
@@ -21,6 +22,8 @@ interface Props {
   league: League
   outbidCount?: number
   isOwner?: boolean
+  /** Seasons in this league's series; more than one reveals the History tab. */
+  seasonCount?: number
 }
 
 const TAB_ICONS: Record<string, LucideIcon> = {
@@ -30,6 +33,7 @@ const TAB_ICONS: Record<string, LucideIcon> = {
   Bidding: DollarSign,
   Trading: ArrowLeftRight,
   Roster: Users,
+  History,
   Settings,
 }
 
@@ -43,11 +47,16 @@ function TabIcon({ name, className }: { name: string; className: string }) {
  * overflow was easy to miss - here every destination is either on the bar or one
  * tap away in the sheet.
  */
-export default function LeagueBottomNav({ league, outbidCount = 0, isOwner = false }: Props): React.ReactElement | null {
+export default function LeagueBottomNav({
+  league,
+  outbidCount = 0,
+  isOwner = false,
+  seasonCount = 1,
+}: Props): React.ReactElement | null {
   const pathname = usePathname()
   const [isSheetOpen, setIsSheetOpen] = useState(false)
 
-  const tabs = getVisibleTabs(league, isOwner, outbidCount)
+  const tabs = getVisibleTabs(league, isOwner, outbidCount, seasonCount)
   const { barTabs, moreTabs } = splitTabsForBottomBar(tabs)
 
   // Route changes come from taps inside the sheet, so it has to close itself.
@@ -105,7 +114,7 @@ export default function LeagueBottomNav({ league, outbidCount = 0, isOwner = fal
                 href={tab.href}
                 aria-current={isActive ? 'page' : undefined}
                 className={`flex flex-col items-center gap-1 ${
-                  isActive ? 'font-semibold text-gold' : 'font-medium text-foreground-muted'
+                  isActive ? 'text-gold' : 'text-foreground-secondary'
                 }`}
               >
                 <span className="relative">
@@ -114,7 +123,7 @@ export default function LeagueBottomNav({ league, outbidCount = 0, isOwner = fal
                     <>
                       <span
                         aria-hidden="true"
-                        className="absolute -top-1 -right-2 min-w-[15px] rounded-full bg-crimson px-1 text-center text-[9px] font-bold leading-[15px] text-foreground"
+                        className="type-meta type-numeric absolute -top-1 -right-2 min-w-4 rounded-full bg-crimson px-1 text-center text-foreground"
                       >
                         {tab.badge}
                       </span>
@@ -122,7 +131,7 @@ export default function LeagueBottomNav({ league, outbidCount = 0, isOwner = fal
                     </>
                   )}
                 </span>
-                <span className="text-[10px]">{tab.name}</span>
+                <span className="type-meta">{tab.name}</span>
               </Link>
             )
           })}
@@ -133,11 +142,11 @@ export default function LeagueBottomNav({ league, outbidCount = 0, isOwner = fal
               onClick={() => setIsSheetOpen((open) => !open)}
               aria-expanded={isSheetOpen}
               className={`flex flex-col items-center gap-1 ${
-                isMoreActive || isSheetOpen ? 'font-semibold text-gold' : 'font-medium text-foreground-muted'
+                isMoreActive || isSheetOpen ? 'text-gold' : 'text-foreground-secondary'
               }`}
             >
               <MoreHorizontal className="h-[21px] w-[21px]" strokeWidth={1.8} aria-hidden="true" />
-              <span className="text-[10px]">More</span>
+              <span className="type-meta">More</span>
             </button>
           )}
         </div>
@@ -151,14 +160,14 @@ function SheetLink({ tab, isActive }: { tab: LeagueTab; isActive: boolean }) {
     <Link
       href={tab.href}
       aria-current={isActive ? 'page' : undefined}
-      className={`flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] transition-colors hover:bg-surface-hover ${
-        isActive ? 'font-semibold text-gold' : 'text-foreground'
+      className={`flex items-center gap-3 rounded-xl px-3 py-3 type-control transition-colors hover:bg-surface-hover ${
+        isActive ? 'text-gold' : 'text-foreground'
       }`}
     >
       <TabIcon name={tab.name} className="h-5 w-5" />
       {tab.name}
       {tab.badge && (
-        <span className="ml-auto rounded-full bg-crimson px-1.5 py-0.5 text-xs text-foreground">{tab.badge}</span>
+        <span className="type-meta ml-auto rounded-full bg-crimson px-1.5 py-0.5 text-foreground">{tab.badge}</span>
       )}
     </Link>
   )

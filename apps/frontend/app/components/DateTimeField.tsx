@@ -31,6 +31,7 @@ interface Props {
  * are trivially edited and are not honored uniformly. Callers must validate the
  * value themselves, and the server must validate it again.
  */
+/** @design-system Foundation */
 export default function DateTimeField({
   label,
   value,
@@ -44,7 +45,7 @@ export default function DateTimeField({
 
   return (
     <div className={className}>
-      <label htmlFor={id} className="text-sm text-foreground-secondary">
+      <label htmlFor={id} className="type-label text-foreground-secondary">
         {label}
       </label>
       <input
@@ -61,7 +62,7 @@ export default function DateTimeField({
       {error && (
         // role="alert" so the message is announced when it appears, and a
         // leading marker so the invalid state is not carried by color alone.
-        <p id={`${id}-error`} role="alert" className="mt-1 text-sm text-error">
+        <p id={`${id}-error`} role="alert" className="type-body-sm mt-1 text-error">
           <span aria-hidden="true">! </span>
           {error}
         </p>

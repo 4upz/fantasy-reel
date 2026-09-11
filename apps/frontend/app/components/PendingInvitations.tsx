@@ -51,7 +51,7 @@ export default function PendingInvitations({ initialInvitations }: PendingInvita
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
         </div>
-        <h3 className="font-display font-semibold text-foreground">
+        <h3 className="type-panel text-foreground">
           {invitations.length === 1 ? 'You have a pending invitation' : `You have ${invitations.length} pending invitations`}
         </h3>
       </div>
@@ -91,10 +91,10 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
   return (
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-lg bg-surface border border-border" data-testid="invitation-card">
       <div className="flex-1 min-w-0">
-        <h4 className="font-semibold text-foreground truncate">
+        <h4 className="type-label text-foreground truncate">
           {invitation.leagues.name}
         </h4>
-        <div className="flex items-center gap-2 text-sm text-foreground-muted">
+        <div className="type-body-sm flex items-center gap-2 text-foreground-secondary">
           <span>Sent {formatDate(invitation.sent_at)}</span>
           <span className="w-1 h-1 rounded-full bg-foreground-muted" />
           <span className={isExpiringSoon ? 'text-warning font-medium' : ''}>
@@ -108,7 +108,7 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
       <div className="flex gap-2 shrink-0">
         <button
           onClick={() => onAccept(invitation.token)}
-          className="btn btn-primary text-sm"
+          className="type-control btn btn-primary"
           data-testid="accept-invitation-button"
         >
           Accept
@@ -116,7 +116,7 @@ function InvitationCard({ invitation, onAccept, onDecline, isDeclining }: Invita
         <button
           onClick={() => onDecline(invitation.id)}
           disabled={isDeclining}
-          className="btn btn-ghost text-sm"
+          className="type-control btn btn-ghost"
           data-testid="decline-invitation-button"
         >
           {isDeclining ? '...' : 'Decline'}

@@ -45,6 +45,13 @@ supabase/functions/
 - Test authentication, validation, and business logic
 - Never call third-party APIs — see below
 
+### Database Tests (`supabase/tests/*.sql`)
+- Run `npx supabase test db` from the project root after applying migrations.
+- Verify transactional rollback, RLS, and frozen season history against Postgres.
+- Fixtures run inside a rolled-back transaction. These tests take table locks;
+  run them before API or browser suites, not concurrently on the same database.
+- The E2E CI job runs them before browser tests.
+
 ### External API Tests (opt-in)
 A few steps in `tests/update-scores.test.ts` and `tests/sync-release-dates.test.ts`
 call the **live MDBList and TMDb APIs**. They are skipped by default and run only

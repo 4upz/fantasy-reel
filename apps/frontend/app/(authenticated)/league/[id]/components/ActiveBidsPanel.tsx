@@ -65,10 +65,10 @@ function UnifiedBidSection({
     <div className={`space-y-3 ${className}`}>
       <div className="flex items-center gap-2">
         {icon}
-        <h3 className={`font-display font-semibold ${titleClassName}`}>
+        <h3 className={`type-panel ${titleClassName}`}>
           {title}
         </h3>
-        <span className="text-foreground-muted text-sm">
+        <span className="type-body-sm text-foreground-secondary">
           ({count})
         </span>
       </div>
@@ -161,7 +161,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
   )
 
   function renderBidItem(item: UnifiedBidItem, isOwner: boolean): React.ReactElement {
-    // A released movie can't be bid on any more, so offering "Counter Bid" on
+    // A released movie can't be bid on any more, so offering "Counter bid" on
     // one is a dead end -- the server rejects it once the modal is filled in.
     const releaseDate = item.type === 'pickup'
       ? item.bid.movie_data?.release_date ?? null
@@ -291,8 +291,8 @@ export default function ActiveBidsPanel(): React.ReactElement {
           <div className="w-16 h-16 bg-elevated rounded-2xl flex items-center justify-center mx-auto mb-5">
             <Film className="w-8 h-8 text-foreground-muted" />
           </div>
-          <h3 className="font-display font-bold text-xl text-foreground mb-2">
-            No Active Bids
+          <h3 className="type-panel text-foreground mb-2">
+            No active bids
           </h3>
           <p className="text-foreground-secondary mb-6 max-w-md mx-auto">
             Place a bid on upcoming movies to add them to your roster.
@@ -307,7 +307,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
               className="btn btn-primary px-6 py-3"
             >
               <Plus className="w-5 h-5 mr-2" />
-              Place Your First Bid
+              Place your first bid
             </button>
             {canPlaceCounterpickBid && (
               <button
@@ -315,7 +315,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
                 className="btn btn-secondary px-6 py-3 border-crimson text-crimson hover:bg-crimson/10"
               >
                 <Target className="w-5 h-5 mr-2" />
-                Place Counterpick Bid
+                Place counterpick bid
               </button>
             )}
           </div>

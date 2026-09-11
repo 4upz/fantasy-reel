@@ -70,11 +70,11 @@ export default function BidResultCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="font-display font-semibold text-foreground leading-snug line-clamp-2">
+              <h3 className="type-row-title text-foreground line-clamp-2">
                 {result.title}
               </h3>
               {result.kind === 'counterpick' && result.targetTeamId && (
-                <p className="text-xs text-crimson mt-0.5 truncate">
+                <p className="type-meta text-crimson mt-0.5 truncate">
                   Counterpick on {teamName(teamsById, result.targetTeamId)}
                 </p>
               )}
@@ -83,18 +83,18 @@ export default function BidResultCard({
             {/* Price, right-aligned so a round's amounts read as one column */}
             <div className="flex-none text-right">
               {result.winner ? (
-                <p className="bid-amount-display text-xl sm:text-2xl tabular-nums leading-none">
+                <p className="type-number-lg bid-amount-display">
                   ${result.winner.amount}
                 </p>
               ) : (
-                <p className="font-display font-semibold text-sm text-foreground-muted leading-none">
+                <p className="type-body-sm text-foreground-secondary">
                   No winner
                 </p>
               )}
               {(wonByMe || lostByMe) && (
                 <span
-                  className={`inline-block mt-1.5 text-[11px] font-medium px-1.5 py-0.5 rounded ${
-                    wonByMe ? 'bg-gold-muted text-gold' : 'bg-elevated text-foreground-muted'
+                  className={`type-meta inline-block mt-1.5 px-1.5 py-0.5 rounded ${
+                    wonByMe ? 'bg-gold-muted text-gold' : 'bg-elevated text-foreground-secondary'
                   }`}
                 >
                   {wonByMe ? 'You won' : 'You lost'}
@@ -104,11 +104,11 @@ export default function BidResultCard({
           </div>
 
           {result.winner && (
-            <p className="text-sm text-foreground-secondary mt-1 truncate">
+            <p className="type-body-sm text-foreground-secondary mt-1 truncate">
               <span className={wonByMe ? 'text-gold' : undefined}>
                 {teamName(teamsById, result.winner.teamId)}
               </span>
-              {margin && <span className="text-foreground-muted"> · {margin}</span>}
+              {margin && <span className="text-foreground-secondary"> · {margin}</span>}
             </p>
           )}
 
@@ -120,18 +120,18 @@ export default function BidResultCard({
           */}
           {result.losers.length > 0 && (
             <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-foreground-muted text-xs uppercase tracking-wide mb-1.5">
+              <p className="type-meta text-foreground-secondary mb-1.5">
                 {result.winner ? 'Also bid' : 'Bids'}
               </p>
               <ul className="space-y-1">
                 {result.losers.map((loser) => {
                   const isMine = loser.teamId === currentTeamId
                   return (
-                    <li key={loser.bidId} className="flex items-baseline justify-between gap-3 text-sm">
+                    <li key={loser.bidId} className="type-body-sm flex items-baseline justify-between gap-3">
                       <span className={`truncate ${isMine ? 'text-gold' : 'text-foreground-secondary'}`}>
                         {teamName(teamsById, loser.teamId)}
                       </span>
-                      <span className="flex-none tabular-nums text-foreground-muted">
+                      <span className="flex-none type-numeric text-foreground-secondary">
                         ${loser.amount}
                       </span>
                     </li>

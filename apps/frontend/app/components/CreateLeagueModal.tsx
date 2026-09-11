@@ -140,17 +140,17 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 id="create-league-title" className="text-xl font-semibold font-display text-foreground">
-              Create New League
+            <h2 id="create-league-title" className="type-panel text-foreground">
+              Create new league
             </h2>
-            <p className="text-sm text-foreground-muted mt-1">
+            <p className="type-body-sm text-foreground-secondary mt-1">
               Set up your fantasy movie league
             </p>
           </div>
           <button
             onClick={handleClose}
             disabled={creating}
-            className="text-foreground-muted hover:text-foreground transition-colors disabled:opacity-50"
+            className="text-foreground-secondary hover:text-foreground transition-colors disabled:opacity-50"
             aria-label="Close"
             data-testid="close-modal-button"
           >
@@ -162,10 +162,10 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* League Name */}
+          {/* League name */}
           <div>
-            <label htmlFor="league-name" className="block text-sm font-medium text-foreground-secondary mb-1.5">
-              League Name
+            <label htmlFor="league-name" className="type-label block text-foreground-secondary mb-1.5">
+              League name
             </label>
             <input
               type="text"
@@ -180,11 +180,11 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
             />
           </div>
 
-          {/* Team Name */}
+          {/* Team name */}
           <div>
-            <label htmlFor="team-name" className="block text-sm font-medium text-foreground-secondary mb-1.5">
-              Your Team Name
-              <span className="text-foreground-muted font-normal ml-1">(optional)</span>
+            <label htmlFor="team-name" className="type-label block text-foreground-secondary mb-1.5">
+              Your team name
+              <span className="text-foreground-secondary font-normal ml-1">(optional)</span>
             </label>
             <input
               type="text"
@@ -197,18 +197,18 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
             />
           </div>
 
-          {/* Max Participants & Invite Only - side by side */}
+          {/* Max participants & Invite Only - side by side */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="max-participants" className="block text-sm font-medium text-foreground-secondary mb-1.5">
-                Max Players
+              <label htmlFor="max-participants" className="type-label block text-foreground-secondary mb-1.5">
+                Max players
               </label>
               <input
                 type="number"
                 id="max-participants"
                 value={formData.max_participants}
                 onChange={(e) => setFormData(prev => ({ ...prev, max_participants: parseInt(e.target.value) || 8 }))}
-                className="input"
+                className="type-numeric input"
                 min="2"
                 max="20"
                 data-testid="max-participants-input"
@@ -216,15 +216,15 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
             </div>
 
             <div className="flex items-end pb-2">
-              <label className="flex items-center gap-2.5 cursor-pointer group">
+              <label className="type-label flex items-center gap-2.5 cursor-pointer group">
                 <input
                   type="checkbox"
                   checked={formData.invite_only}
                   onChange={(e) => setFormData(prev => ({ ...prev, invite_only: e.target.checked }))}
                   className="h-4 w-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-background"
                 />
-                <span className="text-sm text-foreground group-hover:text-gold transition-colors">
-                  Private League
+                <span className="type-body-sm text-foreground group-hover:text-gold transition-colors">
+                  Private league
                 </span>
               </label>
             </div>
@@ -234,76 +234,76 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-2 text-sm text-foreground-secondary hover:text-gold transition-colors w-full"
+            className="type-control flex items-center gap-2 text-foreground-secondary hover:text-gold transition-colors w-full"
           >
             <ChevronDown
               className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
             />
-            <span>Draft & Scoring Options</span>
+            <span>Draft & scoring options</span>
           </button>
 
           {/* Advanced Settings */}
           {showAdvanced && (
             <div className="space-y-5 pt-2 border-t border-border">
-              {/* Roster Configuration */}
+              {/* Roster configuration */}
               <div>
-                <h4 className="text-sm font-medium text-foreground mb-3">Roster Configuration</h4>
+                <h4 className="type-label text-foreground mb-3">Roster configuration</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Total Slots */}
+                  {/* Total slots */}
                   <div>
-                    <label htmlFor="total-slots" className="block text-xs font-medium text-foreground-secondary mb-1">
-                      Total Roster Slots
+                    <label htmlFor="total-slots" className="type-label block text-foreground-secondary mb-1">
+                      Total roster slots
                     </label>
                     <input
                       type="number"
                       id="total-slots"
                       value={formData.total_slots}
                       onChange={(e) => setFormData(prev => ({ ...prev, total_slots: parseInt(e.target.value) || MIN_TOTAL_SLOTS }))}
-                      className="input w-20"
+                      className="type-numeric input w-20"
                       min={MIN_TOTAL_SLOTS}
                       max={MAX_TOTAL_SLOTS}
                     />
-                    <p className="text-xs text-foreground-muted mt-1">Movies per team</p>
+                    <p className="type-meta text-foreground-secondary mt-1">Movies per team</p>
                   </div>
 
-                  {/* Draft Slots */}
+                  {/* Draft slots */}
                   <div>
-                    <label htmlFor="draft-slots" className="block text-xs font-medium text-foreground-secondary mb-1">
-                      Draft Slots
+                    <label htmlFor="draft-slots" className="type-label block text-foreground-secondary mb-1">
+                      Draft slots
                     </label>
                     <input
                       type="number"
                       id="draft-slots"
                       value={formData.draft_slots}
                       onChange={(e) => setFormData(prev => ({ ...prev, draft_slots: parseInt(e.target.value) || MIN_DRAFT_SLOTS }))}
-                      className="input w-20"
+                      className="type-numeric input w-20"
                       min={MIN_DRAFT_SLOTS}
                       max={formData.total_slots}
                     />
-                    <p className="text-xs text-foreground-muted mt-1">= draft rounds</p>
+                    <p className="type-meta text-foreground-secondary mt-1">= draft rounds</p>
                   </div>
 
-                  {/* Drop Limit */}
+                  {/* Drop limit */}
                   <div>
-                    <label htmlFor="drop-limit" className="block text-xs font-medium text-foreground-secondary mb-1">
-                      Drop Limit
+                    <label htmlFor="drop-limit" className="type-label block text-foreground-secondary mb-1">
+                      Drop limit
                     </label>
                     <input
                       type="number"
                       id="drop-limit"
                       value={formData.drop_limit}
                       onChange={(e) => setFormData(prev => ({ ...prev, drop_limit: parseInt(e.target.value) || MIN_DROP_LIMIT }))}
-                      className="input w-20"
+                      className="type-numeric input w-20"
                       min={MIN_DROP_LIMIT}
                       max={MAX_DROP_LIMIT}
                     />
-                    <p className="text-xs text-foreground-muted mt-1">Max drops/season</p>
+                    <p className="type-meta text-foreground-secondary mt-1">Max drops/season</p>
                   </div>
 
-                  {/* Counterbid Window */}
+                  {/* Counterbid window */}
                   <div>
-                    <label htmlFor="counterbid-hours" className="block text-xs font-medium text-foreground-secondary mb-1">
-                      Counterbid Window
+                    <label htmlFor="counterbid-hours" className="type-label block text-foreground-secondary mb-1">
+                      Counterbid window
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -311,19 +311,19 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                         id="counterbid-hours"
                         value={formData.counterbid_hours}
                         onChange={(e) => setFormData(prev => ({ ...prev, counterbid_hours: parseInt(e.target.value) || MIN_COUNTERBID_HOURS }))}
-                        className="input w-16"
+                        className="type-numeric input w-16"
                         min={MIN_COUNTERBID_HOURS}
                         max={MAX_COUNTERBID_HOURS}
                       />
-                      <span className="text-xs text-foreground-secondary">hrs</span>
+                      <span className="type-meta text-foreground-secondary">hrs</span>
                     </div>
-                    <p className="text-xs text-foreground-muted mt-1">Time to counter</p>
+                    <p className="type-meta text-foreground-secondary mt-1">Time to counter</p>
                   </div>
 
-                  {/* New Bid Cutoff */}
+                  {/* New bid cutoff */}
                   <div>
-                    <label htmlFor="new-bid-cutoff-hours" className="block text-xs font-medium text-foreground-secondary mb-1">
-                      New Bid Cutoff
+                    <label htmlFor="new-bid-cutoff-hours" className="type-label block text-foreground-secondary mb-1">
+                      New bid cutoff
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -331,13 +331,13 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                         id="new-bid-cutoff-hours"
                         value={formData.new_bid_cutoff_hours}
                         onChange={(e) => setFormData(prev => ({ ...prev, new_bid_cutoff_hours: parseInt(e.target.value) || MIN_NEW_BID_CUTOFF_HOURS }))}
-                        className="input w-16"
+                        className="type-numeric input w-16"
                         min={MIN_NEW_BID_CUTOFF_HOURS}
                         max={MAX_NEW_BID_CUTOFF_HOURS}
                       />
-                      <span className="text-xs text-foreground-secondary">hrs</span>
+                      <span className="type-meta text-foreground-secondary">hrs</span>
                     </div>
-                    <p className="text-xs text-foreground-muted mt-1">
+                    <p className="type-meta text-foreground-secondary mt-1">
                       {formData.new_bid_cutoff_hours === 0 ? 'Open all week' : 'Then counters only'}
                     </p>
                   </div>
@@ -345,11 +345,11 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
 
                 {/* Roster slots are pooled: the draft fills some, bidding the rest. */}
                 <div className="mt-3 p-2 bg-surface-hover rounded border border-border">
-                  <div className="flex items-center justify-between text-xs">
+                  <div className="type-meta flex items-center justify-between">
                     <span className="text-foreground-secondary">Open after the draft</span>
                     <span className="font-medium text-gold">{pickupSlots} slots</span>
                   </div>
-                  <p className="text-xs text-foreground-muted mt-0.5">
+                  <p className="type-meta text-foreground-secondary mt-0.5">
                     {pickupSlots > 0
                       ? 'Filled by bidding, or by dropping a movie and bidding on a replacement'
                       : 'The draft fills every roster slot. Teams bid by dropping a movie first.'}
@@ -357,45 +357,45 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                 </div>
               </div>
 
-              {/* Counterpick Configuration */}
+              {/* Counterpick configuration */}
               <div>
-                <h4 className="text-sm font-medium text-foreground mb-1">Counterpick Configuration</h4>
-                <p className="text-xs text-foreground-muted mb-3">
+                <h4 className="type-label text-foreground mb-1">Counterpick configuration</h4>
+                <p className="type-meta text-foreground-secondary mb-3">
                   Bet against opponent movies to earn points if they underperform
                 </p>
                 <div className="grid grid-cols-2 gap-4">
                   {/* Draft Counterpick Slots */}
                   <div>
-                    <label htmlFor="draft-counterpick-slots" className="block text-xs font-medium text-foreground-secondary mb-1">
-                      Draft Counterpicks
+                    <label htmlFor="draft-counterpick-slots" className="type-label block text-foreground-secondary mb-1">
+                      Draft counterpicks
                     </label>
                     <input
                       type="number"
                       id="draft-counterpick-slots"
                       value={formData.draft_counterpick_slots}
                       onChange={(e) => setFormData(prev => ({ ...prev, draft_counterpick_slots: parseInt(e.target.value) || MIN_DRAFT_COUNTERPICK_SLOTS }))}
-                      className="input w-20"
+                      className="type-numeric input w-20"
                       min={MIN_DRAFT_COUNTERPICK_SLOTS}
                       max={MAX_DRAFT_COUNTERPICK_SLOTS}
                     />
-                    <p className="text-xs text-foreground-muted mt-1">After draft (0-5)</p>
+                    <p className="type-meta text-foreground-secondary mt-1">After draft (0-5)</p>
                   </div>
 
                   {/* Bidding Counterpick Slots */}
                   <div>
-                    <label htmlFor="bidding-counterpick-slots" className="block text-xs font-medium text-foreground-secondary mb-1">
-                      Bidding Counterpicks
+                    <label htmlFor="bidding-counterpick-slots" className="type-label block text-foreground-secondary mb-1">
+                      Bidding counterpicks
                     </label>
                     <input
                       type="number"
                       id="bidding-counterpick-slots"
                       value={formData.bidding_counterpick_slots}
                       onChange={(e) => setFormData(prev => ({ ...prev, bidding_counterpick_slots: parseInt(e.target.value) || MIN_BIDDING_COUNTERPICK_SLOTS }))}
-                      className="input w-20"
+                      className="type-numeric input w-20"
                       min={MIN_BIDDING_COUNTERPICK_SLOTS}
                       max={MAX_BIDDING_COUNTERPICK_SLOTS}
                     />
-                    <p className="text-xs text-foreground-muted mt-1">During bidding (0-3)</p>
+                    <p className="type-meta text-foreground-secondary mt-1">During bidding (0-3)</p>
                   </div>
                 </div>
 
@@ -408,9 +408,9 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                     onChange={(e) => setFormData(prev => ({ ...prev, counterpicks_block_drops: e.target.checked }))}
                     className="mt-0.5 w-4 h-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-0 focus:ring-2 cursor-pointer"
                   />
-                  <label htmlFor="counterpicks-block-drops" className="cursor-pointer">
-                    <span className="text-xs font-medium text-foreground">Block drops on counterpicked movies</span>
-                    <p className="text-xs text-foreground-muted">Prevent dropping movies that have been counterpicked</p>
+                  <label htmlFor="counterpicks-block-drops" className="type-label cursor-pointer">
+                    <span className="type-meta text-foreground">Block drops on counterpicked movies</span>
+                    <p className="type-meta text-foreground-secondary">Prevent dropping movies that have been counterpicked</p>
                   </label>
                 </div>
               </div>
@@ -436,7 +436,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                   Creating...
                 </>
               ) : (
-                'Create League'
+                'Create league'
               )}
             </button>
             <button

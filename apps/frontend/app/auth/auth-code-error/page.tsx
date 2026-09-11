@@ -41,7 +41,7 @@ export default function AuthCodeErrorPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold font-display text-foreground">Authentication Error</h1>
+          <h1 className="type-page text-foreground">Authentication error</h1>
           <p className="mt-3 text-foreground-secondary">
             The confirmation link may have expired or already been used.
           </p>
@@ -49,7 +49,7 @@ export default function AuthCodeErrorPage() {
 
         {/* Resend confirmation section */}
         <div className="card p-6">
-          <h3 className="text-lg font-semibold text-foreground mb-4">Resend confirmation email</h3>
+          <h3 className="type-panel text-foreground mb-4">Resend confirmation email</h3>
 
           <FormError message={error} />
           {success && (
@@ -85,7 +85,7 @@ export default function AuthCodeErrorPage() {
           {/* Local development helper */}
           {process.env.NODE_ENV === 'development' && (
             <div className="alert alert-info mt-4">
-              <p className="text-xs">
+              <p className="type-meta">
                 <strong>Local development?</strong> Check Mailpit at{' '}
                 <a
                   href="http://localhost:54324"

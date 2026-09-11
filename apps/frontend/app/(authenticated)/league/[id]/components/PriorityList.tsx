@@ -119,9 +119,9 @@ export default function PriorityList({
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <ListOrdered className="w-4 h-4 text-gold" />
-          <h3 className="font-display font-semibold text-foreground">{heading}</h3>
+          <h3 className="type-panel text-foreground">{heading}</h3>
         </div>
-        <p className="text-sm text-foreground-secondary">{description}</p>
+        <p className="type-body-sm text-foreground-secondary">{description}</p>
       </div>
 
       <ol className="space-y-2">
@@ -134,7 +134,7 @@ export default function PriorityList({
               {index === cutIndex && (
                 <div className="flex items-center gap-2 py-2" data-testid={cutTestId}>
                   <Scissors className="w-3.5 h-3.5 text-foreground-muted shrink-0" />
-                  <span className="text-xs uppercase tracking-wide text-foreground-muted whitespace-nowrap">
+                  <span className="type-meta text-foreground-secondary whitespace-nowrap">
                     {cutLabel}
                   </span>
                   <span className="h-px flex-1 bg-border" />
@@ -149,8 +149,8 @@ export default function PriorityList({
                 }`}
               >
                 <span
-                  className={`font-mono text-sm w-6 text-center shrink-0 ${
-                    willFit ? 'text-gold' : 'text-foreground-muted'
+                  className={`type-number w-6 text-center shrink-0 ${
+                    willFit ? 'text-gold' : 'text-foreground-secondary'
                   }`}
                   aria-hidden="true"
                 >
@@ -158,9 +158,9 @@ export default function PriorityList({
                 </span>
 
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground truncate">{item.title}</p>
+                  <p className="type-row-title text-foreground truncate">{item.title}</p>
                   {item.meta && (
-                    <p className="text-xs text-foreground-secondary mt-0.5 flex items-center gap-1">
+                    <p className="type-meta text-foreground-secondary mt-0.5 flex items-center gap-1">
                       {item.meta}
                     </p>
                   )}

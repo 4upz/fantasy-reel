@@ -3,14 +3,21 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { ParticipantWithProfile } from '@/types'
+import ChampionCrown from './ChampionCrown'
 
 interface Props {
   participants: ParticipantWithProfile[]
   ownerId: string
+  /** Last season's winners, crowned beside their names. */
+  reigningChampions?: { seasonYear: number; userIds: string[] } | null
 }
 
 /** @design-system League */
-export default function ParticipantsList({ participants, ownerId }: Props): React.ReactElement {
+export default function ParticipantsList({
+  participants,
+  ownerId,
+  reigningChampions = null,
+}: Props): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false)
 
   return (
@@ -20,7 +27,7 @@ export default function ParticipantsList({ participants, ownerId }: Props): Reac
         aria-expanded={isExpanded}
         className="flex w-full items-center justify-between text-left"
       >
-        <h2 className="text-xl font-semibold font-display text-foreground">
+        <h2 className="type-section text-foreground">
           Participants ({participants.length})
         </h2>
         <ChevronDown
@@ -33,7 +40,7 @@ export default function ParticipantsList({ participants, ownerId }: Props): Reac
         }`}
       >
         {participants.length === 0 ? (
-          <p className="text-foreground-muted">No participants yet</p>
+          <p className="text-foreground-secondary">No participants yet</p>
         ) : (
           <div className="space-y-3">
             {participants.map((participant) => (
@@ -42,11 +49,16 @@ export default function ParticipantsList({ participants, ownerId }: Props): Reac
                 className="flex items-center p-3 bg-elevated rounded-lg border border-border"
               >
                 <div className="flex-1">
-                  <p className="font-medium text-foreground">{participant.teams?.name || 'No Team'}</p>
+                  <p className="flex items-center gap-1.5 type-row-title text-foreground">
+                    <span className="truncate">{participant.teams?.name || 'No Team'}</span>
+                    {reigningChampions?.userIds.includes(participant.user_id) && (
+                      <ChampionCrown seasonYear={reigningChampions.seasonYear} />
+                    )}
+                  </p>
                   {participant.profiles?.display_name && (
-                    <p className="text-xs text-foreground-muted">{participant.profiles.display_name}</p>
+                    <p className="type-meta text-foreground-secondary">{participant.profiles.display_name}</p>
                   )}
-                  <p className="text-sm text-foreground-muted">
+                  <p className="type-body-sm text-foreground-secondary">
                     Draft Order: {participant.draft_order}
                     {participant.user_id === ownerId && (
                       <span className="ml-2 text-gold font-medium">(Owner)</span>
@@ -55,7 +67,7 @@ export default function ParticipantsList({ participants, ownerId }: Props): Reac
                 </div>
                 <span
                   className={`badge ${
-                    participant.role === 'owner' ? 'bg-gold-muted text-gold' : 'bg-elevated text-foreground-muted'
+                    participant.role === 'owner' ? 'bg-gold-muted text-gold' : 'bg-elevated text-foreground-secondary'
                   }`}
                 >
                   {participant.role}

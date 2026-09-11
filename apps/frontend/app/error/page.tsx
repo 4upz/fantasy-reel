@@ -1,14 +1,14 @@
-import { Clapperboard } from 'lucide-react'
+import BrandLogo from '../components/BrandLogo'
 
 export default function ErrorPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-8 text-center">
         <div>
           <div className="flex justify-center mb-4">
-            <Clapperboard className="w-16 h-16 text-gold" />
+            <BrandLogo markOnly className="h-auto w-16" />
           </div>
-          <h2 className="text-3xl font-extrabold font-display text-foreground">
+          <h2 className="type-section text-foreground">
             Something went wrong
           </h2>
           <p className="mt-2 text-foreground-secondary">

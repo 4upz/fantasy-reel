@@ -19,6 +19,6 @@ export const AfterSaving = () => (
 export const Empty = () => (
   <div className="max-w-md">
     <FormSuccess message={null} />
-    <p className="text-sm text-foreground-muted">Nothing renders above this line.</p>
+    <p className="text-sm text-foreground-secondary">Nothing renders above this line.</p>
   </div>
 )

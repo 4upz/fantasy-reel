@@ -2,27 +2,37 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import type { TMDbSearchResult } from '@/types'
+import type { FranchiseHistory, TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
+import { seriesName } from '@/utils/franchise'
 import { StarIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
   movie: TMDbSearchResult
   isDrafted?: boolean
+  /** The series this movie continues, or null for a standalone / first film. */
+  franchise?: FranchiseHistory | null
   onPreview: (movie: TMDbSearchResult) => void
 }
+
+/** Points are RT - 60, so 60 is where a series average turns from gold to crimson. */
+const BREAK_EVEN = 60
 
 /** @design-system Movies */
 export default function DraftMovieCard({
   movie,
   isDrafted,
+  franchise,
   onPreview,
 }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false)
   const [imageError, setImageError] = useState(false)
 
   const popularityBadge = getPopularityBadge(movie.popularity)
+  const releaseYear = movie.release_date ? new Date(movie.release_date).getFullYear() : null
+  const seriesLabel = franchise ? `${seriesName(franchise)} series` : null
+  const seriesAverage = franchise?.average_rt ?? null
 
   function handleCardClick(): void {
     if (!isDrafted) {
@@ -64,7 +74,7 @@ export default function DraftMovieCard({
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-elevated">
             <ClapperboardIcon className="w-12 h-12 text-foreground-muted mb-2" />
-            <span className="text-xs text-foreground-muted">No poster</span>
+            <span className="type-meta text-foreground-secondary">No poster</span>
           </div>
         )}
 
@@ -77,7 +87,7 @@ export default function DraftMovieCard({
           {popularityBadge && (
             <span
               className={cn(
-                'px-2 py-0.5 rounded-full text-xs font-semibold shadow-md',
+                'type-meta px-2 py-0.5 rounded-full shadow-md',
                 popularityBadge.variant === 'solid'
                   ? 'bg-gold text-background'
                   : 'bg-gold-muted text-gold border border-gold'
@@ -98,7 +108,7 @@ export default function DraftMovieCard({
           <div className="absolute bottom-12 left-2">
             <div className="flex items-center gap-1 px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg">
               <StarIcon className="w-3.5 h-3.5 text-gold" />
-              <span className="text-sm font-semibold text-foreground">
+              <span className="type-row-title text-foreground">
                 {movie.vote_average.toFixed(1)}
               </span>
             </div>
@@ -108,7 +118,7 @@ export default function DraftMovieCard({
         {/* Release Date Badge */}
         <div className="absolute bottom-12 right-2">
           <div className="px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg">
-            <span className="text-xs font-medium text-foreground-secondary">
+            <span className="type-meta text-foreground-secondary">
               {formatReleaseDateShort(movie.release_date)}
             </span>
           </div>
@@ -118,7 +128,7 @@ export default function DraftMovieCard({
         {isDrafted && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/70">
             <div className="px-3 py-1.5 bg-elevated border border-border rounded-lg">
-              <span className="text-sm font-medium text-foreground-muted">Drafted</span>
+              <span className="type-label text-foreground-secondary">Drafted</span>
             </div>
           </div>
         )}
@@ -127,14 +137,32 @@ export default function DraftMovieCard({
       {/* Info Section */}
       <div className="p-3 bg-surface border-t border-border">
         <h3
-          className="font-medium text-foreground truncate text-sm leading-tight"
+          className="type-row-title text-foreground truncate"
           title={movie.title}
         >
           {movie.title}
         </h3>
-        {movie.release_date && (
-          <p className="text-xs text-foreground-muted mt-1">
-            {new Date(movie.release_date).getFullYear()}
+        {/* One line, words only: the card has no room for a chart, and the
+            average is the one number that matters at a glance. The preview
+            carries the film-by-film record. */}
+        {(releaseYear || seriesLabel) && (
+          <p className="type-meta text-foreground-secondary mt-1 truncate" data-testid="franchise-line">
+            {releaseYear}
+            {releaseYear && seriesLabel && ' · '}
+            {seriesLabel}
+            {seriesAverage != null && (
+              <>
+                {' · avg '}
+                <span
+                  className={cn(
+                    'font-semibold',
+                    seriesAverage >= BREAK_EVEN ? 'text-gold' : 'text-crimson'
+                  )}
+                >
+                  {seriesAverage}%
+                </span>
+              </>
+            )}
           </p>
         )}
       </div>

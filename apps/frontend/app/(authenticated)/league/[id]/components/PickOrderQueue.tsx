@@ -1,18 +1,21 @@
-'use client'
-
 import { ArrowRightIcon } from './Icons'
 import { cn } from './utils'
-import type { ParticipantWithProfile } from '@/types'
+import type { ParticipantWithProfile, Team, Profile } from '@/types'
+
+export type PickQueueParticipant = Pick<ParticipantWithProfile, 'user_id' | 'draft_order'> & {
+  teams: Pick<Team, 'name'> | null
+  profiles: Pick<Profile, 'display_name'> | null
+}
 
 interface Props {
-  participants: ParticipantWithProfile[]
+  participants: readonly PickQueueParticipant[]
   currentPickIndex: number
   currentUserId: string
   rounds: number
 }
 
 interface QueueItem {
-  participant: ParticipantWithProfile
+  participant: PickQueueParticipant
   round: number
   pickNumber: number
   isCurrentPick: boolean
@@ -20,7 +23,7 @@ interface QueueItem {
 }
 
 function calculatePickOrder(
-  participants: ParticipantWithProfile[],
+  participants: readonly PickQueueParticipant[],
   currentPickIndex: number,
   rounds: number,
   currentUserId: string
@@ -87,6 +90,7 @@ export default function PickOrderQueue({
 }: Props) {
   const totalPicks = participants.length * rounds
   const queue = calculatePickOrder(participants, currentPickIndex, rounds, currentUserId)
+  const nextUserPickIndex = queue.findIndex((item) => item.isCurrentUser)
 
   if (queue.length === 0) {
     return null
@@ -94,13 +98,14 @@ export default function PickOrderQueue({
 
   return (
     <div className="space-y-2" data-testid="pick-order-queue">
-      <h4 className="text-xs font-medium text-foreground-muted uppercase tracking-wider">
-        Upcoming Picks
+      <h4 className="type-label text-foreground-secondary">
+        Upcoming picks
       </h4>
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none">
         {queue.map((item, index) => (
           <div
             key={`${item.round}-${item.pickNumber}`}
+            data-preview-focus={index === nextUserPickIndex ? 'queue' : undefined}
             className={cn(
               'flex-shrink-0 flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border transition-all',
               getQueueItemStyles(item.isCurrentPick, item.isCurrentUser)
@@ -109,7 +114,7 @@ export default function PickOrderQueue({
             {/* Position indicator */}
             <div
               className={cn(
-                'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
+                'type-meta w-6 h-6 rounded-full flex items-center justify-center',
                 getPositionBadgeStyles(item.isCurrentPick, item.isCurrentUser)
               )}
             >
@@ -120,25 +125,25 @@ export default function PickOrderQueue({
             <div className="min-w-0">
               <p
                 className={cn(
-                  'text-sm font-medium truncate max-w-20 sm:max-w-32',
+                  'type-label truncate max-w-20 sm:max-w-32',
                   item.isCurrentPick ? 'text-foreground' : 'text-foreground-secondary'
                 )}
               >
                 {item.participant.teams?.name || 'Unknown'}
               </p>
               {item.participant.profiles?.display_name && (
-                <p className="text-xs text-foreground-muted truncate max-w-20 sm:max-w-32">
+                <p className="type-meta text-foreground-secondary truncate max-w-20 sm:max-w-32">
                   {item.participant.profiles.display_name}
                 </p>
               )}
-              <p className="text-xs text-foreground-muted">
+              <p className="type-meta text-foreground-secondary">
                 R{item.round} P{item.pickNumber}
               </p>
             </div>
 
             {/* Current user indicator */}
             {item.isCurrentUser && (
-              <span className="text-xs font-medium text-success">You</span>
+              <span className="type-meta text-success">You</span>
             )}
 
             {/* Current pick arrow */}
@@ -153,7 +158,7 @@ export default function PickOrderQueue({
         {/* More picks indicator */}
         {currentPickIndex + 5 < totalPicks && (
           <div className="flex-shrink-0 flex items-center px-3">
-            <span className="text-xs text-foreground-muted">
+            <span className="type-meta text-foreground-secondary">
               +{totalPicks - currentPickIndex - 5} more
             </span>
           </div>

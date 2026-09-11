@@ -48,25 +48,25 @@ export default function AcceptConfirmModal({
 
   return (
     <div
-      className="modal-overlay p-4"
+      className="modal-overlay p-[16px]"
       role="dialog"
       aria-modal="true"
       aria-labelledby="accept-confirm-title"
     >
-      <div className="modal-panel glass rounded-lg shadow-heavy max-w-lg w-full border border-border">
+      <div className="modal-panel glass max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain rounded-lg shadow-heavy max-w-lg w-full border border-border [overflow-wrap:anywhere]">
         {/* Header */}
-        <div className="p-4 border-b border-border">
-          <h2 id="accept-confirm-title" className="text-lg font-display font-bold text-foreground">Confirm Trade</h2>
-          <p className="text-sm text-foreground-secondary mt-1">
+        <div className="p-[min(1rem,16px)] border-b border-border">
+          <h2 id="accept-confirm-title" className="type-panel text-foreground">Confirm trade</h2>
+          <p className="type-body-sm text-foreground-secondary mt-1">
             Review the trade details before accepting.
           </p>
         </div>
 
         {/* Trade summary */}
-        <div className="p-4 space-y-4">
+        <div className="p-[min(1rem,16px)] space-y-4">
           {/* What you give */}
-          <div className="p-3 rounded-lg bg-crimson/10 border border-crimson/30">
-            <p className="text-sm font-medium text-foreground-secondary mb-3 flex items-center gap-2">
+          <div className="p-[min(.75rem,12px)] rounded-lg bg-crimson/10 border border-crimson/30">
+            <p className="type-label text-foreground-secondary mb-3 flex items-center gap-2">
               <svg className="w-4 h-4 text-crimson" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
               </svg>
@@ -76,8 +76,8 @@ export default function AcceptConfirmModal({
           </div>
 
           {/* What you receive */}
-          <div className="p-3 rounded-lg bg-success/10 border border-success/30">
-            <p className="text-sm font-medium text-foreground-secondary mb-3 flex items-center gap-2">
+          <div className="p-[min(.75rem,12px)] rounded-lg bg-success/10 border border-success/30">
+            <p className="type-label text-foreground-secondary mb-3 flex items-center gap-2">
               <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-5 5m0 0l-5-5m5 5V6" />
               </svg>
@@ -87,18 +87,18 @@ export default function AcceptConfirmModal({
           </div>
 
           {/* Warning */}
-          <div className="p-3 rounded-lg bg-warning-bg border border-warning/30">
-            <p className="text-sm text-warning">
+          <div className="p-[min(.75rem,12px)] rounded-lg bg-warning-bg border border-warning/30">
+            <p className="type-body-sm text-warning">
               This action cannot be undone. The trade will enter review period and complete automatically if not vetoed.
             </p>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border flex justify-end gap-2">
+        <div className="p-[min(1rem,16px)] border-t border-border flex flex-wrap justify-end gap-2">
           <button
             onClick={onClose}
-            className="btn btn-ghost"
+            className="btn btn-ghost min-w-0 max-w-full"
             disabled={isLoading}
             aria-label="Cancel acceptance"
           >
@@ -106,12 +106,12 @@ export default function AcceptConfirmModal({
           </button>
           <button
             onClick={handleConfirm}
-            className="btn btn-primary"
+            className="btn btn-primary min-w-0 max-w-full"
             disabled={isLoading}
             aria-label={isLoading ? 'Accepting trade...' : 'Confirm accept trade'}
             aria-busy={isLoading}
           >
-            {isLoading ? 'Accepting...' : 'Confirm Accept'}
+            {isLoading ? 'Accepting...' : 'Confirm accept'}
           </button>
         </div>
       </div>
@@ -124,7 +124,7 @@ function TradeItemsList({ items }: { items: TradeItems }) {
   const hasBudget = items.faab > 0
 
   if (!hasMovies && !hasBudget) {
-    return <p className="text-sm text-foreground-muted italic">Nothing</p>
+    return <p className="type-body-sm text-foreground-secondary italic">Nothing</p>
   }
 
   return (
@@ -137,19 +137,19 @@ function TradeItemsList({ items }: { items: TradeItems }) {
               alt={movie.title || 'Movie'}
               width={32}
               height={48}
-              className="w-8 h-12 object-cover rounded"
+              className="w-[32px] h-[48px] shrink-0 object-cover rounded"
             />
           ) : (
-            <div className="w-8 h-12 bg-surface-hover rounded flex items-center justify-center">
-              <span className="text-xs text-foreground-muted">?</span>
+            <div className="w-[32px] h-[48px] shrink-0 bg-surface-hover rounded flex items-center justify-center">
+              <span className="type-meta text-foreground-secondary">?</span>
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground truncate">
+            <p className="type-row-title text-foreground break-words">
               {movie.title || 'Unknown Movie'}
             </p>
             {movie.release_date && (
-              <p className="text-xs text-foreground-muted">
+              <p className="type-meta text-foreground-secondary">
                 {new Date(movie.release_date).getFullYear()}
               </p>
             )}
@@ -159,10 +159,10 @@ function TradeItemsList({ items }: { items: TradeItems }) {
 
       {hasBudget && (
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gold/20 rounded flex items-center justify-center">
-            <span className="text-gold font-bold text-sm">$</span>
+          <div className="w-[32px] h-[32px] shrink-0 bg-gold/20 rounded flex items-center justify-center">
+            <span className="type-row-title text-gold">$</span>
           </div>
-          <p className="text-sm font-medium text-gold">${items.faab} budget</p>
+          <p className="type-number text-gold">${items.faab} budget</p>
         </div>
       )}
     </div>

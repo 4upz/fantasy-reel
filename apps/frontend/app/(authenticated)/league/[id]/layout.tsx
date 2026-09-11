@@ -2,7 +2,9 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedUser } from '@/utils/supabase/cached'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
+import { fetchSeriesSeasons, fetchWonSeasonIds } from '@/utils/seasonQueries'
 import LeagueSwitcher from './components/LeagueSwitcher'
+import SeasonSwitcher from './components/SeasonSwitcher'
 import LeagueTabs from './components/LeagueTabs'
 import LeagueBottomNav from './components/LeagueBottomNav'
 import type { League } from '@/types'
@@ -31,7 +33,9 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
     notFound()
   }
 
-  const [memberResult, countResult] = await Promise.all([
+  const typedLeague = league as League
+
+  const [memberResult, countResult, seasons] = await Promise.all([
     supabase
       .from('league_participants')
       .select('id')
@@ -44,17 +48,25 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
       .select('*', { count: 'exact', head: true })
       .eq('league_id', id)
       .eq('status', 'active'),
+    fetchSeriesSeasons(supabase, typedLeague.series_id),
   ])
 
   if (!memberResult.data) {
     redirect('/dashboard')
   }
 
-  const typedLeague = league as League
   const isOwner = typedLeague.owner_id === user.id
   const participantCount = countResult.count ?? 0
+  const wonSeasonIds = await fetchWonSeasonIds(supabase, user.id, seasons)
 
-  const accessLabel = typedLeague.invite_only ? 'Invite Only' : 'Open'
+  const accessLabel = typedLeague.invite_only ? 'Invite only' : 'Open'
+
+  // Only a league still in setup can be joined, so the open slots are only news
+  // while they can be filled. After that, show the roster of players who are in.
+  const participantLabel =
+    typedLeague.status === 'setup'
+      ? `${participantCount} / ${typedLeague.max_participants} participants`
+      : `${participantCount} ${participantCount === 1 ? 'participant' : 'participants'}`
 
   return (
     <div className="min-h-screen bg-background">
@@ -77,17 +89,32 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
               {getStatusLabel(typedLeague.status)}
             </span>
 
-            <div className="flex basis-full items-center gap-1.5 text-xs text-foreground-muted lg:basis-auto lg:gap-3 lg:text-sm">
+            {/*
+              Dots tie the badge and the facts into one metadata strip. The
+              leading one is desktop-only: on mobile the badge sits up on the
+              title line, so it would dangle at the end of a row.
+
+              The season label leads the strip, so mobile line 2 reads
+              "2026 · Invite Only · 3 participants" and desktop reads
+              "Active · 2026 · Invite Only · 3 participants".
+            */}
+            <div className="type-meta flex basis-full items-center gap-1.5 text-foreground-secondary lg:basis-auto lg:gap-2">
+              <span aria-hidden className="hidden text-foreground-secondary/50 lg:inline">·</span>
+              <SeasonSwitcher
+                currentLeagueId={typedLeague.id}
+                seasonYear={typedLeague.season_year}
+                seasons={seasons}
+                wonSeasonIds={wonSeasonIds}
+              />
+              <span aria-hidden className="text-foreground-secondary/50">·</span>
               <span>{accessLabel}</span>
-              <span className="lg:hidden">·</span>
-              <span>
-                {participantCount} / {typedLeague.max_participants} participants
-              </span>
+              <span aria-hidden className="text-foreground-secondary/50">·</span>
+              <span>{participantLabel}</span>
             </div>
           </div>
 
           <div className="mt-3 mb-6 hidden lg:block">
-            <LeagueTabs league={typedLeague} isOwner={isOwner} />
+            <LeagueTabs league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
           </div>
         </div>
       </div>
@@ -97,7 +124,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
         {children}
       </div>
 
-      <LeagueBottomNav league={typedLeague} isOwner={isOwner} />
+      <LeagueBottomNav league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
     </div>
   )
 }

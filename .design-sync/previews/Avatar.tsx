@@ -25,8 +25,8 @@ export const InTeamRow = () => (
   <div className="flex items-center gap-3 p-3 rounded-lg bg-surface border border-border">
     <Avatar name="Carol Coppola" src={null} size="md" />
     <div className="min-w-0">
-      <p className="font-display font-semibold text-foreground truncate">Carol Coppola</p>
-      <p className="text-sm text-foreground-muted">The Godfathers · 214.5 pts</p>
+      <p className="type-row-title text-foreground truncate">Carol Coppola</p>
+      <p className="type-meta text-foreground-secondary">The Godfathers · 214.5 pts</p>
     </div>
   </div>
 )

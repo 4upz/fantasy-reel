@@ -32,8 +32,8 @@ export default function CounterpickPriorityList({
         <>
           <Target className="w-3 h-3 text-crimson shrink-0" />
           <span className="truncate">vs {bid.target_team?.name || 'Unknown team'}</span>
-          <span className="text-foreground-muted">·</span>
-          <span className="text-foreground-muted">${bid.amount}</span>
+          <span className="text-foreground-secondary">·</span>
+          <span className="type-numeric text-foreground-secondary">${bid.amount}</span>
         </>
       ),
     })),

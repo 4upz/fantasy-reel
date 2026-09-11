@@ -15,6 +15,21 @@ import type { TradeItems } from './trade-validation.ts'
  * the client has already checked anything.
  */
 
+/**
+ * Every status an offer can hold while it is still going somewhere.
+ *
+ * Wider than `expire_lapsed_trade_offers`' ('proposed','countered'), which only
+ * cares about offers nobody has answered. The two sweeps that end offers
+ * wholesale -- a season completing, and the cron catching up afterwards -- also
+ * have to take the ones both teams *did* agree to, since 'accepted' and
+ * 'review' are exactly what the execution loop picks up and are what would
+ * otherwise move a roster after the standings were published.
+ *
+ * Shared rather than declared beside each sweep: the two must agree, or an
+ * offer survives its season's close only to be executed the next morning.
+ */
+export const OPEN_TRADE_STATUSES = ['proposed', 'countered', 'accepted', 'review']
+
 export type ExpiryAnchor = 'fixed' | 'movie_release'
 
 /** An unreleased movie in an offer, i.e. something its expiry could wait on. */
@@ -419,6 +434,8 @@ export function expiredReasonText(trade: {
     }
     case 'league_deadline':
       return 'The league trade deadline passed before it was answered.'
+    case 'season_completed':
+      return 'The season ended before it was answered.'
     case 'offer_window':
       return 'It expired before it was answered.'
     default:

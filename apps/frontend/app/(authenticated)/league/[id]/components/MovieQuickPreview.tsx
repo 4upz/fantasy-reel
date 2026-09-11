@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
+import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 import type { TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
+import FranchiseHistoryPanel from '@/app/components/FranchiseHistoryPanel'
 import { CloseIcon, StarIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
 
@@ -29,6 +31,7 @@ export default function MovieQuickPreview({
   // A failed lookup is not worth an error state: the caller already knows the
   // title, poster and release date, so the panel still reads fine.
   const { details, isLoading: loading } = useMovieDetails(movie.tmdb_id)
+  const { history: franchise } = useFranchiseHistory(movie.tmdb_id)
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent): void {
@@ -79,7 +82,7 @@ export default function MovieQuickPreview({
           {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-border text-foreground-muted hover:text-foreground hover:border-border-hover transition-all z-10"
+            className="absolute top-4 right-4 p-2 rounded-full bg-background/60 backdrop-blur-sm border border-border text-foreground-secondary hover:text-foreground hover:border-border-hover transition-all z-10"
           >
             <CloseIcon className="w-5 h-5" />
           </button>
@@ -114,10 +117,10 @@ export default function MovieQuickPreview({
               {/* Info */}
               <div className="flex-1 min-w-0">
                 {/* Title */}
-                <h2 className="font-display text-2xl sm:text-3xl font-bold text-foreground">
+                <h2 className="type-panel text-foreground">
                   {displayData.title}
                   {releaseYear && (
-                    <span className="text-foreground-muted font-normal ml-2 text-xl">
+                    <span className="type-body text-foreground-secondary ml-2">
                       ({releaseYear})
                     </span>
                   )}
@@ -125,11 +128,11 @@ export default function MovieQuickPreview({
 
                 {/* Tagline */}
                 {details?.tagline && (
-                  <p className="text-gold italic mt-2 text-sm">&ldquo;{details.tagline}&rdquo;</p>
+                  <p className="type-body-sm text-gold italic mt-2">&ldquo;{details.tagline}&rdquo;</p>
                 )}
 
                 {/* Meta Row */}
-                <div className="flex flex-wrap items-center gap-4 mt-4 text-sm">
+                <div className="type-body-sm flex flex-wrap items-center gap-4 mt-4">
                   {/* Rating */}
                   {displayData.vote_average && displayData.vote_average > 0 && (
                     <div className="flex items-center gap-1.5">
@@ -138,7 +141,7 @@ export default function MovieQuickPreview({
                         {displayData.vote_average.toFixed(1)}
                       </span>
                       {details?.vote_count && (
-                        <span className="text-foreground-muted">
+                        <span className="text-foreground-secondary">
                           ({details.vote_count.toLocaleString()})
                         </span>
                       )}
@@ -166,7 +169,7 @@ export default function MovieQuickPreview({
                     {details.genres.map((genre) => (
                       <span
                         key={genre.id}
-                        className="px-3 py-1 rounded-full text-xs font-medium bg-elevated border border-border text-foreground-secondary"
+                        className="type-meta px-3 py-1 rounded-full bg-elevated border border-border text-foreground-secondary"
                       >
                         {genre.name}
                       </span>
@@ -176,8 +179,8 @@ export default function MovieQuickPreview({
 
                 {/* Director */}
                 {details?.director && (
-                  <p className="mt-4 text-sm">
-                    <span className="text-foreground-muted">Directed by</span>{' '}
+                  <p className="type-body-sm mt-4">
+                    <span className="text-foreground-secondary">Directed by</span>{' '}
                     <span className="text-foreground font-medium">{details.director}</span>
                   </p>
                 )}
@@ -190,7 +193,7 @@ export default function MovieQuickPreview({
                         isDescriptionExpanded ? 'max-h-[500px]' : 'max-h-[5.25rem]'
                       }`}
                     >
-                      <p className="text-foreground-secondary text-sm leading-relaxed">
+                      <p className="type-body-sm text-foreground-secondary">
                         {displayData.overview}
                       </p>
                     </div>
@@ -198,7 +201,7 @@ export default function MovieQuickPreview({
                       <button
                         type="button"
                         onClick={() => setIsDescriptionExpanded(!isDescriptionExpanded)}
-                        className="mt-2 text-sm font-medium text-gold hover:text-gold-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+                        className="type-control mt-2 text-gold hover:text-gold-hover transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
                       >
                         {isDescriptionExpanded ? 'Show less' : 'Read more'}
                       </button>
@@ -207,6 +210,17 @@ export default function MovieQuickPreview({
                 )}
               </div>
             </div>
+
+            {/* Franchise history: the one place with room for the film-by-film
+                line, so the grid and bid rows can stay at a single average. */}
+            {franchise && (
+              <FranchiseHistoryPanel
+                history={franchise}
+                movieTitle={displayData.title}
+                movieReleaseDate={displayData.release_date}
+                className="mt-6 animate-fade-in"
+              />
+            )}
 
             {/* Cast Section */}
             {loading ? (
@@ -217,8 +231,8 @@ export default function MovieQuickPreview({
               details?.cast &&
               details.cast.length > 0 && (
                 <div className="mt-6">
-                  <h3 className="font-display font-semibold text-foreground text-sm mb-3">
-                    Top Cast
+                  <h3 className="type-label text-foreground mb-3">
+                    Top cast
                   </h3>
                   <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2">
                     {details.cast.slice(0, 6).map((actor) => (
@@ -233,15 +247,15 @@ export default function MovieQuickPreview({
                               className="object-cover"
                             />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-foreground-muted">
+                            <div className="w-full h-full flex items-center justify-center text-foreground-secondary">
                               <UserIcon className="w-6 h-6" />
                             </div>
                           )}
                         </div>
-                        <p className="mt-1.5 text-xs font-medium text-foreground truncate">
+                        <p className="type-meta mt-1.5 text-foreground truncate">
                           {actor.name}
                         </p>
-                        <p className="text-xs text-foreground-muted truncate">{actor.character}</p>
+                        <p className="type-meta text-foreground-secondary truncate">{actor.character}</p>
                       </div>
                     ))}
                   </div>
@@ -266,13 +280,13 @@ export default function MovieQuickPreview({
                   ) : (
                     <span className="flex items-center justify-center gap-2">
                       <CheckIcon className="w-5 h-5" />
-                      Draft This Movie
+                      Draft this movie
                     </span>
                   )}
                 </button>
               ) : (
                 <div className="flex-1 py-3 px-4 bg-elevated rounded-lg border border-border text-center">
-                  <span className="text-foreground-muted text-sm">Wait for your turn to draft</span>
+                  <span className="type-body-sm text-foreground-secondary">Wait for your turn to draft</span>
                 </div>
               )}
 
@@ -288,7 +302,7 @@ export default function MovieQuickPreview({
                   href={`https://www.imdb.com/title/${details.imdb_id}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-gold hover:text-gold-hover transition-colors"
+                  className="type-body-sm inline-flex items-center gap-1.5 text-gold hover:text-gold-hover transition-colors"
                 >
                   View on IMDb
                   <ExternalLinkIcon className="w-4 h-4" />

@@ -23,10 +23,10 @@ interface InviteResponse {
 type InviteMode = 'email' | 'username'
 
 function getTabClassName(isActive: boolean): string {
-  const base = 'flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors'
+  const base = 'flex-1 px-3 py-2 type-control rounded-md transition-colors'
   return isActive
     ? `${base} bg-surface text-foreground shadow-soft`
-    : `${base} text-foreground-muted hover:text-foreground`
+    : `${base} text-foreground-secondary hover:text-foreground`
 }
 
 export default function InviteModal({ leagueId, onClose }: Props): React.ReactElement {
@@ -134,10 +134,10 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
       <div className="glass card p-6 w-full max-w-md animate-slide-up">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold font-display text-foreground">Invite Players</h2>
+          <h2 className="type-panel text-foreground">Invite players</h2>
           <button
             onClick={onClose}
-            className="text-foreground-muted hover:text-foreground transition-colors"
+            className="text-foreground-secondary hover:text-foreground transition-colors"
             aria-label="Close"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -153,14 +153,14 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
             onClick={() => handleModeChange('username')}
             className={getTabClassName(mode === 'username')}
           >
-            By Username
+            By username
           </button>
           <button
             type="button"
             onClick={() => handleModeChange('email')}
             className={getTabClassName(mode === 'email')}
           >
-            By Email
+            By email
           </button>
         </div>
 
@@ -168,8 +168,8 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
           {/* Username search (typeahead) */}
           {mode === 'username' && (
             <div className="mb-4">
-              <label className="block text-sm font-medium text-foreground-secondary mb-1">
-                Search Users
+              <label className="type-label block text-foreground-secondary mb-1">
+                Search users
               </label>
 
               {selectedUser ? (
@@ -208,7 +208,7 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
                           ))}
                         </div>
                       ) : searchQuery.length >= 2 && !searchLoading ? (
-                        <div className="px-3 py-4 text-center text-sm text-foreground-muted">
+                        <div className="type-body-sm px-3 py-4 text-center text-foreground-secondary">
                           No users found
                         </div>
                       ) : null}
@@ -218,10 +218,10 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
               )}
 
               {searchError && (
-                <p className="mt-1 text-sm text-error">{searchError}</p>
+                <p className="type-body-sm mt-1 text-error">{searchError}</p>
               )}
 
-              <p className="mt-1 text-xs text-foreground-muted">
+              <p className="type-meta mt-1 text-foreground-secondary">
                 Search for existing users to invite them directly
               </p>
             </div>
@@ -230,8 +230,8 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
           {/* Email input */}
           {mode === 'email' && (
             <div className="mb-4">
-              <label htmlFor="email" className="block text-sm font-medium text-foreground-secondary mb-1">
-                Email Address
+              <label htmlFor="email" className="type-label block text-foreground-secondary mb-1">
+                Email address
               </label>
               <input
                 type="email"
@@ -242,7 +242,7 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
                 className="input"
                 required
               />
-              <p className="mt-1 text-xs text-foreground-muted">
+              <p className="type-meta mt-1 text-foreground-secondary">
                 Send an invite link to any email address
               </p>
             </div>
@@ -254,18 +254,18 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
               <p>{result.message}</p>
               {result.url && (
                 <div className="mt-2">
-                  <p className="text-xs font-medium mb-1">Invite Link:</p>
+                  <p className="type-meta mb-1">Invite link:</p>
                   <div className="flex items-center gap-2">
                     <input
                       type="text"
                       value={result.url}
                       readOnly
-                      className="flex-1 text-xs p-2 bg-surface border border-border rounded text-foreground"
+                      className="type-meta flex-1 p-2 bg-surface border border-border rounded text-foreground"
                     />
                     <button
                       type="button"
                       onClick={() => copyToClipboard(result.url!)}
-                      className="btn btn-primary text-xs px-2 py-1"
+                      className="type-meta btn btn-primary px-2 py-1"
                     >
                       Copy
                     </button>

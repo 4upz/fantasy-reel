@@ -43,8 +43,8 @@ export default function BidHistoryPanel(): React.ReactElement {
         <div className="w-16 h-16 bg-elevated rounded-2xl flex items-center justify-center mx-auto mb-5">
           <History className="w-8 h-8 text-foreground-muted" aria-hidden="true" />
         </div>
-        <h3 className="font-display font-bold text-xl text-foreground mb-2">
-          No Results Yet
+        <h3 className="type-panel text-foreground mb-2">
+          No results yet
         </h3>
         <p className="text-foreground-secondary max-w-md mx-auto">
           Bids settle once a week. After the next round processes, this is where you&apos;ll
@@ -61,7 +61,7 @@ export default function BidHistoryPanel(): React.ReactElement {
       {shown.map((round) => (
         <section key={round.date} aria-label={`Results from ${formatRoundDate(round.date)}`}>
           <div className="flex items-center gap-3 mb-3">
-            <h2 className="font-display text-xs sm:text-sm uppercase tracking-[0.15em] text-foreground-secondary whitespace-nowrap">
+            <h2 className="type-label text-foreground-secondary whitespace-nowrap">
               {formatRoundDate(round.date)}
             </h2>
             <div className="h-px flex-1 bg-border" aria-hidden="true" />

@@ -37,7 +37,7 @@ export const SeveralSelected = () => (
 /** In situ: above the invite field it feeds. */
 export const AboveAnInviteField = () => (
   <div className="max-w-md">
-    <label className="block text-sm font-medium text-foreground mb-2">Invite players</label>
+    <label className="block type-label text-foreground mb-2">Invite players</label>
     <div className="flex flex-wrap gap-2 mb-3">
       <SelectedUserChip user={alice} onRemove={noop} />
       <SelectedUserChip user={bob} onRemove={noop} />

@@ -36,7 +36,7 @@ export default function MovieTimeline({ movies, leagueStatus, onMovieClick }: Pr
             />
           ))}
         </div>
-        <p className="text-foreground-muted">
+        <p className="text-foreground-secondary">
           Your movies will appear here after the draft
         </p>
       </div>
@@ -47,7 +47,7 @@ export default function MovieTimeline({ movies, leagueStatus, onMovieClick }: Pr
   if (movies.length === 0) {
     return (
       <div className="card p-8 text-center">
-        <p className="text-foreground-muted">
+        <p className="text-foreground-secondary">
           {leagueStatus === 'drafting'
             ? 'Draft your first movie to see it here'
             : 'No movies on your roster yet'}
@@ -73,8 +73,8 @@ export default function MovieTimeline({ movies, leagueStatus, onMovieClick }: Pr
   return (
     <div className="card p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-display font-semibold text-foreground">
-          Movie Timeline
+        <h3 className="type-panel text-foreground">
+          Movie timeline
         </h3>
         <div className="flex gap-2">
           <button
@@ -105,7 +105,7 @@ export default function MovieTimeline({ movies, leagueStatus, onMovieClick }: Pr
               left: `${(todayIndex / sortedMovies.length) * 100}%`,
             }}
           >
-            <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs text-gold whitespace-nowrap">
+            <span className="type-meta absolute -top-6 left-1/2 -translate-x-1/2 text-gold whitespace-nowrap">
               Today
             </span>
           </div>
@@ -128,15 +128,15 @@ export default function MovieTimeline({ movies, leagueStatus, onMovieClick }: Pr
       </div>
 
       {/* Legend */}
-      <div className="flex justify-center gap-6 mt-4 text-xs text-foreground-muted">
+      <div className="type-meta flex justify-center gap-6 mt-4 text-foreground-secondary">
         <span className="flex items-center gap-1.5">
-          <span className="text-foreground-muted">●</span> Scored
+          <span className="text-foreground-secondary">●</span> Scored
         </span>
         <span className="flex items-center gap-1.5">
           <span className="text-gold">◐</span> Releasing Soon
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="text-foreground-muted">○</span> Upcoming
+          <span className="text-foreground-secondary">○</span> Upcoming
         </span>
       </div>
     </div>

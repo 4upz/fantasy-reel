@@ -92,10 +92,10 @@ export default function MovieSearchClient(): React.ReactElement {
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
           <div className="text-center mb-8">
-            <h1 className="font-display text-4xl sm:text-5xl font-bold text-foreground tracking-tight mb-3">
-              Discover Movies
+            <h1 className="type-page text-foreground mb-3">
+              Discover movies
             </h1>
-            <p className="text-foreground-secondary text-lg max-w-xl mx-auto">
+            <p className="type-lead text-foreground-secondary max-w-xl mx-auto">
               Search the world&apos;s largest movie database and find your next blockbuster picks
             </p>
           </div>
@@ -135,7 +135,7 @@ export default function MovieSearchClient(): React.ReactElement {
             <div className="flex justify-center mb-4">
               <Clapperboard className="w-16 h-16 text-foreground-muted" />
             </div>
-            <p className="text-foreground-secondary text-lg">
+            <p className="type-lead text-foreground-secondary">
               Start typing to search for movies
             </p>
           </div>
@@ -146,10 +146,10 @@ export default function MovieSearchClient(): React.ReactElement {
             <div className="flex justify-center mb-4">
               <Search className="w-16 h-16 text-foreground-muted" />
             </div>
-            <p className="text-foreground-secondary text-lg">
+            <p className="type-lead text-foreground-secondary">
               No movies found for &ldquo;{debouncedQuery}&rdquo;
             </p>
-            <p className="text-foreground-muted mt-2">Try a different search term</p>
+            <p className="text-foreground-secondary mt-2">Try a different search term</p>
           </div>
         )}
 
