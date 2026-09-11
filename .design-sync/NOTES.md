@@ -229,8 +229,6 @@ bundle has passed browser validation:
   visually in the review sheet.
 - `[RENDER_THIN] SectionHeader` — a title-only primitive; with default props
   its entire content legitimately is its own name.
-- `[RENDER_BLANK] DraftTicker` — a marquee whose content is animated in; a
-  static screenshot catches it mid-transform.
 
 Inspect any additional warning before recording it; do not suppress a new
 blank or broken-asset result by extending this list without evidence.
@@ -262,6 +260,29 @@ Run it locally the same way CI does:
 ```sh
 node .design-sync/check-drift.mjs --since origin/main
 ```
+
+### Homepage presentation registry (PR #89)
+
+The native homepage registers its shared bid, draft, roster, standings and
+trade presentations, plus `MarketingHeader`. The complete `HowToPlayContent`,
+fixed-data preview scenes and `SpotlightPreview` camera composition remain
+outside the component library; each exclusion is explained in
+`drift-ignore.txt`. The retired homepage exports, pins, overrides and previews
+have been removed.
+
+Adding roster and standings pins also makes the checker scan those directories.
+Their app containers are deliberately excluded; the pre-existing reusable
+`MovieScoreCard` and `TeamBudgetSummary` remain unregistered and need a separate
+registry follow-up. They were outside the old scan, not added by this PR.
+
+Eight other unregistered exports already fail the check on `origin/main`:
+`CounterpickMark`, `Chip`, `OfferExpiryPicker`, `TradeConfigSection`,
+`DateTimeField`, `FranchiseHistoryPanel`, `FranchiseSummary` and `ProfileMenu`.
+This repair leaves those findings visible rather than suppressing baseline
+drift. The local registry changes do not constitute an external design sync
+or a renderer validation. On the next authorized sync, verify the imported
+`MarketingHeader.module.css` is included and test its mobile popover in a
+small viewport; the primary story intentionally renders one header per page.
 
 ## Re-sync runbook
 

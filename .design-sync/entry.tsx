@@ -43,17 +43,22 @@ export { default as MovieTimelineCard } from '../apps/frontend/app/(authenticate
 // ── League ──────────────────────────────────────────────────────────────
 export { default as LeagueListItem } from '../apps/frontend/app/components/LeagueListItem'
 export { default as BidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidCard'
+export { default as BidSummary, BidAmountDisplay } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidSummary'
 export { default as BidWeekTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidWeekTimeline'
 export { default as CounterpickBidCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickBidCard'
 export { default as PriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/PriorityList'
 export { default as BidPriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/BidPriorityList'
 export { default as CounterpickPriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickPriorityList'
 export { default as TradeOfferCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard'
+export { default as TradeItemsSection } from '../apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection'
+export { default as DraftBoardHeader } from '../apps/frontend/app/(authenticated)/league/[id]/components/DraftBoardHeader'
 export { default as ParticipantsList } from '../apps/frontend/app/(authenticated)/league/[id]/components/ParticipantsList'
 export { default as PickOrderQueue } from '../apps/frontend/app/(authenticated)/league/[id]/components/PickOrderQueue'
 export { default as StandingsSidebar } from '../apps/frontend/app/(authenticated)/league/[id]/components/StandingsSidebar'
 export { default as TeamHeader } from '../apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader'
 export { default as MovieTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/MovieTimeline'
+export { RosterHeader, RosterPoster, RosterMovieCard } from '../apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation'
+export { default as TeamStandingSummary } from '../apps/frontend/app/(authenticated)/league/[id]/standings/TeamStandingSummary'
 
 // ── Modals ──────────────────────────────────────────────────────────────
 export { default as AcceptConfirmModal } from '../apps/frontend/app/(authenticated)/league/[id]/components/AcceptConfirmModal'
@@ -78,11 +83,7 @@ export { default as GoogleIcon } from '../apps/frontend/app/components/icons/Goo
 // image in every design built with it.
 
 // ── Landing ─────────────────────────────────────────────────────────────
-export { default as HeroSection } from '../apps/frontend/app/components/landing/HeroSection'
-export { default as MovieShowcase } from '../apps/frontend/app/components/landing/MovieShowcase'
-export { default as ScoringReveal } from '../apps/frontend/app/components/landing/ScoringReveal'
-export { default as DraftTicker } from '../apps/frontend/app/components/landing/DraftTicker'
-export { default as CTAFooter } from '../apps/frontend/app/components/landing/CTAFooter'
+export { default as MarketingHeader } from '../apps/frontend/app/components/landing/MarketingHeader'
 // SiteFooter is NOT synced — it is a thin wrapper around TMDbAttribution, so it
 // inherits the same missing public/ logo problem. See NOTES.md.
 
