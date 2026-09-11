@@ -12,7 +12,7 @@
   position: absolute;
   inset: 5.25rem 1rem auto auto;
   display: none;
-  width: min(14rem, calc(100% - 2rem));
+  width: min(11rem, calc(100% - 2rem));
   max-height: calc(100dvh - 6.25rem);
   overflow-y: auto;
   margin: 0;
