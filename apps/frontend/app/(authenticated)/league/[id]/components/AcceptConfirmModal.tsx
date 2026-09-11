@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import Image from 'next/image'
+import { getReleaseYear } from '@/utils/date'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import type { TradeOfferWithTeams, TradeItems, TradeMovieItem } from '@/types'
 
@@ -150,7 +151,7 @@ function TradeItemsList({ items }: { items: TradeItems }) {
             </p>
             {movie.release_date && (
               <p className="type-meta text-foreground-secondary">
-                {new Date(movie.release_date).getFullYear()}
+                {getReleaseYear(movie.release_date)}
               </p>
             )}
           </div>
