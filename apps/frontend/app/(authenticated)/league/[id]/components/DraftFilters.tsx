@@ -14,7 +14,6 @@ interface Props {
 export interface DraftFilters {
   releaseWindow: 'all' | 'next30' | 'quarter' | 'year'
   genres: number[]
-  minRating: number
   search: string
 }
 
@@ -30,7 +29,6 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
   const [search, setSearch] = useState('')
   const [releaseWindow, setReleaseWindow] = useState<DraftFilters['releaseWindow']>('year')
   const [selectedGenres, setSelectedGenres] = useState<number[]>([])
-  const [minRating, setMinRating] = useState(0)
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
   const genreDropdownRef = useRef<HTMLDivElement>(null)
 
@@ -58,8 +56,8 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
 
   // Notify parent of filter changes immediately (hook handles debouncing)
   useEffect(() => {
-    notifyFiltersChange({ releaseWindow, genres: selectedGenres, minRating, search })
-  }, [search, releaseWindow, selectedGenres, minRating, notifyFiltersChange])
+    notifyFiltersChange({ releaseWindow, genres: selectedGenres, search })
+  }, [search, releaseWindow, selectedGenres, notifyFiltersChange])
 
   function toggleGenre(genreId: number): void {
     setSelectedGenres((prev) =>
@@ -71,11 +69,10 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
     setSearch('')
     setReleaseWindow('year')
     setSelectedGenres([])
-    setMinRating(0)
   }
 
   const hasActiveFilters =
-    search !== '' || releaseWindow !== 'year' || selectedGenres.length > 0 || minRating > 0
+    search !== '' || releaseWindow !== 'year' || selectedGenres.length > 0
 
   const genreButtonLabel = selectedGenres.length > 0
     ? `${selectedGenres.length} Genre${selectedGenres.length > 1 ? 's' : ''}`
@@ -168,23 +165,6 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
               </div>
             </div>
           )}
-        </div>
-
-        {/* Min Rating Slider */}
-        <div className="flex items-center gap-3 bg-elevated border border-border rounded-lg px-4 py-2">
-          <span className="type-body-sm text-foreground-secondary whitespace-nowrap">Min rating</span>
-          <input
-            type="range"
-            min="0"
-            max="8"
-            step="0.5"
-            value={minRating}
-            onChange={(e) => setMinRating(parseFloat(e.target.value))}
-            className="w-20 h-1.5 bg-border rounded-full appearance-none cursor-pointer accent-gold [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gold [&::-webkit-slider-thumb]:shadow-md"
-          />
-          <span className={cn('type-label w-8', minRating > 0 ? 'text-gold' : 'text-foreground-secondary')}>
-            {minRating > 0 ? minRating.toFixed(1) : 'Any'}
-          </span>
         </div>
 
         {/* Clear Filters */}

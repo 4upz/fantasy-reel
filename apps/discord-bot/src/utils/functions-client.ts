@@ -138,7 +138,6 @@ export function browseMovies(
     page?: number
     genres?: number[]
     release_window?: 'next30' | 'quarter' | 'year' | 'all'
-    min_rating?: number
     sort_by?: 'popularity' | 'release_date'
     trending?: boolean
   } = {}

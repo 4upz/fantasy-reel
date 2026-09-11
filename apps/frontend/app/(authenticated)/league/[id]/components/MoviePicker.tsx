@@ -134,7 +134,7 @@ export default function MoviePicker({
       if (tab === 'trending') {
         fetchTrending()
       } else if (activeTab === 'trending') {
-        browse({ releaseWindow: 'year', genres: [], minRating: 0 })
+        browse({ releaseWindow: 'year', genres: [] })
       }
       setActiveTab(tab)
     },

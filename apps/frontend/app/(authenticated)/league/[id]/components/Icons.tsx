@@ -4,7 +4,6 @@ import {
   ChevronDown,
   X,
   Check,
-  Star,
   Heart,
   Calendar,
   Clock,
@@ -53,7 +52,6 @@ export const TrendingUpIcon = createIcon(TrendingUp, 'w-4 h-4')
 export const PlusIcon = createIcon(Plus, 'w-4 h-4')
 export const EyeIcon = createIcon(Eye, 'w-4 h-4')
 
-export const StarIcon = createFillableIcon(Star, 'w-4 h-4', true)
 export const HeartIcon = createFillableIcon(Heart, 'w-4 h-4', false)
 
 export function SpinnerIcon({ className = 'w-5 h-5' }: IconProps) {

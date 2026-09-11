@@ -5,7 +5,7 @@ import Image from 'next/image'
 import type { FranchiseHistory, TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import { seriesName } from '@/utils/franchise'
-import { StarIcon, ClapperboardIcon } from './Icons'
+import { ClapperboardIcon } from './Icons'
 import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
 
 interface Props {
@@ -102,18 +102,6 @@ export default function DraftMovieCard({
             <WishlistToggle movie={movie} size="sm" variant="overlay" />
           )}
         </div>
-
-        {/* Rating Badge */}
-        {movie.vote_average && movie.vote_average > 0 && (
-          <div className="absolute bottom-12 left-2">
-            <div className="flex items-center gap-1 px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg">
-              <StarIcon className="w-3.5 h-3.5 text-gold" />
-              <span className="type-row-title text-foreground">
-                {movie.vote_average.toFixed(1)}
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Release Date Badge */}
         <div className="absolute bottom-12 right-2">
