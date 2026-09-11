@@ -6,7 +6,7 @@ import Image from 'next/image'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid, DroppableHolding } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
-import { getTmdbPosterUrl, formatReleaseDateFull, isMovieBiddable, formatDeadlineShort } from './utils'
+import { getTmdbPosterUrl, getReleaseYear, formatReleaseDateFull, isMovieBiddable, formatDeadlineShort } from './utils'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import FranchiseSummary from '@/app/components/FranchiseSummary'
@@ -178,12 +178,17 @@ export default function PlaceBidModal({
   const {
     movies: results,
     loading,
+    loadingMore,
+    hasMore,
+    error: searchError,
+    loadMore,
+    retry,
     search,
     clearSearch,
   } = useDraftMovies({
     draftedTmdbIds: excludedTmdbIds,
     seasonYear,
-    enabled: !isCounterBidPhase,
+    enabled: isOpen && !isCounterBidPhase,
   })
 
   // Lock body scroll when modal is open
@@ -502,6 +507,15 @@ export default function PlaceBidModal({
                 </>
               )}
 
+              {!isCounterBidPhase && searchError && (
+                <div className="alert alert-error mb-4">
+                  <p>{searchError}</p>
+                  <button type="button" onClick={retry} className="btn btn-secondary mt-3" data-testid="retry-bid-movies-button">
+                    Retry loading movies
+                  </button>
+                </div>
+              )}
+
               {/* Results */}
               <div className="space-y-2">
                 {resultsState === 'loading' && (
@@ -522,26 +536,26 @@ export default function PlaceBidModal({
                   </div>
                 )}
 
-                {resultsState === 'no-results' && (
+                {resultsState === 'no-results' && !searchError && !loadingMore && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Film className="w-12 h-12 text-foreground-muted mb-4" />
                     <p className="text-foreground-secondary font-medium">
-                      {searchQuery ? 'No movies found' : 'Search for a movie'}
+                      {hasMore ? 'No available movies in these pages' : searchQuery ? 'No movies found' : 'Search for a movie'}
                     </p>
                     <p className="type-body-sm text-foreground-secondary mt-1">
-                      {searchQuery
+                      {hasMore ? 'More pages may have matches. Load more below.' : searchQuery
                         ? 'Try a different search term'
                         : 'Type a movie title above to get started'}
                     </p>
                   </div>
                 )}
 
-                {resultsState === 'no-wishlist-matches' && (
+                {resultsState === 'no-wishlist-matches' && !searchError && (
                   <div className="flex flex-col items-center justify-center py-12 text-center">
                     <Heart className="w-12 h-12 text-foreground-muted mb-4" />
-                    <p className="text-foreground-secondary font-medium">No wishlisted movies found</p>
+                    <p className="text-foreground-secondary font-medium">No wishlisted movies in loaded results</p>
                     <p className="type-body-sm text-foreground-secondary mt-1">
-                      Add movies to your wishlist first, then filter here
+                      Search by title or load more results to find a wishlisted movie
                     </p>
                   </div>
                 )}
@@ -551,7 +565,7 @@ export default function PlaceBidModal({
                     <p className="type-body-sm text-foreground-secondary mb-3">
                       {isCounterBidPhase
                         ? `${displayedResults.length} ${displayedResults.length === 1 ? 'movie' : 'movies'} still being bid on`
-                        : `${displayedResults.length} movies found`}
+                        : `${displayedResults.length} available movies loaded`}
                     </p>
                     {displayedResults.map((movie, index) => (
                       <div
@@ -591,7 +605,7 @@ export default function PlaceBidModal({
                           {movie.release_date && (
                             <div className="type-body-sm flex items-center gap-1 mt-1.5 text-foreground-secondary">
                               <Calendar className="w-3.5 h-3.5" />
-                              {new Date(movie.release_date).getFullYear()}
+                              {getReleaseYear(movie.release_date)}
                             </div>
                           )}
                           <ActiveBidChip
@@ -605,6 +619,12 @@ export default function PlaceBidModal({
                       </div>
                     ))}
                   </>
+                )}
+                {!isCounterBidPhase && (hasMore || loadingMore) && (
+                  <button type="button" onClick={loadMore} disabled={loading || loadingMore || Boolean(searchError)}
+                    className="btn btn-secondary w-full mt-3" data-testid="load-more-bid-movies-button">
+                    {loadingMore ? 'Loading more movies...' : 'Load more movies'}
+                  </button>
                 )}
               </div>
             </div>

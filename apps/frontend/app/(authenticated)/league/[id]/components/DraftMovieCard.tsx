@@ -6,7 +6,7 @@ import type { FranchiseHistory, TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import { seriesName } from '@/utils/franchise'
 import { ClapperboardIcon } from './Icons'
-import { formatReleaseDateShort, getPopularityBadge, cn } from './utils'
+import { formatReleaseDateShort, getReleaseYear, getPopularityBadge, cn } from './utils'
 
 interface Props {
   movie: TMDbSearchResult
@@ -30,24 +30,25 @@ export default function DraftMovieCard({
   const [imageError, setImageError] = useState(false)
 
   const popularityBadge = getPopularityBadge(movie.popularity)
-  const releaseYear = movie.release_date ? new Date(movie.release_date).getFullYear() : null
+  const releaseYear = getReleaseYear(movie.release_date)
   const seriesLabel = franchise ? `${seriesName(franchise)} series` : null
   const seriesAverage = franchise?.average_rt ?? null
 
-  function handleCardClick(): void {
-    if (!isDrafted) {
-      onPreview(movie)
-    }
-  }
-
   const cardClasses = cn(
-    'group relative rounded-xl overflow-hidden transition-all duration-300',
-    isDrafted && 'opacity-40 cursor-not-allowed',
-    !isDrafted && 'cursor-pointer hover:scale-[1.02] hover:z-10 hover:shadow-medium'
+    'group relative rounded-xl overflow-hidden transition-[transform,box-shadow,opacity] duration-300 focus-within:ring-2 focus-within:ring-gold',
+    isDrafted && 'opacity-60',
+    !isDrafted && 'hover:scale-[1.02] hover:z-10 hover:shadow-medium motion-reduce:transform-none'
   )
 
   return (
-    <div onClick={handleCardClick} className={cardClasses} data-testid={`movie-card-${movie.tmdb_id}`}>
+    <div className={cardClasses} data-testid={`movie-card-${movie.tmdb_id}`}>
+      <button
+        type="button"
+        onClick={() => onPreview(movie)}
+        aria-label={`Preview ${movie.title}${isDrafted ? ' (drafted)' : ''}`}
+        className="absolute inset-0 z-10 rounded-xl cursor-pointer focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
+        data-testid={`preview-movie-${movie.tmdb_id}`}
+      />
       {/* Poster Container */}
       <div className="relative aspect-[2/3] bg-elevated">
         {/* Skeleton loader */}
@@ -99,7 +100,7 @@ export default function DraftMovieCard({
 
           {/* Wishlist Button */}
           {!isDrafted && (
-            <WishlistToggle movie={movie} size="sm" variant="overlay" />
+            <WishlistToggle movie={movie} size="sm" variant="overlay" className="relative z-20 ml-auto" />
           )}
         </div>
 

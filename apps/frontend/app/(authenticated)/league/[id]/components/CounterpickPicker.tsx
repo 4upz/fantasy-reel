@@ -1,7 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import Image from 'next/image'
+import { formatReleaseDateFull } from '@/utils/date'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import type { CounterpickOption } from '@/types'
@@ -13,6 +16,8 @@ interface Props {
   isMyTurn: boolean
   isPicking: boolean
   onPick: (movieId: string, option: CounterpickOption) => Promise<void>
+  revision?: number
+  draftRound?: boolean
 }
 
 interface GroupedOptions {
@@ -27,39 +32,46 @@ export default function CounterpickPicker({
   isMyTurn,
   isPicking,
   onPick,
+  revision = 0,
+  draftRound = false,
 }: Props) {
   const [options, setOptions] = useState<CounterpickOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedOption, setSelectedOption] = useState<CounterpickOption | null>(null)
+  const [retry, setRetry] = useState(0)
 
   // Fetch counterpick options when component mounts or when turn changes
   useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15_000)
     async function fetchOptions() {
       setLoading(true)
       setError(null)
 
-      const supabase = createClient()
-      const { data, error: fetchError } = await supabase.rpc('get_counterpick_options', {
-        p_league_id: leagueId,
-        p_team_id: teamId,
-      })
-
-      if (fetchError) {
-        console.error('Error fetching counterpick options:', fetchError)
-        setError('Failed to load counterpick options')
-        setOptions([])
-      } else {
+      try {
+        const { data, error: fetchError } = await createClient().rpc('get_counterpick_options', {
+          p_league_id: leagueId,
+          p_team_id: teamId,
+        }).abortSignal(controller.signal)
+        if (cancelled) return
+        if (fetchError) throw fetchError
         setOptions(data || [])
+      } catch {
+        if (cancelled) return
+        setError('Failed to load counterpick options')
+      } finally {
+        clearTimeout(timeout)
+        if (!cancelled) setLoading(false)
       }
-
-      setLoading(false)
     }
 
     if (leagueId && teamId) {
       fetchOptions()
     }
-  }, [leagueId, teamId])
+    return () => { cancelled = true; clearTimeout(timeout); controller.abort() }
+  }, [leagueId, teamId, isMyTurn, revision, retry])
 
   // Group options by opponent team
   const groupedOptions = useMemo<GroupedOptions[]>(() => {
@@ -86,18 +98,25 @@ export default function CounterpickPicker({
 
   const handleSelectOption = (option: CounterpickOption) => {
     if (!isMyTurn || isPicking) return
+    resetPickError()
     setSelectedOption(option)
   }
 
-  const handleConfirmPick = async () => {
+  const selectedAvailable = options.some(option => option.movie_id === selectedOption?.movie_id)
+  const confirmAction = useCallback(async () => {
     if (!selectedOption || !isMyTurn || isPicking) return
+    if (!selectedAvailable) throw new Error('This movie is no longer available. Choose another counterpick.')
     await onPick(selectedOption.movie_id, selectedOption)
     setSelectedOption(null)
-  }
+  }, [selectedOption, isMyTurn, isPicking, selectedAvailable, onPick])
+  const { execute: confirmPick, isLoading: confirming, error: pickError, reset: resetPickError } = useAsyncAction(confirmAction)
 
   const handleCancelSelection = () => {
+    if (isPicking || confirming) return
     setSelectedOption(null)
+    resetPickError()
   }
+  const renderConfirmation = (content: ReactNode) => draftRound ? createPortal(content, document.body) : content
 
   // Loading state
   if (loading) {
@@ -112,8 +131,9 @@ export default function CounterpickPicker({
   // Error state
   if (error) {
     return (
-      <div className="alert alert-error">
+      <div className="alert alert-error" role="alert">
         {error}
+        <button className="btn btn-secondary ml-3" onClick={() => setRetry(value => value + 1)}>Retry options</button>
       </div>
     )
   }
@@ -130,6 +150,7 @@ export default function CounterpickPicker({
           Opponent movies drop off this list once they&apos;re released or already targeted —
           nothing is left to counterpick right now
         </p>
+        {draftRound && <p className="type-body-sm text-foreground-secondary mt-2">The league owner can end the remaining counterpicks and activate the league.</p>}
       </div>
     )
   }
@@ -186,7 +207,7 @@ export default function CounterpickPicker({
                   key={option.movie_id}
                   option={option}
                   isSelected={selectedOption?.movie_id === option.movie_id}
-                  isSelectable={isMyTurn && !isPicking}
+                  isSelectable={isMyTurn && !isPicking && !confirming}
                   onSelect={handleSelectOption}
                 />
               ))}
@@ -196,10 +217,11 @@ export default function CounterpickPicker({
       </div>
 
       {/* Selection Confirmation Overlay */}
-      {selectedOption && isMyTurn && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 bg-surface/95 backdrop-blur-md border-t border-border shadow-heavy z-40 animate-slide-up">
+      {selectedOption && renderConfirmation(
+        <div className={`fixed ${draftRound ? 'bottom-[calc(76px+env(safe-area-inset-bottom))] lg:bottom-0' : 'bottom-0'} left-0 right-0 p-4 bg-surface/95 backdrop-blur-md border-t border-border shadow-heavy z-40 animate-slide-up motion-reduce:animate-none`} role="region" aria-label="Confirm selected counterpick">
           <div className="max-w-4xl mx-auto">
-            <div className="flex items-center gap-4">
+            {(pickError || !isMyTurn || !selectedAvailable) && <p className="text-error type-body-sm mb-3" role="alert">{pickError || (!isMyTurn ? 'It is no longer your turn.' : 'This movie is no longer available.')}</p>}
+            <div className="flex flex-wrap items-center gap-3">
               {/* Selected movie preview */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 {selectedOption.poster_url ? (
@@ -226,33 +248,33 @@ export default function CounterpickPicker({
                   </p>
                   {selectedOption.release_date && (
                     <p className="type-meta text-foreground-secondary">
-                      {new Date(selectedOption.release_date).toLocaleDateString()}
+                      {formatReleaseDateFull(selectedOption.release_date)}
                     </p>
                   )}
                 </div>
               </div>
 
               {/* Counterpick indicator */}
-              <div className="flex items-center gap-2 px-3 py-2 bg-crimson/10 border border-crimson/30 rounded-lg">
+              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-crimson/10 border border-crimson/30 rounded-lg">
                 <Target className="w-4 h-4 text-crimson" />
                 <span className="type-label text-crimson">Counterpick</span>
               </div>
 
               {/* Actions */}
-              <div className="flex flex-col sm:flex-row gap-2">
+              <div className="flex w-full sm:w-auto gap-2">
                 <button
                   onClick={handleCancelSelection}
-                  disabled={isPicking}
+                  disabled={isPicking || confirming}
                   className="btn btn-ghost px-4"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleConfirmPick}
-                  disabled={isPicking}
+                  onClick={() => { void confirmPick().catch(() => {}) }}
+                  disabled={isPicking || confirming || !isMyTurn || !selectedAvailable}
                   className="btn btn-primary px-6"
                 >
-                  {isPicking ? (
+                  {isPicking || confirming ? (
                     <span className="flex items-center gap-2">
                       <SpinnerIcon className="w-4 h-4" />
                       Picking...
@@ -346,11 +368,7 @@ function CounterpickMovieCard({
         <p className="type-label text-foreground truncate">{option.movie_title}</p>
         {option.release_date && (
           <p className="type-meta text-foreground-secondary mt-0.5">
-            {new Date(option.release_date).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-              year: 'numeric',
-            })}
+            {formatReleaseDateFull(option.release_date)}
           </p>
         )}
       </div>

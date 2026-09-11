@@ -1,14 +1,16 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useId } from 'react'
 import { TMDB_GENRES } from '@/types'
 import { SearchIcon, ChevronDownIcon, CloseIcon, CheckIcon, SpinnerIcon } from './Icons'
 import { cn } from './utils'
 
 interface Props {
+  value: DraftFilters
   onFiltersChange: (filters: DraftFilters) => void
-  totalResults?: number
+  countLabel: string
   loading?: boolean
+  disabledReason?: string
 }
 
 export interface DraftFilters {
@@ -18,30 +20,19 @@ export interface DraftFilters {
 }
 
 const RELEASE_WINDOWS = [
-  { value: 'all', label: 'All Upcoming' },
+  { value: 'all', label: `Through ${new Date().getUTCFullYear() + 2}` },
   { value: 'next30', label: 'Next 30 Days' },
-  { value: 'quarter', label: 'This Quarter' },
+  { value: 'quarter', label: 'Next 90 Days' },
   { value: 'year', label: 'This Year' },
 ] as const
 
 /** @design-system Movies */
-export default function DraftFilters({ onFiltersChange, totalResults, loading }: Props) {
-  const [search, setSearch] = useState('')
-  const [releaseWindow, setReleaseWindow] = useState<DraftFilters['releaseWindow']>('year')
-  const [selectedGenres, setSelectedGenres] = useState<number[]>([])
+export default function DraftFilters({ value, onFiltersChange, countLabel, loading, disabledReason }: Props) {
+  const { search, releaseWindow, genres: selectedGenres } = value
+  const descriptionId = useId()
+  const genreListId = useId()
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
   const genreDropdownRef = useRef<HTMLDivElement>(null)
-
-  // Stable callback ref to avoid triggering effects on callback changes
-  const onFiltersChangeRef = useRef(onFiltersChange)
-  onFiltersChangeRef.current = onFiltersChange
-
-  const notifyFiltersChange = useCallback(
-    (filters: DraftFilters) => {
-      onFiltersChangeRef.current(filters)
-    },
-    []
-  )
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -54,21 +45,13 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Notify parent of filter changes immediately (hook handles debouncing)
-  useEffect(() => {
-    notifyFiltersChange({ releaseWindow, genres: selectedGenres, search })
-  }, [search, releaseWindow, selectedGenres, notifyFiltersChange])
-
   function toggleGenre(genreId: number): void {
-    setSelectedGenres((prev) =>
-      prev.includes(genreId) ? prev.filter((id) => id !== genreId) : [...prev, genreId]
-    )
+    onFiltersChange({ ...value, genres: selectedGenres.includes(genreId)
+      ? selectedGenres.filter(id => id !== genreId) : [...selectedGenres, genreId] })
   }
 
   function clearFilters(): void {
-    setSearch('')
-    setReleaseWindow('year')
-    setSelectedGenres([])
+    onFiltersChange({ search: '', releaseWindow: 'year', genres: [] })
   }
 
   const hasActiveFilters =
@@ -89,7 +72,8 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
           type="text"
           placeholder="Search upcoming movies..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => onFiltersChange({ ...value, search: e.target.value })}
+          aria-label="Search movie titles"
           className="type-input input pl-12 pr-4 py-3"
           data-testid="movie-search-input"
         />
@@ -100,13 +84,18 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
         )}
       </div>
 
+      {disabledReason && <p id={descriptionId} className="type-body-sm text-foreground-secondary">{disabledReason}</p>}
+
       {/* Filter Row */}
       <div className="flex flex-wrap items-center gap-3">
         {/* Release Window Dropdown */}
         <select
           value={releaseWindow}
-          onChange={(e) => setReleaseWindow(e.target.value as DraftFilters['releaseWindow'])}
-          className="type-input bg-elevated border border-border rounded-lg px-4 py-2 text-foreground focus:border-gold focus:ring-1 focus:ring-gold outline-none cursor-pointer transition-all hover:border-border-hover"
+          onChange={(e) => onFiltersChange({ ...value, releaseWindow: e.target.value as DraftFilters['releaseWindow'] })}
+          aria-label="Release window"
+          disabled={Boolean(disabledReason)}
+          aria-describedby={disabledReason ? descriptionId : undefined}
+          className="type-input bg-elevated border border-border rounded-lg px-4 py-2 text-foreground focus:border-gold focus:ring-1 focus:ring-gold outline-none cursor-pointer transition-all hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {RELEASE_WINDOWS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -116,11 +105,20 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
         </select>
 
         {/* Genre Multi-Select */}
-        <div className="relative" ref={genreDropdownRef}>
+        <div className="relative" ref={genreDropdownRef} onKeyDown={event => {
+          if (event.key === 'Escape') {
+            setShowGenreDropdown(false)
+            genreDropdownRef.current?.querySelector('button')?.focus()
+          }
+        }}>
           <button
             onClick={() => setShowGenreDropdown(!showGenreDropdown)}
+            disabled={Boolean(disabledReason)}
+            aria-expanded={showGenreDropdown && !disabledReason}
+            aria-controls={genreListId}
+            aria-describedby={disabledReason ? descriptionId : undefined}
             className={cn(
-              'type-control flex items-center gap-2 bg-elevated border rounded-lg px-4 py-2 transition-all hover:border-border-hover',
+              'type-control flex items-center gap-2 bg-elevated border rounded-lg px-4 py-2 transition-all hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed',
               selectedGenres.length > 0 ? 'border-gold text-gold' : 'border-border text-foreground-secondary'
             )}
           >
@@ -128,12 +126,12 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
             <ChevronDownIcon className={cn('w-4 h-4 transition-transform', showGenreDropdown && 'rotate-180')} />
           </button>
 
-          {showGenreDropdown && (
-            <div className="absolute top-full left-0 mt-2 w-64 max-h-72 overflow-y-auto bg-surface border border-border rounded-xl shadow-heavy z-50 animate-fade-in">
+          {showGenreDropdown && !disabledReason && (
+            <div id={genreListId} className="absolute top-full right-0 sm:left-0 sm:right-auto mt-2 w-64 max-h-72 overflow-y-auto bg-surface border border-border rounded-xl shadow-heavy z-50 animate-fade-in">
               <div className="p-2">
                 {selectedGenres.length > 0 && (
                   <button
-                    onClick={() => setSelectedGenres([])}
+                    onClick={() => onFiltersChange({ ...value, genres: [] })}
                     className="type-control w-full px-3 py-2 text-left text-crimson hover:bg-elevated rounded-lg transition-colors mb-1"
                   >
                     Clear selection
@@ -145,6 +143,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
                     <button
                       key={genre.id}
                       onClick={() => toggleGenre(genre.id)}
+                      aria-pressed={isSelected}
                       className={cn(
                         'type-control w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg transition-all',
                         isSelected ? 'bg-gold-muted text-gold' : 'text-foreground-secondary hover:bg-elevated hover:text-foreground'
@@ -178,16 +177,13 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
           </button>
         )}
 
-        {/* Results Count */}
-        {totalResults !== undefined && (
-          <div className="type-body-sm ml-auto text-foreground-secondary">
-            <span className="text-foreground font-medium">{totalResults}</span> movies
-          </div>
-        )}
+        <div className="type-body-sm ml-auto text-foreground-secondary" role="status">
+          {countLabel}
+        </div>
       </div>
 
       {/* Active Genre Chips */}
-      {selectedGenres.length > 0 && (
+      {selectedGenres.length > 0 && !disabledReason && (
         <div className="flex flex-wrap gap-2 animate-fade-in">
           {selectedGenres.map((genreId) => {
             const genre = TMDB_GENRES.find((g) => g.id === genreId)
@@ -195,6 +191,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
               <button
                 key={genreId}
                 onClick={() => toggleGenre(genreId)}
+                aria-label={`Remove ${genre?.name ?? 'genre'} filter`}
                 className="type-control inline-flex items-center gap-1.5 px-3 py-1 bg-gold-muted border border-gold rounded-full text-gold hover:bg-gold hover:text-background transition-all group"
               >
                 {genre?.name}

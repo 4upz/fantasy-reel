@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { Target } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
+import type { DraftState } from '@/hooks/useDraftState'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
 import { buildTeamInfoByUserId, buildTeamInfoByTeamId, type TeamDisplayInfo } from '@/utils/league'
@@ -11,9 +12,10 @@ import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
 import DraftBoardHeader from './DraftBoardHeader'
+import DraftTurnStatus from './DraftTurnStatus'
 import CounterpickRound from './CounterpickRound'
 import { ClapperboardIcon } from './Icons'
-import type { League, ParticipantWithProfile, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, CounterpickWithDetails } from '@/types'
+import type { League, ParticipantWithProfile, DraftPickWithDetails, NextPickInfo, CounterpickWithDetails } from '@/types'
 
 interface Props {
   league: League
@@ -21,8 +23,9 @@ interface Props {
   draftPicks: DraftPickWithDetails[]
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
-  onPickMade: () => void | Promise<void>
-  onCounterpickMade?: () => void | Promise<void>
+  onPickMade: (confirmedLeague?: League) => Promise<DraftState | null>
+  onCounterpickMade?: (confirmedLeague?: League) => Promise<DraftState | null>
+  updatesUnavailable?: boolean
 }
 
 export default function DraftBoard({
@@ -33,6 +36,7 @@ export default function DraftBoard({
   currentUserId,
   onPickMade,
   onCounterpickMade,
+  updatesUnavailable = false,
 }: Props): React.ReactElement {
   const totalParticipants = participants.length
   const totalPicks = totalParticipants * league.draft_slots
@@ -69,7 +73,7 @@ export default function DraftBoard({
   }, [participants, picksMade, totalParticipants, totalPicks])
 
   const isMyTurn = nextPick?.user_id === currentUserId
-  const isDraftComplete = league.status === 'drafting' && !nextPick
+  const isDraftComplete = league.status === 'drafting' && totalPicks > 0 && picksMade >= totalPicks
 
   // Set of drafted tmdb_ids (movies that have been picked)
   const draftedTmdbIds = useMemo(() => {
@@ -84,33 +88,28 @@ export default function DraftBoard({
   const teamInfoByUserId = useMemo(() => buildTeamInfoByUserId(participants), [participants])
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
 
-  const draftPickAction = useCallback(
-    async (tmdbId: number, movieData: TMDbSearchResult): Promise<void> => {
-      const { error: pickError } = await callEdgeFunction('draft-pick', {
-        body: {
-          league_id: league.id,
-          tmdb_id: tmdbId,
-          movie_data: {
-            title: movieData.title,
-            overview: movieData.overview,
-            poster_url: movieData.poster_url,
-            release_date: movieData.release_date,
-            vote_average: movieData.vote_average,
-            popularity: movieData.popularity,
-            genre_ids: movieData.genre_ids,
-          },
-        },
-      })
-
-      if (pickError) {
-        throw new Error(pickError)
-      }
-
-      await onPickMade()
-      trackEvent('draft_pick_made', { league_id: league.id, round: nextPick?.round ?? 0 })
-    },
-    [league.id, onPickMade, nextPick]
-  )
+  const pendingPick = useRef<{ tmdbId: number; expectedPick: number; requestId: string; teamId: string } | null>(null)
+  const draftPickAction = useCallback(async (tmdbId: number): Promise<void> => {
+    if (!pendingPick.current || pendingPick.current.tmdbId !== tmdbId) {
+      if (!nextPick || updatesUnavailable) throw new Error('Refresh draft updates before making a pick.')
+      pendingPick.current = { tmdbId, expectedPick: picksMade + 1, requestId: crypto.randomUUID(), teamId: nextPick.team_id }
+    }
+    const pending = pendingPick.current
+    const { data, error: pickError } = await callEdgeFunction<{ pick: DraftPickWithDetails; league: League; replayed: boolean }>('draft-pick', {
+      timeoutMs: 30_000,
+      body: { league_id: league.id, tmdb_id: tmdbId, expected_pick: pending.expectedPick, request_id: pending.requestId },
+    })
+    const snapshot = await onPickMade(data?.league)
+    const confirmed = snapshot?.draftPicks.some(pick =>
+      pick.movies?.tmdb_id === tmdbId && pick.team_id === pending.teamId &&
+      (pick.round - 1) * totalParticipants + pick.pick_number === pending.expectedPick)
+    if (!confirmed && snapshot?.draftPicks.some(pick =>
+      (pick.round - 1) * totalParticipants + pick.pick_number === pending.expectedPick)) pendingPick.current = null
+    if (pickError && !confirmed) throw new Error(`${pickError} Your selection is kept. Retry or check the previous pick before choosing again.`)
+    if (!data && !confirmed) throw new Error('The pick could not be confirmed. Check the previous pick before choosing again.')
+    pendingPick.current = null
+    if (!data?.replayed) trackEvent('draft_pick_made', { league_id: league.id, round: Math.ceil(pending.expectedPick / totalParticipants) })
+  }, [league.id, nextPick, onPickMade, picksMade, totalParticipants, updatesUnavailable])
 
   const { execute: handleDraftPick, isLoading: picking, error } = useAsyncAction(draftPickAction)
 
@@ -151,7 +150,8 @@ export default function DraftBoard({
         participants={participants}
         counterpicks={counterpicks}
         currentUserId={currentUserId}
-        onCounterpickMade={onCounterpickMade || (() => {})}
+        onCounterpickMade={onCounterpickMade || onPickMade}
+        updatesUnavailable={updatesUnavailable}
       />
     )
   }
@@ -170,7 +170,9 @@ export default function DraftBoard({
   }
 
   return (
-    <div className="space-y-6" data-testid="draft-board">
+    <div className="space-y-6 pb-24 lg:pb-0" data-testid="draft-board">
+      {nextPick && <DraftTurnStatus label={isMyTurn ? 'Your turn to draft' : `${getTeamName(nextPick.user_id)} is picking`}
+        detail={`Round ${nextPick.round}, pick ${nextPick.pick_number}`} isMyTurn={isMyTurn} unavailable={updatesUnavailable} />}
       <DraftBoardHeader
         picksMade={picksMade}
         totalPicks={totalPicks}
@@ -192,15 +194,21 @@ export default function DraftBoard({
         ) : null}
       />
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className="alert alert-error" role="alert">
+        <p>{error}</p>
+        {pendingPick.current && <button className="btn btn-secondary mt-3" disabled={picking} onClick={() => {
+          if (pendingPick.current) void handleDraftPick(pendingPick.current.tmdbId).catch(() => {})
+        }}>Check previous pick</button>}
+      </div>}
 
       {/* Movie Picker - Always visible for browsing, but only pickable on your turn */}
       <div className="card p-4 sm:p-6">
         <MoviePicker
           draftedTmdbIds={draftedTmdbIds}
           seasonYear={league.season_year}
-          isMyTurn={isMyTurn}
+          isMyTurn={isMyTurn && !updatesUnavailable}
           picking={picking}
+          unavailableReason={updatesUnavailable ? 'Draft updates are unavailable. Retry updates before picking.' : undefined}
           onPick={handleDraftPick}
         />
       </div>
@@ -294,4 +302,3 @@ export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): Rea
     </div>
   )
 }
-

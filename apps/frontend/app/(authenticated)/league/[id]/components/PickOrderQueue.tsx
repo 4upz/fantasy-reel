@@ -32,8 +32,9 @@ function calculatePickOrder(
   const totalParticipants = participants.length
   const totalPicks = totalParticipants * rounds
 
-  // Show 5 upcoming picks including current
-  for (let i = 0; i < 5 && currentPickIndex + i < totalPicks; i++) {
+  // Calculate the whole remaining order so a user's turn can be found beyond
+  // the five visible queue cards.
+  for (let i = 0; currentPickIndex + i < totalPicks; i++) {
     const pickIndex = currentPickIndex + i
     const round = Math.floor(pickIndex / totalParticipants) + 1
     const pickInRound = (pickIndex % totalParticipants) + 1
@@ -89,8 +90,9 @@ export default function PickOrderQueue({
   rounds,
 }: Props) {
   const totalPicks = participants.length * rounds
-  const queue = calculatePickOrder(participants, currentPickIndex, rounds, currentUserId)
-  const nextUserPickIndex = queue.findIndex((item) => item.isCurrentUser)
+  const remaining = calculatePickOrder(participants, currentPickIndex, rounds, currentUserId)
+  const queue = remaining.slice(0, 5)
+  const nextUserPickIndex = remaining.findIndex((item) => item.isCurrentUser)
 
   if (queue.length === 0) {
     return null
@@ -101,6 +103,9 @@ export default function PickOrderQueue({
       <h4 className="type-label text-foreground-secondary">
         Upcoming picks
       </h4>
+      {nextUserPickIndex >= 0 && <p className="type-body-sm text-foreground-secondary" data-testid="picks-until-your-turn">
+        {nextUserPickIndex === 0 ? 'Your turn now' : `Your turn is in ${nextUserPickIndex} pick${nextUserPickIndex === 1 ? '' : 's'}`}
+      </p>}
       <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none">
         {queue.map((item, index) => (
           <div

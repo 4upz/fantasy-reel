@@ -1,4 +1,4 @@
-export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'error'
+export type RealtimeStatus = 'connecting' | 'connected' | 'reconnecting' | 'polling' | 'error'
 
 const STATUS_CONFIG: Record<RealtimeStatus, { dot: string; text: string; textColor: string; title: string }> = {
   connecting: {
@@ -18,6 +18,12 @@ const STATUS_CONFIG: Record<RealtimeStatus, { dot: string; text: string; textCol
     text: 'Reconnecting...',
     textColor: 'text-warning',
     title: 'Reconnecting to real-time updates...',
+  },
+  polling: {
+    dot: 'bg-warning',
+    text: 'Periodic updates',
+    textColor: 'text-warning',
+    title: 'Live connection unavailable. Checking the complete draft every 10 seconds.',
   },
   error: {
     dot: 'bg-error',
@@ -39,6 +45,9 @@ export default function ConnectionStatusIndicator({ status }: Props): React.Reac
     <div
       className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface border border-border"
       title={config.title}
+      role="status"
+      aria-live="polite"
+      data-testid="draft-connection-status"
     >
       <span className={`w-2 h-2 rounded-full ${config.dot}`} />
       <span className={`type-meta ${config.textColor}`}>{config.text}</span>
