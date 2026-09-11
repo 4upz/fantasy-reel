@@ -14,7 +14,7 @@
 
 import { assertEquals } from '@std/assert'
 import { SupabaseClient } from '@supabase/supabase-js'
-import { getServiceClient, createTestFactory, uniqueName } from './_setup.ts'
+import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName } from './_setup.ts'
 
 /**
  * A tmdb_id outside the real TMDb range and outside every other suite's void
@@ -28,25 +28,6 @@ function uniqueVoidTestTmdbId(): number {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
 const STANDALONE_URL = Deno.env.get('PROCESS_BIDS_URL')
 const FUNCTION_URL = STANDALONE_URL || `${SUPABASE_URL}/functions/v1/process-bids`
-
-/** The service role key the Edge Function runtime actually uses. */
-async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
-  }
-  return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
-}
 
 /** A bid already due for processing. */
 function dueDeadline(): string {
