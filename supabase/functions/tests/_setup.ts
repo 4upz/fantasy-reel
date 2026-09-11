@@ -448,11 +448,11 @@ export async function invokeFunction<T = unknown>(
   functionName: string,
   body?: Record<string, unknown>
 ): Promise<InvokeResult<T>> {
-  const { data, error } = await client.functions.invoke(functionName, { body })
+  const { data, error, response } = await client.functions.invoke(functionName, { body })
 
   // If no error, return the data
   if (!error) {
-    return { data: data as T, error: null }
+    return { data: data as T, error: null, status: response?.status }
   }
 
   // For FunctionsHttpError, extract the actual error message from the response body
@@ -468,8 +468,8 @@ export async function invokeFunction<T = unknown>(
         status: error.context.status
       }
     } catch {
-      // If we can't parse the error body, return the generic message
-      return { data: null, error: error.message }
+      // Gateway errors may have non-JSON bodies; keep their actual HTTP status.
+      return { data: null, error: error.message, status: error.context.status }
     }
   }
 

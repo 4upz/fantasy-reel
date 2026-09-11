@@ -11,7 +11,8 @@ start, `7c14975` fixes calendar dates, `06a18a6` adds canonical metadata,
 transactional picks, and their notification outbox, and `0e5aa97` fixes discovery
 paging. `bbdee1e` integrates synchronization, discovery, accessible selection,
 mobile turns, and bounded request recovery. `ea5dca3` refreshes the shared header
-and navigation after draft phase changes.
+and navigation after draft phase changes. `7c0b0c1` preserves retryable Auth
+outage errors instead of misreporting them as rejected credentials.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -193,6 +194,15 @@ Implementation evidence (in progress):
   Auth transport was stubbed through the real SDK without network permission;
   valid/missing/rejected credentials, 500/502/503/504, and network failures were
   covered. The active browser run retains its original backend snapshot.
+
+- Final HTTP preparation found that the existing test invocation helper dropped
+  successful response status codes, which would make the new transaction tests
+  fail despite a correct 200/201 response. It now preserves the real SDK response
+  status, including non-JSON HTTP errors, and leaves transport failures without
+  a fabricated status. Two network-disabled tests through the actual locked SDK
+  cover 200/201/204, JSON 401/409/503, text 546, and transport failure. Both tests,
+  the affected Deno typecheck, and simplification review pass. No application
+  behavior or existing assertions changed.
 
 | ID | Status | Deliverable | Dependencies |
 | --- | --- | --- | --- |
