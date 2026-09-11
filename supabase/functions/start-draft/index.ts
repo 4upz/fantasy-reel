@@ -9,7 +9,7 @@ import {
   internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
-import { createLogger } from '../_shared/logger.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('start-draft')
 
@@ -54,44 +54,20 @@ Deno.serve(async (req) => {
       return errorResponse(`Cannot start draft: league is already in '${league.status}' status`, 400)
     }
 
-    // Count participants
-    const { count: participantCount, error: countError } = await supabaseClient
-      .from('league_participants')
-      .select('*', { count: 'exact', head: true })
-      .eq('league_id', league_id)
-      .eq('status', 'active')
-
-    if (countError) {
-      console.error('Error counting participants:', countError)
-      return errorResponse('Failed to check participants', 500)
-    }
-
-    if (!participantCount || participantCount < 2) {
-      return errorResponse('Need at least 2 participants to start the draft', 400)
-    }
-
-    // Auto-randomize draft order if owner hasn't manually set it
-    const { error: randomizeError } = await supabaseClient.rpc('randomize_draft_order_if_needed', {
+    // Ownership, order preparation, and the phase change share one database lock.
+    const { data: started, error: startError } = await supabaseClient.rpc('start_draft', {
       p_league_id: league_id,
     })
 
-    if (randomizeError) {
-      console.error('Error auto-randomizing draft order:', randomizeError)
-      return errorResponse('Failed to prepare draft order', 500)
-    }
-
-    // Update league status to 'drafting'
-    const { data: updatedLeague, error: updateError } = await supabaseClient
-      .from('leagues')
-      .update({ status: 'drafting' })
-      .eq('id', league_id)
-      .select()
-      .single()
-
-    if (updateError) {
-      console.error('Error updating league status:', updateError)
+    if (startError) {
+      if (['PT400', 'PT403', 'PT404', 'PT409'].includes(startError.code)) {
+        return errorResponse(startError.message, Number(startError.code.slice(2)))
+      }
+      log.error('Failed to start draft', { league_id, error: serializeError(startError) })
       return errorResponse('Failed to start draft', 500)
     }
+
+    const { league: updatedLeague, participant_count: participantCount } = started
 
     // Discord notification: draft started
     const serviceClient = createServiceClient()
@@ -112,7 +88,7 @@ Deno.serve(async (req) => {
         title: 'The Draft Is Open',
         description: `${participantCount} teams on the clock. First pick: ${firstTeamName}.`,
         color: DISCORD_COLORS.gold,
-        footer: { text: `Round 1 of ${updatedLeague.draft_rounds ?? 5}` },
+        footer: { text: `Round 1 of ${updatedLeague.draft_slots}` },
         url: buildLeagueUrl(league_id, '/draft'),
       }],
     })

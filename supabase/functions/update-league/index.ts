@@ -798,14 +798,17 @@ async function handleKickParticipant(
     displayName = profile.display_name
   }
 
-  // Soft delete: set status to 'kicked'
-  const { error: updateError } = await supabase
-    .from('league_participants')
-    .update({ status: 'kicked' })
-    .eq('id', participant_id)
+  // Lock the league before changing membership, in the same order as start.
+  const { error: updateError } = await supabase.rpc('kick_draft_participant', {
+    p_league_id: league.id,
+    p_participant_id: participant_id,
+  })
 
   if (updateError) {
-    console.error('Error kicking participant:', updateError)
+    if (['PT400', 'PT403', 'PT404', 'PT409'].includes(updateError.code)) {
+      return errorResponse(updateError.message, Number(updateError.code.slice(2)))
+    }
+    log.error('Error kicking participant', { league_id: league.id, error: serializeError(updateError) })
     return errorResponse('Failed to remove participant', 500)
   }
 
@@ -825,17 +828,11 @@ async function handleRandomizeDraftOrder(
   })
 
   if (randomizeError) {
-    console.error('Error randomizing draft order:', randomizeError)
+    if (['PT400', 'PT403', 'PT404', 'PT409'].includes(randomizeError.code)) {
+      return errorResponse(randomizeError.message, Number(randomizeError.code.slice(2)))
+    }
+    log.error('Error randomizing draft order', { league_id: league.id, error: serializeError(randomizeError) })
     return errorResponse('Failed to randomize draft order', 500)
-  }
-
-  const { error: flagError } = await supabase
-    .from('leagues')
-    .update({ custom_draft_order: true })
-    .eq('id', league.id)
-
-  if (flagError) {
-    console.error('Error setting custom_draft_order flag:', flagError)
   }
 
   const { data: participants, error: fetchError } = await supabase
@@ -908,17 +905,11 @@ async function handleReorderParticipants(
   })
 
   if (reorderError) {
-    console.error('Error updating draft order:', reorderError)
+    if (['PT400', 'PT403', 'PT404', 'PT409'].includes(reorderError.code)) {
+      return errorResponse(reorderError.message, Number(reorderError.code.slice(2)))
+    }
+    log.error('Error updating draft order', { league_id: league.id, error: serializeError(reorderError) })
     return errorResponse('Failed to update draft order', 500)
-  }
-
-  const { error: flagError } = await supabase
-    .from('leagues')
-    .update({ custom_draft_order: true })
-    .eq('id', league.id)
-
-  if (flagError) {
-    console.error('Error setting custom_draft_order flag:', flagError)
   }
 
   return jsonResponse({ message: 'Draft order updated successfully' })

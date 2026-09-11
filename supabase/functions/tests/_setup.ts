@@ -559,26 +559,25 @@ export class TestDataFactory {
     const { id: leagueId } = await this.createLeague(name)
     await this.addSecondParticipant(leagueId)
 
+    // Configure deterministic order through the same authorized setup action
+    // as the product. Active drafts intentionally reject direct order writes.
+    const ownerUserId = await getUserId(this.client)
+    const { data: participants, error: participantsError } = await this.client
+      .from('league_participants')
+      .select('id, user_id')
+      .eq('league_id', leagueId)
+      .eq('status', 'active')
+    if (participantsError || !participants) throw new Error('Failed to read draft participants')
+    const ordered = [...participants].sort((a, b) =>
+      Number(b.user_id === ownerUserId) - Number(a.user_id === ownerUserId))
+    const { error: orderError } = await this.client.rpc('reorder_draft_order', {
+      p_league_id: leagueId,
+      p_participant_order: ordered.map((participant) => participant.id),
+    })
+    if (orderError) throw new Error(`Failed to set draft order: ${orderError.message}`)
+
     const result = await invokeFunction(this.client, 'start-draft', { league_id: leagueId })
     if (result.error) throw new Error(`Failed to start draft: ${result.error}`)
-
-    // start-draft randomizes draft_order via randomize_draft_order_if_needed().
-    // Force deterministic order for tests: owner=1, second=2.
-    const serviceClient = getServiceClient()
-    const ownerUserId = await getUserId(this.client)
-    const secondUserId = await getUserId(this.secondClient)
-
-    await serviceClient
-      .from('league_participants')
-      .update({ draft_order: 1 })
-      .eq('league_id', leagueId)
-      .eq('user_id', ownerUserId)
-
-    await serviceClient
-      .from('league_participants')
-      .update({ draft_order: 2 })
-      .eq('league_id', leagueId)
-      .eq('user_id', secondUserId)
 
     return leagueId
   }
