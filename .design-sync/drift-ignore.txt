@@ -96,3 +96,9 @@ StandingsClient
 TeamStandingCard
 # TeamDetailRail composes the selected team's roster and league movie modal.
 TeamDetailRail
+
+# Account actions post to the app's sign-out endpoint and navigate to settings;
+# this authenticated application menu is outside the presentation-only catalog.
+ProfileMenu
+# Commissioner form owns persistence, validation and toasts via update-league.
+TradeConfigSection
