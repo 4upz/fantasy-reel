@@ -3,13 +3,14 @@
 Status: implementation and release verification in progress on
 `codex/draft-production-readiness`, based on main `2ca91c4`. DRAFT-01/02 and the
 shared DRAFT-08 date corrections are committed. DRAFT-03 through DRAFT-08 are
-implemented and undergoing final integration checks. No deployment has been
+implemented and committed; final integration checks are underway. No deployment has been
 performed; DRAFT-09 remains open.
 
 Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
 start, `7c14975` fixes calendar dates, `06a18a6` adds canonical metadata,
 transactional picks, and their notification outbox, and `0e5aa97` fixes discovery
-paging. The integrated draft UI is the next batch.
+paging. `bbdee1e` integrates synchronization, discovery, accessible selection,
+mobile turns, and bounded request recovery.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -73,8 +74,8 @@ Implementation evidence (in progress):
   Draft subscriptions now use a stable unique topic per effect lifetime. This
   does not prove that every historical production disconnect had this cause.
 - The initial local two-browser observation delivered a real pick to both UIs
-  in 1.9 seconds while Live. The ongoing development-server observation includes
-  HMR interruptions; it is not a clean production-build uptime measurement.
+  in 1.9 seconds while Live. That development-server observation included HMR
+  interruptions; the separate stable-build sample below is more useful evidence.
 - DRAFT-04 resolves canonical cached/TMDb metadata before persisting a movie;
   malformed identity/date and failed lookups cannot create incomplete records.
   Shared metadata unit checks pass; real Auth/Postgres integration is underway.
@@ -131,9 +132,12 @@ Implementation evidence (in progress):
   tables are included in `supabase_realtime`; missing publication is excluded
   as the cause in the inspected production project.
 - The final production build passes, as do ESLint on 22 changed frontend files
-  and all six state/date regression tests. A fresh 30-minute production-build
-  WebSocket observation is running with two real local sessions; no hot reloads
-  are involved. Initial picks and real token refresh succeeded. The local build
+  and all nine state/date/request regression tests. A 1,802-second production-build
+  WebSocket observation finished with both real local sessions Live and all seven
+  scenarios passing: initial/later picks, remount, focus/visibility, offline
+  recovery, slot-count updates, and a round boundary. Both sessions performed a
+  real token refresh. No hot reloads were involved. Its scoped fixtures were
+  removed after the REST cleanup timed out; the exact-ID SQL cleanup succeeded. The local build
   also exposed unavailable Vercel telemetry scripts redirecting to login HTML;
   those two hosting-specific errors are recorded separately from draft behavior.
   A fetch of main still resolved to `2ca91c4`; all three new migration timestamps
@@ -152,25 +156,33 @@ Implementation evidence (in progress):
   preview indefinitely. Draft mutations now opt into a 30-second deadline that
   covers auth and response parsing, then use the existing snapshot/receipt
   reconciliation. Three additional regression tests pass; nine state/date/request
-  tests pass in total. Deadline ESLint and TypeScript checks pass. The running
-  production socket sample is intentionally unchanged; its build predates this
+  tests pass in total. Deadline ESLint and TypeScript checks pass. The completed
+  production socket sample was intentionally unchanged; its build predates this
   final request-deadline refinement. A separate final-source production build
-  passes and its application files match the branch byte-for-byte. Its browser
-  timeout/footer probe was blocked at login before draft assertions; this is an
-  explicit remaining check. The real waiting-player test passed in the full
+  passes and its application files match the branch byte-for-byte. After earlier
+  login failures, the final 320px browser probe passed the real 30-second request
+  deadline plus bounded reconciliation (45 seconds total), single pending
+  submission, same-key retry, restored dismissal/scroll, and zero page errors.
+  The global footer clears the fixed turn bar by 29px at the bottom of the page. The real waiting-player test passed in the full
   suite (preview available, submission disabled, zero persisted picks).
 
-| ID | Priority | Deliverable | Dependencies |
+- A real owner-start screenshot exposed a stale shared league header still
+  showing Setup while the draft was running. Confirmed phase changes now refresh
+  the server-rendered header/navigation once, without reloading on ordinary picks.
+  Simplification review and the final build pass. A real Realtime phase-change
+  browser probe verified Setup becomes Drafting without manual refresh.
+
+| ID | Status | Deliverable | Dependencies |
 | --- | --- | --- | --- |
 | DRAFT-01 | Implemented; final HTTP gate pending | Protect draft-order mutations | None |
 | DRAFT-02 | Verified | Remove TMDb ratings app-wide | None |
-| DRAFT-03 | Release blocker | Diagnose socket failures and make state recovery reliable | Can begin immediately; integrate with DRAFT-05 |
-| DRAFT-04 | Release blocker | Validate canonical movie metadata and repair wishlist picks | None; coordinate contracts with DRAFT-05/06/07 |
-| DRAFT-05 | Release blocker | Make picks and completion consistent and recoverable | DRAFT-01, DRAFT-04 |
-| DRAFT-06 | Release blocker | Fix discovery pagination and filter state | DRAFT-02; align eligibility with DRAFT-04 |
-| DRAFT-07 | Release blocker | Make selection, submission, and keyboard interaction reliable | DRAFT-03/04/05/06 contracts settled |
-| DRAFT-08 | Required correctness, then polish | Correct dates and improve mobile turn/action visibility | Dates independent; mobile after DRAFT-07 |
-| DRAFT-09 | Release gate | Verify a complete multiplayer draft and deployment readiness | All required fixes |
+| DRAFT-03 | Implemented; local recovery verified; staging gate open | Diagnose socket failures and make state recovery reliable | Can begin immediately; integrate with DRAFT-05 |
+| DRAFT-04 | Implemented; final HTTP gate pending | Validate canonical movie metadata and repair wishlist picks | None; coordinate contracts with DRAFT-05/06/07 |
+| DRAFT-05 | Implemented; SQL/race checks pass; HTTP gate pending | Make picks and completion consistent and recoverable | DRAFT-01, DRAFT-04 |
+| DRAFT-06 | Implemented; full browser gate pending | Fix discovery pagination and filter state | DRAFT-02; align eligibility with DRAFT-04 |
+| DRAFT-07 | Implemented; controlled UI checks pass; final gate pending | Make selection, submission, and keyboard interaction reliable | DRAFT-03/04/05/06 contracts settled |
+| DRAFT-08 | Verified in controlled date/mobile checks | Correct dates and improve mobile turn/action visibility | Dates independent; mobile after DRAFT-07 |
+| DRAFT-09 | Open; full suite in progress | Verify a complete multiplayer draft and deployment readiness | All required fixes |
 
 ### DRAFT-01 — Protect draft-order mutations
 

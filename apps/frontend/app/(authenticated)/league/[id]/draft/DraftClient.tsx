@@ -1,6 +1,7 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
 import { useDraftState } from '@/hooks/useDraftState'
@@ -51,6 +52,17 @@ export default function DraftClient({
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showSkipConfirm, setShowSkipConfirm] = useState(false)
   const [pickHistoryExpanded, setPickHistoryExpanded] = useState(false)
+  const router = useRouter()
+  const phase = `${league.id}:${league.status}`
+  const previousPhase = useRef(phase)
+
+  useEffect(() => {
+    if (previousPhase.current === phase) return
+    previousPhase.current = phase
+    // The shared header and navigation are server-rendered. Refresh them when
+    // a confirmed phase changes, without restarting the draft on every pick.
+    router.refresh()
+  }, [phase, router])
 
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
   const handlePickMade = useCallback(async (confirmedLeague?: League) => {
