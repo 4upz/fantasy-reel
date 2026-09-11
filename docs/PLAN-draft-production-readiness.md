@@ -7,9 +7,9 @@ implemented and undergoing final integration checks. No deployment has been
 performed; DRAFT-09 remains open.
 
 Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
-start, and `7c14975` fixes calendar dates. Canonical metadata, transactional picks,
-and their notification outbox form the next combined backend batch because
-they share mutation contracts. Discovery and the integrated draft UI follow.
+start, `7c14975` fixes calendar dates, and `06a18a6` adds canonical metadata,
+transactional picks, and their notification outbox. Discovery and the integrated
+draft UI follow.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -101,6 +101,12 @@ Implementation evidence (in progress):
   and truthful upstream totals. Browser discovery assertions are included in
   the new DRAFT-09 suite. Eleven draft browser tests are enabled, replacing the
   previously disabled multiplayer coverage.
+  The first real browser test has now passed owner start, search, changed query,
+  truthful loaded counts, and disabled irrelevant filters. The next browser test
+  failed in navigation before its draft assertion. Later full-suite traces
+  captured `/auth/v1/user` returning 504, matching that environment failure.
+  Trending retains its distinct 1,000-page limit; search/discover use 500, as
+  described in [TMDb support's pagination guidance](https://www.themoviedb.org/talk/66901fd440958be954b3a1ad).
 - DRAFT-08 calendar helpers pass boundary checks in UTC, New York, Los Angeles,
   and Kiritimati, including January 1, invalid dates, and windows crossing years.
   Shared movie details and trading/bidding date consumers now use the calendar

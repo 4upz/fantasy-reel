@@ -1,6 +1,7 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateUserOrServiceRole } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateUserOrServiceRole, isUpcomingMovie } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { buildCacheKey, cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
+import { discoveryPage, releaseDateRange } from '../_shared/movie-discovery.ts'
 import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
 
 const log = createLogger('browse-movies')
@@ -11,6 +12,7 @@ interface BrowseMoviesRequest {
   release_window?: 'next30' | 'quarter' | 'year' | 'all'
   sort_by?: 'popularity' | 'release_date'
   trending?: boolean
+  season_year?: number
 }
 
 interface TMDbMovie {
@@ -46,40 +48,6 @@ interface BrowseResult {
   genre_ids: number[]
 }
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000
-
-function toDateString(date: Date): string {
-  return date.toISOString().split('T')[0]
-}
-
-function addDays(date: Date, days: number): Date {
-  return new Date(date.getTime() + days * MS_PER_DAY)
-}
-
-function getReleaseDateRange(releaseWindow: BrowseMoviesRequest['release_window']): { gte: string; lte: string } {
-  const today = new Date()
-  const gte = toDateString(today)
-
-  let lte: string
-  switch (releaseWindow) {
-    case 'next30':
-      lte = toDateString(addDays(today, 30))
-      break
-    case 'quarter':
-      lte = toDateString(addDays(today, 90))
-      break
-    case 'all':
-      lte = toDateString(new Date(today.getFullYear() + 2, 11, 31))
-      break
-    case 'year':
-    default:
-      lte = `${today.getFullYear()}-12-31`
-      break
-  }
-
-  return { gte, lte }
-}
-
 function transformResults(movies: TMDbMovie[]): BrowseResult[] {
   return movies
     .filter((movie) => !movie.adult)
@@ -100,74 +68,18 @@ function transformResults(movies: TMDbMovie[]): BrowseResult[] {
     }))
 }
 
-const TARGET_PAGE_SIZE = 20
-const MAX_TMDB_FETCHES = 5
-
-/**
- * Browse results are the same for every user, so both paths cache on their
- * request parameters alone.
- *
- * Discover is short-lived (30 min): popularity ordering shifts through the
- * day and a newly added title should surface the same day. Trending is a
- * weekly TMDb window that barely moves, and each client page costs up to
- * MAX_TMDB_FETCHES TMDb calls -- by far the most expensive request this
- * function serves -- so it holds for 12 hours.
- *
- * Both keys carry the date the window was computed for. Every date bound here
- * is relative to "today", so without it a cached entry would keep serving a
- * stale window across midnight.
- */
 const DISCOVER_TTL_SECONDS = 30 * 60
 const TRENDING_TTL_SECONDS = 12 * 60 * 60
 
-interface BrowsePage {
-  page: number
-  total_pages: number
-  total_results: number
-  results: BrowseResult[]
-}
+type BrowsePage = ReturnType<typeof discoveryPage<BrowseResult>>
 
-async function fetchTrendingMovies(
-  clientPage: number,
-  tmdbToken: string,
-  today: string
-): Promise<BrowsePage> {
-  const accumulated: BrowseResult[] = []
-  let tmdbPage = (clientPage - 1) * MAX_TMDB_FETCHES + 1
-  let fetches = 0
-  let totalTmdbPages = 1
-  let totalTmdbResults = 0
-  let keptCount = 0
-  let scannedCount = 0
-
-  while (accumulated.length < TARGET_PAGE_SIZE && fetches < MAX_TMDB_FETCHES && tmdbPage <= totalTmdbPages) {
-    const url = `https://api.themoviedb.org/3/trending/movie/week?language=en-US&include_adult=false&page=${tmdbPage}`
-    const data = await tmdbGetJson<TMDbResponse>(url, tmdbToken)
-
-    totalTmdbPages = data.total_pages
-    totalTmdbResults = data.total_results
-    scannedCount += data.results.length
-
-    const unreleased = data.results.filter((movie) => !movie.release_date || movie.release_date >= today)
-
-    keptCount += unreleased.length
-    accumulated.push(...transformResults(unreleased))
-
-    tmdbPage++
-    fetches++
-  }
-
-  // Estimate total pages based on observed keep ratio
-  const keepRatio = scannedCount > 0 ? keptCount / scannedCount : 0.05
-  const estimatedTotalUnreleased = Math.floor(totalTmdbResults * keepRatio)
-  const estimatedTotalPages = Math.max(1, Math.ceil(estimatedTotalUnreleased / TARGET_PAGE_SIZE))
-
-  return {
-    page: clientPage,
-    total_pages: estimatedTotalPages,
-    total_results: estimatedTotalUnreleased,
-    results: accumulated.slice(0, TARGET_PAGE_SIZE),
-  }
+// One client page is exactly one upstream page. This preserves every result
+// and makes an empty filtered page distinct from the end of the catalog.
+async function fetchTrendingMovies(page: number, tmdbToken: string, seasonYear: number): Promise<BrowsePage> {
+  const url = `https://api.themoviedb.org/3/trending/movie/week?language=en-US&page=${page}`
+  const data = await tmdbGetJson<TMDbResponse>(url, tmdbToken)
+  return discoveryPage(data, transformResults(data.results)
+    .filter(movie => isUpcomingMovie(movie.release_date, seasonYear).valid), 1000)
 }
 
 Deno.serve(async (req) => {
@@ -195,24 +107,32 @@ Deno.serve(async (req) => {
         }
       }
     } catch {
-      // Use defaults if parsing fails
+      return errorResponse('Invalid JSON body', 400)
+    }
+    if (!params || typeof params !== 'object' || Array.isArray(params)) {
+      return errorResponse('Invalid request body', 400)
     }
 
-    const { page = 1, trending = false } = params
+    const { page = 1, trending = false, season_year = new Date().getUTCFullYear() } = params
+    const pageLimit = trending ? 1000 : 500
+    if (!Number.isInteger(page) || page < 1 || page > pageLimit) {
+      return errorResponse(`Page must be between 1 and ${pageLimit}`, 400)
+    }
+    if (!Number.isInteger(season_year) || season_year < 1900 || season_year > 3000) {
+      return errorResponse('Invalid season year', 400)
+    }
 
     // Computed once and threaded through both the cache key and the fetch:
     // "today" appearing twice could otherwise straddle midnight and key a page
     // under one date while filtering it by another.
-    const today = toDateString(new Date())
+    const today = new Date().toISOString().slice(0, 10)
 
-    // Trending path: aggregate multiple TMDb pages server-side. The cached
-    // value is the finished aggregate, not the individual TMDb pages, so a hit
-    // replaces the whole multi-fetch loop rather than one call of it.
+    // Versioned key prevents old aggregated pages being interpreted as raw pages.
     if (trending) {
       const payload = await cachedTmdbFetch<BrowsePage>(
-        buildCacheKey('browse', { trending: true, page, today }),
+        buildCacheKey('browse', { trending: true, page, today, season_year, paging: 2 }),
         TRENDING_TTL_SECONDS,
-        () => fetchTrendingMovies(page, tmdbToken, today),
+        () => fetchTrendingMovies(page, tmdbToken, season_year),
         log
       )
       return jsonResponse(payload)
@@ -225,7 +145,13 @@ Deno.serve(async (req) => {
       sort_by = 'popularity',
     } = params
 
-    const { gte, lte } = getReleaseDateRange(release_window)
+    if (!['next30', 'quarter', 'year', 'all'].includes(release_window)) {
+      return errorResponse('Invalid release window', 400)
+    }
+    if (!Array.isArray(genres) || genres.some(genre => !Number.isInteger(genre) || genre <= 0)) {
+      return errorResponse('Genres must be numeric genre IDs', 400)
+    }
+    const { gte, lte } = releaseDateRange(release_window)
 
     const tmdbUrl = new URL('https://api.themoviedb.org/3/discover/movie')
     tmdbUrl.searchParams.set('language', 'en-US')
@@ -267,17 +193,13 @@ Deno.serve(async (req) => {
       DISCOVER_TTL_SECONDS,
       async () => {
         const tmdbData = await tmdbGetJson<TMDbResponse>(tmdbUrl.toString(), tmdbToken)
-        return {
-          page: tmdbData.page,
-          total_pages: tmdbData.total_pages,
-          total_results: tmdbData.total_results,
-          results: transformResults(tmdbData.results),
-        }
+        return discoveryPage(tmdbData, transformResults(tmdbData.results))
       },
       log
     )
 
-    return jsonResponse(payload)
+    return jsonResponse(discoveryPage(payload, payload.results
+      .filter(movie => isUpcomingMovie(movie.release_date, season_year).valid)))
   } catch (error) {
     // Only reached when the cache had nothing to fall back on -- a hit or an
     // expired entry answers a rate-limited or failing TMDb before this.

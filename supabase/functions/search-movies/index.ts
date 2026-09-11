@@ -1,4 +1,5 @@
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie, internalErrorResponse, authenticateUserOrServiceRole } from '../_shared/utils.ts'
+import { discoveryPage } from '../_shared/movie-discovery.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
 import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
@@ -125,10 +126,17 @@ Deno.serve(async (req) => {
       return errorResponse('Invalid JSON body', 400)
     }
 
+    if (!params || typeof params !== 'object' || Array.isArray(params)) {
+      return errorResponse('Invalid request body', 400)
+    }
     const { query, page = 1, year, upcoming_only = false, season_year } = params
 
-    if (!query || query.trim().length === 0) {
+    if (typeof query !== 'string' || query.trim().length === 0) {
       return errorResponse('Query is required', 400)
+    }
+
+    if (!Number.isInteger(page) || page < 1 || page > 500) {
+      return errorResponse('Page must be between 1 and 500', 400)
     }
 
     const tmdbUrl = new URL('https://api.themoviedb.org/3/search/movie')
@@ -157,15 +165,10 @@ Deno.serve(async (req) => {
 
     // Filter to only include upcoming movies if requested (default for draft contexts)
     const results = upcoming_only
-      ? filterUpcomingMovies(payload.results, season_year ?? new Date().getFullYear())
+      ? filterUpcomingMovies(payload.results, season_year ?? new Date().getUTCFullYear())
       : payload.results
 
-    return jsonResponse({
-      page: payload.page,
-      total_pages: payload.total_pages,
-      total_results: upcoming_only ? results.length : payload.total_results,
-      results,
-    })
+    return jsonResponse(discoveryPage(payload, results))
   } catch (error) {
     // Only reached when the cache had nothing to fall back on -- a hit or an
     // expired entry answers a rate-limited or failing TMDb before this.
