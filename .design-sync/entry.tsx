@@ -23,6 +23,8 @@ export { default as Avatar } from '../apps/frontend/app/components/Avatar'
 export { LoadingSpinner } from '../apps/frontend/app/components/LoadingSpinner'
 export { default as TomatometerScore } from '../apps/frontend/app/components/TomatometerScore'
 export { default as DraftProgressRing } from '../apps/frontend/app/(authenticated)/league/[id]/components/DraftProgressRing'
+export { default as CounterpickMark } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickMark'
+export { default as DateTimeField } from '../apps/frontend/app/components/DateTimeField'
 
 // ── Feedback ────────────────────────────────────────────────────────────
 export { FormError, FormSuccess, ErrorAlert } from '../apps/frontend/app/components/FormError'
@@ -39,6 +41,8 @@ export { default as MovieFilters } from '../apps/frontend/app/(authenticated)/mo
 export { default as DraftMovieCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/DraftMovieCard'
 export { default as DraftFilters } from '../apps/frontend/app/(authenticated)/league/[id]/components/DraftFilters'
 export { default as MovieTimelineCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/MovieTimelineCard'
+export { default as FranchiseSummary } from '../apps/frontend/app/components/FranchiseSummary'
+export { default as FranchiseHistoryPanel } from '../apps/frontend/app/components/FranchiseHistoryPanel'
 
 // ── League ──────────────────────────────────────────────────────────────
 export { default as LeagueListItem } from '../apps/frontend/app/components/LeagueListItem'
@@ -51,6 +55,7 @@ export { default as BidPriorityList } from '../apps/frontend/app/(authenticated)
 export { default as CounterpickPriorityList } from '../apps/frontend/app/(authenticated)/league/[id]/components/CounterpickPriorityList'
 export { default as TradeOfferCard } from '../apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard'
 export { default as TradeItemsSection } from '../apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection'
+export { default as OfferExpiryPicker, Chip } from '../apps/frontend/app/(authenticated)/league/[id]/components/OfferExpiryPicker'
 export { default as DraftBoardHeader } from '../apps/frontend/app/(authenticated)/league/[id]/components/DraftBoardHeader'
 export { default as ParticipantsList } from '../apps/frontend/app/(authenticated)/league/[id]/components/ParticipantsList'
 export { default as PickOrderQueue } from '../apps/frontend/app/(authenticated)/league/[id]/components/PickOrderQueue'
@@ -59,6 +64,8 @@ export { default as TeamHeader } from '../apps/frontend/app/(authenticated)/leag
 export { default as MovieTimeline } from '../apps/frontend/app/(authenticated)/league/[id]/components/MovieTimeline'
 export { RosterHeader, RosterPoster, RosterMovieCard } from '../apps/frontend/app/(authenticated)/league/[id]/roster/RosterPresentation'
 export { default as TeamStandingSummary } from '../apps/frontend/app/(authenticated)/league/[id]/standings/TeamStandingSummary'
+export { default as MovieScoreCard } from '../apps/frontend/app/(authenticated)/league/[id]/standings/MovieScoreCard'
+export { default as TeamBudgetSummary } from '../apps/frontend/app/(authenticated)/league/[id]/standings/TeamBudget'
 
 // ── Modals ──────────────────────────────────────────────────────────────
 export { default as AcceptConfirmModal } from '../apps/frontend/app/(authenticated)/league/[id]/components/AcceptConfirmModal'

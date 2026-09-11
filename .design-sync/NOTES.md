@@ -270,19 +270,20 @@ outside the component library; each exclusion is explained in
 `drift-ignore.txt`. The retired homepage exports, pins, overrides and previews
 have been removed.
 
-Adding roster and standings pins also makes the checker scan those directories.
-Their app containers are deliberately excluded; the pre-existing reusable
-`MovieScoreCard` and `TeamBudgetSummary` remain unregistered and need a separate
-registry follow-up. They were outside the old scan, not added by this PR.
+The roster and standings pins also bring those directories into the drift
+scan. `MovieScoreCard` and `TeamBudgetSummary` are registered alongside the
+shared counterpick mark, date/time field, offer-expiry controls and franchise
+summaries. `ProfileMenu` and `TradeConfigSection` follow the existing exclusion
+policy: they own account actions and persisted commissioner settings.
 
-Eight other unregistered exports already fail the check on `origin/main`:
-`CounterpickMark`, `Chip`, `OfferExpiryPicker`, `TradeConfigSection`,
-`DateTimeField`, `FranchiseHistoryPanel`, `FranchiseSummary` and `ProfileMenu`.
-This repair leaves those findings visible rather than suppressing baseline
-drift. The local registry changes do not constitute an external design sync
-or a renderer validation. On the next authorized sync, verify the imported
-`MarketingHeader.module.css` is included and test its mobile popover in a
-small viewport; the primary story intentionally renders one header per page.
+Standalone rendering needs both the compiled shared stylesheet (`cssEntry`)
+and CSS emitted from component module imports. In particular,
+`MarketingHeader.module.css` supplies the mobile popover placement. Verify
+that popover in a small viewport, with one header mounted at the top of the
+page. The primary story intentionally renders only one header.
+
+Local registry, type and render checks do not publish or update the external
+design project. An authorized external re-sync still follows the runbook below.
 
 ## Re-sync runbook
 
