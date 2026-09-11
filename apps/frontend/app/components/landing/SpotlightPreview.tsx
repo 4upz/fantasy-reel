@@ -34,6 +34,7 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
   const cameraRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const spotlightRef = useRef<HTMLDivElement>(null)
+  const beamRef = useRef<HTMLDivElement>(null)
   const animations = useRef<Animation[]>([])
   const focusRef = useRef(focus)
   const initialized = useRef(false)
@@ -43,7 +44,8 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
     const camera = cameraRef.current
     const canvas = canvasRef.current
     const spotlight = spotlightRef.current
-    if (!viewport || !camera || !canvas || !spotlight) return
+    const beam = beamRef.current
+    if (!viewport || !camera || !canvas || !spotlight || !beam) return
 
     const vw = viewport.clientWidth
     const vh = viewport.clientHeight
@@ -55,6 +57,9 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
     const viewportRect = viewport.getBoundingClientRect()
     const oldSpotlight = spotlight.getBoundingClientRect()
     const oldOpacity = getComputedStyle(spotlight).opacity
+    const beamStyle = getComputedStyle(beam)
+    const oldBeamOpacity = beamStyle.opacity
+    const oldBeamTransform = beamStyle.transform
     const target = targetName
       ? canvas.querySelector<HTMLElement>(`[data-preview-focus="${targetName}"]`)
       : null
@@ -92,24 +97,60 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
     }
 
     if (area) {
-      const left = Math.max(4, x + area.x * scale - 6)
-      const top = Math.max(4, y + area.y * scale - 6)
-      const sw = Math.min(vw - left - 4, area.width * scale + 12)
-      const sh = Math.min(vh - top - 4, area.height * scale + 12)
+      const centerX = x + (area.x + area.width / 2) * scale
+      const centerY = y + (area.y + area.height / 2) * scale
+      // An oversized, feathered ellipse keeps the whole detail in the clear light.
+      const sw = Math.max(180, (area.width * scale + 32) * 2.6)
+      const sh = Math.max(140, (area.height * scale + 28) * 2.7)
+      const left = centerX - sw / 2
+      const top = centerY - sh / 2
+      const sourceHeight = Math.max(vh * .2, 80)
+      const beamWidth = Math.max(vw * .75, 300)
+      const beamHeight = Math.max(Math.hypot(vw / 2, vh + sourceHeight), 340)
+      const beamAngle = Math.atan2(vw / 2 - centerX, centerY + sourceHeight) * 180 / Math.PI
+      const beamTransform = `translate(${centerX}px, ${centerY}px) rotate(${beamAngle}deg)`
       Object.assign(spotlight.style, {
         left: `${left}px`, top: `${top}px`, width: `${sw}px`, height: `${sh}px`, opacity: '1',
+      })
+      spotlight.style.setProperty('--light-spread', `${Math.max(vw, vh)}px`)
+      Object.assign(beam.style, {
+        left: `${-beamWidth / 2}px`, top: `${-beamHeight}px`,
+        width: `${beamWidth}px`, height: `${beamHeight}px`,
+        transform: beamTransform, opacity: '1',
       })
       if (shouldAnimate) {
         const previous = oldOpacity !== '0'
           ? `translate(${oldSpotlight.left - viewportRect.left - left}px, ${oldSpotlight.top - viewportRect.top - top}px) scale(${oldSpotlight.width / sw}, ${oldSpotlight.height / sh})`
-          : 'scale(.98)'
+          : 'translate(-24px, -12px) scale(.88)'
         animations.current.push(spotlight.animate([
           { opacity: oldOpacity, transform: previous },
           { opacity: 1, transform: 'translate(0, 0) scale(1)' },
-        ], motion))
+        ], { ...motion, duration: 850 }))
+        animations.current.push(beam.animate([
+          {
+            opacity: oldBeamOpacity,
+            transform: oldBeamOpacity !== '0'
+              ? oldBeamTransform
+              : `translate(${centerX - 24}px, ${centerY - 12}px) rotate(${beamAngle - 12}deg)`,
+          },
+          { opacity: 1, transform: beamTransform },
+        ], { ...motion, duration: 900 }))
       }
     } else {
-      spotlight.style.opacity = '0'
+      // Freeze any interrupted sweep before fading back to the overview.
+      Object.assign(spotlight.style, {
+        left: `${oldSpotlight.left - viewportRect.left}px`,
+        top: `${oldSpotlight.top - viewportRect.top}px`,
+        width: `${oldSpotlight.width}px`, height: `${oldSpotlight.height}px`, opacity: '0',
+      })
+      beam.style.transform = oldBeamTransform
+      beam.style.opacity = '0'
+      if (shouldAnimate) {
+        animations.current.push(
+          spotlight.animate([{ opacity: oldOpacity }, { opacity: 0 }], { duration: 280 }),
+          beam.animate([{ opacity: oldBeamOpacity }, { opacity: 0 }], { duration: 280 }),
+        )
+      }
     }
   }, [width, height])
 
@@ -140,6 +181,7 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
         </div>
       </div>
       <div ref={spotlightRef} className={styles.spotlight} aria-hidden="true" />
+      <div ref={beamRef} className={styles.stageBeam} aria-hidden="true" />
     </div>
   )
 }
