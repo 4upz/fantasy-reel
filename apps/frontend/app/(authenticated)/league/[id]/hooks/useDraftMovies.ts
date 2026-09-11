@@ -1,210 +1,104 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useSWRInfinite from 'swr/infinite'
+import { useDebounce } from '@/hooks/useDebounce'
 import { flattenMoviePages, MOVIE_PAGE_SWR_CONFIG, type MoviePageKey } from '@/utils/movies'
 import { edgeFetcher } from '@/utils/supabase/functions'
-import type { TMDbSearchResult, TMDbSearchResponse } from '@/types'
+import type { TMDbSearchResponse } from '@/types'
 
 export interface BrowseFilters {
   releaseWindow: 'next30' | 'quarter' | 'year' | 'all'
   genres: number[]
 }
 
-interface BrowseResponse {
-  page: number
-  total_pages: number
-  total_results: number
-  results: TMDbSearchResult[]
-}
-
-type PaginatedResponse = TMDbSearchResponse | BrowseResponse
-
-type Mode = 'browse' | 'search' | 'trending'
-
-const SEARCH_DEBOUNCE_MS = 300
-
-const DEFAULT_FILTERS: BrowseFilters = {
-  releaseWindow: 'year',
-  genres: [],
-}
-
-/**
- * What list is being shown. Held as state so it can drive the SWR key: the same
- * request always resolves to the same cache entry, which is what stops a
- * remounting draft board or bid modal from re-hitting TMDb.
- */
-type Request =
+export type DraftMovieRequest =
   | { mode: 'browse'; filters: BrowseFilters }
   | { mode: 'search'; query: string }
   | { mode: 'trending' }
 
-/**
- * `season_year` is what makes "upcoming" mean the season rather than the wall
- * clock. A 2026 season running into January 2027 still wants 2026's slate, so
- * eligibility is decided by the league's season, not by today's date - the same
- * rule `isUpcomingMovie` applies server-side when the pick is actually made.
- *
- * It is part of the SWR key, so two leagues in different seasons cannot share
- * one cached page of results.
- */
-function buildPageKey(request: Request, page: number, seasonYear?: number): MoviePageKey {
+const DEFAULT_FILTERS: BrowseFilters = { releaseWindow: 'year', genres: [] }
+const MAX_AUTOMATIC_PAGES = 3
+
+function buildPageKey(request: DraftMovieRequest, page: number, seasonYear?: number): MoviePageKey {
   switch (request.mode) {
     case 'search':
       return ['search-movies', { query: request.query, page, upcoming_only: true, season_year: seasonYear }]
     case 'trending':
       return ['browse-movies', { page, trending: true, season_year: seasonYear }]
     case 'browse':
-      return [
-        'browse-movies',
-        {
-          page,
-          release_window: request.filters.releaseWindow,
-          genres: request.filters.genres.length > 0 ? request.filters.genres : undefined,
-          sort_by: 'popularity',
-          season_year: seasonYear,
-        },
-      ]
+      return ['browse-movies', {
+        page, release_window: request.filters.releaseWindow,
+        genres: request.filters.genres.length ? request.filters.genres : undefined,
+        sort_by: 'popularity', season_year: seasonYear,
+      }]
   }
 }
 
-const fetcher = ([functionName, body]: MoviePageKey): Promise<PaginatedResponse> =>
-  edgeFetcher<PaginatedResponse>(functionName, body)
+const fetcher = ([functionName, body]: MoviePageKey) => edgeFetcher<TMDbSearchResponse>(functionName, body)
 
-interface UseDraftMoviesOptions {
+interface Options {
   draftedTmdbIds: Set<number>
-  /** The league's season, so eligibility follows the season and not today's date. */
   seasonYear?: number
-  /**
-   * Skip the initial browse. Set false where the movie list is supplied from
-   * elsewhere -- e.g. the bid modal past the new-bid cutoff, which offers only
-   * the movies already being bid on and would otherwise fetch a TMDb page it
-   * never shows.
-   */
   enabled?: boolean
+  /** Controlled by the draft picker. Other consumers can use search/browse. */
+  request?: DraftMovieRequest
 }
 
-interface UseDraftMoviesReturn {
-  movies: TMDbSearchResult[]
-  loading: boolean
-  loadingMore: boolean
-  error: string | null
-  totalResults: number
-  mode: Mode
-  search: (query: string) => void
-  browse: (filters: BrowseFilters) => void
-  fetchTrending: () => void
-  loadMore: () => void
-  clearSearch: () => void
-}
+export function useDraftMovies({ draftedTmdbIds, seasonYear, enabled = true, request: controlledRequest }: Options) {
+  const [internalRequest, setInternalRequest] = useState<DraftMovieRequest>({ mode: 'browse', filters: DEFAULT_FILTERS })
+  const currentFiltersRef = useRef(DEFAULT_FILTERS)
+  const request = controlledRequest ?? internalRequest
+  const debouncedRequest = useDebounce(request, 300)
+  const changingRequest = request !== debouncedRequest
+  const getKey = useCallback((index: number): MoviePageKey | null => (
+    enabled ? buildPageKey(debouncedRequest, index + 1, seasonYear) : null
+  ), [enabled, debouncedRequest, seasonYear])
 
-export function useDraftMovies({
-  draftedTmdbIds,
-  seasonYear,
-  enabled = true,
-}: UseDraftMoviesOptions): UseDraftMoviesReturn {
-  const [request, setRequest] = useState<Request>({ mode: 'browse', filters: DEFAULT_FILTERS })
+  const { data, error, isLoading, size, setSize, mutate } = useSWRInfinite(getKey, fetcher, {
+    ...MOVIE_PAGE_SWR_CONFIG,
+    // A filter change must never label the previous request's movies as matches.
+    keepPreviousData: false,
+    persistSize: false,
+    shouldRetryOnError: false,
+  })
 
-  const currentFiltersRef = useRef<BrowseFilters>(DEFAULT_FILTERS)
-  const debounceRef = useRef<NodeJS.Timeout | null>(null)
-
-  // A null key is SWR's "don't fetch": a hook that starts disabled sits idle
-  // and fetches the moment its owner turns it on.
-  const getKey = useCallback(
-    (index: number): MoviePageKey | null =>
-      enabled ? buildPageKey(request, index + 1, seasonYear) : null,
-    [enabled, request, seasonYear]
-  )
-
-  const { data, error, isLoading, size, setSize } = useSWRInfinite(getKey, fetcher, MOVIE_PAGE_SWR_CONFIG)
-
-  /*
-   * The drafted set is read here but deliberately left out of the deps:
-   * results are filtered when a page lands and then left alone, so a movie
-   * taken while the grid is open stays put and shows its "Drafted" overlay
-   * instead of silently vanishing out from under the cursor.
-   */
+  // Keep newly drafted cards in place with their Drafted overlay. Exclusions
+  // apply when a page arrives, not while another player is using the grid.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const movies = useMemo(() => flattenMoviePages(data, draftedTmdbIds), [data])
-
-  const lastPage = data && data.length > 0 ? data[data.length - 1] : undefined
-  const page = lastPage?.page ?? 1
-  const totalPages = lastPage?.total_pages ?? 0
-
-  // A page has been requested that has not landed yet -- SWR's canonical
-  // "loading more" check, and the only case where results already show.
-  const loadingMore = size > 1 && data != null && data.length < size
-
-  const clearDebounce = useCallback(() => {
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current)
-      debounceRef.current = null
-    }
-  }, [])
-
-  /** Switch to a different list, always starting from its first page. */
-  const changeRequest = useCallback(
-    (next: Request) => {
-      clearDebounce()
-      setRequest(next)
-      setSize(1)
-    },
-    [clearDebounce, setSize]
-  )
-
-  const search = useCallback(
-    (query: string) => {
-      clearDebounce()
-
-      const trimmed = query.trim()
-      if (!trimmed) {
-        changeRequest({ mode: 'browse', filters: currentFiltersRef.current })
-        return
-      }
-
-      debounceRef.current = setTimeout(() => {
-        changeRequest({ mode: 'search', query: trimmed })
-      }, SEARCH_DEBOUNCE_MS)
-    },
-    [changeRequest, clearDebounce]
-  )
-
-  const browse = useCallback(
-    (filters: BrowseFilters) => {
-      currentFiltersRef.current = filters
-      clearDebounce()
-
-      debounceRef.current = setTimeout(() => {
-        changeRequest({ mode: 'browse', filters })
-      }, SEARCH_DEBOUNCE_MS)
-    },
-    [changeRequest, clearDebounce]
-  )
-
-  const fetchTrending = useCallback(() => {
-    changeRequest({ mode: 'trending' })
-  }, [changeRequest])
-
-  const clearSearch = useCallback(() => {
-    search('')
-  }, [search])
+  const movies = useMemo(() => enabled && !changingRequest ? flattenMoviePages(data, draftedTmdbIds) : [], [data, enabled, changingRequest])
+  const lastPage = data?.[data.length - 1]
+  const hasMore = enabled && !changingRequest && Boolean(lastPage && (
+    lastPage.has_more ?? lastPage.page < lastPage.total_pages
+  ))
+  const loading = enabled && (changingRequest || isLoading)
+  const loadingMore = enabled && !error && size > 1 && data !== undefined && data.length < size
 
   const loadMore = useCallback(() => {
-    if (loadingMore || page >= totalPages) return
-    setSize((current) => current + 1)
-  }, [loadingMore, page, totalPages, setSize])
+    if (loading || loadingMore || error || !hasMore) return
+    // Repeated clicks/intersections cannot skip past a pending page.
+    void setSize(current => current === data?.length ? current + 1 : current).catch(() => { /* SWR exposes the error for retry. */ })
+  }, [loading, loadingMore, error, hasMore, data?.length, setSize])
 
-  useEffect(() => clearDebounce, [clearDebounce])
+  useEffect(() => {
+    if (!loading && !loadingMore && !error && hasMore && movies.length === 0 && size < MAX_AUTOMATIC_PAGES) {
+      loadMore()
+    }
+  }, [loading, loadingMore, error, hasMore, movies.length, size, loadMore])
+
+  const search = useCallback((query: string) => {
+    const trimmed = query.trim()
+    setInternalRequest(trimmed ? { mode: 'search', query: trimmed } : { mode: 'browse', filters: currentFiltersRef.current })
+  }, [])
+  const browse = useCallback((filters: BrowseFilters) => {
+    currentFiltersRef.current = filters
+    setInternalRequest({ mode: 'browse', filters })
+  }, [])
+  const fetchTrending = useCallback(() => setInternalRequest({ mode: 'trending' }), [])
+  const clearSearch = useCallback(() => search(''), [search])
+  const retry = useCallback(() => { void mutate().catch(() => { /* Keep the retry error in SWR's visible state. */ }) }, [mutate])
 
   return {
-    movies,
-    loading: isLoading,
-    loadingMore,
-    error: error?.message ?? null,
-    totalResults: lastPage?.total_results ?? 0,
-    mode: request.mode,
-    search,
-    browse,
-    fetchTrending,
-    loadMore,
-    clearSearch,
+    movies, loading, loadingMore, error: changingRequest ? null : error?.message ?? null,
+    totalResults: lastPage?.total_results ?? 0, hasMore,
+    mode: request.mode, search, browse, fetchTrending, loadMore, clearSearch, retry,
   }
 }

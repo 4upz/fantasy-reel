@@ -68,7 +68,8 @@ export default function DraftBoardHeader({
           )}
           {isDraftComplete && (
             <div className="p-4 rounded-xl bg-info-bg border-2 border-info">
-              <p className="type-card text-info">Draft complete! Finalizing results...</p>
+              <p className="type-card text-info">All draft picks are in.</p>
+              <p className="type-body-sm text-foreground-secondary mt-1">Waiting for the league owner to choose the next phase.</p>
             </div>
           )}
         </div>

@@ -752,53 +752,26 @@ Below 50, the slope halves every 10 points, so penalties approach an asymptote a
 
 ## 6. Draft System
 
-### Draft Configuration
-- **Draft Type:** Snake draft (1-2-3...3-2-1) or Linear (1-2-3...1-2-3)
-- **Rounds:** Configurable per league (default: 5)
-- **Time Limit:** Optional per-pick timer
-- **Auto-pick:** If timer expires, auto-select highest-rated available movie
+### Draft rules and mutations
 
-### Draft Flow
-1. League owner sets draft window (start/end dates)
-2. When draft starts, status changes to 'drafting'
-3. Participants take turns picking movies
-4. Each movie can only be picked once per league
-5. Draft ends when all rounds complete or window closes
-6. League status changes to 'active'
+- Draft order is snake (1-2-3…3-2-1), using `draft_slots` rounds. There are no implemented per-pick timers, auto-picks, or automatic draft-window endings.
+- The owner configures order during setup and starts through `start_draft`. Order, membership changes, and start share a database league lock. Direct client writes cannot bypass these rules.
+- Frontend draft requests send `{ league_id, tmdb_id, expected_pick, request_id }`. Counterpicks use `movie_id` instead of `tmdb_id`. `expected_pick` is the absolute one-based slot; keep the UUID for an uncertain retry. Older callers may omit these two fields, but cannot rely on lost-response idempotency without a stable request ID.
+- Draft mutations have a 30-second client deadline, including auth and response-body waits. A timeout is an uncertain result: reconcile fresh state and preserve the request UUID for retry; it does not prove the database rolled back.
+- `draft-pick` resolves canonical TMDb metadata before upserting a movie. Client `movie_data` cannot establish identity or eligibility. Unknown/past dates and earlier-season releases cannot be drafted; failed lookups do not create incomplete rows.
+- Service-only `commit_draft_pick` / `commit_counterpick` validate membership, phase, turn, and availability under a league lock. Receipts bind actor, movie, league, and original slot; replay returns the current phase even after completion.
+- All draft picks must exist before the owner starts or skips counterpicks. Counterpicks use reverse snake order. The owner can explicitly end remaining counterpicks with confirmation, preserving picks already made. This handles rounds with no eligible opponent movies left.
+- Activation initializes missing budgets from the league's `faab_budget`, preserves existing balances, and recalculates scores in the same transaction. A failure rolls back the final pick/phase change.
 
-### Movie Discovery (TMDb API-Powered)
+### Discovery, updates, and delivery
 
-Movies are discovered directly from TMDb API - **no pre-syncing required**.
+`MoviePicker` owns its tab/search/filter state. Browse and title search use one upstream TMDb page per client page, retain empty-page navigation, and label counts as loaded available movies. Unsupported filter combinations are explained; wishlist search filters locally. “Next 30 Days” spans calendar-year boundaries. TMDb ratings, vote counts, and minimum-rating controls are absent from the product; RT remains the fantasy-scoring source.
 
-**Data Flow:**
-```
-1. User opens draft board
-   └── MoviePicker mounts
-       └── useDraftMovies hook calls browse-movies API
-           └── Returns TMDbSearchResult[] from TMDb discover
+`useDraftState` refreshes league, active participants, picks, and counterpicks together after subscription, recovery, focus/online, auth refresh, and mutations. It coalesces superseded reads and applies a request deadline. A unique channel topic per mount avoids the installed SDK's asynchronous same-topic cleanup race. SDK retries own the connection; the UI identifies the bounded polling fallback as periodic updates.
 
-2. User searches for a movie
-   └── Search input debounced (300ms)
-       └── useDraftMovies calls search-movies API
-           └── Returns TMDbSearchResult[] from TMDb search
+Draft notifications use `draft_notification_outbox`, enqueued in the mutation transaction for existing enabled channels with draft notifications enabled. The authenticated `process-draft-notifications` cron worker leases and delivers events in channel order, records bounded retries, and respects preference changes. Delivery is at least once: a successful webhook followed by a lost acknowledgement can be repeated. Notification failures do not change a saved pick's response.
 
-3. User drafts a movie
-   └── DraftBoard calls draft-pick with { league_id, tmdb_id, movie_data }
-       └── Edge function:
-           ├── Finds movie by tmdb_id OR
-           └── Creates movie from movie_data if not exists
-       └── Creates draft_pick with DB movie.id
-       └── Returns success with movie details
-
-4. UI updates via real-time subscription
-   └── New pick appears in history
-   └── tmdb_id added to drafted set (filtered from results)
-```
-
-**Key Types:**
-- `TMDbSearchResult` - Movie data from TMDb API (has `tmdb_id: number`)
-- `Movie` - Database entity (has `id: string` UUID and `tmdb_id: number`)
-- `draft-pick` accepts `tmdb_id` + optional `movie_data` for find-or-create
+See `docs/PLAN-draft-production-readiness.md` for verification evidence and release gates.
 
 ---
 

@@ -7,9 +7,9 @@ implemented and undergoing final integration checks. No deployment has been
 performed; DRAFT-09 remains open.
 
 Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
-start, `7c14975` fixes calendar dates, and `06a18a6` adds canonical metadata,
-transactional picks, and their notification outbox. Discovery and the integrated
-draft UI follow.
+start, `7c14975` fixes calendar dates, `06a18a6` adds canonical metadata,
+transactional picks, and their notification outbox, and `0e5aa97` fixes discovery
+paging. The integrated draft UI is the next batch.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -138,6 +138,27 @@ Implementation evidence (in progress):
   those two hosting-specific errors are recorded separately from draft behavior.
   A fetch of main still resolved to `2ca91c4`; all three new migration timestamps
   sort after its latest migration, `20260911153843`.
+- At 22:42:01 UTC in the stable-build observation, both sockets closed with code
+  1006 without fault injection. The isolated Realtime container restarted at
+  that same timestamp (restart count 1); Postgres and the gateway did not.
+  Both browsers automatically returned to Live around 22:43:11 and received
+  the next real pick in 1.9 seconds. Realtime logs show memory/scheduling warnings
+  and missing-slot errors before restart; afterward both replication slots were
+  active/reserved. The process exit cause is not proven (no crash dump; no
+  retained OOM event). This local server restart explains that observed pair of
+  disconnects, not the historical production incident. The clean uptime gate is
+  still limited by the unstable local service, while recovery was demonstrated.
+- Final review found an unbounded mutation request could lock the pending
+  preview indefinitely. Draft mutations now opt into a 30-second deadline that
+  covers auth and response parsing, then use the existing snapshot/receipt
+  reconciliation. Three additional regression tests pass; nine state/date/request
+  tests pass in total. Deadline ESLint and TypeScript checks pass. The running
+  production socket sample is intentionally unchanged; its build predates this
+  final request-deadline refinement. A separate final-source production build
+  passes and its application files match the branch byte-for-byte. Its browser
+  timeout/footer probe was blocked at login before draft assertions; this is an
+  explicit remaining check. The real waiting-player test passed in the full
+  suite (preview available, submission disabled, zero persisted picks).
 
 | ID | Priority | Deliverable | Dependencies |
 | --- | --- | --- | --- |

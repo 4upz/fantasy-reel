@@ -1,15 +1,17 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import type { DraftState } from '@/hooks/useDraftState'
 import { trackEvent } from '@/utils/analytics'
 import { buildTeamInfoByUserId, buildTeamInfoByTeamId } from '@/utils/league'
 import CounterpickPicker from './CounterpickPicker'
 import DraftProgressRing from './DraftProgressRing'
-import { SpinnerIcon, ClockIcon, ArrowUpIcon, CheckIcon } from './Icons'
+import DraftTurnStatus from './DraftTurnStatus'
+import { SpinnerIcon, ClockIcon, ArrowUpIcon } from './Icons'
 import { cn } from './utils'
 import type {
   League,
@@ -17,7 +19,6 @@ import type {
   Counterpick,
   CounterpickWithDetails,
   CounterpickTurnInfo,
-  CounterpickOption,
 } from '@/types'
 
 interface Props {
@@ -25,7 +26,8 @@ interface Props {
   participants: ParticipantWithProfile[]
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
-  onCounterpickMade: () => void
+  onCounterpickMade: (confirmedLeague?: League) => Promise<DraftState | null>
+  updatesUnavailable?: boolean
 }
 
 export default function CounterpickRound({
@@ -34,10 +36,12 @@ export default function CounterpickRound({
   counterpicks,
   currentUserId,
   onCounterpickMade,
+  updatesUnavailable = false,
 }: Props) {
   const [currentTurn, setCurrentTurn] = useState<CounterpickTurnInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
 
   const totalParticipants = participants.length
   const totalCounterpicks = totalParticipants * league.draft_counterpick_slots
@@ -45,33 +49,34 @@ export default function CounterpickRound({
 
   // Fetch current turn info
   useEffect(() => {
+    let cancelled = false
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15_000)
     async function fetchCurrentTurn() {
       setLoading(true)
       setFetchError(null)
-
-      const supabase = createClient()
-      const { data, error: rpcError } = await supabase.rpc('get_next_counterpick_turn', {
-        p_league_id: league.id,
-      })
-
-      if (rpcError) {
-        console.error('Error fetching counterpick turn:', rpcError)
-        setFetchError('Failed to load turn information')
+      try {
+        const { data, error: rpcError } = await createClient().rpc('get_next_counterpick_turn', {
+          p_league_id: league.id,
+        }).abortSignal(controller.signal)
+        if (cancelled) return
+        if (rpcError) throw rpcError
+        setCurrentTurn(data?.[0] ?? null)
+      } catch {
+        if (cancelled) return
+        setFetchError('Could not load the counterpick turn. Retry before making a pick.')
         setCurrentTurn(null)
-      } else if (data && data.length > 0) {
-        setCurrentTurn(data[0])
-      } else {
-        // No turn data means round is complete
-        setCurrentTurn(null)
+      } finally {
+        clearTimeout(timeout)
+        if (!cancelled) setLoading(false)
       }
-
-      setLoading(false)
     }
 
     if (league.status === 'counterpicking') {
       fetchCurrentTurn()
     }
-  }, [league.id, league.status, counterpicks.length])
+    return () => { cancelled = true; clearTimeout(timeout); controller.abort() }
+  }, [league.id, league.status, counterpicks.length, retry])
 
   // Get current user's team
   const currentUserParticipant = useMemo(() => {
@@ -81,10 +86,10 @@ export default function CounterpickRound({
   const currentUserTeamId = currentUserParticipant?.teams?.id
 
   // Check if it's the current user's turn
-  const isMyTurn = currentTurn?.user_id === currentUserId
+  const isMyTurn = !updatesUnavailable && !loading && !fetchError && currentTurn?.user_id === currentUserId
 
   // Check if round is complete
-  const isRoundComplete = league.status === 'counterpicking' && !currentTurn && !loading
+  const isRoundComplete = league.status === 'counterpicking' && !currentTurn && !loading && !fetchError
 
   // Map of user_id to team info for display
   const teamInfoByUserId = useMemo(() => buildTeamInfoByUserId(participants), [participants])
@@ -97,34 +102,31 @@ export default function CounterpickRound({
     return teamInfoByUserId.get(userId)?.ownerName ?? null
   }
 
-  // Handle making a counterpick - second param required by CounterpickPicker but unused here
-  const counterpickAction = useCallback(
-    async (movieId: string, _option: CounterpickOption): Promise<void> => {
-      void _option // Mark as intentionally unused
-      const { data, error: pickError } = await callEdgeFunction<{
-        counterpick: Counterpick
-        round_complete: boolean
-      }>('make-counterpick', {
-        body: {
-          league_id: league.id,
-          movie_id: movieId,
-        },
-      })
-
-      if (pickError) {
-        throw new Error(pickError)
+  const pendingPick = useRef<{ movieId: string; expectedPick: number; requestId: string; teamId: string } | null>(null)
+  const counterpickAction = useCallback(async (movieId: string): Promise<void> => {
+    if (!pendingPick.current || pendingPick.current.movieId !== movieId) {
+      if (!currentTurn || !currentUserTeamId || updatesUnavailable) throw new Error('Refresh the counterpick turn before picking.')
+      pendingPick.current = {
+        movieId, expectedPick: (currentTurn.round - 1) * totalParticipants + currentTurn.pick_number,
+        requestId: crypto.randomUUID(), teamId: currentUserTeamId,
       }
-
-      onCounterpickMade()
-      trackEvent('counterpick_made', { league_id: league.id })
-      // If round complete, turn will be null on next fetch
-      if (data?.round_complete) {
-        setCurrentTurn(null)
-      }
-    },
-    [league.id, onCounterpickMade]
-  )
-
+    }
+    const pending = pendingPick.current
+    const { data, error: pickError } = await callEdgeFunction<{
+      counterpick: Counterpick; round_complete: boolean; league: League; replayed: boolean
+    }>('make-counterpick', {
+      timeoutMs: 30_000,
+      body: { league_id: league.id, movie_id: movieId, expected_pick: pending.expectedPick, request_id: pending.requestId },
+    })
+    const snapshot = await onCounterpickMade(data?.league)
+    const confirmed = snapshot?.counterpicks.some(pick => pick.movie_id === movieId &&
+      pick.counterpicker_team_id === pending.teamId && pick.pick_order === pending.expectedPick)
+    if (!confirmed && snapshot?.counterpicks.some(pick => pick.pick_order === pending.expectedPick)) pendingPick.current = null
+    if (pickError && !confirmed) throw new Error(`${pickError} Your selection is kept. Retry or check the previous pick.`)
+    if (!data && !confirmed) throw new Error('The counterpick could not be confirmed. Check the previous pick before choosing again.')
+    pendingPick.current = null
+    if (!data?.replayed) trackEvent('counterpick_made', { league_id: league.id })
+  }, [currentTurn, currentUserTeamId, totalParticipants, updatesUnavailable, league.id, onCounterpickMade])
   const { execute: handleCounterpick, isLoading: picking, error } = useAsyncAction(counterpickAction)
 
   // Render different states based on league status
@@ -145,45 +147,25 @@ export default function CounterpickRound({
     )
   }
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="card p-6">
-        <h2 className="type-section text-foreground mb-4">Counterpick round</h2>
-        <div className="text-center py-8">
-          <SpinnerIcon className="w-8 h-8 text-gold mx-auto animate-spin" />
-          <p className="text-foreground-secondary mt-3">Loading counterpick round...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Round complete state
-  if (isRoundComplete) {
-    return (
-      <div className="card p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="type-section text-foreground">Counterpick results</h2>
-          <DraftProgressRing current={counterpicksMade} total={totalCounterpicks} size="sm" showLabel={false} />
-        </div>
-        <div className="p-4 rounded-xl bg-success-bg border-2 border-success mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-success rounded-full flex items-center justify-center">
-              <CheckIcon className="w-5 h-5 text-background" />
-            </div>
-            <div>
-              <p className="type-card text-success">Counterpick round complete!</p>
-              <p className="type-body-sm text-success/80">The league is now active.</p>
-            </div>
-          </div>
-        </div>
-        <CounterpickHistory counterpicks={counterpicks} participants={participants} />
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24 lg:pb-0">
+      <DraftTurnStatus label={loading ? 'Updating counterpick turn…' : currentTurn
+          ? isMyTurn ? 'Your turn to counterpick' : `${getTeamName(currentTurn.user_id)} is counterpicking`
+          : 'Counterpick round needs attention'}
+        detail={currentTurn ? `Round ${currentTurn.round}, pick ${currentTurn.pick_number}` : 'Review the round status above.'}
+        isMyTurn={isMyTurn} unavailable={updatesUnavailable || Boolean(fetchError)} />
+      {loading && <div className="card p-4 flex items-center gap-3" role="status">
+        <SpinnerIcon className="w-5 h-5 text-gold animate-spin" /> Updating counterpick turn…
+      </div>}
+      {fetchError && <div className="card p-6" role="alert">
+        <p className="text-error mb-3">{fetchError}</p>
+        <button className="btn btn-secondary" onClick={() => setRetry(value => value + 1)}>Retry turn information</button>
+      </div>}
+      {isRoundComplete && <div className="card p-6">
+        <p className="type-card text-foreground">No remaining turn was returned.</p>
+        <p className="type-body-sm text-foreground-secondary mt-2">The league is still counterpicking. Refresh its state or ask the owner to finish the round.</p>
+        <button className="btn btn-secondary mt-3" onClick={() => { void onCounterpickMade(); setRetry(value => value + 1) }}>Refresh draft</button>
+      </div>}
       {/* Counterpick Header Card */}
       <div className="card p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
@@ -260,7 +242,12 @@ export default function CounterpickRound({
         )}
       </div>
 
-      {(fetchError || error) && <div className="alert alert-error">{fetchError || error}</div>}
+      {error && <div className="alert alert-error" role="alert">
+        <p>{error}</p>
+        {pendingPick.current && <button className="btn btn-secondary mt-3" disabled={picking} onClick={() => {
+          if (pendingPick.current) void handleCounterpick(pendingPick.current.movieId).catch(() => {})
+        }}>Check previous counterpick</button>}
+      </div>}
 
       {/* Counterpick Picker - Only show when user is a participant */}
       {currentUserTeamId && (
@@ -271,6 +258,8 @@ export default function CounterpickRound({
             isMyTurn={isMyTurn}
             isPicking={picking}
             onPick={handleCounterpick}
+            revision={counterpicks.length}
+            draftRound
           />
         </div>
       )}

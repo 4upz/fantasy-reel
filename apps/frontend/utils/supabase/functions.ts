@@ -22,68 +22,85 @@ export async function callEdgeFunction<T>(
   options: {
     method?: 'GET' | 'POST'
     body?: Record<string, unknown>
+    /** Bound interactive requests, including a stalled auth-token lookup. */
+    timeoutMs?: number
   } = {}
 ): Promise<{ data: T | null; error: string | null; errorBody: Record<string, unknown> | null }> {
   const supabase = createClient()
   const requestId = crypto.randomUUID()
   const startedAt = performance.now()
+  const controller = options.timeoutMs ? new AbortController() : undefined
+  let timeoutId: ReturnType<typeof setTimeout> | undefined
 
   try {
-    const { data, error } = await supabase.functions.invoke<T>(functionName, {
-      method: options.method || 'POST',
-      body: options.body,
-      headers: { 'x-request-id': requestId },
-    })
+    const operation = (async () => {
+      const { data, error } = await supabase.functions.invoke<T>(functionName, {
+        method: options.method || 'POST',
+        body: options.body,
+        headers: { 'x-request-id': requestId },
+        signal: controller?.signal,
+      })
+      const durationMs = performance.now() - startedAt
 
-    const durationMs = performance.now() - startedAt
+      if (error) {
+        // Extract the actual error message from FunctionsHttpError
+        if (error instanceof FunctionsHttpError) {
+          const errorBody = await error.context.json()
+          const errorMessage = errorBody.error || error.message
 
-    if (error) {
-      // Extract the actual error message from FunctionsHttpError
-      if (error instanceof FunctionsHttpError) {
-        const errorBody = await error.context.json()
-        const errorMessage = errorBody.error || error.message
+          console.error(
+            `Edge Function ${functionName} returned an error [request_id=${requestId}]:`,
+            errorMessage
+          )
 
-        console.error(
-          `Edge Function ${functionName} returned an error [request_id=${requestId}]:`,
-          errorMessage
-        )
+          // Business-logic error responses (4xx surfaced to the user) are an
+          // expected flow, not an exception - breadcrumb only so they still
+          // provide context if a later, real error is captured.
+          addBreadcrumb({
+            category: 'edge-function',
+            message: functionName,
+            level: 'error',
+            data: {
+              duration_ms: durationMs,
+              status: error.context.status,
+              request_id: requestId,
+              error: errorMessage,
+            },
+          })
 
-        // Business-logic error responses (4xx surfaced to the user) are an
-        // expected flow, not an exception - breadcrumb only so they still
-        // provide context if a later, real error is captured.
+          return { data: null, error: errorMessage, errorBody }
+        }
+
         addBreadcrumb({
           category: 'edge-function',
           message: functionName,
           level: 'error',
-          data: {
-            duration_ms: durationMs,
-            status: error.context.status,
-            request_id: requestId,
-            error: errorMessage,
-          },
+          data: { duration_ms: durationMs, request_id: requestId, error: error.message },
         })
 
-        return { data: null, error: errorMessage, errorBody }
+        return { data: null, error: error.message || 'Edge function error', errorBody: null }
       }
 
       addBreadcrumb({
         category: 'edge-function',
         message: functionName,
-        level: 'error',
-        data: { duration_ms: durationMs, request_id: requestId, error: error.message },
+        level: 'info',
+        data: { duration_ms: durationMs, status: 'ok', request_id: requestId },
       })
 
-      return { data: null, error: error.message || 'Edge function error', errorBody: null }
-    }
-
-    addBreadcrumb({
-      category: 'edge-function',
-      message: functionName,
-      level: 'info',
-      data: { duration_ms: durationMs, status: 'ok', request_id: requestId },
+      return { data, error: null, errorBody: null }
+    })()
+    const deadline = controller && new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        controller.abort()
+        const error = new Error('The request took too long. Check the latest state before retrying.')
+        error.name = 'EdgeFunctionTimeoutError'
+        reject(error)
+      }, options.timeoutMs)
     })
-
-    return { data, error: null, errorBody: null }
+    // Cover auth-token lookup and response-body reads, not only fetch. An abort
+    // alone cannot release an SDK call stalled before fetch starts.
+    return await (deadline ? Promise.race([operation, deadline]) : operation)
   } catch (err) {
     // Network failures / unexpected exceptions - not an expected business
     // flow, so capture it as a real Sentry exception in addition to logging.
@@ -99,6 +116,8 @@ export async function callEdgeFunction<T>(
       error: err instanceof Error ? err.message : 'Unknown error',
       errorBody: null,
     }
+  } finally {
+    clearTimeout(timeoutId)
   }
 }
 

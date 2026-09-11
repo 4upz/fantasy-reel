@@ -27,12 +27,15 @@ export default async function DraftPage({ params }: PageProps) {
     .eq('id', id)
     .single()
 
-  if (leagueError || !league) {
+  if (leagueError && leagueError.code !== 'PGRST116') {
+    throw new Error('Unable to load the draft. Please try again.', { cause: leagueError })
+  }
+  if (!league) {
     notFound()
   }
 
   // Check if user is a participant
-  const { data: userParticipant } = await supabase
+  const { data: userParticipant, error: participantError } = await supabase
     .from('league_participants')
     .select('id')
     .eq('league_id', id)
@@ -40,6 +43,9 @@ export default async function DraftPage({ params }: PageProps) {
     .eq('status', 'active')
     .single()
 
+  if (participantError && participantError.code !== 'PGRST116') {
+    throw new Error('Unable to check draft membership. Please try again.', { cause: participantError })
+  }
   if (!userParticipant) {
     redirect('/dashboard')
   }
@@ -70,6 +76,9 @@ export default async function DraftPage({ params }: PageProps) {
         .order('pick_order', { ascending: true }),
       fetchReigningChampions(supabase, typedLeague),
     ])
+
+  const loadError = [participantsResult, draftPicksResult, counterpicksResult].find(result => result.error)?.error
+  if (loadError) throw new Error('Unable to load the draft. Please try again.', { cause: loadError })
 
   const { data: participants } = participantsResult
   const { data: draftPicks } = draftPicksResult

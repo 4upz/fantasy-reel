@@ -8,6 +8,8 @@ interface WishlistContextValue {
   wishlistedIds: Set<number>
   wishlistMovies: WishlistedMovie[]
   isLoading: boolean
+  error: string | null
+  retry: () => void
   toggleWishlist: (movie: TMDbSearchResult) => void
   isWishlisted: (tmdbId: number) => boolean
 }
@@ -41,6 +43,9 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const [wishlistedIds, setWishlistedIds] = useState<Set<number>>(new Set())
   const [wishlistMovies, setWishlistMovies] = useState<WishlistedMovie[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [requestVersion, setRequestVersion] = useState(0)
+  const retry = useCallback(() => setRequestVersion(version => version + 1), [])
   const inFlightRef = useRef<Set<number>>(new Set())
   const wishlistedIdsRef = useRef(wishlistedIds)
   wishlistedIdsRef.current = wishlistedIds
@@ -51,31 +56,35 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false
 
     async function fetchWishlist() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || cancelled) return
+      setIsLoading(true)
+      setError(null)
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError) throw authError
+        if (!user) throw new Error('Sign in again to load your wishlist.')
+        if (cancelled) return
 
-      const { data, error } = await supabase
-        .from('wishlisted_movies')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('added_at', { ascending: false })
-
-      if (cancelled) return
-
-      if (error) {
-        console.error('Failed to fetch wishlist:', error.message)
-      } else {
+        const { data, error } = await supabase
+          .from('wishlisted_movies')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('added_at', { ascending: false })
+        if (error) throw error
+        if (cancelled) return
         const rows = data ?? []
         setWishlistedIds(new Set(rows.map((row) => row.tmdb_id)))
         setWishlistMovies(rows)
+        clearLegacyLocalStorageFavorites()
+      } catch {
+        if (!cancelled) setError('Could not load your wishlist. Please try again.')
+      } finally {
+        if (!cancelled) setIsLoading(false)
       }
-      setIsLoading(false)
-      clearLegacyLocalStorageFavorites()
     }
 
     fetchWishlist()
     return () => { cancelled = true }
-  }, [supabase])
+  }, [supabase, requestVersion])
 
   const toggleWishlist = useCallback(
     async (movie: TMDbSearchResult) => {
@@ -165,8 +174,8 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   )
 
   const value = useMemo(
-    () => ({ wishlistedIds, wishlistMovies, isLoading, toggleWishlist, isWishlisted }),
-    [wishlistedIds, wishlistMovies, isLoading, toggleWishlist, isWishlisted]
+    () => ({ wishlistedIds, wishlistMovies, isLoading, error, retry, toggleWishlist, isWishlisted }),
+    [wishlistedIds, wishlistMovies, isLoading, error, retry, toggleWishlist, isWishlisted]
   )
 
   return (

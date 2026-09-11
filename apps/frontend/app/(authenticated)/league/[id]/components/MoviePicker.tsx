@@ -1,15 +1,14 @@
 'use client'
 
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import type { TMDbSearchResult, WishlistedMovie } from '@/types'
 import { useWishlist } from '@/hooks/useWishlist'
 import { useFranchiseHistories } from '@/hooks/useFranchiseHistory'
-import { useDraftMovies, type BrowseFilters } from '../hooks/useDraftMovies'
-import DraftFilters from './DraftFilters'
+import { useDraftMovies, type DraftMovieRequest } from '../hooks/useDraftMovies'
+import DraftFilters, { type DraftFilters as FilterValue } from './DraftFilters'
 import DraftMovieCard from './DraftMovieCard'
 import MovieQuickPreview from './MovieQuickPreview'
 import { SpinnerIcon, ClapperboardIcon, TrendingUpIcon, CalendarIcon, HeartIcon, SearchIcon } from './Icons'
-import { isWithinDays } from './utils'
 
 interface Props {
   draftedTmdbIds: Set<number>
@@ -17,7 +16,8 @@ interface Props {
   seasonYear: number
   isMyTurn: boolean
   picking: boolean
-  onPick: (tmdbId: number, movieData: TMDbSearchResult) => void
+  unavailableReason?: string | null
+  onPick: (tmdbId: number, movieData: TMDbSearchResult) => Promise<void>
 }
 
 type TabType = 'all' | 'trending' | 'releasing-soon' | 'wishlist'
@@ -74,99 +74,98 @@ export default function MoviePicker({
   seasonYear,
   isMyTurn,
   picking,
+  unavailableReason,
   onPick,
 }: Props): React.ReactElement {
-  const { wishlistedIds, wishlistMovies } = useWishlist()
-  const [activeTab, setActiveTab] = useState<TabType>('all')
+  const { wishlistedIds, wishlistMovies, isLoading: wishlistLoading, error: wishlistError, retry: retryWishlist } = useWishlist()
+  const [discovery, setDiscovery] = useState<{ tab: TabType; filters: FilterValue }>({
+    tab: 'all', filters: { releaseWindow: 'year', genres: [], search: '' },
+  })
+  const { tab: activeTab, filters } = discovery
+  const request = useMemo<DraftMovieRequest>(() => {
+    if (activeTab === 'trending') return { mode: 'trending' }
+    if (filters.search.trim()) return { mode: 'search', query: filters.search.trim() }
+    return { mode: 'browse', filters }
+  }, [activeTab, filters])
   const [previewMovie, setPreviewMovie] = useState<TMDbSearchResult | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
   const {
     movies,
-    loading,
+    loading: moviesLoading,
     loadingMore,
-    error,
-    totalResults,
+    error: moviesError,
     mode,
-    search,
-    browse,
-    fetchTrending,
+    hasMore,
     loadMore,
-  } = useDraftMovies({ draftedTmdbIds, seasonYear })
+    retry: retryMovies,
+  } = useDraftMovies({ draftedTmdbIds, seasonYear, request, enabled: activeTab !== 'wishlist' })
 
-  const observerRef = useRef<IntersectionObserver | null>(null)
-  const loadMoreRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      if (loading || loadingMore) return
-      if (observerRef.current) observerRef.current.disconnect()
-
-      observerRef.current = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) {
-          loadMore()
-        }
-      })
-
-      if (node) observerRef.current.observe(node)
-    },
-    [loading, loadingMore, loadMore]
-  )
+  const loading = activeTab === 'wishlist' ? wishlistLoading : moviesLoading
+  const error = activeTab === 'wishlist' ? wishlistError : moviesError
+  const retry = activeTab === 'wishlist' ? retryWishlist : retryMovies
 
   const filteredMovies = useMemo(() => {
     switch (activeTab) {
-      case 'trending':
-        // Trending data comes from the server via fetchTrending — no client filter needed
-        return movies
-      case 'releasing-soon':
-        return movies.filter((m) => isWithinDays(m.release_date, 30))
       case 'wishlist': {
         const loadedMap = new Map(movies.map((m) => [m.tmdb_id, m]))
-        return wishlistMovies.map((wm) =>
-          loadedMap.get(wm.tmdb_id) ?? wishlistToTMDbResult(wm)
-        )
+        const query = filters.search.trim().toLocaleLowerCase()
+        return wishlistMovies
+          .filter(movie => movie.title.toLocaleLowerCase().includes(query))
+          .map(movie => loadedMap.get(movie.tmdb_id) ?? wishlistToTMDbResult(movie))
       }
       default:
         return movies
     }
-  }, [movies, activeTab, wishlistMovies])
+  }, [movies, activeTab, wishlistMovies, filters.search])
 
   const franchises = useFranchiseHistories(filteredMovies.map((m) => m.tmdb_id))
 
-  const handleTabChange = useCallback(
-    (tab: TabType) => {
-      if (tab === 'trending') {
-        fetchTrending()
-      } else if (activeTab === 'trending') {
-        browse({ releaseWindow: 'year', genres: [] })
-      }
-      setActiveTab(tab)
-    },
-    [activeTab, fetchTrending, browse]
-  )
+  const handleTabChange = useCallback((tab: TabType) => {
+    setDiscovery(previous => ({ tab, filters: {
+      ...previous.filters, search: '',
+      releaseWindow: tab === 'releasing-soon' ? 'next30' : previous.filters.releaseWindow,
+    } }))
+  }, [])
 
-  const handleFiltersChange = useCallback(
-    (newFilters: BrowseFilters & { search: string }) => {
-      const { search: searchValue, ...browseFilters } = newFilters
+  const handleFiltersChange = useCallback((filters: FilterValue) => {
+    setDiscovery(previous => ({ filters, tab:
+      previous.tab === 'wishlist' ? 'wishlist'
+        : previous.tab === 'releasing-soon' && filters.releaseWindow === 'next30' && !filters.search.trim()
+          ? 'releasing-soon' : 'all',
+    }))
+  }, [])
 
-      // Auto-switch away from trending when user searches or changes filters
-      setActiveTab((prev) => (prev === 'trending' ? 'all' : prev))
+  const openPreview = useCallback((movie: TMDbSearchResult) => {
+    setPreviewError(null)
+    setPreviewMovie(movie)
+  }, [])
 
-      if (searchValue) {
-        search(searchValue)
-      } else {
-        browse(browseFilters)
-      }
-    },
-    [browse, search]
-  )
-
-  function handleDraftFromPreview(tmdbId: number): void {
-    const movie = filteredMovies.find((m) => m.tmdb_id === tmdbId)
-      ?? movies.find((m) => m.tmdb_id === tmdbId)
-    if (movie) {
-      onPick(tmdbId, movie)
-    }
+  const closePreview = useCallback(() => {
+    if (picking) return
     setPreviewMovie(null)
-  }
+    setPreviewError(null)
+  }, [picking])
+
+  const handleDraftFromPreview = useCallback(async (tmdbId: number): Promise<void> => {
+    if (!previewMovie || previewMovie.tmdb_id !== tmdbId || picking) return
+    setPreviewError(null)
+    try {
+      await onPick(tmdbId, previewMovie)
+      setPreviewMovie(null)
+    } catch (error) {
+      setPreviewError(error instanceof Error ? error.message : 'Could not draft this movie. Please try again.')
+    }
+  }, [previewMovie, picking, onPick])
 
   const availableCount = filteredMovies.filter((m) => !draftedTmdbIds.has(m.tmdb_id)).length
+
+  const disabledReason = activeTab === 'wishlist'
+    ? 'Search filters your wishlist. Release and genre filters are unavailable here.'
+    : activeTab === 'trending'
+      ? 'Trending shows upcoming titles from TMDb’s weekly list. Release and genre filters are unavailable here.'
+      : filters.search.trim()
+        ? 'Title search includes upcoming movies across release windows and genres. Clear the search to use these filters.'
+        : undefined
 
   return (
     <div className="space-y-6" data-testid="movie-picker">
@@ -188,6 +187,8 @@ export default function MoviePicker({
           <button
             key={tab.id}
             onClick={() => handleTabChange(tab.id)}
+            aria-pressed={activeTab === tab.id}
+            data-testid={`movie-tab-${tab.id}`}
             className={`type-control flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
               activeTab === tab.id
                 ? 'bg-gold text-background shadow-md'
@@ -211,15 +212,24 @@ export default function MoviePicker({
 
       {/* Filters */}
       <DraftFilters
+        value={filters}
         onFiltersChange={handleFiltersChange}
-        totalResults={mode === 'search' ? totalResults : availableCount}
-        loading={loading}
+        countLabel={`${availableCount} available ${activeTab === 'wishlist' ? 'in wishlist' : 'loaded'}`}
+        loading={loading || loadingMore}
+        disabledReason={disabledReason}
       />
+
+      {!disabledReason && <p className="type-body-sm text-foreground-secondary">
+        Browse upcoming theatrical releases. Search by title for wider matches.
+      </p>}
 
       {/* Error State */}
       {error && (
         <div className="alert alert-error">
-          {error}
+          <p>{error}</p>
+          <button type="button" onClick={retry} className="btn btn-secondary mt-3" data-testid="retry-movies-button">
+            Retry loading {activeTab === 'wishlist' ? 'wishlist' : 'movies'}
+          </button>
         </div>
       )}
 
@@ -227,22 +237,25 @@ export default function MoviePicker({
       {loading && movies.length === 0 && (
         <div className="text-center py-12">
           <SpinnerIcon className="w-8 h-8 text-gold mx-auto animate-spin" />
-          <p className="text-foreground-secondary mt-3">Loading movies...</p>
+          <p className="text-foreground-secondary mt-3">Loading {activeTab === 'wishlist' ? 'wishlist' : 'movies'}...</p>
         </div>
       )}
 
       {/* Movie Grid */}
-      {!loading && filteredMovies.length === 0 ? (
+      {!loading && !loadingMore && !error && filteredMovies.length === 0 ? (
         <div className="text-center py-12 bg-elevated rounded-xl border border-border">
           <div className="flex justify-center mb-3">
             <EmptyStateIcon activeTab={activeTab} mode={mode} />
           </div>
           <p className="text-foreground-secondary">
-            {getEmptyStateMessage(activeTab, mode)}
+            {hasMore ? 'No available movies in the pages loaded so far. More pages may have matches.'
+              : activeTab === 'wishlist' && filters.search.trim()
+                ? 'No wishlist movies match your search'
+                : getEmptyStateMessage(activeTab, mode)}
           </p>
           {activeTab !== 'all' && (
             <button
-              onClick={() => setActiveTab('all')}
+              onClick={() => handleTabChange('all')}
               className="type-control mt-3 text-gold hover:text-gold-hover transition-colors"
             >
               View all movies
@@ -250,39 +263,38 @@ export default function MoviePicker({
           )}
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {filteredMovies.map((movie) => (
               <DraftMovieCard
                 key={movie.tmdb_id}
                 movie={movie}
                 isDrafted={draftedTmdbIds.has(movie.tmdb_id)}
                 franchise={franchises.get(movie.tmdb_id) ?? null}
-                onPreview={setPreviewMovie}
+                onPreview={openPreview}
               />
             ))}
-          </div>
+        </div>
+      )}
 
-          {/* Load More Trigger */}
-          {!loading && movies.length > 0 && (
-            <div ref={loadMoreRef} className="h-4" />
-          )}
-
-          {/* Loading More Indicator */}
-          {loadingMore && (
-            <div className="text-center py-4">
-              <SpinnerIcon className="w-6 h-6 text-gold mx-auto animate-spin" />
-            </div>
-          )}
-        </>
+      {activeTab !== 'wishlist' && (hasMore || loadingMore) && (
+        <div className="flex justify-center">
+          <button type="button" onClick={loadMore} disabled={loading || loadingMore || Boolean(error)}
+            className="btn btn-secondary" data-testid="load-more-movies-button">
+            {loadingMore ? <><SpinnerIcon className="w-4 h-4 mr-2 animate-spin" /> Loading more movies...</> : 'Load more movies'}
+          </button>
+        </div>
       )}
 
       {/* Movie Detail Modal */}
       {previewMovie && (
         <MovieQuickPreview
           movie={previewMovie}
+          seasonYear={seasonYear}
           isMyTurn={isMyTurn}
-          onClose={() => setPreviewMovie(null)}
+          isDrafted={draftedTmdbIds.has(previewMovie.tmdb_id)}
+          unavailableReason={unavailableReason}
+          error={previewError}
+          onClose={closePreview}
           onDraft={handleDraftFromPreview}
           picking={picking}
         />
