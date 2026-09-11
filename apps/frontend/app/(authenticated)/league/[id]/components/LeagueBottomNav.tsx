@@ -114,7 +114,7 @@ export default function LeagueBottomNav({
                 href={tab.href}
                 aria-current={isActive ? 'page' : undefined}
                 className={`flex flex-col items-center gap-1 ${
-                  isActive ? 'font-semibold text-gold' : 'font-medium text-foreground-muted'
+                  isActive ? 'text-gold' : 'text-foreground-secondary'
                 }`}
               >
                 <span className="relative">
@@ -123,7 +123,7 @@ export default function LeagueBottomNav({
                     <>
                       <span
                         aria-hidden="true"
-                        className="absolute -top-1 -right-2 min-w-[15px] rounded-full bg-crimson px-1 text-center text-[9px] font-bold leading-[15px] text-foreground"
+                        className="type-meta type-numeric absolute -top-1 -right-2 min-w-4 rounded-full bg-crimson px-1 text-center text-foreground"
                       >
                         {tab.badge}
                       </span>
@@ -131,7 +131,7 @@ export default function LeagueBottomNav({
                     </>
                   )}
                 </span>
-                <span className="text-[10px]">{tab.name}</span>
+                <span className="type-meta">{tab.name}</span>
               </Link>
             )
           })}
@@ -142,11 +142,11 @@ export default function LeagueBottomNav({
               onClick={() => setIsSheetOpen((open) => !open)}
               aria-expanded={isSheetOpen}
               className={`flex flex-col items-center gap-1 ${
-                isMoreActive || isSheetOpen ? 'font-semibold text-gold' : 'font-medium text-foreground-muted'
+                isMoreActive || isSheetOpen ? 'text-gold' : 'text-foreground-secondary'
               }`}
             >
               <MoreHorizontal className="h-[21px] w-[21px]" strokeWidth={1.8} aria-hidden="true" />
-              <span className="text-[10px]">More</span>
+              <span className="type-meta">More</span>
             </button>
           )}
         </div>
@@ -160,14 +160,14 @@ function SheetLink({ tab, isActive }: { tab: LeagueTab; isActive: boolean }) {
     <Link
       href={tab.href}
       aria-current={isActive ? 'page' : undefined}
-      className={`flex items-center gap-3 rounded-xl px-3 py-3 text-[15px] transition-colors hover:bg-surface-hover ${
-        isActive ? 'font-semibold text-gold' : 'text-foreground'
+      className={`flex items-center gap-3 rounded-xl px-3 py-3 type-control transition-colors hover:bg-surface-hover ${
+        isActive ? 'text-gold' : 'text-foreground'
       }`}
     >
       <TabIcon name={tab.name} className="h-5 w-5" />
       {tab.name}
       {tab.badge && (
-        <span className="ml-auto rounded-full bg-crimson px-1.5 py-0.5 text-xs text-foreground">{tab.badge}</span>
+        <span className="type-meta ml-auto rounded-full bg-crimson px-1.5 py-0.5 text-foreground">{tab.badge}</span>
       )}
     </Link>
   )

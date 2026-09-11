@@ -80,9 +80,9 @@ export default function DraftConfigSection({
           <div className="mb-6">
             <label
               htmlFor="max_participants"
-              className="block text-sm font-medium text-foreground-secondary mb-2"
+              className="type-label block text-foreground-secondary mb-2"
             >
-              Maximum Participants
+              Maximum participants
             </label>
             <input
               type="number"
@@ -91,19 +91,19 @@ export default function DraftConfigSection({
               onChange={(e) => setMaxParticipants(parseInt(e.target.value, 10) || MIN_PARTICIPANTS)}
               min={MIN_PARTICIPANTS}
               max={MAX_PARTICIPANTS}
-              className={`input w-32 ${isBelowCurrent || isOutOfRange ? 'border-error focus:border-error' : ''}`}
+              className={`type-input type-numeric input w-32 ${isBelowCurrent || isOutOfRange ? 'border-error focus:border-error' : ''}`}
             />
             <div className="mt-2 space-y-1">
-              <p className="text-xs text-foreground-muted">
+              <p className="type-meta text-foreground-secondary">
                 Current participants: {participantCount} / {league.max_participants}
               </p>
               {isBelowCurrent && (
-                <p className="text-xs text-error">
+                <p className="type-meta text-error">
                   Cannot set below current participant count ({participantCount})
                 </p>
               )}
               {isOutOfRange && !isBelowCurrent && (
-                <p className="text-xs text-error">
+                <p className="type-meta text-error">
                   Must be between {MIN_PARTICIPANTS} and {MAX_PARTICIPANTS}
                 </p>
               )}
@@ -121,7 +121,7 @@ export default function DraftConfigSection({
                 Saving...
               </>
             ) : (
-              'Save Changes'
+              'Save changes'
             )}
           </button>
         </form>

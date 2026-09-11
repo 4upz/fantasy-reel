@@ -52,15 +52,15 @@ export default function ConfirmStartSeasonModal({
       aria-modal="true"
       aria-labelledby="start-season-title"
     >
-      <div className="glass card modal-panel w-full max-w-md animate-slide-up p-6">
+      <div className="glass card modal-panel max-h-[calc(100dvh-2rem)] overflow-y-auto w-full max-w-md animate-slide-up p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-foreground-muted">
+            <p className="type-meta text-foreground-secondary">
               {seasonYear} season
             </p>
             <h2
               id="start-season-title"
-              className="mt-1 font-display text-xl font-bold text-foreground"
+              className="mt-1 type-panel text-foreground"
             >
               Start the {seasonYear} season?
             </h2>
@@ -70,7 +70,7 @@ export default function ConfirmStartSeasonModal({
             onClick={onCancel}
             disabled={isLoading}
             aria-label="Close"
-            className="cursor-pointer p-1 text-foreground-muted transition-colors hover:text-foreground"
+            className="cursor-pointer p-1 text-foreground-secondary transition-colors hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -83,12 +83,12 @@ export default function ConfirmStartSeasonModal({
 
         {participantNames.length > 0 && (
           <div className="mt-4 rounded-lg border border-border bg-elevated p-3">
-            <p className="mb-2 text-xs font-medium uppercase tracking-[0.08em] text-foreground-muted">
+            <p className="mb-2 type-label text-foreground-secondary">
               Carrying over ({participantNames.length})
             </p>
             <ul className="space-y-1 text-sm text-foreground-secondary">
-              {participantNames.map((name) => (
-                <li key={name} className="truncate">
+              {participantNames.map((name, index) => (
+                <li key={`${index}-${name}`} className="break-words">
                   {name}
                 </li>
               ))}

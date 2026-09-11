@@ -26,6 +26,7 @@ interface Props {
   /** Current standings, so the modal can name the team that would win. */
   standings: StandingRow[]
   isLoadingStandings: boolean
+  standingsError?: string | null
   onClose: () => void
   onCompleted: (result: CompleteLeagueResponse) => void
 }
@@ -46,6 +47,7 @@ export default function EndSeasonModal({
   seasonEnd,
   standings,
   isLoadingStandings,
+  standingsError = null,
   onClose,
   onCompleted,
 }: Props): React.ReactElement {
@@ -78,7 +80,7 @@ export default function EndSeasonModal({
   const leaderNames = leaders.map((row) => row.team_name)
   const titleLine =
     leaderNames.length === 0
-      ? 'No team has scored yet, so no champion would be recorded.'
+      ? 'No participating teams, so no champion would be recorded.'
       : leaderNames.length === 1
         ? `${leaderNames[0]} wins the ${seasonYear} title.`
         : `${leaderNames.join(' and ')} share the ${seasonYear} title.`
@@ -93,13 +95,13 @@ export default function EndSeasonModal({
       aria-modal="true"
       aria-labelledby="end-season-title"
     >
-      <div className="glass card modal-panel w-full max-w-md animate-slide-up p-6">
+      <div className="glass card modal-panel max-h-[calc(100dvh-2rem)] overflow-y-auto w-full max-w-md animate-slide-up p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-foreground-muted">
+            <p className="type-meta text-foreground-secondary">
               {seasonYear} season
             </p>
-            <h2 id="end-season-title" className="mt-1 font-display text-xl font-bold text-foreground">
+            <h2 id="end-season-title" className="mt-1 type-panel text-foreground">
               End the season?
             </h2>
           </div>
@@ -108,7 +110,7 @@ export default function EndSeasonModal({
             onClick={onClose}
             disabled={isLoading}
             aria-label="Close"
-            className="cursor-pointer p-1 text-foreground-muted transition-colors hover:text-foreground"
+            className="cursor-pointer p-1 text-foreground-secondary transition-colors hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -116,7 +118,9 @@ export default function EndSeasonModal({
 
         {/* Who wins, as the standings stand right now. */}
         <div className="mb-4 rounded-lg border border-border bg-elevated p-3">
-          {isLoadingStandings ? (
+          {standingsError ? (
+            <p role="alert" className="type-body-sm text-error">{standingsError} Close this dialog and try again.</p>
+          ) : isLoadingStandings ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="skeleton h-6 rounded" />
@@ -128,7 +132,7 @@ export default function EndSeasonModal({
                 {topThree.map((row) => (
                   <li key={row.team_id} className="flex items-center gap-2.5">
                     <span
-                      className={`flex h-6 w-6 flex-none items-center justify-center rounded-md font-display text-[11px] font-bold ${podiumChipClass(row.rank)}`}
+                      className={`flex h-6 w-6 flex-none items-center justify-center rounded-md type-number ${podiumChipClass(row.rank)}`}
                     >
                       {row.is_tied ? 'T' : ''}
                       {row.rank}
@@ -138,7 +142,7 @@ export default function EndSeasonModal({
                     >
                       {row.team_name}
                     </span>
-                    <span className="flex-none font-display text-sm font-semibold text-foreground-secondary">
+                    <span className="flex-none type-number text-foreground-secondary">
                       {formatFantasyPoints(row.total_points)}
                     </span>
                   </li>
@@ -151,7 +155,7 @@ export default function EndSeasonModal({
           )}
         </div>
 
-        <ul className="mb-4 space-y-1 text-sm text-foreground-muted">
+        <ul className="mb-4 space-y-1 text-sm text-foreground-secondary">
           <li>• Scores stop updating.</li>
           <li>• Bids, trades and drops close.</li>
           <li>• Everyone gets the final standings.</li>
@@ -201,7 +205,7 @@ export default function EndSeasonModal({
                 /* surfaced in `error` above */
               })
             }}
-            disabled={isLoading || !isConfirmed}
+            disabled={isLoading || isLoadingStandings || Boolean(standingsError) || !isConfirmed}
             className="btn btn-primary"
             data-testid="confirm-end-season"
           >

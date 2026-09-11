@@ -53,10 +53,10 @@ export default function UserSearchResultItem({ user, onSelect, isHighlighted }: 
     >
       <UserAvatar avatarUrl={user.avatar_url} displayName={user.display_name} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">
+        <p className="type-label text-foreground truncate">
           {user.display_name}
         </p>
-        <p className="text-xs text-foreground-muted truncate">
+        <p className="type-meta text-foreground-secondary truncate">
           {user.email_hint}
         </p>
       </div>
@@ -73,13 +73,13 @@ export function SelectedUserChip({ user, onRemove }: SelectedUserChipProps): Rea
   return (
     <div className="flex items-center gap-2 px-3 py-2 bg-elevated rounded-lg border border-border">
       <UserAvatar avatarUrl={user.avatar_url} displayName={user.display_name} size="sm" />
-      <span className="text-sm font-medium text-foreground">
+      <span className="type-label text-foreground">
         {user.display_name}
       </span>
       <button
         type="button"
         onClick={onRemove}
-        className="ml-1 p-0.5 rounded hover:bg-surface-hover text-foreground-muted hover:text-foreground transition-colors"
+        className="ml-1 p-0.5 rounded hover:bg-surface-hover text-foreground-secondary hover:text-foreground transition-colors"
         aria-label="Remove selected user"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

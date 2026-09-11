@@ -80,7 +80,7 @@ export default async function SeasonHistoryPage({ params }: PageProps) {
   return (
     <div className="animate-fade-in">
       <header className="mb-6">
-        <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+        <h1 className="type-page text-foreground">
           {typedLeague.name}
         </h1>
         <p className="mt-1 text-sm text-foreground-secondary">
@@ -91,7 +91,7 @@ export default async function SeasonHistoryPage({ params }: PageProps) {
       <SeasonHistoryList rows={rows} />
 
       {seasons.length < 2 && (
-        <p className="py-10 text-center text-sm text-foreground-muted">
+        <p className="py-10 text-center text-sm text-foreground-secondary">
           This is the league&apos;s first season. Past seasons show up here once one ends.
         </p>
       )}

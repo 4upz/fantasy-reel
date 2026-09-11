@@ -312,6 +312,7 @@ Deno.test({
             amount: 7,
             status: 'active',
             processing_deadline: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+            response_deadline: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           })
           .select('id')
           .single()

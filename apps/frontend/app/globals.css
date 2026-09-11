@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./typography.css";
 
 /* ============================================
    CINEMATIC DARK DESIGN SYSTEM
@@ -52,9 +53,9 @@
   --color-info-bg: oklch(0.55 0.2 260 / 0.15);
 
   /* === FONTS (generates font-* utilities) === */
-  --font-display: "Montserrat", var(--font-montserrat), system-ui, sans-serif;
-  --font-body: "DM Sans", var(--font-dm-sans), system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-display: var(--font-bricolage, "Bricolage Grotesque"), system-ui, sans-serif;
+  --font-body: var(--font-dm-sans, "DM Sans"), system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* === SHADOWS (generates shadow-* utilities) === */
   --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.4);
@@ -126,6 +127,8 @@
 
   body {
     font-family: var(--font-body);
+    font-size: 1rem;
+    line-height: 1.5;
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
@@ -173,11 +176,15 @@
   }
 
   /* Buttons */
-  .btn {
+  /* Role classes can override these defaults, including numeric bid presets. */
+  :where(.btn) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0.5rem 1rem;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
+    line-height: 1.429;
     font-weight: 600;
     border-radius: 0.5rem;
     transition: all 0.2s ease;
@@ -231,6 +238,9 @@
 
   /* Form Inputs */
   .input {
+    font-size: 1rem;
+    line-height: 1.5;
+    min-width: 0;
     width: 100%;
     padding: 0.5rem 0.75rem;
     background-color: var(--color-elevated);
@@ -241,7 +251,7 @@
   }
 
   .input::placeholder {
-    color: var(--color-foreground-muted);
+    color: var(--color-foreground-secondary);
   }
 
   .input:focus {
@@ -332,6 +342,7 @@
     border-radius: 0.5rem;
     border: 1px solid;
     font-size: 0.875rem;
+    line-height: 1.429;
   }
 
   .alert-error {
@@ -384,12 +395,19 @@
     animation: modal-scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* Bid amount display - dramatic gold styling */
+  /* Numeric roles share tabular figures, including legacy score treatments. */
+  .bid-amount-display, .tomatometer-value, .scoring-points {
+    font-variation-settings: "opsz" 12, "wdth" 100;
+    font-optical-sizing: none;
+    font-variant-numeric: tabular-nums lining-nums;
+    letter-spacing: 0;
+  }
+
+  /* Featured bid amount */
   .bid-amount-display {
     font-family: var(--font-display);
     font-weight: 700;
     color: var(--color-gold);
-    text-shadow: 0 0 20px oklch(0.65 0.15 85 / 0.3);
   }
 
   /* Bid card hover lift */
@@ -504,23 +522,6 @@
     background-color: var(--color-surface-hover);
   }
 
-  .sidenav-brand-icon {
-    flex-shrink: 0;
-    color: var(--color-gold);
-    transition: filter 0.2s ease;
-  }
-
-  .sidenav-brand:hover .sidenav-brand-icon {
-    filter: drop-shadow(0 0 8px oklch(0.65 0.15 85 / 0.4));
-  }
-
-  .sidenav-brand-text {
-    font-family: var(--font-display);
-    font-size: 1.125rem;
-    color: var(--color-gold);
-    white-space: nowrap;
-  }
-
   /* Section */
   .sidenav-section {
     margin-bottom: 1.5rem;
@@ -530,11 +531,10 @@
     display: block;
     padding: 0 0.5rem;
     margin-bottom: 0.5rem;
-    font-size: 0.65rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-foreground-muted);
+    font-size: 0.75rem;
+    line-height: 1.333;
+    font-weight: 500;
+    color: var(--color-foreground-secondary);
     white-space: nowrap;
   }
 
@@ -608,7 +608,7 @@
   .sidenav-badge {
     margin-left: auto;
     padding: 0.125rem 0.5rem;
-    font-size: 0.7rem;
+    font-size: 0.75rem;
     font-weight: 600;
     background: var(--color-crimson);
     color: var(--color-foreground);
@@ -858,16 +858,6 @@
     min-width: 0;
   }
 
-  .sidenav-mobile-title {
-    font-family: var(--font-display);
-    font-size: 1rem;
-    font-weight: 600;
-    color: var(--color-foreground);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   /* Mobile Drawer Overlay */
   .sidenav-mobile-overlay {
     position: fixed;
@@ -936,7 +926,7 @@
     color: var(--color-gold);
     font-size: 0.875rem;
     font-weight: 600;
-    font-family: var(--font-display);
+    font-family: var(--font-body);
     text-transform: uppercase;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
@@ -944,10 +934,6 @@
   .avatar:hover {
     border-color: var(--color-gold-hover);
     box-shadow: 0 0 12px oklch(0.65 0.15 85 / 0.25);
-  }
-
-  .nav-logo:hover {
-    filter: drop-shadow(0 0 8px oklch(0.65 0.15 85 / 0.3));
   }
 
   /* Skeleton loading */
@@ -995,13 +981,13 @@
   /* Dashboard two-column grid */
   .dashboard-grid {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1.5rem;
   }
 
   @media (min-width: 1024px) {
     .dashboard-grid {
-      grid-template-columns: 2fr 1fr;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
       align-items: start;
     }
   }
@@ -1124,9 +1110,10 @@
     align-items: center;
     justify-content: center;
     padding: 1rem 2.5rem;
-    font-family: var(--font-display);
-    font-weight: 700;
-    font-size: 1.125rem;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 1rem;
+    line-height: 1.5;
     border-radius: 0.75rem;
     background-color: var(--color-gold);
     color: var(--color-foreground-inverse);
@@ -1194,8 +1181,8 @@
   }
 
   .ticker-handle {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
     color: var(--color-gold);
   }
 
@@ -1211,7 +1198,7 @@
   }
 
   .ticker-snark {
-    color: var(--color-foreground-muted);
+    color: var(--color-foreground-secondary);
     font-style: italic;
     font-size: 0.8rem;
   }
@@ -1286,7 +1273,7 @@
 
   .tomatometer-value {
     font-family: var(--font-display);
-    font-weight: 800;
+    font-weight: 700;
     font-size: 2.5rem;
     line-height: 1;
   }
@@ -1301,9 +1288,9 @@
 
   .tomatometer-label {
     font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-foreground-muted);
+    line-height: 1.333;
+    font-weight: 500;
+    color: var(--color-foreground-secondary);
   }
 
   .scoring-result {
@@ -1313,7 +1300,7 @@
 
   .scoring-points {
     font-family: var(--font-display);
-    font-weight: 800;
+    font-weight: 700;
     font-size: 1.5rem;
   }
 
@@ -1332,8 +1319,8 @@
   }
 
   .scoring-quote-author {
-    font-family: var(--font-mono);
-    font-size: 0.8rem;
+    font-family: var(--font-body);
+    font-size: 0.875rem;
     color: var(--color-gold);
   }
 

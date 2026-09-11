@@ -40,7 +40,7 @@ export default function TMDbAttribution({
   if (variant === 'powered-by') {
     return (
       <div className={`flex flex-col items-center gap-3 ${className}`}>
-        <span className="text-xs uppercase tracking-widest text-foreground-muted font-medium">
+        <span className="type-meta text-foreground-secondary">
           Powered by
         </span>
         <a
@@ -52,7 +52,7 @@ export default function TMDbAttribution({
         >
           <TMDbLogo size="large" />
         </a>
-        <p className="text-xs text-foreground-muted max-w-xs text-center leading-relaxed">
+        <p className="type-meta text-foreground-secondary max-w-xs text-center">
           This product uses the{' '}
           <a
             href="https://www.themoviedb.org"
@@ -79,7 +79,7 @@ export default function TMDbAttribution({
       >
         <TMDbLogo size="medium" />
       </a>
-      <p className="text-xs text-foreground-muted leading-snug">
+      <p className="type-meta text-foreground-secondary">
         This product uses the{' '}
         <a
           href="https://www.themoviedb.org"

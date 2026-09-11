@@ -73,7 +73,7 @@ export default function DraftMovieCard({
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center bg-elevated">
             <ClapperboardIcon className="w-12 h-12 text-foreground-muted mb-2" />
-            <span className="text-xs text-foreground-muted">No poster</span>
+            <span className="type-meta text-foreground-secondary">No poster</span>
           </div>
         )}
 
@@ -86,7 +86,7 @@ export default function DraftMovieCard({
           {popularityBadge && (
             <span
               className={cn(
-                'px-2 py-0.5 rounded-full text-xs font-semibold shadow-md',
+                'type-meta px-2 py-0.5 rounded-full shadow-md',
                 popularityBadge.variant === 'solid'
                   ? 'bg-gold text-background'
                   : 'bg-gold-muted text-gold border border-gold'
@@ -107,7 +107,7 @@ export default function DraftMovieCard({
           <div className="absolute bottom-12 left-2">
             <div className="flex items-center gap-1 px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg">
               <StarIcon className="w-3.5 h-3.5 text-gold" />
-              <span className="text-sm font-semibold text-foreground">
+              <span className="type-row-title text-foreground">
                 {movie.vote_average.toFixed(1)}
               </span>
             </div>
@@ -117,7 +117,7 @@ export default function DraftMovieCard({
         {/* Release Date Badge */}
         <div className="absolute bottom-12 right-2">
           <div className="px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg">
-            <span className="text-xs font-medium text-foreground-secondary">
+            <span className="type-meta text-foreground-secondary">
               {formatReleaseDateShort(movie.release_date)}
             </span>
           </div>
@@ -127,7 +127,7 @@ export default function DraftMovieCard({
         {isDrafted && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/70">
             <div className="px-3 py-1.5 bg-elevated border border-border rounded-lg">
-              <span className="text-sm font-medium text-foreground-muted">Drafted</span>
+              <span className="type-label text-foreground-secondary">Drafted</span>
             </div>
           </div>
         )}
@@ -136,7 +136,7 @@ export default function DraftMovieCard({
       {/* Info Section */}
       <div className="p-3 bg-surface border-t border-border">
         <h3
-          className="font-medium text-foreground truncate text-sm leading-tight"
+          className="type-row-title text-foreground truncate"
           title={movie.title}
         >
           {movie.title}
@@ -145,7 +145,7 @@ export default function DraftMovieCard({
             average is the one number that matters at a glance. The preview
             carries the film-by-film record. */}
         {(releaseYear || seriesLabel) && (
-          <p className="text-xs text-foreground-muted mt-1 truncate" data-testid="franchise-line">
+          <p className="type-meta text-foreground-secondary mt-1 truncate" data-testid="franchise-line">
             {releaseYear}
             {releaseYear && seriesLabel && ' · '}
             {seriesLabel}

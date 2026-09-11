@@ -1,39 +1,30 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Montserrat, DM_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+const bricolage = localFont({
+  src: "./fonts/bricolage.woff2",
+  variable: "--font-bricolage",
+  weight: "200 800",
+  style: "normal",
+  display: "swap",
+  declarations: [{ prop: "font-stretch", value: "75% 100%" }],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const montserrat = Montserrat({
-  variable: "--font-montserrat",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-});
-
-const dmSans = DM_Sans({
+const dmSans = localFont({
+  src: "./fonts/dm-sans.woff2",
   variable: "--font-dm-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
+  weight: "100 1000",
+  style: "normal",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Fantasy Reel",
   description: "Fantasy leagues for movies",
-  icons: {
-    icon: "/icon.svg",
-    apple: "/apple-icon.svg",
-  },
 };
 
 export default function RootLayout({
@@ -42,10 +33,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} ${dmSans.variable} antialiased`}
-      >
+    <html lang="en" className={`${bricolage.variable} ${dmSans.variable}`}>
+      <body className="antialiased">
         <Providers>{children}</Providers>
         <Analytics />
         <SpeedInsights />

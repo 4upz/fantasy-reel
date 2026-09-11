@@ -43,10 +43,10 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
       {/* The link wraps only the top block: the expander below is a real button,
           and nesting one inside a link breaks keyboard navigation. */}
       <Link href={`/league/${current.id}`} className="group block p-4">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <div className="mb-1 flex items-center gap-2.5">
-              <h3 className="truncate font-display font-semibold text-foreground transition-colors group-hover:text-gold">
+            <div className="mb-1 flex flex-wrap items-center gap-2.5">
+              <h3 className="min-w-0 basis-full break-words type-card sm:basis-auto sm:flex-1 text-foreground transition-colors group-hover:text-gold">
                 {current.name}
               </h3>
               <span className={`badge shrink-0 ${STATUS_BADGE_CLASS[current.status]}`}>
@@ -56,8 +56,8 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
                   elements rather than merging into one badge. */}
               <span className={`${SEASON_PILL_CLASS} shrink-0`}>{current.season_year}</span>
             </div>
-            <p className="text-sm text-foreground-muted">
-              {current.invite_only ? 'Private' : 'Open'} · {current.max_participants} participants ·
+            <p className="text-sm text-foreground-secondary">
+              {current.invite_only ? 'Private' : 'Open'} · {current.max_participants} max participants ·
               Created{' '}
               {new Date(current.created_at).toLocaleDateString('en-US', {
                 month: 'short',
@@ -82,7 +82,7 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
             className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-surface-hover"
           >
             <ChevronDown
-              className={`h-4 w-4 flex-none text-foreground-muted transition-transform duration-300 ${
+              className={`h-4 w-4 flex-none text-foreground-secondary transition-transform duration-300 ${
                 isExpanded ? 'rotate-180' : ''
               }`}
               aria-hidden="true"
@@ -106,7 +106,7 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
                         {season.season_year} · {getStatusLabel(season.status)}
                       </span>
                       {champions.length > 0 && (
-                        <span className="flex min-w-0 items-center gap-1 rounded-full bg-gold-muted px-2 py-px text-[11px] text-gold">
+                        <span className="flex min-w-0 items-center gap-1 rounded-full bg-gold-muted px-2 py-px type-meta text-gold">
                           <Trophy className="h-3 w-3 flex-none" aria-hidden="true" />
                           <span className="truncate">{champions.join(' · ')}</span>
                         </span>

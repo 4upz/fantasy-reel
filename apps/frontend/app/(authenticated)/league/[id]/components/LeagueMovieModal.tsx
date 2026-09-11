@@ -130,7 +130,7 @@ export default function LeagueMovieModal({
             disabled={isDropping}
             aria-label="Close"
             data-testid="league-modal-close"
-            className="absolute right-4 top-4 z-10 rounded-full border border-border bg-background/50 p-2 text-foreground-muted backdrop-blur-sm transition-all hover:border-border-hover hover:text-foreground"
+            className="absolute right-4 top-4 z-10 rounded-full border border-border bg-background/50 p-2 text-foreground-secondary backdrop-blur-sm transition-all hover:border-border-hover hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
@@ -197,15 +197,15 @@ function LeagueActionPanel({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           {contextHeading && (
-            <p className="text-xs uppercase tracking-wide text-foreground-muted">
+            <p className="type-meta text-foreground-secondary">
               {contextHeading}
             </p>
           )}
-          <p className="mt-0.5 text-sm text-foreground-secondary">
+          <p className="type-body-sm mt-0.5 text-foreground-secondary">
             {contextLabel}
             {contextLabel && ' · '}
             {points != null ? (
-              <span className={points >= 0 ? 'text-success' : 'text-crimson'}>
+              <span className={`type-numeric ${points >= 0 ? 'text-success' : 'text-crimson'}`}>
                 {formatFantasyPoints(points)} pts
               </span>
             ) : (
@@ -266,10 +266,10 @@ function BlockerNotice({
     <div className="mt-3 flex items-start gap-3 rounded-lg border border-border bg-background/40 p-3">
       <Lock className="mt-0.5 h-4 w-4 flex-none text-foreground-muted" aria-hidden="true" />
       <div>
-        <p className="text-sm font-medium text-foreground" data-testid="drop-blocker-headline">
+        <p className="type-label text-foreground" data-testid="drop-blocker-headline">
           {headline}
         </p>
-        <p className="mt-1 text-sm text-foreground-secondary">{detail}</p>
+        <p className="type-body-sm mt-1 text-foreground-secondary">{detail}</p>
       </div>
     </div>
   )
@@ -297,8 +297,8 @@ function DropConfirmView({
           <TrendingDown className="h-4 w-4" />
         </span>
         <div>
-          <h2 className="font-display text-lg font-bold text-foreground">Drop {movie.title}?</h2>
-          <p className="mt-0.5 text-sm text-foreground-secondary">
+          <h2 className="type-panel text-foreground">Drop {movie.title}?</h2>
+          <p className="type-body-sm mt-0.5 text-foreground-secondary">
             Dropping is permanent. Read what it costs before you confirm.
           </p>
         </div>
@@ -307,14 +307,14 @@ function DropConfirmView({
       {/* Drop allowance: the scarce thing being spent, shown as countable pips. */}
       <div className="mt-5 rounded-lg border border-border bg-elevated/60 p-3">
         <div className="flex items-baseline justify-between gap-2">
-          <p className="text-sm font-medium text-foreground">Your drops</p>
-          <p className="text-xs text-foreground-muted">
+          <p className="type-label text-foreground">Your drops</p>
+          <p className="type-meta text-foreground-secondary">
             {dropCount} of {league.drop_limit} used
           </p>
         </div>
         <DropAllowanceMeter used={dropCount} pending={1} limit={league.drop_limit} />
         <p
-          className={`mt-2 text-xs ${dropsRemainingAfter === 0 ? 'text-crimson' : 'text-foreground-secondary'}`}
+          className={`type-meta mt-2 ${dropsRemainingAfter === 0 ? 'text-crimson' : 'text-foreground-secondary'}`}
           data-testid="drops-after-line"
         >
           {dropsRemainingAfter === 0
@@ -324,7 +324,7 @@ function DropConfirmView({
       </div>
 
       <div className="mt-5">
-        <p className="mb-2 text-sm font-medium text-foreground">What happens</p>
+        <p className="type-label mb-2 text-foreground">What happens</p>
         <ul className="space-y-2">
           <Consequence icon={Film}>
             {movie.title} leaves your roster now, freeing a slot &mdash; you will be at{' '}
@@ -341,13 +341,13 @@ function DropConfirmView({
         </ul>
       </div>
 
-      <p className="alert alert-warning mt-5 flex items-start gap-2 text-sm">
+      <p className="type-body-sm alert alert-warning mt-5 flex items-start gap-2">
         <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
         <span>This takes effect immediately and cannot be undone.</span>
       </p>
 
       {error && (
-        <p className="alert alert-error mt-3 text-sm" role="alert">
+        <p className="type-body-sm alert alert-error mt-3" role="alert">
           {error}
         </p>
       )}
@@ -386,7 +386,7 @@ function Consequence({
   children: React.ReactNode
 }) {
   return (
-    <li className="flex items-start gap-2 text-sm text-foreground-secondary">
+    <li className="type-body-sm flex items-start gap-2 text-foreground-secondary">
       <Icon className="mt-0.5 h-4 w-4 flex-none text-foreground-muted" aria-hidden="true" />
       <span>{children}</span>
     </li>

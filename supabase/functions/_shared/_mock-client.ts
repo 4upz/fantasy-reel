@@ -184,6 +184,20 @@ export function createMockDbClient(db: MockDb, options: MockClientOptions = {}) 
       return Promise.resolve({ data: value ?? null, error: null })
     },
     from(table: string) {
+      // Notification fixtures seed the acquisition tables. Expose the flat,
+      // active-only view the production roster queries now read; recompute on
+      // each select so a test's drop or pickup is reflected in the next read.
+      if (table === 'team_holdings' && !db.team_holdings) {
+        return {
+          select: () => chain([...(db.draft_picks ?? []), ...(db.pickups ?? [])]
+            .filter((row) => row.dropped_at == null)
+            .map((row) => ({
+              movie_id: row.movie_id,
+              league_id: row.league_id,
+              team_name: row.teams?.name ?? null,
+            }))),
+        }
+      }
       if (!db[table]) db[table] = []
       return {
         select: (_cols?: string, _opts?: { count?: string; head?: boolean }) => chain(db[table]),

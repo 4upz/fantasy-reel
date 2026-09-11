@@ -1,0 +1,10 @@
+/* The specimen uses the app's canonical role rules, without a separate scale. */
+@import "../../apps/frontend/app/typography.css";
+
+.fr-type-system {
+  --font-bricolage: "Bricolage Grotesque";
+  --font-dm-sans: "DM Sans";
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-body: var(--font-dm-sans), system-ui, sans-serif;
+  font-family: var(--font-body);
+}

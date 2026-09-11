@@ -1,18 +1,10 @@
 import type { FinalStandingRow, StandingRow } from '@/types'
 
-/**
- * A season year is always set like a number stencilled on a film can: mono,
- * flat, letter-spaced. Never `font-display` (that is for names) and never a
- * `.badge` (those carry status colour). One constant so the surfaces that print
- * a year cannot drift apart.
- *
- * Size is left to the caller - the same stencil reads at 11px in a pill and at
- * `text-sm` down a history spine.
- */
-export const SEASON_YEAR_CLASS = 'font-mono tracking-[0.08em]'
+/** Season labels share the metadata role used by dates elsewhere in the app. */
+export const SEASON_YEAR_CLASS = 'type-meta'
 
-/** The year with its own chrome, for the surfaces that sit it beside a badge. */
-export const SEASON_PILL_CLASS = `rounded-md border border-border bg-elevated px-2 py-0.5 text-[11px] text-foreground-secondary ${SEASON_YEAR_CLASS}`
+/** The year with its own chrome, for surfaces beside a status badge. */
+export const SEASON_PILL_CLASS = `rounded-md border border-border bg-elevated px-2 py-0.5 text-foreground-secondary ${SEASON_YEAR_CLASS}`
 
 export interface Champion {
   teamId: string
@@ -35,7 +27,7 @@ export function seasonStandings(
   finalStandings: FinalStandingRow[] | null | undefined,
   liveStandings: StandingRow[]
 ): StandingRow[] {
-  return finalStandings?.length ? finalStandings : liveStandings
+  return finalStandings ?? liveStandings
 }
 
 /**

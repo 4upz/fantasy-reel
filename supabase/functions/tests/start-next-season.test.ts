@@ -26,7 +26,7 @@ interface SeasonResponse {
 async function completeLeague(leagueId: string): Promise<void> {
   const { error } = await getServiceClient()
     .from('leagues')
-    .update({ status: 'completed', completed_at: new Date().toISOString() })
+    .update({ status: 'completed', completed_at: new Date().toISOString(), final_standings: [{ team_name: 'Previous champion', rank: 1 }] })
     .eq('id', leagueId)
   if (error) throw new Error(`Failed to complete league: ${error.message}`)
 }
@@ -140,6 +140,7 @@ Deno.test({
         webhook_id: 'wh-rollover-test',
         webhook_url: 'https://discord.com/api/webhooks/rollover/test',
         notify_trades: false,
+        enabled: false,
       })
 
       await completeLeague(leagueId)
@@ -187,6 +188,7 @@ Deno.test({
       assertEquals(next!.status, 'setup')
       assertEquals(next!.completed_at, null)
       assertEquals(next!.winner_team_ids, null)
+      assertEquals(next!.final_standings, null)
       assertEquals(next!.draft_start_date, null)
       assertEquals(next!.draft_end_date, null)
       assertEquals(next!.trade_deadline, null)
@@ -265,6 +267,20 @@ Deno.test({
         again.error,
         `The ${before!.season_year + 1} season has already been started`
       )
+    })
+
+    await t.step('concurrent rollover requests return one season and a readable conflict', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('rollover-race'))
+      await completeLeague(leagueId)
+      const results = await Promise.all([
+        invokeFunction<SeasonResponse>(client, 'start-next-season', { league_id: leagueId }),
+        invokeFunction<SeasonResponse>(client, 'start-next-season', { league_id: leagueId }),
+      ])
+      for (const result of results) {
+        if (result.data) factory.trackLeague(result.data.league_id)
+      }
+      assertEquals(results.filter((result) => result.error === null).length, 1)
+      assertEquals(results.filter((result) => result.status === 409).length, 1)
     })
 
     await t.step('cleanup test data', async () => {

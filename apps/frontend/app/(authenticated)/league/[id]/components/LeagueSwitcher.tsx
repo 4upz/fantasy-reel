@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { ChevronDown } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
+import { currentSeasonOf, groupLeaguesIntoSeries } from '@/utils/seasons'
 import type { League } from '@/types'
 
 const CACHE_TTL_MS = 60_000
@@ -15,7 +16,7 @@ interface LeagueSwitcherProps {
   currentLeagueName: string
 }
 
-type LeagueSummary = Pick<League, 'id' | 'name' | 'status'>
+type LeagueSummary = Pick<League, 'id' | 'name' | 'status' | 'series_id' | 'season_year'>
 
 export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: LeagueSwitcherProps): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false)
@@ -37,7 +38,7 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
 
     const { data, error: fetchError } = await supabase
       .from('leagues')
-      .select('id, name, status')
+      .select('id, name, status, series_id, season_year')
       .order('created_at', { ascending: false })
 
     if (fetchError) {
@@ -46,10 +47,12 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
       return
     }
 
-    setLeagues(data as LeagueSummary[])
+    setLeagues(groupLeaguesIntoSeries((data ?? []) as LeagueSummary[]).map((seasons) =>
+      seasons.find((season) => season.id === currentLeagueId) ?? currentSeasonOf(seasons)!
+    ))
     fetchedAtRef.current = now
     setIsLoading(false)
-  }, [])
+  }, [currentLeagueId])
 
   // Fetch leagues when dropdown opens
   useEffect(() => {
@@ -97,7 +100,7 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
         aria-expanded={isOpen}
         aria-haspopup="listbox"
       >
-        <h1 className="min-w-0 truncate text-lg font-display font-semibold text-foreground group-hover:text-gold transition-colors">
+        <h1 className="type-card min-w-0 truncate text-foreground group-hover:text-gold transition-colors">
           {currentLeagueName}
         </h1>
         <ChevronDown
@@ -108,7 +111,7 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
       {isOpen && (
         <div className="absolute left-0 mt-2 w-72 sm:w-80 glass card animate-fade-in z-50">
           <div className="px-4 py-2.5 border-b border-border">
-            <p className="text-sm font-semibold text-foreground-secondary">Your Leagues</p>
+            <p className="type-row-title text-foreground-secondary">Your leagues</p>
           </div>
 
           <div className="max-h-[50vh] overflow-y-auto py-1" role="listbox">
@@ -121,7 +124,7 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
                 </div>
               ))
             ) : error ? (
-              <p className="px-4 py-3 text-sm text-error">{error}</p>
+              <p className="type-body-sm px-4 py-3 text-error">{error}</p>
             ) : (
               leagues?.map(league => {
                 const isCurrent = league.id === currentLeagueId
@@ -148,13 +151,13 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
                       }`}
                     />
                     <span
-                      className={`flex-1 text-sm font-medium truncate ${
+                      className={`type-label flex-1 truncate ${
                         isCurrent ? 'text-gold' : 'text-foreground'
                       }`}
                     >
                       {league.name}
                     </span>
-                    <span className={`badge text-xs ${STATUS_BADGE_CLASS[league.status]}`}>
+                    <span className={`type-meta badge ${STATUS_BADGE_CLASS[league.status]}`}>
                       {getStatusLabel(league.status)}
                     </span>
                   </button>
@@ -167,9 +170,9 @@ export default function LeagueSwitcher({ currentLeagueId, currentLeagueName }: L
             <Link
               href="/dashboard"
               onClick={() => setIsOpen(false)}
-              className="text-sm text-foreground-secondary hover:text-gold transition-colors"
+              className="type-control text-foreground-secondary hover:text-gold transition-colors"
             >
-              View All Leagues
+              View all leagues
             </Link>
           </div>
         </div>

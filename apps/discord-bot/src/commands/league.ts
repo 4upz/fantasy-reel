@@ -87,16 +87,25 @@ export const league: Command = {
       .order('total_points', { ascending: false })
       .returns<StandingRow[]>()
 
-    const leagueScores = scores || []
+    const leagueScores = linked.finalStandings
+      ? linked.finalStandings.map((row) => ({
+          total_points: row.total_points,
+          teams: { id: row.team_id, name: row.team_name },
+        }))
+      : scores || []
 
     // A finished season names its champions from what it recorded; co-champions
     // each get the trophy. See the same reasoning in /standings.
     const champions = championTeamIds(linked)
 
+    let currentRank = 0
+    let previousPoints: number | null = null
     const topLines = leagueScores.slice(0, 3).map((s, index) => {
-      const rank = index + 1
-      const name = s.teams?.name || 'Unknown Team'
       const points = s.total_points ?? 0
+      if (points !== previousPoints) currentRank = index + 1
+      previousPoints = points
+      const rank = linked.finalStandings?.[index].rank ?? currentRank
+      const name = s.teams?.name || 'Unknown Team'
       const trophy = s.teams?.id && champions?.has(s.teams.id) ? ' 🏆' : ''
       return `${rank}. ${name} -- ${points} pts${trophy}`
     })

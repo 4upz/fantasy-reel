@@ -92,7 +92,7 @@ export default async function StandingsPage({ params }: PageProps) {
       `
       )
       .eq('league_id', id)
-      .eq('status', 'active')
+      .in('status', typedLeague.status === 'completed' ? ['active', 'left', 'kicked'] : ['active'])
       .order('draft_order', { ascending: true }),
     supabase
       .from('team_holdings')

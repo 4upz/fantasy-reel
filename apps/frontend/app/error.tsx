@@ -22,10 +22,10 @@ export default function ErrorBoundary({
           <AlertTriangle className="h-16 w-16 text-gold" />
         </div>
         <div className="space-y-2">
-          <h1 className="font-display text-2xl font-bold text-foreground">
+          <h1 className="type-panel text-foreground">
             Something went wrong
           </h1>
-          <p className="text-foreground-secondary">
+          <p className="type-body text-foreground-secondary">
             An unexpected error occurred. You can try again, or head back to your dashboard.
           </p>
         </div>

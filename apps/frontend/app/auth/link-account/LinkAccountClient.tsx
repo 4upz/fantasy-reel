@@ -92,8 +92,8 @@ export default function LinkAccountClient({
         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gold-muted flex items-center justify-center">
           <Link2 className="w-8 h-8 text-gold" />
         </div>
-        <h1 className="text-2xl sm:text-3xl font-display font-bold text-foreground">
-          Link Your Accounts
+        <h1 className="type-page text-foreground">
+          Link your accounts
         </h1>
         <p className="mt-3 text-foreground-secondary">
           An account with <strong className="text-foreground">{email}</strong> already exists.
@@ -112,7 +112,7 @@ export default function LinkAccountClient({
               </div>
               <div>
                 <p className="font-medium text-foreground">{oauthUsername}</p>
-                <p className="text-sm text-foreground-muted">{providerName} account to link</p>
+                <p className="type-body-sm text-foreground-secondary">{providerName} account to link</p>
               </div>
             </div>
           </div>
@@ -121,7 +121,7 @@ export default function LinkAccountClient({
           <div>
             <label
               htmlFor="password"
-              className="block text-sm font-medium text-foreground-secondary mb-2"
+              className="type-label block text-foreground-secondary mb-2"
             >
               Enter password for {email}
             </label>
@@ -158,7 +158,7 @@ export default function LinkAccountClient({
             {isLinking ? (
               <>
                 <span className="w-4 h-4 border-2 border-foreground-inverse/30 border-t-foreground-inverse rounded-full animate-spin mr-2" />
-                Linking Accounts...
+                Linking accounts...
               </>
             ) : (
               'Link Accounts'
@@ -168,11 +168,11 @@ export default function LinkAccountClient({
 
         {/* Alternative option */}
         <div className="mt-6 pt-6 border-t border-border text-center">
-          <p className="text-sm text-foreground-muted mb-3">Don&apos;t want to link accounts?</p>
+          <p className="type-body-sm text-foreground-secondary mb-3">Don&apos;t want to link accounts?</p>
           <button
             onClick={handleKeepSeparate}
             disabled={isKeepingSeparate || isLinking}
-            className="btn btn-ghost text-sm text-foreground-secondary hover:text-foreground"
+            className="type-control btn btn-ghost text-foreground-secondary hover:text-foreground"
           >
             {isKeepingSeparate ? (
               <>

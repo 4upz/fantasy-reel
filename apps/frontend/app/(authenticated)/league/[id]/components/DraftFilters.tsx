@@ -92,7 +92,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
           placeholder="Search upcoming movies..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="input pl-12 pr-4 py-3 text-base"
+          className="type-input input pl-12 pr-4 py-3"
           data-testid="movie-search-input"
         />
         {loading && (
@@ -108,7 +108,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
         <select
           value={releaseWindow}
           onChange={(e) => setReleaseWindow(e.target.value as DraftFilters['releaseWindow'])}
-          className="bg-elevated border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:border-gold focus:ring-1 focus:ring-gold outline-none cursor-pointer transition-all hover:border-border-hover"
+          className="type-input bg-elevated border border-border rounded-lg px-4 py-2 text-foreground focus:border-gold focus:ring-1 focus:ring-gold outline-none cursor-pointer transition-all hover:border-border-hover"
         >
           {RELEASE_WINDOWS.map((option) => (
             <option key={option.value} value={option.value}>
@@ -122,7 +122,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
           <button
             onClick={() => setShowGenreDropdown(!showGenreDropdown)}
             className={cn(
-              'flex items-center gap-2 bg-elevated border rounded-lg px-4 py-2 text-sm transition-all hover:border-border-hover',
+              'type-control flex items-center gap-2 bg-elevated border rounded-lg px-4 py-2 transition-all hover:border-border-hover',
               selectedGenres.length > 0 ? 'border-gold text-gold' : 'border-border text-foreground-secondary'
             )}
           >
@@ -136,7 +136,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
                 {selectedGenres.length > 0 && (
                   <button
                     onClick={() => setSelectedGenres([])}
-                    className="w-full px-3 py-2 text-left text-sm text-crimson hover:bg-elevated rounded-lg transition-colors mb-1"
+                    className="type-control w-full px-3 py-2 text-left text-crimson hover:bg-elevated rounded-lg transition-colors mb-1"
                   >
                     Clear selection
                   </button>
@@ -148,7 +148,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
                       key={genre.id}
                       onClick={() => toggleGenre(genre.id)}
                       className={cn(
-                        'w-full flex items-center gap-3 px-3 py-2 text-left text-sm rounded-lg transition-all',
+                        'type-control w-full flex items-center gap-3 px-3 py-2 text-left rounded-lg transition-all',
                         isSelected ? 'bg-gold-muted text-gold' : 'text-foreground-secondary hover:bg-elevated hover:text-foreground'
                       )}
                     >
@@ -171,7 +171,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
 
         {/* Min Rating Slider */}
         <div className="flex items-center gap-3 bg-elevated border border-border rounded-lg px-4 py-2">
-          <span className="text-sm text-foreground-muted whitespace-nowrap">Min Rating</span>
+          <span className="type-body-sm text-foreground-secondary whitespace-nowrap">Min rating</span>
           <input
             type="range"
             min="0"
@@ -181,7 +181,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
             onChange={(e) => setMinRating(parseFloat(e.target.value))}
             className="w-20 h-1.5 bg-border rounded-full appearance-none cursor-pointer accent-gold [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-gold [&::-webkit-slider-thumb]:shadow-md"
           />
-          <span className={cn('text-sm font-medium w-8', minRating > 0 ? 'text-gold' : 'text-foreground-muted')}>
+          <span className={cn('type-label w-8', minRating > 0 ? 'text-gold' : 'text-foreground-secondary')}>
             {minRating > 0 ? minRating.toFixed(1) : 'Any'}
           </span>
         </div>
@@ -190,7 +190,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
-            className="flex items-center gap-1.5 text-sm text-foreground-muted hover:text-crimson transition-colors"
+            className="type-control flex items-center gap-1.5 text-foreground-secondary hover:text-crimson transition-colors"
           >
             <CloseIcon className="w-4 h-4" />
             Clear filters
@@ -199,7 +199,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
 
         {/* Results Count */}
         {totalResults !== undefined && (
-          <div className="ml-auto text-sm text-foreground-muted">
+          <div className="type-body-sm ml-auto text-foreground-secondary">
             <span className="text-foreground font-medium">{totalResults}</span> movies
           </div>
         )}
@@ -214,7 +214,7 @@ export default function DraftFilters({ onFiltersChange, totalResults, loading }:
               <button
                 key={genreId}
                 onClick={() => toggleGenre(genreId)}
-                className="inline-flex items-center gap-1.5 px-3 py-1 bg-gold-muted border border-gold rounded-full text-sm text-gold hover:bg-gold hover:text-background transition-all group"
+                className="type-control inline-flex items-center gap-1.5 px-3 py-1 bg-gold-muted border border-gold rounded-full text-gold hover:bg-gold hover:text-background transition-all group"
               >
                 {genre?.name}
                 <CloseIcon className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />

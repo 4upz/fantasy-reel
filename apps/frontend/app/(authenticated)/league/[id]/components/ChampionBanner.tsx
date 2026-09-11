@@ -45,24 +45,24 @@ export default function ChampionBanner({
         </span>
 
         <div className="min-w-0 flex-1">
-          <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-gold">{eyebrow}</p>
-          <h2 className="mt-1 font-display text-2xl font-semibold text-foreground">
+          <p className="type-meta text-gold">{eyebrow}</p>
+          <h2 className="mt-1 type-section text-foreground">
             {champions.length === 0
               ? 'No champion recorded'
               : champions.map(championName).join(' · ')}
           </h2>
           {owners.length > 0 && (
-            <p className="mt-0.5 text-sm text-foreground-muted">{owners.join(' · ')}</p>
+            <p className="mt-0.5 text-sm text-foreground-secondary">{owners.join(' · ')}</p>
           )}
         </div>
 
         {/* Mirrors TeamStandingCard's points column, so the eye lands in the
             same place it does on every row of the table below. */}
         <div className="flex-none text-right">
-          <div className="font-display text-[28px] font-bold leading-none text-gold">
+          <div className="type-number-lg text-gold">
             {formatFantasyPoints(points)}
           </div>
-          <div className="mt-1 text-[9px] uppercase tracking-[0.1em] text-foreground-muted">
+          <div className="mt-1 type-meta text-foreground-secondary">
             Final points
           </div>
         </div>

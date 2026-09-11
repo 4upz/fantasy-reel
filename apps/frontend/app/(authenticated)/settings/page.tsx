@@ -31,7 +31,7 @@ export default async function SettingsPage() {
       <div className="max-w-2xl mx-auto">
         {/* Page Header */}
         <header className="mb-8 sm:mb-12 animate-fade-in">
-          <h1 className="text-3xl sm:text-4xl font-display font-bold text-foreground tracking-tight">
+          <h1 className="type-page text-foreground">
             Settings
           </h1>
           <p className="mt-2 text-foreground-secondary">

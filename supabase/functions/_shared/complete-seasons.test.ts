@@ -58,15 +58,22 @@ function channel(leagueId: string): Row {
   }
 }
 
+function completionResult(db: MockDb, leagueId: string, standings: Row[]) {
+  const league = db.leagues.find((row) => row.id === leagueId)!
+  league.status = 'completed'
+  league.winner_team_ids = standings.filter((row) => row.rank === 1).map((row) => row.team_id)
+  return { ok: true, league, standings, winnerTeamIds: league.winner_team_ids, voidedBids: 0, expiredTrades: 0 }
+}
+
 function clientFor(db: MockDb, standingsByLeague: Record<string, Row[]> = {}) {
   return createMockDbClient(db, {
     rpc: {
-      recalculate_team_score_with_counterpicks: null,
       log_notification_delivery: null,
-      league_standings: (args?: Row) => standingsByLeague[args?.p_league_id as string] ?? [],
+      complete_league_season: (args?: Row) => {
+        const id = args?.p_league_id as string
+        return completionResult(db, id, standingsByLeague[id] ?? [])
+      },
     },
-    // Reproduces uq_discord_notification_log_no_movie: a second claim for the
-    // same (league, type) with no movie collides.
     unique: { discord_notification_log: ['league_id', 'movie_id', 'notification_type'] },
   })
 }
@@ -241,11 +248,10 @@ Deno.test('runCompleteSeasons', async (t) => {
     // The first league's standings blow up; the second must still be closed.
     const client = createMockDbClient(db, {
       rpc: {
-        recalculate_team_score_with_counterpicks: null,
         log_notification_delivery: null,
-        league_standings: (args?: Row) => {
+        complete_league_season: (args?: Row) => {
           if (args?.p_league_id === OVERDUE_ID) throw new Error('standings exploded')
-          return [
+          return completionResult(db, args?.p_league_id as string, [
             {
               team_id: TEAM_A,
               team_name: 'Alpha Pictures',
@@ -255,7 +261,7 @@ Deno.test('runCompleteSeasons', async (t) => {
               rank: 1,
               is_tied: false,
             },
-          ]
+          ])
         },
       },
     })

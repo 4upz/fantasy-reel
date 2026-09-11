@@ -47,12 +47,12 @@ interface SlotStatProps {
 function SlotStat({ label, used, total }: SlotStatProps): React.ReactElement {
   return (
     <div>
-      <p className="text-foreground-muted text-xs uppercase tracking-wide mb-1">{label}</p>
+      <p className="type-meta text-foreground-secondary mb-1">{label}</p>
       <div className="flex items-baseline gap-1">
-        <span className="font-display font-bold text-2xl sm:text-3xl text-foreground tabular-nums">
+        <span className="type-number-lg text-foreground">
           {used}
         </span>
-        <span className="text-foreground-muted text-base sm:text-lg tabular-nums">/ {total}</span>
+        <span className="text-foreground-secondary text-base sm:text-lg type-numeric">/ {total}</span>
       </div>
     </div>
   )
@@ -209,12 +209,12 @@ export default function BiddingShell({
         <div className="card p-4 sm:p-5">
           <div className="grid grid-cols-3 gap-3 sm:flex sm:items-center sm:gap-6">
             <div>
-              <p className="text-foreground-muted text-xs uppercase tracking-wide mb-1">Budget</p>
-              <p className="bid-amount-display text-2xl sm:text-3xl tabular-nums">
+              <p className="type-meta text-foreground-secondary mb-1">Budget</p>
+              <p className="type-number-lg bid-amount-display">
                 ${remainingBudget}
               </p>
               {totalPendingBids > 0 && (
-                <p className="text-foreground-muted text-xs mt-1 tabular-nums">
+                <p className="type-meta text-foreground-secondary mt-1">
                   ${totalPendingBids} in active bids
                 </p>
               )}
@@ -257,7 +257,7 @@ export default function BiddingShell({
                 data-testid="place-counterpick-bid-button"
               >
                 <Target className="w-5 h-5 mr-2" />
-                Place Counterpick Bid
+                Place counterpick bid
               </button>
             )}
           </div>
@@ -274,7 +274,7 @@ export default function BiddingShell({
                   href={`/league/${league.id}/bidding${tab.segment ? `/${tab.segment}` : ''}`}
                   aria-current={isActive ? 'page' : undefined}
                   data-testid={`bidding-tab-${tab.label.toLowerCase()}`}
-                  className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  className={`type-control px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${
                     isActive
                       ? 'text-gold border-gold'
                       : 'text-foreground-secondary hover:text-foreground border-transparent'

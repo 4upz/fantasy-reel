@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { toast } from 'sonner'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { callEdgeFunction } from '@/utils/supabase/functions'
@@ -17,6 +18,7 @@ interface Props {
   /** The completed season being rolled over. */
   leagueId: string
   seasonYear: number
+  nextSeasonId?: string
   participantNames: string[]
   /**
    * `primary` is the champion banner's single loud CTA; `secondary` is the
@@ -35,6 +37,7 @@ interface Props {
 export default function StartNextSeasonButton({
   leagueId,
   seasonYear,
+  nextSeasonId,
   participantNames,
   variant = 'primary',
 }: Props): React.ReactElement {
@@ -57,6 +60,10 @@ export default function StartNextSeasonButton({
   }, [leagueId, router])
 
   const { execute, isLoading, error } = useAsyncAction(startSeason)
+
+  if (nextSeasonId) {
+    return <Link href={`/league/${nextSeasonId}/dashboard`} className={`btn ${variant === 'primary' ? 'btn-primary' : 'btn-secondary'}`}>Open the {nextSeasonYear} season</Link>
+  }
 
   return (
     <>

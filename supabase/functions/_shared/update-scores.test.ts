@@ -8,7 +8,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { fetchMDBListRatings } from './scoring.ts'
+import { fetchMDBListRatings, MDBLIST_NOT_FOUND } from './scoring.ts'
 import type { MovieRecord, MDBListRating, MDBListResponse } from './scoring.ts'
 import { isValidUUID } from './utils.ts'
 
@@ -33,6 +33,7 @@ interface UpdateScoresResult {
   movies_fetched: number
   scores_updated: number
   errors: Array<{ movie_id: string; title: string; error: string }>
+  unscored: Array<{ movie_id: string; title: string; reason: string }>
 }
 
 // ============================================================================
@@ -49,14 +50,10 @@ interface MockSupabaseConfig {
     select?: MockQueryResult
     update?: MockQueryResult
   }
-  draft_picks?: {
+  score_update_candidates?: {
     select?: MockQueryResult
   }
-  /** Seasons still scoring -- the nightly run reads this before any holding. */
-  leagues?: {
-    select?: MockQueryResult
-  }
-  /** Active rosters, the nightly run's source of candidate movies. */
+  /** Active rosters for explicit league refreshes. */
   team_holdings?: {
     select?: MockQueryResult
   }
@@ -72,6 +69,7 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
   const upsertCalls: unknown[] = []
   const rpcCalls: Array<{ fn: string; params: unknown }> = []
   const selectedTables: string[] = []
+  const updateCalls: Array<{ table: string; values: unknown; id: string }> = []
 
   function chainable(result: MockQueryResult) {
     const chain = {
@@ -94,6 +92,7 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
     _rpcCalls: rpcCalls,
     /** Which tables the run actually read, in order. */
     _selectedTables: selectedTables,
+    _updateCalls: updateCalls,
     from(table: string) {
       const tableConfig = config[table as keyof MockSupabaseConfig]
       return {
@@ -103,9 +102,10 @@ function createMockSupabaseClient(config: MockSupabaseConfig = {}) {
             { data: [], error: null }
           return chainable(result)
         },
-        update: () => {
+        update: (values: unknown) => {
           return {
-            eq: (_col: string, _id: string) => {
+            eq: (_col: string, id: string) => {
+              updateCalls.push({ table, values, id })
               const result = (tableConfig as { update?: MockQueryResult })?.update ??
                 { data: null, error: null }
               return Promise.resolve(result)
@@ -220,31 +220,25 @@ function buildHandler(
           })
         }
 
-        const { data, error } = await supabaseClient.from('draft_picks').select().single()
+        const { data, error } = await supabaseClient.from('team_holdings').select().single()
         if (error) {
-          return new Response(JSON.stringify({ error: 'Failed to fetch drafted movies' }), {
+          return new Response(JSON.stringify({ error: 'Failed to fetch rostered movies' }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' },
           })
         }
-        moviesToUpdate = (data as MovieRecord[]) || []
+        moviesToUpdate = ((data ?? []) as HoldingRow[]).map((row) => ({
+          id: row.movie_id, tmdb_id: row.tmdb_id, imdb_id: row.imdb_id, title: row.title,
+        }))
       } else {
-        // Nightly run: released movies due a score, minus those whose every
-        // holder is in a finished season. Mirrors update-scores/index.ts --
-        // `movies` first, then team_holdings + leagues for the freeze check.
-        // (The real handler pages the candidate query; the mock returns one
-        // fixed page, so the mirror does a single pass.)
-        const { data, error } = await supabaseClient.from('movies').select().single()
+        const { data, error } = await supabaseClient.from('score_update_candidates').select().single()
         if (error) {
           return new Response(JSON.stringify({ error: 'Failed to fetch movies' }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' },
           })
         }
-
-        const candidates = ((data ?? []) as MovieRecord[])
-        const frozen = await frozenMovieIds(supabaseClient, candidates.map((m) => m.id))
-        moviesToUpdate = candidates.filter((m) => !frozen.has(m.id))
+        moviesToUpdate = (data as MovieRecord[]) || []
       }
 
       if (moviesToUpdate.length === 0) {
@@ -258,10 +252,22 @@ function buildHandler(
         movies_fetched: 0,
         scores_updated: 0,
         errors: [],
+        unscored: [],
+      }
+
+      // Mirrors index.ts markScoreChecked: stamp a movie as checked so it
+      // rotates to the back of the stalest-first queue instead of re-qualifying
+      // (and hogging a batch slot) on every run.
+      async function markScoreChecked(movieId: string): Promise<void> {
+        await supabaseClient
+          .from('movies')
+          .update({ scores_updated_at: new Date().toISOString() })
+          .eq('id', movieId)
       }
 
       for (const movie of moviesToUpdate) {
         if (!movie.tmdb_id) {
+          await markScoreChecked(movie.id)
           results.errors.push({
             movie_id: movie.id,
             title: movie.title,
@@ -283,19 +289,29 @@ function buildHandler(
           }
 
           if (fetchResult.error) {
-            results.errors.push({
-              movie_id: movie.id,
-              title: movie.title,
-              error: fetchResult.error,
-            })
+            if (fetchResult.error === MDBLIST_NOT_FOUND) {
+              await markScoreChecked(movie.id)
+              results.unscored.push({
+                movie_id: movie.id,
+                title: movie.title,
+                reason: 'not_on_mdblist',
+              })
+            } else {
+              results.errors.push({
+                movie_id: movie.id,
+                title: movie.title,
+                error: fetchResult.error,
+              })
+            }
             continue
           }
 
           if (fetchResult.ratings.length === 0) {
-            results.errors.push({
+            await markScoreChecked(movie.id)
+            results.unscored.push({
               movie_id: movie.id,
               title: movie.title,
-              error: 'No ratings available',
+              reason: 'no_ratings',
             })
             continue
           }
@@ -325,7 +341,7 @@ function buildHandler(
           }
 
           if (ratingsStored > 0) {
-            const { error: calcError } = await supabaseClient.rpc(
+            const { data: fantasyPts, error: calcError } = await supabaseClient.rpc(
               'calculate_movie_score',
               { p_movie_id: movie.id },
             )
@@ -334,6 +350,13 @@ function buildHandler(
                 movie_id: movie.id,
                 title: movie.title,
                 error: 'Score calculation failed',
+              })
+            } else if (fantasyPts === null) {
+              // Ratings stored but no Tomatometer among them (mirrors index.ts)
+              results.unscored.push({
+                movie_id: movie.id,
+                title: movie.title,
+                reason: 'no_rt_score',
               })
             } else {
               results.scores_updated++
@@ -440,6 +463,26 @@ function mockMDBListErrorFetch(status: number, body = ''): typeof globalThis.fet
     }
     return Promise.resolve(new Response('', { status: 200 }))
   }) as typeof globalThis.fetch
+}
+
+/**
+ * Run the handler over a single movie in movie_ids mode.
+ * Returns the mock client (for inspecting recorded calls) and the response.
+ */
+async function runSingleMovie(
+  options: {
+    fetchFn?: typeof globalThis.fetch
+    movie?: MovieRecord
+    rpc?: MockSupabaseConfig['rpc']
+  } = {},
+): Promise<{ client: ReturnType<typeof createMockSupabaseClient>; res: Response }> {
+  const client = createMockSupabaseClient({
+    movies: { select: { data: [options.movie ?? testMovie()], error: null } },
+    rpc: options.rpc,
+  })
+  const handler = buildHandler(DEFAULT_ENV, client, options.fetchFn)
+  const res = await handler(makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] }))
+  return { client, res }
 }
 
 // ============================================================================
@@ -688,20 +731,75 @@ Deno.test('update-scores scoring logic', async (t) => {
     assertEquals(body.errors[0].error, 'MDBList API authentication failed')
   })
 
-  await t.step('reports error when MDBList returns no ratings', async () => {
-    const movie = testMovie()
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [movie], error: null } },
+  await t.step('classifies empty MDBList ratings as unscored, not an error', async () => {
+    const { res } = await runSingleMovie({
+      fetchFn: mockMDBListFetch({ title: 'Test', ratings: [] }),
     })
 
-    const handler = buildHandler(DEFAULT_ENV, client, mockMDBListFetch({ title: 'Test', ratings: [] }))
-    const req = makeRequest('POST', { movie_ids: [VALID_MOVIE_ID] })
-
-    const res = await handler(req)
     assertEquals(res.status, 200)
     const body: UpdateScoresResult = await res.json()
-    assertEquals(body.errors.length, 1)
-    assertEquals(body.errors[0].error, 'No ratings available')
+    assertEquals(body.errors.length, 0, 'pending movies must not count as failures')
+    assertEquals(body.unscored.length, 1)
+    assertEquals(body.unscored[0].reason, 'no_ratings')
+  })
+
+  await t.step('classifies missing Tomatometer as unscored, not a score update', async () => {
+    const { res } = await runSingleMovie({
+      fetchFn: mockMDBListFetch(mdblistSuccess([{ source: 'imdb', value: 6.5, score: 65, votes: 1200 }])),
+      rpc: { calculate_movie_score: { data: null, error: null } },
+    })
+
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.movies_fetched, 1)
+    assertEquals(body.scores_updated, 0)
+    assertEquals(body.errors.length, 0)
+    assertEquals(body.unscored.length, 1)
+    assertEquals(body.unscored[0].reason, 'no_rt_score')
+  })
+
+  await t.step('stamps scores_updated_at when MDBList has no ratings', async () => {
+    const { client } = await runSingleMovie({
+      fetchFn: mockMDBListFetch({ title: 'Test', ratings: [] }),
+    })
+
+    assertEquals(client._updateCalls.length, 1)
+    assertEquals(client._updateCalls[0].table, 'movies')
+    assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
+    assertExists((client._updateCalls[0].values as { scores_updated_at?: string }).scores_updated_at)
+  })
+
+  await t.step('stamps scores_updated_at and classifies 404 as unscored', async () => {
+    const { client, res } = await runSingleMovie({ fetchFn: mockMDBListErrorFetch(404) })
+
+    const body: UpdateScoresResult = await res.json()
+    assertEquals(body.errors.length, 0, 'a movie MDBList lacks must not count as a failure')
+    assertEquals(body.unscored.length, 1)
+    assertEquals(body.unscored[0].reason, 'not_on_mdblist')
+    assertEquals(client._updateCalls.length, 1)
+    assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
+  })
+
+  await t.step('stamps scores_updated_at for movie without TMDb ID', async () => {
+    const { client } = await runSingleMovie({ movie: testMovie({ tmdb_id: 0 }) })
+
+    assertEquals(client._updateCalls.length, 1)
+    assertEquals(client._updateCalls[0].id, VALID_MOVIE_ID)
+  })
+
+  await t.step('does NOT stamp scores_updated_at on transient MDBList errors', async () => {
+    // Both failures should retry on the next run, so neither may stamp.
+    const transientCases: Array<{ label: string; fetchFn: typeof globalThis.fetch }> = [
+      { label: 'rate limit (429)', fetchFn: mockMDBListErrorFetch(429) },
+      {
+        label: 'network failure',
+        fetchFn: (() => Promise.reject(new Error('Network failure'))) as typeof globalThis.fetch,
+      },
+    ]
+
+    for (const { label, fetchFn } of transientCases) {
+      const { client } = await runSingleMovie({ fetchFn })
+      assertEquals(client._updateCalls.length, 0, `${label} must not stamp scores_updated_at`)
+    }
   })
 
   await t.step('increments scores_updated only when RPC succeeds', async () => {
@@ -745,7 +843,7 @@ Deno.test('update-scores scoring logic', async (t) => {
     const movie1 = testMovie()
     const movie2 = testMovie({ id: VALID_MOVIE_ID_2, tmdb_id: 680, imdb_id: 'tt0110912', title: 'Pulp Fiction' })
     const client = createMockSupabaseClient({
-      draft_picks: { select: { data: [movie1, movie2], error: null } },
+      team_holdings: { select: { data: [movie1, movie2].map((movie) => ({ ...movie, movie_id: movie.id })), error: null } },
       rpc: { calculate_movie_score: { data: 25, error: null } },
     })
 
@@ -793,78 +891,12 @@ Deno.test('update-scores scoring logic', async (t) => {
   })
 })
 
-// ============================================================================
-// Nightly run: which movies are even candidates
-// ============================================================================
-
-/**
- * Mirrors `frozenMovieIds` in update-scores/index.ts: a movie freezes only when
- * it is held and every league holding it has finished. Fails open.
- */
-async function frozenMovieIds(
-  supabaseClient: ReturnType<typeof createMockSupabaseClient>,
-  candidateIds: string[],
-): Promise<Set<string>> {
-  const frozen = new Set<string>()
-  if (candidateIds.length === 0) return frozen
-
-  const { data: holdings, error } = await supabaseClient.from('team_holdings').select().single()
-  if (error) return frozen
-
-  const rows = (holdings ?? []) as Array<{ movie_id: string; league_id: string }>
-  if (rows.length === 0) return frozen
-
-  const leaguesByMovie = new Map<string, string[]>()
-  for (const row of rows) {
-    const seen = leaguesByMovie.get(row.movie_id)
-    if (seen) seen.push(row.league_id)
-    else leaguesByMovie.set(row.movie_id, [row.league_id])
-  }
-
-  const { data: leagues, error: leaguesError } = await supabaseClient
-    .from('leagues').select().single()
-  if (leaguesError) return frozen
-
-  const completed = new Set(
-    ((leagues ?? []) as Array<{ id: string; status: string }>)
-      .filter((l) => l.status === 'completed')
-      .map((l) => l.id),
-  )
-
-  for (const [movieId, leagueIds] of leaguesByMovie) {
-    if (leagueIds.every((id) => completed.has(id))) frozen.add(movieId)
-  }
-  return frozen
-}
-
-/** A team_holdings row, as the nightly selection reads it. */
-function testHolding(
-  overrides: Partial<HoldingRow & { league_id: string }> = {},
-): HoldingRow & { league_id: string } {
-  return {
-    movie_id: VALID_MOVIE_ID,
-    league_id: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
-    tmdb_id: 550,
-    imdb_id: 'tt0137523',
-    title: 'Fight Club',
-    ...overrides,
-  }
-}
-
-Deno.test('update-scores nightly selection', async (t) => {
-  const RUNNING_LEAGUE = VALID_LEAGUE_ID
-  const FINISHED_LEAGUE = 'd4e5f6a7-b8c9-0123-defa-234567890123'
-
-  const leagues = (rows: Array<{ id: string; status: string }>) => ({
-    select: { data: rows, error: null },
-  })
-
-  await t.step('scores a released movie nobody holds', async () => {
-    // The bidding pool. Nothing holds it, so nothing can freeze it -- this is
-    // the case the first cut of this rule wrongly dropped.
+// The view's season/counterpick filtering is exercised against PostgreSQL in
+// the season integration suite; these cases cover the handler's view contract.
+Deno.test('update-scores nightly candidate query', async (t) => {
+  await t.step('refreshes movies returned by the scoring candidate view', async () => {
     const client = createMockSupabaseClient({
-      movies: { select: { data: [testMovie()], error: null } },
-      team_holdings: { select: { data: [], error: null } },
+      score_update_candidates: { select: { data: [testMovie()], error: null } },
       rpc: { calculate_movie_score: { data: 25, error: null } },
     })
 
@@ -875,131 +907,12 @@ Deno.test('update-scores nightly selection', async (t) => {
     const body: UpdateScoresResult = await res.json()
     assertEquals(body.movies_fetched, 1)
     assertEquals(body.scores_updated, 1)
+    assertEquals(client._selectedTables, ['score_update_candidates'])
   })
 
-  await t.step('scores a movie held in a season that is still running', async () => {
+  await t.step('fails the run when the candidate query errors', async () => {
     const client = createMockSupabaseClient({
-      movies: { select: { data: [testMovie()], error: null } },
-      team_holdings: {
-        select: { data: [testHolding({ league_id: RUNNING_LEAGUE })], error: null },
-      },
-      leagues: leagues([{ id: RUNNING_LEAGUE, status: 'active' }]),
-      rpc: { calculate_movie_score: { data: 25, error: null } },
-    })
-
-    const res = await buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))(
-      makeRequest('POST', {}),
-    )
-
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.movies_fetched, 1)
-  })
-
-  await t.step('does not score a movie whose only holder has finished', async () => {
-    // The freeze that matters: a completed season's standings are final, and
-    // one more MDBList refresh would move them.
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [testMovie()], error: null } },
-      team_holdings: {
-        select: { data: [testHolding({ league_id: FINISHED_LEAGUE })], error: null },
-      },
-      leagues: leagues([{ id: FINISHED_LEAGUE, status: 'completed' }]),
-    })
-
-    const res = await buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))(
-      makeRequest('POST', {}),
-    )
-
-    assertEquals(res.status, 200)
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.movies_fetched, 0)
-    assertEquals(body.scores_updated, 0)
-    assertEquals(client._rpcCalls.length, 0)
-  })
-
-  await t.step('still scores a movie held in a finished AND a running season', async () => {
-    // combined_score belongs to the movie, not to a league. One live holder is
-    // enough to keep it scoring; the finished league's totals are frozen by
-    // not being recalculated, not by starving the movie.
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [testMovie()], error: null } },
-      team_holdings: {
-        select: {
-          data: [
-            testHolding({ league_id: FINISHED_LEAGUE }),
-            testHolding({ league_id: RUNNING_LEAGUE }),
-          ],
-          error: null,
-        },
-      },
-      leagues: leagues([
-        { id: FINISHED_LEAGUE, status: 'completed' },
-        { id: RUNNING_LEAGUE, status: 'active' },
-      ]),
-      rpc: { calculate_movie_score: { data: 25, error: null } },
-    })
-
-    const res = await buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))(
-      makeRequest('POST', {}),
-    )
-
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.movies_fetched, 1)
-    assertEquals(body.scores_updated, 1)
-  })
-
-  await t.step('freezes only the movie that qualifies, not the whole batch', async () => {
-    const other = testMovie({
-      id: VALID_MOVIE_ID_2, tmdb_id: 680, imdb_id: 'tt0110912', title: 'Pulp Fiction',
-    })
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [testMovie(), other], error: null } },
-      team_holdings: {
-        select: {
-          data: [
-            testHolding({ league_id: FINISHED_LEAGUE }),
-            testHolding({ movie_id: VALID_MOVIE_ID_2, league_id: RUNNING_LEAGUE }),
-          ],
-          error: null,
-        },
-      },
-      leagues: leagues([
-        { id: FINISHED_LEAGUE, status: 'completed' },
-        { id: RUNNING_LEAGUE, status: 'active' },
-      ]),
-      rpc: { calculate_movie_score: { data: 25, error: null } },
-    })
-
-    const res = await buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))(
-      makeRequest('POST', {}),
-    )
-
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.movies_fetched, 1, 'only the movie with a live holder is scored')
-    assertEquals(client._rpcCalls.length, 1)
-  })
-
-  await t.step('fails open when the freeze check cannot be read', async () => {
-    // Guessing "frozen" on a bad read would silently halt scoring for every
-    // league, so an unreadable holdings query keeps the movie in the batch.
-    const client = createMockSupabaseClient({
-      movies: { select: { data: [testMovie()], error: null } },
-      team_holdings: { select: { data: null, error: { message: 'boom' } } },
-      rpc: { calculate_movie_score: { data: 25, error: null } },
-    })
-
-    const res = await buildHandler(DEFAULT_ENV, client, mockMDBListFetch(mdblistSuccess()))(
-      makeRequest('POST', {}),
-    )
-
-    assertEquals(res.status, 200)
-    const body: UpdateScoresResult = await res.json()
-    assertEquals(body.movies_fetched, 1)
-  })
-
-  await t.step('fails the run when the candidate query itself errors', async () => {
-    const client = createMockSupabaseClient({
-      movies: { select: { data: null, error: { message: 'boom' } } },
+      score_update_candidates: { select: { data: null, error: { message: 'boom' } } },
     })
 
     const res = await buildHandler(DEFAULT_ENV, client)(makeRequest('POST', {}))

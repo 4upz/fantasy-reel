@@ -45,7 +45,7 @@ test.describe('Critical Path: League Creation @critical @smoke', () => {
     await authenticatedPage.goto('/dashboard')
 
     // Click create league button (or "Create Your First League" in empty state)
-    const createButton = authenticatedPage.getByTestId('create-league-button')
+    const createButton = authenticatedPage.getByRole('button', { name: 'Create your first league', exact: true })
     await expect(createButton).toBeVisible({ timeout: 10000 })
     await createButton.click()
 
@@ -107,7 +107,7 @@ test.describe('Critical Path: Draft (Owner Flow) @critical @smoke', () => {
     // First create a league
     await authenticatedPage.goto('/dashboard')
 
-    const createButton = authenticatedPage.getByTestId('create-league-button')
+    const createButton = authenticatedPage.getByRole('button', { name: 'Create your first league', exact: true })
     await expect(createButton).toBeVisible({ timeout: 10000 })
     await createButton.click()
 
@@ -126,7 +126,7 @@ test.describe('Critical Path: Draft (Owner Flow) @critical @smoke', () => {
     await authenticatedPage.goto(`/league/${leagueId}/draft`)
 
     // Verify draft board is visible (in setup state for new league)
-    await expect(authenticatedPage.getByText('Draft Board')).toBeVisible({ timeout: 10000 })
+    await expect(authenticatedPage.getByRole('heading', { name: 'Draft board', exact: true })).toBeVisible({ timeout: 10000 })
 
     // Start draft button should be visible for owner
     await expect(authenticatedPage.getByRole('button', { name: /start draft/i })).toBeVisible()

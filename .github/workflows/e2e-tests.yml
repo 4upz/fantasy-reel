@@ -83,6 +83,9 @@ jobs:
           echo "supabase db reset failed after 3 attempts"
           exit 1
 
+      - name: Verify database integrity
+        run: supabase test db
+
       # Cache the browser bundle so most runs skip the CDN download entirely.
       # Keyed on the installed Playwright version so upgrades refresh it.
       - name: Get Playwright version

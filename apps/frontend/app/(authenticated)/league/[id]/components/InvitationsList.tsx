@@ -172,8 +172,8 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3">
-          <h3 className="text-lg font-medium text-foreground">Invitations</h3>
-          <span className="text-sm text-foreground-muted">
+          <h3 className="type-panel text-foreground">Invitations</h3>
+          <span className="type-body-sm text-foreground-secondary">
             ({invitations.length} total
             {pendingCount > 0 && `, ${pendingCount} pending`}
             {expiredCount > 0 && `, ${expiredCount} expired`})
@@ -187,7 +187,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
           {loading ? (
             <LoadingSpinner message="Loading invitations..." />
           ) : invitations.length === 0 ? (
-            <p className="text-sm text-foreground-muted text-center py-4">
+            <p className="type-body-sm text-foreground-secondary text-center py-4">
               No invitations sent yet. Use the &quot;Invite Players&quot; button to invite people to your league.
             </p>
           ) : (
@@ -270,12 +270,12 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
       <div className="flex-1 min-w-0 pr-4">
         <div className="flex items-center gap-2.5">
           <span className="font-medium text-foreground truncate">{invitation.email}</span>
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium text-foreground-secondary bg-surface border border-border shrink-0">
+          <span className="type-meta inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-foreground-secondary bg-surface border border-border shrink-0">
             <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
             {statusConfig.label}
           </span>
         </div>
-        <p className="mt-0.5 text-xs text-foreground-muted">
+        <p className="type-meta mt-0.5 text-foreground-secondary">
           Sent {formatDate(invitation.sent_at)}
           {invitation.responded_at && <span> · Responded {formatDate(invitation.responded_at)}</span>}
         </p>
@@ -286,7 +286,7 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
         <div className="relative" ref={menuRef}>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="p-1.5 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface transition-colors"
+            className="p-1.5 rounded-md text-foreground-secondary hover:text-foreground hover:bg-surface transition-colors"
             aria-label="Actions"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -303,7 +303,7 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
                     onCopy(invitation)
                     setMenuOpen(false)
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-foreground hover:bg-surface-hover transition-colors"
+                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 text-foreground hover:bg-surface-hover transition-colors"
                 >
                   {isCopied ? (
                     <>
@@ -329,7 +329,7 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
                     setMenuOpen(false)
                   }}
                   disabled={isCancelling}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-crimson hover:bg-error-bg disabled:opacity-50 transition-colors"
+                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 text-crimson hover:bg-error-bg disabled:opacity-50 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -344,7 +344,7 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
                     setMenuOpen(false)
                   }}
                   disabled={isResending}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-gold hover:bg-gold-muted disabled:opacity-50 transition-colors"
+                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 text-gold hover:bg-gold-muted disabled:opacity-50 transition-colors"
                 >
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -362,7 +362,7 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
 
 function ChevronIcon({ isExpanded }: { isExpanded: boolean }): React.ReactElement {
   return (
-    <span className="text-foreground-muted hover:text-foreground transition-colors">
+    <span className="text-foreground-secondary hover:text-foreground transition-colors">
       <svg
         className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
         fill="none"

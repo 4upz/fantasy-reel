@@ -28,9 +28,9 @@ export default function MovieFilters({ year, onYearChange, totalResults }: Props
           <select
             value={year ?? ''}
             onChange={(e) => onYearChange(e.target.value ? parseInt(e.target.value) : null)}
-            className="appearance-none bg-elevated border border-border rounded-lg px-4 py-2 pr-10 text-sm text-foreground focus:border-gold focus:ring-2 focus:ring-gold-muted focus:outline-none cursor-pointer transition-all hover:border-border-hover"
+            className="type-input appearance-none bg-elevated border border-border rounded-lg px-4 py-2 pr-10 text-foreground focus:border-gold focus:ring-2 focus:ring-gold-muted focus:outline-none cursor-pointer transition-all hover:border-border-hover"
           >
-            <option value="">All Years</option>
+            <option value="">All years</option>
             {years.map((y) => (
               <option key={y} value={y}>
                 {y}
@@ -53,7 +53,7 @@ export default function MovieFilters({ year, onYearChange, totalResults }: Props
         {hasFilters && (
           <button
             onClick={() => onYearChange(null)}
-            className="text-sm text-foreground-muted hover:text-gold transition-colors flex items-center gap-1"
+            className="type-control text-foreground-secondary hover:text-gold transition-colors flex items-center gap-1"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -65,7 +65,7 @@ export default function MovieFilters({ year, onYearChange, totalResults }: Props
 
       {/* Results count */}
       {totalResults > 0 && (
-        <p className="text-sm text-foreground-muted">
+        <p className="type-body-sm text-foreground-secondary">
           <span className="text-foreground font-medium">{totalResults.toLocaleString()}</span> movies
           found
         </p>

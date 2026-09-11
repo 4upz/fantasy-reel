@@ -983,6 +983,71 @@ Deno.test('sendScoreNotifications - notable miss: below threshold sends nothing'
   }
 })
 
+Deno.test('sendScoreNotifications - completed seasons get no movie, standings, or notable-miss updates', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const db = notableMissDb(34, 92)
+    db.leagues = [{ id: 'league-1', status: 'completed' }]
+    const client = createMockDbClient(db)
+    const context = notableMissContext({ placements: baseContext().placements })
+
+    const summary = await sendScoreNotifications(client, context)
+
+    assertEquals(summary, {
+      movie_updates: 0, standings_updates: 0, leagues_with_changes: 0, notable_misses: 0,
+    })
+    assertEquals(calls.length, 0)
+    assertEquals(db.discord_notification_log, [])
+    assertEquals(context.leagueIds, ['league-1'], 'the before snapshot is not mutated')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - a shared movie still notifies its active season', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const db = notableMissDb(34, 92)
+    db.leagues = [
+      { id: 'league-1', status: 'completed' },
+      { id: 'league-2', status: 'active' },
+    ]
+    db.discord_channels.push({ ...db.discord_channels[0], id: 'ch-2', league_id: 'league-2' })
+    const context = baseContext()
+    context.leagueIds.push('league-2')
+    context.placements.push({ ...context.placements[0], leagueId: 'league-2' })
+    context.droppedPlacements = [{
+      movieId: 'movie-1', leagueId: 'league-1', droppedByTeamName: 'Dropper',
+    }]
+
+    const summary = await sendScoreNotifications(createMockDbClient(db), context)
+
+    assertEquals(summary.movie_updates, 1)
+    assertEquals(summary.leagues_with_changes, 1)
+    assertEquals(summary.notable_misses, 0)
+    assertEquals(calls.length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - skips dispatch if season status cannot be read', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const { client, reads } = createMockSupabase({
+      leagues: [{ data: null, error: { message: 'database unavailable' } }],
+    })
+
+    const summary = await sendScoreNotifications(client, baseContext())
+
+    assertEquals(summary.leagues_with_changes, 0)
+    assertEquals(calls.length, 0)
+    assertEquals(reads, ['leagues'])
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 Deno.test('sendScoreNotifications - notable miss: only dropped placements qualify, not active ones', async () => {
   const calls = mockWebhookFetch()
   try {

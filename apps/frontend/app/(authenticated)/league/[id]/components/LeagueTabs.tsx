@@ -42,7 +42,7 @@ export default function LeagueTabs({
             key={tab.name}
             href={tab.href}
             data-testid={tab.secondary ? 'league-tab-secondary' : undefined}
-            className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-[11px] text-sm font-medium transition-colors ${
+            className={`type-control flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-[11px] transition-colors ${
               isActive ? 'border-gold text-gold' : `border-transparent ${inactiveText} hover:text-foreground`
             }`}
             aria-current={isActive ? 'page' : undefined}
@@ -50,7 +50,7 @@ export default function LeagueTabs({
             {tab.name}
             {tab.badge && (
               <>
-                <span aria-hidden="true" className="rounded-full bg-crimson px-1.5 py-0.5 text-xs text-foreground">
+                <span aria-hidden="true" className="type-meta rounded-full bg-crimson px-1.5 py-0.5 text-foreground">
                   {tab.badge}
                 </span>
                 <span className="sr-only">{tab.badge} notifications</span>

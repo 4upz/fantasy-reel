@@ -7,7 +7,7 @@ import { standings } from './standings.js'
 
 const linkedChannel = (
   status = 'active',
-  season: { season_year?: number | null; winner_team_ids?: string[] | null } = {}
+  season: { season_year?: number | null; winner_team_ids?: string[] | null; final_standings?: unknown[]; completed_at?: string } = {}
 ) => ({
   data: {
     league_id: 'league-1',
@@ -16,6 +16,8 @@ const linkedChannel = (
       status,
       season_year: season.season_year ?? 2026,
       winner_team_ids: season.winner_team_ids ?? null,
+      final_standings: season.final_standings ?? null,
+      completed_at: season.completed_at ?? null,
     },
   },
 })
@@ -333,5 +335,38 @@ describe('/standings seasons', () => {
 
     const description: string = interaction.editReply.mock.calls[0][0].embeds[0].data.description
     expect(description.split('\n')[0]).toContain('🏆')
+  })
+})
+
+
+describe('/standings frozen results', () => {
+  it('keeps final names, ranks and points even after live teams disappear or change', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel('completed', {
+          winner_team_ids: ['team-1'],
+          completed_at: '2026-12-31T12:00:00Z',
+          final_standings: [
+            { team_id: 'team-1', team_name: 'Original Champion', user_id: 'user-1', total_points: 200, rank: 1, is_tied: false },
+            { team_id: 'team-2', team_name: 'Original Runner', user_id: 'user-2', total_points: 100, rank: 2, is_tied: false },
+          ],
+        }),
+        league_participants: { data: [
+          participantRow('team-2', 'Renamed Runner', 'Bob', 'user-2', { total_points: 999 }),
+        ] },
+      },
+      rpc: { get_user_by_discord_id: { data: 'user-1' } },
+    })
+    const interaction = makeInteraction()
+    await standings.execute(interaction)
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toContain('Original Champion')
+    expect(embed.description).toContain('**200 pts**')
+    expect(embed.description).toContain('Original Runner')
+    expect(embed.description).toContain('**100 pts**')
+    expect(embed.description).not.toContain('999')
+    expect(embed.description).not.toContain('Renamed Runner')
+    expect(embed.description).toContain('(you)')
+    expect(embed.footer.text).toContain('Dec 31, 2026')
   })
 })

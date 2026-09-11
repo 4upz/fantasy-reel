@@ -73,5 +73,35 @@ SpinnerIcon
 StarIcon
 TradingPanel
 TrendingUpIcon
-UiPreview
 UserIcon
+
+# Complete rules-page content shared by /help and /how-to-play, including
+# route-specific final actions; not an independently composable UI primitive.
+HowToPlayContent
+
+# Homepage-only scene compositions with fixed demonstration data and public
+# poster paths. Register their reusable presentation components instead.
+DraftPreviewScene
+MovesPreviewScene
+RosterPreviewScene
+StandingsPreviewScene
+
+# Homepage camera/control orchestration over fixed scene dimensions and
+# data-preview-focus targets, not a general-purpose design-system component.
+SpotlightPreview
+
+# Newly scanned roster/standings directories: app containers, not primitives.
+# RosterClient owns roster/drop actions and opens the league movie modal.
+RosterClient
+# StandingsClient coordinates selected teams, accordions and the detail rail.
+StandingsClient
+# TeamStandingCard assembles holdings, expansion and league movie-modal state.
+TeamStandingCard
+# TeamDetailRail composes the selected team's roster and league movie modal.
+TeamDetailRail
+
+# Account actions post to the app's sign-out endpoint and navigate to settings;
+# this authenticated application menu is outside the presentation-only catalog.
+ProfileMenu
+# Commissioner form owns persistence, validation and toasts via update-league.
+TradeConfigSection

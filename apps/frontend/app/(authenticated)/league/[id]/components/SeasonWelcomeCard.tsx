@@ -62,12 +62,12 @@ export default function SeasonWelcomeCard({
       </span>
 
       <div className="min-w-0 flex-1">
-        <h2 className="font-display text-base font-semibold text-foreground">
+        <h2 className="type-card text-foreground">
           The {seasonYear} season is open
         </h2>
         <p className="mt-1 text-sm text-foreground-secondary">
           {teamName ? `Your team, ${teamName}, carried over.` : 'Your team carried over.'} Rosters
-          start empty — the draft hasn&apos;t been scheduled yet.
+          start empty for the new draft.
         </p>
         {previousSeason && (
           <Link
@@ -83,7 +83,7 @@ export default function SeasonWelcomeCard({
         type="button"
         onClick={dismiss}
         aria-label="Dismiss"
-        className="flex-none cursor-pointer p-1 text-foreground-muted transition-colors hover:text-foreground"
+        className="flex-none cursor-pointer p-1 text-foreground-secondary transition-colors hover:text-foreground"
       >
         <X className="h-4 w-4" />
       </button>

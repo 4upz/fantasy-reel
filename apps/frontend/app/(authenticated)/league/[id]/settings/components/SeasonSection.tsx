@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CalendarDays } from 'lucide-react'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { createClient } from '@/utils/supabase/client'
 import { fetchStandings } from '@/utils/seasonQueries'
@@ -18,6 +19,7 @@ import type { CompleteLeagueResponse } from './EndSeasonModal'
 
 interface Props {
   league: League
+  nextSeasonId?: string
   /** Display names of everyone still in the league, for the rollover confirm. */
   participantNames: string[]
   onUpdate: (league: League) => void
@@ -36,13 +38,7 @@ function seasonEndedMessage(result: CompleteLeagueResponse): string {
   return `Season ended. ${winners.map((team) => team.teamName).join(' and ')} share the title.`
 }
 
-/**
- * A league is only ever created for the season being played or the one about to
- * be - a 2019 or 2087 season has no movies to draft. Offering exactly those two
- * years makes the field unmistakable and removes every value the server would
- * refuse, so the constraint is visible in the control rather than discovered in
- * an error.
- */
+/** New season years follow the server's current-or-next-year constraint. */
 function seasonYearOptions(): [number, number] {
   const currentYear = new Date().getUTCFullYear()
   return [currentYear, currentYear + 1]
@@ -60,19 +56,16 @@ function seasonYearOptions(): [number, number] {
  */
 export default function SeasonSection({
   league,
+  nextSeasonId,
   participantNames,
   onUpdate,
 }: Props): React.ReactElement {
   const [thisYear, nextYear] = seasonYearOptions()
-  // A league already labelled something else - created before this constraint,
-  // or rolled over across a New Year - falls back to this year, which the owner
-  // then has to save deliberately.
-  const [seasonYear, setSeasonYear] = useState(
-    league.season_year === nextYear ? nextYear : thisYear
-  )
+  const yearOptions = [...new Set([league.season_year, thisYear, nextYear])].sort()
+  const [seasonYear, setSeasonYear] = useState(league.season_year)
   const [seasonEnd, setSeasonEnd] = useState(league.season_end)
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [isEnding, setIsEnding] = useState(false)
+  const [standingsError, setStandingsError] = useState<string | null>(null)
   const [standings, setStandings] = useState<StandingRow[] | null>(null)
 
   const isSetup = league.status === 'setup'
@@ -81,19 +74,23 @@ export default function SeasonSection({
 
   const hasChanges =
     (isSetup && seasonYear !== league.season_year) || seasonEnd !== league.season_end
-  const isSubmitDisabled = isSubmitting || !hasChanges || !seasonEnd
 
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
 
   const openEndSeason = useCallback(async () => {
+    setStandings(null)
+    setStandingsError(null)
     setIsEnding(true)
-    setStandings(await fetchStandings(supabase, league.id))
+    try {
+      setStandings(await fetchStandings(supabase, league.id))
+    } catch (error) {
+      setStandingsError(error instanceof Error ? error.message : 'Could not load standings. Please try again.')
+    }
   }, [supabase, league.id])
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
-    e.preventDefault()
-    setIsSubmitting(true)
+  const saveSeason = useCallback(async () => {
+    if (isCompleted) return
 
     const { data, error } = await callEdgeFunction<UpdateSeasonResponse>('update-league', {
       body: {
@@ -101,24 +98,28 @@ export default function SeasonSection({
         league_id: league.id,
         // The year is only sent while it is still editable, so a later save
         // cannot resubmit a value the server would refuse.
-        ...(isSetup ? { season_year: seasonYear } : {}),
+        ...(isSetup && seasonYear !== league.season_year ? { season_year: seasonYear } : {}),
         season_end: seasonEnd,
       },
     })
 
-    setIsSubmitting(false)
-
-    if (error) {
-      toast.error(error)
-      return
-    }
+    if (error) throw new Error(error)
 
     if (data?.league) {
       onUpdate(data.league)
       setSeasonYear(data.league.season_year)
       setSeasonEnd(data.league.season_end)
       toast.success('Season settings updated')
+      router.refresh()
     }
+  }, [isCompleted, isSetup, league.id, league.season_year, onUpdate, router, seasonEnd, seasonYear])
+
+  const { execute: save, isLoading: isSubmitting } = useAsyncAction(saveSeason)
+  const isSubmitDisabled = isCompleted || isSubmitting || !hasChanges || !seasonEnd
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
+    e.preventDefault()
+    void save().catch((error: Error) => toast.error(error.message))
   }
 
   return (
@@ -131,96 +132,101 @@ export default function SeasonSection({
         />
 
         <form onSubmit={handleSubmit}>
-          <div className="mb-6">
-            {/* Not a <label>: neither branch renders a form control to point
-                at - a group of radios, or a read-only value. */}
-            <p
-              id="season_year_label"
-              className="mb-2 block text-sm font-medium text-foreground-secondary"
-            >
-              Season Year
-            </p>
-            {isSetup ? (
-              <>
-                <div
-                  className="flex gap-2"
-                  role="radiogroup"
-                  aria-labelledby="season_year_label"
-                  aria-describedby="season_year_help"
-                >
-                  {[thisYear, nextYear].map((year) => {
-                    const selected = seasonYear === year
-                    return (
-                      <button
-                        key={year}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => setSeasonYear(year)}
-                        className={`btn px-4 py-1.5 font-mono text-sm tracking-[0.08em] ${
-                          selected
-                            ? 'btn-secondary'
-                            : 'border border-border bg-elevated text-foreground-secondary hover:border-border-hover hover:text-foreground'
-                        }`}
-                        data-testid={`season-year-${year}`}
-                      >
-                        {year}
-                      </button>
-                    )
-                  })}
+          <fieldset disabled={isCompleted || isSubmitting}>
+            <div className="mb-6">
+              {/* Not a <label>: neither branch renders a form control to point
+                  at - a group of radios, or a read-only value. */}
+              <p
+                id="season_year_label"
+                className="mb-2 block text-sm font-medium text-foreground-secondary"
+              >
+                Season Year
+              </p>
+              {isSetup ? (
+                <>
+                  <div
+                    className="flex gap-2"
+                    role="radiogroup"
+                    aria-labelledby="season_year_label"
+                    aria-describedby="season_year_help"
+                  >
+                    {yearOptions.map((year) => {
+                      const selected = seasonYear === year
+                      return (
+                        <button
+                          key={year}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          onClick={() => setSeasonYear(year)}
+                          className={`btn px-4 py-1.5 type-control ${
+                            selected
+                              ? 'btn-secondary'
+                              : 'border border-border bg-elevated text-foreground-secondary hover:border-border-hover hover:text-foreground'
+                          }`}
+                          data-testid={`season-year-${year}`}
+                        >
+                          {year}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p id="season_year_help" className="mt-1.5 text-xs text-foreground-secondary">
+                    Decides which movies are in play — anything released before this season is off
+                    the board. Creating this league for next year&apos;s movies? Pick {nextYear}.
+                  </p>
+                </>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`rounded-md border border-border bg-elevated px-2.5 py-1 text-foreground ${SEASON_YEAR_CLASS}`}
+                  >
+                    {league.season_year}
+                  </span>
+                  <p className="text-xs text-foreground-secondary">
+                    The season year is fixed once the draft starts.
+                  </p>
                 </div>
-                <p id="season_year_help" className="mt-1.5 text-xs text-foreground-muted">
-                  Decides which movies are in play — anything released before this season is off
-                  the board. Creating this league for next year&apos;s movies? Pick {nextYear}.
-                </p>
-              </>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span
-                  className={`rounded-md border border-border bg-elevated px-2.5 py-1 text-foreground ${SEASON_YEAR_CLASS}`}
-                >
-                  {league.season_year}
-                </span>
-                <p className="text-xs text-foreground-muted">
-                  The season year is fixed once the draft starts.
-                </p>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
 
-          <div className="mb-6">
-            <label
-              htmlFor="season_end"
-              className="mb-2 block text-sm font-medium text-foreground-secondary"
-            >
-              Season Ends
-            </label>
-            <input
-              type="date"
-              id="season_end"
-              value={seasonEnd}
-              onChange={(e) => setSeasonEnd(e.target.value)}
-              className="input w-48"
-              aria-describedby="season_end_help"
-            />
-            <p id="season_end_help" className="mt-1.5 text-xs text-foreground-muted">
-              Scores freeze on this date and the champion is recorded.
-              {league.trade_deadline
-                ? ` Trades close ${formatSeasonDate(league.trade_deadline)}.`
-                : ' Trades run until then unless you set a deadline.'}
-            </p>
-          </div>
+            <div className="mb-6">
+              <label
+                htmlFor="season_end"
+                className="mb-2 block text-sm font-medium text-foreground-secondary"
+              >
+                Season Ends
+              </label>
+              <input
+                type="date"
+                id="season_end"
+                value={seasonEnd}
+                min={`${seasonYear}-01-01`}
+                onChange={(e) => setSeasonEnd(e.target.value)}
+                className="input w-48"
+                aria-describedby="season_end_help"
+              />
+              <p id="season_end_help" className="mt-1.5 text-xs text-foreground-secondary">
+                {isCompleted
+                  ? 'This season is complete. Its dates and results are final.'
+                  : 'Scores freeze after this date and the champion is recorded.'}
+                {!isCompleted && (league.trade_deadline
+                  ? ` Trades close ${formatSeasonDate(league.trade_deadline)}.`
+                  : ' Trades run until then unless you set a deadline.')}
+              </p>
+            </div>
 
-          <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary">
-            {isSubmitting ? (
-              <>
-                <ButtonSpinner />
-                Saving...
-              </>
-            ) : (
-              'Save Changes'
-            )}
-          </button>
+            <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary">
+              {isSubmitting ? (
+                <>
+                  <ButtonSpinner />
+                  Saving...
+                </>
+              ) : (
+                'Save Changes'
+              )}
+            </button>
+          </fieldset>
         </form>
 
         {(isActive || isCompleted) && (
@@ -230,7 +236,7 @@ export default function SeasonSection({
                 <>
                   <div>
                     <p className="text-sm font-medium text-foreground">End season now</p>
-                    <p className="mt-0.5 text-xs text-foreground-muted">
+                    <p className="mt-0.5 text-xs text-foreground-secondary">
                       Freezes scores, records the champion, and tells everyone.
                     </p>
                   </div>
@@ -247,15 +253,16 @@ export default function SeasonSection({
                 <>
                   <div>
                     <p className="text-sm font-medium text-foreground">
-                      Start the {league.season_year + 1} season
+                      {nextSeasonId ? 'Open' : 'Start'} the {league.season_year + 1} season
                     </p>
-                    <p className="mt-0.5 text-xs text-foreground-muted">
+                    <p className="mt-0.5 text-xs text-foreground-secondary">
                       Carries everyone over with their team names. Rosters start empty.
                     </p>
                   </div>
                   <StartNextSeasonButton
                     leagueId={league.id}
                     seasonYear={league.season_year}
+                    nextSeasonId={nextSeasonId}
                     participantNames={participantNames}
                     variant="secondary"
                   />
@@ -272,7 +279,8 @@ export default function SeasonSection({
           seasonYear={league.season_year}
           seasonEnd={league.season_end}
           standings={standings ?? []}
-          isLoadingStandings={standings === null}
+          isLoadingStandings={standings === null && !standingsError}
+          standingsError={standingsError}
           onClose={() => setIsEnding(false)}
           onCompleted={(result) => {
             setIsEnding(false)

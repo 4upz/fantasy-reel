@@ -29,7 +29,7 @@ export default function FranchiseSummary({ history, defaultOpen = false, classNa
   return (
     <div className={className} data-testid="franchise-summary">
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <p className="flex flex-wrap items-center gap-1.5 text-xs text-foreground-secondary">
+        <p className="type-meta flex flex-wrap items-center gap-1.5 text-foreground-secondary">
           <span>{entryLabel(history)} · series avg</span>
           <TomatometerScore score={history.average_rt} size="sm" showAccolade={false} />
           <span>· last one</span>
@@ -40,7 +40,7 @@ export default function FranchiseSummary({ history, defaultOpen = false, classNa
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
           aria-controls={listId}
-          className="inline-flex items-center gap-1 -my-1 -mr-2 px-2 py-1 rounded-md text-xs font-medium text-gold hover:text-gold-hover hover:bg-gold-muted transition-colors"
+          className="type-control inline-flex items-center gap-1 -my-1 -mr-2 px-2 py-1 rounded-md text-gold hover:text-gold-hover hover:bg-gold-muted transition-colors"
         >
           {open ? 'Hide history' : 'Franchise history'}
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -58,10 +58,10 @@ export default function FranchiseSummary({ history, defaultOpen = false, classNa
                   <Film className="w-3 h-3 m-auto mt-2 text-foreground-muted" />
                 )}
               </div>
-              <span className="flex-1 min-w-0 truncate text-xs text-foreground">
+              <span className="type-meta flex-1 min-w-0 break-words text-foreground">
                 {film.title}
                 {film.release_date && (
-                  <span className="text-foreground-muted"> {getReleaseYear(film.release_date)}</span>
+                  <span className="text-foreground-secondary"> {getReleaseYear(film.release_date)}</span>
                 )}
               </span>
               <TomatometerScore score={film.rt_score} size="sm" showAccolade={false} />

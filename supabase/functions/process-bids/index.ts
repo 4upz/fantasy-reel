@@ -370,17 +370,7 @@ function seasonYearFor(seasonYears: Map<string, number>, leagueId: string): numb
 /** What survives the season filter, plus the season each survivor belongs to. */
 interface LiveSeasonBids<T> {
   bids: T[]
-  /**
-   * `leagues.season_year` per league, for the release-date guard downstream.
-   *
-   * It comes back from this same read rather than a second one because the
-   * league set is identical: everything that reaches a contest came through
-   * here first. The guard judges a movie against the season it belongs to
-   * rather than the wall-clock year (see isUpcomingMovie) -- a 2026 season
-   * processing bids in January 2027 must not void every remaining title in its
-   * pool just because the calendar rolled over. A league missing from the map
-   * falls back to the current year, which is the behaviour this replaced.
-   */
+  /** Season years for release-date validation after the calendar rolls over. */
   seasonYears: Map<string, number>
 }
 
@@ -405,15 +395,14 @@ interface LiveSeasonBids<T> {
  * those feed the end-of-run emails and that same channel. `completeLeague()`
  * owns telling people the season ended.
  *
- * A league whose row could not be read is left alone rather than treated as
- * finished, matching how this file handles every other unreadable row -- and
- * the awarding path fails it closed anyway, since an unreadable league config
- * yields zero capacity.
+ * An unreadable league is deferred without cancelling its bids. Its status
+ * must be known before any award, even if later capacity queries succeed.
  */
 async function excludeFinishedSeasonBids<T extends { id: string; league_id: string }>(
   serviceClient: ServiceClient,
   bids: T[],
   table: 'pickup_bids' | 'counterpick_bids',
+  errors: ProcessingError[],
 ): Promise<LiveSeasonBids<T>> {
   const seasonYears = new Map<string, number>()
   if (bids.length === 0) return { bids, seasonYears }
@@ -428,29 +417,41 @@ async function excludeFinishedSeasonBids<T extends { id: string; league_id: stri
   )
 
   const completed = new Set<string>()
+  const readable = new Set(leagues.map((league) => league.id))
+  for (const leagueId of leagueIds) {
+    if (!readable.has(leagueId)) {
+      errors.push({ movie_key: leagueId, error: 'Failed to read league status before processing bids' })
+    }
+  }
   for (const league of leagues) {
     if (league.status === COMPLETED_STATUS) completed.add(league.id)
     if (league.season_year != null) seasonYears.set(league.id, league.season_year)
   }
-  if (completed.size === 0) return { bids, seasonYears }
-
   const surviving: T[] = []
   const cancelled: T[] = []
   for (const bid of bids) {
     if (completed.has(bid.league_id)) cancelled.push(bid)
-    else surviving.push(bid)
+    else if (readable.has(bid.league_id)) surviving.push(bid)
   }
 
-  if (cancelled.length > 0) {
-    await serviceClient
+  for (let offset = 0; offset < cancelled.length; offset += ID_BATCH_SIZE) {
+    const batch = cancelled.slice(offset, offset + ID_BATCH_SIZE)
+    const { data: claimed, error } = await serviceClient
       .from(table)
       .update({ status: 'cancelled' })
-      .in('id', cancelled.map((bid) => bid.id))
+      .in('id', batch.map((bid) => bid.id))
+      .in('status', ['active', 'outbid'])
+      .select('id')
+
+    if (error) {
+      log.error('Failed to cancel bids in finished seasons', { bid_type: table, error: serializeError(error) })
+      errors.push({ movie_key: batch[0].league_id, error: 'Failed to cancel bids in finished seasons' })
+      continue
+    }
 
     log.info('Cancelled bids in finished seasons', {
       bid_type: table,
-      leagues: completed.size,
-      bids_cancelled: cancelled.length,
+      bids_cancelled: claimed?.length ?? 0,
     })
   }
 
@@ -1371,6 +1372,7 @@ async function processCounterpickBids(
     serviceClient,
     dueBids,
     'counterpick_bids',
+    errors,
   )
   if (liveSeasonBids.length === 0) return results
 
@@ -1798,8 +1800,9 @@ Deno.serve(async (req) => {
 
     // Before the keys are built, so a group still inside its counter window is
     // cancelled rather than deferred into a season that has ended.
+    const errors: ProcessingError[] = []
     const { bids: liveSeasonBidsToProcess, seasonYears: pickupSeasonYears } =
-      await excludeFinishedSeasonBids(serviceClient, bidsToProcess, 'pickup_bids')
+      await excludeFinishedSeasonBids(serviceClient, bidsToProcess, 'pickup_bids', errors)
 
     // One entry per contested movie (league_id + tmdb_id). Each movie's full bid
     // set is re-read below, so only the key is needed here.
@@ -1808,7 +1811,6 @@ Deno.serve(async (req) => {
     )
 
     const results: ProcessResult[] = []
-    const errors: ProcessingError[] = []
     const voidedPickupResults: VoidedBidResult[] = []
     const deferred: DeferredGroup[] = []
 

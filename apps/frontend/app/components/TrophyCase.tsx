@@ -36,13 +36,13 @@ export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactEle
           <Trophy className="h-5 w-5 text-gold" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="font-display font-semibold text-foreground">Trophy case</span>
+          <span className="type-card text-foreground">Trophy case</span>
           {titles.length > 0 ? (
-            <p className="font-display text-sm text-gold">
+            <p className="type-body-sm text-gold">
               {titles.length} {titles.length === 1 ? 'championship' : 'championships'}
             </p>
           ) : (
-            <p className="truncate text-sm text-foreground-muted">No titles yet</p>
+            <p className="truncate text-sm text-foreground-secondary">No titles yet</p>
           )}
         </div>
       </div>
@@ -50,7 +50,7 @@ export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactEle
       {titles.length === 0 ? (
         // An empty case is a hook, not an error: hiding it means nobody learns
         // that titles are a thing you can win.
-        <p className="text-sm text-foreground-muted">Win a season to hang the first one.</p>
+        <p className="text-sm text-foreground-secondary">Win a season to hang the first one.</p>
       ) : (
         <ul className="space-y-1">
           {visible.map((title) => (
@@ -59,7 +59,7 @@ export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactEle
                 href={`/league/${title.leagueId}/standings`}
                 className="group flex items-baseline gap-2.5 rounded-md px-1 py-1 transition-colors hover:bg-surface-hover"
               >
-                <span className={`flex-none text-[11px] text-foreground-muted ${SEASON_YEAR_CLASS}`}>
+                <span className={`flex-none type-meta text-foreground-secondary ${SEASON_YEAR_CLASS}`}>
                   {title.seasonYear}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-sm text-foreground transition-colors group-hover:text-gold">
@@ -69,7 +69,7 @@ export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactEle
             </li>
           ))}
           {hidden > 0 && (
-            <li className="px-1 pt-1 text-xs text-foreground-muted">+{hidden} more</li>
+            <li className="px-1 pt-1 text-xs text-foreground-secondary">+{hidden} more</li>
           )}
         </ul>
       )}

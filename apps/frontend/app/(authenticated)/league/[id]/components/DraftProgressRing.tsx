@@ -1,5 +1,3 @@
-'use client'
-
 import { CheckIcon } from './Icons'
 
 interface Props {
@@ -10,9 +8,9 @@ interface Props {
 }
 
 const SIZES = {
-  sm: { ring: 48, stroke: 4, text: 'text-xs' },
-  md: { ring: 64, stroke: 5, text: 'text-sm' },
-  lg: { ring: 80, stroke: 6, text: 'text-base' },
+  sm: { ring: 48, stroke: 4, text: 'type-meta' },
+  md: { ring: 64, stroke: 5, text: 'type-body-sm' },
+  lg: { ring: 80, stroke: 6, text: 'type-body' },
 }
 
 export default function DraftProgressRing({
@@ -63,7 +61,7 @@ export default function DraftProgressRing({
 
         {/* Center Content */}
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`font-display font-bold ${text} ${isComplete ? 'text-success' : 'text-foreground'}`}>
+          <span className={`type-numeric font-bold ${text} ${isComplete ? 'text-success' : 'text-foreground'}`}>
             {percentage}%
           </span>
         </div>
@@ -79,9 +77,9 @@ export default function DraftProgressRing({
       {showLabel && (
         <div className="text-center">
           <p className={`${text} text-foreground-secondary`}>
-            <span className="font-medium text-foreground">{current}</span>
+            <span className="type-numeric text-foreground">{current}</span>
             <span className="mx-1">/</span>
-            <span>{total}</span>
+            <span className="type-numeric">{total}</span>
             <span className="ml-1">picks</span>
           </p>
         </div>

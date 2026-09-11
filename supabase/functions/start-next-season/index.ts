@@ -96,6 +96,22 @@ Deno.serve(async (req) => {
       p_season_year: seasonYear,
     })
 
+    if (rpcError?.code === '23505') {
+      // Another request may have rolled over after the preflight lookup.
+      const { data: concurrentSeason } = await serviceClient
+        .from('leagues')
+        .select('id')
+        .eq('series_id', source.series_id)
+        .eq('season_year', seasonYear)
+        .maybeSingle()
+      if (concurrentSeason) {
+        return errorResponse(`The ${seasonYear} season has already been started`, 409, {
+          league_id: concurrentSeason.id,
+          season_year: seasonYear,
+        })
+      }
+    }
+
     if (rpcError || !newLeagueId) {
       log.error('Failed to start next season', {
         league_id,

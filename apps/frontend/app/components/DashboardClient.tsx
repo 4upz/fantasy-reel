@@ -15,6 +15,8 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [leagues, setLeagues] = useState<League[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retry, setRetry] = useState(0)
   const [userId, setUserId] = useState<string | null>(null)
 
   const supabase = useMemo(() => createClient(), [])
@@ -27,35 +29,33 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
     let cancelled = false
 
     async function loadLeagues(): Promise<void> {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session || cancelled) return
+      setLoading(true)
+      setLoadError(null)
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (sessionError) throw sessionError
+        if (!session) throw new Error('Your session has expired. Sign in again to load your leagues.')
+        if (cancelled) return
+        setUserId(session.user.id)
 
-      setUserId(session.user.id)
-
-      const { data, error } = await supabase
-        .from('leagues')
-        .select('*')
-        .order('created_at', { ascending: false })
-
-      if (cancelled) return
-
-      if (error) {
-        console.error('Error fetching leagues:', error)
-        setLoading(false)
-        return
+        const { data, error } = await supabase
+          .from('leagues')
+          .select('*')
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        if (!cancelled) setLeagues((data ?? []) as League[])
+      } catch (error) {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Could not load your leagues. Please try again.')
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-
-      setLeagues((data ?? []) as League[])
-      setLoading(false)
     }
 
     loadLeagues()
     return () => {
       cancelled = true
     }
-  }, [supabase])
+  }, [supabase, retry])
 
   const handleLeagueCreated = useCallback((league: League) => {
     setLeagues((prev) => [league, ...prev])
@@ -86,8 +86,8 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       {/* Hero Section */}
       <div className="mb-8 text-center lg:text-left">
-        <h1 className="text-3xl sm:text-4xl font-bold font-display text-foreground">
-          Your Leagues
+        <h1 className="type-page text-foreground">
+          Your leagues
         </h1>
         <p className="text-foreground-secondary mt-2 max-w-xl lg:max-w-none">
           Draft upcoming movies, compete with friends, and score points based on reviews.
@@ -105,14 +105,21 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
       <div className="dashboard-grid">
         {/* Main column - Leagues */}
         <div>
-          <LeagueManager
-            leagues={leagues}
-            loading={loading}
-            showCreateModal={showCreateModal}
-            onModalClose={() => setShowCreateModal(false)}
-            onCreateClick={() => setShowCreateModal(true)}
-            onLeagueCreated={handleLeagueCreated}
-          />
+          {loadError ? (
+            <div className="alert alert-error" role="alert">
+              <p>{loadError}</p>
+              <button type="button" className="btn btn-secondary mt-3" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+            </div>
+          ) : (
+            <LeagueManager
+              leagues={leagues}
+              loading={loading}
+              showCreateModal={showCreateModal}
+              onModalClose={() => setShowCreateModal(false)}
+              onCreateClick={() => setShowCreateModal(true)}
+              onLeagueCreated={handleLeagueCreated}
+            />
+          )}
         </div>
 
         {/* Sidebar - Actions and Stats */}

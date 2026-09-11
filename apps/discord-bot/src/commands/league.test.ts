@@ -186,6 +186,29 @@ describe('/league seasons', () => {
     expect(description).not.toMatch(/Gamma.*🏆/)
   })
 
+  it('uses the recorded standings and competition ranks after completion', async () => {
+    mockSupabase({ tables: {
+      discord_channels: linked('completed', {
+        winner_team_ids: ['team-1', 'team-2'],
+        final_standings: [
+          { team_id: 'team-1', team_name: 'Frozen Alpha', total_points: 200, rank: 1, is_tied: true },
+          { team_id: 'team-2', team_name: 'Frozen Beta', total_points: 200, rank: 1, is_tied: true },
+          { team_id: 'team-3', team_name: 'Frozen Gamma', total_points: 100, rank: 3, is_tied: false },
+        ],
+      }),
+      leagues: leagueConfig,
+      league_participants: { data: null, count: 3 },
+      team_scores: { data: [{ total_points: 999, teams: { id: 'team-3', name: 'Changed Team' } }] },
+    } })
+    const interaction = makeInteraction()
+    await league.execute(interaction)
+    const description = interaction.editReply.mock.calls[0][0].embeds[0].data.description
+    expect(description).toContain('1. Frozen Alpha -- 200 pts')
+    expect(description).toContain('1. Frozen Beta -- 200 pts')
+    expect(description).toContain('3. Frozen Gamma -- 100 pts')
+    expect(description).not.toContain('999')
+  })
+
   it('leaves a running season standings untrophied', async () => {
     mockSupabase({
       tables: {

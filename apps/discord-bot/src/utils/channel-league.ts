@@ -4,6 +4,16 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 export const UNLINKED_CHANNEL_MESSAGE =
   'This channel is not linked to a league. Use /set-league first.'
 
+export interface SeasonStanding {
+  team_id: string
+  team_name: string
+  display_name?: string | null
+  user_id: string | null
+  total_points: number
+  rank: number
+  is_tied: boolean
+}
+
 export interface LinkedLeague {
   leagueId: string
   leagueName: string
@@ -21,6 +31,8 @@ export interface LinkedLeague {
    * fall back to whoever sorts first.
    */
   winnerTeamIds: string[] | null
+  finalStandings: SeasonStanding[] | null
+  completedAt: string | null
 }
 
 /**
@@ -33,7 +45,7 @@ export async function resolveLinkedLeague(
 ): Promise<LinkedLeague | null> {
   const { data, error } = await supabase
     .from('discord_channels')
-    .select('league_id, leagues(name, status, season_year, winner_team_ids)')
+    .select('league_id, leagues(name, status, season_year, winner_team_ids, final_standings, completed_at)')
     .eq('channel_id', channelId)
     .maybeSingle()
 
@@ -44,6 +56,8 @@ export async function resolveLinkedLeague(
     status?: string
     season_year?: number | null
     winner_team_ids?: string[] | null
+    final_standings?: SeasonStanding[] | null
+    completed_at?: string | null
   } | null
 
   return {
@@ -52,6 +66,8 @@ export async function resolveLinkedLeague(
     leagueStatus: league?.status || 'unknown',
     seasonYear: league?.season_year ?? null,
     winnerTeamIds: league?.winner_team_ids ?? null,
+    finalStandings: league?.status === 'completed' ? league.final_standings ?? null : null,
+    completedAt: league?.completed_at ?? null,
   }
 }
 

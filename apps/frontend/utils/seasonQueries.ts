@@ -15,8 +15,7 @@ export async function fetchStandings(
 ): Promise<StandingRow[]> {
   const { data, error } = await supabase.rpc('league_standings', { p_league_id: leagueId })
   if (error) {
-    console.error('Error loading standings:', error)
-    return []
+    throw new Error('Could not load standings. Please try again.')
   }
   return (data ?? []) as StandingRow[]
 }
@@ -40,8 +39,7 @@ export async function fetchSeriesSeasonRecords(
     .order('season_year', { ascending: false })
 
   if (error) {
-    console.error('Error loading season records:', error)
-    return []
+    throw new Error('Could not load season history. Please try again.')
   }
   return (data ?? []) as League[]
 }
@@ -58,8 +56,7 @@ export async function fetchSeriesSeasons(
     .order('season_year', { ascending: false })
 
   if (error) {
-    console.error('Error loading seasons:', error)
-    return []
+    throw new Error('Could not load seasons. Please try again.')
   }
 
   return (data ?? []).map((row) => ({

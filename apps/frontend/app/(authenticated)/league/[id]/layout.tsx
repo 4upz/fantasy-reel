@@ -59,7 +59,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
   const participantCount = countResult.count ?? 0
   const wonSeasonIds = await fetchWonSeasonIds(supabase, user.id, seasons)
 
-  const accessLabel = typedLeague.invite_only ? 'Invite Only' : 'Open'
+  const accessLabel = typedLeague.invite_only ? 'Invite only' : 'Open'
 
   // Only a league still in setup can be joined, so the open slots are only news
   // while they can be filled. After that, show the roster of players who are in.
@@ -98,17 +98,17 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
               "2026 · Invite Only · 3 participants" and desktop reads
               "Active · 2026 · Invite Only · 3 participants".
             */}
-            <div className="flex basis-full items-center gap-1.5 text-xs text-foreground-muted lg:basis-auto lg:gap-2 lg:text-sm">
-              <span aria-hidden className="hidden text-foreground-muted/50 lg:inline">·</span>
+            <div className="type-meta flex basis-full items-center gap-1.5 text-foreground-secondary lg:basis-auto lg:gap-2">
+              <span aria-hidden className="hidden text-foreground-secondary/50 lg:inline">·</span>
               <SeasonSwitcher
                 currentLeagueId={typedLeague.id}
                 seasonYear={typedLeague.season_year}
                 seasons={seasons}
                 wonSeasonIds={wonSeasonIds}
               />
-              <span aria-hidden className="text-foreground-muted/50">·</span>
+              <span aria-hidden className="text-foreground-secondary/50">·</span>
               <span>{accessLabel}</span>
-              <span aria-hidden className="text-foreground-muted/50">·</span>
+              <span aria-hidden className="text-foreground-secondary/50">·</span>
               <span>{participantLabel}</span>
             </div>
           </div>

@@ -83,7 +83,7 @@ export default function ParticipantsSection({
                 <div className="flex items-center gap-3">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">
+                      <span className="type-label text-foreground">
                         {getParticipantDisplayName(participant)}
                       </span>
                       {isOwner && (
@@ -91,7 +91,7 @@ export default function ParticipantsSection({
                       )}
                     </div>
                     {participant.teams && (
-                      <span className="text-xs text-foreground-muted">
+                      <span className="type-meta text-foreground-secondary">
                         {participant.teams.name}
                       </span>
                     )}
@@ -114,7 +114,7 @@ export default function ParticipantsSection({
         </div>
 
         {participants.length === 0 && (
-          <p className="text-center text-foreground-muted py-8">
+          <p className="text-center text-foreground-secondary py-8">
             No participants yet
           </p>
         )}

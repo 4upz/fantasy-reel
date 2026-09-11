@@ -42,7 +42,7 @@ export default function MovieSearchBar({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search for movies..."
-        className={`input w-full pl-12 pr-12 rounded-xl ${compact ? 'py-2.5 text-base' : 'py-4 text-lg'}`}
+        className={`input w-full pl-12 pr-12 rounded-xl ${compact ? 'py-2.5' : 'py-4'}`}
       />
 
       <div className="absolute right-4 top-1/2 -translate-y-1/2">
@@ -52,7 +52,7 @@ export default function MovieSearchBar({
         {!loading && value && (
           <button
             onClick={onClear}
-            className="p-1 text-foreground-muted hover:text-foreground transition-colors rounded-full hover:bg-surface-hover"
+            className="p-1 text-foreground-secondary hover:text-foreground transition-colors rounded-full hover:bg-surface-hover"
             aria-label="Clear search"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

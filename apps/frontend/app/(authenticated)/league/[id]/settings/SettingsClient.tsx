@@ -20,12 +20,14 @@ interface Props {
   league: League
   participants: ParticipantWithProfile[]
   currentUserId: string
+  nextSeasonId?: string
 }
 
 export default function SettingsClient({
   league: initialLeague,
   participants: initialParticipants,
   currentUserId,
+  nextSeasonId,
 }: Props): React.ReactElement {
   const router = useRouter()
   const [league, setLeague] = useState(initialLeague)
@@ -57,8 +59,8 @@ export default function SettingsClient({
     <div className="animate-fade-in">
       {/* Header */}
       <header className="mb-8">
-        <h1 className="text-3xl sm:text-4xl font-display font-bold text-foreground">
-          League Settings
+        <h1 className="type-page text-foreground">
+          League settings
         </h1>
         <p className="text-foreground-secondary mt-2">
           Manage settings for <span className="text-foreground font-medium">{league.name}</span>
@@ -104,8 +106,7 @@ export default function SettingsClient({
           onUpdate={handleLeagueUpdate}
         />
 
-        {/* No isLocked: trade settings stay editable through the season, which
-            is the whole point of a deadline and a review window. */}
+        {/* Trade settings stay editable until completion. */}
         <TradeConfigSection
           league={league}
           onUpdate={handleLeagueUpdate}
@@ -116,6 +117,7 @@ export default function SettingsClient({
         <SeasonSection
           league={league}
           participantNames={participantNames}
+          nextSeasonId={nextSeasonId}
           onUpdate={handleLeagueUpdate}
         />
 

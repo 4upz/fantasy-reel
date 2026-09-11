@@ -214,7 +214,7 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 
 ## Design System: Cinematic Dark
 
-The app uses a **Cinematic Dark** theme inspired by premium streaming services and awards show aesthetics. All UI should feel like a high-end cinema experience.
+The app uses **Cinematic Dark** with the warmth and personality of an independent cinema: a charcoal canvas, matte gold film-conversation mark, expressive headings, and clear gameplay information. [The typography guide](docs/brand/typography.md) is the canonical scale and role reference; [brand guidance](docs/brand/README.md) covers approved logos and icons.
 
 ### Design Tokens (defined in `globals.css` via Tailwind v4 `@theme`)
 
@@ -231,7 +231,7 @@ The app uses a **Cinematic Dark** theme inspired by premium streaming services a
 | `crimson-hover` | `#b85c68` | Crimson hover state |
 | `foreground` | `#e8e8e8` | Primary text |
 | `foreground-secondary` | `#b8b0a4` | Secondary text (warm gray) |
-| `foreground-muted` | `#8a8078` | Muted/placeholder text (warm taupe) |
+| `foreground-muted` | `#8a8078` | De-emphasized text where contrast permits; use secondary for meaningful small text on cards/inputs |
 | `border` | `#2e2e2e` | Default borders |
 | `border-hover` | `#404040` | Hover borders |
 | `error` | `#d65c5c` | Error states (muted red) |
@@ -249,9 +249,11 @@ The app uses a **Cinematic Dark** theme inspired by premium streaming services a
 - `info` / `info-bg` - Blue
 
 **Typography:**
-- `font-display` - Montserrat (headings, titles)
-- `font-body` - DM Sans (body text, default)
-- `font-mono` - Geist Mono (code)
+- `font-display` - Bricolage Grotesque; prefer the role classes in `app/typography.css` for size, weight, spacing, and optical settings.
+- `font-body` - DM Sans (body, controls, compact movie/team titles, metadata).
+- `type-number`, `type-number-lg`, `type-numeric` - Bricolage with tabular lining digits, optical size 12, width 100. The bundled DM Sans has no `tnum` substitution.
+- `font-mono` - system monospace for join codes and diagnostics.
+- Both brand families load locally from `app/fonts/` through `next/font/local`; do not restore network font imports or a separate display family.
 
 **Shadows:**
 - `shadow-soft` - Subtle elevation
@@ -315,7 +317,7 @@ The app uses a **Cinematic Dark** theme inspired by premium streaming services a
 
 1. **Always use semantic color tokens** - Use `bg-surface` not `bg-[#1c1c1c]`
 2. **Use component classes** - Use `.card` not manual `bg-surface border border-border rounded-lg`
-3. **Headings use `font-display`** - Add `font-display` to h1, h2, h3 elements
+3. **Choose typography by role** - Use `type-page`, `type-section`, `type-panel`, and other canonical roles. Dense movie/team headings use DM Sans `type-row-title` even when their semantic element is h1–h3. Keep functional metadata at least 12px, and meaningful small text on cards/inputs in `foreground-secondary`.
 4. **Gold for interactive elements** - Links, buttons, focus states
 5. **Animations for state changes** - Use `animate-fade-in` for appearing content
 6. **"Your turn" glow** - Use `animate-glow-pulse` with `bg-success-bg border-success`
@@ -375,7 +377,9 @@ const { execute, isLoading, error, reset } = useAsyncAction(myAction)
 ```
 apps/frontend/app/
 ├── globals.css                    # @theme tokens, @layer base, @layer components
-├── layout.tsx                     # Font imports (Montserrat, DM Sans)
+├── typography.css                 # Canonical type-* role implementation
+├── fonts/                         # Local Bricolage Grotesque and DM Sans WOFF2
+├── layout.tsx                     # next/font/local loading and metadata
 ├── components/                    # Shared components
 │   ├── FormError.tsx              # Uses .alert-* classes
 │   ├── LoadingSpinner.tsx         # Uses border-gold
@@ -475,9 +479,12 @@ to the series.
 `_shared/league-completion.ts` `completeLeague()` is the single definition of
 "the season is over", called by exactly two things: the commissioner's
 `update-league` `complete_league` action and the `complete-seasons` cron. It
-rescores, ranks via `league_standings`, then does a **check-and-set** on
-`status = 'active'` — the loser of a race gets `not_active` and announces
-nothing. Announcements (Discord final standings with 👑 for the previous
+calls the service-role-only `complete_league_season` RPC. One transaction locks
+the season, rescores, ranks via `league_standings`, cancels pending activity, and
+records the result. A competing completion gets `not_active` and announces
+nothing; a scoring or cleanup failure rolls back the entire completion. The
+cron also rechecks `season_end` under the lock before closing a season.
+Announcements (Discord final standings with 👑 for the previous
 season's champion, in-app `season_completed`, the `season-final-standings`
 email) run after the state change and never roll it back.
 
@@ -493,8 +500,12 @@ email) run after the state change and never roll it back.
   `accepted`) goes to `expired` with `expired_reason = 'season_completed'`.
   Without this, the next `process-bids` / `process-trades` run would move
   rosters *after* the final standings were announced.
-- `completed_at` / `winner_team_ids` / `final_standings` are write-once in
-  practice; there is no reopen-for-corrections path yet.
+- Database guards keep `completed_at` / `winner_team_ids` / `final_standings`
+  write-once, reject gameplay writes after completion, and preserve finished
+  team totals during shared-movie score updates. There is no reopen path.
+- `score_update_candidates` filters movies belonging only to completed seasons
+  before the nightly score batch limit/count. Active counterpicks count even
+  after their original holding is dropped; the view is service-role-only.
 - `complete-seasons` (Vercel Cron, `0 9 * * *`) ends any active season past
   `season_end` and posts a 7-day heads-up, made idempotent by a
   `discord_notification_log` row with `movie_id IS NULL` (partial unique index

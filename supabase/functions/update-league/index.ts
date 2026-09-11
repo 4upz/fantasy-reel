@@ -11,7 +11,8 @@ import {
 import { MIN_NEW_BID_CUTOFF_HOURS, MAX_NEW_BID_CUTOFF_HOURS } from '../_shared/bid-window.ts'
 import { deriveExpiryBounds, type LeagueExpiryConfig } from '../_shared/trade-expiry.ts'
 import { completeLeague } from '../_shared/league-completion.ts'
-import { createLogger } from '../_shared/logger.ts'
+import { assertLeagueWritable } from '../_shared/league-status.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('update-league')
 
@@ -188,6 +189,12 @@ Deno.serve(async (req) => {
       return errorResponse('Only the league owner can modify settings', 403)
     }
 
+    // Series names remain editable across years. Season settings are frozen.
+    if (action === 'update_season_config' || action === 'update_trade_config') {
+      const writable = assertLeagueWritable(league)
+      if (!writable.ok) return writable.response
+    }
+
     // Route to action handler
     switch (action) {
       case 'update_info':
@@ -276,7 +283,7 @@ async function handleUpdateInfo(
       .eq('id', league.series_id)
 
     if (seriesError) {
-      console.error('Error updating series name:', seriesError)
+      log.error('Error updating series name', { league_id: league.id, error: serializeError(seriesError) })
       return errorResponse('Failed to update league', 500)
     }
   }
@@ -303,7 +310,7 @@ async function handleUpdateInfo(
     .single()
 
   if (readError) {
-    console.error('Error reading updated league:', readError)
+    log.error('Error reading updated league', { league_id: league.id, error: serializeError(readError) })
     return errorResponse('Failed to update league', 500)
   }
 
@@ -733,7 +740,7 @@ async function handleUpdateSeasonConfig(
     .single()
 
   if (error) {
-    console.error('Error updating season config:', error)
+    log.error('Error updating season config', { league_id: league.id, error: serializeError(error) })
     return errorResponse('Failed to update season configuration', 500)
   }
 

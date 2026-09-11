@@ -72,7 +72,7 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
       {!isLocked && (
         <button
           type="button"
-          className="cursor-grab active:cursor-grabbing text-foreground-muted hover:text-foreground-secondary touch-none"
+          className="cursor-grab active:cursor-grabbing text-foreground-secondary hover:text-foreground-secondary touch-none"
           aria-label={`Drag to reorder ${getParticipantDisplayName(participant)}`}
           {...attributes}
           {...listeners}
@@ -81,11 +81,11 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
         </button>
       )}
       <div className="w-8 h-8 rounded-full bg-gold/15 flex items-center justify-center flex-shrink-0">
-        <span className="text-sm font-bold text-gold">{position}</span>
+        <span className="type-row-title text-gold">{position}</span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-foreground truncate">
+          <span className="type-label text-foreground truncate">
             {getParticipantDisplayName(participant)}
           </span>
           {isOwner && (
@@ -93,7 +93,7 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
           )}
         </div>
         {participant.teams && (
-          <span className="text-xs text-foreground-muted truncate block">
+          <span className="type-meta text-foreground-secondary truncate block">
             {participant.teams.name}
           </span>
         )}
@@ -248,7 +248,7 @@ export default function DraftOrderSection({
           </div>
 
           {!league.custom_draft_order && (
-            <p className="text-xs text-foreground-muted mb-4">
+            <p className="type-meta text-foreground-secondary mb-4">
               Draft order will be automatically randomized when the draft starts unless you set it manually.
             </p>
           )}

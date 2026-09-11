@@ -61,15 +61,15 @@ export default function SeasonHistoryList({ rows }: Props): React.ReactElement {
                         className="h-3.5 w-3.5 flex-none translate-y-0.5 text-gold"
                         aria-hidden="true"
                       />
-                      <span className="min-w-0 flex-1 truncate font-display font-semibold text-gold">
+                      <span className="min-w-0 flex-1 truncate type-card text-gold">
                         {row.champions.join(' · ')}
                       </span>
-                      <span className="flex-none font-display text-sm font-semibold text-foreground-secondary">
+                      <span className="flex-none type-number text-foreground-secondary">
                         {formatFantasyPoints(row.championPoints)}
                       </span>
                     </>
                   ) : (
-                    <span className="flex-1 text-sm text-foreground-muted">
+                    <span className="flex-1 text-sm text-foreground-secondary">
                       {row.isCurrent ? 'This season, still being played' : 'Still being played'}
                     </span>
                   )}
@@ -82,12 +82,12 @@ export default function SeasonHistoryList({ rows }: Props): React.ReactElement {
                 </div>
 
                 {row.runnersUp.length > 0 && (
-                  <p className="mt-1 truncate text-xs text-foreground-muted">
+                  <p className="mt-1 truncate text-xs text-foreground-secondary">
                     {row.runnersUp.map((team) => `${ordinal(team.rank)} ${team.name}`).join(' · ')}
                   </p>
                 )}
 
-                <p className="mt-1.5 text-xs text-foreground-muted transition-colors group-hover:text-gold">
+                <p className="mt-1.5 text-xs text-foreground-secondary transition-colors group-hover:text-gold">
                   View season →
                 </p>
               </div>

@@ -60,7 +60,7 @@ shims so components render statically:
 | `next/image` | `<img>` (honours `fill`) | real Image needs the optimizer endpoint + build config |
 | `next/navigation` | no-op router | nothing to navigate to |
 | `@/utils/supabase/client` | inert client, chainable, resolves empty | no project, no session |
-| `@/utils/supabase/functions` | `callEdgeFunction` → `{data:null,error:null}` | write actions no-op instead of throwing |
+| `@/utils/supabase/functions` | inert write helper and `edgeFetcher` | writes no-op; browse/search return empty pages; details report unavailable without a fixture |
 
 These replace the **host**, never a component — every component in the bundle
 is the app's real shipped code.
@@ -73,7 +73,8 @@ extension list tries the bare path first and would return the directory.
 ## Tailwind: compile before every bundle build
 
 `cssEntry` is a **compiled** artifact (`.design-sync/.cache/styles.css`), not a
-source file. `cfg.buildCmd` is the Tailwind CLI invocation. Run it **before**
+source file. `cfg.buildCmd` runs `node .design-sync/build-styles.mjs`, using the app's existing PostCSS/Tailwind dependencies. It refreshes local fonts and embedded
+brand assets as well as CSS. Run it **before**
 `package-build.mjs` — `package-build` only copies the CSS, and
 `preview-rebuild.mjs` does not touch it at all. Symptom of forgetting: cards
 render with correct markup but missing utilities.
@@ -161,56 +162,76 @@ here, and validate re-flagged all six.
   ln -sfn ../../apps/frontend/node_modules/@types/react     node_modules/@types/react
   ln -sfn ../../apps/frontend/node_modules/@types/react-dom node_modules/@types/react-dom
   ```
-- Install the Tailwind CLI alongside the staged converter:
-  `(cd .ds-sync && npm i @tailwindcss/cli)`.
+- Prepare CSS, fonts, and embedded brand SVGs with
+  `node .design-sync/build-styles.mjs`; no separate Tailwind CLI install is needed.
 - Chromium for the render check: `node_modules/.bin/playwright install chromium`
   (the repo pins playwright 1.58.1).
 
-## Fonts are vendored, deliberately
+## Fonts, typography, and brand assets follow the app
 
-The app loads Montserrat and DM Sans through `next/font/google`, which does not
-exist outside Next. `.design-sync/fonts/` holds latin + latin-ext woff2 files
-and a hand-written `brand-fonts.css`, wired via `cfg.extraFonts`, so rendered
-designs get the real brand faces with no network dependency. Regenerate only
-if the brand faces change.
+The canonical specification is [docs/brand/typography.md](../docs/brand/typography.md).
+The app loads Bricolage Grotesque and DM Sans through `next/font/local`.
+`build-styles.mjs` copies those exact WOFF2 files from `apps/frontend/app/fonts/`
+to `.design-sync/fonts/`; `brand-fonts.css` declares the same variable axes and
+CSS variables through `cfg.extraFonts`. Do not download separate font builds
+or restore the old per-weight font cache. Font licenses remain in
+`docs/brand/source/OFL.txt` and `OFL-DM-Sans.txt`; preserve them with any export
+that redistributes the fonts.
+
+`tailwind-entry.css` imports the app's real `globals.css`, which imports
+`app/typography.css`. All `type-*` roles therefore share one implementation.
+Bricolage numeric roles use optical size 12 and tabular lining digits;
+`tabular-nums` alone does not equalize the bundled DM Sans digits.
+
+The same build embeds `logo-dark.svg`, `logo-compact-dark.svg`, and
+`mark-gold.svg` from `apps/frontend/public/brand/v1/` into
+`.design-sync/assets/brand.json`. The `next/image` host shim maps only those
+approved `/brand/v1/` paths to SVG data URLs. `BrandLogo` and `NavLogo` remain
+the actual app components; the asset mapping supplies the missing public-file
+host. Regenerate before bundling after any artwork/font change. The mapping
+and font copies are reproducible checked-in inputs for the standalone bundle.
+
+Updating these local files does not update an external design project. Any
+external sync is a separate publishing operation; retain its actual validation
+and upload record rather than claiming the design project is current from git
+state alone.
 
 ## Deliberately excluded: TMDbAttribution
 
 `TMDbAttribution` is a real, shipped component and is legally required wherever
 TMDb data is shown — but it is **not** in this sync. Its logo is
 `<Image src="/images/tmdb-logo.svg">`, a root-absolute path into the app's
-`public/` directory. Nothing in `public/` is part of a component bundle, and
+`public/` directory. That path is not included in the brand asset mapping, and
 the design project has no `/images/` route, so the mark resolves to a broken
 image — in the preview card *and* in every design the agent builds with it.
 The disclaimer text renders fine; the logo does not.
 
-**To bring it back**, a future sync needs to serve that path: add `images/**`
-to the upload plan's `writes` (and `deletes`), copy
-`apps/frontend/public/images/tmdb-logo.svg` to `ds-bundle/images/`, then
-re-add the export to `entry.tsx` and the `componentSrcMap` pin. That is a
-plan change, so it needs a fresh `finalize_plan` approval — which is why it
-was not done mid-run.
+**To bring it back**, first add its exact public image path to the embedded
+asset mapping and validate the resulting image in the standalone renderer.
+Then re-add its export, source pin, documentation, and preview. The current
+brand mapping intentionally covers only the approved Fantasy Reel SVGs.
 
-## `guidelinesGlob` is intentionally empty
+## Curated typography guideline
 
-The default glob picked up `docs/*.md` — deployment runbooks, E2E test plans,
-and a QA bug report. Those are developer docs, not design guidance, and they
-would have shipped into the design agent's context. Design guidance belongs in
-`.design-sync/conventions.md` (the `readmeHeader`).
+`guidelinesGlob` includes only `docs/brand/typography.md`. Do not broaden it to
+`docs/*.md`: deployment runbooks, E2E plans, and QA reports are not design
+guidelines. The short usage summary stays in `.design-sync/conventions.md`
+(`readmeHeader`); the complete active type scale stays in the canonical guide.
 
-## Known render warns (triaged, expected)
+## Historical render warnings
 
-These fire on every run and are **not** regressions:
+The previous converter run triaged these warnings. Recheck them when the
+components or renderer change; this list does not establish that the current
+bundle has passed browser validation:
 
 - `[RENDER_THIN] DiscordIcon`, `GoogleIcon` — brand glyphs are pure SVG with no
   text; "no text and paints nothing" is a false positive on an icon. Verified
   visually in the review sheet.
 - `[RENDER_THIN] SectionHeader` — a title-only primitive; with default props
   its entire content legitimately is its own name.
-- `[RENDER_BLANK] DraftTicker` — a marquee whose content is animated in; a
-  static screenshot catches it mid-transform.
 
-A warn **not** in this list is new — look at it before recording it.
+Inspect any additional warning before recording it; do not suppress a new
+blank or broken-asset result by extending this list without evidence.
 
 ## The drift check (CI)
 
@@ -240,6 +261,30 @@ Run it locally the same way CI does:
 node .design-sync/check-drift.mjs --since origin/main
 ```
 
+### Homepage presentation registry (PR #89)
+
+The native homepage registers its shared bid, draft, roster, standings and
+trade presentations, plus `MarketingHeader`. The complete `HowToPlayContent`,
+fixed-data preview scenes and `SpotlightPreview` camera composition remain
+outside the component library; each exclusion is explained in
+`drift-ignore.txt`. The retired homepage exports, pins, overrides and previews
+have been removed.
+
+The roster and standings pins also bring those directories into the drift
+scan. `MovieScoreCard` and `TeamBudgetSummary` are registered alongside the
+shared counterpick mark, date/time field, offer-expiry controls and franchise
+summaries. `ProfileMenu` and `TradeConfigSection` follow the existing exclusion
+policy: they own account actions and persisted commissioner settings.
+
+Standalone rendering needs both the compiled shared stylesheet (`cssEntry`)
+and CSS emitted from component module imports. In particular,
+`MarketingHeader.module.css` supplies the mobile popover placement. Verify
+that popover in a small viewport, with one header mounted at the top of the
+page. The primary story intentionally renders only one header.
+
+Local registry, type and render checks do not publish or update the external
+design project. An authorized external re-sync still follows the runbook below.
+
 ## Re-sync runbook
 
 From the repo root, after the fresh-clone setup above:
@@ -248,11 +293,10 @@ From the repo root, after the fresh-clone setup above:
 # 1. stage the converter (a stale .ds-sync/ runs an old converter)
 mkdir -p .ds-sync && cp -r "<skill-dir>"/{package-build.mjs,package-validate.mjs,package-capture.mjs,resync.mjs,lib,storybook} .ds-sync/
 echo '{"name":"ds-sync-deps","private":true}' > .ds-sync/package.json
-(cd .ds-sync && npm i esbuild ts-morph @types/react @tailwindcss/cli)
+(cd .ds-sync && npm i esbuild ts-morph @types/react)
 
-# 2. compile the stylesheet FIRST (cfg.buildCmd)
-node .ds-sync/node_modules/@tailwindcss/cli/dist/index.mjs \
-  -i .design-sync/tailwind-entry.css -o .design-sync/.cache/styles.css
+# 2. prepare shared styles, local fonts, and brand assets FIRST (cfg.buildCmd)
+node .design-sync/build-styles.mjs
 
 # 3. fetch the anchor, then run the driver
 #    (get _ds_sync.json from the project → .design-sync/.cache/remote-sync.json)

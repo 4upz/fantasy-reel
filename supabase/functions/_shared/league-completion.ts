@@ -8,10 +8,10 @@
  * ranked once, the champion (or co-champions) are written onto the season row,
  * and everyone is told.
  *
- * The state change is a check-and-set on `status = 'active'`. Two callers
- * racing -- the owner clicking as the cron runs -- means the loser gets
- * `not_active` and sends nothing, rather than a second set of final-standings
- * announcements naming a champion that was already named.
+ * The database transaction locks the season, refreshes scores, freezes its
+ * result, and cancels pending activity together. A competing caller gets
+ * `not_active` and sends nothing; any database failure leaves completion
+ * retryable instead of permanently recording a partially refreshed winner.
  *
  * Notifications never roll anything back. By the time they run the season is
  * already closed and `winner_team_ids` is already written; a Discord webhook
@@ -37,7 +37,6 @@ import {
 } from './email-templates/season-final-standings.ts'
 import { createLogger, serializeError } from './logger.ts'
 import { COMPLETED_STATUS } from './league-status.ts'
-import { OPEN_TRADE_STATUSES } from './trade-expiry.ts'
 
 const log = createLogger('shared/league-completion')
 
@@ -94,7 +93,7 @@ export interface CompleteLeagueSuccess {
 
 export interface CompleteLeagueFailure {
   ok: false
-  reason: 'not_found' | 'not_active'
+  reason: 'not_found' | 'not_active' | 'not_due'
 }
 
 export type CompleteLeagueResult = CompleteLeagueSuccess | CompleteLeagueFailure
@@ -113,219 +112,41 @@ export async function completeLeague(
   leagueId: string,
   options: { trigger: CompleteLeagueTrigger }
 ): Promise<CompleteLeagueResult> {
-  const { data: league, error: leagueError } = await serviceClient
-    .from('leagues')
-    .select('*')
-    .eq('id', leagueId)
-    .maybeSingle()
-
-  if (leagueError) {
-    // A read failure is not a business answer -- let the caller's outer catch
-    // turn it into a 500 rather than reporting the season as missing.
-    throw new Error(`Failed to load league ${leagueId}: ${leagueError.message}`)
+  const { data, error } = await serviceClient.rpc('complete_league_season', {
+    p_league_id: leagueId,
+    p_trigger: options.trigger,
+  })
+  if (error) {
+    throw new Error(`Failed to complete league ${leagueId}: ${error.message}`)
   }
-  if (!league) return { ok: false, reason: 'not_found' }
-  if (league.status !== 'active') return { ok: false, reason: 'not_active' }
+  if (!data) throw new Error(`Completion returned no result for league ${leagueId}`)
 
-  await refreshTeamScores(serviceClient, leagueId)
+  const result = data as CompleteLeagueResult
+  if (!result.ok) return result
 
-  const standings = await loadStandings(serviceClient, leagueId)
-  const winnerTeamIds = standings.filter((row) => row.rank === 1).map((row) => row.team_id)
-
-  // Resolved before the state change because the snapshot needs the names, and
-  // the emails below reuse the same lookup rather than repeating it.
-  const recipients = await resolveRecipients(serviceClient, standings.map((row) => row.user_id))
-  const finalStandings: FinalStandingRow[] = standings.map((row) => ({
-    ...row,
-    display_name: recipients.get(row.user_id)?.name ?? null,
-  }))
-
-  // Check-and-set. The `.eq('status', 'active')` is the whole race guard: the
-  // second caller matches no rows and comes back with `not_active`.
-  const { data: updatedLeague, error: updateError } = await serviceClient
-    .from('leagues')
-    .update({
-      status: COMPLETED_STATUS,
-      completed_at: new Date().toISOString(),
-      winner_team_ids: winnerTeamIds,
-      final_standings: finalStandings,
-    })
-    .eq('id', leagueId)
-    .eq('status', 'active')
-    .select()
-    .maybeSingle()
-
-  if (updateError) {
-    throw new Error(`Failed to complete league ${leagueId}: ${updateError.message}`)
-  }
-  if (!updatedLeague) return { ok: false, reason: 'not_active' }
-
-  const completed = updatedLeague as CompletableLeague
-
-  // Only the caller that won the race gets here, so the season is closed
-  // exactly once and everything below runs exactly once.
-  const { voidedBids, expiredTrades } = await freezePendingActivity(serviceClient, leagueId)
-
+  const { league, standings, winnerTeamIds, voidedBids, expiredTrades } = result
   log.info('Season completed', {
     league_id: leagueId,
-    series_id: completed.series_id,
-    season_year: completed.season_year,
+    series_id: league.series_id,
+    season_year: league.season_year,
     trigger: options.trigger,
     winner_team_ids: winnerTeamIds,
     voided_bids: voidedBids,
     expired_trades: expiredTrades,
   })
 
-  // Past the point of no return. Everything below is announcement.
-  await notifySeasonCompleted(serviceClient, completed, standings, winnerTeamIds, recipients)
-
-  return { ok: true, league: completed, standings, winnerTeamIds, voidedBids, expiredTrades }
-}
-
-// ============================================================================
-// Freezing what was still in flight
-// ============================================================================
-
-/** `pickup_bids` / `counterpick_bids` statuses that are still in contention. */
-const PENDING_BID_STATUSES = ['active', 'outbid']
-
-/**
- * Close out everything that could still change a roster after the standings
- * are final.
- *
- * Without this the season's result is not actually final: `process-bids` would
- * happily award a pending bid, and `process-trades` would execute an
- * already-accepted offer whose review window happened to lapse the next
- * morning -- both moving rosters after the champion was announced.
- *
- * Bids go to `cancelled`, not `lost`: `lost` means beaten in a contest, and
- * charging or telling a team they were outbid would both be untrue. `cancelled`
- * is the status process-bids already uses for a bid voided uncharged.
- *
- * Failures are logged and counted rather than thrown. The season is already
- * closed by this point -- raising here would abandon the announcements and
- * leave the state half-applied, with no retry that could complete it.
- */
-async function freezePendingActivity(
-  serviceClient: SupabaseClient,
-  leagueId: string
-): Promise<{ voidedBids: number; expiredTrades: number }> {
-  const [pickup, counterpick] = await Promise.all([
-    voidPendingBids(serviceClient, leagueId, 'pickup_bids'),
-    voidPendingBids(serviceClient, leagueId, 'counterpick_bids'),
-  ])
-
-  return {
-    voidedBids: pickup + counterpick,
-    expiredTrades: await expireOpenTrades(serviceClient, leagueId),
-  }
-}
-
-async function voidPendingBids(
-  serviceClient: SupabaseClient,
-  leagueId: string,
-  table: 'pickup_bids' | 'counterpick_bids'
-): Promise<number> {
-  const { data, error } = await serviceClient
-    .from(table)
-    .update({ status: 'cancelled' })
-    .eq('league_id', leagueId)
-    .in('status', PENDING_BID_STATUSES)
-    .select('id')
-
-  if (error) {
-    log.error('Failed to void pending bids on season completion', {
-      league_id: leagueId,
-      table,
-      error: serializeError(error),
-    })
-    return 0
-  }
-
-  return (data ?? []).length
-}
-
-async function expireOpenTrades(
-  serviceClient: SupabaseClient,
-  leagueId: string
-): Promise<number> {
-  const { data, error } = await serviceClient
-    .from('trade_offers')
-    .update({ status: 'expired', expired_reason: 'season_completed' })
-    .eq('league_id', leagueId)
-    .in('status', OPEN_TRADE_STATUSES)
-    .select('id')
-
-  if (error) {
-    log.error('Failed to expire open trades on season completion', {
-      league_id: leagueId,
-      error: serializeError(error),
-    })
-    return 0
-  }
-
-  return (data ?? []).length
-}
-
-// ============================================================================
-// Scores and standings
-// ============================================================================
-
-/**
- * One last recalculation before the numbers are frozen, so anything scored
- * since the last nightly run is counted.
- *
- * Best-effort on purpose. `team_scores` is already maintained by
- * `update-scores` twice a day, so a failure here costs at most a few hours of
- * freshness -- whereas refusing to ever close the season over it would leave
- * the league stuck open with no way out. Failures are logged loudly instead.
- */
-async function refreshTeamScores(serviceClient: SupabaseClient, leagueId: string): Promise<void> {
+  // The transaction has committed; delivery failures cannot undo completion.
+  // Names for the result were snapshotted in SQL, before any account lookup.
   try {
-    const teamIds = await activeTeamIds(serviceClient, leagueId)
-
-    const results = await Promise.allSettled(
-      teamIds.map((teamId) =>
-        serviceClient.rpc('recalculate_team_score_with_counterpicks', { p_team_id: teamId })
-      )
-    )
-
-    results.forEach((result, i) => {
-      const failure =
-        result.status === 'rejected'
-          ? result.reason
-          : (result.value as { error?: unknown } | null)?.error
-      if (failure) {
-        log.error('Failed to recalculate team score before completion', {
-          league_id: leagueId,
-          team_id: teamIds[i],
-          error: serializeError(failure),
-        })
-      }
-    })
+    const recipients = await resolveRecipients(serviceClient, standings.map((row) => row.user_id))
+    await notifySeasonCompleted(serviceClient, league, standings, winnerTeamIds, recipients)
   } catch (error) {
-    log.error('Failed to refresh team scores before completion', {
+    log.error('Failed to resolve season completion recipients', {
       league_id: leagueId,
       error: serializeError(error),
     })
   }
-}
-
-async function activeTeamIds(serviceClient: SupabaseClient, leagueId: string): Promise<string[]> {
-  const participants = await activeParticipants(serviceClient, leagueId)
-  if (participants.length === 0) return []
-
-  const { data: teams, error } = await serviceClient
-    .from('teams')
-    .select('id')
-    .in('participant_id', participants.map((p) => p.id))
-
-  if (error) {
-    log.error('Failed to load teams for league', { league_id: leagueId, error: serializeError(error) })
-    return []
-  }
-
-  return (teams ?? []).map((t: { id: string }) => t.id)
+  return result
 }
 
 async function activeParticipants(
@@ -337,36 +158,8 @@ async function activeParticipants(
     .select('id, user_id')
     .eq('league_id', leagueId)
     .eq('status', 'active')
-
-  if (error) {
-    log.error('Failed to load league participants', { league_id: leagueId, error: serializeError(error) })
-    return []
-  }
-
-  return (data ?? []) as Array<{ id: string; user_id: string }>
-}
-
-/**
- * The one ranking. `league_standings` decides ties, so the champion set, the
- * Discord embed, the email table and the standings page can never disagree
- * about who won.
- */
-async function loadStandings(
-  serviceClient: SupabaseClient,
-  leagueId: string
-): Promise<StandingRow[]> {
-  const { data, error } = await serviceClient.rpc('league_standings', { p_league_id: leagueId })
-
-  if (error) {
-    // Unlike the score refresh, this one is fatal: there is no honest way to
-    // stamp a champion onto the season without it.
-    throw new Error(`Failed to compute standings for league ${leagueId}: ${error.message}`)
-  }
-
-  return ((data ?? []) as StandingRow[]).map((row) => ({
-    ...row,
-    total_points: Number(row.total_points ?? 0),
-  }))
+  if (error) throw error
+  return data ?? []
 }
 
 // ============================================================================
@@ -444,12 +237,20 @@ async function notifySeasonCompleted(
 
     const reigning = await reigningChampionUserIds(serviceClient, league.series_id, league.season_year)
 
-    // Sequential, not parallel: Discord and Resend are separate outbound
-    // services and the isolate can be torn down once the caller responds, so
-    // each is awaited to completion.
-    await sendFinalStandingsEmbed(serviceClient, league, standings, reigning)
-    await insertSeasonCompletedNotifications(serviceClient, league, championNames, winnerTeamIds)
-    await sendFinalStandingsEmails(serviceClient, league, standings, championNames, recipients)
+    // Each channel is independent, and every delivery settles before returning.
+    const deliveries = await Promise.allSettled([
+      sendFinalStandingsEmbed(serviceClient, league, standings, reigning),
+      insertSeasonCompletedNotifications(serviceClient, league, championNames, winnerTeamIds),
+      sendFinalStandingsEmails(serviceClient, league, standings, championNames, recipients),
+    ])
+    for (const delivery of deliveries) {
+      if (delivery.status === 'rejected') {
+        log.error('Season completion delivery failed', {
+          league_id: league.id,
+          error: serializeError(delivery.reason),
+        })
+      }
+    }
   } catch (error) {
     log.error('Failed to send season completion notifications', {
       league_id: league.id,
@@ -470,13 +271,13 @@ async function sendFinalStandingsEmbed(
   standings: StandingRow[],
   reigningChampions: Set<string>
 ): Promise<void> {
-  const podium = standings.slice(0, PODIUM_SIZE)
+  const podium = standings.filter((row) => row.rank <= PODIUM_SIZE)
   if (podium.length === 0) return
 
-  const fields = podium.map((row, i) => ({
+  const fields = podium.map((row) => ({
     // 👑 marks the team whose manager won the previous season, so the channel
     // can see at a glance whether the title was defended.
-    name: `${STANDING_MEDALS[i]} ${row.team_name}${reigningChampions.has(row.user_id) ? ' 👑' : ''}`,
+    name: `${STANDING_MEDALS[row.rank - 1]} ${row.team_name}${reigningChampions.has(row.user_id) ? ' 👑' : ''}`,
     value: `${formatPoints(row.total_points)} pts`,
     inline: true,
   }))
@@ -608,8 +409,7 @@ export type RecipientMap = Map<string, { name: string; email?: string }>
  * PostgREST. League sizes are capped at 20, so that is a bounded handful of
  * calls.
  *
- * Called once per completion, before the state change, because the
- * `final_standings` snapshot needs the names too.
+ * Called after the completion transaction, solely for notification delivery.
  */
 async function resolveRecipients(
   serviceClient: SupabaseClient,

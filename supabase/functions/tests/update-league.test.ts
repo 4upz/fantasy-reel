@@ -1299,6 +1299,29 @@ Deno.test({
       league_id: leagueId,
     })
     assertEquals(second.error, 'Only an active league can be marked completed')
+
+    for (const action of ['update_season_config', 'update_trade_config']) {
+      const frozen = await invokeFunction(client, 'update-league', {
+        action,
+        league_id: leagueId,
+        season_end: `${new Date().getUTCFullYear() + 1}-12-31`,
+        trades_enabled: false,
+      })
+      assertEquals(frozen.status, 400)
+      assertEquals(frozen.error, 'This season is finished.')
+    }
+  })
+
+  await t.step('complete_league: concurrent callers commit one result', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('complete-race'))
+    const service = getServiceClient()
+    const results = await Promise.all([
+      service.rpc('complete_league_season', { p_league_id: leagueId, p_trigger: 'owner' }),
+      service.rpc('complete_league_season', { p_league_id: leagueId, p_trigger: 'owner' }),
+    ])
+    assertEquals(results.every((result) => result.error === null), true)
+    assertEquals(results.filter((result) => result.data?.ok === true).length, 1)
+    assertEquals(results.filter((result) => result.data?.reason === 'not_active').length, 1)
   })
 
   // ============================================================================

@@ -33,10 +33,10 @@ export default function BidPriorityList({
       title: bid.movie_data?.title || 'Unknown movie',
       meta: (
         <>
-          <span className="text-foreground-muted">${bid.amount}</span>
+          <span className="type-numeric text-foreground-secondary">${bid.amount}</span>
           {hasConditionalDrop(bid) && (
             <>
-              <span className="text-foreground-muted">·</span>
+              <span className="text-foreground-secondary">·</span>
               <Scissors className="w-3 h-3 text-warning shrink-0" />
               <span className="truncate text-warning">Brings its own slot</span>
             </>

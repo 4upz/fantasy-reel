@@ -126,7 +126,7 @@ export default function CounterpickPicker({
           <Target className="w-10 h-10 text-foreground-muted" />
         </div>
         <p className="text-foreground-secondary">No movies available to counterpick</p>
-        <p className="text-sm text-foreground-muted mt-1">
+        <p className="type-body-sm text-foreground-secondary mt-1">
           Opponent movies drop off this list once they&apos;re released or already targeted —
           nothing is left to counterpick right now
         </p>
@@ -138,12 +138,12 @@ export default function CounterpickPicker({
     <div className={`space-y-6 ${selectedOption && isMyTurn ? 'pb-32 sm:pb-24' : ''}`}>
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-display font-semibold text-foreground">
-          {isMyTurn ? 'Select Movie to Counterpick' : 'Opponent Movies'}
+        <h3 className="type-panel text-foreground">
+          {isMyTurn ? 'Select movie to counterpick' : 'Opponent movies'}
         </h3>
         {isMyTurn && (
           <span className="badge bg-success-bg text-success border border-success">
-            Your Turn
+            Your turn
           </span>
         )}
       </div>
@@ -153,7 +153,7 @@ export default function CounterpickPicker({
         <div className="flex items-start gap-3">
           <Target className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
           <div>
-            <p className="text-foreground-secondary text-sm">
+            <p className="type-body-sm text-foreground-secondary">
               Bet against an opponent&apos;s movie. If it scores below 60, you earn points equal to their loss. If it scores above 60, you lose points equal to their gain.
             </p>
           </div>
@@ -167,14 +167,14 @@ export default function CounterpickPicker({
             {/* Team header */}
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 bg-gold/20 rounded-full flex items-center justify-center">
-                <span className="text-gold text-xs font-semibold">
+                <span className="type-meta text-gold">
                   {group.teamName.charAt(0).toUpperCase()}
                 </span>
               </div>
-              <h4 className="text-sm font-medium text-foreground-secondary">
+              <h4 className="type-label text-foreground-secondary">
                 {group.teamName}
               </h4>
-              <span className="text-xs text-foreground-muted">
+              <span className="type-meta text-foreground-secondary">
                 ({group.movies.length} {group.movies.length === 1 ? 'movie' : 'movies'})
               </span>
             </div>
@@ -218,14 +218,14 @@ export default function CounterpickPicker({
                   </div>
                 )}
                 <div className="min-w-0">
-                  <p className="font-semibold text-foreground truncate">
+                  <p className="type-row-title text-foreground truncate">
                     {selectedOption.movie_title}
                   </p>
-                  <p className="text-sm text-foreground-muted">
+                  <p className="type-body-sm text-foreground-secondary">
                     Owned by {selectedOption.owner_team_name}
                   </p>
                   {selectedOption.release_date && (
-                    <p className="text-xs text-foreground-muted">
+                    <p className="type-meta text-foreground-secondary">
                       {new Date(selectedOption.release_date).toLocaleDateString()}
                     </p>
                   )}
@@ -235,7 +235,7 @@ export default function CounterpickPicker({
               {/* Counterpick indicator */}
               <div className="flex items-center gap-2 px-3 py-2 bg-crimson/10 border border-crimson/30 rounded-lg">
                 <Target className="w-4 h-4 text-crimson" />
-                <span className="text-sm font-medium text-crimson">Counterpick</span>
+                <span className="type-label text-crimson">Counterpick</span>
               </div>
 
               {/* Actions */}
@@ -319,7 +319,7 @@ function CounterpickMovieCard({
           <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-crimson rounded-full">
               <Target className="w-3.5 h-3.5 text-white" />
-              <span className="text-xs font-medium text-white">Counterpick</span>
+              <span className="type-meta text-white">Counterpick</span>
             </div>
           </div>
         )}
@@ -333,8 +333,8 @@ function CounterpickMovieCard({
 
         {/* Score badge if available */}
         {hasScore && (
-          <div className="absolute top-2 left-2 px-2 py-0.5 bg-background/80 backdrop-blur-sm rounded text-xs font-medium">
-            <span className={option.fantasy_points! >= 0 ? 'text-success' : 'text-crimson'}>
+          <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-background/80 backdrop-blur-sm rounded">
+            <span className={`type-numeric ${option.fantasy_points! >= 0 ? 'text-success' : 'text-crimson'}`}>
               {option.fantasy_points! >= 0 ? '+' : ''}{option.fantasy_points} pts
             </span>
           </div>
@@ -343,9 +343,9 @@ function CounterpickMovieCard({
 
       {/* Movie info */}
       <div className="p-3 bg-surface border-t border-border">
-        <p className="font-medium text-foreground text-sm truncate">{option.movie_title}</p>
+        <p className="type-label text-foreground truncate">{option.movie_title}</p>
         {option.release_date && (
-          <p className="text-xs text-foreground-muted mt-0.5">
+          <p className="type-meta text-foreground-secondary mt-0.5">
             {new Date(option.release_date).toLocaleDateString('en-US', {
               month: 'short',
               day: 'numeric',

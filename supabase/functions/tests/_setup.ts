@@ -114,29 +114,9 @@ export function getServiceClient(): SupabaseClient {
  */
 export const RUN_EXTERNAL_API_TESTS = Deno.env.get('RUN_EXTERNAL_API_TESTS') === '1'
 
-/**
- * Get the service role key that the Edge Function runtime actually uses.
- *
- * Functions with custom auth (X-Cron-Secret OR Bearer service_role) are called
- * via direct fetch() rather than client.functions.invoke(). The .env.test key
- * may not match the Docker container's key if Supabase has been restarted, so
- * query the container directly, falling back to .env.test.
- */
+/** Use the same configured stack credentials as the REST test clients.
+ * Looking up a fixed Docker container can authenticate against another stack. */
 export async function getEdgeFunctionServiceRoleKey(): Promise<string> {
-  try {
-    const cmd = new Deno.Command('docker', {
-      args: ['exec', 'supabase_edge_runtime_fantasy-reel', 'printenv', 'SUPABASE_SERVICE_ROLE_KEY'],
-      stdout: 'piped',
-      stderr: 'piped',
-    })
-    const output = await cmd.output()
-    if (output.success) {
-      const key = new TextDecoder().decode(output.stdout).trim()
-      if (key) return key
-    }
-  } catch {
-    // Docker not available or container not found
-  }
   return Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
 }
 
@@ -733,6 +713,14 @@ export class TestDataFactory {
     if (updatedLeague?.status !== 'active') {
       throw new Error(`League is not active after draft completion. Status: ${updatedLeague?.status}`)
     }
+
+    // General bidding fixtures must work on every weekday. Tests that exercise
+    // the cutoff explicitly configure their own window after creating a league.
+    const { error: cutoffError } = await serviceClient
+      .from('leagues')
+      .update({ new_bid_cutoff_hours: 0 })
+      .eq('id', leagueId)
+    if (cutoffError) throw new Error(`Failed to configure test bid window: ${cutoffError.message}`)
 
     return leagueId
   }

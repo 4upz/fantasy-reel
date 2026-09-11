@@ -185,7 +185,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
-          className="btn btn-secondary text-sm"
+          className="type-control btn btn-secondary"
         >
           {isUploading ? (
             <>
@@ -195,7 +195,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
           ) : (
             <>
               <Camera className="w-4 h-4 mr-2" />
-              Upload Photo
+              Upload photo
             </>
           )}
         </button>
@@ -205,7 +205,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
             type="button"
             onClick={handleRemove}
             disabled={isLoading}
-            className="btn btn-ghost text-sm text-crimson hover:text-crimson-hover hover:bg-error-bg"
+            className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-error-bg"
           >
             {isRemoving ? (
               <>
@@ -221,7 +221,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
           </button>
         )}
 
-        <p className="text-xs text-foreground-muted mt-1">
+        <p className="type-meta text-foreground-secondary mt-1">
           PNG, JPEG, WebP or GIF. Max 2MB.
         </p>
       </div>

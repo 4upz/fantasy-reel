@@ -90,15 +90,38 @@ export const standings: Command = {
       .eq('status', 'active')
       .returns<StandingsRow[]>()
 
-    if (participantsError) {
+    if (participantsError && !linked.finalStandings) {
       console.error('Failed to fetch standings:', participantsError)
       await interaction.editReply('Failed to load standings. Please try again.')
       return
     }
 
-    const sorted = (participants || [])
-      .filter((p) => p.teams != null)
-      .sort((a, b) => totalPoints(b) - totalPoints(a))
+    const liveTeams = new Map(
+      (participants ?? []).filter((p) => p.teams).map((p) => [p.teams!.id, p])
+    )
+    // Final results keep teams that have since left and the names/points they
+    // finished with. Live rows provide only supplementary owner/movie details.
+    const sorted: StandingsRow[] = linked.finalStandings
+      ? linked.finalStandings.map((row) => {
+          const live = liveTeams.get(row.team_id)
+          return {
+            user_id: row.user_id,
+            profiles: 'display_name' in row
+              ? { display_name: row.display_name }
+              : live?.profiles ?? null,
+            teams: {
+              id: row.team_id,
+              name: row.team_name,
+              team_scores: {
+                total_points: row.total_points,
+                movies_scored: live?.teams?.team_scores?.movies_scored ?? null,
+                movies_pending: live?.teams?.team_scores?.movies_pending ?? null,
+                last_calculated_at: linked.completedAt,
+              },
+            },
+          }
+        })
+      : [...liveTeams.values()].sort((a, b) => totalPoints(b) - totalPoints(a))
 
     if (sorted.length === 0) {
       const embed = noticeEmbed(leagueName, leagueId, 'No teams in this league yet.')
@@ -130,7 +153,9 @@ export const standings: Command = {
     const lines = sorted.map((participant, index) => {
       const scores = participant.teams!.team_scores
       const points = totalPoints(participant)
-      if (points !== previousPoints) {
+      if (linked.finalStandings) {
+        currentRank = linked.finalStandings[index].rank
+      } else if (points !== previousPoints) {
         currentRank = index + 1
         previousPoints = points
       }

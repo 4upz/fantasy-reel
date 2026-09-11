@@ -40,7 +40,7 @@ const SCORE_STYLES = {
   club: 'bg-gold/15 border-gold/40 text-gold',
   fresh: 'bg-gold/10 border-gold/25 text-gold/90',
   rotten: 'bg-crimson/15 border-crimson/40 text-crimson',
-  pending: 'bg-elevated border-border text-foreground-muted',
+  pending: 'bg-elevated border-border text-foreground-secondary',
 } as const
 
 const ACCOLADE_STYLE =
@@ -50,21 +50,21 @@ const SIZE_STYLES = {
   sm: {
     pill: 'gap-1 px-1.5 py-0.5 text-xs',
     mark: 'w-3.5 h-3.5',
-    badge: 'px-1.5 py-0.5 text-[9px]',
+    badge: 'px-1.5 py-0.5',
     laurel: 'w-2.5 h-3',
     gap: 'gap-1.5',
   },
   md: {
     pill: 'gap-1.5 px-2.5 py-1 text-sm',
     mark: 'w-4 h-4',
-    badge: 'px-2 py-0.5 text-[10px]',
+    badge: 'px-2 py-0.5',
     laurel: 'w-3 h-3.5',
     gap: 'gap-2',
   },
   lg: {
     pill: 'gap-2 px-3 py-1.5 text-base',
     mark: 'w-6 h-6',
-    badge: 'px-2.5 py-1 text-[11px]',
+    badge: 'px-2.5 py-1',
     laurel: 'w-4 h-[18px]',
     gap: 'gap-2',
   },
@@ -170,7 +170,7 @@ export default function TomatometerScore({
         className={`inline-flex items-center rounded-lg border font-semibold ${SCORE_STYLES.pending} ${sizing.pill} ${className}`}
       >
         <TomatoMark fill={null} className={sizing.mark} />
-        Not rated yet
+        Pending
       </span>
     )
   }
@@ -188,7 +188,7 @@ export default function TomatometerScore({
       aria-label={`Tomatometer ${rounded} percent, ${tier.label}`}
     >
       <span
-        className={`inline-flex items-center rounded-lg border font-semibold ${SCORE_STYLES[tier.key]} ${sizing.pill} ${
+        className={`type-numeric inline-flex items-center rounded-lg border font-bold ${SCORE_STYLES[tier.key]} ${sizing.pill} ${
           shineOnPill ? 'accolade-shine' : ''
         }`}
       >
@@ -198,7 +198,7 @@ export default function TomatometerScore({
 
       {isAccolade && showAccolade && (
         <span
-          className={`accolade-shine inline-flex items-center gap-1 whitespace-nowrap rounded-md border font-semibold uppercase tracking-[0.12em] ${ACCOLADE_STYLE} ${sizing.badge}`}
+          className={`type-meta accolade-shine inline-flex items-center gap-1 whitespace-nowrap rounded-md border ${ACCOLADE_STYLE} ${sizing.badge}`}
         >
           <LaurelSprig className={sizing.laurel} />
           {tier.label}

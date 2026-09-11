@@ -8,10 +8,12 @@ import type {
   CounterpickWithScores,
   RankedTeamFull,
   StandingRow,
+  FinalStandingRow,
 } from '@/types'
 import type { ReigningChampions } from '@/utils/seasonQueries'
 import { championPoints, type Champion } from '@/utils/seasons'
 import TeamStandingCard from './TeamStandingCard'
+import { formatFantasyPoints } from '@/utils/scoring'
 import TeamDetailRail from './TeamDetailRail'
 import ChampionBanner from '../components/ChampionBanner'
 
@@ -71,8 +73,23 @@ function buildRankedTeams(
   )
 
   return standings.flatMap((row) => {
-    const participant = participantByTeamId.get(row.team_id)
-    if (!participant) return []
+    const source = participantByTeamId.get(row.team_id)
+    if (!source?.teams) return []
+    // Frozen standings keep names and totals stable if a profile changes later.
+    const snapshot = row as StandingRow & Partial<FinalStandingRow>
+    const participant: ParticipantWithTeamScore = {
+      ...source,
+      profiles: source.profiles && 'display_name' in row
+        ? { ...source.profiles, display_name: snapshot.display_name ?? null }
+        : source.profiles,
+      teams: {
+        ...source.teams,
+        name: row.team_name,
+        team_scores: source.teams.team_scores
+          ? { ...source.teams.team_scores, total_points: row.total_points }
+          : null,
+      },
+    }
 
     return [
       {
@@ -95,8 +112,8 @@ function teamKey(rankedTeam: RankedTeamFull): string {
 function SummaryCard({ value, label, tone }: { value: number; label: string; tone: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface px-2 py-2.5 text-center">
-      <div className={`font-display text-xl font-bold ${tone}`}>{value}</div>
-      <div className="mt-px text-[11px] text-foreground-muted">{label}</div>
+      <div className={`type-number ${tone}`}>{value}</div>
+      <div className="type-meta mt-px text-foreground-secondary">{label}</div>
     </div>
   )
 }
@@ -122,6 +139,8 @@ export default function StandingsClient({
     () => buildRankedTeams(standings, participants, draftPicks, pickups, counterpicks),
     [standings, participants, draftPicks, pickups, counterpicks]
   )
+
+  const rankedByTeamId = new Map(rankedTeams.map((team) => [teamKey(team), team]))
 
   // The rail opens on your own team - the one you came to the page to check.
   const railTeam = useMemo(() => {
@@ -175,7 +194,7 @@ export default function StandingsClient({
       {/* Summary strip. A finished season labels its own numbers - they are a
           record now, not a running count. */}
       {isCompleted && (
-        <p className="flex-none font-mono text-[11px] uppercase tracking-[0.1em] text-foreground-muted">
+        <p className="flex-none type-meta text-foreground-secondary">
           Final · {seasonYear} season
         </p>
       )}
@@ -195,7 +214,7 @@ export default function StandingsClient({
             </svg>
             <div>
               <p className="font-medium">No scores available yet</p>
-              <p className="text-sm mt-1 opacity-80">
+              <p className="type-body-sm mt-1 opacity-80">
                 Scores are calculated nightly for released movies. Check back after movies in your draft have been released!
               </p>
             </div>
@@ -204,7 +223,17 @@ export default function StandingsClient({
       )}
 
       {/* Leaderboard */}
-      {rankedTeams.map((rankedTeam, index) => {
+      {standings.map((row, index) => {
+        const rankedTeam = rankedByTeamId.get(row.team_id)
+        if (!rankedTeam) {
+          return (
+            <div key={row.team_id} className="card flex items-center gap-3 p-4" data-testid={`team-row-${row.team_id}`}>
+              <span className="type-number text-gold">{row.is_tied ? 'T' : '#'}{row.rank}</span>
+              <span className="type-row-title min-w-0 flex-1 break-words text-foreground">{row.team_name}</span>
+              <span className="type-number text-gold">{formatFantasyPoints(row.total_points)}</span>
+            </div>
+          )
+        }
         const teamId = teamKey(rankedTeam)
         return (
           <TeamStandingCard
@@ -226,15 +255,15 @@ export default function StandingsClient({
       })}
 
       {/* Empty State */}
-      {rankedTeams.length === 0 && (
+      {standings.length === 0 && (
         <div className="card flex-none p-12 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-elevated flex items-center justify-center">
             <svg className="w-8 h-8 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
-          <h3 className="text-lg font-display font-semibold text-foreground">No teams yet</h3>
-          <p className="mt-2 text-foreground-muted">Teams will appear here once the draft begins.</p>
+          <h3 className="type-panel text-foreground">No teams yet</h3>
+          <p className="mt-2 text-foreground-secondary">Teams will appear here once the draft begins.</p>
         </div>
       )}
       </div>

@@ -65,15 +65,15 @@ export default function ChangePasswordModal({
             <div className="p-2 rounded-lg bg-gold-muted">
               <Lock className="w-5 h-5 text-gold" />
             </div>
-            <h2 className="text-xl font-display font-bold text-foreground">
-              Change Password
+            <h2 className="type-panel text-foreground">
+              Change password
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
-            className="p-1 text-foreground-muted hover:text-foreground transition-colors"
+            className="p-1 text-foreground-secondary hover:text-foreground transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -88,13 +88,13 @@ export default function ChangePasswordModal({
 
         {/* Form */}
         <form onSubmit={handleSubmit}>
-          {/* Current Password */}
+          {/* Current password */}
           <div className="mb-4">
             <label
               htmlFor="currentPassword"
-              className="block text-sm font-medium text-foreground-secondary mb-2"
+              className="type-label block text-foreground-secondary mb-2"
             >
-              Current Password
+              Current password
             </label>
             <div className="relative">
               <input
@@ -122,13 +122,13 @@ export default function ChangePasswordModal({
             </div>
           </div>
 
-          {/* New Password */}
+          {/* New password */}
           <div className="mb-4">
             <label
               htmlFor="newPassword"
-              className="block text-sm font-medium text-foreground-secondary mb-2"
+              className="type-label block text-foreground-secondary mb-2"
             >
-              New Password
+              New password
             </label>
             <div className="relative">
               <input
@@ -154,18 +154,18 @@ export default function ChangePasswordModal({
                 )}
               </button>
             </div>
-            <p className="mt-1 text-xs text-foreground-muted">
+            <p className="type-meta mt-1 text-foreground-secondary">
               Must be at least 6 characters
             </p>
           </div>
 
-          {/* Confirm New Password */}
+          {/* Confirm new password */}
           <div className="mb-6">
             <label
               htmlFor="confirmPassword"
-              className="block text-sm font-medium text-foreground-secondary mb-2"
+              className="type-label block text-foreground-secondary mb-2"
             >
-              Confirm New Password
+              Confirm new password
             </label>
             <div className="relative">
               <input
@@ -196,7 +196,7 @@ export default function ChangePasswordModal({
               </button>
             </div>
             {confirmPassword && confirmPassword !== newPassword && (
-              <p className="mt-1 text-xs text-error">Passwords do not match</p>
+              <p className="type-meta mt-1 text-error">Passwords do not match</p>
             )}
           </div>
 

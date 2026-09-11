@@ -75,10 +75,10 @@ export default function SettingsClient({
             <User className="w-5 h-5 text-gold" />
           </div>
           <div>
-            <h2 className="text-lg font-display font-semibold text-foreground">
+            <h2 className="type-section text-foreground">
               Profile
             </h2>
-            <p className="text-sm text-foreground-muted">
+            <p className="type-body-sm text-foreground-secondary">
               Your public profile information
             </p>
           </div>
@@ -86,8 +86,8 @@ export default function SettingsClient({
 
         {/* Avatar Upload */}
         <div className="mb-8">
-          <label className="block text-sm font-medium text-foreground-secondary mb-3">
-            Profile Photo
+          <label className="type-label block text-foreground-secondary mb-3">
+            Profile photo
           </label>
           <AvatarUpload
             userId={userId}
@@ -96,14 +96,14 @@ export default function SettingsClient({
           />
         </div>
 
-        {/* Display Name Form */}
+        {/* Display name Form */}
         <form onSubmit={handleSubmit}>
           <div className="mb-6">
             <label
               htmlFor="display_name"
-              className="block text-sm font-medium text-foreground-secondary mb-2"
+              className="type-label block text-foreground-secondary mb-2"
             >
-              Display Name
+              Display name
             </label>
             <input
               type="text"
@@ -116,11 +116,11 @@ export default function SettingsClient({
               maxLength={110}
             />
             <div className="flex justify-between mt-2">
-              <p className="text-xs text-foreground-muted">
+              <p className="type-meta text-foreground-secondary">
                 This is how other players will see you
               </p>
               <span
-                className={`text-xs ${isOverLimit ? 'text-error' : 'text-foreground-muted'}`}
+                className={`type-meta ${isOverLimit ? 'text-error' : 'text-foreground-secondary'}`}
               >
                 {charCount}/{MAX_DISPLAY_NAME_LENGTH}
               </span>
@@ -138,7 +138,7 @@ export default function SettingsClient({
                 Saving...
               </>
             ) : (
-              'Save Changes'
+              'Save changes'
             )}
           </button>
         </form>
@@ -151,28 +151,28 @@ export default function SettingsClient({
             <Mail className="w-5 h-5 text-foreground-secondary" />
           </div>
           <div>
-            <h2 className="text-lg font-display font-semibold text-foreground">
+            <h2 className="type-section text-foreground">
               Account
             </h2>
-            <p className="text-sm text-foreground-muted">Your account details</p>
+            <p className="type-body-sm text-foreground-secondary">Your account details</p>
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-foreground-secondary mb-2">
-            Email Address
+          <label className="type-label block text-foreground-secondary mb-2">
+            Email address
           </label>
           <div className="flex items-center gap-3 px-3 py-2.5 bg-elevated rounded-lg border border-border">
             <Mail className="w-4 h-4 text-foreground-muted" />
             <span className="text-foreground">{email}</span>
           </div>
-          <p className="mt-2 text-xs text-foreground-muted">
+          <p className="type-meta mt-2 text-foreground-secondary">
             Contact support to change your email address
           </p>
         </div>
       </section>
 
-      {/* Connected Accounts Section */}
+      {/* Connected accounts Section */}
       <ConnectedAccounts email={email} identities={identities} hasPassword={hasPassword} />
 
       {/* Security Section */}
@@ -182,10 +182,10 @@ export default function SettingsClient({
             <Shield className="w-5 h-5 text-foreground-secondary" />
           </div>
           <div>
-            <h2 className="text-lg font-display font-semibold text-foreground">
+            <h2 className="type-section text-foreground">
               Security
             </h2>
-            <p className="text-sm text-foreground-muted">
+            <p className="type-body-sm text-foreground-secondary">
               Password and authentication
             </p>
           </div>
@@ -193,8 +193,8 @@ export default function SettingsClient({
 
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-foreground">Password</p>
-            <p className="text-xs text-foreground-muted mt-0.5">
+            <p className="type-label text-foreground">Password</p>
+            <p className="type-meta text-foreground-secondary mt-0.5">
               {hasPassword
                 ? 'Change your account password'
                 : 'No password set (signed in via OAuth)'}
@@ -203,19 +203,19 @@ export default function SettingsClient({
           {hasPassword ? (
             <button
               onClick={() => setShowPasswordModal(true)}
-              className="btn btn-ghost text-sm"
+              className="type-control btn btn-ghost"
             >
-              Change Password
+              Change password
             </button>
           ) : (
-            <span className="text-xs text-foreground-muted">
+            <span className="type-meta text-foreground-secondary">
               Use forgot password to set one
             </span>
           )}
         </div>
       </section>
 
-      {/* Change Password Modal */}
+      {/* Change password Modal */}
       {showPasswordModal && (
         <ChangePasswordModal
           onClose={() => setShowPasswordModal(false)}

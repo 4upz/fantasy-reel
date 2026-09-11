@@ -131,13 +131,13 @@ export default function CounterpickRound({
   if (league.status !== 'counterpicking') {
     return (
       <div className="card p-6">
-        <h2 className="text-xl font-semibold font-display text-foreground mb-4">Counterpick Round</h2>
+        <h2 className="type-section text-foreground mb-4">Counterpick round</h2>
         <div className="text-center py-8">
           <div className="flex justify-center mb-4">
             <Target className="w-16 h-16 text-foreground-muted" />
           </div>
           <p className="text-foreground-secondary mb-2">The counterpick round hasn&apos;t started yet.</p>
-          <p className="text-sm text-foreground-muted">
+          <p className="type-body-sm text-foreground-secondary">
             Counterpicking begins after the draft is complete.
           </p>
         </div>
@@ -149,7 +149,7 @@ export default function CounterpickRound({
   if (loading) {
     return (
       <div className="card p-6">
-        <h2 className="text-xl font-semibold font-display text-foreground mb-4">Counterpick Round</h2>
+        <h2 className="type-section text-foreground mb-4">Counterpick round</h2>
         <div className="text-center py-8">
           <SpinnerIcon className="w-8 h-8 text-gold mx-auto animate-spin" />
           <p className="text-foreground-secondary mt-3">Loading counterpick round...</p>
@@ -163,7 +163,7 @@ export default function CounterpickRound({
     return (
       <div className="card p-6">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-semibold font-display text-foreground">Counterpick Results</h2>
+          <h2 className="type-section text-foreground">Counterpick results</h2>
           <DraftProgressRing current={counterpicksMade} total={totalCounterpicks} size="sm" showLabel={false} />
         </div>
         <div className="p-4 rounded-xl bg-success-bg border-2 border-success mb-6">
@@ -172,8 +172,8 @@ export default function CounterpickRound({
               <CheckIcon className="w-5 h-5 text-background" />
             </div>
             <div>
-              <p className="text-success font-semibold text-lg">Counterpick round complete!</p>
-              <p className="text-success/80 text-sm">The league is now active.</p>
+              <p className="type-card text-success">Counterpick round complete!</p>
+              <p className="type-body-sm text-success/80">The league is now active.</p>
             </div>
           </div>
         </div>
@@ -190,7 +190,7 @@ export default function CounterpickRound({
           {/* Left: Title and Status */}
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
-              <h2 className="text-xl font-semibold font-display text-foreground">Counterpick Round</h2>
+              <h2 className="type-section text-foreground">Counterpick round</h2>
             </div>
 
             {/* Current Turn Indicator */}
@@ -215,23 +215,23 @@ export default function CounterpickRound({
                     )}
                   </div>
                   <div>
-                    <p className="text-sm text-foreground-muted">
+                    <p className="type-body-sm text-foreground-secondary">
                       Round {currentTurn.round}, Pick {currentTurn.pick_number}
                     </p>
                     <p
-                      className={`text-lg font-semibold ${
+                      className={`type-card ${
                         isMyTurn ? 'text-success' : 'text-foreground'
                       }`}
                     >
                       {isMyTurn ? "It's your turn!" : `${getTeamName(currentTurn.user_id)}'s pick`}
                     </p>
                     {!isMyTurn && getOwnerName(currentTurn.user_id) && (
-                      <p className="text-xs text-foreground-muted">
+                      <p className="type-meta text-foreground-secondary">
                         {getOwnerName(currentTurn.user_id)}
                       </p>
                     )}
                     {isMyTurn && (
-                      <p className="text-sm text-foreground-muted mt-1">
+                      <p className="type-body-sm text-foreground-secondary mt-1">
                         {currentTurn.counterpicks_remaining} counterpick{currentTurn.counterpicks_remaining !== 1 ? 's' : ''} remaining
                       </p>
                     )}
@@ -278,8 +278,8 @@ export default function CounterpickRound({
       {/* Counterpick History */}
       {counterpicks.length > 0 && (
         <div className="card p-6">
-          <h3 className="text-lg font-display font-semibold text-foreground mb-4">
-            Counterpick History
+          <h3 className="type-panel text-foreground mb-4">
+            Counterpick history
           </h3>
           <CounterpickHistory counterpicks={counterpicks} participants={participants} />
         </div>
@@ -298,7 +298,7 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
 
   if (counterpicks.length === 0) {
-    return <p className="text-foreground-muted">No counterpicks yet</p>
+    return <p className="text-foreground-secondary">No counterpicks yet</p>
   }
 
   // Sort by most recent first
@@ -326,19 +326,19 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
 
           {/* Pick Info */}
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-foreground text-sm">
+            <p className="type-label text-foreground">
               {teamInfoById.get(pick.counterpicker_team_id)?.teamName ?? 'Unknown'} counterpicked{' '}
               <span className="text-foreground-secondary">
                 {teamInfoById.get(pick.target_team_id)?.teamName ?? 'Unknown'}
               </span>
             </p>
-            <p className="text-xs text-foreground-muted">
+            <p className="type-meta text-foreground-secondary">
               {teamInfoById.get(pick.counterpicker_team_id)?.ownerName ?? ''}
               {teamInfoById.get(pick.counterpicker_team_id)?.ownerName && ' → '}
               {teamInfoById.get(pick.target_team_id)?.ownerName ?? ''}
             </p>
             {pick.movies && (
-              <p className="text-xs text-foreground-muted truncate mt-0.5">
+              <p className="type-meta text-foreground-secondary truncate mt-0.5">
                 {pick.movies.title}
               </p>
             )}
@@ -347,8 +347,8 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
           {/* Pick order badge */}
           <div className="flex-shrink-0">
             <span
-              className={`inline-block px-2 py-1 rounded-lg text-xs font-medium ${
-                index === 0 ? 'bg-crimson text-white' : 'bg-surface text-foreground-muted'
+              className={`type-meta inline-block px-2 py-1 rounded-lg ${
+                index === 0 ? 'bg-crimson text-white' : 'bg-surface text-foreground-secondary'
               }`}
             >
               #{pick.pick_order}
@@ -425,7 +425,7 @@ function CounterpickQueue({
 
   return (
     <div>
-      <p className="text-sm text-foreground-muted mb-3">Upcoming Picks</p>
+      <p className="type-body-sm text-foreground-secondary mb-3">Upcoming picks</p>
       <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
         {upcomingPicks.map((pick, index) => (
           <div
@@ -436,22 +436,22 @@ function CounterpickQueue({
             )}
           >
             <p className={cn(
-              'text-xs font-medium',
+              'type-meta',
               index === 0 && pick.isCurrentUser ? 'text-success' : 'text-foreground-secondary'
             )}>
               {pick.isCurrentUser ? 'You' : pick.participant.teams?.name || 'Unknown'}
             </p>
             {!pick.isCurrentUser && pick.participant.profiles?.display_name && (
-              <p className="text-xs text-foreground-muted truncate max-w-20">
+              <p className="type-meta text-foreground-secondary truncate max-w-20">
                 {pick.participant.profiles.display_name}
               </p>
             )}
-            <p className="text-xs text-foreground-muted">R{pick.round}</p>
+            <p className="type-meta text-foreground-secondary">R{pick.round}</p>
           </div>
         ))}
         {currentPickIndex + upcomingPicks.length < totalPicks && (
           <div className="flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-surface border border-border flex items-center">
-            <p className="text-xs text-foreground-muted">
+            <p className="type-meta text-foreground-secondary">
               +{totalPicks - currentPickIndex - upcomingPicks.length} more
             </p>
           </div>

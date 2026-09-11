@@ -1,0 +1,33 @@
+{
+  "status": "Active brand assets. The charcoal icon and primary logo are the app defaults.",
+  "colors": {
+    "gold": "#c9a227",
+    "dark": "#0f0f0f",
+    "charcoal": "#1c1c1c",
+    "white": "#e8e8e8"
+  },
+  "pngs": [
+    "app-charcoal-180.png",
+    "app-charcoal-192.png",
+    "app-charcoal-512.png",
+    "app-charcoal-1024.png",
+    "maskable-charcoal-512.png",
+    "app-gold-180.png",
+    "app-gold-192.png",
+    "app-gold-512.png",
+    "app-gold-1024.png",
+    "maskable-gold-512.png",
+    "favicon-16.png",
+    "favicon-32.png",
+    "favicon-48.png"
+  ],
+  "recommended": {
+    "logo": "logo-dark.svg",
+    "favicon": "favicon.svg",
+    "fallback": "favicon.ico",
+    "apple": "app-charcoal-180.png",
+    "android": "app-charcoal-192.png",
+    "large": "app-charcoal-512.png",
+    "maskable": "maskable-charcoal-512.png"
+  }
+}

@@ -187,14 +187,20 @@ export default async function DashboardPage({ params }: PageProps) {
       (season) => season.season_year < typedLeague.season_year && season.status === 'completed'
     ) ?? null
 
+  const finalTeam = typedLeague.final_standings?.find((row) => row.team_id === userTeam?.id)
+  if (userTeam && finalTeam) {
+    userTeam = { ...userTeam, name: finalTeam.team_name, total_points: finalTeam.total_points, rank: finalTeam.rank }
+  }
+
   return (
     <DashboardClient
       league={typedLeague}
       userTeam={userTeam}
-      totalTeams={participantsData.length}
+      totalTeams={typedLeague.final_standings?.length ?? participantsData.length}
       leagueUpcoming={leagueUpcoming}
       todayIso={todayIso}
       isOwner={typedLeague.owner_id === user.id}
+      nextSeasonId={seasons.find((season) => season.season_year === typedLeague.season_year + 1)?.id}
       champions={champions}
       championPoints={championPoints(champions, rows)}
       participantNames={participantsData.map((p) => getParticipantDisplayName(p, 'Unnamed player'))}

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { requestPasswordReset } from './actions'
 import Link from 'next/link'
 import { FormError } from '../../components/FormError'
+import NavLogo from '../../components/navigation/NavLogo'
 
 export default function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null)
@@ -32,7 +33,7 @@ export default function ForgotPasswordPage() {
     return (
       <div className="w-full max-w-md space-y-8 text-center px-4">
         <div className="card p-8">
-          <h2 className="text-2xl font-bold font-display text-foreground">Check your email</h2>
+          <h2 className="type-panel text-foreground">Check your email</h2>
           <div className="mt-6 space-y-4">
             <p className="text-foreground-secondary">
               If an account exists with that email, we sent a password reset link.
@@ -42,7 +43,7 @@ export default function ForgotPasswordPage() {
             </p>
             {process.env.NODE_ENV === 'development' && (
               <div className="alert alert-info mt-6">
-                <p className="text-sm">
+                <p className="type-body-sm">
                   <strong>Using local Supabase?</strong>
                   <br />
                   Check Mailpit at{' '}
@@ -70,16 +71,18 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="w-full max-w-md space-y-8 px-4">
+      <div className="flex justify-center">
+        <NavLogo href="/" />
+      </div>
       <div className="text-center">
-        <h1 className="text-4xl font-bold font-display text-foreground">Fantasy Reel</h1>
-        <p className="mt-3 text-foreground-secondary">Reset your password</p>
+        <h1 className="type-page text-foreground">Reset your password</h1>
       </div>
 
       <div className="card p-8">
         <form action={handleSubmit} className="space-y-6">
           <FormError message={error} />
 
-          <p className="text-sm text-foreground-secondary">
+          <p className="type-body-sm text-foreground-secondary">
             Enter your email address and we will send you a link to reset your password.
           </p>
 
@@ -112,7 +115,7 @@ export default function ForgotPasswordPage() {
           <div className="text-center">
             <Link
               href="/login"
-              className="text-sm text-foreground-secondary hover:text-gold transition-colors"
+              className="type-control text-foreground-secondary hover:text-gold transition-colors"
               data-testid="back-to-login-link"
             >
               Back to sign in

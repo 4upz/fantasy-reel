@@ -109,8 +109,8 @@ export default function JoinLinkSection({
             <>
               {/* Join Code Display */}
               <div>
-                <label className="block text-sm font-medium text-foreground-secondary mb-3">
-                  Join Code
+                <label className="type-label block text-foreground-secondary mb-3">
+                  Join code
                 </label>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 relative">
@@ -131,15 +131,15 @@ export default function JoinLinkSection({
                     )}
                   </button>
                 </div>
-                <p className="text-xs text-foreground-muted mt-2">
+                <p className="type-meta text-foreground-secondary mt-2">
                   Share this code directly - members can enter it at fantasyreel.com/join
                 </p>
               </div>
 
               {/* Full URL Display */}
               <div>
-                <label className="block text-sm font-medium text-foreground-secondary mb-3">
-                  Full Link
+                <label className="type-label block text-foreground-secondary mb-3">
+                  Full link
                 </label>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 relative">
@@ -147,7 +147,7 @@ export default function JoinLinkSection({
                       type="text"
                       readOnly
                       value={joinUrl}
-                      className="input w-full pr-4 text-sm text-foreground-secondary truncate cursor-text"
+                      className="type-input input w-full pr-4 text-foreground-secondary truncate cursor-text"
                       onClick={(e) => (e.target as HTMLInputElement).select()}
                     />
                   </div>
@@ -164,7 +164,7 @@ export default function JoinLinkSection({
                     )}
                   </button>
                 </div>
-                <p className="text-xs text-foreground-muted mt-2">
+                <p className="type-meta text-foreground-secondary mt-2">
                   One-click join - anyone with this link can join your league instantly
                 </p>
               </div>
@@ -176,10 +176,10 @@ export default function JoinLinkSection({
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <p className="text-sm font-medium text-foreground mb-1">
+                        <p className="type-label text-foreground mb-1">
                           Regenerate join link?
                         </p>
-                        <p className="text-xs text-foreground-secondary mb-3">
+                        <p className="type-meta text-foreground-secondary mb-3">
                           The current code will stop working immediately. Anyone who already has the old link won&apos;t be able to use it.
                         </p>
                         <div className="flex gap-2">
@@ -187,7 +187,7 @@ export default function JoinLinkSection({
                             type="button"
                             onClick={() => generateLink()}
                             disabled={isGenerating}
-                            className="btn btn-danger text-sm py-1.5 px-3"
+                            className="type-control btn btn-danger py-1.5 px-3"
                           >
                             {isGenerating ? (
                               <>
@@ -202,7 +202,7 @@ export default function JoinLinkSection({
                             type="button"
                             onClick={() => setShowRegenerateConfirm(false)}
                             disabled={isGenerating}
-                            className="btn btn-ghost text-sm py-1.5 px-3"
+                            className="type-control btn btn-ghost py-1.5 px-3"
                           >
                             Cancel
                           </button>
@@ -229,10 +229,10 @@ export default function JoinLinkSection({
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gold/10 mb-4">
                 <Link2 className="w-8 h-8 text-gold" />
               </div>
-              <h3 className="text-lg font-display font-semibold text-foreground mb-2">
+              <h3 className="type-panel text-foreground mb-2">
                 No join link yet
               </h3>
-              <p className="text-sm text-foreground-secondary mb-6 max-w-md mx-auto">
+              <p className="type-body-sm text-foreground-secondary mb-6 max-w-md mx-auto">
                 Generate a shareable link that anyone can use to join your league.
                 Unlike email invites, this link can be shared anywhere and used by multiple people.
               </p>
@@ -250,7 +250,7 @@ export default function JoinLinkSection({
                 ) : (
                   <>
                     <Link2 className="w-4 h-4 mr-2" />
-                    Generate Join Link
+                    Generate join link
                   </>
                 )}
               </button>

@@ -1,6 +1,6 @@
 ---
 name: web-design-guidelines
-description: Review UI code for Web Interface Guidelines compliance. Use when asked to "review my UI", "check accessibility", "audit design", "review UX", or "check my site against best practices".
+description: Review UI for accessibility and interaction issues when asked to audit a page, component, or UI change.
 metadata:
   author: vercel
   version: "1.0.0"
@@ -9,31 +9,22 @@ metadata:
 
 # Web Interface Guidelines
 
-Review files for compliance with Web Interface Guidelines.
+Review the requested UI scope. Infer files from the named page, component, or
+current diff; ask for scope only when multiple plausible targets remain.
 
-## How It Works
-
-1. Fetch the latest guidelines from the source URL below
-2. Read the specified files (or prompt user for files/pattern)
-3. Check against all rules in the fetched guidelines
-4. Output findings in the terse `file:line` format
-
-## Guidelines Source
-
-Fetch fresh guidelines before each review:
-
-```
+Use the Web Interface Guidelines at:
 https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md
-```
 
-Use WebFetch to retrieve the latest rules. The fetched content contains all the rules and output format instructions.
+Fetch them with available web or network tools once per review. If unavailable,
+use a previously fetched copy when available and disclose its age, or perform a
+limited review of keyboard access, focus, semantics and labels, error feedback,
+contrast, reduced motion, and responsive behavior. State that the current upstream
+checklist could not be verified; do not block useful review or claim full compliance.
 
-## Usage
+Apply relevant rules to the actual code and the repo's existing design system.
+Report actionable findings with severity, clickable file/line references, user
+impact, and a suggested correction. Separate observed defects from checks needing
+browser verification. Follow the user's requested output format when provided.
 
-When a user provides a file or pattern argument:
-1. Fetch guidelines from the source URL above
-2. Read the specified files
-3. Apply all rules from the fetched guidelines
-4. Output findings using the format specified in the guidelines
-
-If no files specified, ask the user which files to review.
+A review request authorizes inspection and findings. Make fixes when requested;
+keep them scoped to confirmed issues and use the repo's verification workflow.
