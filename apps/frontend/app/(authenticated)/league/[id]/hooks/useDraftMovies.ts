@@ -7,7 +7,6 @@ import type { TMDbSearchResult, TMDbSearchResponse } from '@/types'
 export interface BrowseFilters {
   releaseWindow: 'next30' | 'quarter' | 'year' | 'all'
   genres: number[]
-  minRating: number
 }
 
 interface BrowseResponse {
@@ -26,7 +25,6 @@ const SEARCH_DEBOUNCE_MS = 300
 const DEFAULT_FILTERS: BrowseFilters = {
   releaseWindow: 'year',
   genres: [],
-  minRating: 0,
 }
 
 /**
@@ -61,7 +59,6 @@ function buildPageKey(request: Request, page: number, seasonYear?: number): Movi
           page,
           release_window: request.filters.releaseWindow,
           genres: request.filters.genres.length > 0 ? request.filters.genres : undefined,
-          min_rating: request.filters.minRating > 0 ? request.filters.minRating : undefined,
           sort_by: 'popularity',
           season_year: seasonYear,
         },

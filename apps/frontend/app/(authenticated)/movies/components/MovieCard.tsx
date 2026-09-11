@@ -42,14 +42,6 @@ export default function MovieCard({ movie, onClick, index }: Props) {
         {/* Gradient overlay on hover */}
         <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
-        {/* Rating badge */}
-        {movie.vote_average > 0 && (
-          <div className="type-label absolute top-3 right-3 flex items-center gap-1 px-2 py-1 rounded-full bg-background/80 backdrop-blur-sm border border-border">
-            <span className="text-gold">★</span>
-            <span className="type-numeric text-foreground">{movie.vote_average.toFixed(1)}</span>
-          </div>
-        )}
-
         {/* View details prompt on hover */}
         <div className="absolute bottom-4 left-0 right-0 text-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 transform translate-y-2 group-hover:translate-y-0">
           <span className="type-label text-gold">View details</span>

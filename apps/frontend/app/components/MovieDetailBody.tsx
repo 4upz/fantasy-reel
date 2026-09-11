@@ -95,38 +95,26 @@ export default function MovieDetailBody({
               <p className="text-gold italic mt-2">&ldquo;{details.tagline}&rdquo;</p>
             )}
 
-            <div className="type-body-sm flex flex-wrap items-center gap-4 mt-4">
-              {displayData.vote_average > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-gold text-lg">★</span>
-                  <span className="type-number text-foreground">
-                    {displayData.vote_average.toFixed(1)}
-                  </span>
-                  {details?.vote_count && (
-                    <span className="text-foreground-secondary">
-                      ({details.vote_count.toLocaleString()} votes)
-                    </span>
-                  )}
-                </div>
-              )}
+            {(Boolean(details?.runtime) || displayData.release_date) && (
+              <div className="type-body-sm flex flex-wrap items-center gap-4 mt-4">
+                {details?.runtime != null && details.runtime > 0 && (
+                  <div className="flex items-center gap-1.5 text-foreground-secondary">
+                    <Clock className="w-4 h-4" />
+                    <span>{formatRuntime(details.runtime)}</span>
+                  </div>
+                )}
 
-              {details?.runtime && (
-                <div className="flex items-center gap-1.5 text-foreground-secondary">
-                  <Clock className="w-4 h-4" />
-                  <span>{formatRuntime(details.runtime)}</span>
-                </div>
-              )}
-
-              {displayData.release_date && (
-                <div className="text-foreground-secondary">
-                  {new Date(displayData.release_date).toLocaleDateString('en-US', {
-                    month: 'long',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </div>
-              )}
-            </div>
+                {displayData.release_date && (
+                  <div className="text-foreground-secondary">
+                    {new Date(displayData.release_date).toLocaleDateString('en-US', {
+                      month: 'long',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Sits above genres, director and synopsis on purpose: on a phone
                 the info column is the whole screen, and anything below the

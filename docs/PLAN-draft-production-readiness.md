@@ -1,6 +1,8 @@
 # Draft production readiness: implementation plan
 
-Status: ready for implementation; fixes have not been applied by this plan.
+Status: implementation in progress on `codex/draft-production-readiness`, based
+on main `2ca91c4`. DRAFT-02 is verified; DRAFT-01 and DRAFT-03/04 are in progress.
+No deployment has been performed.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -31,10 +33,35 @@ Next.js/Supabase architecture.
 
 ## Work packages
 
+Implementation evidence (in progress):
+
+- DRAFT-01 now also guards direct participant membership/order writes after
+  review found that self-enrollment/deletion could change the active turn count.
+  Join/kick/start share the league lock; verification uses an isolated local DB.
+- DRAFT-02 rendering/filter changes passed simplification review, affected-file
+  ESLint, the 95-test bot suite/build, and 21 existing mocked cache tests.
+  Browser checks passed at 1280px and 390px across movie cards/shared details,
+  draft cards/previews/filters, and bidding results/selected summaries. Rated
+  (8.7 / 87,654 votes) and unrated fixtures showed no ratings/counts, zero-runtime
+  artifacts, NaN, horizontal overflow, or page errors. RT/scoring is preserved.
+- DRAFT-03 now refreshes all four state collections with coalescing, a 15-second
+  request deadline, recovery triggers, and a truthful 10-second polling fallback.
+  A deterministic hook probe passed superseded reads, completion-boundary races,
+  stalled reads, recovery, and unmount cancellation.
+- **New reproduced SDK lifecycle cause:** in installed Realtime 2.95.3,
+  `removeChannel(old)` removes a replacement channel with the same topic when
+  its asynchronous cleanup completes. A direct installed-SDK probe retained zero
+  channels after rapid same-topic replacement and one with distinct mount topics.
+  Draft subscriptions now use a stable unique topic per effect lifetime. This
+  does not prove that every historical production disconnect had this cause.
+- The initial local two-browser observation delivered a real pick to both UIs
+  in 1.9 seconds while Live. The ongoing development-server observation includes
+  HMR interruptions; it is not a clean production-build uptime measurement.
+
 | ID | Priority | Deliverable | Dependencies |
 | --- | --- | --- | --- |
 | DRAFT-01 | Release blocker | Protect draft-order mutations | None |
-| DRAFT-02 | Required product change | Remove TMDb ratings app-wide | None |
+| DRAFT-02 | Verified | Remove TMDb ratings app-wide | None |
 | DRAFT-03 | Release blocker | Diagnose socket failures and make state recovery reliable | Can begin immediately; integrate with DRAFT-05 |
 | DRAFT-04 | Release blocker | Validate canonical movie metadata and repair wishlist picks | None; coordinate contracts with DRAFT-05/06/07 |
 | DRAFT-05 | Release blocker | Make picks and completion consistent and recoverable | DRAFT-01, DRAFT-04 |

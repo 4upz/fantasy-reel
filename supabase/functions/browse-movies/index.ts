@@ -9,7 +9,6 @@ interface BrowseMoviesRequest {
   page?: number
   genres?: number[]
   release_window?: 'next30' | 'quarter' | 'year' | 'all'
-  min_rating?: number
   sort_by?: 'popularity' | 'release_date'
   trending?: boolean
 }
@@ -223,7 +222,6 @@ Deno.serve(async (req) => {
     const {
       genres = [],
       release_window = 'year',
-      min_rating = 0,
       sort_by = 'popularity',
     } = params
 
@@ -257,11 +255,6 @@ Deno.serve(async (req) => {
     // Genre filter
     if (genres.length > 0) {
       tmdbUrl.searchParams.set('with_genres', genres.join(','))
-    }
-
-    // Min rating filter
-    if (min_rating > 0) {
-      tmdbUrl.searchParams.set('vote_average.gte', min_rating.toString())
     }
 
     // Keyed off the request URL itself, so every param that can change the

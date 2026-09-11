@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { X, DollarSign, Search, Film, Sparkles, TrendingUp, Calendar, ArrowLeft, Heart, Swords } from 'lucide-react'
+import { X, DollarSign, Search, Film, TrendingUp, Calendar, ArrowLeft, Heart, Swords } from 'lucide-react'
 import Image from 'next/image'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid, DroppableHolding } from '@/types'
@@ -588,20 +588,12 @@ export default function PlaceBidModal({
                           <h4 className="type-row-title text-foreground truncate group-hover:text-gold transition-colors">
                             {movie.title}
                           </h4>
-                          <div className="type-body-sm flex min-w-0 flex-1 items-start gap-3 mt-1.5 text-foreground-secondary">
-                            {movie.release_date && (
-                              <span className="flex items-center gap-1">
-                                <Calendar className="w-3.5 h-3.5" />
-                                {new Date(movie.release_date).getFullYear()}
-                              </span>
-                            )}
-                            {movie.vote_average > 0 && (
-                              <span className="flex items-center gap-1">
-                                <Sparkles className="w-3.5 h-3.5 text-gold" />
-                                {movie.vote_average.toFixed(1)}
-                              </span>
-                            )}
-                          </div>
+                          {movie.release_date && (
+                            <div className="type-body-sm flex items-center gap-1 mt-1.5 text-foreground-secondary">
+                              <Calendar className="w-3.5 h-3.5" />
+                              {new Date(movie.release_date).getFullYear()}
+                            </div>
+                          )}
                           <ActiveBidChip
                             tmdbId={movie.tmdb_id}
                             info={activeBidsByTmdbId.get(movie.tmdb_id)}
@@ -643,12 +635,6 @@ export default function PlaceBidModal({
                       <Calendar className="w-4 h-4" />
                       {formatReleaseDateFull(selectedMovie.release_date) || 'Release date TBA'}
                     </p>
-                    {selectedMovie.vote_average > 0 && (
-                      <p className="text-foreground-secondary mt-1 flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-gold" />
-                        {selectedMovie.vote_average.toFixed(1)} rating
-                      </p>
-                    )}
                     {highestBid !== null && (
                       <div className="mt-3 px-3 py-1.5 bg-warning-bg/30 border border-warning/20 rounded-lg inline-flex items-center gap-1.5">
                         <DollarSign className="w-4 h-4 text-warning" />

@@ -7,7 +7,7 @@ import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 import type { TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import FranchiseHistoryPanel from '@/app/components/FranchiseHistoryPanel'
-import { CloseIcon, StarIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
+import { CloseIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime } from './utils'
 
 const DESCRIPTION_CHAR_THRESHOLD = 200
@@ -133,23 +133,8 @@ export default function MovieQuickPreview({
 
                 {/* Meta Row */}
                 <div className="type-body-sm flex flex-wrap items-center gap-4 mt-4">
-                  {/* Rating */}
-                  {displayData.vote_average && displayData.vote_average > 0 && (
-                    <div className="flex items-center gap-1.5">
-                      <StarIcon className="w-5 h-5 text-gold" />
-                      <span className="font-semibold text-foreground">
-                        {displayData.vote_average.toFixed(1)}
-                      </span>
-                      {details?.vote_count && (
-                        <span className="text-foreground-secondary">
-                          ({details.vote_count.toLocaleString()})
-                        </span>
-                      )}
-                    </div>
-                  )}
-
                   {/* Runtime */}
-                  {details?.runtime && (
+                  {details?.runtime != null && details.runtime > 0 && (
                     <div className="flex items-center gap-1.5 text-foreground-secondary">
                       <ClockIcon className="w-4 h-4" />
                       <span>{formatRuntime(details.runtime)}</span>
