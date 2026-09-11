@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { AlertTriangle, Film, Lock, Scissors, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
 import BidAmountAndDeadline from './BidAmountAndDeadline'
+import BidSummary from './BidSummary'
 import { getTmdbPosterUrl, getBidTypeClass } from './utils'
 
 interface BidCardProps {
@@ -194,38 +195,11 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
         data-testid={`bid-card-${bid.tmdb_id}`}
       >
         <div className="flex gap-4">
-          {/* Movie Poster */}
-          <div className="relative w-16 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
-            {movieData?.poster_url ? (
-              <Image
-                src={getTmdbPosterUrl(movieData.poster_url, 'w92')!}
-                alt={movieTitle}
-                fill
-                className="object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Film className="w-6 h-6 text-foreground-muted" />
-              </div>
-            )}
-          </div>
-
-          {/* Bid Info */}
-          <div className="flex-1 min-w-0">
-            <h4 className="type-row-title text-foreground truncate">
-              {movieTitle}
-            </h4>
-
-            {movieData?.release_date && (
-              <p className="type-body-sm text-foreground-secondary mt-0.5">
-                {new Date(movieData.release_date).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })}
-              </p>
-            )}
-
+          <BidSummary
+            title={movieTitle}
+            posterUrl={getTmdbPosterUrl(movieData?.poster_url ?? null, 'w92')}
+            releaseDate={movieData?.release_date}
+          >
             <BidAmountAndDeadline
               amount={bid.amount}
               isOutbid={isOutbid}
@@ -250,7 +224,7 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
                 <span>You&apos;ve been outbid!</span>
               </div>
             )}
-          </div>
+          </BidSummary>
 
           {/* Actions */}
           {(showRecoverButton || showRaiseButton || showCancelButton || showCancelLock) && (

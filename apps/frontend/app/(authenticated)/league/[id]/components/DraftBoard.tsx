@@ -10,8 +10,9 @@ import { buildTeamInfoByUserId, buildTeamInfoByTeamId, type TeamDisplayInfo } fr
 import MoviePicker from './MoviePicker'
 import DraftProgressRing from './DraftProgressRing'
 import PickOrderQueue from './PickOrderQueue'
+import DraftBoardHeader from './DraftBoardHeader'
 import CounterpickRound from './CounterpickRound'
-import { ClapperboardIcon, ArrowUpIcon, ClockIcon } from './Icons'
+import { ClapperboardIcon } from './Icons'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, NextPickInfo, TMDbSearchResult, CounterpickWithDetails } from '@/types'
 
 interface Props {
@@ -170,84 +171,26 @@ export default function DraftBoard({
 
   return (
     <div className="space-y-6" data-testid="draft-board">
-      {/* Draft Header Card */}
-      <div className="card p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
-          {/* Left: Title and Status */}
-          <div className="flex-1">
-            <div className="flex items-center gap-3 mb-4">
-              <h2 className="type-section text-foreground">Draft board</h2>
-            </div>
-
-            {/* Current Turn Indicator */}
-            {nextPick && (
-              <div
-                className={`p-4 rounded-xl border-2 transition-all ${
-                  isMyTurn
-                    ? 'bg-success-bg border-success shadow-glow-gold animate-glow-pulse'
-                    : 'bg-elevated border-border'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      isMyTurn ? 'bg-success text-background' : 'bg-gold text-background'
-                    }`}
-                  >
-                    {isMyTurn ? (
-                      <ArrowUpIcon className="w-6 h-6" />
-                    ) : (
-                      <ClockIcon className="w-6 h-6" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="type-body-sm text-foreground-secondary">
-                      Round {nextPick.round}, Pick {nextPick.pick_number}
-                    </p>
-                    <p
-                      className={`type-card ${
-                        isMyTurn ? 'text-success' : 'text-foreground'
-                      }`}
-                    >
-                      {isMyTurn ? "It's your turn!" : `${getTeamName(nextPick.user_id)}'s pick`}
-                    </p>
-                    {!isMyTurn && getOwnerName(nextPick.user_id) && (
-                      <p className="type-meta text-foreground-secondary">
-                        {getOwnerName(nextPick.user_id)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {isDraftComplete && (
-              <div className="p-4 rounded-xl bg-info-bg border-2 border-info">
-                <p className="type-card text-info">
-                  Draft complete! Finalizing results...
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Progress Ring */}
-          <div className="flex-shrink-0 self-center sm:self-start">
-            <DraftProgressRing current={picksMade} total={totalPicks} size="lg" />
-          </div>
-        </div>
-
-        {/* Pick Order Queue */}
-        {nextPick && (
-          <div className="mt-4 pt-4 sm:mt-6 sm:pt-6 border-t border-border">
-            <PickOrderQueue
-              participants={participants}
-              currentPickIndex={picksMade}
-              currentUserId={currentUserId}
-              rounds={league.draft_slots}
-            />
-          </div>
-        )}
-      </div>
+      <DraftBoardHeader
+        picksMade={picksMade}
+        totalPicks={totalPicks}
+        turn={nextPick ? {
+          round: nextPick.round,
+          pickNumber: nextPick.pick_number,
+          teamName: getTeamName(nextPick.user_id),
+          ownerName: getOwnerName(nextPick.user_id),
+        } : null}
+        isMyTurn={isMyTurn}
+        isDraftComplete={isDraftComplete}
+        queue={nextPick ? (
+          <PickOrderQueue
+            participants={participants}
+            currentPickIndex={picksMade}
+            currentUserId={currentUserId}
+            rounds={league.draft_slots}
+          />
+        ) : null}
+      />
 
       {error && <div className="alert alert-error">{error}</div>}
 
