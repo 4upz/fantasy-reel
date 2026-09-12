@@ -182,7 +182,7 @@ jobs:
         if: always()
         run: |
           python3 - <<'PY'
-          import json, os, subprocess
+          import base64, json, os, subprocess
           from pathlib import Path
           report = Path('apps/frontend/test-results.json')
           commit = Path('verification/commit.txt')
@@ -190,6 +190,39 @@ jobs:
           if report.exists():
               data = json.loads(report.read_text())
               summary['stats'] = {key: data['stats'].get(key) for key in ['expected', 'unexpected', 'flaky', 'skipped', 'duration']}
+              summary['tests'] = []
+              summary['draft_pick_timings'] = []
+              def record_suite(suite):
+                  for spec in suite.get('specs', []):
+                      for test in spec.get('tests', []):
+                          results = test.get('results', [])
+                          summary['tests'].append({
+                              'file': spec.get('file'), 'title': spec['title'],
+                              'outcome': test['status'], 'expected_status': test['expectedStatus'],
+                              'statuses': [result['status'] for result in results],
+                              'duration_ms': sum(result['duration'] for result in results),
+                          })
+                          for result in results:
+                              for attachment in result.get('attachments', []):
+                                  if attachment.get('name') != 'draft-pick-latency':
+                                      continue
+                                  if attachment.get('body'):
+                                      timings = json.loads(base64.b64decode(attachment['body']))
+                                  elif attachment.get('path'):
+                                      path = Path(attachment['path']).resolve()
+                                      assert path.is_relative_to(Path.cwd().resolve())
+                                      timings = json.loads(path.read_text())
+                                  else:
+                                      continue
+                                  for timing in timings:
+                                      assert timing['label'] in ['first pick in recovery case', 'warm pick after observer token refresh']
+                                      assert isinstance(timing['status'], int) and 100 <= timing['status'] <= 599
+                                      assert isinstance(timing['elapsed_ms'], (int, float)) and timing['elapsed_ms'] >= 0
+                                      summary['draft_pick_timings'].append({key: timing[key] for key in ['label', 'status', 'elapsed_ms']})
+                  for child in suite.get('suites', []):
+                      record_suite(child)
+              for suite in data.get('suites', []):
+                  record_suite(suite)
           # Emit counts and state only. Raw logs/inspect output can contain
           # credentials or payloads and must not enter this summary.
           ids = subprocess.check_output(['docker', 'ps', '-aq', '--filter', 'name=supabase_edge_runtime'], text=True).split()

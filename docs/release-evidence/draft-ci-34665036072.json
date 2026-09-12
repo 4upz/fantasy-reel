@@ -1,0 +1,22 @@
+{
+  "branch_source": "0cc382390499b064a61daa58a29f035caa40ec21",
+  "ci_run": 34665036072,
+  "conclusion": "failure",
+  "database_assertions": 117,
+  "bot_tests": 95,
+  "shared_tests": {
+    "passed": 240,
+    "steps": 165,
+    "failed": 0
+  },
+  "http_modules": {
+    "passed": 63,
+    "failed": 2
+  },
+  "http_steps": {
+    "passed": 660,
+    "failed": 2,
+    "skipped": 4
+  },
+  "browser_suite_executed": false
+}
