@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { Settings, LogOut } from 'lucide-react'
 import Avatar from '../Avatar'
+import ThemeSelector from '@/components/theme/ThemeSelector'
 
 interface Props {
   displayName: string
@@ -75,6 +76,10 @@ export default function ProfileMenu({ displayName, email, avatarUrl }: Props): R
             <Settings className="w-4 h-4" />
             <span>Account settings</span>
           </Link>
+
+          <div className="border-t border-border px-2 py-3 mt-1">
+            <ThemeSelector />
+          </div>
 
           <form action="/auth/signout" method="post" className="profile-menu-signout">
             <button

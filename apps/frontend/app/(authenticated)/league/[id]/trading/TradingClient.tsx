@@ -10,7 +10,7 @@ import { resolveExpiryBounds, type ResolvedExpiry } from '@/utils/tradeExpiry'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const ProposeTradeModal = dynamic(() => import('../components/ProposeTradeModal'), {
-  loading: () => <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-black/60" /><div className="relative animate-pulse h-[90vh] max-w-2xl w-full bg-surface rounded-lg" /></div>,
+  loading: () => <div className="fixed inset-0 z-50 flex items-center justify-center p-4"><div className="absolute inset-0 bg-overlay-soft" /><div className="relative animate-pulse h-[90vh] max-w-2xl w-full bg-surface rounded-lg" /></div>,
 })
 
 interface Props {

@@ -2,7 +2,7 @@
 @import "./typography.css";
 
 /* ============================================
-   CINEMATIC DARK DESIGN SYSTEM
+   CINEMATIC DESIGN SYSTEM
    Fantasy Reel - Premium Movie Fantasy Leagues
    ============================================ */
 
@@ -21,6 +21,8 @@
   --color-gold-muted: oklch(0.55 0.12 85 / 0.15);
   --color-crimson: #a8505c;
   --color-crimson-hover: #b85c68;
+  --color-silver: #a8a8a8;
+  --color-bronze: #cd7f32;
 
   /* Text */
   --color-foreground: #e8e8e8;
@@ -51,6 +53,8 @@
   --color-warning-bg: oklch(0.7 0.15 70 / 0.15);
   --color-info: #3b82f6;
   --color-info-bg: oklch(0.55 0.2 260 / 0.15);
+  --color-overlay: rgba(0, 0, 0, 0.85);
+  --color-overlay-soft: rgba(0, 0, 0, 0.6);
 
   /* === FONTS (generates font-* utilities) === */
   --font-display: var(--font-bricolage, "Bricolage Grotesque"), system-ui, sans-serif;
@@ -73,6 +77,57 @@
   --animate-heart-shrink: heart-shrink 0.2s ease-out;
   --animate-slide-out-down: slide-out-down 0.25s ease-out forwards;
   --animate-accolade-sweep: accolade-sweep 5s ease-in-out infinite;
+}
+
+/* The root theme is set before paint by ThemeScript. Keep these overrides
+   outside @theme so every utility and component shares the resolved palette. */
+:root {
+  color-scheme: dark;
+  --glass-background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-background: #f5f5f4;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f0f0ee;
+  --color-elevated: #ececea;
+  --color-gold: #71570c;
+  --color-gold-hover: #5f4908;
+  --color-gold-muted: rgba(113, 87, 12, 0.1);
+  --color-crimson: #9b3948;
+  --color-crimson-hover: #832c3a;
+  --color-silver: #626262;
+  --color-bronze: #8a511d;
+  --color-foreground: #242424;
+  --color-foreground-secondary: #55514b;
+  --color-foreground-muted: #68625b;
+  --color-foreground-inverse: #ffffff;
+  --color-border: #d3d2ce;
+  --color-border-hover: #a6a39c;
+  --color-status-setup: #1d4ed8;
+  --color-status-setup-bg: rgba(29, 78, 216, 0.08);
+  --color-status-drafting: #805b08;
+  --color-status-drafting-bg: rgba(128, 91, 8, 0.08);
+  --color-status-active: #176b38;
+  --color-status-active-bg: rgba(23, 107, 56, 0.08);
+  --color-status-completed: #4b5563;
+  --color-status-completed-bg: rgba(75, 85, 99, 0.08);
+  --color-success: #176b38;
+  --color-success-bg: rgba(23, 107, 56, 0.08);
+  --color-error: #b02b32;
+  --color-error-bg: rgba(176, 43, 50, 0.08);
+  --color-warning: #845307;
+  --color-warning-bg: rgba(132, 83, 7, 0.08);
+  --color-info: #1d4ed8;
+  --color-info-bg: rgba(29, 78, 216, 0.08);
+  --color-overlay: rgba(0, 0, 0, 0.45);
+  --color-overlay-soft: rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-heavy: 0 8px 24px rgba(0, 0, 0, 0.16);
+  --shadow-glow-gold: 0 0 20px rgba(113, 87, 12, 0.16);
+  --shadow-glow-crimson: 0 0 20px rgba(155, 57, 72, 0.16);
 }
 
 /* === KEYFRAMES === */
@@ -121,10 +176,6 @@
 
 /* === BASE LAYER === */
 @layer base {
-  html {
-    color-scheme: dark;
-  }
-
   body {
     font-family: var(--font-body);
     font-size: 1rem;
@@ -142,6 +193,17 @@
 
 /* === COMPONENTS LAYER === */
 @layer components {
+  /* Both approved SVGs render on the server; CSS selects the matching artwork
+     before hydration, including when a saved preference overrides the system. */
+  .brand-logo-light,
+  :root[data-theme="light"] .brand-logo-dark {
+    display: none;
+  }
+
+  :root[data-theme="light"] .brand-logo-light {
+    display: block;
+  }
+
   /* Cards */
   .card {
     background-color: var(--color-surface);
@@ -213,7 +275,7 @@
 
   .btn-danger {
     background-color: var(--color-crimson);
-    color: var(--color-foreground);
+    color: #ffffff;
   }
 
   .btn-danger:hover:not(:disabled) {
@@ -371,7 +433,7 @@
 
   /* Glass effect for modals */
   .glass {
-    background: oklch(0.12 0 0 / 0.9);
+    background: var(--glass-background);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
   }
@@ -384,7 +446,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.85);
+    background: var(--color-overlay);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     animation: overlay-fade-in 0.2s ease-out;
@@ -611,7 +673,7 @@
     font-size: 0.75rem;
     font-weight: 600;
     background: var(--color-crimson);
-    color: var(--color-foreground);
+    color: #ffffff;
     border-radius: 9999px;
   }
 
@@ -672,7 +734,7 @@
       padding: 0.375rem;
       border: 1px solid var(--color-border);
       border-radius: 9999px;
-      background: oklch(0.12 0 0 / 0.9);
+      background: var(--glass-background);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       box-shadow: var(--shadow-medium);
@@ -863,7 +925,7 @@
     position: fixed;
     inset: 0;
     z-index: 50;
-    background: rgba(0, 0, 0, 0.7);
+    background: var(--color-overlay-soft);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     animation: overlay-fade-in 0.2s ease-out;
@@ -955,7 +1017,7 @@
     left: 0;
     right: 0;
     z-index: 30;
-    background: oklch(0.1 0 0 / 0.95);
+    background: color-mix(in srgb, var(--color-background) 95%, transparent);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--color-border);
@@ -1012,7 +1074,7 @@
 
   /* Pending invitations banner */
   .invitation-banner {
-    background: linear-gradient(90deg, oklch(0.25 0.08 85 / 0.3) 0%, var(--color-surface) 100%);
+    background: linear-gradient(90deg, var(--color-gold-muted) 0%, var(--color-surface) 100%);
     border: 1px solid var(--color-gold);
     border-radius: 0.75rem;
     animation: var(--animate-fade-in);
@@ -1025,8 +1087,8 @@
 
   /* Hero gradient backdrop */
   .hero-gradient {
-    background: radial-gradient(ellipse at top center, oklch(0.18 0.04 85 / 0.4) 0%, transparent 50%),
-                radial-gradient(ellipse at bottom right, oklch(0.15 0.02 260 / 0.2) 0%, transparent 40%),
+    background: radial-gradient(ellipse at top center, var(--color-gold-muted) 0%, transparent 50%),
+                radial-gradient(ellipse at bottom right, var(--color-info-bg) 0%, transparent 40%),
                 var(--color-background);
   }
 
@@ -1097,7 +1159,7 @@
 
   /* CTA glass panel */
   .cta-panel {
-    background: oklch(0.12 0.01 85 / 0.8);
+    background: var(--glass-background);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--color-border);
@@ -1139,7 +1201,7 @@
   .ticker-container {
     position: relative;
     overflow: hidden;
-    background: oklch(0.1 0.01 85 / 0.6);
+    background: var(--glass-background);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-top: 1px solid var(--color-border);
@@ -1210,7 +1272,7 @@
 
   .scoring-spotlight {
     position: relative;
-    background: radial-gradient(ellipse at center, oklch(0.15 0.02 85 / 0.3) 0%, transparent 60%),
+    background: radial-gradient(ellipse at center, var(--color-gold-muted) 0%, transparent 60%),
                 var(--color-background);
   }
 
@@ -1391,7 +1453,7 @@
     left: 50%;
     transform: translateX(-50%);
     padding: 0.25rem 0.75rem;
-    background: oklch(0.1 0 0 / 0.9);
+    background: var(--glass-background);
     backdrop-filter: blur(8px);
     border-radius: 9999px;
     font-size: 0.75rem;

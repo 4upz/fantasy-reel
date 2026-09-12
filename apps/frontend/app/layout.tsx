@@ -4,6 +4,7 @@ import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 import { Providers } from "./providers";
+import { ThemeScript } from "@/components/theme/ThemeScript";
 
 const bricolage = localFont({
   src: "./fonts/bricolage.woff2",
@@ -33,7 +34,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${bricolage.variable} ${dmSans.variable}`}>
+    <html lang="en" className={`${bricolage.variable} ${dmSans.variable}`} suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+      </head>
       <body className="antialiased">
         <Providers>{children}</Providers>
         <Analytics />

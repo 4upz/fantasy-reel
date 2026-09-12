@@ -38,13 +38,13 @@ const BREAK_EVEN = 60
 
 const SCORE_STYLES = {
   club: 'bg-gold/15 border-gold/40 text-gold',
-  fresh: 'bg-gold/10 border-gold/25 text-gold/90',
+  fresh: 'bg-gold/10 border-gold/25 text-gold',
   rotten: 'bg-crimson/15 border-crimson/40 text-crimson',
   pending: 'bg-elevated border-border text-foreground-secondary',
 } as const
 
 const ACCOLADE_STYLE =
-  'bg-gradient-to-b from-gold/25 to-gold/5 border-gold/50 text-gold shadow-[0_0_10px_rgba(201,162,39,0.15)]'
+  'bg-gradient-to-b from-gold/10 to-gold/5 border-gold/50 text-gold shadow-[0_0_10px_rgba(201,162,39,0.15)]'
 
 const SIZE_STYLES = {
   sm: {

@@ -290,7 +290,7 @@ export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): Rea
             <div className="flex-shrink-0 text-right">
               <span
                 className={`type-meta inline-block px-2 py-1 rounded-lg ${
-                  index === 0 ? 'bg-gold text-background' : 'bg-surface text-foreground-secondary'
+                  index === 0 ? 'bg-gold text-foreground-inverse' : 'bg-surface text-foreground-secondary'
                 }`}
               >
                 R{pick.round} P{pick.pick_number}

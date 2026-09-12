@@ -187,7 +187,7 @@ export default function CounterpickRound({
                 <div className="flex items-center gap-3">
                   <div
                     className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      isMyTurn ? 'bg-success text-background' : 'bg-gold text-background'
+                      isMyTurn ? 'bg-success text-foreground-inverse' : 'bg-gold text-foreground-inverse'
                     }`}
                   >
                     {isMyTurn ? (

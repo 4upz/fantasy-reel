@@ -191,7 +191,7 @@ export default function MoviePicker({
             data-testid={`movie-tab-${tab.id}`}
             className={`type-control flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all ${
               activeTab === tab.id
-                ? 'bg-gold text-background shadow-md'
+                ? 'bg-gold text-foreground-inverse shadow-md'
                 : 'text-foreground-secondary hover:text-foreground hover:bg-surface'
             }`}
           >
@@ -200,7 +200,7 @@ export default function MoviePicker({
             {tab.id === 'wishlist' && wishlistedIds.size > 0 && (
               <span
                 className={`type-meta px-1.5 py-0.5 rounded-full ${
-                  activeTab === tab.id ? 'bg-background/20 text-background' : 'bg-crimson text-white'
+                  activeTab === tab.id ? 'bg-foreground/10 text-foreground-inverse' : 'bg-crimson text-white'
                 }`}
               >
                 {wishlistedIds.size}

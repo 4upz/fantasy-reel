@@ -9,8 +9,8 @@ interface Props {
 
 const RANK_COLORS: Record<number, string> = {
   1: 'text-gold',
-  2: 'text-[#a8a8a8]',
-  3: 'text-[#cd7f32]',
+  2: 'text-silver',
+  3: 'text-bronze',
 }
 
 /** @design-system League */

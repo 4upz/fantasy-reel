@@ -116,7 +116,7 @@ export default function LeagueMovieModal({
       data-view={view}
     >
       <div
-        className="fixed inset-0 bg-black/85 backdrop-blur-sm animate-fade-in"
+        className="fixed inset-0 bg-overlay backdrop-blur-sm animate-fade-in"
         onClick={isDropping ? undefined : onClose}
         aria-hidden="true"
       />

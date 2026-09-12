@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { User, Mail, Shield } from 'lucide-react'
+import { User, Mail, Shield, Sun } from 'lucide-react'
+import ThemeSelector from '@/components/theme/ThemeSelector'
 import type { Profile } from '@/types'
 import type { UserIdentity } from '@supabase/supabase-js'
 import { updateProfile, changePassword } from './actions'
@@ -68,6 +69,23 @@ export default function SettingsClient({
 
   return (
     <div className="space-y-6 animate-slide-up">
+      <section className="card p-6" aria-labelledby="appearance-heading">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+          <div className="p-2 rounded-lg bg-gold-muted">
+            <Sun className="w-5 h-5 text-gold" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 id="appearance-heading" className="type-section text-foreground">Appearance</h2>
+            <p className="type-body-sm text-foreground-secondary">
+              Choose a theme, or follow your device with System. Saved on this device.
+            </p>
+          </div>
+        </div>
+        <div className="max-w-sm">
+          <ThemeSelector />
+        </div>
+      </section>
+
       {/* Profile Section */}
       <section className="card p-6">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
