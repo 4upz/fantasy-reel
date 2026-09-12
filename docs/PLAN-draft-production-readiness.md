@@ -4,7 +4,86 @@ Status: DRAFT-01 through DRAFT-08 are implemented and committed on
 `codex/draft-production-readiness`, based on main `2ca91c4`. DRAFT-09 coverage is
 implemented, but the HTTP and complete multiplayer release gates remain open.
 See [the release review](DRAFT-RELEASE-REVIEW.md) for the remaining checks and
-deployment sequence. No push, merge, or deployment has been performed.
+deployment sequence. The existing branch was pushed in
+[draft PR #92](https://github.com/4upz/fantasy-reel/pull/92). No merge or
+deployment has been performed.
+
+### September 12 verification continuation
+
+Main was re-fetched and remains `2ca91c4`; the implementation was continued from
+`aa0f607`, preserving the unrelated original checkout. Commit `0cc3823` adds
+verification safeguards and coverage, without changing application behavior:
+
+- CI initializes a fresh runner database using `supabase start` with optional
+  development seeds disabled. It performs no database reset. Frontend, Edge
+  Functions, and migrations come from the same checkout.
+- A loopback-only health probe verifies migrated tables, service credentials,
+  real password Auth and refresh, RLS/Edge contracts, and a Realtime subscription.
+  It cleans its exact user even after an uncertain create response and stops
+  before expensive suites when unhealthy.
+- CI pins verified Node 24.21.0, runs a network-disabled browser/trace preflight,
+  and retains tracing for the complete browser suite with two workers and no
+  retries. The existing failure artifact policy is unchanged; the new summary
+  includes only allowed statistics and runtime state/counts.
+- Thirteen draft browser cases at `0cc3823` include a two-round `[A,B,C,C,B,A]` journey,
+  duplicate/stale HTTP submissions at the consecutive-turn boundary, detailed
+  activation scores, missed-pick reconciliation, socket recovery without reload,
+  and real refreshed-token propagation to Realtime. Visibility events are
+  explicitly synthetic; they do not establish OS background suspension behavior.
+- Only the external movie provider is replaced by canonical cache fixtures in
+  these draft tests. An inert TMDb key permits cache lookups in CI; real provider
+  and notification credentials are absent.
+- Vercel Git deployments are disabled specifically for this feature branch.
+  Supabase deployment remains restricted to main pushes/manual deployment;
+  neither deployment path was invoked.
+
+Preparation checks pass: nine draft state/date/request regressions, affected
+ESLint, TypeScript, YAML/shell syntax, and a Node 24 Playwright probe with a valid
+trace ZIP. Independent simplification reviews found and resolved health-probe
+cleanup gaps and a possible false pass in refreshed-token coverage.
+[CI run 34665036072](https://github.com/4upz/fantasy-reel/actions/runs/34665036072)
+at `0cc3823` passed health, 117 database assertions, and 240 shared backend tests
+with 165 steps. Its HTTP suite completed with 63 passing modules and two failing
+modules: 660 passing steps, two failing steps, and four existing provider skips.
+The failures were an oversized fixture-cleanup URL and obsolete exact rejection
+text. Frontend build and browser gates did not execute after that failure.
+
+Commit `ad4bb83` batches exact cache cleanup keys (two network-disabled SDK
+regressions pass), corrects the counterpick rejection text, and verifies rejected
+counterpicks leave receipts, turn, and league phase unchanged. Commit `0912d62`
+fixes reproduced polling starvation and a renewable reconciliation deadline;
+the state/date/request tests, TypeScript, and affected ESLint pass. A new browser
+test delays actual REST snapshots to verify the polling fix with a real pick,
+bringing the current draft browser count to fourteen.
+Independent simplification reviews found no remaining issues in these fixes.
+[CI run 34666240923](https://github.com/4upz/fantasy-reel/actions/runs/34666240923)
+at `ad4bb83` (merge checkout `65c78a0`) passed health, 117 database assertions,
+95 bot tests/build, 242 shared backend tests with 165 steps, all 65 HTTP modules
+(662 passing steps, four existing provider skips), production build, and the
+browser/trace preflight. The full browser result is **165 passed, two failed,
+26 existing skips, zero flaky tests** in 4m18s. All 167 unique traces are valid;
+Edge remained running without OOM, CPU hard-limit events, or acquisition timeouts.
+
+Twelve draft cases passed, including activation/budgets/scores, response-loss
+recovery, slow polling, and real Auth refresh/Realtime recovery. First/warm pick
+timings in the recovery case were 373/251 ms. Two blockers remain: simultaneous
+requests produced a timing-dependent 403 instead of the expected stale-slot 409,
+and the two-round journey committed five picks while the owner's Live browser
+remained at one pick. The final returning turn was therefore not completed.
+Commit `22c7741` fixes stale-slot classification and receipts that commit during
+preflight. Twenty-five actual-handler regression steps pass with transport
+stubbed and networking disabled. Commit `817e17b` awaits Auth before the first
+subscription join and reconciles every five seconds while subscribed. Eleven
+state/date/request tests, TypeScript, and affected ESLint pass. Both batches
+passed independent simplification review. The browser suite now has fifteen
+draft cases, including real change-frame suppression; its snake journey also
+asserts the owner's authenticated identity on every captured draft join.
+
+The installed SDK's tokenless buffered-join race is independently reproduced;
+the failed CI trace cannot prove that specific cause. Historical production
+disconnect causality remains unproven. The complete final-source repeat is still
+required. Sanitized case outcomes and recovery timing fields now persist in CI
+logs even for success, without extending the failure-only raw artifact policy.
 
 Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
 start, `7c14975` fixes calendar dates, `06a18a6` adds canonical metadata,
@@ -283,8 +362,8 @@ Implementation and verification evidence:
   suite under Node 26 had the same pattern: all 13 executable test bodies
   completed, then all 13 timed out during finalization (two existing skips).
   Only the runner PATH changed for the passing email repeat; tests, app build,
-  Auth configuration, tracing, and assertions stayed fixed. CI currently uses
-  Node 20; no repository runtime/dependency change was made. This isolates a
+  Auth configuration, tracing, and assertions stayed fixed. CI used Node 20
+  then; the September 12 continuation now pins Node 24.21.0. This isolates a
   test-runtime problem, but does not erase the earlier full-suite Auth/API/UI
   failures or clear the complete multiplayer release gate.
 

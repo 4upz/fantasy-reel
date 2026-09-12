@@ -1,0 +1,2485 @@
+{
+  "run_url": "https://github.com/4upz/fantasy-reel/actions/runs/34666240923",
+  "branch_source": "ad4bb834442f0c766f5a0d5c2ad014749ee0f22e",
+  "checkout": "65c78a06101775e2d30d0f2af6e452b8d5a16ccc",
+  "source_tree": "6ef64faf67d6025b69667cc0ade0939ea9e6151b",
+  "node": "24.21.0",
+  "supabase_cli": "2.111.0",
+  "deno": "2.6.4",
+  "database_assertions_passed": 117,
+  "draft_state_tests_passed": 9,
+  "bot_tests_passed": 95,
+  "shared_backend": {
+    "passed": 242,
+    "failed": 0,
+    "steps": 165
+  },
+  "http": {
+    "modules_passed": 65,
+    "modules_failed": 0,
+    "steps_passed": 662,
+    "steps_failed": 0,
+    "steps_skipped": 4
+  },
+  "frontend_build": "passed",
+  "runner_trace_preflight": "passed",
+  "runtime": {
+    "status": "running",
+    "oom_killed": false,
+    "cpu_hard_limit_events": 0,
+    "worker_acquisition_timeouts": 0
+  },
+  "scope": "Real local Auth, database, Edge Functions, Realtime. Draft movie-provider data uses canonical cache fixtures. Recovery faults/visibility are injected; timing is not a cold-container measurement. No external notifications.",
+  "ci_run": "34666240923",
+  "branch_commit": "ad4bb83",
+  "stats": {
+    "total": 193,
+    "expected": 165,
+    "unexpected": 2,
+    "flaky": 0,
+    "skipped": 26,
+    "ok": false
+  },
+  "historical_six": [
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "preserves a new bid when delayed bids arrive and revalidates the amount at 1440px",
+      "outcome": "expected",
+      "duration_ms": 4501,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "a committed pick updates the other player turn and progress through Realtime @critical @realtime",
+      "outcome": "expected",
+      "duration_ms": 8174,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "simultaneous selections for the same turn commit exactly one pick",
+      "outcome": "unexpected",
+      "duration_ms": 17582,
+      "statuses": [
+        "failed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "all draft picks and counterpicks activate the league with its configured budgets @critical",
+      "outcome": "expected",
+      "duration_ms": 18808,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "ARIA attributes are correct",
+      "outcome": "expected",
+      "duration_ms": 2166,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/season-lifecycle.spec.ts",
+      "title": "ends a season and starts a clean next season at 1440px",
+      "outcome": "expected",
+      "duration_ms": 5269,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    }
+  ],
+  "recovery": [
+    {
+      "file": "draft/draft-recovery.spec.ts",
+      "title": "recovers missed picks after disconnect and synthetic background/resume, then receives a pick after real token refresh @critical @realtime",
+      "outcome": "expected",
+      "duration_ms": 29866,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ],
+      "pick_latency": [
+        {
+          "label": "first pick in recovery case",
+          "status": 201,
+          "elapsed_ms": 373
+        },
+        {
+          "label": "warm pick after observer token refresh",
+          "status": 201,
+          "elapsed_ms": 251
+        }
+      ]
+    }
+  ],
+  "trace_validation": {
+    "zip_files": 334,
+    "crc_and_trace_json_valid": 334,
+    "invalid": [],
+    "unique_sha256_count": 167,
+    "copies_per_unique": {
+      "2": 167
+    },
+    "referenced_trace_attachments": 167,
+    "all_referenced_files_exist": true,
+    "trace_json_lines_parsed_across_both_copies": 90040
+  },
+  "tests": [
+    {
+      "file": "../global-teardown.ts",
+      "title": "global teardown",
+      "outcome": "expected",
+      "duration_ms": 53,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "../global-setup.ts",
+      "title": "global setup",
+      "outcome": "expected",
+      "duration_ms": 84,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "shows email account as connected @critical",
+      "outcome": "expected",
+      "duration_ms": 2479,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "shows available OAuth providers to connect",
+      "outcome": "expected",
+      "duration_ms": 2486,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "connect Discord button initiates OAuth",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "connect Google button initiates OAuth",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "cannot disconnect only auth method",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "can disconnect when multiple auth methods exist",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "link-account page loads without crashing",
+      "outcome": "expected",
+      "duration_ms": 412,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "merge account button calls merge-accounts function",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "callback redirects to appropriate page on error",
+      "outcome": "expected",
+      "duration_ms": 387,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "link Discord to existing email account",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "merge accounts when OAuth email matches",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "keep accounts separate (decline merge)",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord login button is visible on login page @critical",
+      "outcome": "expected",
+      "duration_ms": 393,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord login button initiates OAuth flow",
+      "outcome": "expected",
+      "duration_ms": 489,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord signup button is visible on signup page",
+      "outcome": "expected",
+      "duration_ms": 410,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord signup button has correct styling",
+      "outcome": "expected",
+      "duration_ms": 380,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "link-account page loads without errors",
+      "outcome": "expected",
+      "duration_ms": 383,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "callback route exists and handles requests",
+      "outcome": "expected",
+      "duration_ms": 359,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "callback without code redirects appropriately",
+      "outcome": "expected",
+      "duration_ms": 353,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google login button is visible on login page @critical",
+      "outcome": "expected",
+      "duration_ms": 373,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google login button initiates OAuth flow",
+      "outcome": "expected",
+      "duration_ms": 439,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google signup button is visible on signup page",
+      "outcome": "expected",
+      "duration_ms": 347,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google signup button has correct styling",
+      "outcome": "expected",
+      "duration_ms": 334,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "link-account page loads without errors",
+      "outcome": "expected",
+      "duration_ms": 485,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "callback route exists and handles requests",
+      "outcome": "expected",
+      "duration_ms": 334,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "callback without code redirects appropriately",
+      "outcome": "expected",
+      "duration_ms": 283,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "successful login redirects to dashboard",
+      "outcome": "expected",
+      "duration_ms": 1115,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "invalid credentials show error message",
+      "outcome": "expected",
+      "duration_ms": 720,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "empty form shows validation errors",
+      "outcome": "expected",
+      "duration_ms": 456,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "preserves return URL after login",
+      "outcome": "expected",
+      "duration_ms": 1063,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "Discord OAuth button is visible",
+      "outcome": "expected",
+      "duration_ms": 330,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "forgot password link navigates correctly",
+      "outcome": "expected",
+      "duration_ms": 503,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "signup link navigates correctly",
+      "outcome": "expected",
+      "duration_ms": 413,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "authenticated user can access dashboard",
+      "outcome": "expected",
+      "duration_ms": 1727,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "logout redirects to login page",
+      "outcome": "expected",
+      "duration_ms": 2158,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "can request password reset email @critical",
+      "outcome": "expected",
+      "duration_ms": 1073,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "shows success for non-existent email (security)",
+      "outcome": "expected",
+      "duration_ms": 499,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "validates email format",
+      "outcome": "expected",
+      "duration_ms": 429,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "back to login link works",
+      "outcome": "expected",
+      "duration_ms": 396,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "reset password with valid token @critical",
+      "outcome": "expected",
+      "duration_ms": 2740,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "shows error for expired token",
+      "outcome": "expected",
+      "duration_ms": 471,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "password validation enforced",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "shows password requirements",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "complete reset flow from login page @critical",
+      "outcome": "expected",
+      "duration_ms": 4032,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "complete signup flow with email verification @critical",
+      "outcome": "expected",
+      "duration_ms": 2216,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows validation errors for invalid input",
+      "outcome": "expected",
+      "duration_ms": 696,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows error for weak password",
+      "outcome": "expected",
+      "duration_ms": 659,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows error for invalid email format",
+      "outcome": "expected",
+      "duration_ms": 522,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "login link navigates correctly",
+      "outcome": "expected",
+      "duration_ms": 570,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows success or error for already registered email",
+      "outcome": "expected",
+      "duration_ms": 1542,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "bidding panel displays budget and place bid button @critical",
+      "outcome": "expected",
+      "duration_ms": 2450,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "displays correct budget amount",
+      "outcome": "expected",
+      "duration_ms": 2263,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can open place bid modal",
+      "outcome": "expected",
+      "duration_ms": 2589,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can search for movies in bid modal",
+      "outcome": "expected",
+      "duration_ms": 2957,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can select movie and see bid amount input",
+      "outcome": "expected",
+      "duration_ms": 2726,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "shows bid amount input and submit button after movie selection",
+      "outcome": "expected",
+      "duration_ms": 2882,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "preserves a new bid when delayed bids arrive and revalidates the amount at 1440px",
+      "outcome": "expected",
+      "duration_ms": 4501,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "preserves a new bid when delayed bids arrive and revalidates the amount at 390px",
+      "outcome": "expected",
+      "duration_ms": 4122,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can submit a valid bid @critical",
+      "outcome": "expected",
+      "duration_ms": 3225,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can cancel an active bid",
+      "outcome": "expected",
+      "duration_ms": 3228,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "shows outbid notification when another user bids higher",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "owner starts the configured draft and can search upcoming titles @critical",
+      "outcome": "expected",
+      "duration_ms": 5064,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "waiting players can preview movies but cannot submit a pick",
+      "outcome": "expected",
+      "duration_ms": 6462,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "a committed pick updates the other player turn and progress through Realtime @critical @realtime",
+      "outcome": "expected",
+      "duration_ms": 8174,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "simultaneous selections for the same turn commit exactly one pick",
+      "outcome": "unexpected",
+      "duration_ms": 17582,
+      "statuses": [
+        "failed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "a response lost after commit is reconciled and its receipt replays without another pick",
+      "outcome": "expected",
+      "duration_ms": 4996,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "duplicate submissions cannot consume the consecutive turn at the round boundary @critical",
+      "outcome": "unexpected",
+      "duration_ms": 25768,
+      "statuses": [
+        "failed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "all draft picks and counterpicks activate the league with its configured budgets @critical",
+      "outcome": "expected",
+      "duration_ms": 18808,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "polling applies slow successful snapshots instead of invalidating every read @critical",
+      "outcome": "expected",
+      "duration_ms": 27885,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "preview keeps selection on server rejection, guards pending actions, and restores focus (1280px)",
+      "outcome": "expected",
+      "duration_ms": 6884,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "preview keeps selection on server rejection, guards pending actions, and restores focus (390px)",
+      "outcome": "expected",
+      "duration_ms": 5137,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "movie details failure is visible and can be retried in the same native dialog",
+      "outcome": "expected",
+      "duration_ms": 5331,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "empty eligible pages advance only three pages, with explicit load and retry for the remainder",
+      "outcome": "expected",
+      "duration_ms": 5017,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "wishlist read failure retries, then title search stays local with unsupported filters disabled",
+      "outcome": "expected",
+      "duration_ms": 2687,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "draft/draft-recovery.spec.ts",
+      "title": "recovers missed picks after disconnect and synthetic background/resume, then receives a pick after real token refresh @critical @realtime",
+      "outcome": "expected",
+      "duration_ms": 29866,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ],
+      "pick_latency": [
+        {
+          "label": "first pick in recovery case",
+          "status": 201,
+          "elapsed_ms": 373
+        },
+        {
+          "label": "warm pick after observer token refresh",
+          "status": 201,
+          "elapsed_ms": 251
+        }
+      ]
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "user can create a new league @critical",
+      "outcome": "expected",
+      "duration_ms": 4624,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "validates required fields",
+      "outcome": "expected",
+      "duration_ms": 2419,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "enforces max participants limits",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "modal can be closed without creating",
+      "outcome": "expected",
+      "duration_ms": 2430,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "shows created leagues on dashboard",
+      "outcome": "expected",
+      "duration_ms": 1482,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "shows empty state when no leagues",
+      "outcome": "expected",
+      "duration_ms": 1516,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "displays draft order section with participants",
+      "outcome": "expected",
+      "duration_ms": 1877,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "randomize button randomizes order and shows toast",
+      "outcome": "expected",
+      "duration_ms": 1896,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "shows locked message when league not in setup",
+      "outcome": "expected",
+      "duration_ms": 1529,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "non-owner cannot access settings page",
+      "outcome": "expected",
+      "duration_ms": 1657,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "join via valid invitation token @critical",
+      "outcome": "expected",
+      "duration_ms": 2053,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "can join without team name (uses default)",
+      "outcome": "expected",
+      "duration_ms": 2015,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "redirects to login if not authenticated",
+      "outcome": "expected",
+      "duration_ms": 705,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "invalid token shows error",
+      "outcome": "expected",
+      "duration_ms": 2051,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "expired invitation shows error",
+      "outcome": "expected",
+      "duration_ms": 3042,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "already used invitation shows error",
+      "outcome": "expected",
+      "duration_ms": 4663,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "can decline invitation",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "cannot join full league",
+      "outcome": "expected",
+      "duration_ms": 2331,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "invitation for different email allows or warns",
+      "outcome": "expected",
+      "duration_ms": 1825,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "pending invitations shown on dashboard",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "can accept invitation from dashboard",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "user can join league via join code @critical",
+      "outcome": "expected",
+      "duration_ms": 2995,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "invalid join code shows error",
+      "outcome": "expected",
+      "duration_ms": 2382,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "cannot join full league via code",
+      "outcome": "expected",
+      "duration_ms": 2870,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "cannot join league after draft starts",
+      "outcome": "expected",
+      "duration_ms": 2262,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "owner can generate join link from settings @critical",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "copy join link to clipboard",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "regenerate join link invalidates old code",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "join link section disabled after draft starts",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "non-owner cannot access settings to generate link",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "existing join link shown on settings page",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "no link shows generate prompt",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "join link card shown on draft page before draft starts",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "join link card hidden after draft starts",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown opens on click",
+      "outcome": "expected",
+      "duration_ms": 2410,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown closes on toggle click",
+      "outcome": "expected",
+      "duration_ms": 2456,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown closes on Escape",
+      "outcome": "expected",
+      "duration_ms": 2022,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown closes on click outside",
+      "outcome": "expected",
+      "duration_ms": 2821,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "current league is highlighted",
+      "outcome": "expected",
+      "duration_ms": 2841,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "switching leagues preserves current tab",
+      "outcome": "expected",
+      "duration_ms": 2563,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "clicking current league closes dropdown without navigation",
+      "outcome": "expected",
+      "duration_ms": 2301,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "status badges are visible for each league",
+      "outcome": "expected",
+      "duration_ms": 2311,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "\"View All Leagues\" navigates to dashboard",
+      "outcome": "expected",
+      "duration_ms": 2697,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "single-league user sees one entry",
+      "outcome": "expected",
+      "duration_ms": 2233,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "ARIA attributes are correct",
+      "outcome": "expected",
+      "duration_ms": 2166,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "tabs render on league page @critical",
+      "outcome": "expected",
+      "duration_ms": 1947,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "clicking a tab navigates to correct page @critical",
+      "outcome": "expected",
+      "duration_ms": 2558,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "active tab is highlighted with aria-current @critical",
+      "outcome": "expected",
+      "duration_ms": 2440,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "hides post-draft tabs for pre-active leagues",
+      "outcome": "expected",
+      "duration_ms": 2091,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "draft is demoted to the end of the strip for active leagues",
+      "outcome": "expected",
+      "duration_ms": 1886,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "draft stays a primary tab before the season starts",
+      "outcome": "expected",
+      "duration_ms": 2376,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "settings tab not visible for non-owner",
+      "outcome": "expected",
+      "duration_ms": 2085,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "settings tab visible for owner",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "tab navigation preserves league context",
+      "outcome": "expected",
+      "duration_ms": 2945,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "all tabs render for active league",
+      "outcome": "expected",
+      "duration_ms": 2042,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "active league puts Roster on the bar and Draft in the More sheet",
+      "outcome": "expected",
+      "duration_ms": 2136,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "pre-active league keeps Draft on the bar",
+      "outcome": "expected",
+      "duration_ms": 1786,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/movie-details.spec.ts",
+      "title": "overview movies open a read-only details dialog",
+      "outcome": "expected",
+      "duration_ms": 2295,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/movie-details.spec.ts",
+      "title": "standings rosters open the same dialog on desktop",
+      "outcome": "expected",
+      "duration_ms": 2666,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/movie-details.spec.ts",
+      "title": "a standings movie opens without collapsing the team it belongs to",
+      "outcome": "expected",
+      "duration_ms": 2605,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "every held movie is an openable card on a touch viewport",
+      "outcome": "expected",
+      "duration_ms": 2090,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "the dialog shows movie details with the roster action attached",
+      "outcome": "expected",
+      "duration_ms": 2492,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "the confirm view spells out the cost, and the drop is recorded",
+      "outcome": "expected",
+      "duration_ms": 3135,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "keeping the movie returns to details without dropping",
+      "outcome": "expected",
+      "duration_ms": 2784,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "a counterpicked movie names the team that locked it and offers no drop",
+      "outcome": "expected",
+      "duration_ms": 2374,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "a released movie explains that it has already opened",
+      "outcome": "expected",
+      "duration_ms": 2209,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "an exhausted drop allowance explains itself on the droppable movie",
+      "outcome": "expected",
+      "duration_ms": 2104,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/season-lifecycle.spec.ts",
+      "title": "ends a season and starts a clean next season at 1440px",
+      "outcome": "expected",
+      "duration_ms": 5269,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/season-lifecycle.spec.ts",
+      "title": "ends a season and starts a clean next season at 390px",
+      "outcome": "expected",
+      "duration_ms": 4979,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/season-lifecycle.spec.ts",
+      "title": "does not allow completion when the standings preview fails",
+      "outcome": "expected",
+      "duration_ms": 2194,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/standings-dropped.spec.ts",
+      "title": "a dropped movie leaves the standings card and its movie count",
+      "outcome": "expected",
+      "duration_ms": 2217,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "league/standings-dropped.spec.ts",
+      "title": "standings and roster list the same movies for the same team",
+      "outcome": "expected",
+      "duration_ms": 2890,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "user can login and access dashboard",
+      "outcome": "expected",
+      "duration_ms": 1182,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "user can logout successfully",
+      "outcome": "expected",
+      "duration_ms": 2116,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "authenticated user can create a new league",
+      "outcome": "expected",
+      "duration_ms": 3165,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "unauthenticated user is redirected from protected routes",
+      "outcome": "expected",
+      "duration_ms": 512,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "login page loads without errors",
+      "outcome": "expected",
+      "duration_ms": 488,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "signup page loads without errors",
+      "outcome": "expected",
+      "duration_ms": 279,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "league owner can access draft page and see draft board",
+      "outcome": "expected",
+      "duration_ms": 3972,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "standings page is accessible from league @critical",
+      "outcome": "expected",
+      "duration_ms": 2359,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "displays team rankings in correct order",
+      "outcome": "expected",
+      "duration_ms": 2479,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "displays team scores",
+      "outcome": "expected",
+      "duration_ms": 2361,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "current user team is identifiable",
+      "outcome": "expected",
+      "duration_ms": 2108,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "can view team details from standings",
+      "outcome": "expected",
+      "duration_ms": 2220,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "shows team movies in standings context",
+      "outcome": "expected",
+      "duration_ms": 2263,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "standings page shows teams in descending score order",
+      "outcome": "expected",
+      "duration_ms": 2317,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "expanded team shows its draft picks and points breakdown",
+      "outcome": "expected",
+      "duration_ms": 2215,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "expanded team with pickup shows Pickups section",
+      "outcome": "expected",
+      "duration_ms": 2087,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "expanded team with counterpick shows Counterpicks section",
+      "outcome": "expected",
+      "duration_ms": 2524,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "team header shows combined movie count from drafts and pickups",
+      "outcome": "expected",
+      "duration_ms": 2218,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "rail defaults to the current user team and follows selection",
+      "outcome": "expected",
+      "duration_ms": 2430,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "rail lists the selected team roster",
+      "outcome": "expected",
+      "duration_ms": 2356,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "pencil icon opens modal with pre-filled name @critical",
+      "outcome": "expected",
+      "duration_ms": 2118,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "cancel closes modal without changes",
+      "outcome": "expected",
+      "duration_ms": 2227,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "escape closes modal",
+      "outcome": "expected",
+      "duration_ms": 2010,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "click outside closes modal",
+      "outcome": "expected",
+      "duration_ms": 2022,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "update team name shows on dashboard @critical",
+      "outcome": "expected",
+      "duration_ms": 2438,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "name persists on reload @critical",
+      "outcome": "expected",
+      "duration_ms": 3205,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "updated name appears on standings @critical",
+      "outcome": "expected",
+      "duration_ms": 2912,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "updated name appears on roster @critical",
+      "outcome": "expected",
+      "duration_ms": 3803,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "trimmed on save",
+      "outcome": "expected",
+      "duration_ms": 2908,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "empty name disables save",
+      "outcome": "expected",
+      "duration_ms": 2337,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "whitespace-only name disables save",
+      "outcome": "expected",
+      "duration_ms": 1937,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "character counter turns red at limit",
+      "outcome": "expected",
+      "duration_ms": 2070,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "upload avatar shows preview",
+      "outcome": "expected",
+      "duration_ms": 2807,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "remove avatar shows fallback",
+      "outcome": "expected",
+      "duration_ms": 2885,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "trading page is accessible from league",
+      "outcome": "expected",
+      "duration_ms": 2824,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "shows team rosters for trading",
+      "outcome": "expected",
+      "duration_ms": 2728,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "can open propose trade interface",
+      "outcome": "expected",
+      "duration_ms": 2685,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "can view own roster on trading page",
+      "outcome": "expected",
+      "duration_ms": 2613,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "can propose a trade through the modal",
+      "outcome": "expected",
+      "duration_ms": 4741,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "recipient can view incoming trade",
+      "outcome": "expected",
+      "duration_ms": 2407,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "recipient can accept trade",
+      "outcome": "expected",
+      "duration_ms": 3020,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "recipient can reject trade",
+      "outcome": "expected",
+      "duration_ms": 3027,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "proposer can cancel pending trade",
+      "outcome": "expected",
+      "duration_ms": 1957,
+      "statuses": [
+        "passed"
+      ],
+      "retries": [
+        0
+      ]
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "league owner sees veto option for trades in review",
+      "outcome": "skipped",
+      "duration_ms": 0,
+      "statuses": [
+        "skipped"
+      ],
+      "retries": [
+        0
+      ]
+    }
+  ]
+}

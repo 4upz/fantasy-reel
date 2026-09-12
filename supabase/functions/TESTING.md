@@ -4,6 +4,20 @@ This document describes the testing infrastructure for Supabase Edge Functions i
 
 ## Quick Start
 
+For the draft release gate, use the isolated PR CI workflow rather than a broad
+run on an unhealthy shared Docker stack. CI initializes a new empty database
+from the checkout's migrations; no reset is needed. Before local expensive
+suites, export the same stack's `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`, then run
+`node scripts/check-draft-stack.cjs` from the repository root under Node 24.21.0.
+The probe refuses non-loopback origins. Diagnose a failed probe before retrying.
+
+The Node 24 Playwright trace probe and complete browser checks are defined in
+`.github/workflows/e2e-tests.yml`. The browser suite runs against a production
+build and real Auth, database, Edge Functions, and Realtime. Draft movie-provider
+fixtures are canonical cache rows; CI uses an inert provider key and no external
+notification credentials. These checks do not verify live provider contracts.
+
 ```bash
 # 1. Start local Supabase
 npx supabase start
