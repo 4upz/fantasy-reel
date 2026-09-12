@@ -10,6 +10,10 @@ are saved in this browser on this device and synchronize across open tabs;
 they are not part of the user's server profile. When browser storage is
 unavailable, the selector still works for the current visit.
 
+The account menu and Settings share a compact, text-only segmented control with
+44px touch targets. A gold border identifies the selected option; an additional
+outer outline identifies keyboard focus. Keep the explanatory copy in Settings.
+
 ## Implementation
 
 - [`utils/theme.ts`](../../apps/frontend/utils/theme.ts) defines the preference
