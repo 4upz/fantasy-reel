@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "codex/draft-production-readiness": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/process-draft-notifications",

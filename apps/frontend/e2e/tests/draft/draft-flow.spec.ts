@@ -1,4 +1,5 @@
 import type { Request } from '@playwright/test'
+import { randomUUID } from 'crypto'
 import { test, expect, openDraft, startDraft, searchDraft, pickMovie, readDraftPicks } from '../../fixtures/draft.fixture'
 import { getAdminClient } from '../../helpers/supabase.helper'
 import { seedDraftSearch } from '../../helpers/draft-cache.helper'
@@ -123,6 +124,94 @@ test.describe('Draft flow', () => {
     expect(await readDraftPicks(readyDraft.id)).toHaveLength(1)
   })
 
+  test.describe('two-round snake draft', () => {
+    test.use({ draftSlots: 2 })
+
+    test('duplicate submissions cannot consume the consecutive turn at the round boundary @critical', async ({
+      leagueOwnerPage: owner, authedPage: second, secondUserPage: third, readyDraft,
+    }) => {
+      test.setTimeout(120_000)
+      await startDraft(owner, readyDraft)
+      for (const page of [second, third]) {
+        await openDraft(page, readyDraft)
+        await expect(page.getByTestId('draft-connection-status')).toHaveText('Live')
+      }
+      for (const [index, page] of [owner, second].entries()) {
+        await expect(page.getByText("It's your turn!", { exact: true })).toBeVisible()
+        await searchDraft(page, readyDraft)
+        await pickMovie(page, readyDraft.movies[index])
+      }
+
+      await expect(third.getByText("It's your turn!", { exact: true })).toBeVisible()
+      await searchDraft(third, readyDraft)
+      let originalRequest: Request | undefined
+      let duplicates: Array<{ status: number; id: string; replayed: boolean }> = []
+      // Send the browser's exact authenticated request twice to the real Edge
+      // handler, then deliver one real response to the UI. Neither response is stubbed.
+      await third.route('**/functions/v1/draft-pick', async route => {
+        if (route.request().method() !== 'POST') { await route.continue(); return }
+        originalRequest = route.request()
+        const responses = await Promise.all([route.fetch(), route.fetch()])
+        duplicates = await Promise.all(responses.map(async response => {
+          const body = await response.json()
+          return { status: response.status(), id: body.pick?.id, replayed: body.replayed }
+        }))
+        await route.fulfill({ response: responses[0] })
+      })
+      try {
+        await pickMovie(third, readyDraft.movies[2])
+      } finally {
+        await third.unroute('**/functions/v1/draft-pick')
+      }
+      expect(duplicates.map(response => response.status)).toEqual([201, 201])
+      expect(duplicates[0].id).toBeTruthy()
+      expect(duplicates[0].id).toBe(duplicates[1].id)
+      expect(duplicates.filter(response => response.replayed)).toHaveLength(1)
+      expect(await readDraftPicks(readyDraft.id)).toHaveLength(3)
+      await expect(third.getByTestId('draft-progress')).toContainText('3/6')
+      await expect(third.getByText("It's your turn!", { exact: true })).toBeVisible()
+
+      expect(originalRequest).toBeDefined()
+      const originalBody = originalRequest!.postDataJSON()
+      expect(originalBody.expected_pick).toBe(3)
+      // A new selection from stale state must not steal this player's second
+      // consecutive turn. Reuse the real browser auth, with a distinct receipt.
+      const stale = await third.request.post(originalRequest!.url(), {
+        headers: await originalRequest!.allHeaders(),
+        data: { ...originalBody, tmdb_id: readyDraft.movies[3].tmdb_id, request_id: randomUUID() },
+      })
+      expect(stale.status()).toBe(409)
+      expect(await readDraftPicks(readyDraft.id)).toHaveLength(3)
+
+      const consecutiveRequest = third.waitForRequest(request =>
+        request.method() === 'POST' && request.url().endsWith('/functions/v1/draft-pick'))
+      await pickMovie(third, readyDraft.movies[3])
+      const consecutiveBody = (await consecutiveRequest).postDataJSON()
+      expect(consecutiveBody.expected_pick).toBe(4)
+      expect(consecutiveBody.request_id).not.toBe(originalBody.request_id)
+      for (const [index, page] of [second, owner].entries()) {
+        await expect(page.getByText("It's your turn!", { exact: true })).toBeVisible()
+        await searchDraft(page, readyDraft)
+        await pickMovie(page, readyDraft.movies[index + 4])
+      }
+
+      const picks = await readDraftPicks(readyDraft.id)
+      expect(picks.map(pick => ({ round: pick.round, pick: pick.pick_number, team: pick.team_id }))).toEqual([
+        { round: 1, pick: 1, team: readyDraft.teamIds[0] },
+        { round: 1, pick: 2, team: readyDraft.teamIds[1] },
+        { round: 1, pick: 3, team: readyDraft.teamIds[2] },
+        { round: 2, pick: 1, team: readyDraft.teamIds[2] },
+        { round: 2, pick: 2, team: readyDraft.teamIds[1] },
+        { round: 2, pick: 3, team: readyDraft.teamIds[0] },
+      ])
+      expect(new Set(picks.map(pick => pick.movie_id)).size).toBe(6)
+      await expect(owner.getByRole('button', { name: 'Start counterpick round', exact: true })).toBeVisible()
+      for (const page of [owner, second, third]) {
+        await expect(page.getByTestId('draft-progress')).toContainText('6/6')
+      }
+    })
+  })
+
   test('all draft picks and counterpicks activate the league with its configured budgets @critical', async ({
     leagueOwnerPage: owner, authedPage: second, secondUserPage: third, readyDraft,
   }) => {
@@ -152,8 +241,16 @@ test.describe('Draft flow', () => {
     const { data: budgets, error: budgetError } = await admin.from('team_budgets').select('remaining_budget').in('team_id', readyDraft.teamIds)
     expect(budgetError).toBeNull()
     expect(budgets?.map(row => row.remaining_budget)).toEqual([137, 137, 137])
-    const { count, error: scoresError } = await admin.from('team_scores').select('id', { count: 'exact', head: true }).in('team_id', readyDraft.teamIds)
+    const { data: scores, error: scoresError } = await admin.from('team_scores')
+      .select('team_id,total_points,draft_points,counterpick_points,movies_pending,movies_scored,counterpicks_made,counterpicks_scored')
+      .in('team_id', readyDraft.teamIds)
     expect(scoresError).toBeNull()
-    expect(count).toBe(3)
+    expect(scores).toHaveLength(3)
+    for (const teamId of readyDraft.teamIds) {
+      expect(scores?.find(score => score.team_id === teamId)).toMatchObject({
+        total_points: 0, draft_points: 0, counterpick_points: 0,
+        movies_pending: 1, movies_scored: 0, counterpicks_made: 1, counterpicks_scored: 0,
+      })
+    }
   })
 })
