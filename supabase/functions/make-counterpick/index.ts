@@ -20,19 +20,24 @@ Deno.serve(async (req) => {
     if (typeof movie_id !== 'string' || !isValidUUID(movie_id)) return errorResponse('Valid movie_id is required', 400)
     const attempt = parseDraftAttempt(body)
     const service = createServiceClient()
-    const replay = await findDraftReplay(service, {
-      ...attempt, leagueId: league_id, userId: user.id, kind: 'counterpick', movieId: movie_id,
-    })
+    const submission = { ...attempt, leagueId: league_id, userId: user.id, kind: 'counterpick' as const, movieId: movie_id }
+    let replay = await findDraftReplay(service, submission)
     let expectedPick = replay?.expected_pick ?? attempt.expectedPick
     if (!replay) {
       const { data: league, error } = await service.from('leagues').select('status').eq('id', league_id).maybeSingle()
       if (error) throw error
       if (!league) return errorResponse('League not found', 404)
       if (league.status !== 'counterpicking') {
-        return errorResponse(league.status === 'active' ? 'Use the bidding system for active-phase counterpicks'
-          : league.status === 'drafting' ? 'Counterpick round has not started yet'
-          : league.status === 'setup' ? 'Draft has not started yet'
-          : `Cannot make counterpick: league is in '${league.status}' status`, 400)
+        // The final counterpick can commit after the first receipt lookup and
+        // activate the league. Prefer its committed replay to a phase rejection.
+        replay = await findDraftReplay(service, submission)
+        if (!replay) {
+          return errorResponse(league.status === 'active' ? 'Use the bidding system for active-phase counterpicks'
+            : league.status === 'drafting' ? 'Counterpick round has not started yet'
+            : league.status === 'setup' ? 'Draft has not started yet'
+            : `Cannot make counterpick: league is in '${league.status}' status`, expectedPick === undefined ? 400 : 409)
+        }
+        expectedPick = replay.expected_pick
       }
       if (expectedPick === undefined) {
         const { count, error: countError } = await service.from('counterpicks')
