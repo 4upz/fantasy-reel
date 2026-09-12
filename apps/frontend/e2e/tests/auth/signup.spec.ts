@@ -8,6 +8,16 @@ import {
 import { generateTestEmail } from '../../fixtures/test-data'
 import { deleteTestUser, getAdminClient } from '../../helpers/supabase.helper'
 
+async function findSignupUser(email: string) {
+  const client = getAdminClient()
+  for (let page = 1; ; page++) {
+    const { data, error } = await client.auth.admin.listUsers({ page, perPage: 100 })
+    if (error) throw error
+    const user = data.users.find((user) => user.email === email)
+    if (user || data.users.length < 100) return user
+  }
+}
+
 /**
  * Signup flow E2E tests
  * Tests complete signup flow including email verification via Inbucket
@@ -25,9 +35,7 @@ test.describe('User Signup', () => {
   test.afterEach(async () => {
     // Clean up test user if created
     try {
-      const client = getAdminClient()
-      const { data } = await client.auth.admin.listUsers()
-      const testUser = data?.users.find((u) => u.email === testEmail)
+      const testUser = await findSignupUser(testEmail)
       if (testUser) {
         await deleteTestUser(testUser.id)
       }
@@ -55,6 +63,13 @@ test.describe('User Signup', () => {
     // Should show confirmation message (heading)
     await expect(page.getByRole('heading', { name: /check your email/i })).toBeVisible({ timeout: 15000 })
 
+    const createdUser = await findSignupUser(testEmail)
+    expect(createdUser, 'Signup must create the test account').toBeDefined()
+    expect(
+      createdUser!.email_confirmed_at,
+      'Email verification requires Auth email confirmations enabled; an auto-confirmed account does not exercise this flow'
+    ).toBeFalsy()
+
     // Wait for NEW confirmation email (after baseline)
     const email = await waitForNewEmail(testEmail, baseline, 15000)
     expect(email.subject.toLowerCase()).toContain('confirm')
@@ -68,6 +83,12 @@ test.describe('User Signup', () => {
     // Should redirect to login or dashboard after confirmation
     // Supabase auth confirm may redirect through intermediate pages
     await page.waitForURL(/\/(login|dashboard)/, { timeout: 15000 })
+
+    // An invalid confirmation token can also redirect to login. Verify the
+    // account was confirmed before treating that redirect as a successful flow.
+    const { data, error } = await getAdminClient().auth.admin.getUserById(createdUser!.id)
+    expect(error).toBeNull()
+    expect(data.user?.email_confirmed_at).toBeTruthy()
   })
 
   test('shows validation errors for invalid input', async ({ page }) => {

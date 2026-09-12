@@ -206,7 +206,8 @@ export async function createTestLeague(
     .insert({
       name,
       owner_id: ownerId,
-      status: options?.status || 'setup',
+      // Add owner membership while setup is mutable, then apply the requested phase.
+      status: 'setup',
       max_participants: options?.maxParticipants || 8,
       invite_only: true,
     })
@@ -239,11 +240,15 @@ export async function createTestLeague(
   // Verify participant exists before returning
   await verifyDataExists(client, 'league_participants', participantData.id)
 
+  if (options?.status && options.status !== 'setup') {
+    await updateLeagueStatus(data.id, options.status)
+  }
+
   return {
     id: data.id,
     name: data.name,
     ownerId: data.owner_id,
-    status: data.status as TestLeague['status'],
+    status: options?.status ?? 'setup',
   }
 }
 

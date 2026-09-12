@@ -26,6 +26,10 @@ dotenv.config({ path: path.resolve(__dirname, '.env.local') })
  * run; set E2E_BASE_URL to test a worktree's own server on another port.
  */
 const E2E_BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
+const appUrl = new URL(E2E_BASE_URL)
+const E2E_PORT = appUrl.port || (appUrl.protocol === 'https:' ? '443' : '80')
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
+const USE_PRODUCTION_SERVER = Boolean(process.env.CI) || process.env.E2E_SERVER_MODE === 'production'
 
 export default defineConfig({
   testDir: './e2e/tests',
@@ -150,22 +154,23 @@ export default defineConfig({
    * `next build` first. A dev server compiles every route on first hit,
    * and parallel workers hitting an uncompiled app on a small runner is
    * what caused the 30s navigation timeouts and 22-28 min suite runs.
-   * Locally: reuse an already-running dev server (faster iteration).
+   * Every run owns a fresh server so a different checkout cannot satisfy it.
    */
   webServer: {
     // Local runs use plain `next dev` (webpack), not `npm run dev`
     // (--turbopack): the Sentry SDK doesn't support Turbopack until Next
     // 15.4.1, and running the E2E suite against that combination degrades
     // the dev server app-wide. Revert after upgrading Next past 15.4.1.
-    command: process.env.CI ? 'npx next start' : 'npx next dev',
+    command: USE_PRODUCTION_SERVER ? 'npx next start' : 'npx next dev',
     url: E2E_BASE_URL,
-    reuseExistingServer: !process.env.CI,
+    // Opt in only when this exact checkout's server was deliberately started.
+    reuseExistingServer: process.env.E2E_REUSE_SERVER === '1',
     timeout: 120 * 1000, // 2 minutes to start
 
     // Environment variables for the server
     env: {
-      // Ensure we're using local Supabase
-      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321',
+      PORT: E2E_PORT,
+      NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
     },
   },
 })

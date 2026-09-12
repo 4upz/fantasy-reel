@@ -1,10 +1,10 @@
 # Draft production readiness: implementation plan
 
-Status: implementation and release verification in progress on
-`codex/draft-production-readiness`, based on main `2ca91c4`. DRAFT-01/02 and the
-shared DRAFT-08 date corrections are committed. DRAFT-03 through DRAFT-08 are
-implemented and committed; final integration checks are underway. No deployment
-has been performed; DRAFT-09 remains open.
+Status: DRAFT-01 through DRAFT-08 are implemented and committed on
+`codex/draft-production-readiness`, based on main `2ca91c4`. DRAFT-09 coverage is
+implemented, but the HTTP and complete multiplayer release gates remain open.
+See [the release review](DRAFT-RELEASE-REVIEW.md) for the remaining checks and
+deployment sequence. No push, merge, or deployment has been performed.
 
 Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
 start, `7c14975` fixes calendar dates, `06a18a6` adds canonical metadata,
@@ -12,7 +12,8 @@ transactional picks, and their notification outbox, and `0e5aa97` fixes discover
 paging. `bbdee1e` integrates synchronization, discovery, accessible selection,
 mobile turns, and bounded request recovery. `ea5dca3` refreshes the shared header
 and navigation after draft phase changes. `7c0b0c1` preserves retryable Auth
-outage errors instead of misreporting them as rejected credentials.
+outage errors instead of misreporting them as rejected credentials. `0d89b61`
+preserves actual HTTP status codes in the integration test helper.
 
 The goal is a dependable first production draft: participants can find eligible
 movies, make picks confidently, see each other's turns without refreshing, and
@@ -47,7 +48,7 @@ Next.js/Supabase architecture.
 
 ## Work packages
 
-Implementation evidence (in progress):
+Implementation and verification evidence:
 
 - DRAFT-01 now also guards direct participant membership/order writes after
   review found that self-enrollment/deletion could change the active turn count.
@@ -80,7 +81,7 @@ Implementation evidence (in progress):
   interruptions; the separate stable-build sample below is more useful evidence.
 - DRAFT-04 resolves canonical cached/TMDb metadata before persisting a movie;
   malformed identity/date and failed lookups cannot create incomplete records.
-  Shared metadata unit checks pass; real Auth/Postgres integration is underway.
+  Shared metadata unit checks pass; final HTTP limitations are recorded below.
   A read-only production audit found 65 movies, zero missing release dates,
   zero missing TMDb identities, and zero empty titles. No production backfill
   is indicated by that completeness check; it does not validate each date.
@@ -96,9 +97,8 @@ Implementation evidence (in progress):
   same-key replay, competing same-slot requests, final-counterpick replay after
   activation, and notification lease/order races. Activation, configured budgets,
   score rows, receipts, and outbox writes commit together. HTTP verification
-  remains separate: the latest real Edge run failed before assertions on Auth
-  504. A local mixed-CLI service-token mismatch was independently found and
-  corrected in ignored test configuration; no authentication code was bypassed.
+  remains separate: final Edge runs encountered Auth 504 and runtime failures.
+  A local mixed-CLI service-token mismatch was independently found and corrected in ignored test configuration; no authentication code was bypassed.
 - DRAFT-06 backend checks passed four tests with six actual-handler steps for
   raw trending pages, empty eligible pages, filter windows, invalid requests,
   and truthful upstream totals. Browser discovery assertions are included in
@@ -193,7 +193,7 @@ Implementation evidence (in progress):
   review, Deno typecheck, and the shared utility suite pass: 11 tests/42 steps.
   Auth transport was stubbed through the real SDK without network permission;
   valid/missing/rejected credentials, 500/502/503/504, and network failures were
-  covered. The active browser run retains its original backend snapshot.
+  covered. The full browser run retained its original backend snapshot.
 
 - Final HTTP preparation found that the existing test invocation helper dropped
   successful response status codes, which would make the new transaction tests
@@ -203,6 +203,90 @@ Implementation evidence (in progress):
   cover 200/201/204, JSON 401/409/503, text 546, and transport failure. Both tests,
   the affected Deno typecheck, and simplification review pass. No application
   behavior or existing assertions changed.
+
+- The complete configured browser run finished on September 12 at 00:11 UTC:
+  **101 passed, 63 failed, 26 existing skips, zero flaky, 190 total** in 97.16
+  minutes. No retries or new skips were used. Of the eleven draft cases, the
+  waiting-player case passed and ten failed. Several stopped before their target
+  scenario on Auth/fixture failures, runtime 546, navigation failures, or delayed
+  canonical details. The desktop rejection case reached the real validation
+  request, whose error arrived just after the assertion deadline. These results
+  do not verify complete multiplayer mutation, replay, or activation. The full
+  report and exact error stacks are preserved before any follow-up run.
+  The app build/backend snapshot stayed fixed, but a rating/NaN regex correction
+  at 22:39 UTC (before the draft group), cache TTL/manifest edits at 22:52 UTC,
+  and cleanup aggregation at 22:55 UTC occurred after the run began at 22:33:58
+  UTC. Race/replay/activation assertions were unchanged; fixture line shifts
+  explain some mismatched code frames. This is not a full final-source pass.
+  A league-switcher ARIA case failed waiting for its first async option, before
+  the two-option assertion. A later snapshot showed one option; neither that
+  snapshot nor the incomplete trace establishes a missing-league defect. Its
+  cause remains unclassified.
+
+- A final isolated-runtime follow-up used the reviewed backend snapshot with
+  `per_worker`, retaining image 1.68.4, normal Auth, and the same CPU/memory limits.
+  Cold/warm checks passed start (200), repeated-start rejection (documented 400),
+  canonical details (200), a real pick (201), and receipt replay (201), with
+  exactly one persisted pick and exact fixture cleanup. Cold start took 1.30s,
+  cold details 2.18s, cold pick 25.64s, and replay 221ms. No 546 occurred in this
+  small sample; the cold-pick latency remains unexplained and is not acceptable
+  evidence of normal production performance. An initial probe stopped because
+  it incorrectly expected 409 for repeat start; the probe was corrected to the
+  existing 400 contract and the isolated runtime restarted before the complete
+  cold run. No application code, runtime limits, or checked-in test assertions
+  changed for that correction. The complete affected HTTP result follows below.
+  Auth log correlation showed sub-second server processing for the slow probe
+  pick; it does not explain the delay before the Auth request appeared. Sustained
+  testing then reproduced seven distinct CPU hard-limit terminations and Auth
+  504s.
+  Per-worker logs use a different hard-limit message than the earlier oneshot
+  logs; an initial narrow log counter missed them. Worker reuse does not resolve
+  the observed failure, and the small passing probe does not clear the gate.
+
+- The final eleven-module HTTP run finished in 15m56s: 38 steps passed and 190
+  failed; all eleven modules failed, and 19 make-counterpick steps never started
+  after an Auth sign-in 504. Of the failed steps, 145 stopped in fixture helpers;
+  the remaining 45 assertions captured unknown errors, gateway 502/503, three
+  service-token 401s, or the safe Auth-unavailable response. Docker inspection
+  confirmed the isolated Edge container was OOM-killed at 00:29:58.450 UTC,
+  exit 137. Later Kong 503s followed the dead backend. Deduplicated runtime logs
+  recorded seven distinct CPU hard-limit isolates before exit; repeated log
+  history must not be counted as additional failures. This is not evidence of a
+  healthy production runtime or a cause for historical production socket loss.
+  Hash-only comparison confirmed the local test service token differed from the
+  effective Edge token. Only ignored `.env.test` was corrected; those three
+  service checks remain pending a healthy runtime. Exact scoped DB checks found
+  no remaining integration leagues, synthetic movies, or cache rows. No further
+  sustained run or redundant request to the dead Edge runtime was attempted.
+
+- Full-run Auth triage found that the legacy email helper hardcoded verification
+  links to local port 54321 while this task's accounts used 55421. Both recovery
+  requests reached the wrong local Auth instance and returned `otp_expired`;
+  these were fixture-origin failures, not demonstrated reset-page defects. The
+  helper now uses the configured Supabase origin and decodes HTML ampersands
+  while preserving the verification query. A network-disabled probe passed
+  recovery/signup URL preservation. Signup verification now checks the exact
+  account changes from unconfirmed to confirmed, preventing an invalid-link
+  redirect to login from falsely passing; account lookup/cleanup paginate.
+  Simplification review, scoped ESLint, frontend TypeScript, and whitespace
+  checks passed. The unchanged final-source recovery/signup suite passed under
+  Node 24.21.0: 13 passed, two existing skips, zero failures in 10.38 seconds,
+  with all 13 trace ZIPs readable. Both recovery links and signup used the
+  isolated Auth origin and reached the matching final frontend. Signup's exact
+  account transitioned from unconfirmed to confirmed. Exact account enumeration
+  found no residual fixtures after either run.
+
+- A separate no-network Playwright Test probe reproduced trace-finalization
+  failure under Node 26.7.0 with installed Playwright 1.58.1: assertions finished
+  in 349ms, but the test timed out and its ZIP was truncated. The identical probe
+  under Node 24.21.0 passed in 2.1 seconds with a valid ZIP. The initial email
+  suite under Node 26 had the same pattern: all 13 executable test bodies
+  completed, then all 13 timed out during finalization (two existing skips).
+  Only the runner PATH changed for the passing email repeat; tests, app build,
+  Auth configuration, tracing, and assertions stayed fixed. CI currently uses
+  Node 20; no repository runtime/dependency change was made. This isolates a
+  test-runtime problem, but does not erase the earlier full-suite Auth/API/UI
+  failures or clear the complete multiplayer release gate.
 
 | ID | Status | Deliverable | Dependencies |
 | --- | --- | --- | --- |
@@ -214,7 +298,7 @@ Implementation evidence (in progress):
 | DRAFT-06 | Implemented; full browser gate pending | Fix discovery pagination and filter state | DRAFT-02; align eligibility with DRAFT-04 |
 | DRAFT-07 | Implemented; controlled UI checks pass; final gate pending | Make selection, submission, and keyboard interaction reliable | DRAFT-03/04/05/06 contracts settled |
 | DRAFT-08 | Verified in controlled date/mobile checks | Correct dates and improve mobile turn/action visibility | Dates independent; mobile after DRAFT-07 |
-| DRAFT-09 | Open; full suite in progress | Verify a complete multiplayer draft and deployment readiness | All required fixes |
+| DRAFT-09 | Open; full suite completed with failures | Verify a complete multiplayer draft and deployment readiness | All required fixes |
 
 ### DRAFT-01 — Protect draft-order mutations
 
