@@ -50,6 +50,9 @@ export function useDraftState(initialState: DraftState) {
     // Coalesce events during a read, then read again before applying anything.
     // An older HTTP response must never overwrite a later mutation/event.
     async function readLatest(): Promise<boolean> {
+      // All coalesced follow-ups share one deadline, so a busy draft cannot
+      // keep a mutation's reconciliation promise pending indefinitely.
+      const deadlineAt = performance.now() + REFRESH_TIMEOUT_MS
       try {
         while (!disposed) {
           const version = requestedVersion
@@ -57,6 +60,11 @@ export function useDraftState(initialState: DraftState) {
           activeRequest = controller
           let timeout: ReturnType<typeof setTimeout> | undefined
           try {
+            const remainingMs = deadlineAt - performance.now()
+            if (remainingMs <= 0) {
+              controller.abort(new Error('Draft refresh timed out'))
+              throw controller.signal.reason
+            }
             const [league, participants, draftPicks, counterpicks] = await Promise.race([
               Promise.all([
                 supabase.from('leagues').select('*').eq('id', leagueId).abortSignal(controller.signal).single(),
@@ -70,7 +78,7 @@ export function useDraftState(initialState: DraftState) {
               ]),
               new Promise<never>((_, reject) => {
                 controller.signal.addEventListener('abort', () => reject(controller.signal.reason), { once: true })
-                timeout = setTimeout(() => controller.abort(new Error('Draft refresh timed out')), REFRESH_TIMEOUT_MS)
+                timeout = setTimeout(() => controller.abort(new Error('Draft refresh timed out')), remainingMs)
               }),
             ])
             if (disposed) return false
@@ -106,8 +114,11 @@ export function useDraftState(initialState: DraftState) {
       }
     }
 
-    function requestRefresh(): Promise<boolean> {
+    function requestRefresh(invalidate = true): Promise<boolean> {
       if (disposed) return Promise.resolve(false)
+      // A routine polling tick can share the current read. Only actual changes
+      // or explicit recovery requests make that read too old to apply.
+      if (inFlight && !invalidate) return inFlight
       requestedVersion += 1
       // Defer the worker until its promise is stored, including synchronous failures.
       if (!inFlight) inFlight = Promise.resolve().then(readLatest)
@@ -127,7 +138,7 @@ export function useDraftState(initialState: DraftState) {
       setRealtimeStatus('polling')
       if (pollingTimer) return
       void requestRefresh()
-      pollingTimer = setInterval(() => void requestRefresh(), POLL_INTERVAL_MS)
+      pollingTimer = setInterval(() => void requestRefresh(false), POLL_INTERVAL_MS)
     }
 
     // removeChannel is asynchronous and this SDK reuses channels by topic.
