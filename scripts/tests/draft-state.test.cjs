@@ -12,6 +12,7 @@ const requests = []
 const timers = new Map()
 let effect
 let timerId = 0
+let clockMs = 0
 let onState
 const listeners = new Map()
 const topics = []
@@ -59,7 +60,7 @@ vm.runInNewContext(compiled, {
   clearTimeout: id => timers.delete(id),
   setInterval(callback, delay) { const id = ++timerId; timers.set(id, { callback, delay, interval: true }); return id },
   clearInterval: id => timers.delete(id),
-  queueMicrotask, AbortController, Promise, crypto: require("node:crypto").webcrypto,
+  queueMicrotask, AbortController, Promise, performance: { now: () => clockMs }, crypto: require("node:crypto").webcrypto,
   window: target, document: { ...target, visibilityState: 'visible' }, navigator: { onLine: true },
 })
 const state = moduleStub.exports.useDraftState({ league: { id: 'league', generation: 0 }, participants: [], draftPicks: [], counterpicks: [] })
@@ -108,6 +109,48 @@ async function main() {
   assert.equal(await recovered, true)
   assert.equal(states[1], null)
 
+  // Routine polling must not discard a healthy response simply because it
+  // takes longer than the polling interval to arrive.
+  const fallback = [...timers.values()].find(timer => timer.delay === 10000 && !timer.interval)
+  fallback.callback()
+  let slowResolved = false
+  const slow = state.refresh().then(result => { slowResolved = true; return result })
+  await flush()
+  const poll = [...timers.values()].find(timer => timer.interval)
+  clockMs += 10000
+  poll.callback()
+  clockMs += 1000
+  resolvePass(6)
+  await flush()
+  assert.equal(states[0].league.generation, 6, 'a successful 11-second read survives a 10-second polling tick')
+  assert.equal(slowResolved, true, 'polling does not keep the caller waiting for another read')
+  assert.equal(await slow, true)
+
+  // Actual mutation/recovery events still invalidate stale reads, but their
+  // follow-up reads share one deadline instead of extending it indefinitely.
+  const invalidated = state.refresh()
+  await flush()
+  for (const generation of [7, 8]) {
+    clockMs += 6000
+    state.refresh()
+    resolvePass(generation)
+    await flush()
+  }
+  assert.equal(states[0].league.generation, 6, 'genuinely superseded data remains unapplied')
+  const remainingDeadline = [...timers.values()].find(timer => timer.delay === 3000)
+  assert.ok(remainingDeadline, 'follow-up reads use the remaining overall deadline')
+  const invalidatedRequests = requests.splice(0)
+  clockMs += 3000
+  remainingDeadline.callback()
+  assert.equal(await invalidated, false, 'ongoing invalidations release the caller after 15 seconds')
+  assert.ok(invalidatedRequests.every(request => request.signal.aborted))
+  assert.ok(states[1], 'an exhausted overall deadline remains visible')
+  const afterInvalidation = state.refresh()
+  await flush()
+  resolvePass(9)
+  assert.equal(await afterInvalidation, true)
+  assert.equal(states[1], null)
+
   const unmounted = state.refresh()
   await flush()
   cleanup()
@@ -118,7 +161,7 @@ async function main() {
   assert.equal(await state.refresh(), false)
 
 }
-test('draft refresh coalesces newer reads, recovers timeouts, and cancels on unmount', main)
+test('draft refresh coalesces events, tolerates slow polling, bounds reconciliation, and cancels on unmount', main)
 
 test('rapid draft remount survives the installed SDK asynchronous channel cleanup', async () => {
   const { RealtimeClient } = require('@supabase/realtime-js')

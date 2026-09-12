@@ -1,6 +1,47 @@
-import { test, expect, startDraft, searchDraft, readDraftPicks } from '../../fixtures/draft.fixture'
+import { test, expect, openDraft, startDraft, searchDraft, pickMovie, readDraftPicks } from '../../fixtures/draft.fixture'
 import { getAdminClient } from '../../helpers/supabase.helper'
 import { seedDraftMovieCache, seedDraftSearch } from '../../helpers/draft-cache.helper'
+
+test('polling applies slow successful snapshots instead of invalidating every read @critical', async ({
+  leagueOwnerPage: owner, authedPage: observer, readyDraft,
+}) => {
+  test.setTimeout(90_000)
+  await startDraft(owner, readyDraft)
+  await observer.setViewportSize({ width: 390, height: 844 })
+  // Deliberate transport failure; Auth, database reads, and the pick remain real.
+  await observer.routeWebSocket(url => url.pathname.includes('/realtime/'), socket => socket.close())
+  const completedTables = new Set<string>()
+  await observer.route('**/rest/v1/**', async route => {
+    const url = new URL(route.request().url())
+    const table = url.pathname.split('/').pop()!
+    if (route.request().method() !== 'GET' ||
+      !['leagues', 'league_participants', 'draft_picks', 'counterpicks'].includes(table) ||
+      ![url.searchParams.get('id'), url.searchParams.get('league_id')].includes(`eq.${readyDraft.id}`)) {
+      await route.continue()
+      return
+    }
+    // Longer than the 10s poll interval, shorter than the 15s read deadline.
+    // Forward the actual read after the delay; never synthesize its response.
+    await new Promise(resolve => setTimeout(resolve, 11_000))
+    const response = await route.fetch()
+    if (response.ok()) completedTables.add(table)
+    await route.fulfill({ response })
+  })
+  try {
+    await openDraft(observer, readyDraft)
+    await expect(observer.getByTestId('draft-connection-status')).toHaveText('Periodic updates', { timeout: 15_000 })
+    await searchDraft(owner, readyDraft)
+    await pickMovie(owner, readyDraft.movies[0])
+    expect(await readDraftPicks(readyDraft.id)).toHaveLength(1)
+    // Allow one poll interval plus the delayed real read. The broken loop
+    // never applies a result, regardless of how many poll cycles complete.
+    await expect(observer.getByTestId('draft-progress')).toContainText('1/3', { timeout: 30_000 })
+    await expect(observer.getByTestId('mobile-draft-turn')).toContainText('Your turn to draft')
+    expect([...completedTables].sort()).toEqual(['counterpicks', 'draft_picks', 'league_participants', 'leagues'])
+  } finally {
+    await observer.unrouteAll({ behavior: 'wait' })
+  }
+})
 
 for (const width of [1280, 390]) {
   test(`preview keeps selection on server rejection, guards pending actions, and restores focus (${width}px)`, async ({ leagueOwnerPage: page, readyDraft }) => {
