@@ -13,12 +13,14 @@ interface ReadyDraft {
   teamIds: string[]
 }
 
-export const test = leagueTest.extend<{ readyDraft: ReadyDraft }>({
-  readyDraft: async ({ draftReadyLeague }, provideFixture) => {
+export const test = leagueTest.extend<{ readyDraft: ReadyDraft; draftSlots: 1 | 2 }>({
+  draftSlots: [1, { option: true }],
+  readyDraft: async ({ draftReadyLeague, draftSlots }, provideFixture) => {
     const admin = getAdminClient()
     const query = `readiness-${randomUUID()}`
-    const tmdbIdBase = randomInt(1_500_000_000, 2_000_000_000 - 4)
-    const movies = ['Alpha', 'Beta', 'Gamma', 'Delta'].map((title, index) => ({
+    const titles = ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta'].slice(0, draftSlots * 3 + 1)
+    const tmdbIdBase = randomInt(1_500_000_000, 2_000_000_000 - titles.length)
+    const movies = titles.map((title, index) => ({
       tmdb_id: tmdbIdBase + index, title: `${query} ${title}`,
       overview: 'A canonical cached movie for draft readiness verification.',
       release_date: daysFromNow(30 + index), poster_url: null, vote_average: 8.7,
@@ -27,7 +29,7 @@ export const test = leagueTest.extend<{ readyDraft: ReadyDraft }>({
     const keys: string[] = []
     try {
       const { error } = await admin.from('leagues').update({
-        draft_slots: 1, draft_counterpick_slots: 1, faab_budget: 137, custom_draft_order: true,
+        draft_slots: draftSlots, draft_counterpick_slots: 1, faab_budget: 137, custom_draft_order: true,
       }).eq('id', draftReadyLeague.id)
       if (error) throw error
       keys.push(...await seedDraftMovieCache(movies))
@@ -90,6 +92,7 @@ export async function pickMovie(page: Page, movie: TMDbSearchResult) {
 export async function readDraftPicks(leagueId: string) {
   const { data, error } = await getAdminClient().from('draft_picks')
     .select('id,team_id,movie_id,round,pick_number,movies(title,tmdb_id)').eq('league_id', leagueId)
+    .order('round').order('pick_number')
   if (error) throw error
   return data ?? []
 }

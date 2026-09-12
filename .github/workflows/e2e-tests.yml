@@ -17,10 +17,8 @@ jobs:
   e2e-tests:
     name: E2E Tests (Chromium)
     runs-on: ubuntu-latest
-    # Run API integration tests before the production build and browser suite,
-    # so their fixtures never compete. The API step has its own 15-minute cap;
-    # retain another 25 minutes for stack startup, the build, and browser tests.
-    timeout-minutes: 40
+    # Database, API, and browser suites run sequentially on this fresh runner.
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
@@ -29,7 +27,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '20'
+          # Node 26.7.0 corrupts Playwright 1.58.1 trace finalization locally.
+          # Pin the verified runner; do not disable traces to hide that failure.
+          node-version: '24.21.0'
           cache: 'npm'
 
       - name: Install dependencies
@@ -48,22 +48,32 @@ jobs:
         with:
           deno-version: '2.6.4'
 
-      - name: Start Supabase
-        # The CLI intermittently 502s while the stack is coming up
-        # ("An invalid response was received from the upstream server"),
-        # which used to fail the whole run in ~5 min. Retry a couple of
-        # times with a clean stop in between before giving up.
+      - name: Prepare isolated verification environment
         run: |
-          for attempt in 1 2 3; do
-            if supabase start; then
-              exit 0
-            fi
-            echo "supabase start failed (attempt ${attempt}); retrying..."
-            supabase stop --no-backup || true
-            sleep 15
-          done
-          echo "supabase start failed after 3 attempts"
-          exit 1
+          mkdir -p verification
+          git rev-parse HEAD > verification/commit.txt
+          node --version
+          deno --version
+          supabase --version
+          # `start` applies all migrations to an empty runner database. Disable
+          # only optional development seeds; there is no existing DB to reset.
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('supabase/config.toml')
+          config = path.read_text()
+          section, tail = config.split('[db.seed]', 1)
+          seed, rest = tail.split('[realtime]', 1)
+          assert 'enabled = true' in seed
+          path.write_text(section + '[db.seed]' + seed.replace('enabled = true', 'enabled = false', 1) + '[realtime]' + rest)
+          PY
+          # Cache-only movie handlers still require a nonempty provider key.
+          # This inert value cannot authorize live TMDb calls. No production
+          # provider, Discord, email, or monitoring secrets enter this runner.
+          echo 'TMDB_API_KEY=ci-cache-only-placeholder' > supabase/functions/.env
+
+      - name: Start Supabase
+        # Stop on an unhealthy start; do not reset or repeatedly retry it.
+        run: supabase start
 
       - name: Get Supabase keys and set environment
         id: supabase-keys
@@ -74,22 +84,20 @@ jobs:
           echo "::add-mask::$SERVICE_KEY"
           echo "service-role-key=$SERVICE_KEY" >> $GITHUB_OUTPUT
 
-      - name: Reset database
-        # Same intermittent-502 hazard as supabase start; the reset is
-        # idempotent, so retrying is safe.
-        run: |
-          for attempt in 1 2 3; do
-            if supabase db reset --no-seed; then
-              exit 0
-            fi
-            echo "supabase db reset failed (attempt ${attempt}); retrying..."
-            sleep 15
-          done
-          echo "supabase db reset failed after 3 attempts"
-          exit 1
+      - name: Verify stack health and HTTP contracts
+        timeout-minutes: 3
+        run: node scripts/check-draft-stack.cjs
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase-keys.outputs.service-role-key }}
 
       - name: Verify database integrity
         run: supabase test db
+
+      - name: Run draft state and bot regressions
+        run: |
+          npm run test:draft:state
+          npm run test:bot
+          npm run build --workspace=apps/discord-bot
 
       - name: Run API integration tests
         timeout-minutes: 15
@@ -97,6 +105,7 @@ jobs:
         # local CI stack environment already used by the browser tests below.
         run: |
           touch .env.test
+          deno task test:unit
           deno task test --reporter=tap
         working-directory: supabase/functions
         env:
@@ -151,11 +160,50 @@ jobs:
         run: npm run build
         working-directory: apps/frontend
 
+      - name: Verify browser runner and stack before browser tests
+        run: |
+          npx playwright test --config=scripts/playwright-preflight/playwright.config.cjs
+          trace=$(find verification/runner -name trace.zip -print -quit)
+          test -n "$trace"
+          unzip -t "$trace"
+          node scripts/check-draft-stack.cjs
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase-keys.outputs.service-role-key }}
+
       - name: Run E2E tests
-        run: npm run test:e2e -- --project=chromium
+        run: npm run test:e2e -- --project=chromium --workers=2 --retries=0 --trace=on
         working-directory: apps/frontend
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ steps.supabase-keys.outputs.service-role-key }}
+
+      - name: Record sanitized verification summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          report = Path('apps/frontend/test-results.json')
+          commit = Path('verification/commit.txt')
+          summary = {'commit': commit.read_text().strip() if commit.exists() else None, 'browser_suite_executed': report.exists()}
+          if report.exists():
+              data = json.loads(report.read_text())
+              summary['stats'] = {key: data['stats'].get(key) for key in ['expected', 'unexpected', 'flaky', 'skipped', 'duration']}
+          # Emit counts and state only. Raw logs/inspect output can contain
+          # credentials or payloads and must not enter this summary.
+          ids = subprocess.check_output(['docker', 'ps', '-aq', '--filter', 'name=supabase_edge_runtime'], text=True).split()
+          summary['edge_runtime'] = []
+          for container in ids:
+              state = json.loads(subprocess.check_output(['docker', 'inspect', container], text=True))[0]['State']
+              logs = subprocess.run(['docker', 'logs', container], capture_output=True, text=True)
+              combined = (logs.stdout + logs.stderr).lower()
+              summary['edge_runtime'].append({
+                  'status': state['Status'], 'oom_killed': state['OOMKilled'], 'exit_code': state['ExitCode'],
+                  'cpu_hard_limit_events': combined.count('cpu time hard limit'),
+                  'worker_acquisition_timeouts': combined.count('worker acquisition timed out'),
+              })
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
+              out.write('```json\n' + json.dumps(summary, indent=2) + '\n```\n')
+          PY
 
       # Reports are only uploaded on failure and expire quickly: uploading
       # every run (plus failure videos) exhausted the account's artifact
