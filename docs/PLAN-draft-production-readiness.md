@@ -1,10 +1,12 @@
 # Draft production readiness: implementation plan
 
-Status: DRAFT-01 through DRAFT-08 are implemented and committed on
-`codex/draft-production-readiness`, based on main `2ca91c4`. DRAFT-09 coverage is
-implemented, but the HTTP and complete multiplayer release gates remain open.
-See [the release review](DRAFT-RELEASE-REVIEW.md) for the remaining checks and
-deployment sequence. The existing branch was pushed in
+Status: DRAFT-01 through DRAFT-09 are implemented and verified on
+`codex/draft-production-readiness`, based on main `2ca91c4`. The final matching-source
+CI gate passed at `efae412`: 168 browser passes, zero failures, 26 existing skips,
+all 15 draft cases, and all required backend/database/build gates. Recommend a
+controlled, coordinated release after deployment approval. See
+[the release review](DRAFT-RELEASE-REVIEW.md) for exact evidence, measurement
+limits, and the deployment/recovery sequence. The existing branch was pushed in
 [draft PR #92](https://github.com/4upz/fantasy-reel/pull/92). No merge or
 deployment has been performed.
 
@@ -64,9 +66,9 @@ browser/trace preflight. The full browser result is **165 passed, two failed,
 26 existing skips, zero flaky tests** in 4m18s. All 167 unique traces are valid;
 Edge remained running without OOM, CPU hard-limit events, or acquisition timeouts.
 
-Twelve draft cases passed, including activation/budgets/scores, response-loss
+Twelve draft cases passed in that second run, including activation/budgets/scores, response-loss
 recovery, slow polling, and real Auth refresh/Realtime recovery. First/warm pick
-timings in the recovery case were 373/251 ms. Two blockers remain: simultaneous
+timings in the recovery case were 373/251 ms. Two blockers remained: simultaneous
 requests produced a timing-dependent 403 instead of the expected stale-slot 409,
 and the two-round journey committed five picks while the owner's Live browser
 remained at one pick. The final returning turn was therefore not completed.
@@ -81,9 +83,31 @@ asserts the owner's authenticated identity on every captured draft join.
 
 The installed SDK's tokenless buffered-join race is independently reproduced;
 the failed CI trace cannot prove that specific cause. Historical production
-disconnect causality remains unproven. The complete final-source repeat is still
-required. Sanitized case outcomes and recovery timing fields now persist in CI
+disconnect causality remains unproven. Sanitized case outcomes and recovery timing fields now persist in CI
 logs even for success, without extending the failure-only raw artifact policy.
+
+[Final CI run 34668316537](https://github.com/4upz/fantasy-reel/actions/runs/34668316537)
+at `efae412` (merge checkout `8a1c173`, identical Git tree
+`6445db8a0d0a45f9f66e8e428f5f97d99153b0e7`) passed both health probes,
+117 database assertions, 11 state/date/request tests, 95 bot tests/build,
+243 shared backend tests/190 steps, all 65 HTTP modules (662 passing steps,
+four existing provider skips), production frontend build, and trace preflight.
+The complete browser suite passed **168 tests, zero failures, 26 existing skips,
+zero flaky tests** in 4m58s, with tracing enabled and no retries. All fifteen
+draft cases and all six historical UI cases passed. This includes the unchanged
+simultaneous-response assertions, complete six-pick snake journey, authenticated
+joins, lost-response replay, and recovery from suppressed real change frames.
+The Edge runtime stayed running without OOM, CPU hard-limit events, or worker
+acquisition timeouts throughout the sustained shared/HTTP/browser sequence.
+
+The [sanitized final report](release-evidence/draft-ci-34668316537.json) preserves
+all 194 case outcomes and timing/runtime data. Recovery picks returned 201 in
+299/327 ms. A fully cold container, natural production outages, actual OS
+suspension, live provider success, and external notification delivery were not
+tested by this run. The historical 25.64-second pick remains unexplained and
+did not recur in the measured clean checks. Production smoke checks and session
+observation remain part of the authorized rollout, not missing CI passes.
+Subsequent documentation/evidence edits preserve the tested executable source.
 
 Committed batches: `1fca2e7` removes ratings, `8f7e0af` protects draft setup and
 start, `7c14975` fixes calendar dates, `06a18a6` adds canonical metadata,
@@ -127,7 +151,9 @@ Next.js/Supabase architecture.
 
 ## Work packages
 
-Implementation and verification evidence:
+Implementation and verification evidence below preserves the earlier local
+diagnostic history. The September 12 final CI results above and the status table
+supersede its open-gate statements; historical failures are not relabeled as passes.
 
 - DRAFT-01 now also guards direct participant membership/order writes after
   review found that self-enrollment/deletion could change the active turn count.
@@ -369,15 +395,15 @@ Implementation and verification evidence:
 
 | ID | Status | Deliverable | Dependencies |
 | --- | --- | --- | --- |
-| DRAFT-01 | Implemented; final HTTP gate pending | Protect draft-order mutations | None |
+| DRAFT-01 | Verified in final database/HTTP CI | Protect draft-order mutations | None |
 | DRAFT-02 | Verified | Remove TMDb ratings app-wide | None |
-| DRAFT-03 | Implemented; local recovery verified; staging gate open | Diagnose socket failures and make state recovery reliable | Can begin immediately; integrate with DRAFT-05 |
-| DRAFT-04 | Implemented; final HTTP gate pending | Validate canonical movie metadata and repair wishlist picks | None; coordinate contracts with DRAFT-05/06/07 |
-| DRAFT-05 | Implemented; SQL/race checks pass; HTTP gate pending | Make picks and completion consistent and recoverable | DRAFT-01, DRAFT-04 |
-| DRAFT-06 | Implemented; full browser gate pending | Fix discovery pagination and filter state | DRAFT-02; align eligibility with DRAFT-04 |
-| DRAFT-07 | Implemented; controlled UI checks pass; final gate pending | Make selection, submission, and keyboard interaction reliable | DRAFT-03/04/05/06 contracts settled |
-| DRAFT-08 | Verified in controlled date/mobile checks | Correct dates and improve mobile turn/action visibility | Dates independent; mobile after DRAFT-07 |
-| DRAFT-09 | Open; full suite completed with failures | Verify a complete multiplayer draft and deployment readiness | All required fixes |
+| DRAFT-03 | Recovery verified in final CI; historical production cause unproven | Diagnose socket failures and make state recovery reliable | Can begin immediately; integrate with DRAFT-05 |
+| DRAFT-04 | Verified in final HTTP/browser CI with canonical cache fixtures | Validate canonical movie metadata and repair wishlist picks | None; coordinate contracts with DRAFT-05/06/07 |
+| DRAFT-05 | Verified in final SQL/race/HTTP/browser CI; delivery providers stubbed | Make picks and completion consistent and recoverable | DRAFT-01, DRAFT-04 |
+| DRAFT-06 | Verified in final browser CI | Fix discovery pagination and filter state | DRAFT-02; align eligibility with DRAFT-04 |
+| DRAFT-07 | Verified in controlled UI checks and final browser CI | Make selection, submission, and keyboard interaction reliable | DRAFT-03/04/05/06 contracts settled |
+| DRAFT-08 | Verified in date/mobile checks and final browser CI | Correct dates and improve mobile turn/action visibility | Dates independent; mobile after DRAFT-07 |
+| DRAFT-09 | Final CI passed; controlled release recommended after approval | Verify a complete multiplayer draft and deployment readiness | All required fixes |
 
 ### DRAFT-01 — Protect draft-order mutations
 

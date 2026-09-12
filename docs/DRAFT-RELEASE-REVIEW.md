@@ -6,6 +6,15 @@ No merge, production migration, deployment, or external notification has been
 performed. Verification status is tracked in
 [the implementation plan](PLAN-draft-production-readiness.md).
 
+**Recommendation: ready for a controlled, coordinated release after deployment
+approval.** The final matching-source CI run passed every executable regression
+case, including the complete multiplayer journey. No reproducible application
+blocker remains. This recommendation requires the migration/backend/frontend
+sequence and deployed smoke check below; it is not authorization to deploy.
+The historical production disconnect and 25.64-second local cold pick remain
+unexplained. Neither recurred in the clean final gate, which does not constitute
+a production soak or a fully cold-container benchmark.
+
 ## Changes to review
 
 - Draft setup/order authorization and membership protection, including direct
@@ -27,7 +36,7 @@ performed. Verification status is tracked in
   SDK with stubbed Auth responses passed the utility suite: 11 tests/42 steps;
   simplification review and typecheck also pass.
 
-## Verification and open gates
+## Final verification and resolved blockers
 
 The September 12 continuation starts from implementation/test commit `aa0f607`.
 Main is still `2ca91c4`. Verification commit `0cc3823` qualifies a fresh CI stack,
@@ -48,6 +57,20 @@ tracing, uses two workers, and has no retries.
 | --- | --- | --- |
 | [34665036072](https://github.com/4upz/fantasy-reel/actions/runs/34665036072) | `0cc3823` | Health and 117 database assertions passed; 240 shared backend tests/165 steps passed. HTTP: 63 of 65 modules passed; 660 passing steps, two failing steps, four existing external-provider skips. Build/browser steps did not execute after the HTTP gate failed. |
 | [34666240923](https://github.com/4upz/fantasy-reel/actions/runs/34666240923) | `ad4bb83` (CI merge checkout `65c78a0`) | Health, 117 database assertions, 95 bot tests/build, 242 shared backend tests/165 steps, all 65 HTTP modules, production frontend build, and trace preflight passed. Browser: 165 passed, two failed, 26 existing skips, zero flaky tests (4m18s). Runtime remained running with zero CPU hard-limit events, zero acquisition timeouts, and no OOM. |
+| [34668316537](https://github.com/4upz/fantasy-reel/actions/runs/34668316537) | `efae412` (CI merge checkout `8a1c173`) | **Passed.** Both health probes, 117 database assertions, 11 state/date/request tests, 95 bot tests/build, 243 shared backend tests/190 steps, all 65 HTTP modules (662 passing steps, four existing provider skips), production frontend build, and trace preflight passed. Browser: **168 passed, zero failed, 26 existing skips, zero flaky tests**, including all **15 draft cases**, in 4m58s. Edge stayed running with no OOM, CPU hard-limit events, or acquisition timeouts. |
+
+The final CI merge checkout and feature source `efae412715f0a98c042f6a7b62a4901ec6299429`
+have the identical Git tree `6445db8a0d0a45f9f66e8e428f5f97d99153b0e7`.
+The full shared/HTTP step ran for 12m40s before the production build and browser
+suite. The retained [final report](release-evidence/draft-ci-34668316537.json)
+contains all 194 case outcomes, gate results, and sanitized runtime/timing data.
+Tracing remained enabled with zero retries; the runner's trace ZIP validation
+passed. Successful-run raw traces were not uploaded under the existing
+failure-only artifact policy, so a full final-run trace CRC audit is not claimed.
+The browser log contains 20 middleware Auth messages for JWT users that no
+longer exist, without test failures or Auth 504s. Fixture deletion with stale
+cookies is a plausible explanation, but the log does not attribute the requests;
+this report does not claim an entirely error-free Auth log.
 
 The first failure was a fixture cleanup URL exceeding the gateway limit after
 the `drop-movie` business assertions passed. Commit `ad4bb83` deletes exact cache
@@ -68,12 +91,13 @@ Nine state/date/request regressions, TypeScript, and affected ESLint pass. The
 new real-stack browser case passed: it delays the four actual REST snapshot
 responses while WebSocket delivery is unavailable.
 
-The two browser failures remain under investigation. The simultaneous selection
+The second run exposed two reproducible browser failures. The simultaneous selection
 case received one 201 and one 403 (`It is not your turn to pick`) where the test
 expected 409. The two-round journey successfully committed five picks, including
 duplicate replay and a rejected stale slot, but the owner's browser remained at
 one pick and did not show its returning turn. This is a real synchronization
-blocker in a healthy runtime; the complete multiplayer gate remains open.
+blocker in a healthy runtime. Both are corrected below and their unchanged
+assertions pass in the final CI run.
 
 Twelve draft cases passed, including lost-response recovery, the complete
 counterpick/activation/budget/initial-score journey, slow fallback polling, and
@@ -108,7 +132,8 @@ Corrections after the second CI run:
   Independent simplification reviews found no required changes. The browser
   suite adds a real socket test that suppresses only pick-change delivery; the
   existing concurrency/turn assertions are unchanged. The complete matching-source
-  CI repeat is still required before release.
+  CI repeat passed both fixes, including authenticated joins, the sixth snake pick,
+  and recovery while real pick-change frames are suppressed.
 - CI now records allowlisted per-test outcomes/durations and the two recovery
   pick timings in its retained log, including successful runs. It excludes
   request IDs, attachment payloads, errors, headers, credentials, and raw runtime
@@ -123,6 +148,11 @@ fits within 1.357 seconds. These are conservative enclosing test windows, not
 per-request latency measurements. CI retains the configured `oneshot` policy;
 fresh request isolates still share runtime/module, Auth, and database resources.
 This evidence does not measure a fully cold container or explain the old delay.
+The final browser recovery case measured successful first/warm pick responses
+at 299/327 ms. All six historical UI cases passed, including delayed bid data,
+both draft search/selection prerequisites, full activation, league-switcher ARIA,
+and season completion. These successes close the reproducible regression gates;
+they do not retroactively explain every failure in the overloaded local run.
 
 Vercel auto-deployment is disabled specifically for this feature branch using
 [`git.deploymentEnabled`](https://vercel.com/docs/project-configuration/git-configuration#gitdeploymentenabled).
@@ -133,21 +163,26 @@ and GitHub deployment records are the verification boundary.
 
 ### Critical journey evidence map
 
-The HTTP/database checks below passed in the second clean CI run. Twelve of the
-fourteen browser cases passed; the two concurrency failures above remain open.
+The HTTP/database checks and all fifteen draft browser cases below passed in the
+final clean CI run at `efae412`.
 
 | Requirement | Real-stack checks | Scope boundary |
 | --- | --- | --- |
 | Authorization and canonical metadata | `draft-authorization`, `movie-endpoints-auth`, `draft-pick`; database guard assertions | Actual Auth, RLS, Edge validation, and persisted-row checks; provider data is cached fixture data. |
 | Discovery and selection | `draft-flow.spec.ts` owner search and changed query; `draft-readiness.spec.ts` empty eligible pages and retries | Browser/Edge/cache/database; no live provider success contract claimed. |
-| Snake, consecutive turns, simultaneous picks, duplicates | `draft-transactions` service-role PostgREST RPC races; `draft-flow.spec.ts` two-round three-player journey and simultaneous selections | RPC races pass. Browser requests cross actual Edge/user Auth: duplicate replay and stale-slot rejection pass, but response classification and returning-owner synchronization remain open. |
+| Snake, consecutive turns, simultaneous picks, duplicates | `draft-transactions` service-role PostgREST RPC races; `draft-flow.spec.ts` complete two-round three-player journey and simultaneous selections | Real Edge/user Auth and persistence: six snake picks, consecutive turns, duplicate 201/replay with one row, competing 201/409, and stale-slot rejection all pass. |
 | Lost response and recovery | `draft-transactions` final replay after activation; browser commit followed by response abort | Actual committed mutation and replay; the network fault is injected. |
 | Disconnect, resume, refreshed Auth | `draft-recovery.spec.ts` missed picks, reconnect, refreshed JWT on the draft socket, later live pick | Real Auth/Realtime; forced disconnect and synthetic visibility events, not OS suspension or natural production outage. |
 | Slow polling fallback | `draft-readiness.spec.ts` eleven-second actual REST responses with WebSocket unavailable | Actual persisted pick and mobile progress/turn assertions; transport delays are injected. |
+| Missed delivery while Live | `draft-recovery.spec.ts` drops actual draft-pick change frames while forwarding socket joins, heartbeats, and other frames | Actual persisted pick reaches the observer through periodic REST reconciliation without a socket close, navigation, or false transport failure. |
 | Counterpicks, activation, budgets, scores | `counterpick-flow` HTTP suite; browser three-player completion with budgets of 137 and exact initial score rows | Browser verifies pending/zero initial scores; HTTP scoring tests seed nonzero scores and verify inversion. |
 | Failed activation and delivery recovery | `draft_transactions.sql` rollback/retry assertions; concurrent delivery claims through PostgREST RPC; shared notification tests | Database fault injection and actual lease RPCs; external delivery responses are stubbed. No messages sent. |
 
 ### Earlier verification evidence
+
+The following records September 11 outcomes. Open gates mentioned in this
+historical record were subsequently resolved by the final clean CI run above;
+unproven production causality and measurement limits remain explicit.
 
 The production build, affected frontend static checks, nine state/date/request
 regressions, 117 database assertions, independent-connection race checks, and
@@ -200,14 +235,16 @@ scripts redirected to login HTML and raised syntax errors before login. The
 browser test fixture substitutes empty scripts only for those exact localhost
 hosting paths; application scripts, Auth, Realtime, and draft handlers remain real.
 
-## Remaining release checks
+## Release gates and deployment checks
 
 | Gate | Current evidence | Required before deployment |
 | --- | --- | --- |
-| Auth and canonical pick HTTP contracts | `ad4bb83`: all 65 modules pass, 662 passing steps and four existing provider skips, real Auth/Edge/database | Reverify after the bounded handler fixes for stale response classification and preflight replay races. |
-| Complete multiplayer draft | `ad4bb83`: browser activation/budgets/scores, lost-response recovery, and duplicate/stale-slot checks pass; two-round journey stops at the returning owner | Fix and verify the stale owner view and simultaneous-response classification, then finish the unchanged six-pick journey. |
-| Socket reliability | `ad4bb83`: forced reconnect and real refreshed-token propagation pass; owner can remain stale while Live in the snake journey | Verify recovery from missing events without waiting indefinitely for an explicit channel error. Historical production disconnect cause remains unproven. |
-| Full regression suite | `ad4bb83`: 165 passed, two failed, 26 existing skips; all 167 unique traces valid | Run the complete suite against the final matching application, handler, and test source after the remaining fixes. |
+| Auth and canonical pick HTTP contracts | `efae412`: all 65 modules pass, 662 passing steps and four existing provider skips, real Auth/Edge/database | Cleared in CI. Verify deployed function/config versions and live provider configuration during the authorized rollout. |
+| Complete multiplayer draft | `efae412`: all 15 draft browser cases pass, including six-pick snake, races/replay, counterpicks, activation, budgets, and scores | Cleared in CI. Run a controlled deployed draft before normal use resumes. |
+| Socket recovery | `efae412`: authenticated joins, refreshed tokens, disconnect/resume, slow reads, and lost events while Live pass | Cleared for tested recovery scenarios. Observe deployed sessions; natural outage and OS suspension are outside this injected-fault coverage. |
+| Full regression suite | `efae412`: 168 passed, zero failed, 26 existing skips, zero flaky tests; production build and runner trace preflight pass | Cleared for the final executable source. Documentation/evidence-only follow-up changes do not alter application, migrations, tests, or CI configuration. |
+| Cold-pick latency | Clean HTTP flows complete promptly; final measured browser recovery picks return 201 in 299/327 ms | No reproduced clean-runtime blocker. These are not a fully cold-container benchmark; inspect request-correlated stages if the historical delay returns. |
+| Notification delivery | Atomic outbox writes, ordering/leases, and stubbed delivery tests pass; no external messages sent | Verify cron credentials, worker job records, and intended delivery in the authorized deployed smoke check. |
 
 ### Earlier diagnostic details (September 11)
 
