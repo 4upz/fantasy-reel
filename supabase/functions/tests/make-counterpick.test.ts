@@ -474,20 +474,35 @@ Deno.test({
 
       // draft_order=2 (secondClient) goes first in round 1 of the reverse
       // counterpick order, so it is their turn to counterpick team 1's movie.
+      const turnBefore = await serviceClient.rpc('get_next_counterpick_turn', { p_league_id: leagueId })
+      assertEquals(turnBefore.error, null)
+      assertEquals(turnBefore.data?.length, 1)
+      assertEquals(turnBefore.data[0].round, 1)
+      assertEquals(turnBefore.data[0].pick_number, 1)
+      const requestId = crypto.randomUUID()
       const result = await invokeFunction(secondClient, 'make-counterpick', {
         league_id: leagueId,
         movie_id: draftPick.movie_id,
+        expected_pick: 1,
+        request_id: requestId,
       })
 
       assertEquals(result.status, 400)
-      assertEquals(result.error, 'Cannot counterpick this movie: Movie was released in a previous season')
+      assertEquals(result.error, 'Cannot counterpick this movie: movie is no longer eligible')
 
-      const { data: counterpicks } = await serviceClient
-        .from('counterpicks')
-        .select('id')
-        .eq('league_id', leagueId)
-        .eq('movie_id', draftPick.movie_id)
-      assertEquals(counterpicks?.length ?? 0, 0)
+      // Eligibility is enforced inside the atomic commit: rejection must roll
+      // back its reserved receipt and leave this player's turn available.
+      const [counterpicks, receipt, turnAfter, leagueAfter] = await Promise.all([
+        serviceClient.from('counterpicks').select('id').eq('league_id', leagueId),
+        serviceClient.from('draft_submissions').select('request_id').eq('request_id', requestId),
+        serviceClient.rpc('get_next_counterpick_turn', { p_league_id: leagueId }),
+        serviceClient.from('leagues').select('status').eq('id', leagueId).single(),
+      ])
+      for (const query of [counterpicks, receipt, turnAfter, leagueAfter]) assertEquals(query.error, null)
+      assertEquals(counterpicks.data, [])
+      assertEquals(receipt.data, [])
+      assertEquals(turnAfter.data, turnBefore.data)
+      assertEquals(leagueAfter.data?.status, 'counterpicking')
     })
 
     // ============================================================================

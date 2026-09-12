@@ -481,6 +481,25 @@ export async function invokeFunction<T = unknown>(
 // Test Data Factory
 // =============================================================================
 
+/** Delete only this factory's canonical cache keys without oversized REST URLs. */
+export async function cleanupDraftMovieCache(service: SupabaseClient, tmdbIds: readonly number[]): Promise<void> {
+  // These keys contain one numeric TMDb ID. Fifty keep even ten-digit IDs well
+  // below the gateway's URL limit; one failed batch must not skip later keys.
+  const batchSize = 50
+  const errors: unknown[] = []
+  for (let offset = 0; offset < tmdbIds.length; offset += batchSize) {
+    const keys = tmdbIds.slice(offset, offset + batchSize)
+      .map(tmdb_id => buildCacheKey('movie_details', { tmdb_id }))
+    try {
+      const { error } = await service.from('tmdb_cache').delete().in('cache_key', keys)
+      if (error) errors.push(new Error(error.message, { cause: error }))
+    } catch (error) {
+      errors.push(error)
+    }
+  }
+  if (errors.length) throw new AggregateError(errors, 'Failed to clean up draft movie cache')
+}
+
 /**
  * Factory for creating test data with automatic cleanup tracking
  */
@@ -1164,9 +1183,7 @@ export class TestDataFactory {
       const ids = [...this.draftMovieTmdbIds]
       const { error: movieError } = await service.from('movies').delete().in('tmdb_id', ids)
       if (movieError) throw new Error(`Failed to clean up draft movies: ${movieError.message}`)
-      const { error: cacheError } = await service.from('tmdb_cache').delete()
-        .in('cache_key', ids.map(tmdb_id => buildCacheKey('movie_details', { tmdb_id })))
-      if (cacheError) throw new Error(`Failed to clean up draft movie cache: ${cacheError.message}`)
+      await cleanupDraftMovieCache(service, ids)
       this.draftMovieTmdbIds.clear()
     }
     this.leagueIds = []

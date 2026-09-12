@@ -100,7 +100,9 @@ jobs:
           npm run build --workspace=apps/discord-bot
 
       - name: Run API integration tests
-        timeout-minutes: 15
+        # The complete shared + HTTP run took 14m50s on the first clean gate.
+        # Allow normal runner variance; Edge CPU/memory limits stay unchanged.
+        timeout-minutes: 20
         # The task expects this ignored file; credentials come from the same
         # local CI stack environment already used by the browser tests below.
         run: |
@@ -203,6 +205,7 @@ jobs:
               })
           with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as out:
               out.write('```json\n' + json.dumps(summary, indent=2) + '\n```\n')
+          print(json.dumps(summary, indent=2))
           PY
 
       # Reports are only uploaded on failure and expire quickly: uploading
