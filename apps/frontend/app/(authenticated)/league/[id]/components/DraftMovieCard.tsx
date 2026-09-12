@@ -90,7 +90,7 @@ export default function DraftMovieCard({
               className={cn(
                 'type-meta px-2 py-0.5 rounded-full shadow-md',
                 popularityBadge.variant === 'solid'
-                  ? 'bg-gold text-background'
+                  ? 'bg-gold text-foreground-inverse'
                   : 'bg-gold-muted text-gold border border-gold'
               )}
             >

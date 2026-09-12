@@ -25,9 +25,9 @@ interface Props {
 }
 
 const PODIUM_CHIP: Record<number, string> = {
-  1: 'bg-[linear-gradient(135deg,#ffd700,#a88c1f)] text-background',
-  2: 'bg-[linear-gradient(135deg,#e8e8e8,#a8a8a8)] text-background',
-  3: 'bg-[linear-gradient(135deg,#cd9b61,#a56b2d)] text-background',
+  1: 'bg-[linear-gradient(135deg,#ffd700,#a88c1f)] text-[#0f0f0f]',
+  2: 'bg-[linear-gradient(135deg,#e8e8e8,#a8a8a8)] text-[#0f0f0f]',
+  3: 'bg-[linear-gradient(135deg,#cd9b61,#a56b2d)] text-[#0f0f0f]',
 }
 
 /** The display-only part of a standings row, shared with public examples. */

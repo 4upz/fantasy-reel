@@ -155,7 +155,7 @@ export default function DraftFilters({ value, onFiltersChange, countLabel, loadi
                           isSelected ? 'bg-gold border-gold' : 'border-border-hover'
                         )}
                       >
-                        {isSelected && <CheckIcon className="w-3 h-3 text-background" />}
+                        {isSelected && <CheckIcon className="w-3 h-3 text-foreground-inverse" />}
                       </span>
                       {genre.name}
                     </button>
@@ -192,7 +192,7 @@ export default function DraftFilters({ value, onFiltersChange, countLabel, loadi
                 key={genreId}
                 onClick={() => toggleGenre(genreId)}
                 aria-label={`Remove ${genre?.name ?? 'genre'} filter`}
-                className="type-control inline-flex items-center gap-1.5 px-3 py-1 bg-gold-muted border border-gold rounded-full text-gold hover:bg-gold hover:text-background transition-all group"
+                className="type-control inline-flex items-center gap-1.5 px-3 py-1 bg-gold-muted border border-gold rounded-full text-gold hover:bg-gold hover:text-foreground-inverse transition-all group"
               >
                 {genre?.name}
                 <CloseIcon className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
