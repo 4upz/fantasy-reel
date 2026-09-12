@@ -10,7 +10,6 @@ import {
   enableLeagueBidding,
   createTeamBudget,
   setTeamScore,
-  getTeamId,
   createPickupBid,
   createPickup,
   createCounterpick,
@@ -112,16 +111,16 @@ interface LeagueFixtures {
 
 export const test = authTest.extend<LeagueFixtures>({
   // Basic league in setup status
-  testLeague: async ({ leagueOwner }, use) => {
+  testLeague: async ({ leagueOwner }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       status: 'setup',
     })
-    await use(league)
+    await provideFixture(league)
     await deleteTestLeague(league.id)
   },
 
   // League with multiple participants ready to draft
-  draftReadyLeague: async ({ leagueOwner, testUser, secondUser }, use) => {
+  draftReadyLeague: async ({ leagueOwner, testUser, secondUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Draft Ready'),
       status: 'setup',
@@ -143,17 +142,17 @@ export const test = authTest.extend<LeagueFixtures>({
       await setDraftOrder(league.id, testUser.id, 2)
       await setDraftOrder(league.id, secondUser.id, 3)
 
-      await use(league)
+      await provideFixture(league)
     } finally {
       await deleteTestLeague(league.id)
     }
   },
 
   // Active league for bidding/trading tests
-  activeLeague: async ({ leagueOwner, testUser }, use) => {
+  activeLeague: async ({ leagueOwner, testUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Active'),
-      status: 'active',
+      status: 'setup',
     })
 
     try {
@@ -164,7 +163,10 @@ export const test = authTest.extend<LeagueFixtures>({
       await createTeam(league.id, leagueOwner.id, 'Owner Team')
       await createTeam(league.id, testUser.id, 'Test Team')
 
-      await use(league)
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture(league)
     } finally {
       await deleteTestLeague(league.id)
     }
@@ -175,10 +177,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league with bidding enabled, team budgets, and pickup slots available.
    * Use for testing bid placement, cancellation, and outbid scenarios.
    */
-  biddingLeague: async ({ leagueOwner, testUser }, use) => {
+  biddingLeague: async ({ leagueOwner, testUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Bidding'),
-      status: 'active',
+      status: 'setup',
     })
 
     try {
@@ -196,7 +198,10 @@ export const test = authTest.extend<LeagueFixtures>({
       await createTeamBudget(ownerTeam.id, 100)
       await createTeamBudget(team.id, 100)
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         teamId: team.id,
         budget: 100, // Default fantasy budget
@@ -211,10 +216,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league with drafted movies on multiple teams.
    * Use for testing trade proposals, responses, and vetoes.
    */
-  tradingLeague: async ({ leagueOwner, testUser }, use) => {
+  tradingLeague: async ({ leagueOwner, testUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Trading'),
-      status: 'active',
+      status: 'setup',
     })
 
     try {
@@ -233,7 +238,10 @@ export const test = authTest.extend<LeagueFixtures>({
       await createDraftPick(league.id, ownerTeam.id, movie1.id, 1, 1)
       await createDraftPick(league.id, testUserTeam.id, movie2.id, 2, 1)
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         ownerTeamId: ownerTeam.id,
         testUserTeamId: testUserTeam.id,
@@ -254,10 +262,10 @@ export const test = authTest.extend<LeagueFixtures>({
    *   - an unreleased, counterpicked -> not droppable (locked, explained)
    * Use for testing the roster drop flow.
    */
-  rosterLeague: async ({ leagueOwner, testUser }, use) => {
+  rosterLeague: async ({ leagueOwner, testUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Roster'),
-      status: 'active',
+      status: 'setup',
     })
 
     try {
@@ -306,7 +314,10 @@ export const test = authTest.extend<LeagueFixtures>({
 
       await createTeamBudget(testUserTeam.id, 100)
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         ownerTeamId: ownerTeam.id,
         testUserTeamId: testUserTeam.id,
@@ -325,10 +336,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league with multiple teams that have scores.
    * Use for testing standings display and score updates.
    */
-  scoredLeague: async ({ leagueOwner, testUser, secondUser }, use) => {
+  scoredLeague: async ({ leagueOwner, testUser, secondUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Scored'),
-      status: 'active',
+      status: 'setup',
       maxParticipants: 4,
     })
 
@@ -347,7 +358,10 @@ export const test = authTest.extend<LeagueFixtures>({
       await setTeamScore(testUserTeam.id, 120)
       await setTeamScore(secondUserTeam.id, 80)
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         teams: [
           { teamId: ownerTeam.id, userId: leagueOwner.id, score: 150, name: 'Owner Team' },
@@ -365,10 +379,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league with bidding enabled and an existing active bid.
    * Use for testing bid cancellation and counter-bid scenarios.
    */
-  biddingLeagueWithBid: async ({ leagueOwner, testUser }, use) => {
+  biddingLeagueWithBid: async ({ leagueOwner, testUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Bidding With Bid'),
-      status: 'active',
+      status: 'setup',
     })
 
     try {
@@ -400,7 +414,10 @@ export const test = authTest.extend<LeagueFixtures>({
         }
       )
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         teamId: team.id,
         budget: 100,
@@ -418,10 +435,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league with a pending trade offer from owner to testUser.
    * Use for testing trade responses (accept, reject, counter).
    */
-  tradingLeagueWithTrade: async ({ leagueOwner, testUser }, use) => {
+  tradingLeagueWithTrade: async ({ leagueOwner, testUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Trading With Trade'),
-      status: 'active',
+      status: 'setup',
     })
 
     try {
@@ -450,7 +467,10 @@ export const test = authTest.extend<LeagueFixtures>({
         { movies: [{ movie_id: movie2.id, source: 'draft_pick' }], faab: 0 }
       )
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         ownerTeamId: ownerTeam.id,
         testUserTeamId: testUserTeam.id,
@@ -468,10 +488,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league with draft picks, a pickup, and a counterpick.
    * Use for testing full roster display in standings (section headers, badges).
    */
-  scoredLeagueWithFullRoster: async ({ leagueOwner, testUser, secondUser }, use) => {
+  scoredLeagueWithFullRoster: async ({ leagueOwner, testUser, secondUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Full Roster'),
-      status: 'active',
+      status: 'setup',
       maxParticipants: 4,
     })
 
@@ -508,7 +528,10 @@ export const test = authTest.extend<LeagueFixtures>({
       await setTeamScore(testUserTeam.id, 80)
       await setTeamScore(secondUserTeam.id, 60)
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         teams: [
           { teamId: ownerTeam.id, userId: leagueOwner.id, score: 100, name: 'Owner Team' },
@@ -529,10 +552,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * League 1 is active, League 2 is in setup status.
    * Use for testing league switcher dropdown.
    */
-  multiLeague: async ({ leagueOwner, testUser }, use) => {
+  multiLeague: async ({ leagueOwner, testUser }, provideFixture) => {
     const league1 = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Multi Active'),
-      status: 'active',
+      status: 'setup',
     })
 
     const league2 = await createTestLeague(leagueOwner.id, {
@@ -551,7 +574,10 @@ export const test = authTest.extend<LeagueFixtures>({
       await createTeam(league2.id, leagueOwner.id, 'Owner Team L2')
       await createTeam(league2.id, testUser.id, 'Test Team L2')
 
-      await use({
+      await updateLeagueStatus(league1.id, 'active')
+      league1.status = 'active'
+
+      await provideFixture({
         league1: { id: league1.id, name: league1.name, status: league1.status },
         league2: { id: league2.id, name: league2.name, status: league2.status },
       })
@@ -566,10 +592,10 @@ export const test = authTest.extend<LeagueFixtures>({
    * An active league with teams, scores, and movie-level review data.
    * Use for testing detailed score breakdowns and review displays.
    */
-  scoredLeagueWithReviews: async ({ leagueOwner, testUser, secondUser }, use) => {
+  scoredLeagueWithReviews: async ({ leagueOwner, testUser, secondUser }, provideFixture) => {
     const league = await createTestLeague(leagueOwner.id, {
       name: uniqueLeagueName('E2E Scored With Reviews'),
-      status: 'active',
+      status: 'setup',
       maxParticipants: 4,
     })
 
@@ -609,7 +635,10 @@ export const test = authTest.extend<LeagueFixtures>({
       await setTeamScore(testUserTeam.id, 120)
       await setTeamScore(secondUserTeam.id, 80)
 
-      await use({
+      await updateLeagueStatus(league.id, 'active')
+      league.status = 'active'
+
+      await provideFixture({
         ...league,
         teams: [
           {

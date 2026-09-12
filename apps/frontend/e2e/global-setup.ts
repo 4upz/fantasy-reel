@@ -1,6 +1,7 @@
 import { test as setup } from '@playwright/test'
 import { cleanupTestData, getAdminClient } from './helpers/supabase.helper'
 import { MOCK_MOVIES } from './fixtures/test-data'
+import { clearGlobalDraftCache, rememberGlobalDraftCache, seedDefaultDraftBrowse, seedDraftMovieCache } from './helpers/draft-cache.helper'
 
 /**
  * Global Setup for E2E Tests
@@ -27,6 +28,7 @@ setup('global setup', async ({ baseURL }) => {
 
   // Verify Supabase connection
   await verifySupabaseConnection()
+  await clearGlobalDraftCache()
 
   // Clean up stale test data from previous runs
   console.log('  Cleaning up stale test data...')
@@ -35,6 +37,11 @@ setup('global setup', async ({ baseURL }) => {
   // Seed mock movies to database
   console.log('  Seeding test movies...')
   await seedTestMovies()
+  const cacheMovies = MOCK_MOVIES.map(movie => ({ ...movie, poster_url: null, genre_ids: [...movie.genre_ids] }))
+  const cacheKeys = await seedDraftMovieCache(cacheMovies)
+  rememberGlobalDraftCache(cacheKeys)
+  cacheKeys.push(...await seedDefaultDraftBrowse(cacheMovies))
+  rememberGlobalDraftCache(cacheKeys)
 
   // Pre-compile the hottest routes so the first tests don't pay the dev
   // server's on-demand compile cost. Only relevant locally: CI serves a

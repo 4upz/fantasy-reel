@@ -37,6 +37,14 @@ import { setWorkerIndex, getWorkerPrefix } from '../helpers/test-ids.helper'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
+// These assets are supplied by Vercel hosting, which is absent on local Next
+// servers. Keep that hosting-only noise out of browser errors; Auth, API calls,
+// and every application script still use their real responses.
+async function stubLocalHostingScripts(context: BrowserContext): Promise<void> {
+  await context.route(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\/_vercel\/(?:insights|speed-insights)\/script\.js(?:\?.*)?$/, route =>
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: '' }))
+}
+
 interface AuthFixtures {
   /** Internal fixture that initializes worker index - runs automatically */
   _workerInit: void
@@ -63,42 +71,49 @@ interface AuthFixtures {
 }
 
 export const test = base.extend<AuthFixtures>({
+  page: async ({ page }, provideFixture) => {
+    await stubLocalHostingScripts(page.context())
+    await provideFixture(page)
+  },
   /**
    * Auto fixture that initializes worker index early in test setup.
    * This ensures all fixtures (not just testUser) get proper worker isolation.
    * Without this, tests using only draftReadyLeague would get workerIndex=0.
    */
-  _workerInit: [async ({}, use, testInfo) => {
+  _workerInit: [async ({}, provideFixture, testInfo) => {
     setWorkerIndex(testInfo.parallelIndex)
-    await use(undefined)
+    await provideFixture(undefined)
   }, { auto: true }],
 
   // Create primary test user
-  testUser: async ({ _workerInit }, use) => {
+  testUser: async ({ _workerInit }, provideFixture) => {
+    void _workerInit // Explicit fixture dependency initializes worker-scoped IDs.
     const user = await createTestUser('primary')
-    await use(user)
+    await provideFixture(user)
     await deleteTestUser(user.id)
   },
 
   // Create secondary test user for multi-user scenarios
-  secondUser: async ({ _workerInit }, use) => {
+  secondUser: async ({ _workerInit }, provideFixture) => {
+    void _workerInit // Explicit fixture dependency initializes worker-scoped IDs.
     const user = await createTestUser('secondary')
-    await use(user)
+    await provideFixture(user)
     await deleteTestUser(user.id)
   },
 
   // Create league owner user
-  leagueOwner: async ({ _workerInit }, use) => {
+  leagueOwner: async ({ _workerInit }, provideFixture) => {
+    void _workerInit // Explicit fixture dependency initializes worker-scoped IDs.
     const user = await createTestUser('owner')
-    await use(user)
+    await provideFixture(user)
     await deleteTestUser(user.id)
   },
 
   // Provide a page that's already authenticated as testUser via UI
   // Use this when you need to test the actual login flow
-  authenticatedPage: async ({ page, testUser }, use) => {
+  authenticatedPage: async ({ page, testUser }, provideFixture) => {
     await loginAs(page, testUser)
-    await use(page)
+    await provideFixture(page)
   },
 
   /**
@@ -117,9 +132,10 @@ export const test = base.extend<AuthFixtures>({
    * - https://playwright.dev/docs/auth
    * - https://www.bekapod.dev/articles/supabase-magic-login-testing-with-playwright/
    */
-  authedContext: async ({ browser, testUser }, use) => {
+  authedContext: async ({ browser, testUser }, provideFixture) => {
     // Create new browser context
     const context = await browser.newContext()
+    await stubLocalHostingScripts(context)
     const page = await context.newPage()
 
     // Login via UI - this ensures the browser's Supabase client
@@ -129,15 +145,15 @@ export const test = base.extend<AuthFixtures>({
     // Close the login page but keep the authenticated context
     await page.close()
 
-    await use(context)
+    await provideFixture(context)
 
     // Cleanup: close context
     await context.close()
   },
 
-  authedPage: async ({ authedContext }, use) => {
+  authedPage: async ({ authedContext }, provideFixture) => {
     const page = await authedContext.newPage()
-    await use(page)
+    await provideFixture(page)
   },
 
   /**
@@ -146,8 +162,9 @@ export const test = base.extend<AuthFixtures>({
    *
    * Uses UI login for proper cookie setup (same as authedContext)
    */
-  secondUserContext: async ({ browser, secondUser }, use) => {
+  secondUserContext: async ({ browser, secondUser }, provideFixture) => {
     const context = await browser.newContext()
+    await stubLocalHostingScripts(context)
     const page = await context.newPage()
 
     // Login via UI for proper cookie setup
@@ -156,7 +173,7 @@ export const test = base.extend<AuthFixtures>({
     // Close the login page but keep the authenticated context
     await page.close()
 
-    await use(context)
+    await provideFixture(context)
 
     await context.close()
   },
@@ -165,9 +182,9 @@ export const test = base.extend<AuthFixtures>({
    * Page authenticated as secondUser
    * Use for multi-user scenarios: User A does action -> User B sees result
    */
-  secondUserPage: async ({ secondUserContext }, use) => {
+  secondUserPage: async ({ secondUserContext }, provideFixture) => {
     const page = await secondUserContext.newPage()
-    await use(page)
+    await provideFixture(page)
   },
 
   /**
@@ -176,15 +193,16 @@ export const test = base.extend<AuthFixtures>({
    *
    * Uses UI login for proper cookie setup (same as authedContext)
    */
-  leagueOwnerContext: async ({ browser, leagueOwner }, use) => {
+  leagueOwnerContext: async ({ browser, leagueOwner }, provideFixture) => {
     const context = await browser.newContext()
+    await stubLocalHostingScripts(context)
     const page = await context.newPage()
 
     await loginAs(page, leagueOwner)
 
     await page.close()
 
-    await use(context)
+    await provideFixture(context)
 
     await context.close()
   },
@@ -193,9 +211,9 @@ export const test = base.extend<AuthFixtures>({
    * Page authenticated as leagueOwner
    * Use for testing owner-only features like league settings, draft order
    */
-  leagueOwnerPage: async ({ leagueOwnerContext }, use) => {
+  leagueOwnerPage: async ({ leagueOwnerContext }, provideFixture) => {
     const page = await leagueOwnerContext.newPage()
-    await use(page)
+    await provideFixture(page)
   },
 })
 

@@ -4,6 +4,7 @@
  */
 
 const MAILPIT_URL = process.env.INBUCKET_URL || 'http://127.0.0.1:54324'
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
 
 /**
  * Mailpit message list response
@@ -128,7 +129,7 @@ export async function waitForNewEmail(
           }
         }
       }
-    } catch (error) {
+    } catch {
       // Ignore errors during polling, will retry
     }
 
@@ -192,7 +193,7 @@ export async function getLatestEmail(
           links,
         }
       }
-    } catch (error) {
+    } catch {
       // Ignore errors during polling, will retry
     }
 
@@ -312,24 +313,19 @@ export function extractAuthLink(
   }
 
   const pattern = patterns[type]
-  const fullText = email.body + (email.html || '')
+  const decodeLink = (link: string) => link.replace(/&(?:amp|#0*38|#x0*26);/gi, '&')
+  const fullText = decodeLink(`${email.body}\n${email.html || ''}`)
   const match = fullText.match(pattern)
 
   if (match) {
-    // Ensure we have a full URL - extract it properly
-    let link = match[0]
-    // Clean up any trailing parentheses or HTML artifacts
-    link = link.replace(/[)>]+$/, '')
-
-    if (link.startsWith('http')) {
-      return link
-    }
-    return `http://127.0.0.1:54321${link}`
+    // The match starts at the verification path, so keep the test project's
+    // configured Auth origin while preserving its token and redirect query.
+    return new URL(match[0].replace(/[)>]+$/, ''), SUPABASE_URL).toString()
   }
 
   // Fallback: check extracted links
   return (
-    email.links.find((l) => {
+    email.links.map(decodeLink).find((l) => {
       if (type === 'confirm')
         return (
           (l.includes('/auth/confirm') || l.includes('/auth/v1/verify')) &&
