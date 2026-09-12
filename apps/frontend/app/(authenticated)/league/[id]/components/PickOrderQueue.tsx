@@ -73,10 +73,10 @@ function getQueueItemStyles(isCurrentPick: boolean, isCurrentUser: boolean): str
 
 function getPositionBadgeStyles(isCurrentPick: boolean, isCurrentUser: boolean): string {
   if (isCurrentPick && isCurrentUser) {
-    return 'bg-success text-background'
+    return 'bg-success text-foreground-inverse'
   }
   if (isCurrentPick) {
-    return 'bg-gold text-background'
+    return 'bg-gold text-foreground-inverse'
   }
   return 'bg-border text-foreground-muted'
 }

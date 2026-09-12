@@ -58,7 +58,7 @@ export default function TMDbAttribution({
             href="https://www.themoviedb.org"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[#01b4e4] hover:text-[#90cea1] transition-colors"
+            className="text-info hover:text-gold transition-colors"
           >
             TMDb
           </a>{' '}
@@ -85,7 +85,7 @@ export default function TMDbAttribution({
           href="https://www.themoviedb.org"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[#01b4e4] hover:text-[#90cea1] transition-colors"
+          className="text-info hover:text-gold transition-colors"
         >
           TMDb
         </a>{' '}

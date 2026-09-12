@@ -2,10 +2,39 @@
 
 import { useEffect } from 'react'
 import { captureException } from '@/utils/sentry'
+import { ThemeScript } from '@/components/theme/ThemeScript'
+import { applyThemePreference, parseThemePreference, SYSTEM_THEME_QUERY, THEME_STORAGE_KEY } from '@/utils/theme'
 
 // This boundary replaces the root layout when an error escapes it, so it
 // cannot rely on globals.css or the design-token classes being loaded —
-// styling here is inline and self-contained on purpose.
+// styling here is self-contained on purpose.
+const recoveryStyles = `
+  :root {
+    color-scheme: dark;
+    --recovery-background: #0f0f0f;
+    --recovery-surface: #1c1c1c;
+    --recovery-foreground: #e8e8e8;
+    --recovery-secondary: #b8b0a4;
+    --recovery-border: #2e2e2e;
+    --recovery-gold: #c9a227;
+    --recovery-inverse: #0f0f0f;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --recovery-background: #f5f5f4;
+    --recovery-surface: #ffffff;
+    --recovery-foreground: #242424;
+    --recovery-secondary: #55514b;
+    --recovery-border: #d3d2ce;
+    --recovery-gold: #71570c;
+    --recovery-inverse: #ffffff;
+  }
+  button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--recovery-gold);
+    outline-offset: 3px;
+  }
+`
+
 export default function GlobalError({
   error,
   reset,
@@ -17,8 +46,26 @@ export default function GlobalError({
     captureException(error)
   }, [error])
 
+  useEffect(() => {
+    // React does not execute inline scripts on a client-side boundary mount.
+    // Preserve the current preference, including when storage is unavailable.
+    let preference = parseThemePreference(document.documentElement.dataset.themePreference)
+    try {
+      preference = parseThemePreference(localStorage.getItem(THEME_STORAGE_KEY))
+    } catch {}
+    const update = () => applyThemePreference(preference)
+    update()
+    const media = window.matchMedia(SYSTEM_THEME_QUERY)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+        <style>{recoveryStyles}</style>
+      </head>
       <body
         style={{
           margin: 0,
@@ -26,8 +73,8 @@ export default function GlobalError({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          backgroundColor: '#0f0f0f',
-          color: '#e8e8e8',
+          backgroundColor: 'var(--recovery-background)',
+          color: 'var(--recovery-foreground)',
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
           fontSize: '1rem',
@@ -41,8 +88,8 @@ export default function GlobalError({
             width: '100%',
             maxWidth: '28rem',
             textAlign: 'center',
-            backgroundColor: '#1c1c1c',
-            border: '1px solid #2e2e2e',
+            backgroundColor: 'var(--recovery-surface)',
+            border: '1px solid var(--recovery-border)',
             borderRadius: '0.75rem',
             padding: '2rem',
             boxSizing: 'border-box',
@@ -55,12 +102,12 @@ export default function GlobalError({
               letterSpacing: '-0.015em',
               fontWeight: 700,
               margin: '0 0 0.5rem',
-              color: '#e8e8e8',
+              color: 'var(--recovery-foreground)',
             }}
           >
             Something went wrong
           </h1>
-          <p style={{ color: '#b8b0a4', margin: '0 0 1.5rem' }}>
+          <p style={{ color: 'var(--recovery-secondary)', margin: '0 0 1.5rem' }}>
             A critical error occurred. Please try again, or return to the homepage.
           </p>
           <div
@@ -82,8 +129,8 @@ export default function GlobalError({
                 borderRadius: '0.5rem',
                 border: 'none',
                 cursor: 'pointer',
-                backgroundColor: '#c9a227',
-                color: '#0f0f0f',
+                backgroundColor: 'var(--recovery-gold)',
+                color: 'var(--recovery-inverse)',
               }}
             >
               Try again
@@ -98,7 +145,7 @@ export default function GlobalError({
                 lineHeight: 1.429,
                 fontWeight: 600,
                 borderRadius: '0.5rem',
-                color: '#b8b0a4',
+                color: 'var(--recovery-secondary)',
                 textDecoration: 'none',
               }}
             >

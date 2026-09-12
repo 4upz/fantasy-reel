@@ -49,8 +49,8 @@ export default function DraftBoardHeader({
                 data-preview-focus="turn"
               >
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isMyTurn
-                  ? 'bg-success text-background'
-                  : 'bg-gold text-background'}`}>
+                  ? 'bg-success text-foreground-inverse'
+                  : 'bg-gold text-foreground-inverse'}`}>
                   {isMyTurn ? <ArrowUpIcon className="w-6 h-6" /> : <ClockIcon className="w-6 h-6" />}
                 </div>
                 <div>

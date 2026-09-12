@@ -40,6 +40,7 @@ The [high-fidelity charcoal](concepts/charcoal.png) and [gold](concepts/gold.png
 
 ## App integration
 
+- The app supports [System, Light, and Dark themes](themes.md), with shared typography and approved light/dark logo assets.
 - Navigation uses the approved horizontal SVG lockup and symbol through the shared brand component. Preserve the link's accessible name, focus behavior, and aspect ratio. Do not repeat the wordmark as adjacent text or recreate the symbol with CSS.
 - [app/icon.svg](../../apps/frontend/app/icon.svg) uses the simplified drawing; [app/favicon.ico](../../apps/frontend/app/favicon.ico) supplies the browser fallback. [app/apple-icon.png](../../apps/frontend/app/apple-icon.png) is the opaque 180px charcoal icon. Keep file-based metadata and explicit layout metadata consistent. See [Next's icon conventions](https://nextjs.org/docs/app/api-reference/file-conventions/metadata/app-icons).
 - The manifest uses separate `any` entries for the charcoal 192px/512px icons and a `maskable` entry for its padded 512px icon. Icon metadata does not by itself add offline support or a native app.

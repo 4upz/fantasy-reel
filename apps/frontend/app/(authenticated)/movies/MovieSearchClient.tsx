@@ -16,7 +16,7 @@ import MovieGridSkeleton from './components/MovieGridSkeleton'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const MovieDetailModal = dynamic(() => import('./components/MovieDetailModal'), {
-  loading: () => <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"><div className="fixed inset-0 bg-black/85" /><div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-pulse h-[600px] bg-surface rounded-lg" /></div>,
+  loading: () => <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"><div className="fixed inset-0 bg-overlay" /><div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-pulse h-[600px] bg-surface rounded-lg" /></div>,
 })
 
 export default function MovieSearchClient(): React.ReactElement {

@@ -169,7 +169,7 @@ export default function CounterpickRound({
         <div className="p-4 rounded-xl bg-success-bg border-2 border-success mb-6">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-success rounded-full flex items-center justify-center">
-              <CheckIcon className="w-5 h-5 text-background" />
+              <CheckIcon className="w-5 h-5 text-foreground-inverse" />
             </div>
             <div>
               <p className="type-card text-success">Counterpick round complete!</p>
@@ -205,7 +205,7 @@ export default function CounterpickRound({
                 <div className="flex items-center gap-3">
                   <div
                     className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                      isMyTurn ? 'bg-success text-background' : 'bg-gold text-background'
+                      isMyTurn ? 'bg-success text-foreground-inverse' : 'bg-gold text-foreground-inverse'
                     }`}
                   >
                     {isMyTurn ? (
