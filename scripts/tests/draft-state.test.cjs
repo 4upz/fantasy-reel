@@ -14,16 +14,18 @@ let effect
 let timerId = 0
 let clockMs = 0
 let onState
+let onSubscription
 const listeners = new Map()
 const topics = []
 const target = {
   addEventListener: (name, callback) => listeners.set(name, callback),
   removeEventListener: (name) => listeners.delete(name),
 }
-const channel = { on() { return this }, subscribe() { return this } }
+const channel = { on() { return this }, subscribe(callback) { onSubscription = callback; return this } }
 const supabase = {
   channel: topic => { topics.push(topic); return channel },
   removeChannel: async () => {},
+  realtime: { connectionState: () => 'open', setAuth: async () => {} },
   auth: { onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }) },
   from(table) {
     const query = {
@@ -151,6 +153,25 @@ async function main() {
   assert.equal(await afterInvalidation, true)
   assert.equal(states[1], null)
 
+  // A healthy subscription can miss a change without emitting any error or
+  // disconnect status. Authoritative reads must still recover that state.
+  onSubscription('SUBSCRIBED')
+  await flush()
+  resolvePass(10)
+  await flush()
+  assert.equal(states[2], 'connected')
+  const liveReconciliation = [...timers.values()].find(timer => timer.interval && timer.delay === 5000)
+  assert.ok(liveReconciliation, 'subscribed channels reconcile even without change events')
+  liveReconciliation.callback()
+  await flush()
+  clockMs += 5000
+  liveReconciliation.callback()
+  resolvePass(11)
+  await flush()
+  assert.equal(states[0].league.generation, 11, 'routine live ticks share and apply the current read')
+  assert.equal(requests.length, 0, 'routine ticks do not invalidate a read or force another pass')
+  assert.equal(states[2], 'connected', 'reconciliation preserves truthful transport status')
+
   const unmounted = state.refresh()
   await flush()
   cleanup()
@@ -161,7 +182,7 @@ async function main() {
   assert.equal(await state.refresh(), false)
 
 }
-test('draft refresh coalesces events, tolerates slow polling, bounds reconciliation, and cancels on unmount', main)
+test('draft refresh coalesces events, recovers missed live events, tolerates slow polling, and bounds reconciliation', main)
 
 test('rapid draft remount survives the installed SDK asynchronous channel cleanup', async () => {
   const { RealtimeClient } = require('@supabase/realtime-js')
@@ -184,6 +205,68 @@ test('rapid draft remount survives the installed SDK asynchronous channel cleanu
   await client.removeAllChannels()
   secondCleanup()
 })
+
+for (const disposeBeforeAuth of [false, true]) {
+  test(`draft awaits Auth before its installed SDK first join (disposed: ${disposeBeforeAuth})`, async () => {
+    const { RealtimeClient } = require('@supabase/realtime-js')
+    let resolveAuth
+    const pendingAuth = new Promise(resolve => { resolveAuth = resolve })
+    const sent = []
+    const sockets = []
+    class FakeSocket {
+      constructor() { this.readyState = 0; sockets.push(this) }
+      send(raw) {
+        const message = JSON.parse(raw)
+        sent.push(Array.isArray(message) ? { event: message[3], payload: message[4] } : message)
+      }
+      close() { this.readyState = 3 }
+    }
+    // No connection is opened. This reproduces the installed SDK's buffered
+    // join retaining an old payload while its asynchronous Auth callback runs.
+    const client = new RealtimeClient('ws://127.0.0.1:1/socket', {
+      transport: FakeSocket, accessToken: () => pendingAuth,
+      params: { apikey: 'public-test-placeholder' },
+    })
+    const original = { channel: supabase.channel, realtime: supabase.realtime, removeChannel: supabase.removeChannel }
+    supabase.channel = client.channel.bind(client)
+    supabase.realtime = client
+    supabase.removeChannel = client.removeChannel.bind(client)
+    let stop
+    try {
+      const hook = moduleStub.exports.useDraftState({ league: { id: 'auth-league' }, participants: [], draftPicks: [], counterpicks: [] })
+      stop = effect()
+      // A stalled Auth bootstrap must not prevent the fallback from starting.
+      const fallback = [...timers.values()].find(timer => timer.delay === 10000 && !timer.interval)
+      assert.ok(fallback)
+      requests.length = 0
+      fallback.callback()
+      await flush()
+      resolvePass(12)
+      await flush()
+      assert.equal(hook.getSnapshot().league.generation, 12)
+      if (disposeBeforeAuth) stop()
+      resolveAuth('user-test-placeholder')
+      await flush()
+      if (disposeBeforeAuth) {
+        assert.equal(sockets.length, 0, 'an unmounted hook never opens a late subscription')
+        assert.equal(client.getChannels().length, 0)
+      } else {
+        assert.equal(sockets.length, 1)
+        sockets[0].readyState = 1
+        sockets[0].onopen()
+        await flush()
+        const join = sent.find(message => message.event === 'phx_join')
+        assert.ok(join, 'the real SDK emitted its first join')
+        assert.equal(join.payload.access_token === 'user-test-placeholder', true, 'first join carries the resolved user token')
+      }
+    } finally {
+      stop?.()
+      client.disconnect()
+      Object.assign(supabase, original)
+      await flush()
+    }
+  })
+}
 
 test('a delayed mutation response cannot rewind the live league phase', () => {
   const hook = moduleStub.exports.useDraftState({ league: { id: 'phase-league', status: 'drafting' }, participants: [], draftPicks: [], counterpicks: [] })

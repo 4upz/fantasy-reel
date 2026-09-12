@@ -16,6 +16,7 @@ export interface DraftState {
 }
 
 const POLL_INTERVAL_MS = 10_000
+const LIVE_RECONCILE_INTERVAL_MS = 5_000
 const REALTIME_FALLBACK_MS = 10_000
 const REFRESH_TIMEOUT_MS = 15_000
 const PHASE_ORDER = { setup: 0, drafting: 1, counterpicking: 2, active: 3, completed: 4 }
@@ -42,6 +43,7 @@ export function useDraftState(initialState: DraftState) {
     let requestedVersion = 0
     let inFlight: Promise<boolean> | null = null
     let pollingTimer: ReturnType<typeof setInterval> | null = null
+    let liveReconciliationTimer: ReturnType<typeof setInterval> | null = null
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null
     let degraded = false
     let warningSent = false
@@ -133,6 +135,11 @@ export function useDraftState(initialState: DraftState) {
       fallbackTimer = null
     }
 
+    function stopLiveReconciliation() {
+      if (liveReconciliationTimer) clearInterval(liveReconciliationTimer)
+      liveReconciliationTimer = null
+    }
+
     function startPolling() {
       if (disposed) return
       setRealtimeStatus('polling')
@@ -151,8 +158,9 @@ export function useDraftState(initialState: DraftState) {
         filter: `${table === 'leagues' ? 'id' : 'league_id'}=eq.${leagueId}`,
       }, () => { void requestRefresh() })
     }
-    channel.subscribe((status, error) => {
+    function handleSubscriptionStatus(status: string, error?: unknown) {
       if (disposed) return
+      stopLiveReconciliation()
       addBreadcrumb({ category: 'realtime.channel', message: status, data: {
         league_id: leagueId, error: realtimeErrorText(error), visibility: document.visibilityState,
         online: navigator.onLine, socket_state: supabase.realtime.connectionState(),
@@ -161,6 +169,9 @@ export function useDraftState(initialState: DraftState) {
         stopPolling()
         setRealtimeStatus('connected')
         void requestRefresh() // Also closes the initial SSR-to-subscription gap.
+        // A joined socket does not prove every database event was delivered.
+        // Bound stale state even when the transport reports no interruption.
+        liveReconciliationTimer = setInterval(() => void requestRefresh(false), LIVE_RECONCILE_INTERVAL_MS)
         if (degraded) trackEvent('realtime_recovered', { league_id: leagueId })
         degraded = false
       } else {
@@ -177,8 +188,14 @@ export function useDraftState(initialState: DraftState) {
           if (!fallbackTimer) fallbackTimer = setTimeout(startPolling, REALTIME_FALLBACK_MS)
         }
       }
-    })
+    }
     fallbackTimer ??= setTimeout(startPolling, REALTIME_FALLBACK_MS)
+    // This SDK can buffer a tokenless join before its async Auth callback
+    // resolves, then skip sending the now-cached token after SUBSCRIBED.
+    // Resolve Auth before subscribe constructs that first join payload.
+    void supabase.realtime.setAuth().then(() => {
+      if (!disposed) channel.subscribe(handleSubscriptionStatus)
+    }).catch(error => handleSubscriptionStatus('CHANNEL_ERROR', error))
 
     const resume = () => { void requestRefresh() }
     const visible = () => { if (document.visibilityState === 'visible') resume() }
@@ -197,6 +214,7 @@ export function useDraftState(initialState: DraftState) {
       disposed = true
       activeRequest?.abort()
       stopPolling()
+      stopLiveReconciliation()
       subscription.unsubscribe()
       window.removeEventListener('focus', resume)
       window.removeEventListener('online', resume)

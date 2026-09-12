@@ -39,6 +39,53 @@ async function expireClientHint(context: BrowserContext) {
 test.describe('draft connection recovery', () => {
   test.use({ draftSlots: 2 })
 
+  test('reconciles a missed database event while its real socket stays Live @critical @realtime', async ({
+    leagueOwnerPage: owner, authedPage: observer, readyDraft,
+  }) => {
+    const droppedPickIds = new Set<string>()
+    let closedSockets = 0
+    observer.on('websocket', socket => {
+      if (socket.url().includes('/realtime/')) socket.on('close', () => { closedSockets += 1 })
+    })
+    await observer.routeWebSocket(url => url.pathname.includes('/realtime/'), socket => {
+      const server = socket.connectToServer()
+      server.onMessage(raw => {
+        // Keep real joins, heartbeats, Auth, and all other frames intact.
+        // Suppress only this league's actual database change notification.
+        try {
+          const message = JSON.parse(raw.toString())
+          const event = Array.isArray(message) ? message[3] : message.event
+          const payload = Array.isArray(message) ? message[4] : message.payload
+          if (event === 'postgres_changes' && payload?.data?.table === 'draft_picks' &&
+            payload.data.record?.league_id === readyDraft.id) {
+            droppedPickIds.add(payload.data.record.id)
+            return
+          }
+        } catch { /* Forward non-JSON frames without retaining or reporting them. */ }
+        socket.send(raw)
+      })
+    })
+    await startDraft(owner, readyDraft)
+    await openDraft(observer, readyDraft)
+    await expect(observer.getByTestId('draft-connection-status')).toHaveText('Live')
+    // Settle the initial reads so they cannot accidentally cover the mutation.
+    await observer.waitForLoadState('networkidle')
+    await expect(observer.getByTestId('draft-progress')).toContainText('0/6')
+    let navigations = 0
+    observer.on('framenavigated', frame => { if (frame === observer.mainFrame()) navigations += 1 })
+
+    await searchDraft(owner, readyDraft)
+    await pickMovie(owner, readyDraft.movies[0])
+    const picks = await readDraftPicks(readyDraft.id)
+    expect(picks).toHaveLength(1)
+    await expect.poll(() => droppedPickIds.has(picks[0].id)).toBe(true)
+    await expect(observer.getByTestId('draft-progress')).toContainText('1/6')
+    await expect(observer.getByText("It's your turn!", { exact: true })).toBeVisible()
+    await expect(observer.getByTestId('draft-connection-status')).toHaveText('Live')
+    expect(closedSockets).toBe(0)
+    expect(navigations).toBe(0)
+  })
+
   test('recovers missed picks after disconnect and synthetic background/resume, then receives a pick after real token refresh @critical @realtime', async ({
     leagueOwnerPage: observer, leagueOwnerContext: observerContext,
     authedPage: second, secondUserPage: third, readyDraft,
