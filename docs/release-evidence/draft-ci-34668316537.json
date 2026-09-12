@@ -1,0 +1,2198 @@
+{
+  "run_url": "https://github.com/4upz/fantasy-reel/actions/runs/34668316537",
+  "source_tree": "6445db8a0d0a45f9f66e8e428f5f97d99153b0e7",
+  "node": "24.21.0",
+  "supabase_cli": "2.111.0",
+  "deno": "2.6.4",
+  "database_assertions_passed": 117,
+  "draft_state_tests_passed": 11,
+  "bot_tests_passed": 95,
+  "frontend_build": "passed",
+  "runner_trace_preflight": "passed",
+  "browser_workers": 2,
+  "browser_retries": 0,
+  "browser_trace": "on",
+  "final_browser_trace_crc_audit": "Not performed; successful-run raw traces were not uploaded under the existing failure-only artifact policy. Runner preflight ZIP validation passed.",
+  "scope": "Real local Auth, database, Edge Functions, Realtime. Draft movie-provider data uses canonical cache fixtures. Recovery faults/visibility are injected; timing is not a cold-container measurement. No external notifications.",
+  "commit": "8a1c1736de77b544311b6e54ce76ac780e11bfad",
+  "browser_suite_executed": true,
+  "stats": {
+    "expected": 168,
+    "unexpected": 0,
+    "flaky": 0,
+    "skipped": 26,
+    "duration": 298249.373
+  },
+  "tests": [
+    {
+      "file": "../global-teardown.ts",
+      "title": "global teardown",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 56
+    },
+    {
+      "file": "../global-setup.ts",
+      "title": "global setup",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 94
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "shows email account as connected @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3401
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "shows available OAuth providers to connect",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3161
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "connect Discord button initiates OAuth",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "connect Google button initiates OAuth",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "cannot disconnect only auth method",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "can disconnect when multiple auth methods exist",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "link-account page loads without crashing",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 474
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "merge account button calls merge-accounts function",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "callback redirects to appropriate page on error",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 564
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "link Discord to existing email account",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "merge accounts when OAuth email matches",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/account-linking.spec.ts",
+      "title": "keep accounts separate (decline merge)",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord login button is visible on login page @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 451
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord login button initiates OAuth flow",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 491
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord signup button is visible on signup page",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 427
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "Discord signup button has correct styling",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 453
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "link-account page loads without errors",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 557
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "callback route exists and handles requests",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 424
+    },
+    {
+      "file": "auth/discord-oauth.spec.ts",
+      "title": "callback without code redirects appropriately",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 415
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google login button is visible on login page @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 414
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google login button initiates OAuth flow",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 532
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google signup button is visible on signup page",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 432
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "Google signup button has correct styling",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 417
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "link-account page loads without errors",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 520
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "callback route exists and handles requests",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 423
+    },
+    {
+      "file": "auth/google-oauth.spec.ts",
+      "title": "callback without code redirects appropriately",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 383
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "successful login redirects to dashboard",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1398
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "invalid credentials show error message",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 852
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "empty form shows validation errors",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 564
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "preserves return URL after login",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1197
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "Discord OAuth button is visible",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 448
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "forgot password link navigates correctly",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 631
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "signup link navigates correctly",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 528
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "authenticated user can access dashboard",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2324
+    },
+    {
+      "file": "auth/login.spec.ts",
+      "title": "logout redirects to login page",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2755
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "can request password reset email @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 942
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "shows success for non-existent email (security)",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 545
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "validates email format",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 614
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "back to login link works",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 457
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "reset password with valid token @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2409
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "shows error for expired token",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 414
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "password validation enforced",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "shows password requirements",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "auth/password-reset.spec.ts",
+      "title": "complete reset flow from login page @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4125
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "complete signup flow with email verification @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1886
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows validation errors for invalid input",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 538
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows error for weak password",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 717
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows error for invalid email format",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 595
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "login link navigates correctly",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 485
+    },
+    {
+      "file": "auth/signup.spec.ts",
+      "title": "shows success or error for already registered email",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1510
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "bidding panel displays budget and place bid button @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2357
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "displays correct budget amount",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2747
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can open place bid modal",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2899
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can search for movies in bid modal",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3509
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can select movie and see bid amount input",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3387
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "shows bid amount input and submit button after movie selection",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3350
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "preserves a new bid when delayed bids arrive and revalidates the amount at 1440px",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 5047
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "preserves a new bid when delayed bids arrive and revalidates the amount at 390px",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 5079
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can submit a valid bid @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3884
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "can cancel an active bid",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4116
+    },
+    {
+      "file": "bidding/place-bid.spec.ts",
+      "title": "shows outbid notification when another user bids higher",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "owner starts the configured draft and can search upcoming titles @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 5482
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "waiting players can preview movies but cannot submit a pick",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 7117
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "a committed pick updates the other player turn and progress through Realtime @critical @realtime",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 10901
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "simultaneous selections for the same turn commit exactly one pick",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 9288
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "a response lost after commit is reconciled and its receipt replays without another pick",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 6606
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "all draft picks and counterpicks activate the league with its configured budgets @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 24483
+    },
+    {
+      "file": "draft/draft-flow.spec.ts",
+      "title": "duplicate submissions cannot consume the consecutive turn at the round boundary @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 25909
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "polling applies slow successful snapshots instead of invalidating every read @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 26481
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "preview keeps selection on server rejection, guards pending actions, and restores focus (1280px)",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 7202
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "preview keeps selection on server rejection, guards pending actions, and restores focus (390px)",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 5891
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "movie details failure is visible and can be retried in the same native dialog",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4730
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "empty eligible pages advance only three pages, with explicit load and retry for the remainder",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 6511
+    },
+    {
+      "file": "draft/draft-readiness.spec.ts",
+      "title": "wishlist read failure retries, then title search stays local with unsupported filters disabled",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 5052
+    },
+    {
+      "file": "draft/draft-recovery.spec.ts",
+      "title": "reconciles a missed database event while its real socket stays Live @critical @realtime",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 12689
+    },
+    {
+      "file": "draft/draft-recovery.spec.ts",
+      "title": "recovers missed picks after disconnect and synthetic background/resume, then receives a pick after real token refresh @critical @realtime",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 32516
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "user can create a new league @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3381
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "validates required fields",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3122
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "enforces max participants limits",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "modal can be closed without creating",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2712
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "shows created leagues on dashboard",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1682
+    },
+    {
+      "file": "league/create-league.spec.ts",
+      "title": "shows empty state when no leagues",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1680
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "displays draft order section with participants",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1813
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "randomize button randomizes order and shows toast",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2292
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "shows locked message when league not in setup",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1845
+    },
+    {
+      "file": "league/draft-order.spec.ts",
+      "title": "non-owner cannot access settings page",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2172
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "join via valid invitation token @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3130
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "can join without team name (uses default)",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2728
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "redirects to login if not authenticated",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1139
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "invalid token shows error",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2461
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "expired invitation shows error",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3126
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "already used invitation shows error",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 5603
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "can decline invitation",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "cannot join full league",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3491
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "invitation for different email allows or warns",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2873
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "pending invitations shown on dashboard",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-invitation.spec.ts",
+      "title": "can accept invitation from dashboard",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "user can join league via join code @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3668
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "invalid join code shows error",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2180
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "cannot join full league via code",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3224
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "cannot join league after draft starts",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2497
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "owner can generate join link from settings @critical",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "copy join link to clipboard",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "regenerate join link invalidates old code",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "join link section disabled after draft starts",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "non-owner cannot access settings to generate link",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "existing join link shown on settings page",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "no link shows generate prompt",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "join link card shown on draft page before draft starts",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/join-link.spec.ts",
+      "title": "join link card hidden after draft starts",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown opens on click",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2840
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown closes on toggle click",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2629
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown closes on Escape",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2992
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "dropdown closes on click outside",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2896
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "current league is highlighted",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2677
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "switching leagues preserves current tab",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3025
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "clicking current league closes dropdown without navigation",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2716
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "status badges are visible for each league",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2798
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "\"View All Leagues\" navigates to dashboard",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2877
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "single-league user sees one entry",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2956
+    },
+    {
+      "file": "league/league-switcher.spec.ts",
+      "title": "ARIA attributes are correct",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2509
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "tabs render on league page @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2479
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "clicking a tab navigates to correct page @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3100
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "active tab is highlighted with aria-current @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2630
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "hides post-draft tabs for pre-active leagues",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2414
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "draft is demoted to the end of the strip for active leagues",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2167
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "draft stays a primary tab before the season starts",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2587
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "settings tab not visible for non-owner",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2349
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "settings tab visible for owner",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "tab navigation preserves league context",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3157
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "all tabs render for active league",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2270
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "active league puts Roster on the bar and Draft in the More sheet",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2777
+    },
+    {
+      "file": "league/league-tabs.spec.ts",
+      "title": "pre-active league keeps Draft on the bar",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2354
+    },
+    {
+      "file": "league/movie-details.spec.ts",
+      "title": "overview movies open a read-only details dialog",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3056
+    },
+    {
+      "file": "league/movie-details.spec.ts",
+      "title": "standings rosters open the same dialog on desktop",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2987
+    },
+    {
+      "file": "league/movie-details.spec.ts",
+      "title": "a standings movie opens without collapsing the team it belongs to",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2935
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "every held movie is an openable card on a touch viewport",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2830
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "the dialog shows movie details with the roster action attached",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2705
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "the confirm view spells out the cost, and the drop is recorded",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3338
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "keeping the movie returns to details without dropping",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3134
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "a counterpicked movie names the team that locked it and offers no drop",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2520
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "a released movie explains that it has already opened",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2858
+    },
+    {
+      "file": "league/roster-drop.spec.ts",
+      "title": "an exhausted drop allowance explains itself on the droppable movie",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2884
+    },
+    {
+      "file": "league/season-lifecycle.spec.ts",
+      "title": "ends a season and starts a clean next season at 1440px",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 6082
+    },
+    {
+      "file": "league/season-lifecycle.spec.ts",
+      "title": "ends a season and starts a clean next season at 390px",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 5767
+    },
+    {
+      "file": "league/season-lifecycle.spec.ts",
+      "title": "does not allow completion when the standings preview fails",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2774
+    },
+    {
+      "file": "league/standings-dropped.spec.ts",
+      "title": "a dropped movie leaves the standings card and its movie count",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2550
+    },
+    {
+      "file": "league/standings-dropped.spec.ts",
+      "title": "standings and roster list the same movies for the same team",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3532
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "user can login and access dashboard",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 1499
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "user can logout successfully",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2461
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "authenticated user can create a new league",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3387
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "unauthenticated user is redirected from protected routes",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 447
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "login page loads without errors",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 674
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "signup page loads without errors",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 377
+    },
+    {
+      "file": "smoke/critical-paths.spec.ts",
+      "title": "league owner can access draft page and see draft board",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4333
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "standings page is accessible from league @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2815
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "displays team rankings in correct order",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2766
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "displays team scores",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2813
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "current user team is identifiable",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2432
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "can view team details from standings",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2545
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "shows team movies in standings context",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2661
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "standings page shows teams in descending score order",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2641
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "expanded team shows its draft picks and points breakdown",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2470
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "expanded team with pickup shows Pickups section",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2628
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "expanded team with counterpick shows Counterpicks section",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2652
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "team header shows combined movie count from drafts and pickups",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2314
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "rail defaults to the current user team and follows selection",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3160
+    },
+    {
+      "file": "standings/leaderboard.spec.ts",
+      "title": "rail lists the selected team roster",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3001
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "pencil icon opens modal with pre-filled name @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2518
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "cancel closes modal without changes",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2606
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "escape closes modal",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2552
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "click outside closes modal",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2624
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "update team name shows on dashboard @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3210
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "name persists on reload @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4007
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "updated name appears on standings @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4120
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "updated name appears on roster @critical",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4398
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "trimmed on save",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3146
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "empty name disables save",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2679
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "whitespace-only name disables save",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2521
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "character counter turns red at limit",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2536
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "upload avatar shows preview",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3423
+    },
+    {
+      "file": "team/team-settings.spec.ts",
+      "title": "remove avatar shows fallback",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3757
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "trading page is accessible from league",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2675
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "shows team rosters for trading",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3095
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "can open propose trade interface",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3927
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "can view own roster on trading page",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2945
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "can propose a trade through the modal",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 4682
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "recipient can view incoming trade",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3092
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "recipient can accept trade",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3714
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "recipient can reject trade",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 3366
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "proposer can cancel pending trade",
+      "outcome": "expected",
+      "expected_status": "passed",
+      "statuses": [
+        "passed"
+      ],
+      "duration_ms": 2504
+    },
+    {
+      "file": "trading/trade-flow.spec.ts",
+      "title": "league owner sees veto option for trades in review",
+      "outcome": "skipped",
+      "expected_status": "skipped",
+      "statuses": [
+        "skipped"
+      ],
+      "duration_ms": 0
+    }
+  ],
+  "draft_pick_timings": [
+    {
+      "label": "first pick in recovery case",
+      "status": 201,
+      "elapsed_ms": 299
+    },
+    {
+      "label": "warm pick after observer token refresh",
+      "status": 201,
+      "elapsed_ms": 327
+    }
+  ],
+  "edge_runtime": [
+    {
+      "status": "running",
+      "oom_killed": false,
+      "exit_code": 0,
+      "cpu_hard_limit_events": 0,
+      "worker_acquisition_timeouts": 0
+    }
+  ],
+  "branch_source": "efae412715f0a98c042f6a7b62a4901ec6299429",
+  "conclusion": "success",
+  "shared_backend": {
+    "passed": 243,
+    "steps": 190,
+    "failed": 0
+  },
+  "http": {
+    "modules_passed": 65,
+    "modules_failed": 0,
+    "steps_passed": 662,
+    "steps_failed": 0,
+    "steps_skipped": 4
+  },
+  "gates": [
+    {
+      "name": "Set up job",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:40:37Z",
+      "completedAt": "2026-09-12T02:40:39Z"
+    },
+    {
+      "name": "Checkout repository",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:40:39Z",
+      "completedAt": "2026-09-12T02:40:41Z"
+    },
+    {
+      "name": "Setup Node.js",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:40:41Z",
+      "completedAt": "2026-09-12T02:40:50Z"
+    },
+    {
+      "name": "Install dependencies",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:40:50Z",
+      "completedAt": "2026-09-12T02:41:12Z"
+    },
+    {
+      "name": "Setup Supabase CLI",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:41:12Z",
+      "completedAt": "2026-09-12T02:41:15Z"
+    },
+    {
+      "name": "Setup Deno",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:41:15Z",
+      "completedAt": "2026-09-12T02:41:17Z"
+    },
+    {
+      "name": "Prepare isolated verification environment",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:41:17Z",
+      "completedAt": "2026-09-12T02:41:18Z"
+    },
+    {
+      "name": "Start Supabase",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:41:18Z",
+      "completedAt": "2026-09-12T02:43:08Z"
+    },
+    {
+      "name": "Get Supabase keys and set environment",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:43:08Z",
+      "completedAt": "2026-09-12T02:43:12Z"
+    },
+    {
+      "name": "Verify stack health and HTTP contracts",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:43:12Z",
+      "completedAt": "2026-09-12T02:43:14Z"
+    },
+    {
+      "name": "Verify database integrity",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:43:14Z",
+      "completedAt": "2026-09-12T02:43:18Z"
+    },
+    {
+      "name": "Run draft state and bot regressions",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:43:18Z",
+      "completedAt": "2026-09-12T02:43:26Z"
+    },
+    {
+      "name": "Run API integration tests",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:43:26Z",
+      "completedAt": "2026-09-12T02:56:06Z"
+    },
+    {
+      "name": "Get Playwright version",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:56:06Z",
+      "completedAt": "2026-09-12T02:56:06Z"
+    },
+    {
+      "name": "Cache Playwright browsers",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:56:06Z",
+      "completedAt": "2026-09-12T02:56:10Z"
+    },
+    {
+      "name": "Install Playwright browsers",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:56:10Z",
+      "completedAt": "2026-09-12T02:56:23Z"
+    },
+    {
+      "name": "Build frontend",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:56:23Z",
+      "completedAt": "2026-09-12T02:57:09Z"
+    },
+    {
+      "name": "Verify browser runner and stack before browser tests",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:57:09Z",
+      "completedAt": "2026-09-12T02:57:13Z"
+    },
+    {
+      "name": "Run E2E tests",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T02:57:13Z",
+      "completedAt": "2026-09-12T03:02:13Z"
+    },
+    {
+      "name": "Record sanitized verification summary",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T03:02:13Z",
+      "completedAt": "2026-09-12T03:02:14Z"
+    },
+    {
+      "name": "Upload Playwright report",
+      "status": "completed",
+      "conclusion": "skipped",
+      "startedAt": "2026-09-12T03:02:14Z",
+      "completedAt": "2026-09-12T03:02:14Z"
+    },
+    {
+      "name": "Upload test artifacts",
+      "status": "completed",
+      "conclusion": "skipped",
+      "startedAt": "2026-09-12T03:02:14Z",
+      "completedAt": "2026-09-12T03:02:14Z"
+    },
+    {
+      "name": "Post Cache Playwright browsers",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T03:02:14Z",
+      "completedAt": "2026-09-12T03:02:14Z"
+    },
+    {
+      "name": "Post Setup Deno",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T03:02:14Z",
+      "completedAt": "2026-09-12T03:02:14Z"
+    },
+    {
+      "name": "Post Setup Node.js",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T03:02:14Z",
+      "completedAt": "2026-09-12T03:02:15Z"
+    },
+    {
+      "name": "Post Checkout repository",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T03:02:15Z",
+      "completedAt": "2026-09-12T03:02:15Z"
+    },
+    {
+      "name": "Complete job",
+      "status": "completed",
+      "conclusion": "success",
+      "startedAt": "2026-09-12T03:02:15Z",
+      "completedAt": "2026-09-12T03:02:15Z"
+    }
+  ],
+  "log_caveats": [
+    "20 browser middleware Auth messages report a JWT user no longer exists. Fixture cleanup with stale cookies is plausible but requests are not attributed; no zero-Auth-error claim.",
+    "Successful-run raw traces were not uploaded; full final trace CRC validation was not performed."
+  ]
+}
