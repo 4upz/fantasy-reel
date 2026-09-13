@@ -4,7 +4,7 @@ import { ArrowRight } from 'lucide-react'
 import MarketingHeader from './components/landing/MarketingHeader'
 import SpotlightPreview from './components/landing/SpotlightPreview'
 import DraftPreviewScene from './components/landing/DraftPreviewScene'
-import StandingsPreviewScene from './components/landing/StandingsPreviewScene'
+import RosterPreviewScene from './components/landing/RosterPreviewScene'
 import MovesPreviewScene from './components/landing/MovesPreviewScene'
 import SiteFooter from './components/landing/SiteFooter'
 import ScrollDepth from './components/landing/ScrollDepth'
@@ -51,16 +51,15 @@ export default function LandingPage(): React.ReactElement {
           <div className={styles.sectionHeader}>
             <p className={`type-meta ${styles.sectionNumber}`}><span>02</span> FOLLOW THE SEASON</p>
             <h2 id="season-title" className={`type-page ${styles.sectionTitle}`}>The reviews are in.<br />So are the rivalries.</h2>
-            <p className={`type-lead ${styles.sectionIntro}`}>As your movies arrive, their Rotten Tomatoes scores become fantasy points. Follow the standings and see whose taste holds up.</p>
+            <p className={`type-lead ${styles.sectionIntro}`}>As your movies arrive, their Rotten Tomatoes scores become fantasy points. Better reviews, more to brag about.</p>
           </div>
-          <SpotlightPreview title="Movie scores and league standings" width={960} height={500} layout="beside" details={[
-            { label: 'A pick that pays off', description: 'You backed Barbie. Its 88% Rotten Tomatoes score brings home 28 fantasy points for Vintage Vibes, our example team.' },
-            { label: 'From reviews to points', description: 'That 88% is the critics’ score. The 28 points go toward your team’s total. Better reviews, more to brag about.', focus: 'reviews' },
-            { label: 'Let the rivalry begin', description: 'Vintage Vibes has 104 points, including Barbie’s 28. Most points at the end of the season wins the league.', focus: 'team' },
+          <SpotlightPreview title="Roster and movie scores" width={1088} height={640} layout="beside" details={[
+            { label: 'The lineup', description: 'A few familiar picks from 2023, playing for Vintage Vibes, our example team. Every movie’s reviews shape the season.' },
+            { label: 'A pick that pays off', description: 'You backed Barbie. Its 88% Rotten Tomatoes score brings home 28 fantasy points. Good taste pays off.', focus: 'reviews' },
           ]}>
-            <StandingsPreviewScene />
+            <RosterPreviewScene />
           </SpotlightPreview>
-          <p className={`type-body-sm ${styles.exampleNote}`}>Barbie (2023), with a saved Rotten Tomatoes score. Teams and standings are fictional.</p>
+          <p className={`type-body-sm ${styles.exampleNote}`}>Real 2023 movies and saved Rotten Tomatoes scores. The team and budget are fictional.</p>
         </section>
         <section className={styles.section} aria-labelledby="moves-title" data-scroll-depth>
           <div className={styles.sectionHeader}>

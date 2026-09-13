@@ -44,9 +44,6 @@
 .sectionNumber span { color: var(--color-gold); }
 .sectionTitle { font-size: clamp(30px, 4.1vw, 49px); line-height: 1.08; letter-spacing: -.035em; text-wrap: balance; }
 .sectionIntro { color: var(--color-foreground-secondary); margin-top: 20px; max-width: 600px; text-wrap: pretty; }
-.scoringScene { position: relative; width: 960px; height: 500px; text-align: left; }
-.scoringMovie { position: absolute; z-index: 1; top: 24px; left: 24px; width: 220px; border-radius: 14px; box-shadow: var(--shadow-heavy); }
-.scoringStandings { position: absolute; top: 158px; left: 220px; width: 716px; padding: 24px 24px 24px 36px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-background); box-shadow: var(--shadow-soft); }
 .exampleNote { margin-top: 20px; color: var(--color-foreground-secondary); }
 .previewStacked { display: flex; flex-direction: column; gap: 18px; }
 .previewBeside { display: grid; grid-template-columns: minmax(0, 1fr) 275px; align-items: center; gap: 36px; }
