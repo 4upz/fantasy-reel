@@ -49,9 +49,11 @@ test.describe('Theme preferences', () => {
     const hydrationErrors = collectHydrationErrors(page)
     await page.emulateMedia({ colorScheme: 'light' })
     await page.goto('/')
-    await page.getByTestId('theme-select').selectOption('dark')
+    await page.getByTestId('marketing-theme-button').click()
+    await page.locator('#marketing-menu').getByText('Dark', { exact: true }).click()
     await expectTheme(page, 'dark', 'dark')
     expect(await page.evaluate(key => localStorage.getItem(key), THEME_STORAGE_KEY)).toBe('dark')
+    await page.keyboard.press('Escape')
 
     await page.getByRole('navigation', { name: 'Main navigation', exact: true })
       .getByRole('link', { name: 'Sign in', exact: true }).click()
@@ -177,6 +179,65 @@ test.describe('Theme preferences', () => {
     { name: 'desktop', width: 1280, height: 900 },
     { name: 'mobile', width: 375, height: 812 },
   ]) {
+    test(`marketing navigation keeps theme controls tucked away on ${viewport.name}`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height })
+      await page.emulateMedia({ colorScheme: 'dark' })
+      await page.goto('/')
+
+      const isMobile = viewport.name === 'mobile'
+      const navigation = page.getByRole('navigation', { name: 'Main navigation', exact: true })
+      await expect(navigation.getByRole('link', { name: 'How to play', exact: true })).toBeVisible()
+      await expect(navigation.getByRole('link', { name: 'Sign up', exact: true })).toBeVisible()
+      const signIn = page.locator('header').getByRole('link', { name: 'Sign in', exact: true })
+      if (isMobile) {
+        await expect(signIn).toBeHidden()
+      } else {
+        await expect(signIn).toBeVisible()
+      }
+      const trigger = page.getByTestId(isMobile ? 'marketing-menu-button' : 'marketing-theme-button')
+      const menu = page.locator('#marketing-menu')
+      const selector = menu.getByTestId('theme-selector')
+      await expect(page.getByTestId('theme-select')).toHaveCount(0)
+      await expect(selector).toBeHidden()
+      await trigger.click()
+      await expect(signIn).toBeVisible()
+      await selector.getByText('Light', { exact: true }).click()
+      await expectTheme(page, 'light', 'light')
+
+      await selector.getByRole('radio', { name: 'Light', exact: true }).focus()
+      await page.keyboard.press('ArrowRight')
+      await expectTheme(page, 'dark', 'dark')
+      await expect(selector.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked()
+      const bounds = await menu.boundingBox()
+      expect(bounds).not.toBeNull()
+      expect(bounds!.x).toBeGreaterThanOrEqual(0)
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width)
+
+      await page.keyboard.press('Escape')
+      await expect(menu).toBeHidden()
+      await expect(trigger).toBeFocused()
+      await trigger.click()
+      await page.locator('header').click({ position: { x: 4, y: 4 } })
+      await expect(menu).toBeHidden()
+
+      await page.reload()
+      await trigger.click()
+      await expect(selector.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked()
+      await page.keyboard.press('Escape')
+      await navigation.getByRole('link', { name: 'How to play', exact: true }).click()
+      await page.waitForURL('/how-to-play')
+      await expect(navigation.getByRole('link', { name: 'How to play', exact: true }))
+        .toHaveAttribute('aria-current', 'page')
+      await expectTheme(page, 'dark', 'dark')
+      await trigger.click()
+      await selector.getByText('System', { exact: true }).click()
+      await page.emulateMedia({ colorScheme: 'light' })
+      await expectTheme(page, 'light', 'system')
+      if (!isMobile) await page.keyboard.press('Escape')
+      await signIn.click()
+      await page.waitForURL('/login')
+    })
+
     test(`account menu and settings share accessible theme controls on ${viewport.name}`, async ({ authedPage: page }) => {
       const hydrationErrors = collectHydrationErrors(page)
       await page.setViewportSize({ width: viewport.width, height: viewport.height })

@@ -2,21 +2,22 @@
   touch-action: manipulation;
 }
 
-.menuButton:focus-visible,
-.mobileMenu a:focus-visible {
+.menuButton:focus-visible {
   outline: 2px solid var(--color-gold);
   outline-offset: 3px;
 }
 
-.mobileMenu {
+.menu {
+  --menu-top: 4.75rem;
+
   position: absolute;
-  inset: 5.25rem 1rem auto auto;
+  inset: var(--menu-top) 1rem auto auto;
   display: none;
-  width: min(11rem, calc(100% - 2rem));
-  max-height: calc(100dvh - 6.25rem);
+  width: min(17rem, calc(100% - 2rem));
+  max-height: calc(100dvh - var(--menu-top) - 1rem);
   overflow-y: auto;
   margin: 0;
-  padding: 0.5rem;
+  padding: 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 0.5rem;
   background: var(--color-surface);
@@ -24,13 +25,14 @@
   box-shadow: var(--shadow-medium);
 }
 
-.mobileMenu:popover-open {
-  display: grid;
-  gap: 0.25rem;
+.menu:popover-open {
+  display: block;
 }
 
 @media (min-width: 48rem) {
-  .mobileMenu:popover-open {
-    display: none;
+  .menu {
+    --menu-top: 5.25rem;
+
+    right: max(1.5rem, calc((100% - 72rem) / 2 + 1.5rem));
   }
 }
