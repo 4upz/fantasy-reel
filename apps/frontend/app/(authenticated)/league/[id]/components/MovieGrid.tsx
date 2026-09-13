@@ -110,9 +110,8 @@ function daysUntil(releaseDate: string | null): number | null {
   return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
 }
 
-/** The hero's eyebrow. Only a genuinely imminent release earns the countdown. */
-function heroEyebrow(movie: MovieTimelineItem, isImminent: boolean): string {
-  if (!isImminent) return 'Next up'
+/** Only an imminent release earns the countdown. */
+function releaseCountdown(movie: MovieTimelineItem): string {
   const days = daysUntil(movie.release_date)
   if (days == null) return 'Releasing soon'
   if (days <= 0) return 'Releasing today'
@@ -132,11 +131,7 @@ function acquisitionLabel(movie: MovieTimelineItem): string {
     : `$${movie.amount_paid} pickup`
 }
 
-/**
- * The movie that decides your week, given the whole width. Gold when it is
- * actually imminent; the fallback next-upcoming gets a neutral surface so the
- * treatment keeps meaning something.
- */
+/** Lead the shared shelf with a larger poster and title. */
 function NextUpHero({
   movie,
   isImminent,
@@ -147,51 +142,53 @@ function NextUpHero({
   onSelect: (movie: MovieTimelineItem) => void
 }) {
   return (
-    <MovieButton
-      movie={movie}
-      onSelect={onSelect}
-      className={`mx-4 mb-[18px] block w-[calc(100%-2rem)] overflow-hidden rounded-[18px] p-3.5 ${
-        isImminent
-          ? 'border border-gold/30 bg-[linear-gradient(160deg,rgba(201,162,39,0.12),var(--color-surface)_60%)] hover:border-gold/60'
-          : 'border border-border bg-surface hover:border-border-hover hover:bg-surface-hover'
-      }`}
-    >
-      <div
-        className={`type-meta flex items-center gap-1.5 ${
-          isImminent ? 'text-gold' : 'text-foreground-secondary'
-        }`}
+    <div className="w-40 flex-none sm:w-44" data-testid="next-up">
+      <SectionHeader title="Next up" className="pb-2" />
+      <MovieButton
+        movie={movie}
+        onSelect={onSelect}
+        className="flex w-full flex-col gap-[7px] rounded-xl"
       >
-        {isImminent && <Flame className="h-3.5 w-3.5" aria-hidden="true" />}
-        {heroEyebrow(movie, isImminent)}
-      </div>
-
-      <div className="mt-3 flex items-center gap-3.5">
         <Poster
           movie={movie}
-          sizes="76px"
-          className="h-[114px] w-[76px] rounded-[10px]"
+          sizes="(min-width: 640px) 176px, 160px"
+          className={`aspect-[2/3] w-full rounded-xl border transition-colors ${
+            isImminent
+              ? 'border-gold/30 group-hover:border-gold/60'
+              : 'border-border group-hover:border-border-hover'
+          }`}
           iconClassName="h-[22px] w-[22px]"
         />
-        <div className="min-w-0 flex-1">
-          <h3 className="type-card text-foreground">{movie.title}</h3>
-          <p className="type-body-sm mt-1 text-foreground-secondary">
-            {shortDate(movie.release_date)} · {acquisitionLabel(movie)}
-          </p>
-          <p className="type-meta mt-2 text-foreground-secondary">
-            Not rated yet. Scores land the night after release.
-          </p>
+        <div className="type-card w-full break-words text-foreground transition-colors group-hover:text-gold">
+          {movie.title}
         </div>
-      </div>
-    </MovieButton>
+        {isImminent && (
+          <div className="type-meta flex items-center gap-1.5 text-gold">
+            <Flame className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            {releaseCountdown(movie)}
+          </div>
+        )}
+        <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
+        <div className="type-meta text-foreground-secondary">{acquisitionLabel(movie)}</div>
+      </MovieButton>
+    </div>
   )
 }
 
 /** Shared with the league release board so the overview's sections match. */
-export function SectionHeader({ title, count }: { title: string; count: number }) {
+export function SectionHeader({
+  title,
+  count,
+  className = 'px-4 pb-2',
+}: {
+  title: string
+  count?: number
+  className?: string
+}) {
   return (
-    <div className="flex items-baseline gap-2 px-4 pb-2">
+    <div className={`flex items-baseline gap-2 ${className}`}>
       <h3 className="type-section text-foreground">{title}</h3>
-      <span className="type-meta type-numeric text-foreground-secondary">{count}</span>
+      {count != null && <span className="type-meta type-numeric text-foreground-secondary">{count}</span>}
     </div>
   )
 }
@@ -204,10 +201,9 @@ function UpcomingShelf({
   onSelect: (movie: MovieTimelineItem) => void
 }) {
   return (
-    <>
-      <SectionHeader title="Upcoming" count={movies.length} />
-      {/* Native horizontal scroll - no arrows on touch */}
-      <div className="scrollbar-none flex gap-3 overflow-x-auto px-4 pb-[18px]" data-testid="upcoming-shelf">
+    <div className="flex-none">
+      <SectionHeader title="Upcoming" count={movies.length} className="pb-2" />
+      <div className="flex items-start gap-3" data-testid="upcoming-shelf">
         {movies.map((movie) => (
           <MovieButton
             key={movie.id}
@@ -231,7 +227,7 @@ function UpcomingShelf({
           </MovieButton>
         ))}
       </div>
-    </>
+    </div>
   )
 }
 
@@ -338,8 +334,15 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
 
   return (
     <div className="animate-fade-in">
-      {hero && <NextUpHero movie={hero} isImminent={heroIsImminent} onSelect={setSelected} />}
-      {upcoming.length > 0 && <UpcomingShelf movies={upcoming} onSelect={setSelected} />}
+      {hero && (
+        <div
+          className="scrollbar-none flex items-start gap-6 overflow-x-auto px-4 pb-[18px] pt-1"
+          data-testid="release-shelf"
+        >
+          <NextUpHero movie={hero} isImminent={heroIsImminent} onSelect={setSelected} />
+          {upcoming.length > 0 && <UpcomingShelf movies={upcoming} onSelect={setSelected} />}
+        </div>
+      )}
       {scored.length > 0 && <ScoredList movies={scored} onSelect={setSelected} />}
 
       {/* Read-only here. Managing a holding is the roster's job, so the overview
