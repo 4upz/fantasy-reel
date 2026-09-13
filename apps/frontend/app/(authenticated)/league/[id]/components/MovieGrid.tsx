@@ -142,34 +142,36 @@ function NextUpHero({
   onSelect: (movie: MovieTimelineItem) => void
 }) {
   return (
-    <div className="w-40 flex-none sm:w-44" data-testid="next-up">
+    <div className="w-40 flex-none min-[480px]:w-[360px]" data-testid="next-up">
       <SectionHeader title="Next up" className="pb-2" />
       <MovieButton
         movie={movie}
         onSelect={onSelect}
-        className="flex w-full flex-col gap-[7px] rounded-xl"
+        className="flex w-full flex-col gap-[7px] rounded-xl min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-4"
       >
         <Poster
           movie={movie}
-          sizes="(min-width: 640px) 176px, 160px"
-          className={`aspect-[2/3] w-full rounded-xl border transition-colors ${
+          sizes="(min-width: 480px) 144px, 160px"
+          className={`aspect-[2/3] w-full rounded-xl border transition-colors min-[480px]:w-36 ${
             isImminent
               ? 'border-gold/30 group-hover:border-gold/60'
               : 'border-border group-hover:border-border-hover'
           }`}
           iconClassName="h-[22px] w-[22px]"
         />
-        <div className="type-card w-full break-words text-foreground transition-colors group-hover:text-gold">
-          {movie.title}
-        </div>
-        {isImminent && (
-          <div className="type-meta flex items-center gap-1.5 text-gold">
-            <Flame className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-            {releaseCountdown(movie)}
+        <div className="flex w-full min-w-0 flex-1 flex-col gap-[7px]">
+          <div className="type-card break-words text-foreground transition-colors group-hover:text-gold">
+            {movie.title}
           </div>
-        )}
-        <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
-        <div className="type-meta text-foreground-secondary">{acquisitionLabel(movie)}</div>
+          {isImminent && (
+            <div className="type-meta flex items-center gap-1.5 text-gold">
+              <Flame className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+              {releaseCountdown(movie)}
+            </div>
+          )}
+          <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
+          <div className="type-meta text-foreground-secondary">{acquisitionLabel(movie)}</div>
+        </div>
       </MovieButton>
     </div>
   )
