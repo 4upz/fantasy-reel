@@ -1,11 +1,17 @@
 import { Trophy } from 'lucide-react'
+import { fantasyPointsForTomatometer } from '@/utils/scoring'
 import { RosterHeader, RosterMovieCard } from '../../(authenticated)/league/[id]/roster/RosterPresentation'
 
+// Fixed Tomatometer snapshots from Rotten Tomatoes, checked September 13, 2026.
 const MOVIES = [
-  { title: 'Barbie', poster: 'barbie', label: 'Round 1, Pick 1' },
-  { title: 'Killers of the Flower Moon', poster: 'killers', label: 'Round 2, Pick 4' },
-  { title: 'The Hunger Games: The Ballad of Songbirds & Snakes', poster: 'ballad', label: 'Round 3, Pick 1' },
-  { title: 'The Marvels', poster: 'marvels', label: 'Round 4, Pick 4' },
+  // https://www.rottentomatoes.com/m/barbie
+  { title: 'Barbie', poster: 'barbie', label: 'Round 1, Pick 1', tomatometer: 88 },
+  // https://www.rottentomatoes.com/m/killers_of_the_flower_moon
+  { title: 'Killers of the Flower Moon', poster: 'killers', label: 'Round 2, Pick 4', tomatometer: 93 },
+  // https://www.rottentomatoes.com/m/the_hunger_games_the_ballad_of_songbirds_and_snakes
+  { title: 'The Hunger Games: The Ballad of Songbirds & Snakes', poster: 'ballad', label: 'Round 3, Pick 1', tomatometer: 64 },
+  // https://www.rottentomatoes.com/m/the_marvels
+  { title: 'The Marvels', poster: 'marvels', label: 'Round 4, Pick 4', tomatometer: 63 },
 ] as const
 
 /** A fixed example, rendered with the roster's own presentation components. */
@@ -29,7 +35,12 @@ export default function RosterPreviewScene() {
           {MOVIES.map((movie, index) => (
             <RosterMovieCard
               key={movie.poster}
-              movie={{ title: movie.title, poster_url: null, fantasy_points: null, combined_score: null }}
+              movie={{
+                title: movie.title,
+                poster_url: null,
+                fantasy_points: fantasyPointsForTomatometer(movie.tomatometer),
+                combined_score: movie.tomatometer,
+              }}
               posterSrc={`/images/homepage/${movie.poster}.webp`}
               posterSizes="260px"
               label={movie.label}

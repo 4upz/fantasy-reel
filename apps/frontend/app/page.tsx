@@ -11,8 +11,8 @@ import SiteFooter from './components/landing/SiteFooter'
 import styles from './components/landing/landing.module.css'
 
 export const metadata: Metadata = {
-  title: 'Fantasy Reel — Great taste deserves a trophy',
-  description: 'Draft upcoming movies, compete with friends, and let the critics settle it. Your next fantasy league starts at the movies.',
+  title: 'Fantasy Reel — Draft movies. Compete with friends.',
+  description: 'Build a roster of upcoming movies, compete with friends, and earn fantasy points from Rotten Tomatoes scores.',
 }
 
 export default function LandingPage(): React.ReactElement {
@@ -24,9 +24,9 @@ export default function LandingPage(): React.ReactElement {
         <section className={styles.hero} aria-labelledby="hero-title">
           <div className={styles.ambient} aria-hidden="true" />
           <div className={styles.heroCopy}>
-            <p className={`type-meta ${styles.eyebrow}`}>FANTASY LEAGUES. FOR MOVIE PEOPLE.</p>
-            <h1 id="hero-title" className={`type-hero ${styles.headline}`}>Great taste<br /><span>deserves a trophy.</span></h1>
-            <p className={`type-lead ${styles.intro}`}>Draft upcoming movies. Compete with friends.<br className="hidden sm:block" /> Let the critics settle it.</p>
+            <p className={`type-meta ${styles.eyebrow}`}>Fantasy leagues for movie fans</p>
+            <h1 id="hero-title" className={`type-hero ${styles.headline}`}>Draft movies.<br />Compete with friends.</h1>
+            <p className={`type-lead ${styles.intro}`}>Build a roster of upcoming movies and earn fantasy points from their Rotten Tomatoes scores.</p>
             <div className={styles.heroActions}>
               <Link href="/signup" className="btn btn-primary">Start a league <ArrowRight size={16} className="ml-2" aria-hidden="true" /></Link>
               <Link href="/how-to-play" className="btn btn-secondary">How to play</Link>
@@ -36,7 +36,7 @@ export default function LandingPage(): React.ReactElement {
             <SpotlightPreview title="Your roster" width={1088} height={618} details={[
               { label: 'The lineup', description: 'Your movies, your season. Keep your picks and their review status together in one roster.' },
               { label: 'Your budget', description: 'Keep an eye on your Fantasy Budget and remaining drops as you plan your next move.', focus: 'budget' },
-              { label: 'Review status', description: 'A movie stays Pending until a Rotten Tomatoes score is available. Then the reviews turn into fantasy points.', focus: 'reviews' },
+              { label: 'Review status', description: 'In this example, Barbie’s 88% Rotten Tomatoes score earns your team 28 fantasy points. Higher scores mean more points.', focus: 'reviews' },
             ]}>
               <RosterPreviewScene />
             </SpotlightPreview>

@@ -187,8 +187,19 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
 
 export default function SpotlightPreview({ title, width, height, details, children, layout = 'stacked' }: SpotlightPreviewProps) {
   const [active, setActive] = useState(0)
+  const previewRef = useRef<HTMLDivElement>(null)
   const id = useId()
   const selected = details[active]
+
+  const selectDetail = (index: number) => {
+    setActive(index)
+    if (layout === 'stacked') {
+      previewRef.current?.scrollIntoView({
+        block: 'nearest',
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+      })
+    }
+  }
 
   const notes = (
     <div className={styles.previewNotes}>
@@ -200,7 +211,7 @@ export default function SpotlightPreview({ title, width, height, details, childr
             className={styles.previewControl}
             aria-pressed={active === index}
             aria-controls={id}
-            onClick={() => setActive(index)}
+            onClick={() => selectDetail(index)}
           >
             <span className="type-control">{detail.label}</span>
             {layout === 'beside' && <span className={`type-body-sm ${styles.controlDescription}`}>{detail.description}</span>}
@@ -212,12 +223,11 @@ export default function SpotlightPreview({ title, width, height, details, childr
   )
 
   return (
-    <div className={layout === 'beside' ? styles.previewBeside : styles.previewStacked}>
-      {layout === 'stacked' && notes}
+    <div ref={previewRef} className={layout === 'beside' ? styles.previewBeside : styles.previewStacked}>
       <div id={id} className={styles.preview} role="img" aria-label={`${title} example. ${selected.description}`}>
         <PreviewSurface width={width} height={height} focus={selected.focus}>{children}</PreviewSurface>
       </div>
-      {layout === 'beside' && notes}
+      {notes}
     </div>
   )
 }
