@@ -1,3 +1,15 @@
+/* Keep per-frame values on the section, without invalidating its descendants. */
+@property --scroll-enter {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+@property --scroll-exit {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
 .page { position: relative; isolation: isolate; }
 .page [data-scroll-depth] {
   --scroll-enter: 1;
