@@ -18,11 +18,11 @@ export const metadata: Metadata = {
 export default function LandingPage(): React.ReactElement {
   return (
     <div className={styles.page}>
+      <div className={styles.ambient} aria-hidden="true" />
       <a href="#main-content" className={styles.skipLink}>Skip to content</a>
-      <MarketingHeader />
+      <MarketingHeader transparent />
       <main id="main-content" tabIndex={-1}>
         <section className={styles.hero} aria-labelledby="hero-title">
-          <div className={styles.ambient} aria-hidden="true" />
           <div className={styles.heroCopy}>
             <p className={`type-meta ${styles.eyebrow}`}>Fantasy leagues for movie fans</p>
             <h1 id="hero-title" className={`type-hero ${styles.headline}`}>Draft movies.<br />Compete with friends.</h1>

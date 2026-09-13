@@ -6,12 +6,13 @@ import ThemeSelector from '@/components/theme/ThemeSelector'
 
 interface MarketingHeaderProps {
   currentPage?: 'how-to-play'
+  transparent?: boolean
 }
 
 /** @design-system Landing */
-export default function MarketingHeader({ currentPage }: MarketingHeaderProps): React.ReactElement {
+export default function MarketingHeader({ currentPage, transparent = false }: MarketingHeaderProps): React.ReactElement {
   return (
-    <header className="border-b border-border/50 bg-background">
+    <header className={transparent ? 'bg-transparent' : 'border-b border-border/50 bg-background'}>
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3 sm:px-6 md:gap-6 md:py-4">
         <Link href="/" className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-sm" aria-label="Fantasy Reel home">
           <span className="md:hidden"><BrandLogo markOnly className="h-auto w-8" /></span>
