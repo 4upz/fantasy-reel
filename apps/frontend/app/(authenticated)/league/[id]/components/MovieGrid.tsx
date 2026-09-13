@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from 'react'
 import Image from 'next/image'
-import { Flame } from 'lucide-react'
 import type { MovieTimelineItem, League } from '@/types'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
@@ -39,7 +38,7 @@ function MovieButton({
       onClick={() => onSelect(movie)}
       data-testid="overview-movie-button"
       aria-label={`View ${movie.title}`}
-      className={`group cursor-pointer text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold ${className}`}
+      className={`group cursor-pointer text-left transition-[color,background-color,border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold motion-reduce:transition-none ${className}`}
     >
       {children}
     </button>
@@ -88,7 +87,7 @@ function Poster({
           // already clips, so this reads as the artwork leaning forward rather
           // than the card moving - which keeps the horizontal shelf from
           // jittering the way a lift on the tile itself would.
-          className="object-cover transition-transform duration-300 ease-out motion-safe:group-hover:scale-[1.06]"
+          className="object-cover transition-transform duration-300 ease-out motion-safe:group-hover:scale-[1.06] motion-safe:group-focus-visible:scale-[1.06]"
           onError={() => setFailed(true)}
         />
       ) : (
@@ -104,22 +103,6 @@ function sortByDate(a: MovieTimelineItem, b: MovieTimelineItem) {
   return new Date(a.release_date).getTime() - new Date(b.release_date).getTime()
 }
 
-function daysUntil(releaseDate: string | null): number | null {
-  if (!releaseDate) return null
-  const diffMs = new Date(releaseDate).getTime() - Date.now()
-  return Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-}
-
-/** Only an imminent release earns the countdown. */
-function releaseCountdown(movie: MovieTimelineItem): string {
-  const days = daysUntil(movie.release_date)
-  if (days == null) return 'Releasing soon'
-  if (days <= 0) return 'Releasing today'
-  if (days === 1) return 'Releasing tomorrow'
-  if (days <= 14) return `Releasing in ${days} days`
-  return `Releasing in ${Math.ceil(days / 7)} weeks`
-}
-
 function shortDate(releaseDate: string | null): string {
   return releaseDate ? formatDate(releaseDate) : 'TBA'
 }
@@ -131,46 +114,38 @@ function acquisitionLabel(movie: MovieTimelineItem): string {
     : `$${movie.amount_paid} pickup`
 }
 
-/** Lead the shared shelf with a larger poster and title. */
+/** The next release leads the shelf with its title over the artwork. */
 function NextUpHero({
   movie,
-  isImminent,
   onSelect,
 }: {
   movie: MovieTimelineItem
-  isImminent: boolean
   onSelect: (movie: MovieTimelineItem) => void
 }) {
   return (
-    <div className="w-40 flex-none min-[480px]:w-[360px]" data-testid="next-up">
-      <SectionHeader title="Next up" className="pb-2" />
+    <div className="w-40 flex-none sm:w-44" data-testid="next-up">
       <MovieButton
         movie={movie}
         onSelect={onSelect}
-        className="flex w-full flex-col gap-[7px] rounded-xl min-[480px]:flex-row min-[480px]:items-center min-[480px]:gap-4"
+        className="relative block w-full rounded-xl shadow-[0_0_12px_rgba(201,162,39,0.14)] hover:shadow-glow-gold focus-visible:shadow-glow-gold"
       >
         <Poster
           movie={movie}
-          sizes="(min-width: 480px) 144px, 160px"
-          className={`aspect-[2/3] w-full rounded-xl border transition-colors min-[480px]:w-36 ${
-            isImminent
-              ? 'border-gold/30 group-hover:border-gold/60'
-              : 'border-border group-hover:border-border-hover'
-          }`}
-          iconClassName="h-[22px] w-[22px]"
+          sizes="(min-width: 640px) 176px, 160px"
+          className="aspect-[2/3] w-full rounded-xl border border-gold/40 transition-colors group-hover:border-gold/70 group-focus-visible:border-gold/70"
+          iconClassName="mb-16 h-[22px] w-[22px]"
         />
-        <div className="flex w-full min-w-0 flex-1 flex-col gap-[7px]">
-          <div className="type-card break-words text-foreground transition-colors group-hover:text-gold">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 rounded-xl bg-[linear-gradient(to_top,rgba(0,0,0,0.95),rgba(0,0,0,0.78)_40%,transparent_75%)]"
+        />
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <div className="type-card line-clamp-3 break-words text-white">
             {movie.title}
           </div>
-          {isImminent && (
-            <div className="type-meta flex items-center gap-1.5 text-gold">
-              <Flame className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-              {releaseCountdown(movie)}
-            </div>
-          )}
-          <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
-          <div className="type-meta text-foreground-secondary">{acquisitionLabel(movie)}</div>
+          <div className="type-meta mt-2 text-white/90">
+            {shortDate(movie.release_date)}
+          </div>
         </div>
       </MovieButton>
     </div>
@@ -178,19 +153,11 @@ function NextUpHero({
 }
 
 /** Shared with the league release board so the overview's sections match. */
-export function SectionHeader({
-  title,
-  count,
-  className = 'px-4 pb-2',
-}: {
-  title: string
-  count?: number
-  className?: string
-}) {
+export function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
-    <div className={`flex items-baseline gap-2 ${className}`}>
+    <div className="flex items-baseline gap-2 px-4 pb-2">
       <h3 className="type-section text-foreground">{title}</h3>
-      {count != null && <span className="type-meta type-numeric text-foreground-secondary">{count}</span>}
+      <span className="type-meta type-numeric text-foreground-secondary">{count}</span>
     </div>
   )
 }
@@ -203,32 +170,29 @@ function UpcomingShelf({
   onSelect: (movie: MovieTimelineItem) => void
 }) {
   return (
-    <div className="flex-none">
-      <SectionHeader title="Upcoming" count={movies.length} className="pb-2" />
-      <div className="flex items-start gap-3" data-testid="upcoming-shelf">
-        {movies.map((movie) => (
-          <MovieButton
-            key={movie.id}
+    <div className="flex flex-none items-start gap-3" data-testid="upcoming-shelf">
+      {movies.map((movie) => (
+        <MovieButton
+          key={movie.id}
+          movie={movie}
+          onSelect={onSelect}
+          className="flex w-[118px] flex-none flex-col gap-[7px] rounded-xl"
+        >
+          <Poster
             movie={movie}
-            onSelect={onSelect}
-            className="flex w-[118px] flex-none flex-col gap-[7px] rounded-xl"
+            sizes="118px"
+            className="h-[177px] w-[118px] rounded-xl border border-border transition-colors group-hover:border-border-hover"
+            iconClassName="h-[22px] w-[22px]"
+          />
+          <div
+            className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
+            title={movie.title}
           >
-            <Poster
-              movie={movie}
-              sizes="118px"
-              className="h-[177px] w-[118px] rounded-xl border border-border transition-colors group-hover:border-border-hover"
-              iconClassName="h-[22px] w-[22px]"
-            />
-            <div
-              className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
-              title={movie.title}
-            >
-              {movie.title}
-            </div>
-            <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
-          </MovieButton>
-        ))}
-      </div>
+            {movie.title}
+          </div>
+          <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
+        </MovieButton>
+      ))}
     </div>
   )
 }
@@ -289,7 +253,7 @@ function ScoredList({
 export default function MovieGrid({ movies, leagueStatus }: Props) {
   const [selected, setSelected] = useState<MovieTimelineItem | null>(null)
 
-  const { hero, heroIsImminent, upcoming, scored } = useMemo(() => {
+  const { hero, upcoming, scored } = useMemo(() => {
     const scoredMovies = movies
       .filter((m) => m.status === 'scored')
       .sort((a, b) => (b.fantasy_points || 0) - (a.fantasy_points || 0))
@@ -302,7 +266,6 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
 
     return {
       hero: heroMovie,
-      heroIsImminent: imminent != null,
       // Everything still unreleased that is not already the hero
       upcoming: unreleased.filter((m) => m.id !== heroMovie?.id),
       scored: scoredMovies,
@@ -337,13 +300,16 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
   return (
     <div className="animate-fade-in">
       {hero && (
-        <div
-          className="scrollbar-none flex items-start gap-6 overflow-x-auto px-4 pb-[18px] pt-1"
-          data-testid="release-shelf"
-        >
-          <NextUpHero movie={hero} isImminent={heroIsImminent} onSelect={setSelected} />
-          {upcoming.length > 0 && <UpcomingShelf movies={upcoming} onSelect={setSelected} />}
-        </div>
+        <>
+          <SectionHeader title="Upcoming" count={upcoming.length + 1} />
+          <div
+            className="scrollbar-none flex items-start gap-4 overflow-x-auto px-4 pb-[18px] pt-2"
+            data-testid="release-shelf"
+          >
+            <NextUpHero movie={hero} onSelect={setSelected} />
+            {upcoming.length > 0 && <UpcomingShelf movies={upcoming} onSelect={setSelected} />}
+          </div>
+        </>
       )}
       {scored.length > 0 && <ScoredList movies={scored} onSelect={setSelected} />}
 
