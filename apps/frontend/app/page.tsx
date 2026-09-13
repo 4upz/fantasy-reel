@@ -3,7 +3,6 @@ import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
 import MarketingHeader from './components/landing/MarketingHeader'
 import SpotlightPreview from './components/landing/SpotlightPreview'
-import RosterPreviewScene from './components/landing/RosterPreviewScene'
 import DraftPreviewScene from './components/landing/DraftPreviewScene'
 import StandingsPreviewScene from './components/landing/StandingsPreviewScene'
 import MovesPreviewScene from './components/landing/MovesPreviewScene'
@@ -30,20 +29,11 @@ export default function LandingPage(): React.ReactElement {
             <p className={`type-lead ${styles.intro}`}>Build a roster of upcoming movies and earn fantasy points from their critic scores.</p>
             <div className={styles.heroActions}>
               <Link href="/signup" className="btn btn-primary">Start a league <ArrowRight size={16} className="ml-2" aria-hidden="true" /></Link>
-              <Link href="/how-to-play" className="btn btn-secondary">How to play</Link>
+              <a href="#how-it-works" className="btn btn-secondary">See how it works</a>
             </div>
           </div>
-          <div id="your-roster" className={styles.heroPreview} data-scroll-depth>
-            <SpotlightPreview title="Your roster" width={1088} height={618} details={[
-              { label: 'The lineup', description: 'Your movies, your season. Keep your picks and their review status together in one roster.' },
-              { label: 'Your budget', description: 'Keep an eye on your Fantasy Budget and remaining drops as you plan your next move.', focus: 'budget' },
-              { label: 'Review status', description: 'In this example, Barbie’s 88% Rotten Tomatoes score earns your team 28 fantasy points. Higher scores mean more points.', focus: 'reviews' },
-            ]}>
-              <RosterPreviewScene />
-            </SpotlightPreview>
-          </div>
         </section>
-        <section className={styles.section} aria-labelledby="draft-title" data-scroll-depth>
+        <section id="how-it-works" className={styles.section} aria-labelledby="draft-title" data-scroll-depth>
           <div className={styles.sectionHeader}>
             <p className={`type-meta ${styles.sectionNumber}`}><span>01</span> MAKE YOUR PICKS</p>
             <h2 id="draft-title" className={`type-page ${styles.sectionTitle}`}>Draft night.<br />Everyone’s a critic.</h2>
@@ -63,13 +53,14 @@ export default function LandingPage(): React.ReactElement {
             <h2 id="season-title" className={`type-page ${styles.sectionTitle}`}>The reviews are in.<br />So are the rivalries.</h2>
             <p className={`type-lead ${styles.sectionIntro}`}>As your movies arrive, their Rotten Tomatoes scores become fantasy points. Follow the standings and see whose taste holds up.</p>
           </div>
-          <SpotlightPreview title="League standings" width={800} height={280} layout="beside" details={[
-            { label: 'A little friendly competition', description: 'Your league’s teams, points, and remaining budgets, together on one leaderboard.' },
-            { label: 'Let the critics call it', description: 'Rotten Tomatoes drives fantasy points. Higher scores reward your picks; counterpicks add another layer of strategy.', focus: 'score' },
-            { label: 'Room for your next move', description: 'See the Fantasy Budget each team has left before making your next bid or trade.', focus: 'budget' },
+          <SpotlightPreview title="Movie scores and league standings" width={960} height={500} layout="beside" details={[
+            { label: 'A pick that pays off', description: 'You backed Barbie. Its 88% Rotten Tomatoes score brings home 28 fantasy points for Vintage Vibes, our example team.' },
+            { label: 'From reviews to points', description: 'That 88% is the critics’ score. The 28 points go toward your team’s total. Better reviews, more to brag about.', focus: 'reviews' },
+            { label: 'Let the rivalry begin', description: 'Vintage Vibes has 104 points, including Barbie’s 28. Most points at the end of the season wins the league.', focus: 'team' },
           ]}>
             <StandingsPreviewScene />
           </SpotlightPreview>
+          <p className={`type-body-sm ${styles.exampleNote}`}>Barbie (2023), with a saved Rotten Tomatoes score. Teams and standings are fictional.</p>
         </section>
         <section className={styles.section} aria-labelledby="moves-title" data-scroll-depth>
           <div className={styles.sectionHeader}>
