@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { getVisibleTabs, isTabActive } from './leagueNav'
 import type { League } from '@/types'
 
@@ -22,10 +23,45 @@ export default function LeagueTabs({
 }: Props): React.ReactElement {
   const pathname = usePathname()
   const tabs = getVisibleTabs(league, isOwner, outbidCount, seasonCount)
+  const navRef = useRef<HTMLElement>(null)
+  const activeTabRef = useRef<HTMLAnchorElement>(null)
+  const [indicator, setIndicator] = useState<{ left: number; width: number } | null>(null)
+  const tabSignature = tabs.map((tab) => tab.href).join('|')
+
+  useLayoutEffect(() => {
+    const nav = navRef.current
+    const activeTab = activeTabRef.current
+    if (!nav || !activeTab) {
+      setIndicator(null)
+      return
+    }
+
+    const updateIndicator = () => {
+      const nextIndicator = {
+        left: activeTab.offsetLeft,
+        width: activeTab.offsetWidth,
+      }
+
+      setIndicator((current) =>
+        current?.left === nextIndicator.left && current.width === nextIndicator.width
+          ? current
+          : nextIndicator,
+      )
+    }
+
+    updateIndicator()
+
+    const resizeObserver = new ResizeObserver(updateIndicator)
+    resizeObserver.observe(nav)
+    resizeObserver.observe(activeTab)
+
+    return () => resizeObserver.disconnect()
+  }, [pathname, tabSignature])
 
   return (
     <nav
-      className="flex gap-2 border-b border-border"
+      ref={navRef}
+      className="relative flex gap-2 border-b border-border"
       aria-label="League navigation"
       data-testid="league-tabs"
     >
@@ -40,10 +76,11 @@ export default function LeagueTabs({
         return (
           <Link
             key={tab.name}
+            ref={isActive ? activeTabRef : undefined}
             href={tab.href}
             data-testid={tab.secondary ? 'league-tab-secondary' : undefined}
-            className={`type-control flex items-center gap-2 whitespace-nowrap border-b-2 px-3.5 py-[11px] transition-colors ${
-              isActive ? 'border-gold text-gold' : `border-transparent ${inactiveText} hover:text-foreground`
+            className={`type-control flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3.5 py-[11px] transition-colors ${
+              isActive ? 'text-gold' : `${inactiveText} hover:text-foreground`
             }`}
             aria-current={isActive ? 'page' : undefined}
           >
@@ -59,6 +96,18 @@ export default function LeagueTabs({
           </Link>
         )
       })}
+
+      {indicator && (
+        <span
+          aria-hidden="true"
+          data-testid="league-tab-indicator"
+          className="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-gold transition-[transform,width] duration-300 ease-out motion-reduce:transition-none"
+          style={{
+            transform: `translateX(${indicator.left}px)`,
+            width: indicator.width,
+          }}
+        />
+      )}
     </nav>
   )
 }
