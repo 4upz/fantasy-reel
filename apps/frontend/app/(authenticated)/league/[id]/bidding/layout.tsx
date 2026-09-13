@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import BiddingShell from './BiddingShell'
 import type { League, ParticipantWithProfile, Team, TeamHolding, TeamWithOwner } from '@/types'
@@ -24,16 +25,13 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
   if (!user) {
     redirect('/login')
   }
-
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError || !league) {
     notFound()
@@ -60,7 +58,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
   ] = await Promise.all([
     supabase
       .from('league_participants')
-      .select(`*, teams (*), profiles (*)`)
+      .select('*, teams (*), profiles (display_name, avatar_url)')
       .eq('league_id', id)
       .eq('status', 'active'),
     supabase.from('team_holdings').select(
@@ -106,6 +104,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
   return (
     <BiddingShell
       league={league as League}
+      userId={user.id}
       teamId={team.id}
       teams={teams}
       ownedTmdbIds={ownedTmdbIds}

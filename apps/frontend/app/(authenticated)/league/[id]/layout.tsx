@@ -1,12 +1,13 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
-import { getCachedUser } from '@/utils/supabase/cached'
+import { getCachedUser, getCachedLeague, getCachedActiveParticipant, getCachedParticipantCount } from '@/utils/supabase/cached'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
 import { fetchSeriesSeasons, fetchWonSeasonIds } from '@/utils/seasonQueries'
 import LeagueSwitcher from './components/LeagueSwitcher'
 import SeasonSwitcher from './components/SeasonSwitcher'
 import LeagueTabs from './components/LeagueTabs'
 import LeagueBottomNav from './components/LeagueBottomNav'
+import { LeagueNavigation, LeagueTabContent } from './components/LeagueNavigation'
 import type { League } from '@/types'
 
 interface LayoutProps {
@@ -17,17 +18,13 @@ interface LayoutProps {
 export default async function LeagueLayout({ children, params }: LayoutProps): Promise<React.ReactElement> {
   const { id } = await params
   const supabase = await createClient()
-
-  const { data: { user } } = await getCachedUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
   if (!user) {
     redirect('/login')
   }
-
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError || !league) {
     notFound()
@@ -36,18 +33,8 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
   const typedLeague = league as League
 
   const [memberResult, countResult, seasons] = await Promise.all([
-    supabase
-      .from('league_participants')
-      .select('id')
-      .eq('league_id', id)
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .single(),
-    supabase
-      .from('league_participants')
-      .select('*', { count: 'exact', head: true })
-      .eq('league_id', id)
-      .eq('status', 'active'),
+    getCachedActiveParticipant(id, user.id),
+    getCachedParticipantCount(id),
     fetchSeriesSeasons(supabase, typedLeague.series_id),
   ])
 
@@ -69,62 +56,64 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
       : `${participantCount} ${participantCount === 1 ? 'participant' : 'participants'}`
 
   return (
-    <div className="min-h-screen bg-background">
-      {/*
-        One header, two shapes. On mobile it condenses to two lines - name + status,
-        then the meta - and pins below the app's fixed 56px mobile header so the
-        league you are looking at stays named while the table scrolls. On desktop it
-        unwraps into today's three rows. Rendering it once keeps a single <h1> and a
-        single switcher rather than a hidden duplicate of each.
-      */}
-      <div className="sticky top-14 z-20 border-b border-border bg-background lg:static lg:z-auto lg:border-0">
-        <div className="mx-auto max-w-6xl px-4 pt-1.5 pb-2.5 sm:px-6 lg:px-8 lg:pt-6 lg:pb-0">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 lg:gap-x-3">
-            {/* Shares line 1 with the badge on mobile; owns its own row on desktop */}
-            <div className="min-w-0 flex-1 lg:basis-full lg:flex-none">
-              <LeagueSwitcher currentLeagueId={typedLeague.id} currentLeagueName={typedLeague.name} />
+    <LeagueNavigation key={id}>
+      <div className="min-h-screen bg-background">
+        {/*
+          One header, two shapes. On mobile it condenses to two lines - name + status,
+          then the meta - and pins below the app's fixed 56px mobile header so the
+          league you are looking at stays named while the table scrolls. On desktop it
+          unwraps into today's three rows. Rendering it once keeps a single <h1> and a
+          single switcher rather than a hidden duplicate of each.
+        */}
+        <div className="sticky top-14 z-20 border-b border-border bg-background lg:static lg:z-auto lg:border-0">
+          <div className="mx-auto max-w-6xl px-4 pt-1.5 pb-2.5 sm:px-6 lg:px-8 lg:pt-6 lg:pb-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 lg:gap-x-3">
+              {/* Shares line 1 with the badge on mobile; owns its own row on desktop */}
+              <div className="min-w-0 flex-1 lg:basis-full lg:flex-none">
+                <LeagueSwitcher currentLeagueId={typedLeague.id} currentLeagueName={typedLeague.name} />
+              </div>
+
+              <span className={`badge flex-none ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
+                {getStatusLabel(typedLeague.status)}
+              </span>
+
+              {/*
+                Dots tie the badge and the facts into one metadata strip. The
+                leading one is desktop-only: on mobile the badge sits up on the
+                title line, so it would dangle at the end of a row.
+
+                The season label leads the strip, so mobile line 2 reads
+                "2026 · Invite Only · 3 participants" and desktop reads
+                "Active · 2026 · Invite Only · 3 participants".
+              */}
+              <div className="type-meta flex basis-full items-center gap-1.5 text-foreground-secondary lg:basis-auto lg:gap-2">
+                <span aria-hidden className="hidden text-foreground-secondary/50 lg:inline">·</span>
+                <SeasonSwitcher
+                  currentLeagueId={typedLeague.id}
+                  seasonYear={typedLeague.season_year}
+                  seasons={seasons}
+                  wonSeasonIds={wonSeasonIds}
+                />
+                <span aria-hidden className="text-foreground-secondary/50">·</span>
+                <span>{accessLabel}</span>
+                <span aria-hidden className="text-foreground-secondary/50">·</span>
+                <span>{participantLabel}</span>
+              </div>
             </div>
 
-            <span className={`badge flex-none ${STATUS_BADGE_CLASS[typedLeague.status]}`}>
-              {getStatusLabel(typedLeague.status)}
-            </span>
-
-            {/*
-              Dots tie the badge and the facts into one metadata strip. The
-              leading one is desktop-only: on mobile the badge sits up on the
-              title line, so it would dangle at the end of a row.
-
-              The season label leads the strip, so mobile line 2 reads
-              "2026 · Invite Only · 3 participants" and desktop reads
-              "Active · 2026 · Invite Only · 3 participants".
-            */}
-            <div className="type-meta flex basis-full items-center gap-1.5 text-foreground-secondary lg:basis-auto lg:gap-2">
-              <span aria-hidden className="hidden text-foreground-secondary/50 lg:inline">·</span>
-              <SeasonSwitcher
-                currentLeagueId={typedLeague.id}
-                seasonYear={typedLeague.season_year}
-                seasons={seasons}
-                wonSeasonIds={wonSeasonIds}
-              />
-              <span aria-hidden className="text-foreground-secondary/50">·</span>
-              <span>{accessLabel}</span>
-              <span aria-hidden className="text-foreground-secondary/50">·</span>
-              <span>{participantLabel}</span>
+            <div className="mt-3 mb-6 hidden lg:block">
+              <LeagueTabs league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
             </div>
-          </div>
-
-          <div className="mt-3 mb-6 hidden lg:block">
-            <LeagueTabs league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
           </div>
         </div>
-      </div>
 
-      {/* pb clears the fixed bottom bar on mobile */}
-      <div className="mx-auto max-w-6xl px-4 pt-3.5 pb-[110px] sm:px-6 lg:px-8 lg:pt-0 lg:pb-6">
-        {children}
-      </div>
+        {/* pb clears the fixed bottom bar on mobile */}
+        <div className="mx-auto max-w-6xl px-4 pt-3.5 pb-[110px] sm:px-6 lg:px-8 lg:pt-0 lg:pb-6">
+          <LeagueTabContent>{children}</LeagueTabContent>
+        </div>
 
-      <LeagueBottomNav league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
-    </div>
+        <LeagueBottomNav league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />
+      </div>
+    </LeagueNavigation>
   )
 }

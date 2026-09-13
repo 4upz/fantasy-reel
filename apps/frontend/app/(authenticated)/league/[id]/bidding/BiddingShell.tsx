@@ -6,25 +6,19 @@ import Link from 'next/link'
 import { useSelectedLayoutSegment } from 'next/navigation'
 import { Plus, Swords, Target } from 'lucide-react'
 import type { CounterpickBid, DroppableHolding, League, PickupBid, TeamWithOwner } from '@/types'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { useBidding } from '../hooks/useBidding'
 import BidWeekTimeline from '../components/BidWeekTimeline'
 import { getBidPhase } from '../components/utils'
 import { BiddingProvider } from './BiddingContext'
-
-function ModalLoadingFallback(): React.ReactElement {
-  return (
-    <div className="modal-overlay">
-      <div className="animate-pulse h-[85vh] max-w-2xl w-full mx-4 bg-surface rounded-2xl" />
-    </div>
-  )
-}
+import BiddingModalLoading from './BiddingModalLoading'
 
 const PlaceBidModal = dynamic(() => import('../components/PlaceBidModal'), {
-  loading: ModalLoadingFallback,
+  loading: BiddingModalLoading,
 })
 
 const PlaceCounterpickBidModal = dynamic(() => import('../components/PlaceCounterpickBidModal'), {
-  loading: ModalLoadingFallback,
+  loading: BiddingModalLoading,
 })
 
 /**
@@ -39,19 +33,22 @@ const TABS = [
 
 interface SlotStatProps {
   label: string
-  used: number
+  used: number | null
   total: number
+  loading?: boolean
 }
 
 /** One "used / total" stat in the header rail. */
-function SlotStat({ label, used, total }: SlotStatProps): React.ReactElement {
+function SlotStat({ label, used, total, loading = false }: SlotStatProps): React.ReactElement {
   return (
     <div>
       <p className="type-meta text-foreground-secondary mb-1">{label}</p>
       <div className="flex items-baseline gap-1">
-        <span className="type-number-lg text-foreground">
-          {used}
-        </span>
+        {loading ? (
+          <span className="skeleton h-8 sm:h-9 w-6 rounded" role="status" aria-label={`Loading ${label.toLowerCase()}`} />
+        ) : (
+          <span className="type-number-lg text-foreground">{used ?? '—'}</span>
+        )}
         <span className="text-foreground-secondary text-base sm:text-lg type-numeric">/ {total}</span>
       </div>
     </div>
@@ -79,6 +76,7 @@ function getBidCtaTitle(
 interface Props {
   league: League
   teamId: string
+  userId: string
   teams: TeamWithOwner[]
   ownedTmdbIds: number[]
   /** Active holdings across the whole roster: draft picks and pickups share total_slots. */
@@ -95,6 +93,7 @@ interface Props {
 export default function BiddingShell({
   league,
   teamId,
+  userId,
   teams,
   ownedTmdbIds,
   usedRosterSlots,
@@ -110,8 +109,11 @@ export default function BiddingShell({
   const [isCounterpickModalOpen, setIsCounterpickModalOpen] = useState(false)
   const [counterCounterpickTarget, setCounterCounterpickTarget] = useState<CounterpickBid | null>(null)
 
-  const bidding = useBidding({ leagueId: league.id, teamId })
-  const { bids, myBids, budget, counterpickBids, myCounterpickBids, biddingCounterpickCount } = bidding
+  const bidding = useBidding({ leagueId: league.id, teamId, userId })
+  const {
+    bids, myBids, budget, counterpickBids, myCounterpickBids,
+    biddingCounterpickCount, loading, refreshing, hasLoaded, error,
+  } = bidding
 
   const hasCounterpicks = biddingCounterpickSlots > 0
   // Roster slots are pooled: draft picks and pickups draw on the same total.
@@ -131,8 +133,13 @@ export default function BiddingShell({
       return true
     })
   }, [myHoldings, league.counterpicks_block_drops])
-  const remainingBudget = budget?.remaining_budget ?? 100
-  const canPlaceCounterpickBid = hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots
+  // Browsing and composing a new bid can start while contests load. The modal
+  // waits for those bids before allowing submission without resetting a draft.
+  const canSpend = budget !== null && !error
+  const canPlaceCounterpickBid = canSpend && hasLoaded && hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots
+  const unavailableBidTitle = loading
+    ? 'Loading your bidding information'
+    : 'Your bidding information is unavailable. Try again.'
 
   // Past the cutoff the week belongs to counter bidding: only movies already
   // being bid on can be raised or countered, and nothing can be withdrawn.
@@ -148,7 +155,7 @@ export default function BiddingShell({
   )
 
   // With no contest left to join, the bid modal has nothing to offer.
-  const canOpenBidModal = !isCounterBidPhase || hasContestedBids
+  const canOpenBidModal = canSpend && (!isCounterBidPhase || hasContestedBids)
 
   const totalPendingBids = useMemo(
     () => [...myBids, ...myCounterpickBids]
@@ -158,14 +165,18 @@ export default function BiddingShell({
   )
 
   const openPlaceBid = useCallback((target?: PickupBid | null) => {
+    if (!canOpenBidModal) return
     setCounterBidTarget(target ?? null)
     setIsBidModalOpen(true)
-  }, [])
+  }, [canOpenBidModal])
 
   const openCounterpickBid = useCallback((target?: CounterpickBid | null) => {
+    if (!canSpend || !hasLoaded) return
     setCounterCounterpickTarget(target ?? null)
     setIsCounterpickModalOpen(true)
-  }, [])
+  }, [canSpend, hasLoaded])
+
+  const { execute: retryBidding, isLoading: isRetrying } = useAsyncAction(bidding.refetch)
 
   const contextValue = useMemo(
     () => ({
@@ -210,10 +221,14 @@ export default function BiddingShell({
           <div className="grid grid-cols-3 gap-3 sm:flex sm:items-center sm:gap-6">
             <div>
               <p className="type-meta text-foreground-secondary mb-1">Budget</p>
-              <p className="type-number-lg bid-amount-display">
-                ${remainingBudget}
-              </p>
-              {totalPendingBids > 0 && (
+              {loading && !budget && !error ? (
+                <div className="skeleton h-8 sm:h-9 w-20 rounded" role="status" aria-label="Loading budget" data-testid="bidding-budget-loading" />
+              ) : (
+                <p className="type-number-lg bid-amount-display" data-testid="bidding-budget">
+                  {budget ? `$${budget.remaining_budget}` : '—'}
+                </p>
+              )}
+              {hasLoaded && totalPendingBids > 0 && (
                 <p className="type-meta text-foreground-secondary mt-1">
                   ${totalPendingBids} in active bids
                 </p>
@@ -229,8 +244,9 @@ export default function BiddingShell({
                 <div className="hidden sm:block h-14 w-px bg-border" />
                 <SlotStat
                   label="Counterpicks"
-                  used={biddingCounterpickCount}
+                  used={hasLoaded ? biddingCounterpickCount : null}
                   total={biddingCounterpickSlots}
+                  loading={loading && !hasLoaded}
                 />
               </>
             )}
@@ -242,7 +258,7 @@ export default function BiddingShell({
             <button
               onClick={() => openPlaceBid()}
               disabled={!canOpenBidModal}
-              title={getBidCtaTitle(isCounterBidPhase, hasContestedBids)}
+              title={!canSpend ? unavailableBidTitle : getBidCtaTitle(isCounterBidPhase, hasContestedBids)}
               className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto"
               data-testid="place-bid-button"
             >
@@ -250,9 +266,10 @@ export default function BiddingShell({
               {isCounterBidPhase ? 'Counter a Bid' : 'Place Bid'}
             </button>
 
-            {canPlaceCounterpickBid && (
+            {hasCounterpicks && (!hasLoaded || biddingCounterpickCount < biddingCounterpickSlots) && (
               <button
                 onClick={() => openCounterpickBid()}
+                disabled={!canPlaceCounterpickBid}
                 className="btn btn-secondary px-6 py-3 text-base w-full sm:w-auto border-crimson text-crimson hover:bg-crimson/10"
                 data-testid="place-counterpick-bid-button"
               >
@@ -261,6 +278,19 @@ export default function BiddingShell({
               </button>
             )}
           </div>
+
+          {(error || (hasLoaded && !budget)) && (
+            <div className="alert alert-warning mt-4 flex flex-wrap items-center gap-3" role="alert">
+              <p className="type-body-sm flex-1">
+                {error
+                  ? 'Could not load the latest bidding information. Try again before placing a bid.'
+                  : 'Your team budget is not available yet. Bidding will be available once it is ready.'}
+              </p>
+              <button type="button" className="btn btn-secondary px-4 py-2" onClick={retryBidding} disabled={refreshing || isRetrying}>
+                {refreshing || isRetrying ? 'Loading…' : 'Try again'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -301,6 +331,8 @@ export default function BiddingShell({
           teamId={teamId}
           budget={budget}
           existingBids={bids}
+          bidsReady={bidding.bidsReady && !error}
+          bidsError={!!error}
           ownedTmdbIds={ownedTmdbIds}
           onPlaceBid={bidding.placeBid}
           myHoldings={droppableHoldings}

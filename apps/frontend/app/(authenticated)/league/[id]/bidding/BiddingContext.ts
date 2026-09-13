@@ -38,7 +38,7 @@ export interface BiddingContextValue {
    * need a contest to join, since the modal offers only movies already in play.
    */
   canOpenBidModal: boolean
-  /** False when counterpicks are off, or the team's counterpick slots are all claimed. */
+  /** False until bidding data is ready, when counterpicks are off, or all slots are claimed. */
   canPlaceCounterpickBid: boolean
   /** Opens the bid modal, optionally pre-aimed at a bid to outbid. */
   openPlaceBid: (target?: PickupBid | null) => void

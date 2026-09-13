@@ -21,6 +21,8 @@ interface PlaceBidModalProps {
   teamId: string
   budget: TeamBudget | null
   existingBids: PickupBid[]
+  bidsReady: boolean
+  bidsError: boolean
   ownedTmdbIds: number[]
   onPlaceBid: (
     tmdbId: number,
@@ -115,7 +117,8 @@ function getBidResultsState(params: {
   return 'list'
 }
 
-function getValidationErrorMessage(bidAmount: number, remainingBudget: number, highestBid: number | null): string {
+function getValidationErrorMessage(bidAmount: number, remainingBudget: number | null, highestBid: number | null): string {
+  if (remainingBudget === null) return 'Your budget is unavailable. Close this dialog and try again.'
   if (bidAmount > remainingBudget) {
     return `Exceeds your budget of $${remainingBudget}`
   }
@@ -136,6 +139,8 @@ export default function PlaceBidModal({
   teamId,
   budget,
   existingBids,
+  bidsReady,
+  bidsError,
   ownedTmdbIds,
   onPlaceBid,
   myHoldings,
@@ -294,7 +299,7 @@ export default function PlaceBidModal({
   const highestBid = selectedBidInfo?.high ?? null
 
   const submitBidAction = useCallback(async () => {
-    if (!selectedMovie) return
+    if (!selectedMovie || !budget || !bidsReady) return
 
     // Guard against a stale movie list: the search results were fetched when the
     // modal opened, so a movie can release while it's still sitting on screen.
@@ -333,12 +338,12 @@ export default function PlaceBidModal({
         : `Bid of $${bidAmount} placed on ${selectedMovie.title}`
     )
     onClose()
-  }, [selectedMovie, bidAmount, dropHoldingId, myHoldings, onPlaceBid, onClose])
+  }, [selectedMovie, budget, bidsReady, bidAmount, dropHoldingId, myHoldings, onPlaceBid, onClose])
 
   const { execute: handleSubmit, isLoading: isSubmitting } = useAsyncAction(submitBidAction)
 
-  const remainingBudget = budget?.remaining_budget ?? 0
-  const isValidBid = bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100 &&
+  const remainingBudget = budget?.remaining_budget ?? null
+  const isValidBid = bidsReady && remainingBudget !== null && bidAmount >= 0 && bidAmount <= remainingBudget && bidAmount <= 100 &&
     (highestBid === null || bidAmount > highestBid)
 
   // The movies still in play, rebuilt from the bids themselves. 'outbid' rows
@@ -438,7 +443,7 @@ export default function PlaceBidModal({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="type-body-sm text-foreground-secondary">Available budget</span>
             <span className="type-number bid-amount-display whitespace-nowrap">
-              ${remainingBudget}
+              {remainingBudget === null ? 'Unavailable' : `$${remainingBudget}`}
             </span>
           </div>
         </div>
@@ -699,7 +704,7 @@ export default function PlaceBidModal({
 
                 {/* Quick Amount Buttons */}
                 <div className="flex flex-wrap gap-2">
-                  {QUICK_BID_AMOUNTS.filter(amt => amt <= remainingBudget).map(amount => (
+                  {QUICK_BID_AMOUNTS.filter(amt => remainingBudget !== null && amt <= remainingBudget).map(amount => (
                     <button
                       key={amount}
                       onClick={() => setBidAmount(amount)}
@@ -722,15 +727,22 @@ export default function PlaceBidModal({
                     value={bidAmount}
                     onChange={(e) => setBidAmount(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
                     min={0}
-                    max={Math.min(100, remainingBudget)}
+                    max={Math.min(100, remainingBudget ?? 0)}
+                    disabled={remainingBudget === null}
                     className={`type-input type-numeric input w-full pl-[56px] py-4 text-center ${
-                      !isValidBid ? 'border-error focus:border-error' : 'focus:border-gold'
+                      bidsReady && !isValidBid ? 'border-error focus:border-error' : 'focus:border-gold'
                     }`}
                     data-testid="bid-amount-input"
                   />
                 </div>
 
-                {!isValidBid ? (
+                {!bidsReady ? (
+                  <p className="type-body-sm text-foreground-secondary" role={bidsError ? 'alert' : 'status'}>
+                    {bidsError
+                      ? 'Current bids are unavailable. Close this dialog and try again.'
+                      : 'Loading current bids before you submit…'}
+                  </p>
+                ) : !isValidBid ? (
                   <p className="type-body-sm text-error flex items-center gap-1.5">
                     {getValidationErrorMessage(bidAmount, remainingBudget, highestBid)}
                   </p>

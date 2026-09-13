@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import DashboardClient from './DashboardClient'
 import { buildTeamInfoByTeamId, getMovieStatus, getParticipantDisplayName } from '@/utils/league'
@@ -52,17 +53,13 @@ export default async function DashboardPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
   if (!user) {
     redirect('/login')
   }
-
-  // Fetch league
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError || !league) {
     notFound()
@@ -87,7 +84,7 @@ export default async function DashboardPage({ params }: PageProps) {
           team_scores (*),
           team_budgets (remaining_budget)
         ),
-        profiles (display_name, avatar_url)
+        profiles (display_name, avatar_url, wishlist_public)
       `)
       .eq('league_id', id)
       .eq('status', 'active'),
@@ -164,7 +161,7 @@ export default async function DashboardPage({ params }: PageProps) {
       avatar_url: team.avatar_url,
       total_points: team.team_scores?.total_points ?? 0,
       remaining_budget: league.faab_budget > 0
-        ? team.team_budgets?.remaining_budget ?? league.faab_budget
+        ? team.team_budgets?.remaining_budget ?? null
         : null,
       rank: rankMap.get(team.id) ?? participantsData.length,
       movies,
@@ -200,6 +197,9 @@ export default async function DashboardPage({ params }: PageProps) {
       league={typedLeague}
       userTeam={userTeam}
       totalTeams={typedLeague.final_standings?.length ?? participantsData.length}
+      publicWishlistCount={participantsData.filter((p) => (
+        p.user_id !== user.id && p.profiles?.wishlist_public
+      )).length}
       leagueUpcoming={leagueUpcoming}
       todayIso={todayIso}
       isOwner={typedLeague.owner_id === user.id}

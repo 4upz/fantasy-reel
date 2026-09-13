@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { useLeagueNavigation, type LeagueNavigateEvent } from './LeagueNavigation'
 import {
   ArrowLeftRight,
   BarChart3,
@@ -53,7 +53,7 @@ export default function LeagueBottomNav({
   isOwner = false,
   seasonCount = 1,
 }: Props): React.ReactElement | null {
-  const pathname = usePathname()
+  const { pathname, pendingHref, navigate } = useLeagueNavigation()
   const [isSheetOpen, setIsSheetOpen] = useState(false)
 
   const tabs = getVisibleTabs(league, isOwner, outbidCount, seasonCount)
@@ -90,7 +90,7 @@ export default function LeagueBottomNav({
             <div className="mx-auto mt-2.5 h-1 w-9 rounded-full bg-border-hover" />
             <div className="flex flex-col p-2">
               {moreTabs.map((tab) => (
-                <SheetLink key={tab.name} tab={tab} isActive={isTabActive(pathname, tab.href)} />
+                <SheetLink key={tab.name} tab={tab} isActive={isTabActive(pathname, tab.href)} onNavigate={() => setIsSheetOpen(false)} />
               ))}
             </div>
           </div>
@@ -112,6 +112,8 @@ export default function LeagueBottomNav({
               <Link
                 key={tab.name}
                 href={tab.href}
+                onNavigate={(event: LeagueNavigateEvent) => navigate(tab.href, event)}
+                aria-busy={pendingHref === tab.href || undefined}
                 aria-current={isActive ? 'page' : undefined}
                 className={`flex flex-col items-center gap-1 ${
                   isActive ? 'text-gold' : 'text-foreground-secondary'
@@ -155,10 +157,15 @@ export default function LeagueBottomNav({
   )
 }
 
-function SheetLink({ tab, isActive }: { tab: LeagueTab; isActive: boolean }) {
+function SheetLink({ tab, isActive, onNavigate }: { tab: LeagueTab; isActive: boolean; onNavigate: () => void }) {
+  const { navigate } = useLeagueNavigation()
   return (
     <Link
       href={tab.href}
+      onNavigate={(event: LeagueNavigateEvent) => {
+        onNavigate()
+        navigate(tab.href, event)
+      }}
       aria-current={isActive ? 'page' : undefined}
       className={`flex items-center gap-3 rounded-xl px-3 py-3 type-control transition-colors hover:bg-surface-hover ${
         isActive ? 'text-gold' : 'text-foreground'

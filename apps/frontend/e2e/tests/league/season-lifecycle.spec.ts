@@ -29,10 +29,19 @@ test.describe('Season lifecycle', () => {
         expect(completed!.winner_team_ids).toHaveLength(2)
 
         await page.getByTestId('start-next-season').click()
-        await page.getByTestId('confirm-start-season').click()
-        await page.waitForURL(/\/league\/(?!.*undefined)[^/]+\/settings/)
+        const [startResponse] = await Promise.all([
+          page.waitForResponse((response) => (
+            response.url().endsWith('/functions/v1/start-next-season') &&
+            response.request().method() === 'POST'
+          )),
+          page.getByTestId('confirm-start-season').click(),
+        ])
+        const started = await startResponse.json()
+        if (typeof started.league_id === 'string') nextSeasonId = started.league_id
+        expect(startResponse.ok()).toBeTruthy()
+        expect(nextSeasonId).toEqual(expect.any(String))
+        await page.waitForURL(`/league/${nextSeasonId}/settings`)
         await expect(page).not.toHaveURL(new RegExp(activeLeague.id))
-        nextSeasonId = new URL(page.url()).pathname.split('/')[2]
         const { data: next } = await admin.from('leagues').select('status, season_year, series_id, final_standings, winner_team_ids')
           .eq('id', nextSeasonId).single()
         expect(next).toMatchObject({

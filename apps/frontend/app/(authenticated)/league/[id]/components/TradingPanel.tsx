@@ -22,6 +22,7 @@ interface Props {
   tradeableMovies: TradeableMovie[]
   budget: TeamBudget | null
   isOwner: boolean
+  isLoading: boolean
   /** The league's offer-window rules, on their way to each card's modals. */
   expiryBounds: ExpiryBounds
   onProposeTrade: () => void
@@ -61,6 +62,7 @@ export default function TradingPanel({
   tradeableMovies,
   budget,
   isOwner,
+  isLoading,
   expiryBounds,
   onProposeTrade,
   onRespondTrade,
@@ -76,13 +78,10 @@ export default function TradingPanel({
   const getFilteredTrades = () => {
     switch (activeTab) {
       case 'pending':
+      case 'all':
         return pendingTrades
       case 'my-trades':
         return myTrades.filter(
-          (t) => t.status === 'proposed' || t.status === 'countered' || t.status === 'review'
-        )
-      case 'all':
-        return trades.filter(
           (t) => t.status === 'proposed' || t.status === 'countered' || t.status === 'review'
         )
       case 'history':
@@ -126,13 +125,14 @@ export default function TradingPanel({
           </div>
 
           <div className="flex items-center gap-4">
-            {actionNeededCount > 0 && (
+            {!isLoading && actionNeededCount > 0 && (
               <span className="type-label text-crimson" role="status" aria-live="polite">
                 {actionNeededCount} trade{actionNeededCount !== 1 ? 's' : ''} need your response
               </span>
             )}
             <button
               onClick={onProposeTrade}
+              disabled={isLoading}
               className="btn btn-primary"
               aria-label="Propose a new trade"
               data-testid="propose-trade-button"
@@ -143,10 +143,14 @@ export default function TradingPanel({
         </div>
 
         {/* Budget display */}
-        {budget && (
+        {(budget || isLoading) && (
           <div className="mt-4 pt-4 border-t border-border">
             <p className="type-body-sm text-foreground-secondary">
-              Available budget: <span className="type-number text-gold" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
+              Available budget: {isLoading ? (
+                <span className="inline-block h-5 w-14 skeleton rounded align-middle" role="status" aria-label="Loading budget" />
+              ) : budget && (
+                <span className="type-number text-gold" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
+              )}
             </p>
           </div>
         )}
@@ -175,7 +179,9 @@ export default function TradingPanel({
                 }`}
               >
                 {tab.label}
-                {tab.count !== undefined && tab.count > 0 && (
+                {tab.count !== undefined && isLoading ? (
+                  <span className="h-5 w-5 skeleton rounded-full" role="status" aria-label="Loading trade count" />
+                ) : tab.count !== undefined && tab.count > 0 && (
                   <span
                     className="type-meta type-numeric bg-surface-hover text-foreground-secondary px-1.5 py-0.5 rounded-full"
                     aria-label={`${tab.count} ${tab.label.toLowerCase()}`}
@@ -194,8 +200,25 @@ export default function TradingPanel({
           role="tabpanel"
           id={`trade-panel-${activeTab}`}
           aria-labelledby={`trade-tab-${activeTab}`}
+          aria-busy={isLoading}
         >
-          {filteredTrades.length === 0 ? (
+          {isLoading ? (
+            <div className="space-y-4" role="status" aria-label="Loading trades" data-testid="trading-loading">
+              <span className="sr-only">Loading trades...</span>
+              {[0, 1].map((index) => (
+                <div key={index} className="rounded-lg border border-border p-4 space-y-4" aria-hidden="true">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 skeleton rounded-full" />
+                    <div className="h-5 w-36 skeleton rounded" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="h-20 skeleton rounded" />
+                    <div className="h-20 skeleton rounded" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredTrades.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-foreground-secondary" role="status">
                 {activeTab === 'pending' && 'No pending trades'}

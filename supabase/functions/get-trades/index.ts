@@ -174,30 +174,30 @@ Deno.serve(async (req) => {
       query = query.eq('status', status)
     }
 
-    const { data: trades, error: tradesError } = await query
+    // Counts and contest annotations only need the authorized league. Anchor
+    // titles depend on the offers, so start that lookup as soon as offers arrive
+    // while the independent queries are still running.
+    const [tradeResult, { count: totalCount }, contested] = await Promise.all([
+      query.then(async (result) => ({
+        ...result,
+        anchorTitles: await getAnchorTitles(serviceClient, result.data ?? []),
+      })),
+      serviceClient
+        .from('trade_offers')
+        .select('*', { count: 'exact', head: true })
+        .eq('league_id', league_id),
+      getContestedSourceIds(serviceClient, league_id),
+    ])
+    const { data: trades, error: tradesError, anchorTitles } = tradeResult
 
     if (tradesError) {
       console.error('Failed to fetch trades:', tradesError)
       return errorResponse('Failed to fetch trades', 500)
     }
 
-    const { count: totalCount } = await serviceClient
-      .from('trade_offers')
-      .select('*', { count: 'exact', head: true })
-      .eq('league_id', league_id)
-
-    // The movie a release-anchored offer waits on, resolved here from the live
-    // movies table. The client used to derive this from the items snapshot,
-    // which could name the wrong film once release dates moved -- the server
-    // knows which movie it picked, so it says so.
-    const anchorTitles = await getAnchorTitles(serviceClient, trades ?? [])
-
-    // Annotate each offer with which of ITS OWN movies are also named by another
-    // open offer, so the UI can flag a contested deal. get_contested_source_ids
-    // returns counts only -- never which teams or offers are competing -- so
-    // this cannot be used to infer the contents of someone else's trade.
-    const contested = await getContestedSourceIds(serviceClient, league_id)
-
+    // Use the live title of the server-selected anchor, since release dates in
+    // the items snapshot can drift. Annotate only this offer's contested movie
+    // ids: the RPC reveals counts, never competing teams or offer contents.
     const tradesWithContest = (trades ?? []).map((trade) => ({
       ...trade,
       contested_source_ids: contestedSourceIdsFor(trade, contested),

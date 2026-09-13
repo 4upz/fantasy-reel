@@ -96,6 +96,7 @@ export default function ProposeTradeModal({
   const [recipientMovies, setRecipientMovies] = useState<TradeableMovie[]>([])
   const [recipientBudget, setRecipientBudget] = useState<TeamBudget | null>(null)
   const [isLoadingRecipient, setIsLoadingRecipient] = useState(false)
+  const [recipientError, setRecipientError] = useState<string | null>(null)
 
   // Selected items
   const [offeredMovies, setOfferedMovies] = useState<Set<string>>(new Set())
@@ -128,33 +129,38 @@ export default function ProposeTradeModal({
   // Fetch recipient's tradeable movies when team is selected
   useEffect(() => {
     if (!selectedTeamId) return
+    let cancelled = false
 
     const fetchRecipientMovies = async () => {
-      setIsLoadingRecipient(true)
       try {
-        setRecipientMovies(await fetchTradeableMovies(supabase, selectedTeamId))
-
-        // Fetch recipient budget
-        const { data: budgetData } = await supabase
-          .from('team_budgets')
-          .select('*')
-          .eq('team_id', selectedTeamId)
-          .single()
-
+        const [movies, { data: budgetData, error: budgetError }] = await Promise.all([
+          fetchTradeableMovies(supabase, selectedTeamId),
+          supabase.from('team_budgets').select('*').eq('team_id', selectedTeamId).maybeSingle(),
+        ])
+        if (budgetError) throw budgetError
+        if (cancelled) return
+        setRecipientMovies(movies)
         setRecipientBudget(budgetData)
-      } catch (err) {
-        console.error('Error fetching recipient movies:', err)
+      } catch {
+        if (!cancelled) {
+          setRecipientError('Unable to load this team’s roster and budget. Choose a trade partner again to retry.')
+        }
       } finally {
-        setIsLoadingRecipient(false)
+        if (!cancelled) setIsLoadingRecipient(false)
       }
     }
 
     fetchRecipientMovies()
+    return () => { cancelled = true }
   }, [selectedTeamId, supabase])
 
   const selectedTeam = otherTeams.find((t) => t.id === selectedTeamId)
 
   const handleSelectTeam = (teamId: string) => {
+    setRecipientMovies([])
+    setRecipientBudget(null)
+    setRecipientError(null)
+    setIsLoadingRecipient(true)
     setSelectedTeamId(teamId)
     setStep('select-items')
   }
@@ -201,7 +207,7 @@ export default function ProposeTradeModal({
   const expiry = useOfferExpiry(offerMovies, expiryBounds)
 
   const submitTradeAction = useCallback(async () => {
-    if (!selectedTeamId) return
+    if (!selectedTeamId || isLoadingRecipient || recipientError) return
 
     setError(null)
     setInvalidSourceIds(EMPTY_INVALID)
@@ -246,7 +252,7 @@ export default function ProposeTradeModal({
       setError(result.error || 'Failed to propose trade')
       setInvalidSourceIds(new Set(result.invalidSourceIds ?? []))
     }
-  }, [selectedTeamId, tradeableMovies, offeredMovies, offeredBudget, recipientMovies, requestedMovies, requestedBudget, message, expiry, onPropose])
+  }, [selectedTeamId, isLoadingRecipient, recipientError, tradeableMovies, offeredMovies, offeredBudget, recipientMovies, requestedMovies, requestedBudget, message, expiry, onPropose])
 
   const { execute: handleSubmit, isLoading } = useAsyncAction(submitTradeAction)
 
@@ -353,13 +359,14 @@ export default function ProposeTradeModal({
                 />
                 <div className="mt-3">
                   <label className="type-label text-foreground-secondary">
-                    Budget (max ${budget?.remaining_budget ?? 0})
+                    {budget ? `Budget (max $${budget.remaining_budget})` : 'Budget unavailable'}
                   </label>
                   <input
                     type="number"
                     min={0}
                     max={budget?.remaining_budget ?? 0}
                     value={offeredBudget}
+                    disabled={!budget}
                     onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
                     className="type-input type-numeric input mt-1 w-24"
                   />
@@ -372,7 +379,13 @@ export default function ProposeTradeModal({
                   You receive ({selectedTeam?.name})
                 </h3>
                 {isLoadingRecipient ? (
-                  <MovieSelectorSkeleton />
+                  <div role="status" aria-label="Loading trade partner" aria-busy="true">
+                    <MovieSelectorSkeleton />
+                    <div className="h-5 w-36 skeleton rounded mt-3" aria-hidden="true" />
+                    <div className="h-10 w-24 skeleton rounded mt-1" aria-hidden="true" />
+                  </div>
+                ) : recipientError ? (
+                  <p className="alert alert-error" role="alert">{recipientError}</p>
                 ) : (
                   <>
                     <MovieSelector
@@ -383,13 +396,14 @@ export default function ProposeTradeModal({
                     />
                     <div className="mt-3">
                       <label className="type-label text-foreground-secondary">
-                        Budget (max ${recipientBudget?.remaining_budget ?? 0})
+                        {recipientBudget ? `Budget (max $${recipientBudget.remaining_budget})` : 'Budget unavailable'}
                       </label>
                       <input
                         type="number"
                         min={0}
                         max={recipientBudget?.remaining_budget ?? 0}
                         value={requestedBudget}
+                        disabled={!recipientBudget}
                         onChange={(e) =>
                           setRequestedBudget(Math.max(0, parseInt(e.target.value) || 0))
                         }
@@ -444,7 +458,7 @@ export default function ProposeTradeModal({
             </button>
             <button
               onClick={handleSubmit}
-              disabled={!hasItems || !expiry.resolution.ok || isLoading}
+              disabled={!hasItems || !expiry.resolution.ok || isLoading || isLoadingRecipient || !!recipientError}
               className="btn btn-primary"
               aria-label={isLoading ? 'Proposing trade...' : 'Submit trade proposal'}
               aria-busy={isLoading}

@@ -30,6 +30,7 @@ interface Props {
   participantNames: string[]
   /** The season this one follows, if any. */
   previousSeason: { id: string; seasonYear: number } | null
+  publicWishlistCount: number
 }
 
 export default function DashboardClient({
@@ -44,36 +45,13 @@ export default function DashboardClient({
   championPoints,
   participantNames,
   previousSeason,
+  publicWishlistCount,
 }: Props): React.ReactElement {
   const router = useRouter()
   const [league, setLeague] = useState(initialLeague)
   const [showEditTeamModal, setShowEditTeamModal] = useState(false)
-  const [wishlistCount, setWishlistCount] = useState(0)
 
   const supabase = useMemo(() => createClient(), [])
-
-  // Fetch count of league-mates with public wishlists
-  useEffect(() => {
-    let cancelled = false
-    async function fetchWishlistCount() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || cancelled) return
-
-      const { data } = await supabase
-        .from('league_participants')
-        .select('user_id, profiles!inner(wishlist_public)')
-        .eq('league_id', league.id)
-        .eq('status', 'active')
-        .neq('user_id', user.id)
-        .eq('profiles.wishlist_public', true)
-
-      if (!cancelled && data) {
-        setWishlistCount(data.length)
-      }
-    }
-    fetchWishlistCount()
-    return () => { cancelled = true }
-  }, [league.id, supabase])
 
   // Real-time subscription for league updates
   useEffect(() => {
@@ -160,11 +138,11 @@ export default function DashboardClient({
       <MovieGrid movies={userTeam.movies} leagueStatus={league.status} />
       <LeagueReleaseBoard releases={leagueUpcoming} todayIso={todayIso} />
 
-      {wishlistCount > 0 && (
+      {publicWishlistCount > 0 && (
         <div className="card mx-4 mt-[18px] flex items-center gap-3 p-4">
           <Heart className="w-5 h-5 text-crimson flex-shrink-0" />
           <p className="type-body-sm flex-1 text-foreground-secondary">
-            {wishlistCount} league-mate{wishlistCount !== 1 ? 's have' : ' has'} shared their wishlist{wishlistCount !== 1 ? 's' : ''}
+            {publicWishlistCount} league-mate{publicWishlistCount !== 1 ? 's have' : ' has'} shared their wishlist{publicWishlistCount !== 1 ? 's' : ''}
           </p>
           <Link href="/wishlist" className="type-control text-gold hover:text-gold-hover transition-colors">
             View

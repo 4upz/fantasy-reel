@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { useLeagueNavigation, type LeagueNavigateEvent } from './LeagueNavigation'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { getVisibleTabs, isTabActive } from './leagueNav'
 import type { League } from '@/types'
@@ -21,7 +21,7 @@ export default function LeagueTabs({
   isOwner = false,
   seasonCount = 1,
 }: Props): React.ReactElement {
-  const pathname = usePathname()
+  const { pathname, pendingHref, navigate } = useLeagueNavigation()
   const tabs = getVisibleTabs(league, isOwner, outbidCount, seasonCount)
   const navRef = useRef<HTMLElement>(null)
   const activeTabRef = useRef<HTMLAnchorElement>(null)
@@ -78,6 +78,8 @@ export default function LeagueTabs({
             key={tab.name}
             ref={isActive ? activeTabRef : undefined}
             href={tab.href}
+            onNavigate={(event: LeagueNavigateEvent) => navigate(tab.href, event)}
+            aria-busy={pendingHref === tab.href || undefined}
             data-testid={tab.secondary ? 'league-tab-secondary' : undefined}
             className={`type-control flex items-center gap-2 whitespace-nowrap border-b-2 border-transparent px-3.5 py-[11px] transition-colors ${
               isActive ? 'text-gold' : `${inactiveText} hover:text-foreground`

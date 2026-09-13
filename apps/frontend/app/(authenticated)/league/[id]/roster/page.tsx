@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect } from 'next/navigation'
 import { HOLDING_MOVIE_COLUMNS } from '@/utils/holdings'
 import RosterClient from './RosterClient'
@@ -12,20 +13,14 @@ export default async function RosterPage({ params }: RosterPageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
 
   if (!user) {
     redirect('/login')
   }
-
-  // Fetch league
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError || !league) {
     redirect('/dashboard')
@@ -40,7 +35,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
     .eq('status', 'active')
     .single()
 
-  if (!participant) {
+  if (!participant?.teams) {
     redirect(`/league/${id}`)
   }
 

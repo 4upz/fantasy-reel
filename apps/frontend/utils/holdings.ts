@@ -100,7 +100,7 @@ export async function fetchTradeableMovies(
   supabase: SupabaseClient,
   teamId: string
 ): Promise<TradeableMovie[]> {
-  const [{ data: holdings }, { data: counterpicks }] = await Promise.all([
+  const [{ data: holdings, error: holdingsError }, { data: counterpicks, error: counterpicksError }] = await Promise.all([
     supabase
       .from('team_holdings')
       .select(
@@ -117,6 +117,9 @@ export async function fetchTradeableMovies(
       .eq('counterpicker_team_id', teamId)
       .order('pick_order', { ascending: true }),
   ])
+
+  if (holdingsError) throw holdingsError
+  if (counterpicksError) throw counterpicksError
 
   const tradeableHoldings: TradeableMovie[] = ((holdings ?? []) as TradeableRow[]).map(
     (holding) => ({
