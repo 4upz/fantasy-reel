@@ -1,14 +1,19 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { AlertCircle, Film, ListOrdered, Plus, Sparkles, Target, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CounterpickBid, PickupBid } from '@/types'
 import BidCard from './BidCard'
 import CounterpickBidCard from './CounterpickBidCard'
-import BidPriorityModal from './BidPriorityModal'
+import BiddingModalLoading from '../bidding/BiddingModalLoading'
 import { groupBy, isMovieBiddable, latestOpenCounterWindow } from './utils'
 import { useBiddingContext } from '../bidding/BiddingContext'
+
+const BidPriorityModal = dynamic(() => import('./BidPriorityModal'), {
+  loading: BiddingModalLoading,
+})
 
 type UnifiedBidItem =
   | { type: 'pickup'; bid: PickupBid }
@@ -168,7 +173,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
     const releaseDate = item.type === 'pickup'
       ? item.bid.movie_data?.release_date ?? null
       : item.bid.movies?.release_date ?? null
-    const canCounter = isMovieBiddable(releaseDate)
+    const canCounter = bidding.hasLoaded && bidding.budget !== null && !bidding.error && isMovieBiddable(releaseDate)
 
     if (item.type === 'pickup') {
       // Only the bid's own team holds the drop target, so only they can be
@@ -212,7 +217,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
       <div
         key={`${item.type}-${item.bid.id}`}
         className="animate-slide-up"
-        style={{ animationDelay: `${index * 50}ms` }}
+        style={{ animationDelay: `${Math.min(index * 50, 150)}ms` }}
       >
         {renderBidItem(item, isOwner)}
       </div>
@@ -231,6 +236,26 @@ export default function ActiveBidsPanel(): React.ReactElement {
       Edit priority
     </button>
   ) : null
+
+  if (!bidding.hasLoaded) {
+    if (bidding.error) return <div data-testid="active-bids-panel" />
+
+    return (
+      <div className="space-y-3" role="status" aria-label="Loading active bids" data-testid="active-bids-loading">
+        <div className="skeleton h-7 w-44 rounded" aria-hidden="true" />
+        {[0, 1, 2].map((index) => (
+          <div key={index} className="card p-4 flex gap-4" aria-hidden="true">
+            <div className="skeleton h-24 w-16 shrink-0 rounded" />
+            <div className="flex-1 space-y-3 py-1">
+              <div className="skeleton h-5 w-2/3 rounded" />
+              <div className="skeleton h-4 w-1/3 rounded" />
+              <div className="skeleton h-7 w-20 rounded" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6" data-testid="active-bids-panel">

@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import SettingsClient from './SettingsClient'
 import { fetchSeriesSeasons } from '@/utils/seasonQueries'
@@ -12,17 +13,13 @@ export default async function LeagueSettingsPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
   if (!user) {
     redirect('/login')
   }
-
-  // Fetch the league
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError || !league) {
     notFound()

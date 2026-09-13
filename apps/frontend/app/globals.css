@@ -1010,6 +1010,12 @@
     animation: var(--animate-shimmer);
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+    }
+  }
+
   /* Floating search bar */
   .search-bar-floating {
     position: fixed;

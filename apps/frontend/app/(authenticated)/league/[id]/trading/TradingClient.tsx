@@ -1,12 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { League, Team, TeamWithOwner, TradeItems } from '@/types'
 import { useTrading } from '../hooks/useTrading'
 import TradingPanel from '../components/TradingPanel'
 import { trackEvent } from '@/utils/analytics'
 import { resolveExpiryBounds, type ResolvedExpiry } from '@/utils/tradeExpiry'
+import { useAsyncAction } from '@/hooks/useAsyncAction'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const ProposeTradeModal = dynamic(() => import('../components/ProposeTradeModal'), {
@@ -19,9 +20,10 @@ interface Props {
   currentTeam: TeamWithOwner
   otherTeams: TeamWithOwner[]
   isOwner: boolean
+  userId: string
 }
 
-export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner }: Props) {
+export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner, userId }: Props) {
   const [showProposeModal, setShowProposeModal] = useState(false)
 
   // Derived once for the whole page: both the propose modal and every card's
@@ -44,49 +46,51 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
     vetoTrade,
     approveTrade,
     extendTrade,
+    refreshTrades,
+    refreshRoster,
   } = useTrading({
     leagueId: league.id,
     teamId: team.id,
+    userId,
   })
 
-  if (isLoading) {
-    return (
-      <div className="card p-8 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold mx-auto" />
-        <p className="mt-4 text-foreground-secondary">Loading trades...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="alert alert-error">
-        <p>{error}</p>
-      </div>
-    )
-  }
+  const retryAction = useCallback(async () => {
+    await Promise.all([refreshTrades(), refreshRoster()])
+  }, [refreshTrades, refreshRoster])
+  const { execute: retry, isLoading: isRetrying } = useAsyncAction(retryAction)
 
   return (
     <>
-      <TradingPanel
-        team={team}
-        currentTeam={currentTeam}
-        otherTeams={otherTeams}
-        trades={trades}
-        pendingTrades={pendingTrades}
-        myTrades={myTrades}
-        tradeableMovies={tradeableMovies}
-        budget={budget}
-        isOwner={isOwner}
-        expiryBounds={expiryBounds}
-        onProposeTrade={() => setShowProposeModal(true)}
-        onRespondTrade={respondTrade}
-        onCounterTrade={counterTrade}
-        onCancelTrade={cancelTrade}
-        onVetoTrade={vetoTrade}
-        onApproveTrade={approveTrade}
-        onExtendTrade={extendTrade}
-      />
+      {error && (
+        <div className="alert alert-error mb-4" role="alert">
+          <p>{error}</p>
+          <button onClick={retry} disabled={isRetrying} className="btn btn-secondary mt-3">
+            {isRetrying ? 'Retrying...' : 'Try again'}
+          </button>
+        </div>
+      )}
+      {!(error && isLoading) && (
+        <TradingPanel
+          team={team}
+          currentTeam={currentTeam}
+          otherTeams={otherTeams}
+          trades={trades}
+          pendingTrades={pendingTrades}
+          myTrades={myTrades}
+          tradeableMovies={tradeableMovies}
+          budget={budget}
+          isLoading={isLoading}
+          isOwner={isOwner}
+          expiryBounds={expiryBounds}
+          onProposeTrade={() => setShowProposeModal(true)}
+          onRespondTrade={respondTrade}
+          onCounterTrade={counterTrade}
+          onCancelTrade={cancelTrade}
+          onVetoTrade={vetoTrade}
+          onApproveTrade={approveTrade}
+          onExtendTrade={extendTrade}
+        />
+      )}
 
       {showProposeModal && (
         <ProposeTradeModal

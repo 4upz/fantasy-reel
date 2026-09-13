@@ -116,7 +116,7 @@ export default function RosterClient({
         teamName={team.name}
         slotsFilled={totalMovies}
         totalSlots={league.total_slots}
-        remainingBudget={budget?.remaining_budget ?? 100}
+        remainingBudget={budget?.remaining_budget ?? null}
         dropCount={dropCount}
         dropLimit={league.drop_limit}
       />

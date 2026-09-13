@@ -34,7 +34,8 @@ function getModalTitle(
   return step === 2 ? 'Set your bid' : 'Place counterpick bid'
 }
 
-function getValidationErrorMessage(bidAmount: number, remainingBudget: number, highestBid: number | null): string {
+function getValidationErrorMessage(bidAmount: number, remainingBudget: number | null, highestBid: number | null): string {
+  if (remainingBudget === null) return 'Your budget is unavailable. Close this dialog and try again.'
   if (bidAmount > remainingBudget) {
     return `Exceeds your budget of $${remainingBudget}`
   }
@@ -158,7 +159,7 @@ export default function PlaceCounterpickBidModal({
   }, [])
 
   const submitBidAction = useCallback(async () => {
-    if (!selectedMovie) return
+    if (!selectedMovie || !budget) return
 
     const { success, error } = await onPlaceCounterpickBid(selectedMovie.movieId, bidAmount)
 
@@ -169,13 +170,13 @@ export default function PlaceCounterpickBidModal({
 
     toast.success(`Counterpick bid of $${bidAmount} placed on ${selectedMovie.title}`)
     onClose()
-  }, [selectedMovie, bidAmount, onPlaceCounterpickBid, onClose])
+  }, [selectedMovie, budget, bidAmount, onPlaceCounterpickBid, onClose])
 
   const { execute: handleSubmit, isLoading: isSubmitting } = useAsyncAction(submitBidAction)
 
-  const remainingBudget = budget?.remaining_budget ?? 0
+  const remainingBudget = budget?.remaining_budget ?? null
   const isValidBid = useMemo(() => {
-    if (bidAmount < 0 || bidAmount > remainingBudget || bidAmount > 100) return false
+    if (remainingBudget === null || bidAmount < 0 || bidAmount > remainingBudget || bidAmount > 100) return false
     if (highestBid !== null && bidAmount <= highestBid) return false
     return true
   }, [bidAmount, remainingBudget, highestBid])
@@ -231,7 +232,7 @@ export default function PlaceCounterpickBidModal({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="type-body-sm text-foreground-secondary">Available budget</span>
             <span className="type-number bid-amount-display whitespace-nowrap">
-              ${remainingBudget}
+              {remainingBudget === null ? 'Unavailable' : `$${remainingBudget}`}
             </span>
           </div>
         </div>
@@ -300,7 +301,7 @@ export default function PlaceCounterpickBidModal({
 
                 {/* Quick Amount Buttons */}
                 <div className="flex flex-wrap gap-2">
-                  {QUICK_BID_AMOUNTS.filter(amt => amt <= remainingBudget).map(amount => (
+                  {QUICK_BID_AMOUNTS.filter(amt => remainingBudget !== null && amt <= remainingBudget).map(amount => (
                     <button
                       key={amount}
                       onClick={() => setBidAmount(amount)}
@@ -323,7 +324,8 @@ export default function PlaceCounterpickBidModal({
                     value={bidAmount}
                     onChange={(e) => setBidAmount(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
                     min={0}
-                    max={Math.min(100, remainingBudget)}
+                    max={Math.min(100, remainingBudget ?? 0)}
+                    disabled={remainingBudget === null}
                     className={`type-input type-numeric input w-full pl-[56px] py-4 text-center ${
                       !isValidBid ? 'border-error focus:border-error' : 'focus:border-gold'
                     }`}

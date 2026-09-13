@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getCachedActiveParticipant, getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import StandingsClient from './StandingsClient'
 import { HOLDING_MOVIE_COLUMNS, holdingMovie, type HoldingMovieRow } from '@/utils/holdings'
@@ -34,19 +35,13 @@ export default async function StandingsPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
   if (!user) {
     redirect('/login')
   }
-
-  // Fetch the league
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError || !league) {
     notFound()
@@ -58,13 +53,7 @@ export default async function StandingsPage({ params }: PageProps) {
   }
 
   // Check if user is a participant in this league
-  const { data: userParticipant } = await supabase
-    .from('league_participants')
-    .select('id')
-    .eq('league_id', id)
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .single()
+  const { data: userParticipant } = await getCachedActiveParticipant(id, user.id)
 
   if (!userParticipant) {
     redirect('/dashboard')
@@ -88,7 +77,8 @@ export default async function StandingsPage({ params }: PageProps) {
           *,
           team_scores (*),
           team_budgets (*)
-        )
+        ),
+        profiles (*)
       `
       )
       .eq('league_id', id)
@@ -150,35 +140,19 @@ export default async function StandingsPage({ params }: PageProps) {
       movie: holdingMovie(holding),
     }))
 
-  // Fetch profiles separately (no direct FK from league_participants)
-  const userIds = (participants ?? []).map((p) => p.user_id)
-  const { data: profiles } =
-    userIds.length > 0
-      ? await supabase.from('profiles').select('*').in('user_id', userIds)
-      : { data: [] }
-
-  // Build profile lookup map for O(1) access
-  const profilesByUserId = new Map(
-    (profiles ?? []).map((p) => [p.user_id, p])
-  )
-
-  // Merge profiles into participants
-  const participantsWithProfiles = (participants ?? []).map((p) => ({
-    ...p,
-    profiles: profilesByUserId.get(p.user_id) ?? null,
-  }))
+  const participantsWithProfiles = (participants ?? []) as ParticipantWithTeamScore[]
 
   // The champion banner and the table read the same rows, so a name can never
   // disagree with the rank shown beside it.
   const rows = seasonStandings(typedLeague.final_standings, standings)
   const ownerNameByUserId = new Map(
-    (profiles ?? []).map((p) => [p.user_id as string, (p.display_name as string | null) ?? null])
+    participantsWithProfiles.map((p) => [p.user_id, p.profiles?.display_name ?? null])
   )
   const champions = resolveChampions(typedLeague.winner_team_ids, rows, ownerNameByUserId)
 
   return (
     <StandingsClient
-      participants={participantsWithProfiles as ParticipantWithTeamScore[]}
+      participants={participantsWithProfiles}
       standings={rows}
       draftPicks={draftPicks}
       pickups={pickups}

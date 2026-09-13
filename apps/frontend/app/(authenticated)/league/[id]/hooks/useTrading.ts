@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { fetchTradeableMovies } from '@/utils/holdings'
@@ -16,6 +17,7 @@ import type {
 interface UseTradingOptions {
   leagueId: string
   teamId: string
+  userId: string
 }
 
 interface UseTradingReturn {
@@ -72,62 +74,72 @@ function invalidSourceIdsFrom(errorBody: Record<string, unknown> | null): string
   return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
 }
 
-export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingReturn {
-  const [trades, setTrades] = useState<TradeOfferWithTeams[]>([])
-  const [tradeableMovies, setTradeableMovies] = useState<TradeableMovie[]>([])
-  const [budget, setBudget] = useState<TeamBudget | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+// League activity can change while another tab is open. Keep cached results for
+// immediate revisits, but revalidate them instead of using the movie-cache TTL.
+const TRADING_SWR_OPTIONS = {
+  dedupingInterval: 2_000,
+  revalidateOnMount: true,
+  revalidateOnFocus: true,
+}
 
+const EMPTY_TRADES: TradeOfferWithTeams[] = []
+const EMPTY_MOVIES: TradeableMovie[] = []
+
+export function useTrading({ leagueId, teamId, userId }: UseTradingOptions): UseTradingReturn {
   const supabase = useMemo(() => createClient(), [])
 
-  // Fetch trades
+  // Keep private offers isolated when accounts change in the same browser.
+  const tradesQuery = useSWR<TradeOfferWithTeams[], Error>(
+    ['league-trades', leagueId, teamId, userId],
+    async () => {
+      const { data, error } = await callEdgeFunction<{ trades: TradeOfferWithTeams[] }>(
+        'get-trades',
+        { body: { league_id: leagueId } }
+      )
+      if (error) throw new Error(error)
+      return data?.trades ?? []
+    },
+    TRADING_SWR_OPTIONS
+  )
+  const rosterQuery = useSWR<TradeableMovie[], Error>(
+    ['league-trade-roster', leagueId, teamId, userId],
+    () => fetchTradeableMovies(supabase, teamId),
+    TRADING_SWR_OPTIONS
+  )
+  const budgetQuery = useSWR<TeamBudget | null, Error>(
+    ['league-trade-budget', leagueId, teamId, userId],
+    async () => {
+      const { data, error } = await supabase
+        .from('team_budgets')
+        .select('*')
+        .eq('team_id', teamId)
+        .maybeSingle()
+      if (error) throw new Error('Unable to load your budget. Please try again.')
+      return data
+    },
+    TRADING_SWR_OPTIONS
+  )
+
+  const trades = tradesQuery.data ?? EMPTY_TRADES
+  const tradeableMovies = rosterQuery.data ?? EMPTY_MOVIES
+  const budget = budgetQuery.data ?? null
+  const isLoading = tradesQuery.data === undefined || rosterQuery.data === undefined || budgetQuery.data === undefined
+  const error = tradesQuery.error?.message
+    ?? rosterQuery.error?.message
+    ?? budgetQuery.error?.message
+    ?? null
+  const { mutate: mutateTrades } = tradesQuery
+  const { mutate: mutateRoster } = rosterQuery
+  const { mutate: mutateBudget } = budgetQuery
   const fetchTrades = useCallback(async () => {
-    // get-trades supports both GET+query-string and POST+JSON body (see
-    // supabase/functions/get-trades/index.ts); POST body matches the
-    // callEdgeFunction idiom used by every other call site in this app.
-    const { data, error: fetchError } = await callEdgeFunction<{ trades: TradeOfferWithTeams[] }>(
-      'get-trades',
-      { body: { league_id: leagueId } }
-    )
-
-    if (fetchError) {
-      setError(fetchError)
-      return
-    }
-
-    setTrades(data?.trades || [])
-  }, [leagueId])
-
-  // Fetch tradeable movies (team's roster)
+    await mutateTrades()
+  }, [mutateTrades])
   const loadTradeableMovies = useCallback(async () => {
-    try {
-      setTradeableMovies(await fetchTradeableMovies(supabase, teamId))
-    } catch (err) {
-      console.error('Error fetching tradeable movies:', err)
-    }
-  }, [supabase, teamId])
-
-  // Fetch budget
+    await mutateRoster()
+  }, [mutateRoster])
   const fetchBudget = useCallback(async () => {
-    const { data } = await supabase
-      .from('team_budgets')
-      .select('*')
-      .eq('team_id', teamId)
-      .single()
-
-    setBudget(data)
-  }, [supabase, teamId])
-
-  // Initial fetch
-  useEffect(() => {
-    const init = async () => {
-      setIsLoading(true)
-      await Promise.all([fetchTrades(), loadTradeableMovies(), fetchBudget()])
-      setIsLoading(false)
-    }
-    init()
-  }, [fetchTrades, loadTradeableMovies, fetchBudget])
+    await mutateBudget()
+  }, [mutateBudget])
 
   // Real-time subscription for trades
   useEffect(() => {
@@ -151,12 +163,17 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
           }
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'team_budgets', filter: `team_id=eq.${teamId}` },
+        fetchBudget
+      )
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, leagueId, fetchTrades, loadTradeableMovies, fetchBudget])
+  }, [supabase, leagueId, teamId, fetchTrades, loadTradeableMovies, fetchBudget])
 
   // Propose a new trade
   const proposeTrade = useCallback(
@@ -224,11 +241,10 @@ export function useTrading({ leagueId, teamId }: UseTradingOptions): UseTradingR
         }
       }
 
-      await fetchTrades()
-      // If accepted, roster will change - refresh it
-      if (response === 'accept') {
-        await Promise.all([loadTradeableMovies(), fetchBudget()])
-      }
+      await Promise.all([
+        fetchTrades(),
+        ...(response === 'accept' ? [loadTradeableMovies(), fetchBudget()] : []),
+      ])
       return { success: true }
     },
     [fetchTrades, loadTradeableMovies, fetchBudget]

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo } from 'react'
+import useSWR from 'swr'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { trackEvent } from '@/utils/analytics'
@@ -9,6 +10,17 @@ import type { PickupBid, TeamBudget, CounterpickBid } from '@/types'
 interface UseBiddingOptions {
   leagueId: string
   teamId: string
+  userId: string
+}
+
+const EMPTY_PICKUP_BIDS: PickupBid[] = []
+const EMPTY_COUNTERPICK_BIDS: CounterpickBid[] = []
+
+// Gameplay changes while a tab is away. Keep warm data on return, but refresh
+// promptly instead of inheriting the minute-long movie catalogue cache window.
+const BIDDING_CACHE_OPTIONS = {
+  dedupingInterval: 2_000,
+  revalidateOnFocus: true,
 }
 
 /** A holding the bidder wants released if -- and only if -- the bid wins. */
@@ -21,7 +33,12 @@ export interface UseBiddingReturn {
   bids: PickupBid[]
   myBids: PickupBid[]
   budget: TeamBudget | null
+  /** Pickup contests are known, so a composed bid can be validated. */
+  bidsReady: boolean
   loading: boolean
+  refreshing: boolean
+  /** All four resources have loaded, including a genuinely absent budget. */
+  hasLoaded: boolean
   error: string | null
   placeBid: (
     tmdbId: number,
@@ -42,15 +59,7 @@ export interface UseBiddingReturn {
   setCounterpickBidPriorities: (bidIds: string[]) => Promise<{ success: boolean; error?: string }>
 }
 
-export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingReturn {
-  const [bids, setBids] = useState<PickupBid[]>([])
-  const [counterpickBids, setCounterpickBids] = useState<CounterpickBid[]>([])
-  const [biddingCounterpickCount, setBiddingCounterpickCount] = useState(0)
-  const [budget, setBudget] = useState<TeamBudget | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Memoize to prevent re-renders (rerender-memo optimization)
+export function useBidding({ leagueId, teamId, userId }: UseBiddingOptions): UseBiddingReturn {
   const supabase = useMemo(() => createClient(), [])
 
   const fetchBids = useCallback(async () => {
@@ -61,11 +70,8 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       .in('status', ['active', 'outbid'])
       .order('created_at', { ascending: false })
 
-    if (fetchError) {
-      setError(fetchError.message)
-    } else {
-      setBids(data || [])
-    }
+    if (fetchError) throw fetchError
+    return (data ?? []) as PickupBid[]
   }, [supabase, leagueId])
 
   const fetchBudget = useCallback(async () => {
@@ -73,13 +79,10 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       .from('team_budgets')
       .select('*')
       .eq('team_id', teamId)
-      .single()
+      .maybeSingle()
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      setError(fetchError.message)
-    } else {
-      setBudget(data)
-    }
+    if (fetchError) throw fetchError
+    return data as TeamBudget | null
   }, [supabase, teamId])
 
   const fetchCounterpickBids = useCallback(async () => {
@@ -90,11 +93,8 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       .in('status', ['active', 'outbid'])
       .order('created_at', { ascending: false })
 
-    if (fetchError) {
-      setError(fetchError.message)
-    } else {
-      setCounterpickBids((data as CounterpickBid[]) || [])
-    }
+    if (fetchError) throw fetchError
+    return (data ?? []) as CounterpickBid[]
   }, [supabase, leagueId])
 
   const fetchBiddingCounterpickCount = useCallback(async () => {
@@ -104,24 +104,50 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       .eq('counterpicker_team_id', teamId)
       .eq('phase', 'bidding')
 
-    if (fetchError) {
-      setError(fetchError.message)
-    } else {
-      setBiddingCounterpickCount(count ?? 0)
-    }
+    if (fetchError) throw fetchError
+    return count ?? 0
   }, [supabase, teamId])
 
-  const refetch = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    await Promise.all([fetchBids(), fetchBudget(), fetchCounterpickBids(), fetchBiddingCounterpickCount()])
-    setLoading(false)
-  }, [fetchBids, fetchBudget, fetchCounterpickBids, fetchBiddingCounterpickCount])
+  // Scope every cache entry to the viewer so switching accounts cannot reuse
+  // another user's RLS-filtered data. Separate resources keep realtime updates
+  // from refetching unrelated tables.
+  const pickupState = useSWR(
+    ['bidding-pickups', userId, leagueId, teamId], fetchBids, BIDDING_CACHE_OPTIONS,
+  )
+  const budgetState = useSWR(
+    ['bidding-budget', userId, teamId], fetchBudget, BIDDING_CACHE_OPTIONS,
+  )
+  const counterpickState = useSWR(
+    ['bidding-counterpicks', userId, leagueId, teamId], fetchCounterpickBids, BIDDING_CACHE_OPTIONS,
+  )
+  const countState = useSWR(
+    ['bidding-counterpick-count', userId, teamId], fetchBiddingCounterpickCount, BIDDING_CACHE_OPTIONS,
+  )
 
-  // Initial fetch
-  useEffect(() => {
-    refetch()
-  }, [refetch])
+  const { mutate: refreshBids } = pickupState
+  const { mutate: refreshBudget } = budgetState
+  const { mutate: refreshCounterpickBids } = counterpickState
+  const { mutate: refreshCounterpickCount } = countState
+
+  const refetch = useCallback(async () => {
+    await Promise.all([
+      refreshBids(), refreshBudget(), refreshCounterpickBids(), refreshCounterpickCount(),
+    ])
+  }, [refreshBids, refreshBudget, refreshCounterpickBids, refreshCounterpickCount])
+
+  const bids = pickupState.data ?? EMPTY_PICKUP_BIDS
+  const bidsReady = pickupState.data !== undefined && !pickupState.error
+  const counterpickBids = counterpickState.data ?? EMPTY_COUNTERPICK_BIDS
+  const budget = budgetState.data ?? null
+  const biddingCounterpickCount = countState.data ?? 0
+  const hasLoaded = pickupState.data !== undefined && budgetState.data !== undefined &&
+    counterpickState.data !== undefined && countState.data !== undefined
+  const loading = pickupState.isLoading || budgetState.isLoading ||
+    counterpickState.isLoading || countState.isLoading
+  const refreshing = pickupState.isValidating || budgetState.isValidating ||
+    counterpickState.isValidating || countState.isValidating
+  const error = (pickupState.error ?? budgetState.error ?? counterpickState.error ?? countState.error)
+    ?.message ?? null
 
   // Real-time subscriptions
   useEffect(() => {
@@ -132,31 +158,31 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
         schema: 'public',
         table: 'pickup_bids',
         filter: `league_id=eq.${leagueId}`,
-      }, () => fetchBids())
+      }, () => { void refreshBids() })
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'team_budgets',
         filter: `team_id=eq.${teamId}`,
-      }, () => fetchBudget())
+      }, () => { void refreshBudget() })
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'counterpick_bids',
         filter: `league_id=eq.${leagueId}`,
-      }, () => fetchCounterpickBids())
+      }, () => { void refreshCounterpickBids() })
       .on('postgres_changes', {
         event: '*',
         schema: 'public',
         table: 'counterpicks',
         filter: `counterpicker_team_id=eq.${teamId}`,
-      }, () => fetchBiddingCounterpickCount())
+      }, () => { void refreshCounterpickCount() })
       .subscribe()
 
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase, leagueId, teamId, fetchBids, fetchBudget, fetchCounterpickBids, fetchBiddingCounterpickCount])
+  }, [supabase, leagueId, teamId, refreshBids, refreshBudget, refreshCounterpickBids, refreshCounterpickCount])
 
   const placeBid = useCallback(async (
     tmdbId: number,
@@ -182,10 +208,10 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       return { success: false, error: bidError }
     }
 
-    await refetch()
+    await refreshBids()
     trackEvent('bid_placed', { league_id: leagueId, amount })
     return { success: true }
-  }, [leagueId, refetch])
+  }, [leagueId, refreshBids])
 
   const cancelBid = useCallback(async (bidId: string): Promise<{ success: boolean; error?: string }> => {
     const { error: cancelError } = await callEdgeFunction('cancel-bid', {
@@ -196,9 +222,9 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       return { success: false, error: cancelError }
     }
 
-    await refetch()
+    await refreshBids()
     return { success: true }
-  }, [refetch])
+  }, [refreshBids])
 
   const placeCounterpickBid = useCallback(async (
     movieId: string,
@@ -216,9 +242,9 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       return { success: false, error: bidError }
     }
 
-    await refetch()
+    await refreshCounterpickBids()
     return { success: true }
-  }, [leagueId, refetch])
+  }, [leagueId, refreshCounterpickBids])
 
   const cancelCounterpickBid = useCallback(async (bidId: string): Promise<{ success: boolean; error?: string }> => {
     const { error: cancelError } = await callEdgeFunction('cancel-counterpick-bid', {
@@ -229,9 +255,9 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       return { success: false, error: cancelError }
     }
 
-    await refetch()
+    await refreshCounterpickBids()
     return { success: true }
-  }, [refetch])
+  }, [refreshCounterpickBids])
 
   const setBidPriorities = useCallback(async (
     bidIds: string[]
@@ -244,9 +270,9 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       return { success: false, error: priorityError }
     }
 
-    await refetch()
+    await refreshBids()
     return { success: true }
-  }, [leagueId, refetch])
+  }, [leagueId, refreshBids])
 
   const setCounterpickBidPriorities = useCallback(async (
     bidIds: string[]
@@ -259,9 +285,9 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
       return { success: false, error: priorityError }
     }
 
-    await refetch()
+    await refreshCounterpickBids()
     return { success: true }
-  }, [leagueId, refetch])
+  }, [leagueId, refreshCounterpickBids])
 
   // Memoize to prevent re-renders (rerender-memo optimization)
   // Priority order is the order the team chose, so surface it that way everywhere.
@@ -283,7 +309,10 @@ export function useBidding({ leagueId, teamId }: UseBiddingOptions): UseBiddingR
     bids,
     myBids,
     budget,
+    bidsReady,
     loading,
+    refreshing,
+    hasLoaded,
     error,
     placeBid,
     cancelBid,

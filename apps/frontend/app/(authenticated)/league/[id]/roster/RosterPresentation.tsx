@@ -18,7 +18,7 @@ export function RosterHeader({
   teamName: string
   slotsFilled: number
   totalSlots: number
-  remainingBudget: number
+  remainingBudget: number | null
   dropCount: number
   dropLimit: number
 }) {
@@ -34,7 +34,14 @@ export function RosterHeader({
       </div>
       <div className="text-right" data-preview-focus="budget">
         <p className="type-body-sm text-foreground-secondary">Budget remaining</p>
-        <p className="type-number-lg text-gold">${remainingBudget}</p>
+        <p className="type-number-lg text-gold">
+          {remainingBudget === null ? (
+            <>
+              <span aria-hidden="true">—</span>
+              <span className="sr-only">Budget not available yet</span>
+            </>
+          ) : `$${remainingBudget}`}
+        </p>
         <p
           className={`type-body-sm ${dropsRemaining > 0 ? 'text-foreground-secondary' : 'text-crimson'}`}
           data-testid="drops-summary"

@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import TradingClient from './TradingClient'
 import type { League, Team, TeamWithOwner, ParticipantWithProfile } from '@/types'
@@ -11,17 +12,13 @@ export default async function TradingPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
   if (!user) {
     redirect('/login')
   }
-
-  // Fetch the league
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError || !league) {
     notFound()
@@ -37,24 +34,14 @@ export default async function TradingPage({ params }: PageProps) {
     redirect(`/league/${id}/dashboard`)
   }
 
-  // Parallelize independent queries (async-parallel optimization)
-  const [participantResult, otherParticipantsResult] = await Promise.all([
-    supabase
-      .from('league_participants')
-      .select(`*, teams (*), profiles (*)`)
-      .eq('league_id', id)
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .single(),
-    supabase
-      .from('league_participants')
-      .select(`*, teams (*), profiles (*)`)
-      .eq('league_id', id)
-      .eq('status', 'active')
-      .neq('user_id', user.id),
-  ])
+  // One participant read supplies both the current team and trading partners.
+  const { data: participants } = await supabase
+    .from('league_participants')
+    .select('*, teams (*), profiles (display_name)')
+    .eq('league_id', id)
+    .eq('status', 'active')
 
-  const { data: participant } = participantResult
+  const participant = participants?.find((p) => p.user_id === user.id)
   if (!participant) {
     redirect('/dashboard')
   }
@@ -72,10 +59,10 @@ export default async function TradingPage({ params }: PageProps) {
     display_name: participant.profiles?.display_name ?? null,
   }
 
-  const { data: participants } = otherParticipantsResult
-
   const otherTeams: TeamWithOwner[] = (participants ?? [])
-    .filter((p): p is ParticipantWithProfile & { teams: Team } => p.teams !== null)
+    .filter((p): p is ParticipantWithProfile & { teams: Team } => (
+      p.user_id !== user.id && p.teams !== null
+    ))
     .map((p) => ({
       id: p.teams.id,
       name: p.teams.name,
@@ -88,6 +75,7 @@ export default async function TradingPage({ params }: PageProps) {
   return (
     <TradingClient
       league={league as League}
+      userId={user.id}
       team={team}
       currentTeam={currentTeam}
       otherTeams={otherTeams}

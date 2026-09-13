@@ -1,4 +1,4 @@
-import { createClient } from '@/utils/supabase/server'
+import { getCachedLeague } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 
 interface PageProps {
@@ -7,14 +7,9 @@ interface PageProps {
 
 export default async function LeagueRootPage({ params }: PageProps) {
   const { id } = await params
-  const supabase = await createClient()
 
   // Fetch league status for phase-aware redirect
-  const { data: league, error } = await supabase
-    .from('leagues')
-    .select('status')
-    .eq('id', id)
-    .single()
+  const { data: league, error } = await getCachedLeague(id)
 
   if (error || !league) {
     notFound()

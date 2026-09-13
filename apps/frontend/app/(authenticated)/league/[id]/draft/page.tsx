@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getCachedActiveParticipant, getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import DraftClient from './DraftClient'
 import { fetchReigningChampions } from '@/utils/seasonQueries'
@@ -15,17 +16,13 @@ export default async function DraftPage({ params }: PageProps) {
   const { id } = await params
   const supabase = await createClient()
 
-  const { data: { user } } = await supabase.auth.getUser()
+  const [{ data: { user } }, { data: league, error: leagueError }] = await Promise.all([
+    getCachedUser(),
+    getCachedLeague(id),
+  ])
   if (!user) {
     redirect('/login')
   }
-
-  // Fetch the league
-  const { data: league, error: leagueError } = await supabase
-    .from('leagues')
-    .select('*')
-    .eq('id', id)
-    .single()
 
   if (leagueError && leagueError.code !== 'PGRST116') {
     throw new Error('Unable to load the draft. Please try again.', { cause: leagueError })
@@ -35,13 +32,7 @@ export default async function DraftPage({ params }: PageProps) {
   }
 
   // Check if user is a participant
-  const { data: userParticipant, error: participantError } = await supabase
-    .from('league_participants')
-    .select('id')
-    .eq('league_id', id)
-    .eq('user_id', user.id)
-    .eq('status', 'active')
-    .single()
+  const { data: userParticipant, error: participantError } = await getCachedActiveParticipant(id, user.id)
 
   if (participantError && participantError.code !== 'PGRST116') {
     throw new Error('Unable to check draft membership. Please try again.', { cause: participantError })
