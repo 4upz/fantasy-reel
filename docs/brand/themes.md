@@ -13,6 +13,9 @@ unavailable, the selector still works for the current visit.
 The account menu and Settings share a compact, text-only segmented control with
 44px touch targets. A gold border identifies the selected option; an additional
 outer outline identifies keyboard focus. Keep the explanatory copy in Settings.
+The selection indicator slides between options over 200ms. It appears in its
+saved position after initialization and moves instantly when reduced motion is
+preferred.
 
 ## Implementation
 
