@@ -12,7 +12,7 @@ import styles from './components/landing/landing.module.css'
 
 export const metadata: Metadata = {
   title: 'Fantasy Reel — Draft movies. Compete with friends.',
-  description: 'Build a roster of upcoming movies, compete with friends, and earn fantasy points from Rotten Tomatoes scores.',
+  description: 'Build a roster of upcoming movies, compete with friends, and earn fantasy points from critic scores.',
 }
 
 export default function LandingPage(): React.ReactElement {
@@ -26,7 +26,7 @@ export default function LandingPage(): React.ReactElement {
           <div className={styles.heroCopy}>
             <p className={`type-meta ${styles.eyebrow}`}>Fantasy leagues for movie fans</p>
             <h1 id="hero-title" className={`type-hero ${styles.headline}`}>Draft movies.<br />Compete with friends.</h1>
-            <p className={`type-lead ${styles.intro}`}>Build a roster of upcoming movies and earn fantasy points from their Rotten Tomatoes scores.</p>
+            <p className={`type-lead ${styles.intro}`}>Build a roster of upcoming movies and earn fantasy points from their critic scores.</p>
             <div className={styles.heroActions}>
               <Link href="/signup" className="btn btn-primary">Start a league <ArrowRight size={16} className="ml-2" aria-hidden="true" /></Link>
               <Link href="/how-to-play" className="btn btn-secondary">How to play</Link>
