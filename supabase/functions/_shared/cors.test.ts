@@ -64,6 +64,42 @@ Deno.test('getCorsHeaders', async (t) => {
     assertEquals(headers['Access-Control-Allow-Origin'], 'https://www.fantasyreel.com')
   })
 
+  await t.step('allows this project\'s Vercel branch aliases and deployment URLs', () => {
+    const origins = [
+      'https://fantasy-reel-frontend-git-codex-lea-01de51-arik-smiths-projects.vercel.app',
+      'https://fantasy-reel-frontend-git-codex-hom-b0e6fd-arik-smiths-projects.vercel.app',
+      'https://fantasy-reel-frontend-qsm1jzimx-arik-smiths-projects.vercel.app',
+    ]
+
+    for (const origin of origins) {
+      const headers = getCorsHeaders(preflight(origin, 'authorization, content-type, sentry-trace, baggage'))
+      assertEquals(headers['Access-Control-Allow-Origin'], origin)
+      assertEquals(headers['Access-Control-Allow-Credentials'], 'true')
+      assertEquals(allowedHeaders(headers).includes('sentry-trace'), true)
+      assertEquals(allowedHeaders(headers).includes('baggage'), true)
+    }
+  })
+
+  await t.step('rejects other Vercel projects, teams, and lookalike preview origins', () => {
+    const origins = [
+      'https://other-project-git-main-arik-smiths-projects.vercel.app',
+      'https://fantasy-reel-frontend-git-main-other-team.vercel.app',
+      'https://fantasy-reel-frontend-git-main-arik-smiths-projects.vercel.app.evil.example',
+      'https://evil.fantasy-reel-frontend-git-main-arik-smiths-projects.vercel.app',
+      'https://fantasy-reel-frontend-git-main-arik-smiths-projects.vercel.app@evil.example',
+      'https://evil.example/fantasy-reel-frontend-git-main-arik-smiths-projects.vercel.app',
+      'http://fantasy-reel-frontend-git-main-arik-smiths-projects.vercel.app',
+      'https://fantasy-reel-frontend-git-main-arik-smiths-projects.vercel.app:8080',
+      'https://fantasy-reel-frontend-git-main-arik-smiths-projects.vercel.app/path',
+      'null',
+    ]
+
+    for (const origin of origins) {
+      const headers = getCorsHeaders(preflight(origin, null))
+      assertEquals(headers['Access-Control-Allow-Origin'], 'https://fantasyreel.com', origin)
+    }
+  })
+
   await t.step('does not echo an unknown origin', () => {
     const headers = getCorsHeaders(preflight('https://evil.example.com', null))
     assertEquals(headers['Access-Control-Allow-Origin'], 'https://fantasyreel.com')
