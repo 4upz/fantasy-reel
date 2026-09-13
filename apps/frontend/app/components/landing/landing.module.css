@@ -43,6 +43,9 @@
 .ambient::before, .ambient::after {
   content: ''; position: absolute; top: -25%; width: max(100%, 800px); height: 160%;
   transform-origin: 50% 0;
+  opacity: .8;
+  transform: translateX(-50%) rotate(calc(var(--spotlight-direction) * atan2(26vw, 75svh)));
+  animation: spotlightSweep 12s ease-in-out -7s infinite alternate;
   background: conic-gradient(from 164deg at 50% 0%,
     transparent 0deg,
     color-mix(in srgb, var(--color-gold) 3%, transparent) 5deg,
@@ -53,19 +56,12 @@
     transparent 32deg);
   mask-image: radial-gradient(ellipse closest-side, #000 15%, rgb(0 0 0 / .8) 40%, transparent 100%);
 }
-/* Separate timelines and uneven turns keep the beams from moving as a mirrored pair. */
-.ambient::before { left: 24%; opacity: .85; transform: translateX(-50%) rotate(-24deg); animation: spotlightLeft 29s ease-in-out -5s infinite; }
-.ambient::after { left: 76%; opacity: .7; transform: translateX(-50%) rotate(24deg); animation: spotlightRight 43s ease-in-out -19s infinite; }
-@keyframes spotlightLeft {
-  0%, 100% { opacity: .8; transform: translateX(-50%) rotate(-28deg); }
-  38% { opacity: 1; transform: translateX(-50%) rotate(6deg); }
-  72% { opacity: .65; transform: translateX(-50%) rotate(-38deg); }
-}
-@keyframes spotlightRight {
-  0%, 100% { opacity: .7; transform: translateX(-50%) rotate(28deg); }
-  22% { opacity: .9; transform: translateX(-50%) rotate(2deg); }
-  64% { opacity: .6; transform: translateX(-50%) rotate(40deg); }
-  84% { opacity: .8; transform: translateX(-50%) rotate(12deg); }
+/* One clock, mirrored directions. Viewport-based angles keep the crossing on mobile, too. */
+.ambient::before { --spotlight-direction: -1; left: 24%; }
+.ambient::after { --spotlight-direction: 1; left: 76%; }
+@keyframes spotlightSweep {
+  from { transform: translateX(-50%) rotate(calc(var(--spotlight-direction) * -1 * atan2(30vw, 75svh))); }
+  to { transform: translateX(-50%) rotate(calc(var(--spotlight-direction) * atan2(60vw, 75svh))); }
 }
 .heroCopy { text-align: center; max-width: 790px; margin: 0 auto; }
 .eyebrow { color: var(--color-gold); margin-bottom: 22px; }
