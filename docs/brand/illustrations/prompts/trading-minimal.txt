@@ -1,0 +1,16 @@
+Edit the supplied Fantasy Reel trading-page concept. The user's latest choice is a MINIMAL STORYBOOK illustration at a NORMAL EMPTY-STATE GRAPHIC SIZE, centered above the message.
+
+Keep the exact screenshot dimensions, complete signed-in navigation, header, brand mark, account controls, Trading block card, Propose trade button, Available budget $100, trade tabs, and all their typography, wording, positions and colors unchanged.
+
+Replace the oversized wide illustration with a compactly composed version of the same two paper movie cards and short film-strip connector. Preserve its muted storybook palette, warm taupe paper edges, simple moon-and-hill faces, and VERY LIGHT fine paper grain. No hands, scenery, detailed textures, shadows, bright outlines, or additional objects. The two cards should sit close together at gentle opposing angles, connected by one short strip with only a few broad perforations. Retain filled paper forms, not outline line art.
+
+CRITICAL SIZE REQUIREMENT:
+The ENTIRE assembled illustration, both cards AND the connector together, must fit within a bounding box approximately 230 pixels wide and 155 pixels tall on this 1496-pixel-wide screenshot. This is about ONE QUARTER of the current illustration's total width. Do not interpret 230px as the width of EACH card.
+Its TOTAL WIDTH must be LESS THAN the width of the "No pending trades" heading below it.
+Keep lots of plain dark card surface on both sides. This must look like a standard modest empty-state illustration, not a banner or hero.
+Suggested exact placement for the entire assembled artwork: x675–905, y530–685. Do not fill or exceed that area. Keep the tab row and divider where they are.
+
+Move the EXISTING heading "No pending trades" upward to about y715, centered beneath the illustration with around24px of space. Move the support sentence "Have a swap in mind? Propose a trade to another team." beneath it, about y755, retaining the same fonts, sizes and contrast.
+Bring the BOTTOM edge of the empty-state card upward to about y800, keeping roughly40px of padding under the support text. Keep the TOP and left/right edges of the card in their original places. Fill the area below the shortened card with the existing near-black page background.
+
+No style labels, sizing guides, outlines around the illustration, measurement annotations, extra buttons, layout redesign, or changes to other parts of the page. This is a focused size-and-composition refinement: familiar empty-state scale, low-detail storybook character. Make sure the artwork is genuinely small relative to the full panel and narrower than the heading.

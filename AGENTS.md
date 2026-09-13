@@ -99,6 +99,10 @@ meaningful small text on cards/inputs and keep functional metadata at least 12px
 Keep gold interactive accents, existing animations, and `.card`, `.btn-*`,
 `.input`, `.badge-*`, `.alert-*` classes. Reuse the approved logo/icon assets in
 `apps/frontend/public/brand/v1/`; see [brand guidance](docs/brand/README.md).
+For illustration or graphic work, read the canonical
+[illustration guide](docs/brand/illustrations.md): one Storybook family with full
+and minimal detail levels, sized to the placement. Its concepts are references
+for requested work, not instructions to roll illustrations out across screens.
 Use `hooks/useAsyncAction.ts` for async submissions to prevent duplicate requests;
 wrap actions in `useCallback`. Keep both error boundaries in sync with design
 changes. Display “Fantasy Budget” or “Budget”; retain existing `faab` schema/JSON

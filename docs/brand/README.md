@@ -4,6 +4,10 @@ The active Fantasy Reel identity: a gold film-strip speech-bubble mark, outlined
 
 Open [the interactive review](preview.html) to compare five logo treatments, two icon colorways, browser icons at actual size, the complete type scale, and representative league/form specimens. It uses local font files and works without external font services. The [typography guide](typography.md) is the canonical role reference. The specimen's [typography.css](typography.css) imports [the app's role stylesheet](../../apps/frontend/app/typography.css), so the displayed scale stays synchronized with the product.
 
+## Illustrations
+
+The [illustration guide](illustrations.md) documents the selected Storybook family: full scenes for expressive placements and minimal paper illustrations for in-app states, with size chosen separately from detail. It includes the homepage, minimal trading, and original style-board examples, plus generation prompts. These are references for future illustration work; no screen rollout is included.
+
 ## Active combination and alternatives
 
 - [Primary logo](../../apps/frontend/public/brand/v1/logo-dark.svg): gold film-conversation mark with soft-white Bricolage wordmark.
