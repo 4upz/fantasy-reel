@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ChevronDown } from 'lucide-react'
 import MarketingHeader from './components/landing/MarketingHeader'
 import SpotlightPreview from './components/landing/SpotlightPreview'
 import DraftPreviewScene from './components/landing/DraftPreviewScene'
@@ -22,7 +22,7 @@ export default function LandingPage(): React.ReactElement {
       <a href="#main-content" className={styles.skipLink}>Skip to content</a>
       <MarketingHeader transparent />
       <main id="main-content" tabIndex={-1}>
-        <section className={styles.hero} aria-labelledby="hero-title">
+        <section className={styles.hero} aria-labelledby="hero-title" data-hero>
           <div className={styles.heroCopy}>
             <p className={`type-meta ${styles.eyebrow}`}>Fantasy leagues for movie fans</p>
             <h1 id="hero-title" className={`type-hero ${styles.headline}`}>Draft movies.<br />Compete with friends.</h1>
@@ -32,21 +32,27 @@ export default function LandingPage(): React.ReactElement {
               <a href="#how-it-works" className="btn btn-secondary">See how it works</a>
             </div>
           </div>
+          <a href="#how-it-works" className={styles.scrollCue} data-scroll-cue data-testid="hero-scroll-cue">
+            <span className="type-control">How to play</span>
+            <ChevronDown size={20} className={styles.scrollCueIcon} aria-hidden="true" />
+          </a>
         </section>
-        <section id="how-it-works" className={styles.section} aria-labelledby="draft-title" data-scroll-depth>
-          <div className={styles.sectionHeader}>
-            <p className={`type-meta ${styles.sectionNumber}`}><span>01</span> MAKE YOUR PICKS</p>
-            <h2 id="draft-title" className={`type-page ${styles.sectionTitle}`}>Draft night.<br />Everyone’s a critic.</h2>
-            <p className={`type-lead ${styles.sectionIntro}`}>Get your friends together and take turns picking the movies you believe in. That sleeper hit? It could be your season.</p>
-          </div>
-          <SpotlightPreview title="The draft room" width={760} height={352} layout="beside" details={[
-            { label: 'The whole room, in sync', description: 'Follow the draft as picks come in. Everyone sees the board update in real time.' },
-            { label: 'Know when you’re up', description: 'The current turn, round, and pick stay front and center.', focus: 'turn' },
-            { label: 'Think a pick ahead', description: 'See who picks next. The snake draft reverses the order each round.', focus: 'queue' },
-          ]}>
-            <DraftPreviewScene />
-          </SpotlightPreview>
-        </section>
+        <div id="how-it-works" tabIndex={-1}>
+          <section className={styles.section} aria-labelledby="draft-title" data-scroll-depth>
+            <div className={styles.sectionHeader}>
+              <p className={`type-meta ${styles.sectionNumber}`}><span>01</span> MAKE YOUR PICKS</p>
+              <h2 id="draft-title" className={`type-page ${styles.sectionTitle}`}>Draft night.<br />Everyone’s a critic.</h2>
+              <p className={`type-lead ${styles.sectionIntro}`}>Get your friends together and take turns picking the movies you believe in. That sleeper hit? It could be your season.</p>
+            </div>
+            <SpotlightPreview title="The draft room" width={760} height={352} layout="beside" details={[
+              { label: 'The whole room, in sync', description: 'Follow the draft as picks come in. Everyone sees the board update in real time.' },
+              { label: 'Know when you’re up', description: 'The current turn, round, and pick stay front and center.', focus: 'turn' },
+              { label: 'Think a pick ahead', description: 'See who picks next. The snake draft reverses the order each round.', focus: 'queue' },
+            ]}>
+              <DraftPreviewScene />
+            </SpotlightPreview>
+          </section>
+        </div>
         <section className={styles.section} aria-labelledby="season-title" data-scroll-depth>
           <div className={styles.sectionHeader}>
             <p className={`type-meta ${styles.sectionNumber}`}><span>02</span> FOLLOW THE SEASON</p>

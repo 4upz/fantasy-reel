@@ -26,6 +26,9 @@ export default function ScrollDepth({ children, className }: { children: ReactNo
 
     const preference = window.matchMedia('(prefers-reduced-motion: reduce)')
     const sections = Array.from(root.querySelectorAll<HTMLElement>('[data-scroll-depth]'))
+    const hero = root.querySelector<HTMLElement>('[data-hero]')
+    const header = root.querySelector('header')
+    const scrollCue = root.querySelector<HTMLElement>('[data-scroll-cue]')
     let frame = 0
 
     const reset = () => {
@@ -35,6 +38,8 @@ export default function ScrollDepth({ children, className }: { children: ReactNo
         section.style.removeProperty('--scroll-enter')
         section.style.removeProperty('--scroll-exit')
       })
+      scrollCue?.style.removeProperty('opacity')
+      scrollCue?.style.removeProperty('visibility')
     }
 
     const update = () => {
@@ -44,6 +49,12 @@ export default function ScrollDepth({ children, className }: { children: ReactNo
       const maxScroll = Math.max(0, document.documentElement.scrollHeight - height)
       // Batch layout reads before style writes, and never rerender React on scroll.
       const positions = sections.map(section => ({ top: layoutTop(section), height: section.offsetHeight }))
+
+      if (scrollCue) {
+        const fade = ease(clamp(scroll / Math.min(160, height * .2)))
+        scrollCue.style.opacity = (1 - fade).toFixed(4)
+        scrollCue.style.visibility = fade === 1 ? 'hidden' : 'visible'
+      }
 
       sections.forEach((section, index) => {
         const position = positions[index]
@@ -61,13 +72,20 @@ export default function ScrollDepth({ children, className }: { children: ReactNo
       if (!frame && !preference.matches) frame = requestAnimationFrame(update)
     }
     const updatePreference = () => preference.matches ? reset() : schedule()
-    const resizeObserver = new ResizeObserver(schedule)
+    const resize = () => {
+      if (hero && header) {
+        hero.style.setProperty('--hero-header-height', `${header.offsetHeight}px`)
+      }
+      schedule()
+    }
+    const resizeObserver = new ResizeObserver(resize)
     resizeObserver.observe(root)
+    if (header) resizeObserver.observe(header)
     sections.forEach(section => resizeObserver.observe(section))
     window.addEventListener('scroll', schedule, { passive: true })
     window.addEventListener('resize', schedule)
     preference.addEventListener('change', updatePreference)
-    schedule()
+    resize()
 
     return () => {
       window.removeEventListener('scroll', schedule)
@@ -75,6 +93,7 @@ export default function ScrollDepth({ children, className }: { children: ReactNo
       preference.removeEventListener('change', updatePreference)
       resizeObserver.disconnect()
       reset()
+      hero?.style.removeProperty('--hero-header-height')
     }
   }, [])
 
