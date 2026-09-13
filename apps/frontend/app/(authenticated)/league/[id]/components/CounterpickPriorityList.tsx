@@ -12,7 +12,8 @@ interface CounterpickPriorityListProps {
   slots: number
   /** Bidding counterpicks the team already holds. */
   used: number
-  onReorder: (bidIds: string[]) => Promise<{ success: boolean; error?: string }>
+  disabled: boolean
+  onReorder: (bidIds: string[]) => void
 }
 
 /** @design-system League */
@@ -20,6 +21,7 @@ export default function CounterpickPriorityList({
   bids,
   slots,
   used,
+  disabled,
   onReorder,
 }: CounterpickPriorityListProps): React.ReactElement | null {
   const remainingSlots = Math.max(0, slots - used)
@@ -54,7 +56,7 @@ export default function CounterpickPriorityList({
     <PriorityList
       items={items}
       computeFits={computeFits}
-      heading="Counterpick priority"
+      heading="Counterpick bids"
       description={
         remainingSlots > 0
           ? `If more of your bids win than you have slots for, you keep the top ${remainingSlots}.`
@@ -64,6 +66,7 @@ export default function CounterpickPriorityList({
       testId="counterpick-priority-list"
       cutTestId="counterpick-slot-cut-line"
       onReorder={onReorder}
+      disabled={disabled}
     />
   )
 }

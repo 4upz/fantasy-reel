@@ -12,7 +12,8 @@ interface BidPriorityListProps {
   slots: number
   /** Roster slots the team has already filled. */
   used: number
-  onReorder: (bidIds: string[]) => Promise<{ success: boolean; error?: string }>
+  disabled: boolean
+  onReorder: (bidIds: string[]) => void
 }
 
 function hasConditionalDrop(bid: PickupBid): boolean {
@@ -24,6 +25,7 @@ export default function BidPriorityList({
   bids,
   slots,
   used,
+  disabled,
   onReorder,
 }: BidPriorityListProps): React.ReactElement | null {
   const remainingSlots = Math.max(0, slots - used)
@@ -83,7 +85,7 @@ export default function BidPriorityList({
     <PriorityList
       items={items}
       computeFits={computeFits}
-      heading="Bid priority"
+      heading="Pickup bids"
       description={
         remainingSlots > 0
           ? `If more of your bids win than you have room for, you keep the top ${remainingSlots}.`
@@ -93,6 +95,7 @@ export default function BidPriorityList({
       testId="bid-priority-list"
       cutTestId="bid-slot-cut-line"
       onReorder={onReorder}
+      disabled={disabled}
     />
   )
 }

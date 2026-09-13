@@ -1,13 +1,12 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
-import { AlertCircle, Film, Plus, Sparkles, Target, TrendingUp } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { AlertCircle, Film, ListOrdered, Plus, Sparkles, Target, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CounterpickBid, PickupBid } from '@/types'
 import BidCard from './BidCard'
 import CounterpickBidCard from './CounterpickBidCard'
-import BidPriorityList from './BidPriorityList'
-import CounterpickPriorityList from './CounterpickPriorityList'
+import BidPriorityModal from './BidPriorityModal'
 import { groupBy, isMovieBiddable, latestOpenCounterWindow } from './utils'
 import { useBiddingContext } from '../bidding/BiddingContext'
 
@@ -51,6 +50,7 @@ interface UnifiedBidSectionProps {
   titleClassName?: string
   className?: string
   children: React.ReactNode
+  action?: React.ReactNode
 }
 
 function UnifiedBidSection({
@@ -60,10 +60,11 @@ function UnifiedBidSection({
   titleClassName = 'text-foreground',
   className = '',
   children,
+  action,
 }: UnifiedBidSectionProps): React.ReactElement {
   return (
     <div className={`space-y-3 ${className}`}>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {icon}
         <h3 className={`type-panel ${titleClassName}`}>
           {title}
@@ -71,6 +72,7 @@ function UnifiedBidSection({
         <span className="type-body-sm text-foreground-secondary">
           ({count})
         </span>
+        {action && <div className="ml-auto">{action}</div>}
       </div>
       <div className="space-y-3">
         {children}
@@ -81,10 +83,8 @@ function UnifiedBidSection({
 
 export default function ActiveBidsPanel(): React.ReactElement {
   const {
-    league,
     teamId,
     bidding,
-    usedRosterSlots,
     myHoldings,
     biddingCounterpickSlots,
     canPlaceCounterpickBid,
@@ -99,12 +99,14 @@ export default function ActiveBidsPanel(): React.ReactElement {
     myBids,
     counterpickBids,
     myCounterpickBids,
-    biddingCounterpickCount,
     cancelBid,
     cancelCounterpickBid,
-    setBidPriorities,
-    setCounterpickBidPriorities,
   } = bidding
+
+  const [isPriorityModalOpen, setIsPriorityModalOpen] = useState(false)
+  const closePriorityModal = useCallback(() => setIsPriorityModalOpen(false), [])
+  const canEditPriority = myBids.length > 1 ||
+    (biddingCounterpickSlots > 0 && myCounterpickBids.length > 1)
 
   /** Holding id -> title, so a bid can name the movie it would drop. */
   const holdingTitles = useMemo(
@@ -217,6 +219,19 @@ export default function ActiveBidsPanel(): React.ReactElement {
     ))
   }
 
+  const priorityButton = canEditPriority ? (
+    <button
+      type="button"
+      className="btn btn-secondary min-h-11 px-4 py-2"
+      data-testid="edit-bid-priority"
+      aria-haspopup="dialog"
+      onClick={() => setIsPriorityModalOpen(true)}
+    >
+      <ListOrdered className="w-4 h-4 mr-2" aria-hidden="true" />
+      Edit priority
+    </button>
+  ) : null
+
   return (
     <div className="space-y-6" data-testid="active-bids-panel">
       {actionRequiredItems.length > 0 && (
@@ -228,34 +243,14 @@ export default function ActiveBidsPanel(): React.ReactElement {
             </div>
           }
           count={actionRequiredItems.length}
+          action={myActiveItems.length === 0 ? priorityButton : undefined}
           className="animate-fade-in"
         >
           {renderBidList(actionRequiredItems, true)}
         </UnifiedBidSection>
       )}
 
-      {/* Bid priority: which pickups the team keeps if more of its bids win than
-          it has roster room for. Deliberately separate from the counterpick list
-          below -- the two draw on different capacity pools, so ranking them
-          against each other would mean nothing. */}
-      <BidPriorityList
-        bids={myBids}
-        slots={league.total_slots}
-        used={usedRosterSlots}
-        onReorder={setBidPriorities}
-      />
-
-      {/* Counterpick priority: which counterpicks the team keeps if more of its
-          bids win than it has slots for. Only meaningful once counterpicks are
-          enabled and more than one bid is pending. */}
-      {hasCounterpicks && (
-        <CounterpickPriorityList
-          bids={myCounterpickBids}
-          slots={biddingCounterpickSlots}
-          used={biddingCounterpickCount}
-          onReorder={setCounterpickBidPriorities}
-        />
-      )}
+      {isPriorityModalOpen && <BidPriorityModal onClose={closePriorityModal} />}
 
       {myActiveItems.length > 0 && (
         <UnifiedBidSection
@@ -266,6 +261,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
             </div>
           }
           count={myActiveItems.length}
+          action={priorityButton}
         >
           {renderBidList(myActiveItems, true)}
         </UnifiedBidSection>
