@@ -1,4 +1,7 @@
 .page { position: relative; isolation: isolate; }
+.page [data-scroll-reveal] { transition: opacity 560ms ease-out, transform 560ms cubic-bezier(.22, 1, .36, 1); }
+.page [data-scroll-reveal='pending'] { opacity: 0; transform: translateY(16px); }
+.page [data-scroll-reveal]:focus-within { opacity: 1; transform: none; transition: none; }
 .page :global(.btn) { min-height: 44px; transition-property: color, background-color, border-color, box-shadow; }
 .page :is(a, button, summary):focus-visible { outline: 2px solid var(--color-gold); outline-offset: 4px; }
 .page :is(button, summary) { touch-action: manipulation; }
@@ -91,6 +94,7 @@
   .closing { padding: 64px 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .page [data-scroll-reveal] { opacity: 1; transform: none; }
   .ambient::before, .ambient::after { animation: none; }
   .page * { scroll-behavior: auto !important; transition: none !important; }
 }

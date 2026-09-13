@@ -8,6 +8,7 @@ import DraftPreviewScene from './components/landing/DraftPreviewScene'
 import StandingsPreviewScene from './components/landing/StandingsPreviewScene'
 import MovesPreviewScene from './components/landing/MovesPreviewScene'
 import SiteFooter from './components/landing/SiteFooter'
+import ScrollReveal from './components/landing/ScrollReveal'
 import styles from './components/landing/landing.module.css'
 
 export const metadata: Metadata = {
@@ -17,7 +18,7 @@ export const metadata: Metadata = {
 
 export default function LandingPage(): React.ReactElement {
   return (
-    <div className={styles.page}>
+    <ScrollReveal className={styles.page}>
       <div className={styles.ambient} aria-hidden="true" />
       <a href="#main-content" className={styles.skipLink}>Skip to content</a>
       <MarketingHeader transparent />
@@ -32,7 +33,7 @@ export default function LandingPage(): React.ReactElement {
               <Link href="/how-to-play" className="btn btn-secondary">How to play</Link>
             </div>
           </div>
-          <div id="your-roster" className={styles.heroPreview}>
+          <div id="your-roster" className={styles.heroPreview} data-scroll-reveal>
             <SpotlightPreview title="Your roster" width={1088} height={618} details={[
               { label: 'The lineup', description: 'Your movies, your season. Keep your picks and their review status together in one roster.' },
               { label: 'Your budget', description: 'Keep an eye on your Fantasy Budget and remaining drops as you plan your next move.', focus: 'budget' },
@@ -42,7 +43,7 @@ export default function LandingPage(): React.ReactElement {
             </SpotlightPreview>
           </div>
         </section>
-        <section className={styles.section} aria-labelledby="draft-title">
+        <section className={styles.section} aria-labelledby="draft-title" data-scroll-reveal>
           <div className={styles.sectionHeader}>
             <p className={`type-meta ${styles.sectionNumber}`}><span>01</span> MAKE YOUR PICKS</p>
             <h2 id="draft-title" className={`type-page ${styles.sectionTitle}`}>Draft night.<br />Everyone’s a critic.</h2>
@@ -56,7 +57,7 @@ export default function LandingPage(): React.ReactElement {
             <DraftPreviewScene />
           </SpotlightPreview>
         </section>
-        <section className={styles.section} aria-labelledby="season-title">
+        <section className={styles.section} aria-labelledby="season-title" data-scroll-reveal>
           <div className={styles.sectionHeader}>
             <p className={`type-meta ${styles.sectionNumber}`}><span>02</span> FOLLOW THE SEASON</p>
             <h2 id="season-title" className={`type-page ${styles.sectionTitle}`}>The reviews are in.<br />So are the rivalries.</h2>
@@ -70,7 +71,7 @@ export default function LandingPage(): React.ReactElement {
             <StandingsPreviewScene />
           </SpotlightPreview>
         </section>
-        <section className={styles.section} aria-labelledby="moves-title">
+        <section className={styles.section} aria-labelledby="moves-title" data-scroll-reveal>
           <div className={styles.sectionHeader}>
             <p className={`type-meta ${styles.sectionNumber}`}><span>03</span> MAKE YOUR NEXT MOVE</p>
             <h2 id="moves-title" className={`type-page ${styles.sectionTitle}`}>The draft is just<br />the opening scene.</h2>
@@ -84,7 +85,7 @@ export default function LandingPage(): React.ReactElement {
             <MovesPreviewScene />
           </SpotlightPreview>
         </section>
-        <section className={`${styles.section} ${styles.faq}`} aria-labelledby="questions-title">
+        <section className={`${styles.section} ${styles.faq}`} aria-labelledby="questions-title" data-scroll-reveal>
           <div className={styles.sectionHeader}><h2 id="questions-title" className={`type-page ${styles.sectionTitle}`}>Frequently asked questions</h2></div>
           <details>
             <summary className="type-row-title">Do I need to know every movie?</summary>
@@ -100,7 +101,7 @@ export default function LandingPage(): React.ReactElement {
           </details>
           <Link href="/how-to-play" className={`type-control ${styles.guideLink}`}>Read the full How to Play guide <ArrowRight size={16} aria-hidden="true" /></Link>
         </section>
-        <section className={styles.closing} aria-labelledby="closing-title">
+        <section className={styles.closing} aria-labelledby="closing-title" data-scroll-reveal>
           <h2 id="closing-title" className={`type-page ${styles.sectionTitle}`}>Your group chat has opinions.<br />Give them a leaderboard.</h2>
           <p className="type-lead">Bring your friends. Pick your movies. Make it a season.</p>
           <div className={styles.heroActions}>
@@ -110,6 +111,6 @@ export default function LandingPage(): React.ReactElement {
         </section>
       </main>
       <SiteFooter />
-    </div>
+    </ScrollReveal>
   )
 }
