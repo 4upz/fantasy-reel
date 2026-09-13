@@ -277,7 +277,7 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
       <div className="card mx-4 p-8 text-center">
         <div className="mx-auto mb-6 grid max-w-md grid-cols-3 gap-4 sm:grid-cols-5">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="aspect-[2/3] animate-pulse rounded-lg border border-border bg-elevated" />
+            <div key={i} className="aspect-[2/3] rounded-lg border border-border bg-elevated" />
           ))}
         </div>
         <p className="text-foreground-secondary">Your movies will appear here after the draft</p>

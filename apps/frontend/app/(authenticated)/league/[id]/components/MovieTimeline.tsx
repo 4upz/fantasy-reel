@@ -32,7 +32,7 @@ export default function MovieTimeline({ movies, leagueStatus, onMovieClick }: Pr
           {[1, 2, 3, 4, 5].map((i) => (
             <div
               key={i}
-              className="w-24 h-36 rounded-lg bg-elevated border border-border animate-pulse"
+              className="w-24 h-36 rounded-lg bg-elevated border border-border"
             />
           ))}
         </div>

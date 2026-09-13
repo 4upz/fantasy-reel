@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useOptimistic, useTransition } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import LeagueTabLoading from './LeagueTabLoading'
 
 export interface LeagueNavigateEvent {
   preventDefault: () => void
@@ -33,8 +32,8 @@ export function LeagueNavigation({ children }: { children: React.ReactNode }) {
   }, [router, setDestination])
 
   // Next owns completion, redirects, errors and interrupted navigations. Once a
-  // loading boundary commits, the URL names the destination and that boundary
-  // takes over. Until then, show feedback even for an unprefetched route.
+  // loading boundary commits, the URL names the destination. Pending navigation
+  // updates the tab indicator, but does not mean the page's data is unavailable.
   const pendingHref = isPending && destination !== pathname ? destination : null
 
   return (
@@ -48,15 +47,4 @@ export function useLeagueNavigation() {
   const context = useContext(Context)
   if (!context) throw new Error('League navigation must be inside LeagueNavigation')
   return context
-}
-
-export function LeagueTabContent({ children }: { children: React.ReactNode }) {
-  const { pendingHref } = useLeagueNavigation()
-  return (
-    <>
-      {pendingHref && <LeagueTabLoading />}
-      {/* Keep the current tab mounted while Next loads its replacement. */}
-      <div hidden={pendingHref !== null}>{children}</div>
-    </>
-  )
 }
