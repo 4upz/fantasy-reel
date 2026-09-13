@@ -18,6 +18,7 @@ interface UseTradingOptions {
   leagueId: string
   teamId: string
   userId: string
+  rosterRequested: boolean
 }
 
 interface UseTradingReturn {
@@ -28,6 +29,10 @@ interface UseTradingReturn {
   budget: TeamBudget | null
   isLoading: boolean
   error: string | null
+  isBudgetLoading: boolean
+  budgetError: string | null
+  isRosterLoading: boolean
+  rosterError: string | null
   proposeTrade: (
     recipientTeamId: string,
     offeredItems: TradeItems,
@@ -62,6 +67,7 @@ interface UseTradingReturn {
   extendTrade: (tradeOfferId: string, expiresAt: string) => Promise<TradeActionResult>
   refreshTrades: () => Promise<void>
   refreshRoster: () => Promise<void>
+  refreshBudget: () => Promise<void>
 }
 
 /**
@@ -85,7 +91,7 @@ const TRADING_SWR_OPTIONS = {
 const EMPTY_TRADES: TradeOfferWithTeams[] = []
 const EMPTY_MOVIES: TradeableMovie[] = []
 
-export function useTrading({ leagueId, teamId, userId }: UseTradingOptions): UseTradingReturn {
+export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTradingOptions): UseTradingReturn {
   const supabase = useMemo(() => createClient(), [])
 
   // Keep private offers isolated when accounts change in the same browser.
@@ -102,7 +108,7 @@ export function useTrading({ leagueId, teamId, userId }: UseTradingOptions): Use
     TRADING_SWR_OPTIONS
   )
   const rosterQuery = useSWR<TradeableMovie[], Error>(
-    ['league-trade-roster', leagueId, teamId, userId],
+    rosterRequested ? ['league-trade-roster', leagueId, teamId, userId] : null,
     () => fetchTradeableMovies(supabase, teamId),
     TRADING_SWR_OPTIONS
   )
@@ -123,11 +129,10 @@ export function useTrading({ leagueId, teamId, userId }: UseTradingOptions): Use
   const trades = tradesQuery.data ?? EMPTY_TRADES
   const tradeableMovies = rosterQuery.data ?? EMPTY_MOVIES
   const budget = budgetQuery.data ?? null
-  const isLoading = tradesQuery.data === undefined || rosterQuery.data === undefined || budgetQuery.data === undefined
-  const error = tradesQuery.error?.message
-    ?? rosterQuery.error?.message
-    ?? budgetQuery.error?.message
-    ?? null
+  // Offers and the budget rail can render independently. Roster data is only
+  // needed to compose an offer, so don't fetch it until that dialog is opened.
+  const isLoading = tradesQuery.data === undefined
+  const error = tradesQuery.error?.message ?? null
   const { mutate: mutateTrades } = tradesQuery
   const { mutate: mutateRoster } = rosterQuery
   const { mutate: mutateBudget } = budgetQuery
@@ -387,6 +392,10 @@ export function useTrading({ leagueId, teamId, userId }: UseTradingOptions): Use
     budget,
     isLoading,
     error,
+    isBudgetLoading: budgetQuery.data === undefined,
+    budgetError: budgetQuery.error?.message ?? null,
+    isRosterLoading: rosterQuery.data === undefined,
+    rosterError: rosterQuery.error?.message ?? null,
     proposeTrade,
     respondTrade,
     counterTrade,
@@ -396,5 +405,6 @@ export function useTrading({ leagueId, teamId, userId }: UseTradingOptions): Use
     extendTrade,
     refreshTrades: fetchTrades,
     refreshRoster,
+    refreshBudget: fetchBudget,
   }
 }
