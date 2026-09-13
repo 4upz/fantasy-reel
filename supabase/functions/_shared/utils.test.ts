@@ -218,6 +218,48 @@ Deno.test('handleCorsPreflightRequest', async (t) => {
       assertEquals(response, null, `Expected null for ${method} request`)
     }
   })
+
+  await t.step('preserves preview CORS headers through preflight and JSON responses', async () => {
+    const origin = 'https://fantasy-reel-frontend-qsm1jzimx-arik-smiths-projects.vercel.app'
+    const headers = {
+      Origin: origin,
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'authorization, content-type, sentry-trace, baggage',
+    }
+
+    try {
+      const preflight = handleCorsPreflightRequest(new Request('https://example.test/get-trades', {
+        method: 'OPTIONS',
+        headers,
+      }))
+      assertExists(preflight)
+      assertEquals(preflight.status, 200)
+      assertEquals(preflight.headers.get('Access-Control-Allow-Origin'), origin)
+      assertEquals(await preflight.text(), 'ok')
+
+      const request = new Request('https://example.test/get-trades', {
+        method: 'POST',
+        headers: { Origin: origin },
+      })
+      assertEquals(handleCorsPreflightRequest(request), null)
+
+      const success = jsonResponse({ ok: true })
+      const unauthorized = await authenticateRequest(request)
+      if (!(unauthorized instanceof Response)) {
+        throw new Error('Expected the unauthenticated preview request to be rejected')
+      }
+      for (const response of [success, unauthorized]) {
+        assertEquals(response.headers.get('Access-Control-Allow-Origin'), origin)
+        assertEquals(response.headers.get('Access-Control-Allow-Credentials'), 'true')
+        assertEquals(response.headers.get('Vary'), 'Origin, Access-Control-Request-Headers')
+      }
+      assertEquals(await success.json(), { ok: true })
+      assertEquals(unauthorized.status, 401)
+      assertEquals(await unauthorized.json(), { error: 'Unauthorized' })
+    } finally {
+      handleCorsPreflightRequest(createMockRequest())
+    }
+  })
 })
 
 // ============================================================================

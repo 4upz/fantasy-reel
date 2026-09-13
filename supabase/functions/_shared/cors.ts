@@ -4,6 +4,9 @@ const PRODUCTION_ORIGINS = [
   'https://fantasy-reel.vercel.app',
 ]
 
+// Vercel branch aliases and deployment URLs for this project and team only.
+const PREVIEW_ORIGIN = /^https:\/\/fantasy-reel-frontend-[a-z0-9-]+-arik-smiths-projects\.vercel\.app$/
+
 const DEV_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
@@ -42,7 +45,7 @@ function getAllowedOrigin(requestOrigin: string | null): string {
     return PRODUCTION_ORIGINS[0]
   }
 
-  if (PRODUCTION_ORIGINS.includes(requestOrigin)) {
+  if (PRODUCTION_ORIGINS.includes(requestOrigin) || PREVIEW_ORIGIN.test(requestOrigin)) {
     return requestOrigin
   }
 
