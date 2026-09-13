@@ -53,15 +53,19 @@
     transparent 32deg);
   mask-image: radial-gradient(ellipse closest-side, #000 15%, rgb(0 0 0 / .8) 40%, transparent 100%);
 }
-.ambient::before { left: 24%; opacity: .85; transform: translateX(-50%) rotate(-24deg); animation: spotlightLeft 24s ease-in-out -8s infinite alternate; }
-.ambient::after { left: 76%; opacity: .7; transform: translateX(-50%) rotate(24deg); animation: spotlightRight 31s ease-in-out -19s infinite alternate; }
+/* Separate timelines and uneven turns keep the beams from moving as a mirrored pair. */
+.ambient::before { left: 24%; opacity: .85; transform: translateX(-50%) rotate(-24deg); animation: spotlightLeft 29s ease-in-out -5s infinite; }
+.ambient::after { left: 76%; opacity: .7; transform: translateX(-50%) rotate(24deg); animation: spotlightRight 43s ease-in-out -19s infinite; }
 @keyframes spotlightLeft {
-  from { opacity: .65; transform: translateX(-50%) rotate(-34deg); }
-  to { opacity: 1; transform: translateX(-50%) rotate(-6deg); }
+  0%, 100% { opacity: .8; transform: translateX(-50%) rotate(-28deg); }
+  38% { opacity: 1; transform: translateX(-50%) rotate(6deg); }
+  72% { opacity: .65; transform: translateX(-50%) rotate(-38deg); }
 }
 @keyframes spotlightRight {
-  from { opacity: .9; transform: translateX(-50%) rotate(8deg); }
-  to { opacity: .6; transform: translateX(-50%) rotate(38deg); }
+  0%, 100% { opacity: .7; transform: translateX(-50%) rotate(28deg); }
+  22% { opacity: .9; transform: translateX(-50%) rotate(2deg); }
+  64% { opacity: .6; transform: translateX(-50%) rotate(40deg); }
+  84% { opacity: .8; transform: translateX(-50%) rotate(12deg); }
 }
 .heroCopy { text-align: center; max-width: 790px; margin: 0 auto; }
 .eyebrow { color: var(--color-gold); margin-bottom: 22px; }
