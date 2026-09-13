@@ -40,13 +40,12 @@ type DashboardHolding = Pick<
   | 'fantasy_points'
 >
 
-/**
- * What this page's participant query selects. Not `ParticipantWithTeamScore`:
- * that one also promises `team_budgets`, which the dashboard has no use for and
- * does not ask for.
- */
+/** The scores and budget balance selected by this page's participant query. */
 type DashboardParticipant = ParticipantWithProfile & {
-  teams: (Team & { team_scores: TeamScore | null }) | null
+  teams: (Team & {
+    team_scores: TeamScore | null
+    team_budgets: { remaining_budget: number } | null
+  }) | null
 }
 
 export default async function DashboardPage({ params }: PageProps) {
@@ -78,14 +77,15 @@ export default async function DashboardPage({ params }: PageProps) {
   const typedLeague = league as League
 
   const [{ data: participants }, { data: holdingRows }, standings, seasons] = await Promise.all([
-    // Fetch all participants with teams and scores
+    // Fetch all participants with teams, scores, and remaining budgets
     supabase
       .from('league_participants')
       .select(`
         *,
         teams (
           *,
-          team_scores (*)
+          team_scores (*),
+          team_budgets (remaining_budget)
         ),
         profiles (display_name, avatar_url)
       `)
@@ -163,6 +163,9 @@ export default async function DashboardPage({ params }: PageProps) {
       name: team.name,
       avatar_url: team.avatar_url,
       total_points: team.team_scores?.total_points ?? 0,
+      remaining_budget: league.faab_budget > 0
+        ? team.team_budgets?.remaining_budget ?? league.faab_budget
+        : null,
       rank: rankMap.get(team.id) ?? participantsData.length,
       movies,
     }
