@@ -78,6 +78,67 @@ test.describe('League Tabs Navigation', () => {
       await expect(draftTab).toHaveAttribute('aria-current', 'page')
       await expect(overviewTab).not.toHaveAttribute('aria-current', 'page')
     })
+
+    test('active underline slides to the newly selected tab @critical', async ({
+      authedPage,
+      activeLeague,
+    }) => {
+      await authedPage.goto(`/league/${activeLeague.id}/dashboard`)
+      await waitForPageSettle(authedPage)
+
+      const tabNav = authedPage.locator('[data-testid="league-tabs"]')
+      await expect(tabNav).toBeVisible({ timeout: 10000 })
+
+      const indicator = tabNav.locator('[data-testid="league-tab-indicator"]')
+      const overviewTab = tabNav.getByRole('link', { name: 'Overview' })
+      await expect(indicator).toBeVisible()
+
+      await expect
+        .poll(async () => {
+          const [indicatorBox, overviewBox] = await Promise.all([
+            indicator.boundingBox(),
+            overviewTab.boundingBox(),
+          ])
+
+          if (!indicatorBox || !overviewBox) return Number.POSITIVE_INFINITY
+          return Math.max(
+            Math.abs(indicatorBox.x - overviewBox.x),
+            Math.abs(indicatorBox.width - overviewBox.width),
+          )
+        })
+        .toBeLessThan(1)
+
+      await indicator.evaluate((element) => {
+        const handleTransitionStart = (event: Event) => {
+          if ((event as TransitionEvent).propertyName !== 'transform') return
+          element.setAttribute('data-transform-transition-started', 'true')
+          element.removeEventListener('transitionstart', handleTransitionStart)
+        }
+
+        element.setAttribute('data-transform-transition-started', 'false')
+        element.addEventListener('transitionstart', handleTransitionStart)
+      })
+
+      const rosterTab = tabNav.getByRole('link', { name: 'Roster' })
+      await rosterTab.click()
+      await authedPage.waitForURL(`**/league/${activeLeague.id}/roster`)
+
+      await expect(indicator).toHaveAttribute('data-transform-transition-started', 'true')
+      await expect
+        .poll(async () => {
+          const [indicatorBox, rosterBox] = await Promise.all([
+            indicator.boundingBox(),
+            rosterTab.boundingBox(),
+          ])
+
+          if (!indicatorBox || !rosterBox) return Number.POSITIVE_INFINITY
+          return Math.max(
+            Math.abs(indicatorBox.x - rosterBox.x),
+            Math.abs(indicatorBox.width - rosterBox.width),
+          )
+        })
+        .toBeLessThan(1)
+    })
   })
 
   test.describe('P1 - Important', () => {
