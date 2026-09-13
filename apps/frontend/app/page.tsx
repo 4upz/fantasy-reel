@@ -85,7 +85,7 @@ export default function LandingPage(): React.ReactElement {
           </SpotlightPreview>
         </section>
         <section className={`${styles.section} ${styles.faq}`} aria-labelledby="questions-title">
-          <div className={styles.sectionHeader}><h2 id="questions-title" className={`type-page ${styles.sectionTitle}`}>Before the opening credits.</h2></div>
+          <div className={styles.sectionHeader}><h2 id="questions-title" className={`type-page ${styles.sectionTitle}`}>Frequently asked questions</h2></div>
           <details>
             <summary className="type-row-title">Do I need to know every movie?</summary>
             <p className="type-body">Just bring your taste. Explore upcoming releases, make your picks, and discover new movies along the way.</p>
