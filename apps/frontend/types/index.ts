@@ -641,6 +641,8 @@ export interface DashboardTeam {
   name: string
   avatar_url: string | null
   total_points: number
+  /** Null when the league does not use a Fantasy Budget. */
+  remaining_budget: number | null
   rank: number
   movies: MovieTimelineItem[]
 }

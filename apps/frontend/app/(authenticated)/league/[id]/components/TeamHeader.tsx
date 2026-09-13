@@ -10,7 +10,7 @@ interface Props {
 }
 
 /**
- * The overview's opening line: who you are, where you sit, what you have scored.
+ * The overview's opening line: team, rank, points, and remaining Fantasy Budget.
  * Deliberately not a card - the "next up" hero below it is the thing meant to
  * catch the eye, and two stacked panels would fight over that.
  * @design-system League
@@ -45,13 +45,25 @@ export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }:
         </p>
       </div>
 
-      <div className="flex-none text-right">
-        <div
-          className={`type-number-lg ${isPositive ? 'text-gold' : 'text-crimson'}`}
-        >
-          {formatFantasyPoints(team.total_points)}
+      <div className="flex flex-none items-center gap-4 text-right sm:gap-5">
+        <div data-testid="team-points">
+          <div
+            className={`type-number-lg ${isPositive ? 'text-gold' : 'text-crimson'}`}
+          >
+            {formatFantasyPoints(team.total_points)}
+          </div>
+          <div className="type-meta mt-0.5 text-foreground-secondary">Points</div>
         </div>
-        <div className="type-meta mt-0.5 text-foreground-secondary">Points</div>
+        {team.remaining_budget !== null && (
+          <div className="border-l border-border pl-4 sm:pl-5" data-testid="team-budget">
+            <div
+              className={`type-number-lg ${team.remaining_budget > 0 ? 'text-gold' : 'text-foreground-secondary'}`}
+            >
+              ${team.remaining_budget}
+            </div>
+            <div className="type-meta mt-0.5 text-foreground-secondary">Budget</div>
+          </div>
+        )}
       </div>
     </div>
   )
