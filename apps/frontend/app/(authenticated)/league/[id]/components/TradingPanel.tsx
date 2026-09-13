@@ -11,6 +11,7 @@ import type {
 } from '@/types'
 import type { ExpiryBounds } from '@/utils/tradeExpiry'
 import TradeOfferCard from './TradeOfferCard'
+import type { TradeComposerState } from './TradeComposerLoading'
 
 interface Props {
   team: Team
@@ -23,6 +24,10 @@ interface Props {
   budget: TeamBudget | null
   isOwner: boolean
   isLoading: boolean
+  hasTradesError: boolean
+  isBudgetLoading: boolean
+  budgetError: string | null
+  composerState: TradeComposerState
   /** The league's offer-window rules, on their way to each card's modals. */
   expiryBounds: ExpiryBounds
   onProposeTrade: () => void
@@ -63,6 +68,10 @@ export default function TradingPanel({
   budget,
   isOwner,
   isLoading,
+  hasTradesError,
+  isBudgetLoading,
+  budgetError,
+  composerState,
   expiryBounds,
   onProposeTrade,
   onRespondTrade,
@@ -132,7 +141,6 @@ export default function TradingPanel({
             )}
             <button
               onClick={onProposeTrade}
-              disabled={isLoading}
               className="btn btn-primary"
               aria-label="Propose a new trade"
               data-testid="propose-trade-button"
@@ -143,17 +151,17 @@ export default function TradingPanel({
         </div>
 
         {/* Budget display */}
-        {(budget || isLoading) && (
-          <div className="mt-4 pt-4 border-t border-border">
-            <p className="type-body-sm text-foreground-secondary">
-              Available budget: {isLoading ? (
-                <span className="inline-block h-5 w-14 skeleton rounded align-middle" role="status" aria-label="Loading budget" />
-              ) : budget && (
-                <span className="type-number text-gold" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
-              )}
-            </p>
-          </div>
-        )}
+        <div className="mt-4 pt-4 border-t border-border">
+          <p className="type-body-sm text-foreground-secondary">
+            Available budget: {budget ? (
+              <span className="type-number text-gold" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
+            ) : isBudgetLoading && !budgetError ? (
+              <span className="inline-block h-5 w-14 skeleton rounded align-middle" role="status" aria-label="Loading budget" />
+            ) : (
+              <span>Unavailable</span>
+            )}
+          </p>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -200,9 +208,9 @@ export default function TradingPanel({
           role="tabpanel"
           id={`trade-panel-${activeTab}`}
           aria-labelledby={`trade-tab-${activeTab}`}
-          aria-busy={isLoading}
+          aria-busy={isLoading && !hasTradesError}
         >
-          {isLoading ? (
+          {isLoading && hasTradesError ? null : isLoading ? (
             <div className="space-y-4" role="status" aria-label="Loading trades" data-testid="trading-loading">
               <span className="sr-only">Loading trades...</span>
               {[0, 1].map((index) => (
@@ -239,6 +247,7 @@ export default function TradingPanel({
                   otherTeams={otherTeams}
                   tradeableMovies={tradeableMovies}
                   budget={budget}
+                  composerState={composerState}
                   expiryBounds={expiryBounds}
                   onRespond={onRespondTrade}
                   onCounter={onCounterTrade}

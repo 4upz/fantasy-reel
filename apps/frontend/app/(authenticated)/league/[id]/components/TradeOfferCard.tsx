@@ -28,6 +28,7 @@ import {
 } from '@/utils/tradeExpiry'
 import CounterpickMark from './CounterpickMark'
 import TradeItemsSection from './TradeItemsSection'
+import TradeComposerLoading, { type TradeComposerState } from './TradeComposerLoading'
 
 interface Props {
   trade: TradeOfferWithTeams
@@ -37,6 +38,7 @@ interface Props {
   otherTeams: TeamWithOwner[]
   tradeableMovies: TradeableMovie[]
   budget: TeamBudget | null
+  composerState: TradeComposerState
   /** The league's offer-window rules, for the counter and extend modals. */
   expiryBounds: ExpiryBounds
   onRespond: (
@@ -143,6 +145,7 @@ export default function TradeOfferCard(props: Props) {
     otherTeams,
     tradeableMovies,
     budget,
+    composerState,
     expiryBounds,
     onRespond,
     onCounter,
@@ -439,7 +442,10 @@ export default function TradeOfferCard(props: Props) {
                 {pendingAction === 'accept' ? 'Accepting...' : 'Accept'}
               </button>
               <button
-                onClick={() => setShowCounterModal(true)}
+                onClick={() => {
+                  composerState.onOpen()
+                  setShowCounterModal(true)
+                }}
                 disabled={isLoading}
                 className="btn btn-secondary"
                 aria-label="Counter trade offer"
@@ -513,7 +519,9 @@ export default function TradeOfferCard(props: Props) {
       )}
 
       {/* Counter Trade Modal */}
-      {showCounterModal && (
+      {showCounterModal && (composerState.isLoading || composerState.error ? (
+        <TradeComposerLoading state={composerState} onClose={() => setShowCounterModal(false)} />
+      ) : (
         <CounterTradeModal
           trade={trade}
           currentTeamId={currentTeamId}
@@ -531,7 +539,7 @@ export default function TradeOfferCard(props: Props) {
             return result
           }}
         />
-      )}
+      ))}
 
       {/* Veto Modal */}
       {showVetoModal && (
@@ -645,7 +653,8 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
     existingRecipientItems.movies.forEach((m) => ids.add(m.source_id))
     return ids
   })
-  const [offeredBudget, setOfferedBudget] = useState(existingRecipientItems.faab || 0)
+  const [offeredBudgetInput, setOfferedBudget] = useState(existingRecipientItems.faab || 0)
+  const offeredBudget = budget ? offeredBudgetInput : 0
 
   const [requestedMovies, setRequestedMovies] = useState<Set<string>>(() => {
     const ids = new Set<string>()
@@ -803,13 +812,16 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               invalidIds={invalidSourceIds}
             />
             <div className="mt-3">
-              <label htmlFor="counter-offered-budget" className="type-label text-foreground-secondary">Budget (max ${budget?.remaining_budget ?? 0})</label>
+              <label htmlFor="counter-offered-budget" className="type-label text-foreground-secondary">
+                {budget ? `Budget (max $${budget.remaining_budget})` : 'Budget unavailable'}
+              </label>
               <input
                 id="counter-offered-budget"
                 type="number"
                 min={0}
-                max={budget?.remaining_budget ?? 0}
+                max={budget?.remaining_budget}
                 value={offeredBudget}
+                disabled={!budget}
                 onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
                 className="type-input type-numeric input mt-1 w-24"
               />
