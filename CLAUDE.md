@@ -216,6 +216,8 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 
 The app uses **Cinematic Dark** with the warmth and personality of an independent cinema: a charcoal canvas, matte gold film-conversation mark, expressive headings, and clear gameplay information. [The typography guide](docs/brand/typography.md) is the canonical scale and role reference; [brand guidance](docs/brand/README.md) covers approved logos and icons.
 
+For illustration and graphic work, follow the canonical [illustration guide](docs/brand/illustrations.md). It records the selected Storybook family, full and minimal detail levels, placement guidance, and concept examples. The concepts are references for requested work, not a screen rollout plan.
+
 ### Design Tokens (defined in `globals.css` via Tailwind v4 `@theme`)
 
 **Colors:**
