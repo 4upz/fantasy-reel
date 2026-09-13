@@ -30,15 +30,15 @@
 .scrollCue { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; display: inline-flex; flex-direction: column; align-items: center; gap: 4px; min-height: 44px; padding: 8px 16px; border-radius: 8px; color: var(--color-foreground-secondary); transform: translateX(-50%); }
 .scrollCue:hover { color: var(--color-gold); }
 .scrollCue:focus-visible { opacity: 1 !important; visibility: visible !important; }
-.scrollCueIcon { color: var(--color-gold); animation: scrollCuePulse 2.4s ease-in-out .8s 2; }
+.scrollCueIcon { color: var(--color-gold); filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-gold) 65%, transparent)); animation: scrollCuePulse 3.6s ease-in-out infinite; }
 .scrollCue:hover .scrollCueIcon { animation-play-state: paused; }
-@keyframes scrollCuePulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
-.ambient { position: absolute; z-index: -1; inset: 0 0 auto; height: min(100%, 960px); overflow: hidden; pointer-events: none; mask-image: linear-gradient(to bottom, #000, rgb(0 0 0 / .7) 18%, transparent 45%); }
-.ambient::before, .ambient::after { content: ''; position: absolute; width: min(1100px, 135vw); height: 720px; left: calc(50% - min(550px, 67.5vw)); top: -180px; }
-.ambient::before { background: radial-gradient(ellipse, rgb(201 162 39 / .14), transparent 67%); animation: goldArrival 4s ease-out both; }
-.ambient::after { background: radial-gradient(ellipse at 65% 55%, rgb(145 98 51 / .09), transparent 58%); animation: warmArrival 4.4s ease-out both; }
-@keyframes goldArrival { from { opacity: .3; transform: translate(-7%, -7%) scale(.94); } to { opacity: 1; transform: translate(0, 0) scale(1); } }
-@keyframes warmArrival { from { opacity: 0; transform: translate(9%, 5%); } to { opacity: 1; transform: translate(0, 0); } }
+@keyframes scrollCuePulse { 0%, 100% { opacity: .55; transform: translateY(0); } 50% { opacity: 1; transform: translateY(3px); } }
+.ambient { position: absolute; z-index: -1; inset: 0 0 auto; height: 100svh; overflow: hidden; pointer-events: none; mask-image: linear-gradient(to bottom, #000 65%, transparent); }
+.ambient::before, .ambient::after { content: ''; position: absolute; width: min(1400px, 160vw); height: 120%; left: calc(50% - min(700px, 80vw)); top: -18%; }
+.ambient::before { background: radial-gradient(ellipse at 40% 45%, rgb(201 162 39 / .22), rgb(201 162 39 / .065) 40%, transparent 68%); animation: goldDrift 24s ease-in-out infinite alternate; }
+.ambient::after { background: radial-gradient(ellipse at 65% 60%, rgb(145 98 51 / .16), transparent 60%); animation: warmDrift 32s ease-in-out infinite alternate; }
+@keyframes goldDrift { from { opacity: .7; transform: translate(-5%, -3%) scale(.96); } to { opacity: 1; transform: translate(6%, 4%) scale(1.06); } }
+@keyframes warmDrift { from { opacity: .65; transform: translate(6%, 3%); } to { opacity: 1; transform: translate(-5%, -4%); } }
 .heroCopy { text-align: center; max-width: 790px; margin: 0 auto; }
 .eyebrow { color: var(--color-gold); margin-bottom: 22px; }
 .headline { font-size: clamp(44px, 6.5vw, 82px); line-height: 1.02; letter-spacing: -.045em; text-wrap: balance; }
