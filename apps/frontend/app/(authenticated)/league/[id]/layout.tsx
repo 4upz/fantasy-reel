@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedUser, getCachedLeague, getCachedActiveParticipant, getCachedParticipantCount } from '@/utils/supabase/cached'
@@ -7,7 +8,8 @@ import LeagueSwitcher from './components/LeagueSwitcher'
 import SeasonSwitcher from './components/SeasonSwitcher'
 import LeagueTabs from './components/LeagueTabs'
 import LeagueBottomNav from './components/LeagueBottomNav'
-import { LeagueNavigation, LeagueTabContent } from './components/LeagueNavigation'
+import { LeagueNavigation } from './components/LeagueNavigation'
+import LeaguePageLoading from './components/LeaguePageLoading'
 import type { League } from '@/types'
 
 interface LayoutProps {
@@ -109,7 +111,11 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
 
         {/* pb clears the fixed bottom bar on mobile */}
         <div className="mx-auto max-w-6xl px-4 pt-3.5 pb-[110px] sm:px-6 lg:px-8 lg:pt-0 lg:pb-6">
-          <LeagueTabContent>{children}</LeagueTabContent>
+          {/* Keep this boundary across tabs so transitions retain revealed data.
+              A loading.tsx boundary would reset on every destination change. */}
+          <Suspense fallback={<LeaguePageLoading />}>
+            {children}
+          </Suspense>
         </div>
 
         <LeagueBottomNav league={typedLeague} isOwner={isOwner} seasonCount={seasons.length} />

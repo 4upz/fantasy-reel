@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test'
 import { test, expect } from '../../fixtures/league.fixture'
 import { createTeamBudget, getAdminClient, getTeamId } from '../../helpers/supabase.helper'
 
@@ -7,7 +8,33 @@ function deferred() {
   return { promise, resolve }
 }
 
-test('selects the destination and shows glimmers before a slow tab response arrives', async ({ authedPage: page, activeLeague }) => {
+async function expectNoGlimmersDuring(page: Page, navigate: () => Promise<void>, selector = '[data-testid="league-tab-loading"]') {
+  // Final-state assertions miss glimmers that mount and disappear during a fast
+  // cached navigation. Observe insertions for the entire transition instead.
+  const observation = await page.evaluateHandle((selector) => {
+    const state = { count: document.querySelectorAll(selector).length }
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && (node.matches(selector) || node.querySelector(selector))) {
+            state.count += 1
+          }
+        }
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    return { state, observer }
+  }, selector)
+  try {
+    await navigate()
+    expect(await observation.evaluate(({ state }) => state.count), 'Navigation should never insert a loading glimmer').toBe(0)
+  } finally {
+    await observation.evaluate(({ observer }) => observer.disconnect())
+    await observation.dispose()
+  }
+}
+
+test('selects the destination and retains available content before a slow tab response arrives', async ({ authedPage: page, activeLeague }) => {
   const response = deferred()
   await page.route(`**/league/${activeLeague.id}/trading?*`, async (route) => {
     await response.promise
@@ -18,25 +45,49 @@ test('selects the destination and shows glimmers before a slow tab response arri
 
   const tab = page.getByTestId('league-tabs').getByRole('link', { name: 'Trading' })
   try {
-    await tab.click()
-    await expect(tab).toHaveAttribute('aria-current', 'page', { timeout: 1000 })
-    await expect(page.getByTestId('league-tab-loading')).toBeVisible({ timeout: 1000 })
-    await expect(page.getByTestId('team-header')).not.toBeVisible()
+    await expectNoGlimmersDuring(page, async () => {
+      await tab.click()
+      await expect(tab).toHaveAttribute('aria-current', 'page', { timeout: 1000 })
+      await expect(tab).toHaveAttribute('aria-busy', 'true')
+      await expect(page.getByTestId('team-header')).toBeVisible()
+      await expect(page.getByTestId('league-tab-loading')).not.toBeVisible()
+    })
   } finally {
     response.resolve()
   }
   await expect(page.getByTestId('trading-panel')).toBeVisible()
-  await expect(page.getByTestId('league-tab-loading')).not.toBeVisible()
-  await page.goBack()
-  await expect(page.getByTestId('team-header')).toBeVisible()
-  await expect(page.getByTestId('league-tabs').getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page')
-  await page.goForward()
-  await expect(page.getByTestId('trading-panel')).toBeVisible()
-  await expect(tab).toHaveAttribute('aria-current', 'page')
+  await expect(tab).not.toHaveAttribute('aria-busy', 'true')
   await expect(page.getByTestId('league-tab-loading')).not.toBeVisible()
 })
 
-test('mobile More closes immediately while its destination loads', async ({ authedPage: page, activeLeague }) => {
+test('cached tabs and browser history never flash route glimmers', async ({ authedPage: page, activeLeague }) => {
+  await page.goto(`/league/${activeLeague.id}/dashboard`)
+  await expect(page.getByTestId('team-header')).toBeVisible()
+  const nav = page.getByTestId('league-tabs')
+  const trading = nav.getByRole('link', { name: 'Trading' })
+  const overview = nav.getByRole('link', { name: 'Overview' })
+  await trading.click()
+  await expect(page.getByTestId('trading-panel')).toBeVisible()
+  await expect(trading).not.toHaveAttribute('aria-busy', 'true')
+
+  await expectNoGlimmersDuring(page, async () => {
+    await overview.click()
+    await expect(page.getByTestId('team-header')).toBeVisible()
+    await expect(overview).toHaveAttribute('aria-current', 'page')
+    await expect(overview).not.toHaveAttribute('aria-busy', 'true')
+    await trading.click()
+    await expect(page.getByTestId('trading-panel')).toBeVisible()
+    await expect(trading).not.toHaveAttribute('aria-busy', 'true')
+    await page.goBack()
+    await expect(page.getByTestId('team-header')).toBeVisible()
+    await expect(overview).toHaveAttribute('aria-current', 'page')
+    await page.goForward()
+    await expect(page.getByTestId('trading-panel')).toBeVisible()
+    await expect(trading).toHaveAttribute('aria-current', 'page')
+  })
+})
+
+test('mobile More closes immediately and retains available content while its destination loads', async ({ authedPage: page, activeLeague }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const response = deferred()
   await page.route(`**/league/${activeLeague.id}/trading?*`, async (route) => {
@@ -48,9 +99,12 @@ test('mobile More closes immediately while its destination loads', async ({ auth
   await page.getByTestId('league-bottom-nav').getByRole('button', { name: 'More' }).click()
   const sheet = page.getByRole('dialog', { name: 'More league pages' })
   try {
-    await sheet.getByRole('link', { name: 'Trading' }).click()
-    await expect(sheet).not.toBeVisible({ timeout: 1000 })
-    await expect(page.getByTestId('league-tab-loading')).toBeVisible({ timeout: 1000 })
+    await expectNoGlimmersDuring(page, async () => {
+      await sheet.getByRole('link', { name: 'Trading' }).click()
+      await expect(sheet).not.toBeVisible({ timeout: 1000 })
+      await expect(page.getByTestId('team-header')).toBeVisible()
+      await expect(page.getByTestId('league-tab-loading')).not.toBeVisible()
+    })
   } finally {
     response.resolve()
   }
@@ -70,7 +124,9 @@ test('a newer tab selection wins while the previous response is delayed', async 
   const standings = nav.getByRole('link', { name: 'Standings' })
   try {
     await nav.getByRole('link', { name: 'Trading' }).click()
-    await expect(page.getByTestId('league-tab-loading')).toBeVisible({ timeout: 1000 })
+    await expect(nav.getByRole('link', { name: 'Trading' })).toHaveAttribute('aria-busy', 'true')
+    await expect(page.getByTestId('team-header')).toBeVisible()
+    await expect(page.getByTestId('league-tab-loading')).not.toBeVisible()
     await standings.click()
     await expect(standings).toHaveAttribute('aria-current', 'page', { timeout: 1000 })
   } finally {
@@ -130,9 +186,11 @@ test('bidding retains the known balance when returning to the tab', async ({ aut
     await route.continue()
   })
   try {
-    await nav.getByRole('link', { name: 'Bidding' }).click()
-    await expect(page.getByTestId('bidding-panel')).toContainText('$37')
-    await expect(page.getByTestId('bidding-panel')).not.toContainText('$100')
+    await expectNoGlimmersDuring(page, async () => {
+      await nav.getByRole('link', { name: 'Bidding' }).click()
+      await expect(page.getByTestId('bidding-panel')).toContainText('$37')
+      await expect(page.getByTestId('bidding-panel')).not.toContainText('$100')
+    }, '[data-testid="league-tab-loading"], [data-testid="bidding-budget-loading"]')
   } finally {
     budget.resolve()
   }
