@@ -60,8 +60,8 @@ export default function LandingPage(): React.ReactElement {
             <p className={`type-lead ${styles.sectionIntro}`}>As your movies arrive, their Rotten Tomatoes scores become fantasy points. Better reviews, more to brag about.</p>
           </div>
           <SpotlightPreview title="Roster and movie scores" width={1088} height={640} layout="beside" details={[
-            { label: 'The lineup', description: 'A few familiar picks from 2023, playing for Vintage Vibes, our example team. Every movie’s reviews shape the season.' },
-            { label: 'A pick that pays off', description: 'You backed Barbie. Its 88% Rotten Tomatoes score brings home 28 fantasy points. Good taste pays off.', focus: 'reviews' },
+            { label: 'Your roster and budget', description: 'After the draft, you have a starting roster to follow all season and a Fantasy Budget to bid on more movies. There’s room to grow.' },
+            { label: 'How your picks score', description: 'Each pick stays Pending until its Rotten Tomatoes critic score arrives. That score determines whether you earn or lose fantasy points.', focus: 'reviews' },
           ]}>
             <RosterPreviewScene />
           </SpotlightPreview>
