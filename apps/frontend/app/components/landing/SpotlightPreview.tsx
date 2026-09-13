@@ -54,7 +54,16 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
     const matrix = new DOMMatrix(getComputedStyle(camera).transform)
     const oldScale = (Number(getComputedStyle(canvas).zoom) || 1) * matrix.a
     const viewportRect = viewport.getBoundingClientRect()
-    const oldSpotlight = spotlight.getBoundingClientRect()
+    // Scroll depth scales the whole scene; camera coordinates stay local to it.
+    const viewportScale = viewportRect.width / vw
+    const renderedScale = oldScale * viewportScale
+    const spotlightRect = spotlight.getBoundingClientRect()
+    const oldSpotlight = {
+      left: (spotlightRect.left - viewportRect.left) / viewportScale,
+      top: (spotlightRect.top - viewportRect.top) / viewportScale,
+      width: spotlightRect.width / viewportScale,
+      height: spotlightRect.height / viewportScale,
+    }
     const oldOpacity = getComputedStyle(spotlight).opacity
     const beamStyle = getComputedStyle(beam)
     const oldBeamOpacity = beamStyle.opacity
@@ -65,10 +74,10 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
     const canvasRect = canvas.getBoundingClientRect()
     const targetRect = target?.getBoundingClientRect()
     const area = targetRect ? {
-      x: (targetRect.left - canvasRect.left) / oldScale,
-      y: (targetRect.top - canvasRect.top) / oldScale,
-      width: targetRect.width / oldScale,
-      height: targetRect.height / oldScale,
+      x: (targetRect.left - canvasRect.left) / renderedScale,
+      y: (targetRect.top - canvasRect.top) / renderedScale,
+      width: targetRect.width / renderedScale,
+      height: targetRect.height / renderedScale,
     } : null
 
     let scale = Math.min(vw / width, vh / height)
@@ -119,7 +128,7 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
       })
       if (shouldAnimate) {
         const previous = oldOpacity !== '0'
-          ? `translate(${oldSpotlight.left - viewportRect.left - left}px, ${oldSpotlight.top - viewportRect.top - top}px) scale(${oldSpotlight.width / sw}, ${oldSpotlight.height / sh})`
+          ? `translate(${oldSpotlight.left - left}px, ${oldSpotlight.top - top}px) scale(${oldSpotlight.width / sw}, ${oldSpotlight.height / sh})`
           : 'translate(-24px, -12px) scale(.88)'
         animations.current.push(spotlight.animate([
           { opacity: oldOpacity, transform: previous },
@@ -138,8 +147,8 @@ function PreviewSurface({ width, height, focus, children }: SurfaceProps) {
     } else {
       // Freeze any interrupted sweep before fading back to the overview.
       Object.assign(spotlight.style, {
-        left: `${oldSpotlight.left - viewportRect.left}px`,
-        top: `${oldSpotlight.top - viewportRect.top}px`,
+        left: `${oldSpotlight.left}px`,
+        top: `${oldSpotlight.top}px`,
         width: `${oldSpotlight.width}px`, height: `${oldSpotlight.height}px`, opacity: '0',
       })
       beam.style.transform = oldBeamTransform

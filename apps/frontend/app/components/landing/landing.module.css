@@ -1,7 +1,13 @@
 .page { position: relative; isolation: isolate; }
-.page [data-scroll-reveal] { transition: opacity 560ms ease-out, transform 560ms cubic-bezier(.22, 1, .36, 1); }
-.page [data-scroll-reveal='pending'] { opacity: 0; transform: translateY(16px); }
-.page [data-scroll-reveal]:focus-within { opacity: 1; transform: none; transition: none; }
+.page [data-scroll-depth] {
+  --scroll-enter: 1;
+  --scroll-exit: 0;
+  --scroll-distance: 96px;
+  opacity: calc(.22 + .78 * var(--scroll-enter) - .55 * var(--scroll-exit));
+  transform: translate3d(0, calc((1 - var(--scroll-enter)) * var(--scroll-distance) - var(--scroll-exit) * 32px), 0) scale(calc(.94 + .06 * var(--scroll-enter) - .03 * var(--scroll-exit)));
+  transform-origin: 50% 0;
+}
+.page [data-scroll-depth]:has(:focus-visible) { opacity: 1; transform: none; }
 .page :global(.btn) { min-height: 44px; transition-property: color, background-color, border-color, box-shadow; }
 .page :is(a, button, summary):focus-visible { outline: 2px solid var(--color-gold); outline-offset: 4px; }
 .page :is(button, summary) { touch-action: manipulation; }
@@ -80,6 +86,7 @@
   .previewBeside > .previewNotes .caption { position: static; width: auto; height: auto; min-height: 40px; padding: 0; margin: 12px auto 0; overflow: visible; clip-path: none; white-space: normal; }
 }
 @media (max-width: 600px) {
+  .page [data-scroll-depth] { --scroll-distance: 56px; }
   .hero { padding: 56px 16px 60px; }
   .eyebrow { margin-bottom: 18px; }
   .heroPreview { margin-top: 40px; }
@@ -94,7 +101,7 @@
   .closing { padding: 64px 20px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .page [data-scroll-reveal] { opacity: 1; transform: none; }
+  .page [data-scroll-depth] { opacity: 1; transform: none; }
   .ambient::before, .ambient::after { animation: none; }
   .page * { scroll-behavior: auto !important; transition: none !important; }
 }
