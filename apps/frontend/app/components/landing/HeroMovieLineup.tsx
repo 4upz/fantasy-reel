@@ -13,7 +13,7 @@ export default function HeroMovieLineup() {
   return (
     <figure
       className={styles.lineup}
-      aria-label="Example movies from 2023 with Rotten Tomatoes critic scores"
+      aria-label="Example movies from 2026 with Rotten Tomatoes critic scores"
       data-testid="hero-movie-lineup"
     >
       <div className={styles.posters}>
@@ -32,7 +32,7 @@ export default function HeroMovieLineup() {
               alt=""
               width={260}
               height={390}
-              sizes="(max-width: 480px) 33vw, 150px"
+              unoptimized
               loading="eager"
             />
             <span className={`type-numeric ${styles.score}`} aria-hidden="true">
@@ -45,7 +45,7 @@ export default function HeroMovieLineup() {
       <figcaption className={`type-meta ${styles.caption}`} aria-live="polite" aria-atomic="true">
         <a href={selectedMovie.source} target="_blank" rel="noopener noreferrer">
           {selectedMovie.title}
-          <span className="sr-only"> — Rotten Tomatoes score for this 2023 example (opens in a new tab)</span>
+          <span className="sr-only"> — Rotten Tomatoes score for this 2026 example (opens in a new tab)</span>
         </a>
       </figcaption>
     </figure>
