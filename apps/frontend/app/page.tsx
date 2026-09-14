@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ArrowRight, ChevronDown } from 'lucide-react'
 import MarketingHeader from './components/landing/MarketingHeader'
+import HeroMovieLineup from './components/landing/HeroMovieLineup'
 import SpotlightPreview from './components/landing/SpotlightPreview'
 import DraftPreviewScene from './components/landing/DraftPreviewScene'
 import RosterPreviewScene from './components/landing/RosterPreviewScene'
@@ -31,6 +32,7 @@ export default function LandingPage(): React.ReactElement {
               <Link href="/signup" className="btn btn-primary">Start a league <ArrowRight size={16} className="ml-2" aria-hidden="true" /></Link>
               <a href="#how-it-works" className="btn btn-secondary">See how it works</a>
             </div>
+            <HeroMovieLineup />
           </div>
           <a href="#how-it-works" className={styles.scrollCue} data-scroll-cue data-testid="hero-scroll-cue">
             <span className="type-control">How to play</span>

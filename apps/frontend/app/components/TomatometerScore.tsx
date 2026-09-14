@@ -113,7 +113,7 @@ const BODY_BOTTOM = 18.2
  * A tomato whose body fills from the bottom to `fill` percent. Passing null
  * leaves the body hollow, for a movie with no Tomatometer yet.
  */
-function TomatoMark({ fill, className }: { fill: number | null; className?: string }) {
+export function TomatoMark({ fill, className }: { fill: number | null; className?: string }) {
   // useId can emit colons, which browsers reject inside url(#...) references.
   const clipId = `tomato-${useId().replace(/:/g, '')}`
   const fraction = Math.min(Math.max(fill ?? 0, 0), 100) / 100
