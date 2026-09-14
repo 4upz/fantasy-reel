@@ -67,7 +67,7 @@ export default function LandingPage(): React.ReactElement {
           ]}>
             <RosterPreviewScene />
           </SpotlightPreview>
-          <p className={`type-body-sm ${styles.exampleNote}`}>Real 2023 movies and saved Rotten Tomatoes scores. The team and budget are fictional.</p>
+          <p className={`type-body-sm ${styles.exampleNote}`}>Real 2026 movies and saved Rotten Tomatoes scores. The team and budget are fictional.</p>
         </section>
         <section className={styles.section} aria-labelledby="moves-title" data-scroll-depth>
           <div className={styles.sectionHeader}>

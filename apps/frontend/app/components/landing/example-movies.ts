@@ -1,31 +1,31 @@
-// Fixed 2023 film examples. Tomatometer snapshots checked September 13, 2026.
+// Fixed 2026 film examples. Tomatometer snapshots checked September 14, 2026.
 export const EXAMPLE_MOVIES = [
   {
-    title: 'Barbie',
-    poster: 'barbie',
+    title: 'Toy Story 5',
+    poster: 'toy-story-5',
     label: 'Round 1, Pick 1',
-    tomatometer: 88,
-    source: 'https://www.rottentomatoes.com/m/barbie',
-  },
-  {
-    title: 'Killers of the Flower Moon',
-    poster: 'killers',
-    label: 'Round 2, Pick 4',
     tomatometer: 93,
-    source: 'https://www.rottentomatoes.com/m/killers_of_the_flower_moon',
+    source: 'https://www.rottentomatoes.com/m/toy_story_5',
   },
   {
-    title: 'The Hunger Games: The Ballad of Songbirds & Snakes',
-    poster: 'ballad',
+    title: 'Project Hail Mary',
+    poster: 'project-hail-mary',
+    label: 'Round 2, Pick 4',
+    tomatometer: 95,
+    source: 'https://www.rottentomatoes.com/m/project_hail_mary',
+  },
+  {
+    title: 'Mortal Kombat II',
+    poster: 'mortal-kombat-ii',
     label: 'Round 3, Pick 1',
     tomatometer: 64,
-    source: 'https://www.rottentomatoes.com/m/the_hunger_games_the_ballad_of_songbirds_and_snakes',
+    source: 'https://www.rottentomatoes.com/m/mortal_kombat_ii',
   },
   {
-    title: 'The Marvels',
-    poster: 'marvels',
+    title: 'The Mandalorian and Grogu',
+    poster: 'mandalorian-and-grogu',
     label: 'Round 4, Pick 4',
-    tomatometer: 63,
-    source: 'https://www.rottentomatoes.com/m/the_marvels',
+    tomatometer: 60,
+    source: 'https://www.rottentomatoes.com/m/star_wars_the_mandalorian_and_grogu',
   },
 ] as const

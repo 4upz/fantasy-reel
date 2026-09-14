@@ -1,8 +1,10 @@
 import { Clock } from 'lucide-react'
 import BidSummary, { BidAmountDisplay } from '../../(authenticated)/league/[id]/components/BidSummary'
 import TradeItemsSection from '../../(authenticated)/league/[id]/components/TradeItemsSection'
+import { EXAMPLE_MOVIES } from './example-movies'
 
 const NO_CONTESTED_MOVIES: ReadonlySet<string> = new Set()
+const [receivedMovie, offeredMovie, , pickupMovie] = EXAMPLE_MOVIES
 
 /** Static examples use the app's bid summary and two sides of a trade offer. */
 export default function MovesPreviewScene() {
@@ -15,7 +17,7 @@ export default function MovesPreviewScene() {
 
       <div className="card bid-card-pickup p-4">
         <div className="flex gap-4">
-          <BidSummary title="The Marvels" posterUrl="/images/homepage/marvels.webp" focus="bid">
+          <BidSummary title={pickupMovie.title} posterUrl={`/images/homepage/${pickupMovie.poster}.webp`} focus="bid">
             <p className="type-body-sm mt-0.5 text-foreground-secondary">Pickup bid</p>
             <div className="mt-2 flex items-center gap-4">
               <BidAmountDisplay amount={15} />
@@ -42,7 +44,7 @@ export default function MovesPreviewScene() {
           <TradeItemsSection
             title="Opening Night sends"
             items={{
-              movies: [{ movie_id: 'example-killers', source: 'draft_pick', source_id: 'example-killers-pick', title: 'Killers of the Flower Moon', poster_url: '/images/homepage/killers.webp' }],
+              movies: [{ movie_id: `example-${offeredMovie.poster}`, source: 'draft_pick', source_id: `example-${offeredMovie.poster}-pick`, title: offeredMovie.title, poster_url: `/images/homepage/${offeredMovie.poster}.webp` }],
               faab: 10,
             }}
             isYours
@@ -52,7 +54,7 @@ export default function MovesPreviewScene() {
             <TradeItemsSection
               title="Second Take sends"
               items={{
-                movies: [{ movie_id: 'example-barbie', source: 'draft_pick', source_id: 'example-barbie-pick', title: 'Barbie', poster_url: '/images/homepage/barbie.webp' }],
+                movies: [{ movie_id: `example-${receivedMovie.poster}`, source: 'draft_pick', source_id: `example-${receivedMovie.poster}-pick`, title: receivedMovie.title, poster_url: `/images/homepage/${receivedMovie.poster}.webp` }],
                 faab: 0,
               }}
               isYours={false}
