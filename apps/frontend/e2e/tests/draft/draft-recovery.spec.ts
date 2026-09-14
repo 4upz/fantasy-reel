@@ -164,14 +164,19 @@ test.describe('draft connection recovery', () => {
 
     try {
       await simulateVisibility(observer, 'hidden')
-      await observerContext.setOffline(true)
       const closedBefore = closedSockets
-      const socketsClosed = await observer.evaluate(() => {
+      const socketsClosed = await observer.evaluate(async () => {
         const sockets = (window as unknown as { __draftRecoverySockets: WebSocket[] }).__draftRecoverySockets
           .filter(socket => socket.readyState === WebSocket.OPEN)
-        sockets.forEach(socket => socket.close(1000, 'Draft recovery test disconnect'))
+        // A graceful close needs the network to finish its handshake. Wait for
+        // native closure before going offline, then keep later picks unreachable.
+        await Promise.all(sockets.map(socket => new Promise<void>(resolve => {
+          socket.addEventListener('close', () => resolve(), { once: true })
+          socket.close(1000, 'Draft recovery test disconnect')
+        })))
         return sockets.length
       })
+      await observerContext.setOffline(true)
       expect(socketsClosed).toBeGreaterThan(0)
       await expect.poll(() => closedSockets).toBeGreaterThan(closedBefore)
       await expect(observer.getByTestId('draft-connection-status')).not.toHaveText('Live')
