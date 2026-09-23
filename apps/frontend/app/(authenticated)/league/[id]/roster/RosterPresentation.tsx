@@ -1,8 +1,7 @@
-import Image from 'next/image'
-import { Film, Lock } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+import { Lock } from 'lucide-react'
 import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
 import type { HoldingMovie } from '@/types'
-import { getTmdbPosterUrl } from '../components/utils'
 
 type RosterMovie = Pick<HoldingMovie, 'title' | 'poster_url' | 'fantasy_points' | 'combined_score'>
 
@@ -65,17 +64,14 @@ export function RosterPoster({
   src?: string
   sizes?: string
 }) {
-  const posterSrc = src ?? getTmdbPosterUrl(movie.poster_url, 'w342')
-
-  if (!posterSrc) {
-    return (
-      <div className="w-full h-full flex items-center justify-center">
-        <Film className="w-12 h-12 text-foreground-muted" aria-hidden="true" />
-      </div>
-    )
-  }
-
-  return <Image src={posterSrc} alt={movie.title} fill sizes={sizes} className="object-cover" />
+  return (
+    <MoviePoster
+      src={src ?? movie.poster_url}
+      alt={movie.title}
+      sizes={sizes}
+      posterSize="w342"
+    />
+  )
 }
 
 /** The same movie presentation serves playable rosters and read-only examples. */

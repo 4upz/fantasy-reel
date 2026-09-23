@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { Settings, X, Heart, Film, ChevronDown, Check, Users } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
-import { getTmdbPosterUrl } from '@/app/(authenticated)/league/[id]/components/utils'
+
 import Avatar from '@/app/components/Avatar'
 import type { TeamHolding, WishlistedMovie } from '@/types'
 
@@ -695,20 +695,13 @@ function WishlistMovieCard({
 
       {/* Poster */}
       <div className="relative aspect-[2/3] bg-elevated overflow-hidden">
-        {movie.poster_url ? (
-          <Image
-            src={getTmdbPosterUrl(movie.poster_url, 'w342') ?? movie.poster_url}
-            alt={movie.title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-foreground-secondary">
-            <Film className="w-12 h-12 mb-2" />
-            <span className="type-meta">No poster</span>
-          </div>
-        )}
+        <MoviePoster
+          src={movie.poster_url}
+          alt={movie.title}
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          posterSize="w342"
+          className="transition-transform duration-500 group-hover:scale-105"
+        />
 
         <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 

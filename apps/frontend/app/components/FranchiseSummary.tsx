@@ -1,8 +1,8 @@
 'use client'
 
 import { useId, useState } from 'react'
-import Image from 'next/image'
-import { ChevronDown, Film } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+import { ChevronDown } from 'lucide-react'
 import type { FranchiseHistory } from '@/types'
 import { entryLabel } from '@/utils/franchise'
 import { getReleaseYear } from '@/utils/date'
@@ -53,11 +53,12 @@ export default function FranchiseSummary({ history, defaultOpen = false, classNa
           {history.films.map((film) => (
             <li key={film.tmdb_id} className="flex items-center gap-2">
               <div className="relative w-5 h-[30px] shrink-0 rounded-[3px] overflow-hidden bg-elevated border border-border">
-                {film.poster_url ? (
-                  <Image src={film.poster_url} alt="" fill sizes="20px" className="object-cover" />
-                ) : (
-                  <Film className="w-3 h-3 m-auto mt-2 text-foreground-muted" />
-                )}
+                <MoviePoster
+                  src={film.poster_url}
+                  alt=""
+                  sizes="20px"
+                  posterSize="w92"
+                />
               </div>
               <span className="type-meta flex-1 min-w-0 break-words text-foreground">
                 {film.title}

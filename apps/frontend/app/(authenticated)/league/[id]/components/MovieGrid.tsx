@@ -1,12 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import type { MovieTimelineItem, League } from '@/types'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
 import LeagueMovieModal from './LeagueMovieModal'
-import { getTmdbPosterUrl } from './utils'
 
 interface Props {
   movies: MovieTimelineItem[]
@@ -45,54 +44,24 @@ function MovieButton({
   )
 }
 
-/** The film-strip placeholder shown wherever a poster is missing. */
-function PosterFallback({ className }: { className: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth={1.5}
-        d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
-      />
-    </svg>
-  )
-}
-
 function Poster({
   movie,
   sizes,
   className,
-  iconClassName,
 }: {
   movie: MovieTimelineItem
   sizes: string
   className: string
-  iconClassName: string
 }) {
-  const [failed, setFailed] = useState(false)
-
   return (
     <div className={`relative flex flex-none items-center justify-center overflow-hidden bg-elevated ${className}`}>
-      {movie.poster_url && !failed ? (
-        <Image
-          // Stored posters are TMDb paths, not URLs. Passing the raw path made
-          // next/image 400 on every poster here and silently fall back to the
-          // film-strip placeholder.
-          src={getTmdbPosterUrl(movie.poster_url, 'w342')!}
-          alt={movie.title}
-          fill
-          sizes={sizes}
-          // The poster pushes very slightly past its frame on hover. The frame
-          // already clips, so this reads as the artwork leaning forward rather
-          // than the card moving - which keeps the horizontal shelf from
-          // jittering the way a lift on the tile itself would.
-          className="object-cover transition-transform duration-300 ease-out motion-safe:group-hover:scale-[1.06] motion-safe:group-focus-visible:scale-[1.06]"
-          onError={() => setFailed(true)}
-        />
-      ) : (
-        <PosterFallback className={`${iconClassName} text-foreground-muted`} />
-      )}
+      <MoviePoster
+        src={movie.poster_url}
+        alt={movie.title}
+        sizes={sizes}
+        posterSize="w342"
+        className="transition-transform duration-300 ease-out motion-safe:group-hover:scale-[1.06] motion-safe:group-focus-visible:scale-[1.06]"
+      />
     </div>
   )
 }
@@ -133,7 +102,6 @@ function NextUpHero({
           movie={movie}
           sizes="(min-width: 640px) 176px, 160px"
           className="aspect-[2/3] w-full rounded-xl border border-gold/40 transition-colors group-hover:border-gold/70 group-focus-visible:border-gold/70"
-          iconClassName="mb-16 h-[22px] w-[22px]"
         />
         <div
           aria-hidden="true"
@@ -182,7 +150,6 @@ function UpcomingShelf({
             movie={movie}
             sizes="118px"
             className="h-[177px] w-[118px] rounded-xl border border-border transition-colors group-hover:border-border-hover"
-            iconClassName="h-[22px] w-[22px]"
           />
           <div
             className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
@@ -219,7 +186,6 @@ function ScoredList({
               movie={movie}
               sizes="38px"
               className="h-[57px] w-[38px] rounded-[7px]"
-              iconClassName="h-[15px] w-[15px]"
             />
             <div className="min-w-0 flex-1">
               <div

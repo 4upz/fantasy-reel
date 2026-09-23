@@ -1,4 +1,4 @@
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
 import type { TradeItems, TradeMovieItem } from '@/types'
 import CounterpickMark from './CounterpickMark'
@@ -30,20 +30,14 @@ export default function TradeItemsSection({
         <div className="space-y-2">
           {items.movies.map((movie: TradeMovieItem) => (
             <div key={movie.source_id} className="flex items-center gap-2">
-              <div className="relative shrink-0">
-                {movie.poster_url ? (
-                  <Image
-                    src={movie.poster_url}
-                    alt={movie.title || 'Movie'}
-                    width={32}
-                    height={48}
-                    className="w-8 h-12 object-cover rounded"
-                  />
-                ) : (
-                  <div className="w-8 h-12 bg-surface-hover rounded flex items-center justify-center">
-                    <span className="type-meta text-foreground-secondary">?</span>
-                  </div>
-                )}
+              <div className="relative w-8 h-12 shrink-0 rounded bg-surface-hover">
+                <MoviePoster
+                  src={movie.poster_url}
+                  alt={movie.title || 'Movie'}
+                  sizes="32px"
+                  posterSize="w92"
+                  className="rounded"
+                />
                 {movie.source === 'counterpick' && <CounterpickMark />}
               </div>
               <div className="min-w-0 flex-1">

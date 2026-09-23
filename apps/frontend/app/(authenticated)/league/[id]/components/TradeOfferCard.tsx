@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
 import type {
@@ -974,20 +975,14 @@ function MovieSelector({
                   : 'bg-surface-hover hover:bg-elevated border border-transparent'
             } focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface`}
           >
-            <div className="relative shrink-0">
-              {movie.poster_url ? (
-                <Image
-                  src={movie.poster_url}
-                  alt=""
-                  width={32}
-                  height={48}
-                  className="w-8 h-12 object-cover rounded"
-                />
-              ) : (
-                <div className="w-8 h-12 bg-surface rounded flex items-center justify-center">
-                  <span className="type-meta text-foreground-secondary" aria-hidden="true">?</span>
-                </div>
-              )}
+            <div className="relative w-8 h-12 shrink-0 rounded bg-surface-hover">
+              <MoviePoster
+                src={movie.poster_url}
+                alt=""
+                sizes="32px"
+                posterSize="w92"
+                className="rounded"
+              />
               {movie.source === 'counterpick' && <CounterpickMark />}
             </div>
             <div className="min-w-0 flex-1">

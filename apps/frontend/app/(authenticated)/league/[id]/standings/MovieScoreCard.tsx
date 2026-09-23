@@ -1,13 +1,11 @@
 'use client'
 
-import { useState } from 'react'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { Target } from 'lucide-react'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
 import type { HoldingMovie } from '@/types'
 import TomatometerScore from '@/app/components/TomatometerScore'
-import { getTmdbPosterUrl } from '../components/utils'
 
 type MovieBadge =
   | { type: 'draft'; round: number; pick: number }
@@ -37,9 +35,6 @@ export default function MovieScoreCard({
   overridePoints,
   onSelect,
 }: Props) {
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const [imageError, setImageError] = useState(false)
-
   const displayPoints = overridePoints !== undefined ? overridePoints : movie.fantasy_points
   const hasScore = displayPoints != null
   const isReleased = movie.status === 'released'
@@ -75,41 +70,14 @@ export default function MovieScoreCard({
     >
       {/* Poster */}
       <div className="relative h-[66px] w-11 flex-none">
-        <div className="h-full w-full overflow-hidden rounded-lg bg-elevated">
-          {movie.poster_url && !imageError ? (
-            <>
-              {!imageLoaded && <div className="absolute inset-0 animate-shimmer rounded-lg bg-elevated" />}
-              <Image
-                // Stored posters are TMDb paths, not URLs. The raw path made
-                // next/image 400 on every row and fall back to the placeholder.
-                src={getTmdbPosterUrl(movie.poster_url, 'w154')!}
-                alt={movie.title}
-                fill
-                sizes="44px"
-                className={`rounded-lg object-cover transition-opacity duration-300 ${
-                  imageLoaded ? 'opacity-100' : 'opacity-0'
-                }`}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageError(true)}
-              />
-            </>
-          ) : (
-            <div className="flex h-full w-full items-center justify-center">
-              <svg
-                className="h-[18px] w-[18px] text-foreground-muted"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
-                />
-              </svg>
-            </div>
-          )}
+        <div className="relative h-full w-full overflow-hidden rounded-lg bg-elevated">
+          <MoviePoster
+            src={movie.poster_url}
+            alt={movie.title}
+            sizes="44px"
+            posterSize="w154"
+            className="rounded-lg transition-opacity duration-300 motion-reduce:transition-none"
+          />
         </div>
 
         {/* Acquisition badge */}

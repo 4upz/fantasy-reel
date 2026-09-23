@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useCallback, useRef } from 'react'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { Target } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { DraftState } from '@/hooks/useDraftState'
@@ -251,21 +251,14 @@ export function PickHistory({ draftPicks, teamInfoById }: PickHistoryProps): Rea
             }`}
           >
             {/* Movie Poster Thumbnail */}
-            {pick.movies?.poster_url ? (
-              <div className="relative w-10 h-15 rounded-lg overflow-hidden border border-border flex-shrink-0">
-                <Image
-                  src={pick.movies.poster_url}
-                  alt={pick.movies.title}
-                  fill
-                  sizes="40px"
-                  className="object-cover"
-                />
-              </div>
-            ) : (
-              <div className="w-10 h-15 bg-surface rounded-lg border border-border flex items-center justify-center flex-shrink-0">
-                <ClapperboardIcon className="w-5 h-5 text-foreground-muted" />
-              </div>
-            )}
+            <div className="relative w-10 h-15 rounded-lg overflow-hidden border border-border flex-shrink-0 bg-surface">
+              <MoviePoster
+                src={pick.movies?.poster_url}
+                alt={pick.movies?.title || 'Movie'}
+                sizes="40px"
+                posterSize="w154"
+              />
+            </div>
 
             {/* Pick Info */}
             <div className="flex-1 min-w-0">

@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { formatReleaseDateFull } from '@/utils/date'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import type { CounterpickOption } from '@/types'
-import { SpinnerIcon, ClapperboardIcon } from './Icons'
+import { SpinnerIcon } from './Icons'
 
 interface Props {
   leagueId: string
@@ -224,21 +224,14 @@ export default function CounterpickPicker({
             <div className="flex flex-wrap items-center gap-3">
               {/* Selected movie preview */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                {selectedOption.poster_url ? (
-                  <div className="relative w-12 h-16 rounded-lg overflow-hidden border border-border">
-                    <Image
-                      src={selectedOption.poster_url}
-                      alt={selectedOption.movie_title}
-                      fill
-                      sizes="48px"
-                      className="object-cover"
-                    />
-                  </div>
-                ) : (
-                  <div className="w-12 h-16 bg-elevated rounded-lg border border-border flex items-center justify-center">
-                    <ClapperboardIcon className="w-5 h-5 text-foreground-muted" />
-                  </div>
-                )}
+                <div className="relative w-12 h-16 rounded-lg overflow-hidden border border-border bg-elevated">
+                  <MoviePoster
+                    src={selectedOption.poster_url}
+                    alt={selectedOption.movie_title}
+                    sizes="48px"
+                    posterSize="w154"
+                  />
+                </div>
                 <div className="min-w-0">
                   <p className="type-row-title text-foreground truncate">
                     {selectedOption.movie_title}
@@ -322,19 +315,12 @@ function CounterpickMovieCard({
     >
       {/* Poster */}
       <div className="aspect-[2/3] relative bg-elevated">
-        {option.poster_url ? (
-          <Image
-            src={option.poster_url}
-            alt={option.movie_title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <ClapperboardIcon className="w-12 h-12 text-foreground-muted" />
-          </div>
-        )}
+        <MoviePoster
+          src={option.poster_url}
+          alt={option.movie_title}
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          posterSize="w500"
+        />
 
         {/* Hover overlay */}
         {isSelectable && (

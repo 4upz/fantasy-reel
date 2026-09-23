@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { Clapperboard, Clock, User, ExternalLink, ChevronDown } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+import { Clock, User, ExternalLink, ChevronDown } from 'lucide-react'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
 import { getReleaseYear, formatRuntime, formatReleaseDateFull } from '@/utils/date'
 
@@ -64,21 +65,15 @@ export default function MovieDetailBody({
           {/* Poster */}
           <div className="flex-shrink-0 mx-auto sm:mx-0">
             <div className="relative w-40 sm:w-48 rounded-lg overflow-hidden shadow-heavy border border-border">
-              {displayData.poster_url ? (
-                <div className="relative w-full aspect-[2/3]">
-                  <Image
-                    src={displayData.poster_url}
-                    alt={displayData.title}
-                    fill
-                    sizes="192px"
-                    className="object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="w-full aspect-[2/3] bg-elevated flex items-center justify-center">
-                  <Clapperboard className="w-16 h-16 text-foreground-muted" />
-                </div>
-              )}
+              <div className="relative w-full aspect-[2/3] bg-elevated">
+                <MoviePoster
+                  src={displayData.poster_url}
+                  alt={displayData.title}
+                  sizes="(min-width: 640px) 192px, 160px"
+                  posterSize="w500"
+                  priority
+                />
+              </div>
             </div>
           </div>
 

@@ -54,13 +54,12 @@ Deno.serve(async (req) => {
     // Also never throws; null means the purge itself failed (already logged).
     const tmdbCachePurged = await purgeStaleTmdbCache(serviceClient)
 
-    // The handler logs and skips individual TMDb/update failures rather than
-    // counting them, so there is no per-item failed counter to map.
     const job_status = await run.finish(serviceClient, {
       processed: result.movies_checked,
-      failed: 0,
+      failed: result.failed,
       metadata: {
         dates_changed: result.dates_changed,
+        posters_updated: result.posters_updated,
         leagues_notified: result.leagues_notified,
         job_runs_purged: purged,
         tmdb_cache_purged: tmdbCachePurged,

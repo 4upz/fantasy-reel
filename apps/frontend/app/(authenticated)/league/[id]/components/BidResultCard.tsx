@@ -1,9 +1,9 @@
 'use client'
 
-import Image from 'next/image'
-import { Film } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+
 import type { BidHistoryResult, TeamWithOwner } from '@/types'
-import { getBidTypeClass, getTmdbPosterUrl } from './utils'
+import { getBidTypeClass } from './utils'
 
 interface Props {
   result: BidHistoryResult
@@ -38,7 +38,6 @@ export default function BidResultCard({
   teamsById,
   currentTeamId,
 }: Props): React.ReactElement {
-  const posterUrl = getTmdbPosterUrl(result.posterUrl, 'w92')
   const wonByMe = result.winner?.teamId === currentTeamId
   const lostByMe = result.losers.some((loser) => loser.teamId === currentTeamId)
   const margin = marginNote(result)
@@ -51,19 +50,12 @@ export default function BidResultCard({
       <div className="flex gap-3">
         {/* Poster */}
         <div className="relative w-10 h-15 sm:w-12 sm:h-18 flex-none rounded overflow-hidden bg-elevated">
-          {posterUrl ? (
-            <Image
-              src={posterUrl}
-              alt=""
-              fill
-              sizes="48px"
-              className="object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Film className="w-4 h-4 text-foreground-muted" aria-hidden="true" />
-            </div>
-          )}
+          <MoviePoster
+            src={result.posterUrl}
+            alt=""
+            sizes="(min-width: 640px) 48px, 40px"
+            posterSize="w154"
+          />
         </div>
 
         {/* Title and outcome */}

@@ -1,11 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import type { FranchiseHistory, TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import { seriesName } from '@/utils/franchise'
-import { ClapperboardIcon } from './Icons'
+
 import { formatReleaseDateShort, getReleaseYear, getPopularityBadge, cn } from './utils'
 
 interface Props {
@@ -26,9 +25,6 @@ export default function DraftMovieCard({
   franchise,
   onPreview,
 }: Props) {
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const [imageError, setImageError] = useState(false)
-
   const popularityBadge = getPopularityBadge(movie.popularity)
   const releaseYear = getReleaseYear(movie.release_date)
   const seriesLabel = franchise ? `${seriesName(franchise)} series` : null
@@ -51,33 +47,13 @@ export default function DraftMovieCard({
       />
       {/* Poster Container */}
       <div className="relative aspect-[2/3] bg-elevated">
-        {/* Skeleton loader */}
-        {!imageLoaded && !imageError && movie.poster_url && (
-          <div className="absolute inset-0 bg-elevated animate-pulse">
-            <div className="absolute inset-0 bg-gradient-to-t from-surface via-transparent to-transparent" />
-          </div>
-        )}
-
-        {/* Poster Image */}
-        {movie.poster_url && !imageError ? (
-          <Image
-            src={movie.poster_url}
-            alt={movie.title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className={cn(
-              'object-cover transition-opacity duration-300',
-              imageLoaded ? 'opacity-100' : 'opacity-0'
-            )}
-            onLoad={() => setImageLoaded(true)}
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center bg-elevated">
-            <ClapperboardIcon className="w-12 h-12 text-foreground-muted mb-2" />
-            <span className="type-meta text-foreground-secondary">No poster</span>
-          </div>
-        )}
+        <MoviePoster
+          src={movie.poster_url}
+          alt={movie.title}
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          posterSize="w500"
+          className="transition-opacity duration-300 motion-reduce:transition-none"
+        />
 
         {/* Gradient Overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />

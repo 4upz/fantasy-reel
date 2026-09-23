@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import Image from 'next/image'
-import { AlertTriangle, Film, Lock, Scissors, Trash2, X } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+import { AlertTriangle, Lock, Scissors, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
 import BidAmountAndDeadline from './BidAmountAndDeadline'
 import BidSummary from './BidSummary'
-import { getTmdbPosterUrl, getBidTypeClass } from './utils'
+import { getBidTypeClass } from './utils'
 
 interface BidCardProps {
   bid: PickupBid
@@ -111,18 +111,12 @@ function CancelBidModal({
           <div className="card p-3 mb-4">
             <div className="flex gap-3 items-center">
               <div className="relative w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-elevated">
-                {moviePoster ? (
-                  <Image
-                    src={getTmdbPosterUrl(moviePoster, 'w92')!}
-                    alt={movieTitle}
-                    fill
-                    className="object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Film className="w-5 h-5 text-foreground-muted" />
-                  </div>
-                )}
+                <MoviePoster
+                  src={moviePoster}
+                  alt={movieTitle}
+                  sizes="48px"
+                  posterSize="w154"
+                />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="type-row-title text-foreground break-words">
@@ -198,7 +192,7 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
         <div className="flex gap-4">
           <BidSummary
             title={movieTitle}
-            posterUrl={getTmdbPosterUrl(movieData?.poster_url ?? null, 'w92')}
+            posterUrl={movieData?.poster_url}
             releaseDate={movieData?.release_date}
           >
             <BidAmountAndDeadline

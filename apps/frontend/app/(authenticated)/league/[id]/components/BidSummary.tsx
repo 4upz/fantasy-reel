@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import Image from 'next/image'
-import { DollarSign, Film } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+import { DollarSign } from 'lucide-react'
 
 /** @design-system League */
 export function BidAmountDisplay({ amount }: { amount: number }) {
@@ -30,13 +30,12 @@ export default function BidSummary({
   return (
     <>
       <div className="relative w-16 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
-        {posterUrl ? (
-          <Image src={posterUrl} alt={title} fill sizes="64px" className="object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <Film className="w-6 h-6 text-foreground-muted" aria-hidden="true" />
-          </div>
-        )}
+        <MoviePoster
+          src={posterUrl}
+          alt={title}
+          sizes="64px"
+          posterSize="w185"
+        />
       </div>
 
       <div className="flex-1 min-w-0">

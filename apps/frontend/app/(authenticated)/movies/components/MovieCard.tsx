@@ -1,7 +1,7 @@
 'use client'
 
-import Image from 'next/image'
-import { Clapperboard } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+
 import type { TMDbSearchResult } from '@/types'
 import { getReleaseYear } from '@/utils/date'
 
@@ -24,20 +24,13 @@ export default function MovieCard({ movie, onClick, index }: Props) {
     >
       {/* Poster container with aspect ratio */}
       <div className="relative aspect-[2/3] overflow-hidden bg-elevated">
-        {movie.poster_url ? (
-          <Image
-            src={movie.poster_url}
-            alt={movie.title}
-            fill
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex flex-col items-center justify-center text-foreground-secondary">
-            <Clapperboard className="w-12 h-12 mb-2" />
-            <span className="type-meta">No poster</span>
-          </div>
-        )}
+        <MoviePoster
+          src={movie.poster_url}
+          alt={movie.title}
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+          posterSize="w500"
+          className="transition-transform duration-500 group-hover:scale-105"
+        />
 
         {/* Gradient overlay on hover */}
         <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

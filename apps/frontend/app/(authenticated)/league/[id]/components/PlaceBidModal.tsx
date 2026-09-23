@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { X, DollarSign, Search, Film, TrendingUp, Calendar, ArrowLeft, Heart, Swords } from 'lucide-react'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { toast } from 'sonner'
 import type { TMDbSearchResult, TeamBudget, PickupBid, DroppableHolding } from '@/types'
 import { useDraftMovies } from '../hooks/useDraftMovies'
-import { getTmdbPosterUrl, getReleaseYear, formatReleaseDateFull, isMovieBiddable, formatDeadlineShort } from './utils'
+import { getReleaseYear, formatReleaseDateFull, isMovieBiddable, formatDeadlineShort } from './utils'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import FranchiseSummary from '@/app/components/FranchiseSummary'
@@ -589,18 +589,12 @@ export default function PlaceBidModal({
                         style={{ animationDelay: `${index * 30}ms` }}
                       >
                         <div className="relative w-14 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
-                          {movie.poster_url ? (
-                            <Image
-                              src={getTmdbPosterUrl(movie.poster_url, 'w92')!}
-                              alt={movie.title}
-                              fill
-                              className="object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                              <Film className="w-6 h-6 text-foreground-muted" />
-                            </div>
-                          )}
+                          <MoviePoster
+                            src={movie.poster_url}
+                            alt={movie.title}
+                            sizes="56px"
+                            posterSize="w154"
+                          />
                           <WishlistToggle movie={movie} size="sm" variant="overlay" className="absolute top-0.5 right-0.5" />
                         </div>
                         <div className="flex-1 min-w-0 py-0.5">
@@ -639,18 +633,12 @@ export default function PlaceBidModal({
               <div className="card p-[min(1rem,16px)] mb-6 bg-surface/50">
                 <div className="flex flex-wrap gap-4">
                   <div className="relative w-[min(6rem,96px)] aspect-[2/3] flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-medium">
-                    {selectedMovie.poster_url ? (
-                      <Image
-                        src={getTmdbPosterUrl(selectedMovie.poster_url, 'w154')!}
-                        alt={selectedMovie.title}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Film className="w-10 h-10 text-foreground-muted" />
-                      </div>
-                    )}
+                    <MoviePoster
+                      src={selectedMovie.poster_url}
+                      alt={selectedMovie.title}
+                      sizes="96px"
+                      posterSize="w342"
+                    />
                   </div>
                   <div className="flex-1 min-w-[min(100%,8rem)]">
                     <h3 className="type-card break-words text-foreground">
