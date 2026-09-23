@@ -1,4 +1,4 @@
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import type { MovieTimelineItem } from '@/types'
 import TomatometerScore from '@/app/components/TomatometerScore'
 import { formatFantasyPoints } from '@/utils/scoring'
@@ -59,19 +59,12 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
 
       {/* Poster */}
       <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-elevated border border-border group-hover:border-gold/50 transition-colors">
-        {movie.poster_url ? (
-          <Image
-            src={movie.poster_url}
-            alt={movie.title}
-            fill
-            className="object-cover"
-            sizes="128px"
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-foreground-secondary">
-            No poster
-          </div>
-        )}
+        <MoviePoster
+          src={movie.poster_url}
+          alt={movie.title}
+          sizes="128px"
+          posterSize="w342"
+        />
 
         {/* Hover Overlay with the Tomatometer */}
         {isScored && movie.combined_score != null && (

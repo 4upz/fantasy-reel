@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
-import { X, DollarSign, Target, ArrowLeft, Film } from 'lucide-react'
-import Image from 'next/image'
+import { X, DollarSign, Target, ArrowLeft } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
 import { toast } from 'sonner'
 import type { TeamBudget, CounterpickBid, CounterpickOption } from '@/types'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
-import { getTmdbPosterUrl, formatReleaseDateFull } from './utils'
+import { formatReleaseDateFull } from './utils'
 import CounterpickPicker from './CounterpickPicker'
 
 interface PlaceCounterpickBidModalProps {
@@ -255,18 +255,12 @@ export default function PlaceCounterpickBidModal({
               <div className="card p-[min(1rem,16px)] mb-6 bg-surface/50">
                 <div className="flex flex-wrap gap-4">
                   <div className="relative w-[min(6rem,96px)] aspect-[2/3] flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-medium">
-                    {selectedMovie.posterUrl ? (
-                      <Image
-                        src={getTmdbPosterUrl(selectedMovie.posterUrl, 'w154')!}
-                        alt={selectedMovie.title}
-                        fill
-                        className="object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Film className="w-10 h-10 text-foreground-muted" />
-                      </div>
-                    )}
+                    <MoviePoster
+                      src={selectedMovie.posterUrl}
+                      alt={selectedMovie.title}
+                      sizes="96px"
+                      posterSize="w342"
+                    />
                   </div>
                   <div className="flex-1 min-w-[min(100%,8rem)]">
                     <h3 className="type-card break-words text-foreground">

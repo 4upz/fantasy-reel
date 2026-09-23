@@ -1,13 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
 import type { HoldingMovie, RankedTeamFull } from '@/types'
 import TeamBudgetSummary from './TeamBudget'
 import LeagueMovieModal from '../components/LeagueMovieModal'
-import { getTmdbPosterUrl } from '../components/utils'
 
 interface Props {
   rankedTeam: RankedTeamFull
@@ -22,22 +21,14 @@ interface RosterEntry {
 }
 
 function RailPoster({ movie }: { movie: HoldingMovie }) {
-  const [failed, setFailed] = useState(false)
-
   return (
     <div className="relative h-12 w-8 flex-none overflow-hidden rounded-md bg-elevated">
-      {movie.poster_url && !failed ? (
-        <Image
-          // Stored posters are TMDb paths, not URLs. The raw path made
-          // next/image 400 and render an empty tile.
-          src={getTmdbPosterUrl(movie.poster_url, 'w154')!}
-          alt={movie.title}
-          fill
-          sizes="32px"
-          className="object-cover"
-          onError={() => setFailed(true)}
-        />
-      ) : null}
+      <MoviePoster
+        src={movie.poster_url}
+        alt={movie.title}
+        sizes="32px"
+        posterSize="w92"
+      />
     </div>
   )
 }

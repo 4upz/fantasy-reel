@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
-import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import type { TradeOfferWithTeams, TradeItems, TradeMovieItem } from '@/types'
@@ -132,19 +132,14 @@ function TradeItemsList({ items }: { items: TradeItems }) {
     <div className="space-y-2">
       {items.movies.map((movie: TradeMovieItem) => (
         <div key={movie.source_id} className="flex items-center gap-2">
-          {movie.poster_url ? (
-            <Image
+          <div className="relative w-8 h-12 shrink-0 rounded overflow-hidden bg-surface-hover">
+            <MoviePoster
               src={movie.poster_url}
               alt={movie.title || 'Movie'}
-              width={32}
-              height={48}
-              className="w-[32px] h-[48px] shrink-0 object-cover rounded"
+              sizes="32px"
+              posterSize="w92"
             />
-          ) : (
-            <div className="w-[32px] h-[48px] shrink-0 bg-surface-hover rounded flex items-center justify-center">
-              <span className="type-meta text-foreground-secondary">?</span>
-            </div>
-          )}
+          </div>
           <div className="min-w-0 flex-1">
             <p className="type-row-title text-foreground break-words">
               {movie.title || 'Unknown Movie'}

@@ -4,7 +4,7 @@
  * Tests the actual function via direct fetch() with service role auth.
  *
  * Every success path of this function calls the live TMDb API -- once per
- * rostered movie released within the recent-cutoff window, with no upper bound
+ * rostered movie, regardless of release date, with no upper bound
  * -- so those steps are gated behind RUN_EXTERNAL_API_TESTS. See
  * `RUN_EXTERNAL_API_TESTS` in ./_setup.ts for why, and `deno task test:external`
  * to run them. The drift-detection logic is covered against mocks in
@@ -60,7 +60,9 @@ Deno.test({
         assertEquals(status, 200)
         assertEquals(typeof data.movies_checked, 'number')
         assertEquals(typeof data.dates_changed, 'number')
+        assertEquals(typeof data.posters_updated, 'number')
         assertEquals(typeof data.leagues_notified, 'number')
+        assertEquals(typeof data.failed, 'number')
       },
     })
 
@@ -99,7 +101,7 @@ Deno.test({
           // release_date behind breaks later drafts.
           const { data: original } = await serviceClient
             .from('movies')
-            .select('tmdb_id, release_date')
+            .select('tmdb_id, release_date, poster_url')
             .eq('id', movieId)
             .single()
 
@@ -135,6 +137,7 @@ Deno.test({
               .update({
                 tmdb_id: original?.tmdb_id ?? 900_000_000 + Math.floor(Math.random() * 1_000_000),
                 release_date: original?.release_date ?? '2026-12-15',
+                poster_url: original?.poster_url ?? null,
               })
               .eq('id', movieId)
           }

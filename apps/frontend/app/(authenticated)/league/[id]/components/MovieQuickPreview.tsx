@@ -5,12 +5,13 @@ import { useSWRConfig } from 'swr'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { useModalDialog } from '@/hooks/useModalDialog'
 import Image from 'next/image'
+import MoviePoster from '@/app/components/MoviePoster'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
 import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 import type { TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import FranchiseHistoryPanel from '@/app/components/FranchiseHistoryPanel'
-import { CloseIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon, ClapperboardIcon } from './Icons'
+import { CloseIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime, getReleaseYear } from './utils'
 
 const DESCRIPTION_CHAR_THRESHOLD = 200
@@ -117,21 +118,15 @@ export default function MovieQuickPreview({
                 {/* Poster */}
                 <div className="flex-shrink-0 mx-auto sm:mx-0">
                   <div className="relative w-36 sm:w-44 rounded-xl overflow-hidden shadow-heavy border border-border">
-                    {displayData.poster_url ? (
-                      <div className="relative w-full aspect-[2/3]">
-                        <Image
-                          src={displayData.poster_url}
-                          alt={displayData.title}
-                          fill
-                          sizes="176px"
-                          className="object-cover"
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-full aspect-[2/3] bg-elevated flex items-center justify-center">
-                        <ClapperboardIcon className="w-12 h-12 text-foreground-muted" />
-                      </div>
-                    )}
+                    <div className="relative w-full aspect-[2/3] bg-elevated">
+                      <MoviePoster
+                        src={displayData.poster_url}
+                        alt={displayData.title}
+                        sizes="(min-width: 640px) 176px, 144px"
+                        posterSize="w500"
+                        priority
+                      />
+                    </div>
 
                     {/* Wishlist Button */}
                     <WishlistToggle movie={movie} size="md" variant="overlay" className="absolute top-2 right-2" />

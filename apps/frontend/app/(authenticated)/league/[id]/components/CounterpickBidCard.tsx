@@ -1,10 +1,10 @@
 'use client'
 
-import Image from 'next/image'
-import { AlertTriangle, Film, Lock, Target, Trash2 } from 'lucide-react'
+import MoviePoster from '@/app/components/MoviePoster'
+import { AlertTriangle, Lock, Target, Trash2 } from 'lucide-react'
 import type { CounterpickBid } from '@/types'
 import BidAmountAndDeadline from './BidAmountAndDeadline'
-import { getTmdbPosterUrl, getBidTypeClass } from './utils'
+import { getBidTypeClass } from './utils'
 
 interface CounterpickBidCardProps {
   bid: CounterpickBid
@@ -48,18 +48,12 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
       <div className="flex gap-4">
         {/* Movie Poster */}
         <div className="relative w-16 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
-          {posterUrl ? (
-            <Image
-              src={getTmdbPosterUrl(posterUrl, 'w92')!}
-              alt={movieTitle}
-              fill
-              className="object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Film className="w-6 h-6 text-foreground-muted" />
-            </div>
-          )}
+          <MoviePoster
+            src={posterUrl}
+            alt={movieTitle}
+            sizes="64px"
+            posterSize="w185"
+          />
         </div>
 
         {/* Bid Info */}
