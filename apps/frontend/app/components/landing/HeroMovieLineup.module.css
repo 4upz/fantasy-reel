@@ -1,5 +1,6 @@
 .lineup { width: min(466px, 100%); margin: 32px auto 0; }
-.posters { display: flex; align-items: flex-start; gap: 12px; min-height: 212px; }
+/* Reserves the tallest arrangement (third poster selected); recompute if a flex value or % offset changes. */
+.posters { display: flex; align-items: flex-start; gap: 2.6%; aspect-ratio: 466 / 256; }
 .movie {
   position: relative;
   flex: .85;
@@ -11,9 +12,9 @@
   cursor: pointer;
   transition: flex .28s ease, transform .28s ease;
 }
-.movie:nth-child(1) { margin-top: 28px; }
-.movie:nth-child(3) { margin-top: 42px; flex: .78; }
-.movie:nth-child(4) { margin-top: 12px; flex: .92; }
+.movie:nth-child(1) { margin-top: 6%; }
+.movie:nth-child(3) { margin-top: 9%; flex: .78; }
+.movie:nth-child(4) { margin-top: 2.6%; flex: .92; }
 .movie[aria-pressed='true'] { flex: 1.3; }
 .movie img { display: block; width: 100%; height: auto; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 3px; }
 /* Poster overlays keep their dark backing and light text in either page theme. */
@@ -36,16 +37,13 @@
   font-weight: 600;
 }
 .tomato { flex-shrink: 0; width: 12px; height: 12px; color: #c9a227; }
-.caption { max-width: 340px; min-height: 36px; margin: 10px auto 0; color: var(--color-foreground-secondary); text-align: center; text-wrap: balance; font-weight: 400; line-height: 1.5; }
+.caption { max-width: 340px; min-height: 2lh; margin: 10px auto 0; color: var(--color-foreground-secondary); text-align: center; text-wrap: balance; font-weight: 400; line-height: 1.5; }
 .caption a:hover { text-decoration: underline; text-underline-offset: 3px; }
 @media (hover: hover) {
   .movie:hover { transform: translateY(-5px); }
 }
 @media (max-width: 600px) {
   .lineup { margin-top: 30px; }
-  .posters { gap: 8px; min-height: 0; }
-  .movie:nth-child(1) { margin-top: 20px; }
-  .movie:nth-child(3) { margin-top: 32px; }
   .score { bottom: 4px; left: 4px; gap: 2px; padding: 2px 4px; max-width: calc(100% - 8px); }
   .caption { margin-top: 20px; }
 }
