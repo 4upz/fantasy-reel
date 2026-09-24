@@ -58,12 +58,8 @@ export default function BidPriorityList({
   )
 
   /**
-   * Walk the list in priority order, spending roster slots and drops.
-   *
-   * This cannot be the simple `index < remainingSlots` test the counterpick
-   * list uses: a bid carrying a conditional drop can land below the line by
-   * bringing its own room. Nor does every such bid land -- two naming the same
-   * holding cannot both drop it. See forecastBidFits.
+   * Not the counterpick list's `index < remainingSlots`: a conditional drop can
+   * bring its own room, once per holding. See forecastBidFits.
    */
   const computeFits = useCallback(
     (ordered: PriorityListItem[]): boolean[] =>
