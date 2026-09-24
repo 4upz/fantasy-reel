@@ -4,8 +4,9 @@
  * Tests the actual function via direct fetch() with service role auth.
  *
  * Every success path of this function calls the live TMDb API -- once per
- * rostered movie, regardless of release date, with no upper bound
- * -- so those steps are gated behind RUN_EXTERNAL_API_TESTS. See
+ * rostered movie in a league still in play whose release date is recent or
+ * upcoming, or whose poster is missing -- so those steps are gated behind
+ * RUN_EXTERNAL_API_TESTS. See
  * `RUN_EXTERNAL_API_TESTS` in ./_setup.ts for why, and `deno task test:external`
  * to run them. The drift-detection logic is covered against mocks in
  * ../_shared/sync-release-dates.test.ts.
@@ -62,7 +63,9 @@ Deno.test({
         assertEquals(typeof data.dates_changed, 'number')
         assertEquals(typeof data.posters_updated, 'number')
         assertEquals(typeof data.leagues_notified, 'number')
-        assertEquals(typeof data.failed, 'number')
+        assertEquals(Array.isArray(data.errors), true)
+        assertEquals(Array.isArray(data.not_found), true)
+        assertEquals(typeof data.deferred, 'number')
       },
     })
 

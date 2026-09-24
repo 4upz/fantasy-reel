@@ -54,13 +54,19 @@ Deno.serve(async (req) => {
     // Also never throws; null means the purge itself failed (already logged).
     const tmdbCachePurged = await purgeStaleTmdbCache(serviceClient)
 
+    // Only genuine failures drive job_status. Movies TMDb no longer has, and
+    // work deferred by the time budget, are reported in metadata instead so
+    // they stay findable without turning the cron red every night.
     const job_status = await run.finish(serviceClient, {
       processed: result.movies_checked,
-      failed: result.failed,
+      failed: result.errors.length,
+      errors: result.errors,
       metadata: {
         dates_changed: result.dates_changed,
         posters_updated: result.posters_updated,
         leagues_notified: result.leagues_notified,
+        not_found: result.not_found,
+        deferred: result.deferred,
         job_runs_purged: purged,
         tmdb_cache_purged: tmdbCachePurged,
       },
