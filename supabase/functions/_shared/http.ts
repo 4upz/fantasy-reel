@@ -96,6 +96,21 @@ export function retryDelayMs(response: Response | undefined, backoffMs: number):
   return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS)
 }
 
+function waitForRetry(delayMs: number, signal?: AbortSignal | null): Promise<void> {
+  signal?.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal!.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, delayMs)
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
 /**
  * Fetch with a bounded timeout and a single retry on network/timeout errors,
  * 5xx responses, or 429 rate limits. A 429 honors the server's `Retry-After`
@@ -103,7 +118,9 @@ export function retryDelayMs(response: Response | undefined, backoffMs: number):
  * Never retries any other 4xx -- those won't succeed on a retry. Intended
  * only for idempotent GETs. Returns the last response (even if not ok) once
  * retries are exhausted, or rethrows the last error if every attempt failed
- * to produce a response at all.
+ * to produce a response at all. A caller's signal cancels both requests and
+ * retry waits; caller cancellation is never retried or replaced by an earlier
+ * response. The per-attempt timeout remains retryable.
  */
 export async function fetchWithRetry(
   url: string | URL,
@@ -119,33 +136,41 @@ export async function fetchWithRetry(
   // retryable response rather than throwing.
   let lastResponse: Response | undefined
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    // This attempt's own outcome: the delay must reflect *this* attempt's
-    // Retry-After, and the log line this attempt's reason.
-    let delayMs = backoffMs
-    let reason: string
+  try {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      init.signal?.throwIfAborted()
+      // This attempt's own outcome: the delay must reflect *this* attempt's
+      // Retry-After, and the log line this attempt's reason.
+      let delayMs = backoffMs
+      let reason: string
 
-    try {
-      const response = await fetchWithTimeout(url, init, timeoutMs, fetchImpl)
-      // Any earlier retryable response is superseded by this one and its body
-      // will never be read; cancel it so the retry doesn't leak a connection
-      // until GC. Whichever response is ultimately returned stays consumable.
-      if (lastResponse) await lastResponse.body?.cancel().catch(() => {})
-      if (response.ok || (response.status < 500 && response.status !== 429)) return response
-      lastResponse = response
-      delayMs = retryDelayMs(response, backoffMs)
-      reason = `status_${response.status}`
-    } catch (error) {
-      lastError = error
-      reason = error instanceof Error ? error.name : 'unknown'
+      try {
+        const response = await fetchWithTimeout(url, init, timeoutMs, fetchImpl)
+        // Any earlier retryable response is superseded by this one and its body
+        // will never be read; cancel it so the retry doesn't leak a connection
+        // until GC. Whichever response is ultimately returned stays consumable.
+        if (lastResponse) await lastResponse.body?.cancel().catch(() => {})
+        lastResponse = response
+        init.signal?.throwIfAborted()
+        if (response.ok || (response.status < 500 && response.status !== 429)) return response
+        delayMs = retryDelayMs(response, backoffMs)
+        reason = `status_${response.status}`
+      } catch (error) {
+        init.signal?.throwIfAborted()
+        lastError = error
+        reason = error instanceof Error ? error.name : 'unknown'
+      }
+
+      if (attempt < retries) {
+        log.warn('outbound retry', { host, attempt: attempt + 1, delay_ms: delayMs, reason })
+        await waitForRetry(delayMs, init.signal)
+      }
     }
 
-    if (attempt < retries) {
-      log.warn('outbound retry', { host, attempt: attempt + 1, delay_ms: delayMs, reason })
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-    }
+    if (lastResponse) return lastResponse
+    throw lastError
+  } catch (error) {
+    await lastResponse?.body?.cancel().catch(() => {})
+    throw error
   }
-
-  if (lastResponse) return lastResponse
-  throw lastError
 }

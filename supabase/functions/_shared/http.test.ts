@@ -173,3 +173,108 @@ Deno.test('fetchWithRetry - a later network error still returns an earlier respo
 
   assertEquals(response.status, 503)
 })
+
+Deno.test('fetchWithRetry - an already aborted caller signal starts no request', async () => {
+  const controller = new AbortController()
+  controller.abort(new Error('caller deadline exceeded'))
+  const { impl, callCount } = stubResponses([new Response('ok')])
+
+  await assertRejects(
+    () => fetchWithRetry(URL_UNDER_TEST, { signal: controller.signal }, { backoffMs: 0 }, impl),
+    Error,
+    'caller deadline exceeded'
+  )
+  assertEquals(callCount(), 0)
+})
+
+Deno.test('fetchWithRetry - caller cancellation stops an active request without retrying', async () => {
+  const controller = new AbortController()
+  let calls = 0
+  const impl: typeof fetch = (_url, init) => {
+    calls++
+    const signal = (init as RequestInit).signal!
+    if (signal.aborted) return Promise.reject(signal.reason)
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+      controller.abort(new Error('caller cancelled'))
+    })
+  }
+
+  await assertRejects(
+    () => fetchWithRetry(URL_UNDER_TEST, { signal: controller.signal }, { backoffMs: 0 }, impl),
+    Error,
+    'caller cancelled'
+  )
+  assertEquals(calls, 1)
+})
+
+Deno.test('fetchWithRetry - caller cancellation interrupts retry waits', async (t) => {
+  for (const status of [503, 429]) {
+    await t.step(status === 429 ? 'Retry-After' : 'backoff', async () => {
+      const controller = new AbortController()
+      const first = cancelTracking(status)
+      if (status === 429) first.response.headers.set('Retry-After', '2')
+      const { impl, callCount } = stubResponses([first.response, new Response('ok')])
+      const start = performance.now()
+      const timer = setTimeout(() => controller.abort(new Error('caller deadline exceeded')), 20)
+
+      try {
+        await assertRejects(
+          () => fetchWithRetry(URL_UNDER_TEST, { signal: controller.signal }, { backoffMs: 2_000 }, impl),
+          Error,
+          'caller deadline exceeded'
+        )
+      } finally {
+        clearTimeout(timer)
+      }
+
+      assertEquals(callCount(), 1)
+      assertEquals(first.wasCancelled(), true)
+      assertEquals(performance.now() - start < 1_000, true, 'cancellation waited for the retry delay')
+    })
+  }
+})
+
+Deno.test('fetchWithRetry - caller cancellation supersedes an earlier retryable response', async () => {
+  const controller = new AbortController()
+  const first = cancelTracking(503)
+  let calls = 0
+  const impl: typeof fetch = () => {
+    calls++
+    if (calls === 1) return Promise.resolve(first.response)
+    controller.abort(new Error('caller cancelled'))
+    return Promise.reject(controller.signal.reason)
+  }
+
+  await assertRejects(
+    () => fetchWithRetry(URL_UNDER_TEST, { signal: controller.signal }, { backoffMs: 0 }, impl),
+    Error,
+    'caller cancelled'
+  )
+  assertEquals(calls, 2)
+  assertEquals(first.wasCancelled(), true)
+})
+
+Deno.test('fetchWithRetry - per-attempt timeout still retries with an active caller signal', async () => {
+  const controller = new AbortController()
+  let calls = 0
+  const impl: typeof fetch = (_url, init) => {
+    calls++
+    if (calls === 2) return Promise.resolve(new Response('ok'))
+    const signal = (init as RequestInit).signal!
+    return new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+    })
+  }
+
+  const response = await fetchWithRetry(
+    URL_UNDER_TEST,
+    { signal: controller.signal },
+    { timeoutMs: 10, backoffMs: 0 },
+    impl
+  )
+
+  assertEquals(response.status, 200)
+  assertEquals(calls, 2)
+  assertEquals(controller.signal.aborted, false)
+})
