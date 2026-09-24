@@ -9,8 +9,8 @@
  * Run with: deno task test:unit
  */
 import { assertEquals, assertRejects } from '@std/assert'
-import { runSyncReleaseDates } from '../sync-release-dates/handler.ts'
-import { createMockDbClient, stubFetch, type MockDb } from './_mock-client.ts'
+import { runSyncReleaseDates, type SyncReleaseDatesResult } from '../sync-release-dates/handler.ts'
+import { createMockDbClient, stubFetch, type MockDb, type Row } from './_mock-client.ts'
 
 const LEAGUE_ID = 'league-1'
 const MOVIE_ID = 'movie-1'
@@ -45,7 +45,7 @@ function baseDb(): MockDb {
         consecutive_failures: 0,
       },
     ],
-    leagues: [{ id: LEAGUE_ID, name: 'The League' }],
+    leagues: [{ id: LEAGUE_ID, name: 'The League', status: 'active' }],
   }
 }
 
@@ -61,45 +61,104 @@ function tmdbResponder(releaseDate: string | null, posterPath: string | null = n
   }
 }
 
-/** Add pagination and fault injection locally without broadening the shared mock. */
-function createSyncClient(db: MockDb, failure?: 'holdings' | 'movies' | 'update') {
+/** Evaluates a PostgREST `or` filter such as `release_date.gte.2026-01-01,poster_url.is.null`. */
+function matchesAny(row: Row, filter: string): boolean {
+  return filter.split(',').some((condition) => {
+    const [column, operator, ...rest] = condition.split('.')
+    const value = rest.join('.')
+    if (operator === 'gte') return row[column] != null && row[column] >= value
+    if (operator === 'is' && value === 'null') return row[column] == null
+    throw new Error(`Unsupported filter in the test stub: ${condition}`)
+  })
+}
+
+/**
+ * Mirrors what the handler relies on from team_holdings -- the joined movie
+ * columns, the candidate filter, ordering and pagination -- and adds fault
+ * injection, locally rather than broadening the shared mock.
+ */
+function createSyncClient(db: MockDb, failure?: 'holdings' | 'leagues' | 'update') {
   const client = createMockDbClient(db)
   const from = client.from.bind(client)
-  const batches: string[][] = []
   const ranges: number[][] = []
+  const orders: string[] = []
+  const leagueBatches: string[][] = []
   client.from = (table: string) => {
     const query = from(table)
     if (table === 'team_holdings') {
-      const rows = query.select().data
+      // Like the view, each holding carries its movie's columns (inner join).
+      const movies = new Map(db.movies.map((movie) => [movie.id, movie]))
+      let rows: Row[] = query.select().data.flatMap((holding: Row) => {
+        const movie = movies.get(holding.movie_id)
+        return movie
+          ? [{ ...holding, tmdb_id: movie.tmdb_id, title: movie.title, release_date: movie.release_date, poster_url: movie.poster_url }]
+          : []
+      })
+      const sortKeys: string[] = []
       const page = {
-        order: () => page,
+        gt: (column: string, value: number) => {
+          rows = rows.filter((row) => row[column] > value)
+          return page
+        },
+        or: (filter: string) => {
+          rows = rows.filter((row) => matchesAny(row, filter))
+          return page
+        },
+        order: (column: string) => {
+          orders.push(column)
+          sortKeys.push(column)
+          return page
+        },
         range: (start: number, end: number) => {
           ranges.push([start, end])
+          const sorted = [...rows].sort((a, b) => {
+            for (const key of sortKeys) {
+              if (a[key] !== b[key]) return a[key] < b[key] ? -1 : 1
+            }
+            return 0
+          })
           return failure === 'holdings'
             ? { data: null, error: { message: 'holdings unavailable' } }
-            : { data: rows.slice(start, end + 1), error: null }
+            : { data: sorted.slice(start, end + 1), error: null }
         },
       }
       return { select: () => page }
     }
-    if (table === 'movies') {
+    if (table === 'leagues') {
       const select = query.select.bind(query)
-      query.select = () => ({
+      query.select = (columns?: string) => ({
+        ...select(columns),
         in: (column: string, ids: string[]) => {
-          batches.push(ids)
-          return failure === 'movies'
-            ? { gt: () => ({ data: null, error: { message: 'movies unavailable' } }) }
-            : select().in(column, ids)
+          leagueBatches.push(ids)
+          return failure === 'leagues'
+            ? { eq: () => ({ data: null, error: { message: 'leagues unavailable' } }) }
+            : select(columns).in(column, ids)
         },
       })
-      if (failure === 'update') {
-        query.update = () => ({ eq: () => ({ select: () => ({ single: () => ({ data: null, error: { message: 'write failed' } }) }) }) })
-      }
+    }
+    if (table === 'movies' && failure === 'update') {
+      query.update = () => ({ eq: () => ({ select: () => ({ single: () => ({ data: null, error: { message: 'write failed' } }) }) }) })
     }
     return query
   }
-  return { client, batches, ranges }
+  return { client, ranges, orders, leagueBatches }
 }
+
+/** A run's result with nothing failed, missing or deferred, unless overridden. */
+function runResult(overrides: Partial<SyncReleaseDatesResult>): SyncReleaseDatesResult {
+  return {
+    movies_checked: 0,
+    dates_changed: 0,
+    posters_updated: 0,
+    leagues_notified: 0,
+    errors: [],
+    not_found: [],
+    deferred: 0,
+    ...overrides,
+  }
+}
+
+const FIGHT_CLUB = { movie_id: MOVIE_ID, tmdb_id: TMDB_ID, title: 'Fight Club' }
 
 Deno.test('sync-release-dates', async (t) => {
   await t.step('no-op when no candidate movies', async () => {
@@ -110,7 +169,7 @@ Deno.test('sync-release-dates', async (t) => {
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 0, dates_changed: 0, posters_updated: 0, leagues_notified: 0, failed: 0 })
+      assertEquals(result, runResult({}))
       assertEquals(calls.length, 0)
     } finally {
       restore()
@@ -124,7 +183,7 @@ Deno.test('sync-release-dates', async (t) => {
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 1, dates_changed: 0, posters_updated: 0, leagues_notified: 0, failed: 0 })
+      assertEquals(result, runResult({ movies_checked: 1 }))
       assertEquals(db.movies[0].release_date, today) // unchanged
       // Only the TMDb lookup happened, no Discord webhook call
       assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 0)
@@ -141,7 +200,7 @@ Deno.test('sync-release-dates', async (t) => {
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 1, dates_changed: 1, posters_updated: 0, leagues_notified: 1, failed: 0 })
+      assertEquals(result, runResult({ movies_checked: 1, dates_changed: 1, leagues_notified: 1 }))
       assertEquals(db.movies[0].release_date, newDate)
       assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 1)
     } finally {
@@ -157,9 +216,64 @@ Deno.test('sync-release-dates', async (t) => {
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 0, dates_changed: 0, posters_updated: 0, leagues_notified: 0, failed: 0 })
+      assertEquals(result, runResult({}))
       // Never even reaches out to TMDb for a movie nobody rosters
       assertEquals(calls.filter((c) => c.url.includes('api.themoviedb.org')).length, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('skips released movies that already have a poster', async () => {
+    const db = baseDb()
+    db.movies[0].release_date = '1999-10-15'
+    db.movies[0].poster_url = 'https://image.tmdb.org/t/p/w500/existing.jpg'
+    const { client } = createSyncClient(db)
+    const { calls, restore } = stubFetch(tmdbResponder('1999-10-15', '/new-poster.jpg'))
+
+    try {
+      assertEquals(await runSyncReleaseDates(client, TMDB_TOKEN), runResult({}))
+      assertEquals(calls.length, 0)
+      assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/existing.jpg')
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('skips completed seasons and does not notify their leagues', async () => {
+    const db = baseDb()
+    db.leagues[0].status = 'completed'
+    const { client } = createSyncClient(db)
+    const { calls, restore } = stubFetch(tmdbResponder('2027-01-15'))
+
+    try {
+      // Held only by the completed league: not a candidate at all.
+      assertEquals(await runSyncReleaseDates(client, TMDB_TOKEN), runResult({}))
+      assertEquals(calls.length, 0)
+
+      // Also held by a league still in play: checked once, and only that
+      // league (which has no Discord channel here) is notified.
+      db.pickups.push({ movie_id: MOVIE_ID, league_id: 'league-2', dropped_at: null, teams: { name: 'Team B' } })
+      const result = await runSyncReleaseDates(client, TMDB_TOKEN)
+      assertEquals(result, runResult({ movies_checked: 1, dates_changed: 1, leagues_notified: 1 }))
+      assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 0)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('reports a movie TMDb no longer has as not found, not a failure', async () => {
+    const db = baseDb()
+    db.movies[0].poster_url = 'https://image.tmdb.org/t/p/w500/existing.jpg'
+    const { client } = createSyncClient(db)
+    const { calls, restore } = stubFetch(tmdbResponder(null))
+
+    try {
+      const result = await runSyncReleaseDates(client, TMDB_TOKEN)
+      assertEquals(result, runResult({ movies_checked: 1, not_found: [FIGHT_CLUB] }))
+      assertEquals(db.movies[0].release_date, today)
+      assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/existing.jpg')
+      assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 0)
     } finally {
       restore()
     }
@@ -169,11 +283,14 @@ Deno.test('sync-release-dates', async (t) => {
     const db = baseDb()
     db.movies[0].poster_url = 'https://image.tmdb.org/t/p/w500/existing.jpg'
     const { client } = createSyncClient(db)
-    const { calls, restore } = stubFetch(tmdbResponder(null))
+    const { calls, restore } = stubFetch(() => new Response('Unauthorized', { status: 401 }))
 
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 1, dates_changed: 0, posters_updated: 0, leagues_notified: 0, failed: 1 })
+      assertEquals(result, runResult({
+        movies_checked: 1,
+        errors: [{ ...FIGHT_CLUB, error: 'TMDb lookup failed with status 401' }],
+      }))
       assertEquals(db.movies[0].release_date, today)
       assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/existing.jpg')
       assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 0)
@@ -190,7 +307,7 @@ Deno.test('sync-release-dates', async (t) => {
       const { calls, restore } = stubFetch(tmdbResponder(today, '/new-poster.jpg'))
       try {
         const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-        assertEquals(result, { movies_checked: 1, dates_changed: 0, posters_updated: 1, leagues_notified: 0, failed: 0 })
+        assertEquals(result, runResult({ movies_checked: 1, posters_updated: 1 }))
         assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/new-poster.jpg')
         assertEquals(db.movies[0].release_date, releaseDate)
         assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 0)
@@ -251,9 +368,7 @@ Deno.test('sync-release-dates', async (t) => {
     const { restore } = stubFetch(tmdbResponder('', '/new-poster.jpg'))
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result.posters_updated, 1)
-      assertEquals(result.dates_changed, 0)
-      assertEquals(result.failed, 0)
+      assertEquals(result, runResult({ movies_checked: 1, posters_updated: 1 }))
       assertEquals(db.movies[0].release_date, today)
     } finally {
       restore()
@@ -268,7 +383,7 @@ Deno.test('sync-release-dates', async (t) => {
       const { restore } = stubFetch(() => new Response(JSON.stringify(metadata), { status: 200 }))
       try {
         const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-        assertEquals(result.failed, 1)
+        assertEquals(result.errors, [{ ...FIGHT_CLUB, error: 'Invalid TMDb movie response' }])
         assertEquals(result.posters_updated, 0)
         assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/existing.jpg')
       } finally {
@@ -283,7 +398,10 @@ Deno.test('sync-release-dates', async (t) => {
     const { calls, restore } = stubFetch(tmdbResponder('2027-01-15', '/new-poster.jpg'))
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 1, dates_changed: 0, posters_updated: 0, leagues_notified: 0, failed: 1 })
+      assertEquals(result, runResult({
+        movies_checked: 1,
+        errors: [{ ...FIGHT_CLUB, error: 'Failed to update movie metadata: write failed' }],
+      }))
       assertEquals(db.movies[0].poster_url, null)
       assertEquals(db.movies[0].release_date, today)
       assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 0)
@@ -298,11 +416,15 @@ Deno.test('sync-release-dates', async (t) => {
     db.pickups.push({ movie_id: 'movie-2', league_id: LEAGUE_ID, dropped_at: null, teams: { name: 'Team A' } })
     const { client } = createSyncClient(db)
     const { restore } = stubFetch((url) => url.endsWith(`/${TMDB_ID}`)
-      ? new Response('Not Found', { status: 404 })
+      ? new Response('Unauthorized', { status: 401 })
       : new Response(JSON.stringify({ id: TMDB_ID + 1, title: 'Other movie', poster_path: '/new-poster.jpg' }), { status: 200 }))
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 2, dates_changed: 0, posters_updated: 1, leagues_notified: 0, failed: 1 })
+      assertEquals(result, runResult({
+        movies_checked: 2,
+        posters_updated: 1,
+        errors: [{ ...FIGHT_CLUB, error: 'TMDb lookup failed with status 401' }],
+      }))
       assertEquals(db.movies[0].poster_url, null)
       assertEquals(db.movies[1].poster_url, 'https://image.tmdb.org/t/p/w500/new-poster.jpg')
     } finally {
@@ -317,7 +439,7 @@ Deno.test('sync-release-dates', async (t) => {
     const { restore } = stubFetch(tmdbResponder('2027-01-15', '/new-poster.jpg'))
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN)
-      assertEquals(result, { movies_checked: 1, dates_changed: 1, posters_updated: 1, leagues_notified: 2, failed: 0 })
+      assertEquals(result, runResult({ movies_checked: 1, dates_changed: 1, posters_updated: 1, leagues_notified: 2 }))
       assertEquals(db.movies[0].release_date, '2027-01-15')
       assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/new-poster.jpg')
     } finally {
@@ -341,24 +463,45 @@ Deno.test('sync-release-dates', async (t) => {
     }
   })
 
-  await t.step('pages holdings and restricts movie queries to bounded roster ID batches', async () => {
+  await t.step('checks release dates first and defers the rest once the time budget runs out', async () => {
     const db = baseDb()
-    db.team_holdings = Array.from({ length: 1001 }, (_, i) => ({ movie_id: `movie-${i}`, league_id: LEAGUE_ID, team_name: 'Team A' }))
-    db.movies[0].id = 'movie-1000'
-    const { client, batches, ranges } = createSyncClient(db)
-    const { restore } = stubFetch(tmdbResponder(today, '/new-poster.jpg'))
+    // Sorts ahead of MOVIE_ID, but only needs a poster, so it waits.
+    db.movies.push({ id: 'movie-0', tmdb_id: TMDB_ID + 1, title: 'Old movie', release_date: '1999-10-15', poster_url: null })
+    db.pickups.push({ movie_id: 'movie-0', league_id: LEAGUE_ID, dropped_at: null, teams: { name: 'Team A' } })
+    const { client } = createSyncClient(db)
+    const { calls, restore } = stubFetch(tmdbResponder(today, '/new-poster.jpg'))
+    // Each clock read advances a second, so a 1.5s budget allows one lookup.
+    let reads = 0
+    const now = () => reads++ * 1000
     try {
-      assertEquals((await runSyncReleaseDates(client, TMDB_TOKEN)).posters_updated, 1)
-      assertEquals(ranges, [[0, 999], [1000, 1999]])
-      assertEquals(batches.map((batch) => batch.length), [150, 150, 150, 150, 150, 150, 101])
-      assertEquals(new Set(batches.flat()).size, 1001)
+      const result = await runSyncReleaseDates(client, TMDB_TOKEN, undefined, { now, timeBudgetMs: 1500 })
+      assertEquals(result, runResult({ movies_checked: 1, posters_updated: 1, deferred: 1 }))
+      assertEquals(calls.map((c) => c.url), [`https://api.themoviedb.org/3/movie/${TMDB_ID}`])
       assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/new-poster.jpg')
+      assertEquals(db.movies[1].poster_url, null)
     } finally {
       restore()
     }
   })
 
-  for (const failure of ['holdings', 'movies'] as const) {
+  await t.step('pages ordered holdings and batches the league status lookups', async () => {
+    const db = baseDb()
+    db.team_holdings = Array.from({ length: 1001 }, (_, i) => ({ movie_id: MOVIE_ID, league_id: `league-${i}`, team_name: 'Team A' }))
+    const { client, ranges, orders, leagueBatches } = createSyncClient(db)
+    const { restore } = stubFetch(tmdbResponder(today, '/new-poster.jpg'))
+    try {
+      assertEquals(await runSyncReleaseDates(client, TMDB_TOKEN), runResult({ movies_checked: 1, posters_updated: 1 }))
+      assertEquals(ranges, [[0, 999], [1000, 1999]])
+      // OFFSET paging is only stable over a total order.
+      assertEquals(orders, ['movie_id', 'league_id', 'movie_id', 'league_id'])
+      assertEquals(leagueBatches.map((batch) => batch.length), [150, 150, 150, 150, 150, 150, 101])
+      assertEquals(new Set(leagueBatches.flat()).size, 1001)
+    } finally {
+      restore()
+    }
+  })
+
+  for (const failure of ['holdings', 'leagues'] as const) {
     await t.step(`fails the job when the ${failure} query fails`, async () => {
       const { client } = createSyncClient(baseDb(), failure)
       const { calls, restore } = stubFetch(tmdbResponder(today))
