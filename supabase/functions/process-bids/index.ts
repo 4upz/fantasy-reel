@@ -14,7 +14,7 @@
  * 4. Create movie if it doesn't exist (from movie_data)
  * 5. Create pickup record
  * 6. Deduct from team budget
- * 7. Mark winner as 'won', others as 'lost'
+ * 7. Mark winner as 'won', others as 'lost' (every bid, if no bidder could take the movie)
  * 8. Send notifications to winner and losers
  */
 // Trigger deploy
@@ -151,6 +151,13 @@ interface VoidedBidResult {
   reason: string
   tmdb_id?: number
   movie_id?: string
+}
+
+/** A pickup contest no bidder could take, closed out with every bid lost. */
+interface UnawardedContest {
+  league_id: string
+  tmdb_id: number
+  movie_title: string
 }
 
 // deno-lint-ignore no-explicit-any
@@ -483,12 +490,19 @@ async function excludeFinishedSeasonBids<T extends { id: string; league_id: stri
  *
  * `slotsByLeague` carries the league's *total* allowance for this kind (not the
  * remainder); the "no slots" notification copy quotes it.
+ *
+ * `unreadableTeams` names the teams zeroed that way. A zeroed team was never
+ * judged, so its bid going unawarded says nothing about whether it would fit.
  */
 async function getTeamCapacities(
   serviceClient: ServiceClient,
   contests: BidContest[],
   kind: 'pickup' | 'counterpick',
-): Promise<{ capacities: Map<string, TeamCapacity>; slotsByLeague: Map<string, number> }> {
+): Promise<{
+  capacities: Map<string, TeamCapacity>
+  slotsByLeague: Map<string, number>
+  unreadableTeams: Set<string>
+}> {
   const leagueOfTeam = new Map<string, string>()
   for (const contest of contests) {
     const leagueId = contest.key.split(':')[0]
@@ -499,7 +513,8 @@ async function getTeamCapacities(
   const teamIds = [...leagueOfTeam.keys()]
   const capacities = new Map<string, TeamCapacity>()
   const slotsByLeague = new Map<string, number>()
-  if (teamIds.length === 0) return { capacities, slotsByLeague }
+  const unreadableTeams = new Set<string>()
+  if (teamIds.length === 0) return { capacities, slotsByLeague, unreadableTeams }
 
   const { rows: leagueRows } = await selectByIdBatches<{
     id: string
@@ -576,7 +591,9 @@ async function getTeamCapacities(
   let unreadDropTeams = new Set<string>()
 
   if (kind === 'pickup') {
-    const { rows: dropRows, unreadIds } = await selectByIdBatches<{ team_id: string }>(
+    const { rows: dropRows, unreadIds: unreadDropCountTeams } = await selectByIdBatches<
+      { team_id: string }
+    >(
       teamIds,
       'Failed to count team drops:',
       (batch) => serviceClient.from('team_drops').select('team_id').in('team_id', batch),
@@ -584,9 +601,8 @@ async function getTeamCapacities(
     for (const row of dropRows) {
       dropsByTeam.set(row.team_id, (dropsByTeam.get(row.team_id) ?? 0) + 1)
     }
-    unreadDropTeams = unreadIds
 
-    const { rows: holdingRows } = await selectByIdBatches<{
+    const { rows: holdingRows, unreadIds: unreadHoldingTeams } = await selectByIdBatches<{
       holding_id: string
       team_id: string
       movie_id: string
@@ -601,6 +617,9 @@ async function getTeamCapacities(
           .select('holding_id, team_id, movie_id, release_date, counterpicked_by_team_id')
           .in('team_id', batch),
     )
+    // An unread holdings list would otherwise read as "nothing droppable",
+    // judging a full roster's conditional drops as unusable on a failed read.
+    unreadDropTeams = new Set([...unreadDropCountTeams, ...unreadHoldingTeams])
 
     // One query for every pending counterpick auction touching these movies,
     // rather than one per holding.
@@ -649,6 +668,7 @@ async function getTeamCapacities(
       unreadUsedTeams.has(teamId) || unreadBudgetTeams.has(teamId) || unreadDropTeams.has(teamId)
 
     if (unreadable || !league) {
+      unreadableTeams.add(teamId)
       capacities.set(teamId, {
         freeSlots: 0,
         remainingBudget: 0,
@@ -666,7 +686,7 @@ async function getTeamCapacities(
     })
   }
 
-  return { capacities, slotsByLeague }
+  return { capacities, slotsByLeague, unreadableTeams }
 }
 
 /** The user behind a team, or null if the team has no reachable owner. */
@@ -768,6 +788,94 @@ async function notifyVoidedBidder(
     body,
     data,
   })
+}
+
+/** The title a pickup bid group is announced under: the first bid that carries one. */
+function pickupMovieTitle(bids: PickupBid[], tmdbId: number): string {
+  return bids.find((bid) => bid.movie_data?.title)?.movie_data?.title || `Movie #${tmdbId}`
+}
+
+/**
+ * Why a pickup bid did not win, in words the bidder can act on. "Not enough"
+ * is wrong for a bid that led but had nowhere to put the movie or nothing left
+ * to pay with. `winningAmount` is null when nobody won the movie.
+ */
+function pickupLossBody(
+  reason: BidLossReason,
+  amount: number,
+  movieTitle: string,
+  winningAmount: number | null,
+): string {
+  switch (reason) {
+    case 'insufficient_budget':
+      return `Your bid of $${amount} on ${movieTitle} could not be honored — your remaining Fantasy Budget was already committed to higher-priority bids.`
+    case 'no_slots':
+      return `Your bid of $${amount} on ${movieTitle} could not be honored — your roster was full and no conditional drop was available.`
+    case 'outbid':
+      return winningAmount === null
+        ? `Your bid of $${amount} on ${movieTitle} was outbid, and the top bidder could not take the movie, so nobody won it this week.`
+        : `Your bid of $${amount} was not enough. The winning bid was $${winningAmount}.`
+  }
+}
+
+/**
+ * Close out a pickup contest that no bidder could take: every pending bid on
+ * the movie loses, and each bidder is told why.
+ *
+ * Leaving these bids pending is not a harmless deferral. A bid past its
+ * processing deadline can no longer be cancelled, yet it still shows as live
+ * and is re-resolved every week -- so it wins, and charges the budget, in
+ * whatever later week its team happens to have room.
+ *
+ * Only rows still pending are claimed, and only those bidders notified, so a
+ * repeated run cannot notify twice. No email is sent: the bid-lost template
+ * quotes a winning bid, and there is none.
+ */
+async function settleUnawardedPickupContest(
+  serviceClient: ServiceClient,
+  bids: PickupBid[],
+  lossReasons: Map<string, BidLossReason>,
+  movieTitle: string,
+): Promise<void> {
+  const { data: claimed, error } = await serviceClient
+    .from('pickup_bids')
+    .update({ status: 'lost' })
+    .in('id', bids.map((bid) => bid.id))
+    .in('status', ['active', 'outbid'])
+    .select('id')
+
+  if (error) throw error
+
+  const claimedIds = new Set((claimed ?? []).map((row: { id: string }) => row.id))
+  log.info('No pickup awarded: no bidder could take the movie', {
+    movie_title: movieTitle,
+    bids_lost: claimedIds.size,
+  })
+
+  for (const bid of bids) {
+    if (!claimedIds.has(bid.id)) continue
+
+    const userId = await getTeamUserId(serviceClient, bid.team_id)
+    if (!userId) continue
+
+    // The resolver reports on every bid it weighed. Anything else was an
+    // 'outbid' row, which lost on price to a leader that then could not take it.
+    const reason = lossReasons.get(bid.id) ?? 'outbid'
+
+    await serviceClient.from('notifications').insert({
+      user_id: userId,
+      league_id: bid.league_id,
+      type: 'bid_lost',
+      title: `Bid unsuccessful for ${movieTitle}`,
+      body: pickupLossBody(reason, bid.amount, movieTitle, null),
+      data: {
+        bid_id: bid.id,
+        tmdb_id: bid.tmdb_id,
+        winning_amount: null,
+        loss_reason: reason,
+      },
+    })
+  }
 }
 
 async function getRecipient(
@@ -1816,6 +1924,7 @@ Deno.serve(async (req) => {
 
     const results: ProcessResult[] = []
     const voidedPickupResults: VoidedBidResult[] = []
+    const unawardedPickups: UnawardedContest[] = []
     const deferred: DeferredGroup[] = []
 
     // Every due group's active bids, gathered before any award, so capacity is
@@ -1845,10 +1954,9 @@ Deno.serve(async (req) => {
       if (openWindowEnds) {
         // Someone still has time to counter: leave the group for the extended
         // run, but record the deferral so it can be surfaced downstream.
-        const titledBid = movieBids.find((bid) => bid.movie_data?.title)
         deferred.push({
           league_id: leagueId,
-          movie_title: titledBid?.movie_data?.title || `Movie #${tmdbId}`,
+          movie_title: pickupMovieTitle(movieBids, tmdbId),
           counter_window_ends: openWindowEnds,
         })
         continue
@@ -1872,11 +1980,10 @@ Deno.serve(async (req) => {
       })
     }
 
-    const { capacities: pickupCapacities } = await getTeamCapacities(
-      serviceClient,
-      pickupContests,
-      'pickup',
-    )
+    const {
+      capacities: pickupCapacities,
+      unreadableTeams: unreadablePickupTeams,
+    } = await getTeamCapacities(serviceClient, pickupContests, 'pickup')
     const {
       winners: pickupWinners,
       lossReasons: pickupLossReasons,
@@ -1891,10 +1998,24 @@ Deno.serve(async (req) => {
       try {
         const resolved = pickupWinners.get(key)
 
-        // No winner: every contender was out of room, budget, or drops. Leave
-        // the bids pending -- a later run can award them once capacity frees up
-        // -- exactly as an unawarded counterpick contest behaves.
-        if (!resolved) continue
+        if (!resolved) {
+          // A team whose capacity could not be read was zeroed, not judged.
+          // Its bid may well fit, so hold the group for the next run rather
+          // than turn a failed read into a lost bid.
+          if (contest.activeBids.some((bid) => unreadablePickupTeams.has(bid.team_id))) {
+            errors.push({ movie_key: key, error: 'Bidder capacity could not be read; bids left pending' })
+            continue
+          }
+
+          // Every contender was out of room, budget, or drops. These bids were
+          // due now, so they lose now rather than linger into next week -- see
+          // settleUnawardedPickupContest for why lingering is harmful.
+          const tmdbId = parseInt(key.split(':')[1])
+          const movieTitle = pickupMovieTitle(allBidsForMovie, tmdbId)
+          await settleUnawardedPickupContest(serviceClient, allBidsForMovie, pickupLossReasons, movieTitle)
+          unawardedPickups.push({ league_id: contestLeagueId, tmdb_id: tmdbId, movie_title: movieTitle })
+          continue
+        }
 
         const winner = allBidsForMovie.find((bid) => bid.id === resolved.id)!
         const movieTitle = winner.movie_data?.title || `Movie #${winner.tmdb_id}`
@@ -2109,22 +2230,14 @@ Deno.serve(async (req) => {
           const loserUserId = await getTeamUserId(serviceClient, loserBid.team_id)
 
           if (loserUserId) {
-            // Say which constraint actually stopped the bid. "Not enough" is
-            // wrong -- and unactionable -- for a bid that led its contest but
-            // had nowhere to put the movie or nothing left to pay with.
             const lossReason: BidLossReason = pickupLossReasons.get(loserBid.id) ?? 'outbid'
-            const lossBody = lossReason === 'insufficient_budget'
-              ? `Your bid of $${loserBid.amount} on ${movieTitle} could not be honored — your remaining Fantasy Budget was already committed to higher-priority bids.`
-              : lossReason === 'no_slots'
-                ? `Your bid of $${loserBid.amount} on ${movieTitle} could not be honored — your roster was full and no conditional drop was available.`
-                : `Your bid of $${loserBid.amount} was not enough. The winning bid was $${winner.amount}.`
 
             await serviceClient.from('notifications').insert({
               user_id: loserUserId,
               league_id: loserBid.league_id,
               type: 'bid_lost',
               title: `Bid unsuccessful for ${movieTitle}`,
-              body: lossBody,
+              body: pickupLossBody(lossReason, loserBid.amount, movieTitle, winner.amount),
               data: {
                 bid_id: loserBid.id,
                 tmdb_id: loserBid.tmdb_id,
@@ -2223,8 +2336,9 @@ Deno.serve(async (req) => {
 
     // Weekly wrap-up messages. "No bids were placed" is reserved for leagues
     // that truly saw no bid activity: a league whose groups were deferred,
-    // voided, or errored had bids, and telling it otherwise misreports the week
-    // (deferred leagues get the "results delayed" message above instead).
+    // voided, unawarded, or errored had bids, and telling it otherwise
+    // misreports the week (deferred leagues get the "results delayed" message
+    // above instead).
     let notificationSummary: NotificationSummary | undefined
     if (mode === 'weekly') {
       await sendBidsDeferredDiscordNotifications(serviceClient, deferred)
@@ -2235,29 +2349,34 @@ Deno.serve(async (req) => {
         ...deferred.map(d => d.league_id),
         ...voidedPickupResults.map(v => v.league_id),
         ...voidedCounterpickResults.map(v => v.league_id),
+        ...unawardedPickups.map(u => u.league_id),
         ...errors.map(e => e.movie_key.split(':')[0]),
       ])
       notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBidActivity, league_id)
     }
 
-    // A run that awarded nothing but voided or deferred something did do work,
-    // so it must not report "No bids to process" -- that message is reserved
-    // for a truly idle run.
+    // A run that awarded nothing but voided, closed out, or deferred something
+    // did do work, so it must not report "No bids to process" -- that message
+    // is reserved for a truly idle run.
     const voidedCount = voidedPickupResults.length + voidedCounterpickResults.length
     const nothingProcessed = results.length === 0 && counterpickResults.length === 0
     const voidedSuffix = voidedCount > 0
       ? `; voided ${voidedCount} bid(s) for movies that released before processing`
+      : ''
+    const unawardedSuffix = unawardedPickups.length > 0
+      ? `; ${unawardedPickups.length} movie(s) went unawarded (no bidder could take them)`
       : ''
     const deferredSuffix = deferred.length > 0
       ? `; deferred ${deferred.length} movie(s) with open counter-bid windows`
       : ''
 
     // Items attempted = awarded pickups + awarded counterpicks + voided bids +
-    // movies whose processing errored. Skipped movies (open counter windows,
-    // no active bids) did not have work attempted on them.
+    // unawarded movies + movies whose processing errored. Skipped movies (open
+    // counter windows, no active bids) did not have work attempted on them.
     const job_status = await run.finish(serviceClient, {
       processed:
-        results.length + counterpickResults.length + voidedCount + errors.length,
+        results.length + counterpickResults.length + voidedCount + unawardedPickups.length +
+        errors.length,
       failed: errors.length,
       errors,
       metadata: {
@@ -2265,15 +2384,16 @@ Deno.serve(async (req) => {
         pickups_awarded: results.length,
         counterpicks_awarded: counterpickResults.length,
         bids_voided: voidedCount,
+        pickups_unawarded: unawardedPickups.length,
         movies_deferred: deferred.length,
         ...(notificationSummary ? { notifications: notificationSummary } : {}),
       },
     })
 
     return jsonResponse({
-      message: nothingProcessed && voidedCount === 0 && deferred.length === 0
+      message: nothingProcessed && voidedCount === 0 && unawardedPickups.length === 0 && deferred.length === 0
         ? 'No bids to process'
-        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)${voidedSuffix}${deferredSuffix}`,
+        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)${voidedSuffix}${unawardedSuffix}${deferredSuffix}`,
       mode,
       processed: results.length,
       results,
@@ -2281,6 +2401,7 @@ Deno.serve(async (req) => {
       counterpick_results: counterpickResults,
       voided_pickup_bids: voidedPickupResults.length > 0 ? voidedPickupResults : undefined,
       voided_counterpick_bids: voidedCounterpickResults.length > 0 ? voidedCounterpickResults : undefined,
+      unawarded_pickups: unawardedPickups.length > 0 ? unawardedPickups : undefined,
       deferred: deferred.length > 0 ? deferred : undefined,
       errors: errors.length > 0 ? errors : undefined,
       notifications: notificationSummary,
