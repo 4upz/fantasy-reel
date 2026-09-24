@@ -67,6 +67,7 @@ Deno.serve(async (req) => {
         leagues_notified: result.leagues_notified,
         not_found: result.not_found,
         deferred: result.deferred,
+        sync_release_dates_progress: { resume_after: result.resume_after },
         job_runs_purged: purged,
         tmdb_cache_purged: tmdbCachePurged,
       },

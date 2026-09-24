@@ -15,8 +15,9 @@
  * does), and outside the release-date window it only looks up movies that
  * have no poster yet. The nightly workload therefore tracks the leagues in
  * play instead of growing with every season ever played. A time budget keeps
- * a slow TMDb from pushing a run past the cron proxy's timeout: release-date
- * checks go first, and whatever is left is reported as deferred.
+ * a slow TMDb from pushing a run past the cron proxy's timeout. Each sweep
+ * checks release dates first and resumes deferred work from job_runs on the
+ * next invocation, before starting another sweep.
  *
  * Deliberately a separate function from sync-movies: sync-movies is a broad
  * TMDb discovery/upsert pass over popularity-sorted upcoming movies for a
@@ -43,9 +44,9 @@ const HOLDINGS_PAGE_SIZE = 1000
 // UUID filters are sent in the URL; keep each request below the gateway limit.
 const LEAGUE_ID_BATCH_SIZE = 150
 /**
- * No new TMDb lookup starts after this long. The Vercel cron proxy aborts the
- * request at 55s; the rest covers the Discord sends plus the purges and
- * run.finish in index.ts.
+ * TMDb requests, including retries and response bodies, stop at this budget.
+ * The Vercel cron proxy aborts at 55s; leave the rest for Discord, purges and
+ * recording the run (including its continuation cursor).
  */
 const TIME_BUDGET_MS = 40_000
 
@@ -57,6 +58,11 @@ export interface SyncMovieRef {
 
 export interface SyncError extends SyncMovieRef {
   error: string
+}
+
+interface SyncCursor {
+  movie_id: string
+  date_check: boolean
 }
 
 export interface SyncReleaseDatesResult {
@@ -71,6 +77,8 @@ export interface SyncReleaseDatesResult {
   not_found: SyncMovieRef[]
   /** Candidates left for the next run because the time budget ran out. */
   deferred: number
+  /** Last completed candidate in an unfinished sweep; null starts a new sweep. */
+  resume_after: SyncCursor | null
 }
 
 export interface SyncReleaseDatesOptions {
@@ -106,6 +114,31 @@ type TmdbLookup =
   | { kind: 'found'; movie: TmdbMovie }
   | { kind: 'not_found' }
   | { kind: 'failed'; error: string }
+  | { kind: 'deferred' }
+
+/** Aborted runs have no progress metadata, so they do not erase the last checkpoint. */
+async function readSyncCursor(serviceClient: SupabaseClient): Promise<SyncCursor | null> {
+  const { data, error } = await serviceClient
+    .from('job_runs')
+    .select('metadata')
+    .eq('job_name', 'sync-release-dates')
+    .not('metadata->sync_release_dates_progress', 'is', null)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw new Error(`Failed to read release-date sync progress: ${error.message}`)
+  const cursor = data?.metadata?.sync_release_dates_progress?.resume_after
+  if (cursor == null) return null
+  if (typeof cursor.movie_id !== 'string' || typeof cursor.date_check !== 'boolean') {
+    throw new Error('Invalid release-date sync progress')
+  }
+  return cursor
+}
+
+function compareCursors(a: SyncCursor, b: SyncCursor): number {
+  return Number(b.date_check) - Number(a.date_check)
+    || (a.movie_id < b.movie_id ? -1 : a.movie_id > b.movie_id ? 1 : 0)
+}
 
 /**
  * Holdings whose movie has something to refresh: a release date still inside
@@ -161,12 +194,14 @@ function formatDate(isoDate: string): string {
 async function fetchTmdbMovie(
   tmdbId: number,
   token: string,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  signal: AbortSignal
 ): Promise<TmdbLookup> {
   try {
     const response = await fetchWithRetry(
       `https://api.themoviedb.org/3/movie/${tmdbId}`,
       {
+        signal,
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -192,6 +227,7 @@ async function fetchTmdbMovie(
     }
     return { kind: 'found', movie: data }
   } catch (error) {
+    if (signal.aborted) return { kind: 'deferred' }
     log.warn('TMDb lookup error', { tmdb_id: tmdbId, error: serializeError(error) })
     return { kind: 'failed', error: `TMDb lookup error: ${error instanceof Error ? error.message : String(error)}` }
   }
@@ -211,6 +247,7 @@ export async function runSyncReleaseDates(
   recentCutoff.setUTCDate(recentCutoff.getUTCDate() - RECENT_DAYS)
   const cutoffDate = recentCutoff.toISOString().split('T')[0]
 
+  let resumeAfter = await readSyncCursor(serviceClient)
   const candidateHoldings = await fetchCandidateHoldings(serviceClient, cutoffDate)
   const completedLeagueIds = await fetchCompletedLeagueIds(
     serviceClient,
@@ -234,11 +271,14 @@ export async function runSyncReleaseDates(
     })
   }
 
-  // Release-date checks go first so a run that hits the time budget only
-  // defers poster repairs, which can wait a night.
+  // Resume the unfinished sweep before revisiting already checked movies.
+  // Compare keys instead of locating a row: the checkpoint movie may since
+  // have been dropped, repaired, or removed from a completed league.
   const inDateWindow = (movie: MovieRow) => movie.release_date !== null && movie.release_date >= cutoffDate
+  const cursorFor = (movie: MovieRow): SyncCursor => ({ movie_id: movie.id, date_check: inDateWindow(movie) })
   const candidates = [...moviesById.values()]
-    .sort((a, b) => Number(inDateWindow(b)) - Number(inDateWindow(a)))
+    .sort((a, b) => compareCursors(cursorFor(a), cursorFor(b)))
+    .filter((movie) => !resumeAfter || compareCursors(cursorFor(movie), resumeAfter) > 0)
 
   // leagueId -> changes to report in that league's embed
   const changesByLeague = new Map<
@@ -246,17 +286,25 @@ export async function runSyncReleaseDates(
     Array<{ title: string; teamName: string; previousDate: string; newDate: string }>
   >()
   let moviesChecked = 0
+  let moviesCompleted = 0
   let datesChanged = 0
   let postersUpdated = 0
   const errors: SyncError[] = []
   const notFound: SyncMovieRef[] = []
 
   for (const movie of candidates) {
-    if (now() - startedAt >= timeBudgetMs) break
+    const remainingMs = timeBudgetMs - (now() - startedAt)
+    if (remainingMs <= 0) break
     moviesChecked++
 
     const movieRef = { movie_id: movie.id, tmdb_id: movie.tmdb_id, title: movie.title }
-    const lookup = await fetchTmdbMovie(movie.tmdb_id, tmdbToken, fetchImpl)
+    const lookup = await fetchTmdbMovie(
+      movie.tmdb_id, tmdbToken, fetchImpl, AbortSignal.timeout(Math.ceil(remainingMs))
+    )
+    // A lookup interrupted by the sweep deadline gets a full budget next run.
+    if (lookup.kind === 'deferred') break
+    moviesCompleted++
+    resumeAfter = cursorFor(movie)
     // Small delay between sequential TMDb lookups, matching sync-movies.
     await new Promise((resolve) => setTimeout(resolve, 50))
 
@@ -313,7 +361,7 @@ export async function runSyncReleaseDates(
     }
   }
 
-  const deferred = candidates.length - moviesChecked
+  const deferred = candidates.length - moviesCompleted
   if (deferred > 0) {
     log.warn('Time budget reached; remaining movies deferred to the next run', {
       checked: moviesChecked,
@@ -357,5 +405,6 @@ export async function runSyncReleaseDates(
     errors,
     not_found: notFound,
     deferred,
+    resume_after: deferred > 0 ? resumeAfter : null,
   }
 }

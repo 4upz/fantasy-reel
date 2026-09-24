@@ -8,9 +8,10 @@
  *
  * Run with: deno task test:unit
  */
-import { assertEquals, assertRejects } from '@std/assert'
+import { assert, assertEquals, assertRejects } from '@std/assert'
 import { runSyncReleaseDates, type SyncReleaseDatesResult } from '../sync-release-dates/handler.ts'
 import { createMockDbClient, stubFetch, type MockDb, type Row } from './_mock-client.ts'
+import { startJobRun } from './job-runs.ts'
 
 const LEAGUE_ID = 'league-1'
 const MOVIE_ID = 'movie-1'
@@ -77,7 +78,7 @@ function matchesAny(row: Row, filter: string): boolean {
  * columns, the candidate filter, ordering and pagination -- and adds fault
  * injection, locally rather than broadening the shared mock.
  */
-function createSyncClient(db: MockDb, failure?: 'holdings' | 'leagues' | 'update') {
+function createSyncClient(db: MockDb, failure?: 'holdings' | 'leagues' | 'update' | 'progress') {
   const client = createMockDbClient(db)
   const from = client.from.bind(client)
   const ranges: number[][] = []
@@ -85,6 +86,23 @@ function createSyncClient(db: MockDb, failure?: 'holdings' | 'leagues' | 'update
   const leagueBatches: string[][] = []
   client.from = (table: string) => {
     const query = from(table)
+    if (table === 'job_runs') {
+      query.select = () => ({
+        eq: (_column: string, jobName: string) => ({
+          not: () => ({
+            order: () => ({
+              limit: () => ({
+                maybeSingle: () => ({
+                  data: [...db.job_runs].reverse().find((row) => row.job_name === jobName
+                    && row.metadata?.sync_release_dates_progress) ?? null,
+                  error: failure === 'progress' ? { message: 'progress unavailable' } : null,
+                }),
+              }),
+            }),
+          }),
+        }),
+      })
+    }
     if (table === 'team_holdings') {
       // Like the view, each holding carries its movie's columns (inner join).
       const movies = new Map(db.movies.map((movie) => [movie.id, movie]))
@@ -154,6 +172,7 @@ function runResult(overrides: Partial<SyncReleaseDatesResult>): SyncReleaseDates
     errors: [],
     not_found: [],
     deferred: 0,
+    resume_after: null,
     ...overrides,
   }
 }
@@ -475,7 +494,10 @@ Deno.test('sync-release-dates', async (t) => {
     const now = () => reads++ * 1000
     try {
       const result = await runSyncReleaseDates(client, TMDB_TOKEN, undefined, { now, timeBudgetMs: 1500 })
-      assertEquals(result, runResult({ movies_checked: 1, posters_updated: 1, deferred: 1 }))
+      assertEquals(result, runResult({
+        movies_checked: 1, posters_updated: 1, deferred: 1,
+        resume_after: { movie_id: MOVIE_ID, date_check: true },
+      }))
       assertEquals(calls.map((c) => c.url), [`https://api.themoviedb.org/3/movie/${TMDB_ID}`])
       assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/new-poster.jpg')
       assertEquals(db.movies[1].poster_url, null)
@@ -501,7 +523,137 @@ Deno.test('sync-release-dates', async (t) => {
     }
   })
 
-  for (const failure of ['holdings', 'leagues'] as const) {
+  await t.step('resumes across runs until missing posters are reached, then starts a new sweep', async () => {
+    const db = baseDb()
+    db.movies[0].poster_url = 'https://image.tmdb.org/t/p/w500/existing.jpg'
+    db.movies.push(
+      { id: 'movie-2', tmdb_id: 551, title: 'Upcoming', release_date: today, poster_url: null },
+      { id: 'movie-0', tmdb_id: 552, title: 'Old movie', release_date: '1999-10-15', poster_url: null },
+    )
+    db.pickups.push(...['movie-2', 'movie-0'].map((movie_id) => ({ movie_id, league_id: LEAGUE_ID, dropped_at: null })))
+    const { client } = createSyncClient(db)
+    const { calls, restore } = stubFetch((url) => new Response(JSON.stringify({
+      id: Number(url.split('/').pop()), title: 'Movie', release_date: today, poster_path: '/existing.jpg',
+    })))
+    try {
+      const results = []
+      for (let run = 0; run < 4; run++) {
+        let reads = 0
+        const result = await runSyncReleaseDates(client, TMDB_TOKEN, undefined, {
+          now: () => reads++ * 1000, timeBudgetMs: 1500,
+        })
+        results.push(result)
+        await startJobRun('sync-release-dates').finish(client, {
+          processed: result.movies_checked, failed: result.errors.length,
+          metadata: { sync_release_dates_progress: { resume_after: result.resume_after } },
+        })
+      }
+      assertEquals(calls.map((call) => Number(call.url.split('/').pop())), [550, 551, 552, 550])
+      assertEquals(results.map((result) => result.deferred), [2, 1, 0, 1])
+      assertEquals(results[2].resume_after, null)
+      assertEquals(db.movies[2].poster_url, 'https://image.tmdb.org/t/p/w500/existing.jpg')
+    } finally {
+      restore()
+    }
+  })
+
+  for (const dateCheck of [true, false]) {
+    await t.step(`resumes past a removed checkpoint (date check: ${dateCheck}) and ignores aborted or unrelated runs`, async () => {
+      const db = baseDb()
+      db.movies[0].release_date = '1999-10-15'
+      db.job_runs = [
+        { job_name: 'sync-release-dates', metadata: { sync_release_dates_progress: {
+          resume_after: { movie_id: 'deleted-movie', date_check: dateCheck },
+        } } },
+        { job_name: 'sync-release-dates', status: 'failed', metadata: null },
+        { job_name: 'other-job', metadata: { sync_release_dates_progress: {
+          resume_after: { movie_id: 'zzz', date_check: false },
+        } } },
+      ]
+      const { client } = createSyncClient(db)
+      const { calls, restore } = stubFetch(tmdbResponder(today, '/poster.jpg'))
+      try {
+        const result = await runSyncReleaseDates(client, TMDB_TOKEN)
+        assertEquals(result.posters_updated, 1)
+        assertEquals(result.resume_after, null)
+        assertEquals(calls.length, 1)
+      } finally {
+        restore()
+      }
+    })
+  }
+
+  await t.step('clears an empty remaining tail so new candidates are checked on the next sweep', async () => {
+    const db = baseDb()
+    db.job_runs = [{ job_name: 'sync-release-dates', metadata: { sync_release_dates_progress: {
+      resume_after: { movie_id: 'removed-last-movie', date_check: false },
+    } } }]
+    const { client } = createSyncClient(db)
+    const { calls, restore } = stubFetch(tmdbResponder(today))
+    try {
+      const result = await runSyncReleaseDates(client, TMDB_TOKEN)
+      assertEquals(result, runResult({}))
+      assertEquals(calls.length, 0)
+      await startJobRun('sync-release-dates').finish(client, {
+        processed: 0, failed: 0,
+        metadata: { sync_release_dates_progress: { resume_after: result.resume_after } },
+      })
+      assertEquals((await runSyncReleaseDates(client, TMDB_TOKEN)).movies_checked, 1)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('bounds a late lookup and its retry by the remaining sweep budget', async () => {
+    const { client } = createSyncClient(baseDb())
+    let reads = 0
+    let attempts = 0
+    const fakeFetch: typeof fetch = async (_input, init) => {
+      const signal = (init as RequestInit).signal!
+      attempts++
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          signal.removeEventListener('abort', onAbort)
+          resolve()
+        }, attempts === 1 ? 100 : 2000)
+        const onAbort = () => { clearTimeout(timer); reject(signal.reason) }
+        signal.addEventListener('abort', onAbort, { once: true })
+      })
+      return new Response('Unavailable', { status: 503 })
+    }
+    const started = performance.now()
+    const result = await runSyncReleaseDates(client, TMDB_TOKEN, fakeFetch, {
+      // Simulate a lookup starting 39 seconds into the real 40-second budget.
+      now: () => reads++ === 0 ? 0 : 39_000,
+    })
+    assert(performance.now() - started < 2000, 'lookup/retry must stop when the remaining second expires')
+    assertEquals(attempts, 2)
+    assertEquals(result, runResult({ movies_checked: 1, deferred: 1 }))
+  })
+
+  await t.step('defers a response body that stalls until the sweep deadline', async () => {
+    const db = baseDb()
+    const previousCursor = { movie_id: 'movie-0', date_check: true }
+    db.job_runs = [{ job_name: 'sync-release-dates', metadata: { sync_release_dates_progress: {
+      resume_after: previousCursor,
+    } } }]
+    const { client } = createSyncClient(db)
+    const fakeFetch: typeof fetch = (_input, init) => {
+      const signal = (init as RequestInit).signal!
+      return Promise.resolve(new Response(new ReadableStream({
+        start(controller) {
+          signal.addEventListener('abort', () => controller.error(signal.reason), { once: true })
+        },
+      })))
+    }
+    const result = await runSyncReleaseDates(client, TMDB_TOKEN, fakeFetch, { timeBudgetMs: 50 })
+    assertEquals(result, runResult({ movies_checked: 1, deferred: 1, resume_after: previousCursor }))
+    assertEquals((await runSyncReleaseDates(client, TMDB_TOKEN,
+      async () => tmdbResponder(today, '/poster.jpg')('https://api.themoviedb.org/3/movie/550')!
+    )).posters_updated, 1)
+  })
+
+  for (const failure of ['holdings', 'leagues', 'progress'] as const) {
     await t.step(`fails the job when the ${failure} query fails`, async () => {
       const { client } = createSyncClient(baseDb(), failure)
       const { calls, restore } = stubFetch(tmdbResponder(today))
