@@ -73,6 +73,19 @@ export const DISCORD_COLORS = {
 
 export const FANTASY_REEL_ICON = 'https://fantasy-reel.vercel.app/icon-128.png'
 
+/**
+ * Spacing between messages to the same webhook. Discord's per-webhook bucket
+ * is 5 requests per 2s (400ms); this leaves a margin on top. Overrunning it
+ * can still cost a message -- sendToWebhook retries a 429 once, honouring
+ * retry_after (capped at 5s), but a failure on that retry is dropped like
+ * any other webhook error.
+ */
+export const WEBHOOK_SEND_DELAY_MS = 450
+
+export function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 // ============================================================================
 // Category → Column Mapping
 // ============================================================================

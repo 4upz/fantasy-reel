@@ -847,13 +847,16 @@ for the next run as a job error — a failed read is not a full roster.
 `BidPriorityList`'s cut line forecasts the same rules via `forecastBidFits`;
 `scripts/tests/bid-fit-forecast.test.cjs` checks it against the resolver.
 
-The bids-channel results post reports **every active bid** a run settles, pickups
-and counterpicks alike: won, couldn't be honored (and why), or cancelled — naming
-the team. `process-bids` records each outcome where it is decided
-(`recordResults`, into a per-kind `ResultsLedger`), and
-`_shared/bid-results-announcement.ts` renders it, splitting a busy league's post
-across messages rather than truncating it. A new way for a bid to settle must
-record its result too, or that bid silently drops out of the announcement.
+The bids-channel results post reports **every bid a run settles** — leaders and
+outbid bids, pickups and counterpicks — naming the team: won, outbid, couldn't be
+honored (and why), or cancelled. The one exception is bids cancelled because
+their season finished; `completeLeague()` announces that. `process-bids` records
+outcomes where they are decided, through `recordVoided` (every void path) and
+`recordResolvedContest` (every resolved contest), into a per-kind
+`ResultsLedger`; `_shared/bid-results-announcement.ts` renders it, splitting a
+busy league's post across messages rather than truncating it. A new way for a
+bid to settle must go through one of those helpers, or that bid silently drops
+out of the announcement.
 
 `_shared/bid-resolution.ts` resolves both bid types — every contest together, at
 most one award per team per pass, then re-check capacity (slots, budget, drop

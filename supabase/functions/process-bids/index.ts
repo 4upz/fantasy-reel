@@ -24,7 +24,15 @@ import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovi
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import {
+  sendDiscordNotification,
+  DISCORD_COLORS,
+  buildLeagueUrl,
+  buildEmbedAuthor,
+  getLeagueName,
+  delay,
+  WEBHOOK_SEND_DELAY_MS,
+} from '../_shared/discord.ts'
 import { COMPLETED_STATUS } from '../_shared/league-status.ts'
 import {
   type BidContest,
@@ -38,9 +46,9 @@ import {
   type VoidReasonCode,
 } from '../_shared/bid-resolution.ts'
 import {
-  type BidResultOutcome,
+  type BidResult,
   type BidResultsKind,
-  buildBidResultsEmbeds,
+  buildBidResultsMessages,
 } from '../_shared/bid-results-announcement.ts'
 import {
   getCounterpickNoSlotsEmailHtml,
@@ -160,19 +168,15 @@ interface UnawardedContest {
   movie_title: string
 }
 
-/** How one active bid ended, before its team's name is looked up. */
-interface BidResultRecord {
-  team_id: string
-  amount: number
-  outcome: BidResultOutcome
-}
+/** How one bid ended, before its team's name is looked up. */
+type BidResultRecord = Omit<BidResult, 'teamName'> & { team_id: string }
 
 /**
- * Contest key -> how every active bid on that movie ended this run: what the
- * league's results post reports. One ledger per bid kind. A contest can be
- * recorded in parts -- a counterpick bid voided before resolution, the rest
- * after -- and a contest whose processing failed is not recorded at all: its
- * bids are still pending, and the run that settles them reports them.
+ * Contest key -> how every bid on that movie ended this run: what the league's
+ * results post reports. One ledger per bid kind. A contest can be recorded in
+ * parts -- a counterpick bid voided before resolution, the rest after -- and a
+ * contest whose processing failed is not recorded at all: its bids are still
+ * pending, and the run that settles them reports them.
  */
 type ResultsLedger = Map<string, { league_id: string; title: string; bids: BidResultRecord[] }>
 
@@ -187,11 +191,44 @@ function recordResults(
   else ledger.set(contestKey, { league_id: contestKey.split(':')[0], title: movieTitle, bids })
 }
 
-function resultOf(
-  bid: { team_id: string; amount: number },
-  outcome: BidResultOutcome,
-): BidResultRecord {
-  return { team_id: bid.team_id, amount: bid.amount, outcome }
+/**
+ * Record a bid voided at processing time in both the run's `voided` list and
+ * the results ledger -- one call, so no void path can do one and forget the
+ * other.
+ */
+function recordVoided(
+  voided: VoidedBidResult[],
+  ledger: ResultsLedger,
+  contestKey: string,
+  result: VoidedBidResult,
+  reason: VoidReasonCode,
+): void {
+  voided.push(result)
+  recordResults(ledger, contestKey, result.movie_title, [
+    { team_id: result.team_id, amount: result.amount, outcome: { kind: 'cancelled', reason } },
+  ])
+}
+
+/**
+ * Record how every bid on a resolved contest ended: the winner, and why each
+ * other bid lost -- the resolver's reason for a bid it weighed, else 'outbid',
+ * which is how an 'outbid' row lost.
+ */
+function recordResolvedContest(
+  ledger: ResultsLedger,
+  contestKey: string,
+  movieTitle: string,
+  bids: Array<{ id: string; team_id: string; amount: number }>,
+  winnerId: string | undefined,
+  lossReasons: Map<string, BidLossReason>,
+): void {
+  recordResults(ledger, contestKey, movieTitle, bids.map((bid) => ({
+    team_id: bid.team_id,
+    amount: bid.amount,
+    outcome: bid.id === winnerId
+      ? { kind: 'won' }
+      : { kind: 'lost', reason: lossReasons.get(bid.id) ?? 'outbid' },
+  })))
 }
 
 // deno-lint-ignore no-explicit-any
@@ -963,11 +1000,13 @@ async function notifyPickupLoser(
  * and is re-resolved every week -- so it wins, and charges the budget, in
  * whatever later week its team happens to have room.
  *
- * Only rows still pending are claimed, and only those bidders notified, so a
- * repeated run cannot notify twice.
+ * Only rows still pending are claimed, and only those are recorded and their
+ * bidders notified, so a repeated run cannot report them twice.
  */
 async function settleUnawardedPickupContest(
   serviceClient: ServiceClient,
+  ledger: ResultsLedger,
+  contestKey: string,
   bids: PickupBid[],
   lossReasons: Map<string, BidLossReason>,
   movieTitle: string,
@@ -982,14 +1021,14 @@ async function settleUnawardedPickupContest(
   if (error) throw error
 
   const claimedIds = new Set((claimed ?? []).map((row: { id: string }) => row.id))
+  const claimedBids = bids.filter((bid) => claimedIds.has(bid.id))
+  recordResolvedContest(ledger, contestKey, movieTitle, claimedBids, undefined, lossReasons)
   log.info('No pickup awarded: no bidder could take the movie', {
     movie_title: movieTitle,
-    bids_lost: claimedIds.size,
+    bids_lost: claimedBids.length,
   })
 
-  for (const bid of bids) {
-    if (!claimedIds.has(bid.id)) continue
-
+  for (const bid of claimedBids) {
     await notifyPickupLoser(serviceClient, {
       loserBid: bid,
       movieTitle,
@@ -1073,7 +1112,7 @@ async function voidReleasedPickupContests(
         movie_id: movie?.id,
       }, reason)
 
-      voided.push({
+      recordVoided(voided, ledger, contest.key, {
         bid_id: bid.id,
         league_id: bid.league_id,
         team_id: bid.team_id,
@@ -1082,14 +1121,8 @@ async function voidReleasedPickupContests(
         reason,
         tmdb_id: bid.tmdb_id,
         movie_id: movie?.id,
-      })
+      }, 'movie_released')
     }
-    recordResults(
-      ledger,
-      contest.key,
-      movieTitle,
-      contest.activeBids.map((bid) => resultOf(bid, { kind: 'cancelled', reason: 'movie_released' })),
-    )
 
     log.info('Voided pickup bid(s): movie released before processing', {
       voided_count: bids.length,
@@ -1446,7 +1479,7 @@ async function voidReleasedCounterpickContests(
         bid_type: 'counterpick',
       }, reason)
 
-      voided.push({
+      recordVoided(voided, ledger, contest.key, {
         bid_id: bid.id,
         league_id: bid.league_id,
         team_id: bid.team_id,
@@ -1454,14 +1487,8 @@ async function voidReleasedCounterpickContests(
         movie_title: movieTitle,
         reason,
         movie_id: movieId,
-      })
+      }, 'movie_released')
     }
-    recordResults(
-      ledger,
-      contest.key,
-      movieTitle,
-      contest.activeBids.map((bid) => resultOf(bid, { kind: 'cancelled', reason: 'movie_released' })),
-    )
 
     log.info('Voided counterpick bid(s): movie released before processing', {
       voided_count: bidsToVoid.length,
@@ -1610,7 +1637,7 @@ async function revalidateCounterpickTargets(
         bid_type: 'counterpick',
       })
 
-      voided.push({
+      recordVoided(voided, ledger, contestKey, {
         bid_id: bid.id,
         league_id: bid.league_id,
         team_id: bid.team_id,
@@ -1618,7 +1645,7 @@ async function revalidateCounterpickTargets(
         movie_title: movieTitle,
         reason: TARGET_VOID_REASON_TEXT[reason],
         movie_id: movieId,
-      })
+      }, reason)
     }
 
     const voidedIds = new Set(entries.map(({ bid }) => bid.id))
@@ -1638,12 +1665,6 @@ async function revalidateCounterpickTargets(
 
     if (toVoid.length > 0) {
       await voidBids(contest.key, toVoid, movieId, movieTitle)
-      recordResults(
-        ledger,
-        contest.key,
-        movieTitle,
-        toVoid.map(({ bid, reason }) => resultOf(bid, { kind: 'cancelled', reason })),
-      )
       log.info('Voided counterpick bid(s): target holding no longer valid', {
         voided_count: toVoid.length,
         movie_title: movieTitle,
@@ -1763,7 +1784,7 @@ async function processCounterpickBids(
   )
   const { winners, lossReasons } = resolveBidWinners(contests, capacities)
 
-  for (const { key, activeBids } of contests) {
+  for (const { key } of contests) {
     const [leagueId, movieId] = key.split(':')
     const winner = winners.get(key) as CounterpickBid | undefined
     const allBids = bidsByContest.get(key) ?? []
@@ -1861,6 +1882,7 @@ async function processCounterpickBids(
           .update({ status: 'lost' })
           .in('id', loserIds)
       }
+      recordResolvedContest(ledger, key, movieTitle, allBids, winner?.id, lossReasons)
 
       for (const loserBid of loserBids) {
         // The resolver only reports on bids it actually weighed. A bid that
@@ -1876,13 +1898,6 @@ async function processCounterpickBids(
           slots: slotsByLeague.get(leagueId) ?? 0,
         })
       }
-
-      recordResults(ledger, key, movieTitle, activeBids.map((bid) => resultOf(
-        bid,
-        bid.id === winner?.id
-          ? { kind: 'won' }
-          : { kind: 'lost', reason: lossReasons.get(bid.id) ?? (winner ? 'outbid' : 'no_slots') },
-      )))
     } catch (error) {
       log.error('Error processing counterpick bids', { movie_key: key, error: serializeError(error) })
       errors.push({
@@ -1912,9 +1927,9 @@ function groupByLeague<T extends { league_id: string }>(items: T[]): Map<string,
 }
 
 /**
- * Post each league's results: the outcome of every active bid settled this run
- * -- won, not honored and why, or cancelled -- not just the awards. A busy
- * league gets several messages, sent in order, pinging the bid role once.
+ * Post each league's results post (see bid-results-announcement.ts). Messages
+ * go out in order and paced for Discord's per-webhook rate limit; only the
+ * first pings the bid role.
  */
 async function sendBidResultsDiscordNotifications(
   serviceClient: ServiceClient,
@@ -1940,27 +1955,27 @@ async function sendBidResultsDiscordNotifications(
   const leagueNames = new Map(leagues.map((league) => [league.id, league.name]))
 
   await Promise.allSettled([...groupByLeague(movies)].map(async ([leagueId, leagueMovies]) => {
-    const embeds = buildBidResultsEmbeds({
+    const messages = buildBidResultsMessages({
       leagueId,
       leagueName: leagueNames.get(leagueId) ?? 'League',
       kind,
       movies: leagueMovies.map((movie) => ({
         title: movie.title,
-        bids: movie.bids.map((bid) => ({
-          teamName: teamNames.get(bid.team_id) ?? 'A team',
-          amount: bid.amount,
-          outcome: bid.outcome,
+        bids: movie.bids.map(({ team_id, ...bid }) => ({
+          ...bid,
+          teamName: teamNames.get(team_id) ?? 'A team',
         })),
       })),
     })
 
-    for (const [index, embed] of embeds.entries()) {
+    for (const [index, embeds] of messages.entries()) {
       await sendDiscordNotification(serviceClient, {
         leagueId,
         category: 'bids',
         mentionRole: index === 0,
-        embeds: [embed],
+        embeds,
       })
+      await delay(WEBHOOK_SEND_DELAY_MS)
     }
   }))
 }
@@ -2263,12 +2278,15 @@ Deno.serve(async (req) => {
           // Nobody had room, budget, or a drop for it: close it out now.
           const tmdbId = parseInt(tmdbIdStr)
           const movieTitle = pickupMovieTitle(allBidsForMovie, tmdbId)
-          await settleUnawardedPickupContest(serviceClient, allBidsForMovie, pickupLossReasons, movieTitle)
+          await settleUnawardedPickupContest(
+            serviceClient,
+            pickupLedger,
+            key,
+            allBidsForMovie,
+            pickupLossReasons,
+            movieTitle,
+          )
           unawardedPickups.push({ league_id: contestLeagueId, tmdb_id: tmdbId, movie_title: movieTitle })
-          recordResults(pickupLedger, key, movieTitle, contest.activeBids.map((bid) => resultOf(
-            bid,
-            { kind: 'lost', reason: pickupLossReasons.get(bid.id) ?? 'no_slots' },
-          )))
           continue
         }
 
@@ -2366,6 +2384,7 @@ Deno.serve(async (req) => {
             .update({ status: 'lost' })
             .in('id', loserIds)
         }
+        recordResolvedContest(pickupLedger, key, movieTitle, allBidsForMovie, winner.id, pickupLossReasons)
 
         // Send notification to winner
         const winnerUserId = await getTeamUserId(serviceClient, winner.team_id)
@@ -2440,12 +2459,6 @@ Deno.serve(async (req) => {
           amount: winner.amount,
           movie_title: movieTitle,
         })
-        recordResults(pickupLedger, key, movieTitle, contest.activeBids.map((bid) => resultOf(
-          bid,
-          bid.id === winner.id
-            ? { kind: 'won' }
-            : { kind: 'lost', reason: pickupLossReasons.get(bid.id) ?? 'outbid' },
-        )))
 
         log.info('Processed bid', { movie_title: movieTitle, winner_team_id: winner.team_id, amount: winner.amount })
       } catch (error) {
@@ -2488,19 +2501,17 @@ Deno.serve(async (req) => {
     await sendBidResultsDiscordNotifications(serviceClient, counterpickLedger, 'counterpick')
 
     // Weekly wrap-up messages. "No bids were placed" is reserved for leagues
-    // that truly saw no bid activity: a league whose bids were settled in any
-    // way, deferred, or errored had bids, and telling it otherwise misreports
-    // the week (deferred leagues get the "results delayed" message above
-    // instead).
+    // that truly saw no bid activity. Any league with a bid due this run had
+    // bids -- however they then settled, deferred, or errored -- and telling it
+    // otherwise misreports the week (deferred leagues get the "results
+    // delayed" message above instead).
     let notificationSummary: NotificationSummary | undefined
     if (mode === 'weekly') {
       await sendBidsDeferredDiscordNotifications(serviceClient, deferred)
 
-      const leaguesWithBidActivity = new Set([
-        ...[...pickupLedger.values(), ...counterpickLedger.values()].map((movie) => movie.league_id),
-        ...deferred.map(d => d.league_id),
-        ...errors.map(e => e.movie_key.split(':')[0]),
-      ])
+      const leaguesWithBidActivity = new Set(
+        [...bidsToProcess, ...counterpickBidsToProcess].map((bid) => bid.league_id),
+      )
       notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBidActivity, league_id)
     }
 

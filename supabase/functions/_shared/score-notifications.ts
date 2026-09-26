@@ -25,6 +25,8 @@ import {
   DISCORD_COLORS,
   buildLeagueUrl,
   buildEmbedAuthor,
+  delay,
+  WEBHOOK_SEND_DELAY_MS,
   type DiscordEmbed,
 } from './discord.ts'
 
@@ -732,15 +734,6 @@ async function loadLeagueNames(
 // ============================================================================
 
 /**
- * Spacing between messages to the same webhook. Discord's per-webhook bucket
- * is 5 requests per 2s (400ms); this leaves a margin on top. Overrunning it
- * can still cost a message -- discord.ts retries a 429 once, honouring
- * retry_after (capped at 5s), but a failure on that retry is dropped like
- * any other webhook error.
- */
-const WEBHOOK_SEND_DELAY_MS = 450
-
-/**
  * Per-league ceiling on individual movie messages in one run. Beyond this the
  * remainder is folded into a single rollup, so a heavy release weekend can't
  * dominate a channel.
@@ -1007,8 +1000,4 @@ async function loadMovieScoreChanges(
   }
 
   return changes
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }
