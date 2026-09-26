@@ -1,11 +1,7 @@
 /**
- * The bids-channel post announcing what processing did with every active bid:
- * won, not honored (and why), or cancelled.
- *
- * Only reporting awards left a team whose bid failed for lack of room -- or
- * whose movie released first -- to find out from its own notifications while
- * the league saw nothing. Every active bid process-bids settles now appears
- * here, named, so the channel is a complete record of the run.
+ * The bids-channel post reporting how every bid a processing run settled
+ * ended -- won, outbid, couldn't be honored (and why), or cancelled -- naming
+ * the team, so the league sees each result, not just the awards.
  *
  * Pure, like the other announcement builders, so the wording and Discord's size
  * limits are testable without a webhook.
@@ -14,7 +10,7 @@
 import type { BidLossReason, VoidReasonCode } from './bid-resolution.ts'
 import { buildEmbedAuthor, buildLeagueUrl, DISCORD_COLORS, type DiscordEmbed } from './discord.ts'
 
-/** How one active bid ended. */
+/** How one bid ended. */
 export type BidResultOutcome =
   | { kind: 'won' }
   | { kind: 'lost'; reason: BidLossReason }
@@ -28,7 +24,7 @@ export interface BidResult {
   outcome: BidResultOutcome
 }
 
-/** One movie, and how each active bid on it ended. */
+/** One movie, and how each bid on it ended. */
 export interface MovieResult {
   title: string
   bids: BidResult[]
@@ -36,7 +32,7 @@ export interface MovieResult {
 
 // Discord rejects an embed with more than 25 fields, a field name over 256
 // characters or a value over 1024, and a message over 6000 characters in
-// total. Each embed goes out as its own message, kept safely under that cap.
+// total. Each message here carries one embed, kept safely under that cap.
 const MAX_FIELDS = 25
 const MAX_FIELD_NAME = 256
 const MAX_FIELD_VALUE = 1024
@@ -109,16 +105,15 @@ function movieField(movie: MovieResult, kind: BidResultsKind) {
 }
 
 /**
- * The results post for one league, as one or more embeds -- each to be sent as
- * its own message, in order. A busy week splits rather than truncates: every
- * active bid's result is reported.
+ * The results post for one league: one entry per message, to be sent in order.
+ * A busy week splits across messages rather than dropping any bid's result.
  */
-export function buildBidResultsEmbeds(params: {
+export function buildBidResultsMessages(params: {
   leagueId: string
   leagueName: string
   kind: BidResultsKind
   movies: MovieResult[]
-}): DiscordEmbed[] {
+}): DiscordEmbed[][] {
   const { leagueId, leagueName, kind, movies } = params
   if (movies.length === 0) return []
 
@@ -151,7 +146,7 @@ export function buildBidResultsEmbeds(params: {
     }
   }
 
-  return batches.map((batchFields, index) => ({
+  return batches.map((batchFields, index) => [{
     author: buildEmbedAuthor(leagueName, leagueId),
     title: index === 0 ? title : `${title} (continued)`,
     description: index === 0 ? description : undefined,
@@ -159,5 +154,5 @@ export function buildBidResultsEmbeds(params: {
     color: awardedCount > 0 ? DISCORD_COLORS.green : DISCORD_COLORS.blue,
     footer: { text: leagueName },
     url: buildLeagueUrl(leagueId, '/bidding'),
-  }))
+  }])
 }
