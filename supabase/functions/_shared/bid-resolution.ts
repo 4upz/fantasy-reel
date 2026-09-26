@@ -395,6 +395,9 @@ export interface CounterpickTargetRow {
  */
 export type TargetVoidReason = 'movie_dropped' | 'target_owned' | 'target_missing'
 
+/** Every reason a pending bid can be voided at processing time instead of settled. */
+export type VoidReasonCode = 'movie_released' | TargetVoidReason
+
 export type TargetRevalidation =
   | { outcome: 'keep'; targetTeamId: string }
   | { outcome: 'void'; reason: TargetVoidReason }
