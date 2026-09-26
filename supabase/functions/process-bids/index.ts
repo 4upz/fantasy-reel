@@ -35,7 +35,13 @@ import {
   droppableHoldingIds,
   resolveTargetRevalidation,
   type TargetVoidReason,
+  type VoidReasonCode,
 } from '../_shared/bid-resolution.ts'
+import {
+  type BidResultOutcome,
+  type BidResultsKind,
+  buildBidResultsEmbeds,
+} from '../_shared/bid-results-announcement.ts'
 import {
   getCounterpickNoSlotsEmailHtml,
   getCounterpickNoSlotsEmailText,
@@ -132,13 +138,6 @@ interface DeferredGroup {
   counter_window_ends: string
 }
 
-interface BidResultSummary {
-  league_id: string
-  winner_team_id: string
-  amount: number
-  movie_title: string
-}
-
 // A winning bid that was voided at processing time because the movie released
 // while the bid was pending (bids can sit for up to a week - see
 // get_next_processing_deadline). Placement-time checks can't catch this since
@@ -159,6 +158,40 @@ interface UnawardedContest {
   league_id: string
   tmdb_id: number
   movie_title: string
+}
+
+/** How one active bid ended, before its team's name is looked up. */
+interface BidResultRecord {
+  team_id: string
+  amount: number
+  outcome: BidResultOutcome
+}
+
+/**
+ * Contest key -> how every active bid on that movie ended this run: what the
+ * league's results post reports. One ledger per bid kind. A contest can be
+ * recorded in parts -- a counterpick bid voided before resolution, the rest
+ * after -- and a contest whose processing failed is not recorded at all: its
+ * bids are still pending, and the run that settles them reports them.
+ */
+type ResultsLedger = Map<string, { league_id: string; title: string; bids: BidResultRecord[] }>
+
+function recordResults(
+  ledger: ResultsLedger,
+  contestKey: string,
+  movieTitle: string,
+  bids: BidResultRecord[],
+): void {
+  const entry = ledger.get(contestKey)
+  if (entry) entry.bids.push(...bids)
+  else ledger.set(contestKey, { league_id: contestKey.split(':')[0], title: movieTitle, bids })
+}
+
+function resultOf(
+  bid: { team_id: string; amount: number },
+  outcome: BidResultOutcome,
+): BidResultRecord {
+  return { team_id: bid.team_id, amount: bid.amount, outcome }
 }
 
 // deno-lint-ignore no-explicit-any
@@ -726,9 +759,6 @@ async function getTeamUserId(
   return (team?.league_participants as unknown as { user_id: string })?.user_id ?? null
 }
 
-/** Every reason a pending bid can be voided at processing time instead of settled. */
-type VoidReasonCode = 'movie_released' | TargetVoidReason
-
 /**
  * Title/body copy for a voided-bid notification, one entry per `VoidReasonCode`.
  * All four share the same shape (a movie became un-winnable while the bid sat
@@ -993,6 +1023,7 @@ async function voidReleasedPickupContests(
   contests: BidContest[],
   bidsByKey: Map<string, PickupBid[]>,
   voided: VoidedBidResult[],
+  ledger: ResultsLedger,
   seasonYears: Map<string, number>,
 ): Promise<{ contests: BidContest[]; unreadLeagues: Set<string> }> {
   const tmdbIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
@@ -1053,6 +1084,12 @@ async function voidReleasedPickupContests(
         movie_id: movie?.id,
       })
     }
+    recordResults(
+      ledger,
+      contest.key,
+      movieTitle,
+      contest.activeBids.map((bid) => resultOf(bid, { kind: 'cancelled', reason: 'movie_released' })),
+    )
 
     log.info('Voided pickup bid(s): movie released before processing', {
       voided_count: bids.length,
@@ -1354,6 +1391,7 @@ async function voidReleasedCounterpickContests(
   contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
+  ledger: ResultsLedger,
   seasonYears: Map<string, number>,
 ): Promise<BidContest[]> {
   const movieIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
@@ -1418,6 +1456,12 @@ async function voidReleasedCounterpickContests(
         movie_id: movieId,
       })
     }
+    recordResults(
+      ledger,
+      contest.key,
+      movieTitle,
+      contest.activeBids.map((bid) => resultOf(bid, { kind: 'cancelled', reason: 'movie_released' })),
+    )
 
     log.info('Voided counterpick bid(s): movie released before processing', {
       voided_count: bidsToVoid.length,
@@ -1460,6 +1504,7 @@ async function revalidateCounterpickTargets(
   contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
+  ledger: ResultsLedger,
 ): Promise<BidContest[]> {
   // Trailing bids can target a different holding from the active leader.
   // Load their targets too so promotion does not mistake an unread row for
@@ -1593,6 +1638,12 @@ async function revalidateCounterpickTargets(
 
     if (toVoid.length > 0) {
       await voidBids(contest.key, toVoid, movieId, movieTitle)
+      recordResults(
+        ledger,
+        contest.key,
+        movieTitle,
+        toVoid.map(({ bid, reason }) => resultOf(bid, { kind: 'cancelled', reason })),
+      )
       log.info('Voided counterpick bid(s): target holding no longer valid', {
         voided_count: toVoid.length,
         movie_title: movieTitle,
@@ -1659,6 +1710,7 @@ async function processCounterpickBids(
   errors: ProcessingError[],
   voided: VoidedBidResult[],
   deferred: DeferredGroup[],
+  ledger: ResultsLedger,
 ): Promise<CounterpickProcessResult[]> {
   const results: CounterpickProcessResult[] = []
   if (dueBids.length === 0) return results
@@ -1687,6 +1739,7 @@ async function processCounterpickBids(
     settledContests,
     bidsByContest,
     voided,
+    ledger,
     seasonYears
   )
   if (unreleasedContests.length === 0) return results
@@ -1698,7 +1751,8 @@ async function processCounterpickBids(
     serviceClient,
     unreleasedContests,
     bidsByContest,
-    voided
+    voided,
+    ledger
   )
   if (contests.length === 0) return results
 
@@ -1709,7 +1763,7 @@ async function processCounterpickBids(
   )
   const { winners, lossReasons } = resolveBidWinners(contests, capacities)
 
-  for (const { key } of contests) {
+  for (const { key, activeBids } of contests) {
     const [leagueId, movieId] = key.split(':')
     const winner = winners.get(key) as CounterpickBid | undefined
     const allBids = bidsByContest.get(key) ?? []
@@ -1822,6 +1876,13 @@ async function processCounterpickBids(
           slots: slotsByLeague.get(leagueId) ?? 0,
         })
       }
+
+      recordResults(ledger, key, movieTitle, activeBids.map((bid) => resultOf(
+        bid,
+        bid.id === winner?.id
+          ? { kind: 'won' }
+          : { kind: 'lost', reason: lossReasons.get(bid.id) ?? (winner ? 'outbid' : 'no_slots') },
+      )))
     } catch (error) {
       log.error('Error processing counterpick bids', { movie_key: key, error: serializeError(error) })
       errors.push({
@@ -1850,60 +1911,58 @@ function groupByLeague<T extends { league_id: string }>(items: T[]): Map<string,
   return byLeague
 }
 
+/**
+ * Post each league's results: the outcome of every active bid settled this run
+ * -- won, not honored and why, or cancelled -- not just the awards. A busy
+ * league gets several messages, sent in order, pinging the bid role once.
+ */
 async function sendBidResultsDiscordNotifications(
   serviceClient: ServiceClient,
-  results: BidResultSummary[],
-  embedTitle: string,
-  itemLabel: string,
-  fieldPrefix: string,
+  ledger: ResultsLedger,
+  kind: BidResultsKind,
 ): Promise<void> {
-  if (results.length === 0) return
+  if (ledger.size === 0) return
 
-  const resultsByLeague = groupByLeague(results)
-
-  const allTeamIds = [...new Set(results.map((r) => r.winner_team_id))]
-  const allLeagueIds = [...resultsByLeague.keys()]
-
-  const [{ data: teamsData }, { data: leaguesData }] = await Promise.all([
-    serviceClient.from('teams').select('id, name').in('id', allTeamIds),
-    serviceClient.from('leagues').select('id, name').in('id', allLeagueIds),
+  const movies = [...ledger.values()]
+  const [{ rows: teams }, { rows: leagues }] = await Promise.all([
+    selectByIdBatches<{ id: string; name: string }>(
+      [...new Set(movies.flatMap((movie) => movie.bids.map((bid) => bid.team_id)))],
+      'Failed to read team names for the results post:',
+      (batch) => serviceClient.from('teams').select('id, name').in('id', batch),
+    ),
+    selectByIdBatches<{ id: string; name: string }>(
+      [...new Set(movies.map((movie) => movie.league_id))],
+      'Failed to read league names for the results post:',
+      (batch) => serviceClient.from('leagues').select('id, name').in('id', batch),
+    ),
   ])
+  const teamNames = new Map(teams.map((team) => [team.id, team.name]))
+  const leagueNames = new Map(leagues.map((league) => [league.id, league.name]))
 
-  const teamNameMap = new Map<string, string>()
-  for (const t of teamsData ?? []) teamNameMap.set(t.id, t.name)
+  await Promise.allSettled([...groupByLeague(movies)].map(async ([leagueId, leagueMovies]) => {
+    const embeds = buildBidResultsEmbeds({
+      leagueId,
+      leagueName: leagueNames.get(leagueId) ?? 'League',
+      kind,
+      movies: leagueMovies.map((movie) => ({
+        title: movie.title,
+        bids: movie.bids.map((bid) => ({
+          teamName: teamNames.get(bid.team_id) ?? 'A team',
+          amount: bid.amount,
+          outcome: bid.outcome,
+        })),
+      })),
+    })
 
-  const leagueNameMap = new Map<string, string>()
-  for (const l of leaguesData ?? []) leagueNameMap.set(l.id, l.name)
-
-  const discordPromises: Promise<void>[] = []
-  for (const [leagueId, leagueResults] of resultsByLeague) {
-    const leagueName = leagueNameMap.get(leagueId) ?? 'League'
-
-    const fields = leagueResults.slice(0, 10).map((r) => ({
-      name: r.movie_title,
-      value: `${fieldPrefix} **${teamNameMap.get(r.winner_team_id) ?? 'A team'}** for $${r.amount}`,
-      inline: true,
-    }))
-
-    discordPromises.push(
-      sendDiscordNotification(serviceClient, {
+    for (const [index, embed] of embeds.entries()) {
+      await sendDiscordNotification(serviceClient, {
         leagueId,
         category: 'bids',
-        mentionRole: true,
-        embeds: [{
-          author: buildEmbedAuthor(leagueName, leagueId),
-          title: embedTitle,
-          description: `${leagueResults.length} ${itemLabel}${leagueResults.length === 1 ? '' : 's'} awarded`,
-          fields,
-          color: DISCORD_COLORS.green,
-          footer: { text: leagueName },
-          url: buildLeagueUrl(leagueId, '/bidding'),
-        }],
+        mentionRole: index === 0,
+        embeds: [embed],
       })
-    )
-  }
-
-  await Promise.allSettled(discordPromises)
+    }
+  }))
 }
 
 /**
@@ -2111,6 +2170,8 @@ Deno.serve(async (req) => {
     const voidedPickupResults: VoidedBidResult[] = []
     const unawardedPickups: UnawardedContest[] = []
     const deferred: DeferredGroup[] = []
+    const pickupLedger: ResultsLedger = new Map()
+    const counterpickLedger: ResultsLedger = new Map()
 
     // Every due group's active bids, gathered before any award, so capacity is
     // decided against the whole week rather than movie-by-movie. Resolving each
@@ -2171,6 +2232,7 @@ Deno.serve(async (req) => {
         pickupContests,
         bidsByKey,
         voidedPickupResults,
+        pickupLedger,
         pickupSeasonYears,
       )
     const { capacities: pickupCapacities, unreadableLeagues } = await getTeamCapacities(
@@ -2203,6 +2265,10 @@ Deno.serve(async (req) => {
           const movieTitle = pickupMovieTitle(allBidsForMovie, tmdbId)
           await settleUnawardedPickupContest(serviceClient, allBidsForMovie, pickupLossReasons, movieTitle)
           unawardedPickups.push({ league_id: contestLeagueId, tmdb_id: tmdbId, movie_title: movieTitle })
+          recordResults(pickupLedger, key, movieTitle, contest.activeBids.map((bid) => resultOf(
+            bid,
+            { kind: 'lost', reason: pickupLossReasons.get(bid.id) ?? 'no_slots' },
+          )))
           continue
         }
 
@@ -2374,6 +2440,12 @@ Deno.serve(async (req) => {
           amount: winner.amount,
           movie_title: movieTitle,
         })
+        recordResults(pickupLedger, key, movieTitle, contest.activeBids.map((bid) => resultOf(
+          bid,
+          bid.id === winner.id
+            ? { kind: 'won' }
+            : { kind: 'lost', reason: pickupLossReasons.get(bid.id) ?? 'outbid' },
+        )))
 
         log.info('Processed bid', { movie_title: movieTitle, winner_team_id: winner.team_id, amount: winner.amount })
       } catch (error) {
@@ -2408,28 +2480,25 @@ Deno.serve(async (req) => {
       now,
       errors,
       voidedCounterpickResults,
-      deferred
+      deferred,
+      counterpickLedger,
     )
 
-    await sendBidResultsDiscordNotifications(serviceClient, results, 'Bidding Results', 'movie', 'Won by')
-    await sendBidResultsDiscordNotifications(serviceClient, counterpickResults, 'Counterpick Bidding Results', 'counterpick', 'Counterpicked by')
+    await sendBidResultsDiscordNotifications(serviceClient, pickupLedger, 'pickup')
+    await sendBidResultsDiscordNotifications(serviceClient, counterpickLedger, 'counterpick')
 
     // Weekly wrap-up messages. "No bids were placed" is reserved for leagues
-    // that truly saw no bid activity: a league whose groups were deferred,
-    // voided, unawarded, or errored had bids, and telling it otherwise
-    // misreports the week (deferred leagues get the "results delayed" message
-    // above instead).
+    // that truly saw no bid activity: a league whose bids were settled in any
+    // way, deferred, or errored had bids, and telling it otherwise misreports
+    // the week (deferred leagues get the "results delayed" message above
+    // instead).
     let notificationSummary: NotificationSummary | undefined
     if (mode === 'weekly') {
       await sendBidsDeferredDiscordNotifications(serviceClient, deferred)
 
       const leaguesWithBidActivity = new Set([
-        ...results.map(r => r.league_id),
-        ...counterpickResults.map(cr => cr.league_id),
+        ...[...pickupLedger.values(), ...counterpickLedger.values()].map((movie) => movie.league_id),
         ...deferred.map(d => d.league_id),
-        ...voidedPickupResults.map(v => v.league_id),
-        ...voidedCounterpickResults.map(v => v.league_id),
-        ...unawardedPickups.map(u => u.league_id),
         ...errors.map(e => e.movie_key.split(':')[0]),
       ])
       notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBidActivity, league_id)
