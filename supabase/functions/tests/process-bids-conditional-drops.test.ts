@@ -42,12 +42,15 @@ interface SeedBidOptions {
   priority?: number
   conditionalDropPickupId?: string | null
   conditionalDropDraftPickId?: string | null
+  /** 'outbid' seeds a bid whose counter window has already closed. */
+  status?: 'active' | 'outbid'
 }
 
 async function seedBid(
   serviceClient: SupabaseClient,
   options: SeedBidOptions,
 ): Promise<string> {
+  const outbid = options.status === 'outbid'
   const { data, error } = await serviceClient
     .from('pickup_bids')
     .insert({
@@ -62,11 +65,13 @@ async function seedBid(
         poster_url: null,
       },
       amount: options.amount,
-      status: 'active',
+      status: options.status ?? 'active',
       priority: options.priority ?? 1,
       conditional_drop_pickup_id: options.conditionalDropPickupId ?? null,
       conditional_drop_draft_pick_id: options.conditionalDropDraftPickId ?? null,
       processing_deadline: dueDeadline(),
+      countered_at: outbid ? new Date(Date.now() - 2 * 3600_000).toISOString() : null,
+      response_deadline: outbid ? new Date(Date.now() - 3600_000).toISOString() : null,
     })
     .select('id')
     .single()
@@ -109,6 +114,69 @@ Deno.test({
       await serviceClient.from('counterpick_bids').update({ status: 'lost' }).in('status', ['active', 'outbid'])
     }
 
+    /**
+     * Fill a team's roster with unreleased pickups, leaving `leaveFree` slots.
+     * @returns the pickups created -- each a valid conditional drop target.
+     */
+    async function fillRoster(
+      leagueId: string,
+      userClient: SupabaseClient,
+      teamId: string,
+      leaveFree = 0,
+    ): Promise<string[]> {
+      const { data: league } = await serviceClient
+        .from('leagues').select('total_slots').eq('id', leagueId).single()
+
+      const pickupIds: string[] = []
+      for (let i = await countHoldings(teamId); i < (league!.total_slots as number) - leaveFree; i++) {
+        pickupIds.push(
+          await factory.createPickupForUser(leagueId, userClient, {
+            tmdb_id: uniqueVoidTestTmdbId(),
+            title: `Filler ${i}`,
+            release_date: '2099-06-01',
+          }),
+        )
+      }
+      return pickupIds
+    }
+
+    /** The loss reason a bidder was notified of, or undefined if none was sent. */
+    async function lossReasonFor(leagueId: string, bidId: string): Promise<unknown> {
+      const { data } = await serviceClient
+        .from('notifications')
+        .select('data')
+        .eq('league_id', leagueId)
+        .eq('type', 'bid_lost')
+        .eq('data->>bid_id', bidId)
+        .maybeSingle()
+      return data?.data?.loss_reason
+    }
+
+    /** Active holdings on a team's roster. */
+    async function countHoldings(teamId: string): Promise<number> {
+      const { count } = await serviceClient
+        .from('team_holdings')
+        .select('*', { count: 'exact', head: true })
+        .eq('team_id', teamId)
+      return count ?? 0
+    }
+
+    /** Each bid's current status, by id. */
+    async function bidStatuses(ids: string[]): Promise<Map<string, string>> {
+      const { data } = await serviceClient.from('pickup_bids').select('id, status').in('id', ids)
+      return new Map((data ?? []).map((bid) => [bid.id, bid.status]))
+    }
+
+    /** Whether a pickup was released, and how many drops were charged for it. */
+    async function dropState(pickupId: string): Promise<{ dropped: boolean; drops: number }> {
+      const { data } = await serviceClient.from('pickups').select('dropped_at').eq('id', pickupId).single()
+      const { count } = await serviceClient
+        .from('team_drops')
+        .select('*', { count: 'exact', head: true })
+        .eq('pickup_id', pickupId)
+      return { dropped: data!.dropped_at !== null, drops: count ?? 0 }
+    }
+
     try {
       await t.step('a conditional drop buys room on a full roster', async () => {
         await clearPendingBids()
@@ -117,27 +185,7 @@ Deno.test({
         const team = (await factory.getTeamForUser(leagueId, client))!
 
         // Fill the roster: total_slots holdings, so nothing fits without a drop.
-        const { data: league } = await serviceClient
-          .from('leagues')
-          .select('total_slots')
-          .eq('id', leagueId)
-          .single()
-
-        const { count: heldCount } = await serviceClient
-          .from('team_holdings')
-          .select('*', { count: 'exact', head: true })
-          .eq('team_id', team.teamId)
-
-        const pickupIds: string[] = []
-        for (let i = (heldCount ?? 0); i < (league!.total_slots as number); i++) {
-          pickupIds.push(
-            await factory.createPickupForUser(leagueId, client, {
-              tmdb_id: uniqueVoidTestTmdbId(),
-              title: `Filler ${i}`,
-              release_date: '2099-06-01',
-            }),
-          )
-        }
+        const pickupIds = await fillRoster(leagueId, client, team.teamId)
 
         const dropTarget = pickupIds[0]
         const targetTmdbId = uniqueVoidTestTmdbId()
@@ -157,17 +205,9 @@ Deno.test({
           .from('pickup_bids').select('status').eq('id', bidId).single()
         assertEquals(bid!.status, 'won')
 
-        // ...the named holding was released...
-        const { data: dropped } = await serviceClient
-          .from('pickups').select('dropped_at').eq('id', dropTarget).single()
-        assertEquals(dropped!.dropped_at !== null, true)
-
-        // ...and exactly one drop was charged against drop_limit.
-        const { count: dropCount } = await serviceClient
-          .from('team_drops')
-          .select('*', { count: 'exact', head: true })
-          .eq('pickup_id', dropTarget)
-        assertEquals(dropCount, 1)
+        // ...the named holding was released, and exactly one drop was charged
+        // against drop_limit.
+        assertEquals(await dropState(dropTarget), { dropped: true, drops: 1 })
       })
 
       await t.step('a full roster with no conditional drop loses to the runner-up', async () => {
@@ -177,20 +217,7 @@ Deno.test({
         const fullTeam = (await factory.getTeamForUser(leagueId, client))!
         const roomyTeam = (await factory.getTeamForUser(leagueId, secondClient))!
 
-        const { data: league } = await serviceClient
-          .from('leagues').select('total_slots').eq('id', leagueId).single()
-        const { count: heldCount } = await serviceClient
-          .from('team_holdings')
-          .select('*', { count: 'exact', head: true })
-          .eq('team_id', fullTeam.teamId)
-
-        for (let i = (heldCount ?? 0); i < (league!.total_slots as number); i++) {
-          await factory.createPickupForUser(leagueId, client, {
-            tmdb_id: uniqueVoidTestTmdbId(),
-            title: `Filler ${i}`,
-            release_date: '2099-06-01',
-          })
-        }
+        await fillRoster(leagueId, client, fullTeam.teamId)
 
         const contested = uniqueVoidTestTmdbId()
         // The full team bids higher, but has nowhere to put the movie.
@@ -204,9 +231,7 @@ Deno.test({
         const { status } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
         assertEquals(status, 200)
 
-        const { data: bids } = await serviceClient
-          .from('pickup_bids').select('id, status').in('id', [highBidId, lowBidId])
-        const byId = new Map(bids!.map((b) => [b.id, b.status]))
+        const byId = await bidStatuses([highBidId, lowBidId])
 
         // The movie falls through to the runner-up rather than going unawarded.
         assertEquals(byId.get(lowBidId), 'won')
@@ -219,21 +244,8 @@ Deno.test({
         const leagueId = await factory.createActiveLeague(uniqueName('Priority'))
         const team = (await factory.getTeamForUser(leagueId, client))!
 
-        const { data: league } = await serviceClient
-          .from('leagues').select('total_slots').eq('id', leagueId).single()
-        const { count: heldCount } = await serviceClient
-          .from('team_holdings')
-          .select('*', { count: 'exact', head: true })
-          .eq('team_id', team.teamId)
-
         // Leave exactly one free slot.
-        for (let i = (heldCount ?? 0); i < (league!.total_slots as number) - 1; i++) {
-          await factory.createPickupForUser(leagueId, client, {
-            tmdb_id: uniqueVoidTestTmdbId(),
-            title: `Filler ${i}`,
-            release_date: '2099-06-01',
-          })
-        }
+        await fillRoster(leagueId, client, team.teamId, 1)
 
         // The cheaper bid is ranked first: priority, not amount, decides which
         // of a team's OWN wins it keeps.
@@ -247,14 +259,128 @@ Deno.test({
         const { status } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
         assertEquals(status, 200)
 
-        const { data: bids } = await serviceClient
-          .from('pickup_bids').select('id, status').in('id', [wantedId, spareId])
-        const byId = new Map(bids!.map((b) => [b.id, b.status]))
+        const byId = await bidStatuses([wantedId, spareId])
 
         assertEquals(byId.get(wantedId), 'won')
-        // Uncontested and unawarded: it stays pending for a later run rather
-        // than being marked lost, because capacity may free up.
-        assertEquals(byId.get(spareId), 'active')
+        // Uncontested but out of room: it loses now. Left pending it could no
+        // longer be cancelled, yet would win whenever a slot next freed up.
+        assertEquals(byId.get(spareId), 'lost')
+        assertEquals(await lossReasonFor(leagueId, spareId), 'no_slots')
+      })
+
+      await t.step('a bid on a movie that has since released does not take the room', async () => {
+        await clearPendingBids()
+
+        const leagueId = await factory.createActiveLeague(uniqueName('Released'))
+        const team = (await factory.getTeamForUser(leagueId, client))!
+        await fillRoster(leagueId, client, team.teamId, 1)
+
+        // Upcoming when bid on, released by processing time.
+        const releasedTmdbId = uniqueVoidTestTmdbId()
+        const { error: movieError } = await serviceClient.from('movies').insert({
+          tmdb_id: releasedTmdbId,
+          title: `Released ${releasedTmdbId}`,
+          release_date: '2020-01-01',
+          status: 'released',
+        })
+        assertEquals(movieError, null)
+
+        const releasedId = await seedBid(serviceClient, {
+          leagueId, teamId: team.teamId, tmdbId: releasedTmdbId, amount: 5, priority: 1,
+        })
+        const nextId = await seedBid(serviceClient, {
+          leagueId, teamId: team.teamId, tmdbId: uniqueVoidTestTmdbId(), amount: 5, priority: 2,
+        })
+
+        const { status } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+
+        // Voided before resolution, so the one free slot goes to the next bid
+        // instead of being spent on a movie that can never be awarded.
+        const byId = await bidStatuses([releasedId, nextId])
+        assertEquals(byId.get(releasedId), 'cancelled')
+        assertEquals(byId.get(nextId), 'won')
+      })
+
+      await t.step('two bids naming the same conditional drop: only the higher priority is honored', async () => {
+        await clearPendingBids()
+
+        const leagueId = await factory.createActiveLeague(uniqueName('SameDrop'))
+        const team = (await factory.getTeamForUser(leagueId, client))!
+        const [dropTarget] = await fillRoster(leagueId, client, team.teamId)
+        const rosterSize = await countHoldings(team.teamId)
+
+        // Both bids fund themselves with the same drop. The second is ranked
+        // lower -- and bids more, so amount cannot be what decides.
+        const firstId = await seedBid(serviceClient, {
+          leagueId, teamId: team.teamId, tmdbId: uniqueVoidTestTmdbId(), amount: 5, priority: 1,
+          conditionalDropPickupId: dropTarget,
+        })
+        const secondId = await seedBid(serviceClient, {
+          leagueId, teamId: team.teamId, tmdbId: uniqueVoidTestTmdbId(), amount: 8, priority: 2,
+          conditionalDropPickupId: dropTarget,
+        })
+
+        const { status } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+
+        const byId = await bidStatuses([firstId, secondId])
+
+        // The first cashes the drop...
+        assertEquals(byId.get(firstId), 'won')
+        assertEquals(await dropState(dropTarget), { dropped: true, drops: 1 })
+
+        // ...so the second has no room left and loses this run, rather than
+        // carrying into next week's processing.
+        assertEquals(byId.get(secondId), 'lost')
+        assertEquals(await lossReasonFor(leagueId, secondId), 'no_slots')
+
+        const { count: stillPending } = await serviceClient
+          .from('pickup_bids')
+          .select('*', { count: 'exact', head: true })
+          .eq('team_id', team.teamId)
+          .in('status', ['active', 'outbid'])
+        assertEquals(stillPending, 0)
+
+        // One movie in, one out: the roster is exactly as full as before.
+        assertEquals(await countHoldings(team.teamId), rosterSize)
+      })
+
+      await t.step('a movie no bidder can take closes out its outbid bids too', async () => {
+        await clearPendingBids()
+
+        const leagueId = await factory.createActiveLeague(uniqueName('Unawarded'))
+        const fullTeam = (await factory.getTeamForUser(leagueId, client))!
+        const otherTeam = (await factory.getTeamForUser(leagueId, secondClient))!
+        await fillRoster(leagueId, client, fullTeam.teamId)
+
+        // The leader has no room; the team it outbid let its counter window
+        // lapse. Only the leader is weighed, so nobody wins the movie.
+        const contested = uniqueVoidTestTmdbId()
+        const leaderId = await seedBid(serviceClient, {
+          leagueId, teamId: fullTeam.teamId, tmdbId: contested, amount: 20,
+        })
+        const outbidId = await seedBid(serviceClient, {
+          leagueId, teamId: otherTeam.teamId, tmdbId: contested, amount: 10, status: 'outbid',
+        })
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.unawarded_pickups?.length, 1)
+
+        const byId = await bidStatuses([leaderId, outbidId])
+        assertEquals(byId.get(leaderId), 'lost')
+        assertEquals(byId.get(outbidId), 'lost')
+
+        // Each bidder is told what actually stopped them.
+        assertEquals(await lossReasonFor(leagueId, leaderId), 'no_slots')
+        assertEquals(await lossReasonFor(leagueId, outbidId), 'outbid')
+
+        const { count: awarded } = await serviceClient
+          .from('pickups')
+          .select('*', { count: 'exact', head: true })
+          .in('bid_id', [leaderId, outbidId])
+        assertEquals(awarded, 0)
       })
 
       await t.step('a losing bid never fires its conditional drop', async () => {
@@ -283,15 +409,7 @@ Deno.test({
         assertEquals(status, 200)
 
         // Outbid, so the drop must not have happened.
-        const { data: survivor } = await serviceClient
-          .from('pickups').select('dropped_at').eq('id', keepMe).single()
-        assertEquals(survivor!.dropped_at, null)
-
-        const { count: dropCount } = await serviceClient
-          .from('team_drops')
-          .select('*', { count: 'exact', head: true })
-          .eq('pickup_id', keepMe)
-        assertEquals(dropCount, 0)
+        assertEquals(await dropState(keepMe), { dropped: false, drops: 0 })
       })
     } finally {
       await factory.cleanup()

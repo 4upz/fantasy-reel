@@ -835,6 +835,18 @@ drafted movie to make room for a pickup.
 processing, so refusing the bid a week early forecloses that; a bid that still
 cannot be honored loses at processing with reason `no_slots`.
 
+That loss happens **in the run the bid falls due**, contested or not: a contest
+the resolver leaves unawarded marks every pending bid on it `lost`. Never leave
+one pending "for a later run" — past its `processing_deadline` it can no longer
+be cancelled, yet it still shows as live and is re-resolved every week, so it
+wins whenever a slot next frees up. Closing out is only sound if resolution sees
+nothing but awardable contests with fully read inputs, so before resolving,
+movies that released while bids were pending are voided (as counterpick
+contests are), and a league where any input could not be *read* is held whole
+for the next run as a job error — a failed read is not a full roster.
+`BidPriorityList`'s cut line forecasts the same rules via `forecastBidFits`;
+`scripts/tests/bid-fit-forecast.test.cjs` checks it against the resolver.
+
 `_shared/bid-resolution.ts` resolves both bid types — every contest together, at
 most one award per team per pass, then re-check capacity (slots, budget, drop
 allowance). **Do not go back to resolving contests independently**: that is what

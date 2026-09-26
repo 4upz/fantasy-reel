@@ -4,6 +4,7 @@ import { useCallback, useMemo } from 'react'
 import { Scissors } from 'lucide-react'
 import type { PickupBid } from '@/types'
 import PriorityList, { type PriorityListItem } from './PriorityList'
+import { forecastBidFits } from './bidFitForecast'
 
 interface BidPriorityListProps {
   /** The team's pending pickup bids, already in priority order. */
@@ -16,8 +17,9 @@ interface BidPriorityListProps {
   onReorder: (bidIds: string[]) => void
 }
 
-function hasConditionalDrop(bid: PickupBid): boolean {
-  return bid.conditional_drop_pickup_id !== null || bid.conditional_drop_draft_pick_id !== null
+/** The holding this bid drops if it wins, or null when it carries no conditional drop. */
+function conditionalDropOf(bid: PickupBid): string | null {
+  return bid.conditional_drop_pickup_id ?? bid.conditional_drop_draft_pick_id ?? null
 }
 
 /** @design-system League */
@@ -37,7 +39,7 @@ export default function BidPriorityList({
       meta: (
         <>
           <span className="type-numeric text-foreground-secondary">${bid.amount}</span>
-          {hasConditionalDrop(bid) && (
+          {conditionalDropOf(bid) !== null && (
             <>
               <span className="text-foreground-secondary">·</span>
               <Scissors className="w-3 h-3 text-warning shrink-0" />
@@ -50,36 +52,20 @@ export default function BidPriorityList({
     [bids]
   )
 
-  const dropCarriers = useMemo(
-    () => new Set(bids.filter(hasConditionalDrop).map((bid) => bid.id)),
+  const dropTargetById = useMemo(
+    () => new Map(bids.map((bid) => [bid.id, conditionalDropOf(bid)])),
     [bids]
   )
 
   /**
-   * Walk the list in priority order, spending roster slots.
-   *
-   * A plain bid consumes a slot. A bid carrying a conditional drop brings its
-   * own room -- the movie arriving and the movie leaving cancel out -- so it
-   * always fits and never spends one. That is why this cannot be the simple
-   * `index < remainingSlots` test the counterpick list uses: a drop-carrying bid
-   * ranked last still lands, and drawing a cut line above it would be a lie.
-   *
-   * Mirrors `consume()` in _shared/bid-resolution.ts. It is a forecast, not a
-   * promise: budget, and whether the drop target is still droppable at
-   * processing time, are settled server-side.
+   * Not the counterpick list's `index < remainingSlots`: a conditional drop can
+   * bring its own room, once per holding. See forecastBidFits.
    */
-  const computeFits = useCallback((ordered: PriorityListItem[]): boolean[] => {
-    let slotsLeft = remainingSlots
-
-    return ordered.map((item) => {
-      if (dropCarriers.has(item.id)) return true
-      if (slotsLeft > 0) {
-        slotsLeft -= 1
-        return true
-      }
-      return false
-    })
-  }, [remainingSlots, dropCarriers])
+  const computeFits = useCallback(
+    (ordered: PriorityListItem[]): boolean[] =>
+      forecastBidFits(ordered.map((item) => dropTargetById.get(item.id) ?? null), remainingSlots),
+    [remainingSlots, dropTargetById]
+  )
 
   return (
     <PriorityList
