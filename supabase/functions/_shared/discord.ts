@@ -57,6 +57,12 @@ export interface DiscordChannel {
 // Constants
 // ============================================================================
 
+/** Discord's hard limits; embed characters are totaled across a message's embeds. */
+export const DISCORD_MAX_EMBED_FIELDS = 25
+export const DISCORD_MAX_FIELD_NAME = 256
+export const DISCORD_MAX_FIELD_VALUE = 1024
+export const DISCORD_MAX_EMBED_CHARS = 6000
+
 /** Color constants matching design system tokens in globals.css */
 export const DISCORD_COLORS = {
   /** "Something happened" -- draft picks, proposals, general events */

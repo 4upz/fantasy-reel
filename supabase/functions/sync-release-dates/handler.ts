@@ -30,7 +30,7 @@
  * naturally idempotent against the current state.
  */
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, DISCORD_MAX_EMBED_FIELDS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { groupHoldingsByMovie } from '../_shared/roster-holdings.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
@@ -39,7 +39,6 @@ const log = createLogger('sync-release-dates')
 
 /** How far in the past a stored release date can be and still get updated. */
 const RECENT_DAYS = 14
-const MAX_FIELDS = 25
 const HOLDINGS_PAGE_SIZE = 1000
 // UUID filters are sent in the URL; keep each request below the gateway limit.
 const LEAGUE_ID_BATCH_SIZE = 150
@@ -374,7 +373,7 @@ export async function runSyncReleaseDates(
 
   for (const [leagueId, changes] of changesByLeague) {
     const leagueName = await getLeagueName(serviceClient, leagueId)
-    const fields = changes.slice(0, MAX_FIELDS).map((c) => ({
+    const fields = changes.slice(0, DISCORD_MAX_EMBED_FIELDS).map((c) => ({
       name: c.title,
       value: `Moved from **${formatDate(c.previousDate)}** to **${formatDate(c.newDate)}** -- picked by **${c.teamName}**`,
       inline: false,

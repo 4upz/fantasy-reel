@@ -37,7 +37,7 @@ export interface ResolvableBid {
 export interface BidContest {
   /** Opaque identifier for the movie being contested, e.g. `${league_id}:${movie_id}`. */
   key: string
-  /** Every bid with status 'active' on this movie. */
+  /** Every still-pending bid on this movie, including outbid runners-up. */
   activeBids: ResolvableBid[]
 }
 
@@ -84,7 +84,7 @@ export type BidLossReason = 'outbid' | 'no_slots' | 'insufficient_budget'
 export interface BidResolution {
   /** Contest key -> winning bid. Keys absent here went unawarded. */
   winners: Map<string, ResolvableBid>
-  /** Bid id -> why it lost. Contains every active bid that is not a winner. */
+  /** Bid id -> why it lost. Contains every candidate bid that is not a winner. */
   lossReasons: Map<string, BidLossReason>
   /**
    * Winning bid id -> holding it must drop. Only bids whose award was actually

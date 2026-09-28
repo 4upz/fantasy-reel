@@ -14,14 +14,13 @@
  * only has one release day, so the log entry never needs to expire.
  */
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, DISCORD_MAX_EMBED_FIELDS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { fetchRosterHoldings, groupHoldingsByLeague } from '../_shared/roster-holdings.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('release-day-announcements')
 
 const NOTIFICATION_TYPE = 'release_day'
-const MAX_FIELDS = 25
 
 export interface ReleaseDayResult {
   leagues_notified: number
@@ -95,7 +94,7 @@ export async function runReleaseDayAnnouncements(
     }
 
     const leagueName = await getLeagueName(serviceClient, leagueId)
-    const shown = unsent.slice(0, MAX_FIELDS)
+    const shown = unsent.slice(0, DISCORD_MAX_EMBED_FIELDS)
     const fields = shown.map((h) => ({
       name: movieById.get(h.movieId)?.title ?? 'Unknown movie',
       value: `Picked by **${h.teamName}**`,

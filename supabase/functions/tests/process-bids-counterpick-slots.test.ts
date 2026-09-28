@@ -72,10 +72,6 @@ Deno.test({
       teamForOrThrow(factory, leagueId, userClient)
 
     try {
-      // Other suites leave active bids behind; they would be swept into our runs.
-      await serviceClient.from('pickup_bids').update({ status: 'lost' }).eq('status', 'active')
-      await serviceClient.from('counterpick_bids').update({ status: 'lost' }).eq('status', 'active')
-
       await t.step(
         'awards no more bidding counterpicks than the league allows',
         async () => {
@@ -156,7 +152,8 @@ Deno.test({
           await seedCounterpickBid(leagueId, teamA, picksB[0], teamB, 4, 1)
           await seedCounterpickBid(leagueId, teamA, picksC[0], teamC, 9, 2)
           // B trails A on C's movie and should inherit it once A is out of slots.
-          await seedCounterpickBid(leagueId, teamB, picksC[0], teamC, 3, 1)
+          const runnerBid = await seedCounterpickBid(leagueId, teamB, picksC[0], teamC, 3, 1)
+          await serviceClient.from('counterpick_bids').update({ status: 'outbid' }).eq('id', runnerBid)
 
           const { status } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
           assertEquals(status, 200)
@@ -169,7 +166,7 @@ Deno.test({
           assertEquals(
             await counterpickerOf(leagueId, picksC[0].movie_id),
             teamB,
-            'the movie team A could not take should fall through to the runner-up',
+            'the movie team A could not take should fall through to the outbid runner-up',
           )
           assertEquals(await countCounterpicks(leagueId, teamA), 1)
         },

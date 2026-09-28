@@ -5,12 +5,13 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSelectedLayoutSegment } from 'next/navigation'
 import { Plus, Swords, Target } from 'lucide-react'
-import type { CounterpickBid, DroppableHolding, League, PickupBid, TeamWithOwner } from '@/types'
+import type { CounterpickBid, League, PickupBid, TeamWithOwner } from '@/types'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { useBidding } from '../hooks/useBidding'
 import BidWeekTimeline from '../components/BidWeekTimeline'
 import { getBidPhase } from '../components/utils'
-import { BiddingProvider } from './BiddingContext'
+import { getDroppableBidHoldingIds } from '../components/bidFitForecast'
+import { BiddingProvider, type BiddingHolding } from './BiddingContext'
 import BiddingModalLoading from './BiddingModalLoading'
 
 const PlaceBidModal = dynamic(() => import('../components/PlaceBidModal'), {
@@ -82,7 +83,7 @@ interface Props {
   /** Active holdings across the whole roster: draft picks and pickups share total_slots. */
   usedRosterSlots: number
   /** The team's own holdings, offered as conditional drop targets in the bid modal. */
-  myHoldings: DroppableHolding[]
+  myHoldings: BiddingHolding[]
   biddingCounterpickSlots: number
   /** From get_new_bid_cutoff(); null when the league has the cutoff disabled. */
   newBidCutoffAt: string | null
@@ -125,14 +126,18 @@ export default function BiddingShell({
   // _shared/bid-resolution.ts, which re-checks them at processing time):
   // offering a released or counterpicked movie is a dead end that would fail a
   // week later, when the bid is settled and it is too late to choose again.
-  const droppableHoldings = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10)
-    return myHoldings.filter((holding) => {
-      if (holding.release_date && holding.release_date < today) return false
-      if (league.counterpicks_block_drops && holding.counterpicked_by_team_id) return false
-      return true
+  const droppableHoldingIds = useMemo(() => {
+    if (!hasLoaded || error) return new Set<string>()
+    return getDroppableBidHoldingIds(myHoldings, {
+      today: new Date().toISOString().slice(0, 10),
+      counterpicksBlockDrops: league.counterpicks_block_drops,
+      contestedMovieIds: new Set(counterpickBids.map((bid) => bid.movie_id)),
     })
-  }, [myHoldings, league.counterpicks_block_drops])
+  }, [myHoldings, league.counterpicks_block_drops, counterpickBids, hasLoaded, error])
+  const droppableHoldings = useMemo(
+    () => myHoldings.filter((holding) => droppableHoldingIds.has(holding.holding_id)),
+    [myHoldings, droppableHoldingIds]
+  )
   // Browsing and composing a new bid can start while contests load. The modal
   // waits for those bids before allowing submission without resetting a draft.
   const canSpend = budget !== null && !error

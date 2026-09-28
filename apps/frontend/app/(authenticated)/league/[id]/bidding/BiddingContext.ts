@@ -1,8 +1,10 @@
 'use client'
 
 import { createContext, useContext } from 'react'
-import type { CounterpickBid, DroppableHolding, League, PickupBid, TeamWithOwner } from '@/types'
+import type { CounterpickBid, DroppableHolding, League, PickupBid, TeamHolding, TeamWithOwner } from '@/types'
 import type { UseBiddingReturn } from '../hooks/useBidding'
+
+export type BiddingHolding = DroppableHolding & Pick<TeamHolding, 'movie_id'>
 
 /**
  * State the bidding tabs share. It lives in the segment layout rather than in
@@ -24,7 +26,7 @@ export interface BiddingContextValue {
   /** Roster slots still open. Zero means a bid needs a conditional drop to land. */
   freeRosterSlots: number
   /** The team's own holdings, offered as conditional drop targets. */
-  myHoldings: DroppableHolding[]
+  myHoldings: BiddingHolding[]
   biddingCounterpickSlots: number
   /**
    * True once the week's new-bid cutoff has passed: only raises and counters on

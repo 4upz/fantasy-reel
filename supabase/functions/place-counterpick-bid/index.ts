@@ -251,6 +251,7 @@ Deno.serve(async (req) => {
         .update({
           amount,
           status: 'active',
+          resolution_reason: null,
           countered_at: null,
           response_deadline: null,
         })
@@ -287,6 +288,7 @@ Deno.serve(async (req) => {
           amount,
           priority: (pendingBidCount ?? 0) + 1,
           status: 'active',
+          resolution_reason: null,
           processing_deadline: processingDeadline,
         })
         .select()

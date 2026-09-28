@@ -162,3 +162,16 @@ Deno.test('long results stay under the per-message character cap', () => {
 Deno.test('no settled bids, no post', () => {
   assertEquals(buildBidResultsMessages({ ...LEAGUE, kind: 'pickup', movies: [] }), [])
 })
+
+Deno.test('partial results explicitly say that other bids remain pending', () => {
+  const [[embed]] = buildBidResultsMessages({ ...LEAGUE, kind: 'pickup',
+    movies: [oneBid('Released', 'Eve', 10, { kind: 'cancelled', reason: 'movie_released' })],
+    hasPendingBids: true })
+  assertEquals(embed.description, "0 movies awarded · 1 not awarded\nSome bids are still pending; they'll be reported once processed.")
+})
+
+Deno.test('a fully held league gets a pending notice, not silence or no-bids copy', () => {
+  const [[embed]] = buildBidResultsMessages({ ...LEAGUE, kind: 'counterpick', movies: [], hasPendingBids: true })
+  assertEquals(embed.description, "0 counterpicks awarded\nSome bids are still pending; they'll be reported once processed.")
+  assertEquals(embed.fields, [])
+})

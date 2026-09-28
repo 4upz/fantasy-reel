@@ -844,7 +844,20 @@ nothing but awardable contests with fully read inputs, so before resolving,
 movies that released while bids were pending are voided (as counterpick
 contests are), and a league where any input could not be *read* is held whole
 for the next run as a job error — a failed read is not a full roster.
-`BidPriorityList`'s cut line forecasts the same rules via `forecastBidFits`;
+Outbid bids remain committed offers until cancelled or processed. After every
+counter window closes, both pickup and counterpick contests consider all
+`active` and `outbid` bids: if a higher bidder cannot take the movie, award it
+to the highest eligible runner-up at that runner-up's own bid amount. Each
+team's priority, remaining budget, slots, and drop allowance still bind.
+
+Lost and cancelled bids persist `resolution_reason` on the bid row, independent
+of notifications. Pending and won rows clear it; historical unknown reasons
+remain NULL. `/bid-results` reports both bid types and cancellations from these
+rows. Results posts explicitly flag leagues with processing errors as pending.
+
+`BidPriorityList`'s cut line forecasts the same rules via `forecastBidFits`,
+including remaining drop allowance, target eligibility, and whether each bid
+uses an open slot or a conditional drop;
 `scripts/tests/bid-fit-forecast.test.cjs` checks it against the resolver.
 
 The bids-channel results post reports **every bid a run settles** — leaders and

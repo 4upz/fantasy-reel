@@ -264,6 +264,7 @@ Deno.serve(async (req) => {
         .update({
           amount,
           status: 'active',
+          resolution_reason: null,
           movie_data: movie_data || existingTeamBid.movie_data,
           countered_at: null,
           response_deadline: null,
@@ -292,6 +293,7 @@ Deno.serve(async (req) => {
           movie_data,
           amount,
           status: 'active',
+          resolution_reason: null,
           processing_deadline: processingDeadline,
           conditional_drop_draft_pick_id: conditional_drop_draft_pick_id ?? null,
           conditional_drop_pickup_id: conditional_drop_pickup_id ?? null,
