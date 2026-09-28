@@ -7,10 +7,11 @@
  * all and blow past its slot limit.
  *
  * This resolver decides all contests together. It is modelled on Fantasy Critic's
- * ActionProcessor: each pass awards at most one movie per team -- the highest
- * priority bid it can still win -- then re-checks remaining capacity and repeats.
- * A team that is out of slots stops being a contender, so its movies fall through
- * to the runner-up rather than going unawarded.
+ * ActionProcessor: each pass awards at most one movie per team, then re-checks
+ * remaining capacity. A lower-priority leader waits while a preferred runner-up
+ * could still win. Cycles retain the strongest contenders, so a team's priority
+ * never lets it jump ahead of an eligible higher bidder. A team that is out of
+ * slots stops being a contender, letting its movies fall through to runners-up.
  *
  * Kept free of Supabase calls so the ordering rules can be tested directly.
  */
@@ -202,6 +203,64 @@ interface Contender {
 }
 
 /**
+ * Teams can advance once they depend on nobody outside their own cycle. Sink
+ * strongly connected components include both ready teams (singletons) and
+ * mutually waiting teams, whose existing leaders preserve bid-strength order.
+ * Teams upstream of a cycle must wait: its awards may free their preferred bids.
+ */
+function teamsReadyToAdvance(dependencies: Map<string, Set<string>>): Set<string> {
+  const indices = new Map<string, number>()
+  const lowLinks = new Map<string, number>()
+  const stack: string[] = []
+  const onStack = new Set<string>()
+  const components: Set<string>[] = []
+
+  // Tarjan's algorithm groups cycles in linear time without making the result
+  // depend on the order teams or contests arrived from the database.
+  const visit = (team: string) => {
+    const index = indices.size
+    indices.set(team, index)
+    lowLinks.set(team, index)
+    stack.push(team)
+    onStack.add(team)
+
+    for (const dependency of dependencies.get(team)!) {
+      if (!indices.has(dependency)) {
+        visit(dependency)
+        lowLinks.set(team, Math.min(lowLinks.get(team)!, lowLinks.get(dependency)!))
+      } else if (onStack.has(dependency)) {
+        lowLinks.set(team, Math.min(lowLinks.get(team)!, indices.get(dependency)!))
+      }
+    }
+
+    if (lowLinks.get(team) !== index) return
+    const component = new Set<string>()
+    let member: string
+    do {
+      member = stack.pop()!
+      onStack.delete(member)
+      component.add(member)
+    } while (member !== team)
+    components.push(component)
+  }
+
+  for (const team of dependencies.keys()) {
+    if (!indices.has(team)) visit(team)
+  }
+
+  const ready = new Set<string>()
+  for (const component of components) {
+    const waitsOutside = [...component].some((team) =>
+      [...dependencies.get(team)!].some((dependency) => !component.has(dependency))
+    )
+    if (!waitsOutside) {
+      for (const team of component) ready.add(team)
+    }
+  }
+  return ready
+}
+
+/**
  * Pick a winner for every contest without letting any team exceed its capacity.
  *
  * @param contests Movies with at least one active bid and no open counter window.
@@ -250,13 +309,15 @@ export function resolveBidWinners(
   }
 
   while (unresolvedKeys.size > 0) {
-    // Each team advances only its highest-priority contender this pass. That is
-    // what makes slots fill in the order the team chose instead of the order the
-    // contests happen to be iterated in.
+    // First preserve price/time precedence in each contest, then choose each
+    // leading team's preferred award. These are candidates, not yet winners:
+    // the team may prefer a contest where it is currently only the runner-up.
+    const contenderByKey = new Map<string, ResolvableBid>()
     const contenderByTeam = new Map<string, Contender>()
     for (const key of unresolvedKeys) {
       const bid = rankedBids.get(key)!.find((b) => canAfford(b, capacities.get(b.team_id)))
       if (!bid) continue
+      contenderByKey.set(key, bid)
 
       const incumbent = contenderByTeam.get(bid.team_id)
       if (!incumbent || outranks({ key, bid }, incumbent)) {
@@ -265,7 +326,21 @@ export function resolveBidWinners(
     }
     if (contenderByTeam.size === 0) break
 
-    for (const { key, bid } of contenderByTeam.values()) {
+    const dependencies = new Map(
+      [...contenderByTeam.keys()].map((team) => [team, new Set<string>()]),
+    )
+    for (const [key, leader] of contenderByKey) {
+      for (const bid of rankedBids.get(key)!) {
+        const candidate = contenderByTeam.get(bid.team_id)
+        if (candidate && priorityOf(bid) < priorityOf(candidate.bid) &&
+          canAfford(bid, capacities.get(bid.team_id))) {
+          dependencies.get(bid.team_id)!.add(leader.team_id)
+        }
+      }
+    }
+
+    for (const team of teamsReadyToAdvance(dependencies)) {
+      const { key, bid } = contenderByTeam.get(team)!
       winners.set(key, bid)
       unresolvedKeys.delete(key)
       const dropped = consume(bid, capacities.get(bid.team_id)!)

@@ -397,7 +397,7 @@ Deno.test({
         assertEquals(after!.remaining_budget, before!.remaining_budget - 10)
       })
 
-      await t.step('a losing bid never fires its conditional drop', async () => {
+      await t.step('a losing bid never fires its conditional drop, including a retry after its award settled', async () => {
         const leagueId = await factory.createActiveLeague(uniqueName('LoserDrop'))
         const loser = (await factory.getTeamForUser(leagueId, client))!
         const winner = (await factory.getTeamForUser(leagueId, secondClient))!
@@ -407,9 +407,10 @@ Deno.test({
           title: 'Should Survive',
           release_date: '2099-06-01',
         })
+        await fillRoster(leagueId, client, loser.teamId)
 
         const contested = uniqueVoidTestTmdbId()
-        await seedBid(serviceClient, {
+        const loserId = await seedBid(serviceClient, {
           leagueId, teamId: loser.teamId, tmdbId: contested, amount: 2,
           conditionalDropPickupId: keepMe,
         })
@@ -422,6 +423,26 @@ Deno.test({
 
         // Outbid, so the drop must not have happened.
         assertEquals(await dropState(keepMe), { dropped: false, drops: 0 })
+
+        // Simulate the award committing while the losing status write failed.
+        // The runner's offer must not become a new auction on the next run.
+        const { error: resetError } = await serviceClient.from('pickup_bids')
+          .update({ status: 'outbid', resolution_reason: null }).eq('id', loserId)
+        assertEquals(resetError, null)
+        const { data: before } = await serviceClient.from('team_budgets')
+          .select('remaining_budget').eq('team_id', loser.teamId).single()
+        const retry = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(retry.status, 200)
+        assertEquals(retry.data.processed, 0)
+        assertEquals(retry.data.errors ?? [], [])
+        assertEquals(await dropState(keepMe), { dropped: false, drops: 0 })
+        assertEquals((await bidStatuses([loserId])).get(loserId), 'lost')
+        const { data: settled } = await serviceClient.from('pickup_bids')
+          .select('resolution_reason').eq('id', loserId).single()
+        assertEquals(settled?.resolution_reason, 'outbid')
+        const { data: after } = await serviceClient.from('team_budgets')
+          .select('remaining_budget').eq('team_id', loser.teamId).single()
+        assertEquals(after, before)
       })
     } finally {
       await factory.cleanup()

@@ -849,11 +849,20 @@ counter window closes, both pickup and counterpick contests consider all
 `active` and `outbid` bids: if a higher bidder cannot take the movie, award it
 to the highest eligible runner-up at that runner-up's own bid amount. Each
 team's priority, remaining budget, slots, and drop allowance still bind.
+Lower-priority contenders wait for higher-priority affordable offers to resolve;
+closed dependency cycles retain their current price/time leaders. Both pending
+statuses can be cancelled until the existing cutoff. Cancelling a runner-up
+does not promote other bids or reset response windows.
 
 Lost and cancelled bids persist `resolution_reason` on the bid row, independent
 of notifications. Pending and won rows clear it; historical unknown reasons
 remain NULL. `/bid-results` reports both bid types and cancellations from these
 rows. Results posts explicitly flag leagues with processing errors as pending.
+Retries reconcile leftover offers against existing awards before reserving
+capacity or executing drops. Confirmed weaker offers lose as outbid; uncertain
+prior accounting, capacity-loss reasons, or reused bids after a drop hold the
+league for reconciliation instead of replaying the award. Results identify
+these as previous awards without counting a new win.
 
 `BidPriorityList`'s cut line forecasts the same rules via `forecastBidFits`,
 including remaining drop allowance, target eligibility, and whether each bid

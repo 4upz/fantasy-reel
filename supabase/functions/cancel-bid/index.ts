@@ -79,9 +79,9 @@ Deno.serve(async (req) => {
       return errorResponse('You can only cancel your own bids', 403)
     }
 
-    // Can only cancel active bids (not outbid - that means someone else is higher)
-    if (bid.status !== 'active') {
-      return errorResponse('Can only cancel active bids', 400)
+    // Both leading and outbid offers can still win until they are processed.
+    if (bid.status !== 'active' && bid.status !== 'outbid') {
+      return errorResponse('Can only cancel pending bids', 400)
     }
 
     // Once the counter-bid phase starts a bid is a commitment. Without this, a
@@ -118,14 +118,29 @@ Deno.serve(async (req) => {
     }
 
     // Cancel the bid
-    const { error: updateError } = await serviceClient
+    const { data: cancelledBid, error: updateError } = await serviceClient
       .from('pickup_bids')
       .update({ status: 'cancelled', resolution_reason: 'user_cancelled' })
       .eq('id', bid_id)
+      .eq('status', bid.status)
+      .select('id')
+      .maybeSingle()
 
     if (updateError) {
       console.error('Error cancelling bid:', updateError)
       return errorResponse('Failed to cancel bid', 500)
+    }
+
+    if (!cancelledBid) {
+      return errorResponse('Bid changed while cancelling. Refresh and try again.', 409)
+    }
+
+    // Cancelling a runner-up leaves the leader and every response window alone.
+    if (bid.status === 'outbid') {
+      return jsonResponse({
+        message: 'Bid cancelled successfully',
+        restored_bid: null,
+      })
     }
 
     // Restore the next highest outbid user to active status
@@ -140,7 +155,7 @@ Deno.serve(async (req) => {
       .single()
 
     if (nextHighestBid) {
-      await serviceClient
+      const { data: restoredBid, error: restoreError } = await serviceClient
         .from('pickup_bids')
         .update({
           status: 'active',
@@ -149,6 +164,15 @@ Deno.serve(async (req) => {
           response_deadline: null,
         })
         .eq('id', nextHighestBid.id)
+        .eq('status', 'outbid')
+        .select('id')
+        .maybeSingle()
+
+      if (restoreError) throw restoreError
+      // A runner-up may have cancelled after it was selected for promotion.
+      if (!restoredBid) {
+        return jsonResponse({ message: 'Bid cancelled successfully', restored_bid: null })
+      }
 
       // Notify the restored bidder
       const { data: restoredTeam } = await serviceClient
