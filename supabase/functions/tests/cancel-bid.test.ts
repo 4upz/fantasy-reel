@@ -6,7 +6,8 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName, invokeFunction } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
+import { cancelClosedMessage, computeBidWindow, CANCEL_IN_PROCESSING_MESSAGE } from '../_shared/bid-window.ts'
 
 // Test movie data for bidding
 const currentYear = new Date().getFullYear()
@@ -94,34 +95,101 @@ Deno.test({
     // Status Tests
     // ============================================================================
 
-    await t.step('returns 400 when bid status is not active (outbid)', async () => {
-      const leagueId = await factory.createActiveLeague(uniqueName('cancel-outbid'))
-
-      // First user places a bid
-      const { data: bidData } = await client.functions.invoke('place-bid', {
-        body: {
+    await t.step('cancels an outbid offer without promoting another bidder or resetting windows', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('cancel-outbid'), 3)
+      const thirdClient = await factory.createThirdClient()
+      const service = getServiceClient()
+      const placedIds: string[] = []
+      for (const [bidder, amount] of [[client, 10], [secondClient, 20], [thirdClient, 30]] as const) {
+        const result = await invokeFunction<{ bid: { id: string } }>(bidder, 'place-bid', {
           league_id: leagueId,
           tmdb_id: 400002,
-          amount: 10,
+          amount,
           movie_data: { ...testMovieData, title: 'Outbid Cancel Movie' },
-        },
-      })
+        })
+        assertEquals(result.error, null)
+        assertExists(result.data?.bid.id)
+        placedIds.push(result.data.bid.id)
+      }
+      const { error: deadlineError } = await service.from('pickup_bids')
+        .update({ processing_deadline: new Date(Date.now() + 7 * 86400_000).toISOString() })
+        .in('id', placedIds)
+      assertEquals(deadlineError, null)
 
-      // Second user outbids. The real client always resupplies movie_data.
-      await secondClient.functions.invoke('place-bid', {
-        body: {
-          league_id: leagueId,
-          tmdb_id: 400002,
-          amount: 20,
-          movie_data: { ...testMovieData, title: 'Outbid Cancel Movie' },
-        },
-      })
+      const remainingFields = 'id, status, resolution_reason, countered_at, response_deadline'
+      const { data: before, error: beforeError } = await service.from('pickup_bids')
+        .select(remainingFields).in('id', placedIds.slice(1)).order('id')
+      assertEquals(beforeError, null)
+      assertEquals(before?.filter((row) => row.status === 'active').length, 1)
+      assertEquals(before?.filter((row) => row.status === 'outbid').length, 1)
+      const { count: notificationCount, error: countError } = await service.from('notifications')
+        .select('id', { count: 'exact', head: true }).eq('league_id', leagueId)
+      assertEquals(countError, null)
 
-      // First user tries to cancel their outbid bid
-      const result = await invokeFunction(client, 'cancel-bid', {
-        bid_id: bidData.bid.id,
+      const result = await invokeFunction<{ restored_bid: null }>(client, 'cancel-bid', {
+        bid_id: placedIds[0],
       })
-      assertEquals(result.error, 'Can only cancel active bids')
+      assertEquals(result.error, null)
+      assertEquals(result.data?.restored_bid, null)
+      const { data: cancelled, error: cancelledError } = await service.from('pickup_bids')
+        .select('status, resolution_reason').eq('id', placedIds[0]).single()
+      assertEquals(cancelledError, null)
+      assertEquals(cancelled, { status: 'cancelled', resolution_reason: 'user_cancelled' })
+      const { data: after, error: afterError } = await service.from('pickup_bids')
+        .select(remainingFields).in('id', placedIds.slice(1)).order('id')
+      assertEquals(afterError, null)
+      assertEquals(after, before)
+      const { count: afterCount, error: afterCountError } = await service.from('notifications')
+        .select('id', { count: 'exact', head: true }).eq('league_id', leagueId)
+      assertEquals(afterCountError, null)
+      assertEquals(afterCount, notificationCount)
+    })
+
+    await t.step('outbid offers keep the same cutoff and processing deadline locks', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('cancel-outbid-locked'))
+      const service = getServiceClient()
+      const team = await factory.getTeamForUser(leagueId, client)
+      assertExists(team)
+      const { data: bid, error: bidError } = await service.from('pickup_bids').insert({
+        league_id: leagueId,
+        team_id: team.teamId,
+        tmdb_id: 400006,
+        movie_data: testMovieData,
+        amount: 10,
+        status: 'outbid',
+        processing_deadline: new Date(Date.now() + 86400_000).toISOString(),
+      }).select('id, processing_deadline').single()
+      assertEquals(bidError, null)
+      assertExists(bid)
+
+      const { error: cutoffError } = await service.from('leagues')
+        .update({ new_bid_cutoff_hours: 48 }).eq('id', leagueId)
+      assertEquals(cutoffError, null)
+      const locked = await invokeFunction(client, 'cancel-bid', { bid_id: bid.id })
+      assertEquals(locked.status, 400)
+      assertEquals(locked.error, cancelClosedMessage(computeBidWindow(bid.processing_deadline, 48)))
+
+      const { error: disableError } = await service.from('leagues')
+        .update({ new_bid_cutoff_hours: 0 }).eq('id', leagueId)
+      assertEquals(disableError, null)
+      const { error: deadlineError } = await service.from('pickup_bids')
+        .update({ processing_deadline: new Date(Date.now() - 3600_000).toISOString() }).eq('id', bid.id)
+      assertEquals(deadlineError, null)
+      const processing = await invokeFunction(client, 'cancel-bid', { bid_id: bid.id })
+      assertEquals(processing.status, 400)
+      assertEquals(processing.error, CANCEL_IN_PROCESSING_MESSAGE)
+      const { data: unchanged, error: unchangedError } = await service.from('pickup_bids')
+        .select('status, resolution_reason').eq('id', bid.id).single()
+      assertEquals(unchangedError, null)
+      assertEquals(unchanged, { status: 'outbid', resolution_reason: null })
+
+      for (const status of ['won', 'lost', 'cancelled']) {
+        const { error: statusError } = await service.from('pickup_bids').update({ status }).eq('id', bid.id)
+        assertEquals(statusError, null)
+        const settled = await invokeFunction(client, 'cancel-bid', { bid_id: bid.id })
+        assertEquals(settled.status, 400)
+        assertEquals(settled.error, 'Can only cancel pending bids')
+      }
     })
 
     // ============================================================================

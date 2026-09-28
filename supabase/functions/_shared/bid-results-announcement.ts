@@ -37,6 +37,8 @@ export interface BidResult {
 export interface MovieResult {
   title: string
   bids: BidResult[]
+  /** This run only reconciled losses left behind an earlier award. */
+  previouslyAwarded?: boolean
 }
 
 // Each message carries one embed. Keep a deliberate 500-character safety
@@ -86,7 +88,7 @@ function describeBid(bid: BidResult, kind: BidResultsKind): string {
 }
 
 function isAwarded(movie: MovieResult): boolean {
-  return movie.bids.some((bid) => bid.outcome.kind === 'won')
+  return movie.previouslyAwarded === true || movie.bids.some((bid) => bid.outcome.kind === 'won')
 }
 
 /**
@@ -100,7 +102,7 @@ function movieField(movie: MovieResult, kind: BidResultsKind) {
     .sort((a, b) => Number(b.outcome.kind === 'won') - Number(a.outcome.kind === 'won'))
     .map((bid) => describeBid(bid, kind))
   // Clip the title, never the verdict.
-  const suffix = awarded ? '' : ' — not awarded'
+  const suffix = movie.previouslyAwarded ? ' — previously awarded' : awarded ? '' : ' — not awarded'
 
   return {
     name: `${clip(movie.title, DISCORD_MAX_FIELD_NAME - suffix.length)}${suffix}`,
@@ -124,10 +126,12 @@ export function buildBidResultsMessages(params: {
   if (movies.length === 0 && !hasPendingBids) return []
 
   const { title, noun } = COPY[kind]
-  const awardedCount = movies.filter(isAwarded).length
-  const notAwardedCount = movies.length - awardedCount
+  const awardedCount = movies.filter((movie) => !movie.previouslyAwarded && isAwarded(movie)).length
+  const notAwardedCount = movies.filter((movie) => !isAwarded(movie)).length
+  const previousCount = movies.filter((movie) => movie.previouslyAwarded).length
   const description = `${awardedCount} ${noun}${awardedCount === 1 ? '' : 's'} awarded` +
     (notAwardedCount > 0 ? ` · ${notAwardedCount} not awarded` : '') +
+    (previousCount > 0 ? ` · ${previousCount} previously awarded` : '') +
     (hasPendingBids ? "\nSome bids are still pending; they'll be reported once processed." : '')
 
   // Plain awards first, so they sit together as a grid above the explanations.

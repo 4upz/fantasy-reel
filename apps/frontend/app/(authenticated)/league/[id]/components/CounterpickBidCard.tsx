@@ -26,6 +26,7 @@ interface CounterpickBidCardProps {
 export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt }: CounterpickBidCardProps) {
   const isOutbid = bid.status === 'outbid'
   const isActive = bid.status === 'active'
+  const isPending = isActive || isOutbid
   const movieTitle = bid.movies?.title || 'Unknown Movie'
   const posterUrl = bid.movies?.poster_url || null
 
@@ -35,8 +36,8 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
   // quieter option to raise your own bid or outbid a rival's.
   const showRecoverButton = isOutbid && isOwner && !!onCounter
   const showRaiseButton = isActive && !!onCounter
-  const showCancelButton = isOwner && isActive && !!onCancel
-  const showCancelLock = isOwner && isActive && !onCancel && !!cancelLocked
+  const showCancelButton = isOwner && isPending && !!onCancel
+  const showCancelLock = isOwner && isPending && !onCancel && !!cancelLocked
 
   return (
     <div
@@ -108,6 +109,7 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
             {showCancelButton && (
               <button
                 onClick={onCancel}
+                data-testid={`cancel-counterpick-bid-${bid.movie_id}`}
                 className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-crimson/10"
               >
                 <Trash2 className="w-4 h-4 mr-1.5" />

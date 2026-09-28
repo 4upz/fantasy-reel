@@ -163,6 +163,18 @@ Deno.test('no settled bids, no post', () => {
   assertEquals(buildBidResultsMessages({ ...LEAGUE, kind: 'pickup', movies: [] }), [])
 })
 
+Deno.test('reconciled losses retain the previous award without counting a new win', () => {
+  for (const kind of ['pickup', 'counterpick'] as const) {
+    const [embed] = embedsOf(kind, [{
+      ...oneBid('Earlier winner', 'Runner-up', 5, { kind: 'lost', reason: 'outbid' }),
+      previouslyAwarded: true,
+    }])
+    assertEquals(embed.description, `0 ${kind === 'pickup' ? 'movies' : 'counterpicks'} awarded · 1 previously awarded`)
+    assertEquals(embed.fields?.[0].name, 'Earlier winner — previously awarded')
+    assert(!embed.fields?.[0].value.includes('Won by'))
+  }
+})
+
 Deno.test('partial results explicitly say that other bids remain pending', () => {
   const [[embed]] = buildBidResultsMessages({ ...LEAGUE, kind: 'pickup',
     movies: [oneBid('Released', 'Eve', 10, { kind: 'cancelled', reason: 'movie_released' })],

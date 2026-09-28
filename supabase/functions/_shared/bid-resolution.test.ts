@@ -29,7 +29,7 @@ function bid(
     team_id: teamId,
     amount,
     priority,
-    created_at: createdAt ?? `2026-01-01T00:00:${String(placedCounter).padStart(2, '0')}Z`,
+    created_at: createdAt ?? new Date(Date.UTC(2026, 0, 1, 0, 0, placedCounter)).toISOString(),
     conditionalDropHoldingId: null,
   }
 }
@@ -226,6 +226,144 @@ Deno.test('resolves an empty slate without looping', () => {
 
   assertEquals(resolution.winners.size, 0)
   assertEquals(resolution.lossReasons.size, 0)
+})
+
+function permutations<T>(items: T[]): T[][] {
+  if (items.length === 0) return [[]]
+  return items.flatMap((item, index) =>
+    permutations(items.filter((_, otherIndex) => otherIndex !== index))
+      .map((rest) => [item, ...rest])
+  )
+}
+
+/** Contest, bidder, and team-map iteration order must not decide an award. */
+function assertAwardsInAnyOrder(
+  contests: BidContest[],
+  capacities: Map<string, TeamCapacity>,
+  expected: Record<string, string>,
+) {
+  const baseline = resolveBidWinners(contests, capacities)
+  assertEquals(Object.fromEntries([...baseline.winners].map(([key, winner]) => [key, winner.id])), expected)
+  for (const reordered of permutations(contests)) {
+    for (const reverse of [false, true]) {
+      const result = resolveBidWinners(
+        reordered.map((c) => ({ ...c, activeBids: reverse ? c.activeBids.toReversed() : c.activeBids })),
+        new Map(reverse ? [...capacities].toReversed() : capacities),
+      )
+      assertEquals(result, baseline)
+    }
+  }
+  return baseline
+}
+
+Deno.test('reserves a runner-up team slot for its preferred unresolved contest', () => {
+  const contests = [
+    contest('A', bid('t1-a', 'T1', 10, 1), bid('t2-a', 'T2', 20, 2)),
+    contest('B', bid('t1-b', 'T1', 10, 2)),
+    contest('C', bid('t2-c', 'T2', 10, 1)),
+  ]
+  const result = assertAwardsInAnyOrder(contests, new Map([
+    ['T1', slotsOnlyCapacity(1)], ['T2', slotsOnlyCapacity(1)],
+  ]), { A: 't1-a', C: 't2-c' })
+
+  assertEquals(result.lossReasons.get('t1-b'), 'no_slots')
+  assertEquals(result.lossReasons.get('t2-a'), 'no_slots')
+})
+
+Deno.test('reserves budget for a preferred runner-up bid before a lower-priority leader', () => {
+  const contests = [
+    contest('A', bid('t1-a', 'T1', 10, 1), bid('t2-a', 'T2', 20, 2)),
+    contest('B', bid('t1-b', 'T1', 10, 2)),
+    contest('C', bid('t2-c', 'T2', 10, 1)),
+  ]
+  const result = assertAwardsInAnyOrder(contests, new Map([
+    ['T1', cap({ remainingBudget: 10 })], ['T2', cap({ remainingBudget: 20 })],
+  ]), { A: 't1-a', C: 't2-c' })
+
+  assertEquals(result.lossReasons.get('t1-b'), 'insufficient_budget')
+  assertEquals(result.lossReasons.get('t2-a'), 'insufficient_budget')
+})
+
+Deno.test('reserves conditional drop allowance and targets for preferred runner-up bids', () => {
+  for (const sharedTarget of [false, true]) {
+    const contests = [
+      contest('A', dropBid('t1-a', 'T1', 10, 1, 'h1'), bid('t2-a', 'T2', 20, 2)),
+      contest('B', dropBid('t1-b', 'T1', 10, 2, sharedTarget ? 'h1' : 'h2')),
+      contest('C', bid('t2-c', 'T2', 10, 1)),
+    ]
+    const result = assertAwardsInAnyOrder(contests, new Map([
+      ['T1', cap({
+        freeSlots: 0,
+        remainingDrops: sharedTarget ? 2 : 1,
+        droppableHoldingIds: new Set(['h1', 'h2']),
+      })],
+      ['T2', slotsOnlyCapacity(1)],
+    ]), { A: 't1-a', C: 't2-c' })
+
+    assertEquals(result.executedDrops, new Map([['t1-a', 'h1']]))
+    assertEquals(result.lossReasons.get('t1-b'), 'no_slots')
+  }
+})
+
+Deno.test('dependency cycles keep price precedence over each competing team priority', () => {
+  const contests = [
+    contest('X', bid('a-x', 'A', 20, 2), bid('b-x', 'B', 10, 1)),
+    contest('Y', bid('b-y', 'B', 20, 2), bid('a-y', 'A', 10, 1)),
+  ]
+  const result = assertAwardsInAnyOrder(contests, new Map([
+    ['A', slotsOnlyCapacity(1)], ['B', slotsOnlyCapacity(1)],
+  ]), { X: 'a-x', Y: 'b-y' })
+
+  assertEquals(result.lossReasons.get('b-x'), 'outbid')
+  assertEquals(result.lossReasons.get('a-y'), 'outbid')
+})
+
+Deno.test('a chain waiting on a cycle preserves capacity until its fallback contests settle', () => {
+  const contests = [
+    contest('X', bid('a-x', 'A', 20, 2), bid('b-x', 'B', 10, 1)),
+    contest('Y', bid('b-y', 'B', 20, 2), bid('a-y', 'A', 10, 1)),
+    contest('P', bid('b-p', 'B', 20, 3), bid('c-p', 'C', 10, 1)),
+    contest('Q', bid('c-q', 'C', 10, 2), bid('d-q', 'D', 5, 1)),
+    contest('R', bid('d-r', 'D', 10, 2)),
+  ]
+  assertAwardsInAnyOrder(contests, new Map([
+    ['A', slotsOnlyCapacity(1)], ['B', slotsOnlyCapacity(1)],
+    ['C', slotsOnlyCapacity(1)], ['D', slotsOnlyCapacity(1)],
+  ]), { X: 'a-x', Y: 'b-y', P: 'c-p', Q: 'd-q' })
+})
+
+Deno.test('a cycle also waits for every higher-priority fallback outside that cycle', () => {
+  const contests = [
+    contest('X', bid('a-x', 'A', 20, 3), bid('b-x', 'B', 10, 1)),
+    contest('Y', bid('b-y', 'B', 20, 2), bid('a-y', 'A', 10, 1)),
+    contest('Z', bid('c-z', 'C', 20, 2), bid('a-z', 'A', 10, 2)),
+    contest('W', bid('c-w', 'C', 10, 1)),
+  ]
+  assertAwardsInAnyOrder(contests, new Map([
+    ['A', slotsOnlyCapacity(1)], ['B', slotsOnlyCapacity(1)], ['C', slotsOnlyCapacity(1)],
+  ]), { Y: 'b-y', Z: 'a-z', W: 'c-w' })
+})
+
+Deno.test('unaffordable preferred bids do not delay affordable leaders', () => {
+  const contests = [
+    contest('X', bid('a-x', 'A', 10, 2), bid('b-x', 'B', 5, 1)),
+    contest('Y', bid('b-y', 'B', 30, 2), bid('a-y', 'A', 20, 1)),
+  ]
+  assertAwardsInAnyOrder(contests, new Map([
+    ['A', cap({ freeSlots: 1, remainingBudget: 10 })], ['B', slotsOnlyCapacity(1)],
+  ]), { X: 'a-x', Y: 'b-y' })
+})
+
+Deno.test('earliest equal-price leaders retain precedence through dependency cycles', () => {
+  const early = '2026-01-01T00:00:00Z'
+  const late = '2026-01-02T00:00:00Z'
+  const contests = [
+    contest('X', bid('a-x', 'A', 10, 2, early), bid('b-x', 'B', 10, 1, late)),
+    contest('Y', bid('b-y', 'B', 10, 2, early), bid('a-y', 'A', 10, 1, late)),
+  ]
+  assertAwardsInAnyOrder(contests, new Map([
+    ['A', slotsOnlyCapacity(1)], ['B', slotsOnlyCapacity(1)],
+  ]), { X: 'a-x', Y: 'b-y' })
 })
 
 // ---------------------------------------------------------------------------

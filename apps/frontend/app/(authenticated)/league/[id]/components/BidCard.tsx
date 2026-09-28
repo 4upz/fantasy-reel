@@ -130,7 +130,7 @@ function CancelBidModal({
           </div>
 
           <p className="type-body-sm text-foreground-secondary mb-4">
-            ${bidAmount} will be returned to your budget.
+            This bid will no longer be eligible to win.
           </p>
 
           {/* Actions */}
@@ -170,6 +170,7 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
   const isOutbid = bid.status === 'outbid'
   const isActive = bid.status === 'active'
+  const isPending = isActive || isOutbid
   const movieTitle = movieData?.title || `Movie #${bid.tmdb_id}`
 
   const typeClass = getBidTypeClass(bidType)
@@ -178,8 +179,8 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
   // quieter option to raise your own bid or outbid a rival's.
   const showRecoverButton = isOutbid && isOwner && !!onCounter
   const showRaiseButton = isActive && !!onCounter
-  const showCancelButton = isOwner && isActive && !!onCancel
-  const showCancelLock = isOwner && isActive && !onCancel && !!cancelLocked
+  const showCancelButton = isOwner && isPending && !!onCancel
+  const showCancelLock = isOwner && isPending && !onCancel && !!cancelLocked
 
   return (
     <>
