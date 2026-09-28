@@ -13,6 +13,10 @@ interface BidPriorityListProps {
   slots: number
   /** Roster slots the team has already filled. */
   used: number
+  /** Drop allowance left after all drops already executed this season. */
+  remainingDrops: number
+  /** Current holdings that can supply room when no open slot remains. */
+  droppableHoldingIds: ReadonlySet<string>
   disabled: boolean
   onReorder: (bidIds: string[]) => void
 }
@@ -27,34 +31,49 @@ export default function BidPriorityList({
   bids,
   slots,
   used,
+  remainingDrops,
+  droppableHoldingIds,
   disabled,
   onReorder,
 }: BidPriorityListProps): React.ReactElement | null {
   const remainingSlots = Math.max(0, slots - used)
 
-  const items = useMemo<PriorityListItem[]>(
-    () => bids.map((bid) => ({
-      id: bid.id,
-      title: bid.movie_data?.title || 'Unknown movie',
-      meta: (
-        <>
-          <span className="type-numeric text-foreground-secondary">${bid.amount}</span>
-          {conditionalDropOf(bid) !== null && (
-            <>
-              <span className="text-foreground-secondary">·</span>
-              <Scissors className="w-3 h-3 text-warning shrink-0" />
-              <span className="truncate text-warning">Brings its own slot</span>
-            </>
-          )}
-        </>
-      ),
-    })),
-    [bids]
-  )
-
   const dropTargetById = useMemo(
     () => new Map(bids.map((bid) => [bid.id, conditionalDropOf(bid)])),
     [bids]
+  )
+
+  const computeFunding = useCallback(
+    (ordered: { id: string }[]) => forecastBidFits(
+      ordered.map((item) => dropTargetById.get(item.id) ?? null),
+      { freeSlots: remainingSlots, remainingDrops, droppableHoldingIds },
+    ),
+    [remainingSlots, remainingDrops, droppableHoldingIds, dropTargetById]
+  )
+
+  const items = useMemo<PriorityListItem[]>(
+    () => {
+      const funding = computeFunding(bids)
+      return bids.map((bid, index) => ({
+        id: bid.id,
+        title: bid.movie_data?.title || 'Unknown movie',
+        meta: (
+          <>
+            <span className="type-numeric text-foreground-secondary">${bid.amount}</span>
+            <span aria-hidden="true">·</span>
+            {funding[index] === 'drop' && (
+              <Scissors className="w-3 h-3 text-warning shrink-0" aria-hidden="true" />
+            )}
+            <span className={funding[index] === 'drop' ? 'text-warning' : undefined}>
+              {funding[index] === 'drop'
+                ? 'Uses conditional drop'
+                : funding[index] === 'slot' ? 'Uses open slot' : 'No room currently'}
+            </span>
+          </>
+        ),
+      }))
+    },
+    [bids, computeFunding]
   )
 
   /**
@@ -63,8 +82,8 @@ export default function BidPriorityList({
    */
   const computeFits = useCallback(
     (ordered: PriorityListItem[]): boolean[] =>
-      forecastBidFits(ordered.map((item) => dropTargetById.get(item.id) ?? null), remainingSlots),
-    [remainingSlots, dropTargetById]
+      computeFunding(ordered).map((funding) => funding !== null),
+    [computeFunding]
   )
 
   return (
@@ -72,11 +91,7 @@ export default function BidPriorityList({
       items={items}
       computeFits={computeFits}
       heading="Pickup bids"
-      description={
-        remainingSlots > 0
-          ? `If more of your bids win than you have room for, you keep the top ${remainingSlots}.`
-          : 'Your roster is full. Only bids with a movie to drop can be honored.'
-      }
+      description={`If these bids win in this order, they use your ${remainingSlots} open ${remainingSlots === 1 ? 'slot' : 'slots'} first, then eligible drops (${remainingDrops} left). Budget and other bids can change the result.`}
       cutLabel="Roster runs out"
       testId="bid-priority-list"
       cutTestId="bid-slot-cut-line"

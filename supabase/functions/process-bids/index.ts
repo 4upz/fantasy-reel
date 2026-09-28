@@ -264,7 +264,7 @@ interface DeadlinedBid {
 
 /**
  * Bids on `table` whose window has closed.
- * - `weekly`: active bids whose regular processing deadline has passed.
+ * - `weekly`: pending bids whose regular processing deadline has passed.
  * - `extended`: bids whose counter-response window has expired, and only those
  *   that really were in counter-bid extra time -- a response_deadline at or
  *   before the processing deadline just means the regular weekly run will pick
@@ -283,7 +283,7 @@ async function fetchDueBids<T extends DeadlinedBid>(
   let query = serviceClient.from(table).select('*')
 
   if (mode === 'weekly') {
-    query = query.eq('status', 'active').lte('processing_deadline', now.toISOString())
+    query = query.in('status', ['active', 'outbid']).lte('processing_deadline', now.toISOString())
   } else {
     query = query
       .in('status', ['active', 'outbid'])
@@ -516,7 +516,7 @@ async function excludeFinishedSeasonBids<T extends { id: string; league_id: stri
     const batch = cancelled.slice(offset, offset + ID_BATCH_SIZE)
     const { data: claimed, error } = await serviceClient
       .from(table)
-      .update({ status: 'cancelled' })
+      .update({ status: 'cancelled', resolution_reason: 'season_completed' })
       .in('id', batch.map((bid) => bid.id))
       .in('status', ['active', 'outbid'])
       .select('id')
@@ -566,7 +566,7 @@ async function excludeFinishedSeasonBids<T extends { id: string; league_id: stri
  * team was never judged, so no outcome in its league can be trusted this run --
  * see holdUnreadLeagues.
  */
-async function getTeamCapacities(
+export async function getTeamCapacities(
   serviceClient: ServiceClient,
   contests: BidContest[],
   kind: 'pickup' | 'counterpick',
@@ -642,18 +642,6 @@ async function getTeamCapacities(
       usedByTeam.set(row.counterpicker_team_id, (usedByTeam.get(row.counterpicker_team_id) ?? 0) + 1)
     }
     unreadUsedTeams = unreadIds
-  } else {
-    // team_holdings excludes dropped rows itself, so there is no dropped_at
-    // filter to forget here.
-    const { rows, unreadIds } = await selectByIdBatches<{ team_id: string }>(
-      teamIds,
-      'Failed to count active holdings:',
-      (batch) => serviceClient.from('team_holdings').select('team_id').in('team_id', batch),
-    )
-    for (const row of rows) {
-      usedByTeam.set(row.team_id, (usedByTeam.get(row.team_id) ?? 0) + 1)
-    }
-    unreadUsedTeams = unreadIds
   }
 
   // Drops and droppable holdings are pickup-only; counterpicks carry no
@@ -689,6 +677,10 @@ async function getTeamCapacities(
           .select('holding_id, team_id, movie_id, release_date, counterpicked_by_team_id')
           .in('team_id', batch),
     )
+    for (const row of holdingRows) {
+      usedByTeam.set(row.team_id, (usedByTeam.get(row.team_id) ?? 0) + 1)
+    }
+    unreadUsedTeams = unreadHoldingTeams
     // An unread holdings list would otherwise read as "nothing droppable",
     // judging a full roster's conditional drops as unusable on a failed read.
     unreadDropTeams = new Set([...unreadDropCountTeams, ...unreadHoldingTeams])
@@ -696,7 +688,7 @@ async function getTeamCapacities(
     // One query for every pending counterpick auction touching these movies,
     // rather than one per holding.
     const movieIds = [...new Set(holdingRows.map((row) => row.movie_id))]
-    const { rows: pendingCpBids } = await selectByIdBatches<{ movie_id: string }>(
+    const { rows: pendingCpBids, unreadIds: unreadCounterpickMovies } = await selectByIdBatches<{ movie_id: string }>(
       movieIds,
       'Failed to load pending counterpick bids:',
       (batch) =>
@@ -707,6 +699,12 @@ async function getTeamCapacities(
           .in('movie_id', batch),
     )
     const contestedMovieIds = new Set(pendingCpBids.map((row) => row.movie_id))
+    for (const row of holdingRows) {
+      const league = leagueById.get(leagueOfTeam.get(row.team_id) ?? '')
+      if (unreadCounterpickMovies.has(row.movie_id) && (league?.counterpicks_block_drops ?? true)) {
+        unreadDropTeams.add(row.team_id)
+      }
+    }
 
     const today = new Date().toISOString().slice(0, 10)
     const candidatesByTeam = new Map<string, DroppableCandidate[]>()
@@ -737,7 +735,7 @@ async function getTeamCapacities(
   for (const [teamId, leagueId] of leagueOfTeam) {
     const league = leagueById.get(leagueId)
     const unreadable =
-      unreadUsedTeams.has(teamId) || unreadBudgetTeams.has(teamId) || unreadDropTeams.has(teamId)
+      unreadUsedTeams.has(teamId) || unreadBudgetTeams.has(teamId) || !budgetByTeam.has(teamId) || unreadDropTeams.has(teamId)
 
     if (unreadable || !league) {
       unreadableLeagues.add(leagueId)
@@ -991,6 +989,40 @@ async function notifyPickupLoser(
   })
 }
 
+/** Change only pending rows, returning exactly the bids this run settled. */
+async function settlePendingBids<T extends { id: string }>(
+  serviceClient: ServiceClient,
+  table: 'pickup_bids' | 'counterpick_bids',
+  bids: T[],
+  status: 'lost' | 'cancelled',
+  reason: BidLossReason | VoidReasonCode,
+): Promise<T[]> {
+  if (bids.length === 0) return []
+  const { data, error } = await serviceClient.from(table)
+    .update({ status, resolution_reason: reason })
+    .in('id', bids.map((bid) => bid.id))
+    .in('status', ['active', 'outbid'])
+    .select('id')
+  if (error) throw error
+  const claimedIds = new Set((data ?? []).map((row: { id: string }) => row.id))
+  return bids.filter((bid) => claimedIds.has(bid.id))
+}
+
+/** Persist each loss reason and return only bids this run actually settled. */
+async function settleLostBids<T extends { id: string }>(
+  serviceClient: ServiceClient,
+  table: 'pickup_bids' | 'counterpick_bids',
+  bids: T[],
+  lossReasons: ReadonlyMap<string, BidLossReason>,
+): Promise<T[]> {
+  const claimed: T[] = []
+  for (const reason of ['outbid', 'no_slots', 'insufficient_budget'] as const) {
+    const group = bids.filter((bid) => (lossReasons.get(bid.id) ?? 'outbid') === reason)
+    claimed.push(...await settlePendingBids(serviceClient, table, group, 'lost', reason))
+  }
+  return claimed
+}
+
 /**
  * Close out a pickup contest that no bidder could take: every pending bid on
  * the movie loses, and each bidder is told why.
@@ -1011,17 +1043,8 @@ async function settleUnawardedPickupContest(
   lossReasons: Map<string, BidLossReason>,
   movieTitle: string,
 ): Promise<void> {
-  const { data: claimed, error } = await serviceClient
-    .from('pickup_bids')
-    .update({ status: 'lost' })
-    .in('id', bids.map((bid) => bid.id))
-    .in('status', ['active', 'outbid'])
-    .select('id')
+  const claimedBids = await settleLostBids(serviceClient, 'pickup_bids', bids, lossReasons)
 
-  if (error) throw error
-
-  const claimedIds = new Set((claimed ?? []).map((row: { id: string }) => row.id))
-  const claimedBids = bids.filter((bid) => claimedIds.has(bid.id))
   recordResolvedContest(ledger, contestKey, movieTitle, claimedBids, undefined, lossReasons)
   log.info('No pickup awarded: no bidder could take the movie', {
     movie_title: movieTitle,
@@ -1032,8 +1055,7 @@ async function settleUnawardedPickupContest(
     await notifyPickupLoser(serviceClient, {
       loserBid: bid,
       movieTitle,
-      // The resolver reports on every bid it weighed. Anything else was an
-      // 'outbid' row, which lost on price to a leader that then could not take it.
+      // Use the same reason persisted on the row and recorded in results.
       reason: lossReasons.get(bid.id) ?? 'outbid',
       award: null,
     })
@@ -1101,12 +1123,16 @@ async function voidReleasedPickupContests(
 
     // Every bid in the group, not just the leader: none can ever be honored,
     // and one left 'active' past its deadline would be reconsidered every run.
-    await serviceClient
-      .from('pickup_bids')
-      .update({ status: 'cancelled' })
-      .in('id', bids.map((bid) => bid.id))
+    let claimed: PickupBid[]
+    try {
+      claimed = await settlePendingBids(serviceClient, 'pickup_bids', bids, 'cancelled', 'movie_released')
+    } catch (error) {
+      log.error('Failed to cancel released pickup bids', { error: serializeError(error) })
+      unreadLeagues.add(leagueId)
+      continue
+    }
 
-    for (const bid of bids) {
+    for (const bid of claimed) {
       await notifyVoidedBidder(serviceClient, bid, movieTitle, 'movie_released', {
         tmdb_id: bid.tmdb_id,
         movie_id: movie?.id,
@@ -1125,7 +1151,7 @@ async function voidReleasedPickupContests(
     }
 
     log.info('Voided pickup bid(s): movie released before processing', {
-      voided_count: bids.length,
+      voided_count: claimed.length,
       movie_title: movieTitle,
     })
   }
@@ -1246,7 +1272,7 @@ async function notifyCounterpickLoser(
       : `Counterpick bid unsuccessful for ${movieTitle}`,
     body: outOfSlots
       ? `Your $${loserBid.amount} bid on ${movieTitle} would have won, but your higher-priority bids had already filled all ${slots} of your counterpick slots.`
-      : `Your bid of $${loserBid.amount} was not enough. The winning bid was $${winner?.amount ?? 'more'}.`,
+      : pickupLossBody(reason, loserBid.amount, `${movieTitle} (counterpick)`, winner?.amount ?? null),
     data: {
       bid_id: loserBid.id,
       movie_id: movieId,
@@ -1300,7 +1326,7 @@ async function notifyCounterpickLoser(
 
   // No winner means there is no losing amount to quote, so the in-app
   // notification above stands on its own rather than sending a misleading email.
-  if (!winner) return
+  if (!winner || reason !== 'outbid') return
 
   const emailData = {
     recipientName: name,
@@ -1389,7 +1415,7 @@ async function loadSettledCounterpickContests(
         continue
       }
 
-      const activeBids = bids.filter((bid) => bid.status === 'active')
+      const activeBids = bids
       if (activeBids.length === 0) continue
 
       contests.push({ key, activeBids })
@@ -1403,7 +1429,8 @@ async function loadSettledCounterpickContests(
     }
   }
 
-  return { contests, bidsByContest }
+  const unreadLeagues = new Set(errors.map((error) => error.movie_key.split(':')[0]))
+  return { contests: contests.filter((contest) => !unreadLeagues.has(contest.key.split(':')[0])), bidsByContest }
 }
 
 /**
@@ -1419,6 +1446,13 @@ async function loadSettledCounterpickContests(
  * awarded must not consume one of the bidder's scarce counterpick slots, which
  * is exactly what would happen if it were resolved first and voided after.
  */
+interface CounterpickMovie {
+  id: string
+  title: string
+  release_date: string | null
+  fantasy_points: number | null
+}
+
 async function voidReleasedCounterpickContests(
   serviceClient: ServiceClient,
   contests: BidContest[],
@@ -1426,30 +1460,27 @@ async function voidReleasedCounterpickContests(
   voided: VoidedBidResult[],
   ledger: ResultsLedger,
   seasonYears: Map<string, number>,
-): Promise<BidContest[]> {
+  errors: ProcessingError[],
+): Promise<{ contests: BidContest[]; movies: Map<string, CounterpickMovie> }> {
   const movieIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
 
-  const { rows: movies } = await selectByIdBatches<
-    { id: string; title: string; release_date: string | null }
-  >(
+  const { rows: movies } = await selectByIdBatches<CounterpickMovie>(
     movieIds,
     'Failed to read movies for the counterpick release check:',
-    (batch) => serviceClient.from('movies').select('id, title, release_date').in('id', batch),
+    (batch) => serviceClient.from('movies').select('id, title, release_date, fantasy_points').in('id', batch),
   )
   const moviesById = new Map(movies.map((movie) => [movie.id, movie]))
 
+  const unreadLeagues = new Set(contests
+    .filter((contest) => !moviesById.has(contest.key.split(':')[1]))
+    .map((contest) => contest.key.split(':')[0]))
   const surviving: BidContest[] = []
 
-  for (const contest of contests) {
+  for (const contest of holdUnreadLeagues(contests, unreadLeagues, errors)) {
     const [leagueId, movieId] = contest.key.split(':')
     const movie = moviesById.get(movieId)
 
-    // A movie we could not read is left in place so the awarding loop reports it
-    // as an error, rather than voiding real bids on the strength of a failed read.
-    if (!movie) {
-      surviving.push(contest)
-      continue
-    }
+    if (!movie) continue
 
     const releaseCheck = isUpcomingMovie(movie.release_date, seasonYearFor(seasonYears, leagueId))
     if (releaseCheck.valid) {
@@ -1464,14 +1495,8 @@ async function voidReleasedCounterpickContests(
     // released none of them can ever be honored, and a bid left 'active' with an
     // expired deadline would be reconsidered on every later run and would keep
     // rendering as live in the UI.
-    const bidsToVoid = bidsByContest.get(contest.key) ?? []
-
-    if (bidsToVoid.length > 0) {
-      await serviceClient
-        .from('counterpick_bids')
-        .update({ status: 'cancelled' })
-        .in('id', bidsToVoid.map((bid) => bid.id))
-    }
+    const bidsToVoid = await settlePendingBids(serviceClient, 'counterpick_bids',
+      bidsByContest.get(contest.key) ?? [], 'cancelled', 'movie_released')
 
     for (const bid of bidsToVoid) {
       await notifyVoidedBidder(serviceClient, bid, movieTitle, 'movie_released', {
@@ -1496,7 +1521,7 @@ async function voidReleasedCounterpickContests(
     })
   }
 
-  return surviving
+  return { contests: surviving, movies: moviesById }
 }
 
 /** Human-readable `VoidedBidResult.reason` text per target-revalidation void reason. */
@@ -1522,9 +1547,8 @@ const TARGET_VOID_REASON_TEXT: Record<TargetVoidReason, string> = {
  * does: a bid that can never be awarded must not consume one of the bidder's
  * scarce counterpick slots.
  *
- * If every active bid is voided, remaining 'outbid' bids are revalidated
- * against their own holdings and promoted if still valid. A movie may have
- * been dropped and acquired again since the leading bid was placed.
+ * Revalidate leaders and runners-up against their own holdings. A movie may
+ * have been dropped and acquired again since the leading bid was placed.
  */
 async function revalidateCounterpickTargets(
   serviceClient: ServiceClient,
@@ -1532,10 +1556,11 @@ async function revalidateCounterpickTargets(
   bidsByContest: Map<string, CounterpickBid[]>,
   voided: VoidedBidResult[],
   ledger: ResultsLedger,
+  errors: ProcessingError[],
+  movies: ReadonlyMap<string, CounterpickMovie>,
 ): Promise<BidContest[]> {
-  // Trailing bids can target a different holding from the active leader.
-  // Load their targets too so promotion does not mistake an unread row for
-  // a holding that no longer exists.
+  // Runners-up can target a different holding from the leader. Every pending
+  // bid's target must be readable before judging the league.
   const allBids = contests.flatMap((contest) =>
     bidsByContest.get(contest.key) ?? contest.activeBids as CounterpickBid[]
   )
@@ -1549,12 +1574,9 @@ async function revalidateCounterpickTargets(
 
   type TargetRow = { id: string; team_id: string; dropped_at: string | null }
 
-  const movieIds = [...new Set(contests.map((contest) => contest.key.split(':')[1]))]
-
   const [
     { rows: draftRows, unreadIds: unreadDraftPickIds },
     { rows: pickupRows, unreadIds: unreadPickupIds },
-    { rows: movies },
   ] = await Promise.all([
     selectByIdBatches<TargetRow>(
       draftPickIds,
@@ -1566,16 +1588,10 @@ async function revalidateCounterpickTargets(
       'Failed to read pickups for the counterpick target check:',
       (batch) => serviceClient.from('pickups').select('id, team_id, dropped_at').in('id', batch),
     ),
-    selectByIdBatches<{ id: string; title: string }>(
-      movieIds,
-      'Failed to read movies for the counterpick target check:',
-      (batch) => serviceClient.from('movies').select('id, title').in('id', batch),
-    ),
   ])
 
   const targetRowById = new Map([...draftRows, ...pickupRows].map((row) => [row.id, row]))
   const unreadTargetIds = new Set([...unreadDraftPickIds, ...unreadPickupIds])
-  const titleByMovieId = new Map(movies.map((movie) => [movie.id, movie.title]))
 
   const surviving: BidContest[] = []
 
@@ -1626,12 +1642,9 @@ async function revalidateCounterpickTargets(
     movieId: string,
     movieTitle: string,
   ): Promise<void> {
-    await serviceClient
-      .from('counterpick_bids')
-      .update({ status: 'cancelled' })
-      .in('id', entries.map(({ bid }) => bid.id))
-
     for (const { bid, reason } of entries) {
+      const claimed = await settlePendingBids(serviceClient, 'counterpick_bids', [bid], 'cancelled', reason)
+      if (claimed.length === 0) continue
       await notifyVoidedBidder(serviceClient, bid, movieTitle, reason, {
         movie_id: movieId,
         bid_type: 'counterpick',
@@ -1655,9 +1668,12 @@ async function revalidateCounterpickTargets(
     )
   }
 
-  for (const contest of contests) {
+  const unreadLeagues = new Set(allBids
+    .filter((bid) => unreadTargetIds.has((bid.draft_pick_id ?? bid.pickup_id) as string))
+    .map((bid) => bid.league_id))
+  for (const contest of holdUnreadLeagues(contests, unreadLeagues, errors)) {
     const movieId = contest.key.split(':')[1]
-    const movieTitle = titleByMovieId.get(movieId) || `Movie ${movieId}`
+    const movieTitle = movies.get(movieId)?.title || `Movie ${movieId}`
 
     const { kept: keptBids, toVoid } = partitionByTargetValidity(
       contest.activeBids as CounterpickBid[],
@@ -1674,44 +1690,7 @@ async function revalidateCounterpickTargets(
 
     if (keptBids.length > 0) {
       surviving.push({ key: contest.key, activeBids: keptBids })
-      continue
     }
-
-    // No active bid survived. Give each remaining 'outbid' bid the same
-    // treatment cancel-counterpick-bid gives when a leader withdraws:
-    // revalidate it against its own target and promote it back to 'active' so
-    // it re-enters the contest -- its target can differ from the dead
-    // leader's (e.g. the movie was dropped and re-picked-up mid-week). Bids
-    // whose own target is also gone are voided instead, so nothing strands as
-    // 'outbid' forever with no active bid left to ever beat. A bid kept on a
-    // failed read is promoted too: 'active' bids are re-fetched and
-    // revalidated on every later run, so promotion is the self-healing
-    // fail-open, whereas leaving it 'outbid' in a contest with no active bids
-    // would strand it (fetchDueBids only looks at 'active' rows).
-    const outbidBids = (bidsByContest.get(contest.key) ?? []).filter(
-      (bid) => bid.status === 'outbid',
-    )
-    const { kept: promotable, toVoid: outbidToVoid } = partitionByTargetValidity(outbidBids)
-
-    if (outbidToVoid.length > 0) {
-      await voidBids(contest.key, outbidToVoid, movieId, movieTitle)
-    }
-
-    if (promotable.length === 0) continue
-
-    await serviceClient
-      .from('counterpick_bids')
-      .update({ status: 'active', countered_at: null, response_deadline: null })
-      .in('id', promotable.map((bid) => bid.id))
-
-    for (const bid of promotable) bid.status = 'active'
-
-    log.info('Promoted outbid counterpick bid(s): contest leaders voided', {
-      promoted_count: promotable.length,
-      movie_title: movieTitle,
-    })
-
-    surviving.push({ key: contest.key, activeBids: promotable })
   }
 
   return surviving
@@ -1724,7 +1703,7 @@ async function revalidateCounterpickTargets(
  * lead several at once, and only a combined view can stop it winning more
  * counterpicks than `leagues.bidding_counterpick_slots` allows (issue #24).
  */
-async function processCounterpickBids(
+export async function processCounterpickBids(
   serviceClient: ServiceClient,
   dueBids: CounterpickBid[],
   now: Date,
@@ -1755,13 +1734,14 @@ async function processCounterpickBids(
   )
   if (settledContests.length === 0) return results
 
-  const unreleasedContests = await voidReleasedCounterpickContests(
+  const { contests: unreleasedContests, movies } = await voidReleasedCounterpickContests(
     serviceClient,
     settledContests,
     bidsByContest,
     voided,
     ledger,
-    seasonYears
+    seasonYears,
+    errors,
   )
   if (unreleasedContests.length === 0) return results
 
@@ -1773,34 +1753,29 @@ async function processCounterpickBids(
     unreleasedContests,
     bidsByContest,
     voided,
-    ledger
+    ledger,
+    errors,
+    movies,
   )
   if (contests.length === 0) return results
 
-  const { capacities, slotsByLeague } = await getTeamCapacities(
+  const { capacities, slotsByLeague, unreadableLeagues } = await getTeamCapacities(
     serviceClient,
     contests,
     'counterpick',
   )
-  const { winners, lossReasons } = resolveBidWinners(contests, capacities)
+  const readableContests = holdUnreadLeagues(contests, unreadableLeagues, errors)
+  const { winners, lossReasons } = resolveBidWinners(readableContests, capacities)
 
-  for (const { key } of contests) {
+  for (const { key } of readableContests) {
     const [leagueId, movieId] = key.split(':')
     const winner = winners.get(key) as CounterpickBid | undefined
     const allBids = bidsByContest.get(key) ?? []
 
     try {
-      const { data: movie, error: movieError } = await serviceClient
-        .from('movies')
-        .select('id, title, fantasy_points')
-        .eq('id', movieId)
-        .single()
-
-      if (movieError || !movie) {
-        log.error('Movie not found for counterpick bid', { movie_id: movieId })
-        errors.push({ movie_key: key, error: 'Movie not found for counterpick bid' })
-        continue
-      }
+      // Read before resolution, so a second read cannot invalidate a slot
+      // reservation after other bids have already been judged against it.
+      const movie = movies.get(movieId)!
 
       const movieTitle = movie.title || `Movie ${movieId}`
 
@@ -1850,7 +1825,7 @@ async function processCounterpickBids(
         // Mark winner as won
         await serviceClient
           .from('counterpick_bids')
-          .update({ status: 'won' })
+          .update({ status: 'won', resolution_reason: null })
           .eq('id', winner.id)
 
         await notifyCounterpickWinner(serviceClient, winner, movieTitle, movieId)
@@ -1869,26 +1844,17 @@ async function processCounterpickBids(
           amount: winner.amount,
         })
       } else {
-        log.info('No counterpick awarded: every bidder had filled its slots', { movie_title: movieTitle })
+        log.info('No counterpick awarded: no eligible bidder', { movie_title: movieTitle })
       }
 
       // Mark all other bids for this movie as lost
-      const loserBids = allBids.filter((bid) => bid.id !== winner?.id)
-      const loserIds = loserBids.map((bid) => bid.id)
-
-      if (loserIds.length > 0) {
-        await serviceClient
-          .from('counterpick_bids')
-          .update({ status: 'lost' })
-          .in('id', loserIds)
-      }
-      recordResolvedContest(ledger, key, movieTitle, allBids, winner?.id, lossReasons)
+      const loserBids = await settleLostBids(
+        serviceClient, 'counterpick_bids', allBids.filter((bid) => bid.id !== winner?.id), lossReasons,
+      )
+      recordResolvedContest(ledger, key, movieTitle, winner ? [winner, ...loserBids] : loserBids, winner?.id, lossReasons)
 
       for (const loserBid of loserBids) {
-        // The resolver only reports on bids it actually weighed. A bid that
-        // never went active was outbid -- unless nothing won at all, in which
-        // case the movie went unawarded for lack of slots.
-        const reason = lossReasons.get(loserBid.id) ?? (winner ? 'outbid' : 'no_slots')
+        const reason = lossReasons.get(loserBid.id) ?? 'outbid'
         await notifyCounterpickLoser(serviceClient, {
           loserBid,
           movieTitle,
@@ -1935,8 +1901,9 @@ async function sendBidResultsDiscordNotifications(
   serviceClient: ServiceClient,
   ledger: ResultsLedger,
   kind: BidResultsKind,
+  pendingLeagues: ReadonlySet<string>,
 ): Promise<void> {
-  if (ledger.size === 0) return
+  if (ledger.size === 0 && pendingLeagues.size === 0) return
 
   const movies = [...ledger.values()]
   const [{ rows: teams }, { rows: leagues }] = await Promise.all([
@@ -1946,7 +1913,7 @@ async function sendBidResultsDiscordNotifications(
       (batch) => serviceClient.from('teams').select('id, name').in('id', batch),
     ),
     selectByIdBatches<{ id: string; name: string }>(
-      [...new Set(movies.map((movie) => movie.league_id))],
+      [...new Set([...movies.map((movie) => movie.league_id), ...pendingLeagues])],
       'Failed to read league names for the results post:',
       (batch) => serviceClient.from('leagues').select('id, name').in('id', batch),
     ),
@@ -1954,11 +1921,16 @@ async function sendBidResultsDiscordNotifications(
   const teamNames = new Map(teams.map((team) => [team.id, team.name]))
   const leagueNames = new Map(leagues.map((league) => [league.id, league.name]))
 
-  await Promise.allSettled([...groupByLeague(movies)].map(async ([leagueId, leagueMovies]) => {
+  const byLeague = groupByLeague(movies)
+  for (const leagueId of pendingLeagues) {
+    if (!byLeague.has(leagueId)) byLeague.set(leagueId, [])
+  }
+  await Promise.allSettled([...byLeague].map(async ([leagueId, leagueMovies]) => {
     const messages = buildBidResultsMessages({
       leagueId,
       leagueName: leagueNames.get(leagueId) ?? 'League',
       kind,
+      hasPendingBids: pendingLeagues.has(leagueId),
       movies: leagueMovies.map((movie) => ({
         title: movie.title,
         bids: movie.bids.map(({ team_id, ...bid }) => ({
@@ -2192,6 +2164,7 @@ Deno.serve(async (req) => {
     // decided against the whole week rather than movie-by-movie. Resolving each
     // contest independently is what let a team win more movies than it had
     // roster room or budget for.
+    const unreadPickupLeagues = new Set<string>()
     const pickupContests: BidContest[] = []
     const bidsByKey = new Map<string, PickupBid[]>()
 
@@ -2201,13 +2174,17 @@ Deno.serve(async (req) => {
 
       // Check if any bids for this movie still have open response windows
       // (including outbid entries that might counter)
-      const { data: allBidsForMovie } = await serviceClient
+      const { data: allBidsForMovie, error: contestReadError } = await serviceClient
         .from('pickup_bids')
         .select('*')
         .eq('league_id', leagueId)
         .eq('tmdb_id', tmdbId)
         .in('status', ['active', 'outbid'])
 
+      if (contestReadError) {
+        unreadPickupLeagues.add(leagueId)
+        continue
+      }
       const movieBids: PickupBid[] = allBidsForMovie || []
       bidsByKey.set(key, movieBids)
 
@@ -2223,8 +2200,9 @@ Deno.serve(async (req) => {
         continue
       }
 
-      // Find active bids only (outbid entries don't win)
-      const activeBids = movieBids.filter((b) => b.status === 'active')
+      // Every pending offer remains eligible, including a runner-up whose
+      // counter window closed. The resolver enforces each bidder's capacity.
+      const activeBids = movieBids
       if (activeBids.length === 0) continue
 
       pickupContests.push({
@@ -2257,7 +2235,7 @@ Deno.serve(async (req) => {
     )
     const resolvableContests = holdUnreadLeagues(
       unreleasedContests,
-      new Set([...unreadMovieLeagues, ...unreadableLeagues]),
+      new Set([...unreadPickupLeagues, ...unreadMovieLeagues, ...unreadableLeagues]),
       errors,
     )
     const {
@@ -2371,20 +2349,14 @@ Deno.serve(async (req) => {
         // Mark winner as won
         await serviceClient
           .from('pickup_bids')
-          .update({ status: 'won' })
+          .update({ status: 'won', resolution_reason: null })
           .eq('id', winner.id)
 
         // Mark all other bids for this movie as lost
-        const loserBids = (allBidsForMovie || []).filter((b) => b.id !== winner.id)
-        const loserIds = loserBids.map((b) => b.id)
-
-        if (loserIds.length > 0) {
-          await serviceClient
-            .from('pickup_bids')
-            .update({ status: 'lost' })
-            .in('id', loserIds)
-        }
-        recordResolvedContest(pickupLedger, key, movieTitle, allBidsForMovie, winner.id, pickupLossReasons)
+        const loserBids = await settleLostBids(
+          serviceClient, 'pickup_bids', allBidsForMovie.filter((bid) => bid.id !== winner.id), pickupLossReasons,
+        )
+        recordResolvedContest(pickupLedger, key, movieTitle, [winner, ...loserBids], winner.id, pickupLossReasons)
 
         // Send notification to winner
         const winnerUserId = await getTeamUserId(serviceClient, winner.team_id)
@@ -2475,6 +2447,8 @@ Deno.serve(async (req) => {
     // Process counterpick bids after pickup bids
     // ========================================================================
 
+    const pickupPendingLeagues = new Set(errors.map((error) => error.movie_key.split(':')[0]))
+    const counterpickErrorStart = errors.length
     const {
       bids: counterpickBidsToProcess,
       error: counterpickBidsError,
@@ -2483,6 +2457,7 @@ Deno.serve(async (req) => {
     if (counterpickBidsError) {
       // Continue with pickup results even if counterpick fetch fails
       log.error('Failed to fetch counterpick bids', { mode, error: serializeError(counterpickBidsError) })
+      errors.push({ movie_key: league_id ?? 'counterpick-fetch', error: 'Could not read due counterpick bids' })
     }
 
     const voidedCounterpickResults: VoidedBidResult[] = []
@@ -2497,8 +2472,10 @@ Deno.serve(async (req) => {
       counterpickLedger,
     )
 
-    await sendBidResultsDiscordNotifications(serviceClient, pickupLedger, 'pickup')
-    await sendBidResultsDiscordNotifications(serviceClient, counterpickLedger, 'counterpick')
+    const counterpickPendingLeagues = new Set(errors.slice(counterpickErrorStart)
+      .map((error) => error.movie_key.split(':')[0]).filter((id) => id !== 'counterpick-fetch'))
+    await sendBidResultsDiscordNotifications(serviceClient, pickupLedger, 'pickup', pickupPendingLeagues)
+    await sendBidResultsDiscordNotifications(serviceClient, counterpickLedger, 'counterpick', counterpickPendingLeagues)
 
     // Weekly wrap-up messages. "No bids were placed" is reserved for leagues
     // that truly saw no bid activity. Any league with a bid due this run had
@@ -2512,21 +2489,30 @@ Deno.serve(async (req) => {
       const leaguesWithBidActivity = new Set(
         [...bidsToProcess, ...counterpickBidsToProcess].map((bid) => bid.league_id),
       )
-      notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBidActivity, league_id)
+      if (!counterpickBidsError) {
+        notificationSummary = await sendNoBidsDiscordNotifications(serviceClient, leaguesWithBidActivity, league_id)
+      }
     }
 
     // A run that awarded nothing but voided, closed out, or deferred something
     // did do work, so it must not report "No bids to process" -- that message
     // is reserved for a truly idle run.
     const voidedCount = voidedPickupResults.length + voidedCounterpickResults.length
+    const counterpicksUnawarded = [...counterpickLedger.values()].filter((movie) =>
+      movie.bids.some((bid) => bid.outcome.kind === 'lost') &&
+      !movie.bids.some((bid) => bid.outcome.kind === 'won')).length
     const settledCount =
-      results.length + counterpickResults.length + voidedCount + unawardedPickups.length
+      results.length + counterpickResults.length + voidedCount + unawardedPickups.length + counterpicksUnawarded
     const voidedSuffix = voidedCount > 0
       ? `; voided ${voidedCount} bid(s) for movies that released before processing`
       : ''
     const unawardedSuffix = unawardedPickups.length > 0
       ? `; ${unawardedPickups.length} movie(s) went unawarded (no bidder could take them)`
       : ''
+    const counterpickUnawardedSuffix = counterpicksUnawarded > 0
+      ? `; ${counterpicksUnawarded} counterpick(s) went unawarded`
+      : ''
+    const errorSuffix = errors.length > 0 ? '; some bids remain pending after processing errors' : ''
     const deferredSuffix = deferred.length > 0
       ? `; deferred ${deferred.length} movie(s) with open counter-bid windows`
       : ''
@@ -2544,15 +2530,16 @@ Deno.serve(async (req) => {
         counterpicks_awarded: counterpickResults.length,
         bids_voided: voidedCount,
         pickups_unawarded: unawardedPickups.length,
+        counterpicks_unawarded: counterpicksUnawarded,
         movies_deferred: deferred.length,
         ...(notificationSummary ? { notifications: notificationSummary } : {}),
       },
     })
 
     return jsonResponse({
-      message: settledCount + deferred.length === 0
+      message: settledCount + deferred.length + errors.length === 0
         ? 'No bids to process'
-        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)${voidedSuffix}${unawardedSuffix}${deferredSuffix}`,
+        : `Processed ${results.length} pickup(s) and ${counterpickResults.length} counterpick(s)${voidedSuffix}${unawardedSuffix}${counterpickUnawardedSuffix}${deferredSuffix}${errorSuffix}`,
       mode,
       processed: results.length,
       results,

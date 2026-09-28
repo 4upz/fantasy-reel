@@ -8,7 +8,16 @@
  */
 
 import type { BidLossReason, VoidReasonCode } from './bid-resolution.ts'
-import { buildEmbedAuthor, buildLeagueUrl, DISCORD_COLORS, type DiscordEmbed } from './discord.ts'
+import {
+  buildEmbedAuthor,
+  buildLeagueUrl,
+  DISCORD_COLORS,
+  DISCORD_MAX_EMBED_FIELDS,
+  DISCORD_MAX_FIELD_NAME,
+  DISCORD_MAX_FIELD_VALUE,
+  DISCORD_MAX_EMBED_CHARS,
+  type DiscordEmbed,
+} from './discord.ts'
 
 /** How one bid ended. */
 export type BidResultOutcome =
@@ -30,13 +39,9 @@ export interface MovieResult {
   bids: BidResult[]
 }
 
-// Discord rejects an embed with more than 25 fields, a field name over 256
-// characters or a value over 1024, and a message over 6000 characters in
-// total. Each message here carries one embed, kept safely under that cap.
-const MAX_FIELDS = 25
-const MAX_FIELD_NAME = 256
-const MAX_FIELD_VALUE = 1024
-const MAX_EMBED_CHARS = 5500
+// Each message carries one embed. Keep a deliberate 500-character safety
+// margin below Discord's hard cap for the bid-results message budget.
+const BID_RESULTS_EMBED_CHAR_BUDGET = DISCORD_MAX_EMBED_CHARS - 500
 
 const COPY: Record<BidResultsKind, { title: string; noun: string; wonBy: string; noRoom: string }> = {
   pickup: {
@@ -98,8 +103,8 @@ function movieField(movie: MovieResult, kind: BidResultsKind) {
   const suffix = awarded ? '' : ' — not awarded'
 
   return {
-    name: `${clip(movie.title, MAX_FIELD_NAME - suffix.length)}${suffix}`,
-    value: clip(lines.join('\n'), MAX_FIELD_VALUE),
+    name: `${clip(movie.title, DISCORD_MAX_FIELD_NAME - suffix.length)}${suffix}`,
+    value: clip(lines.join('\n'), DISCORD_MAX_FIELD_VALUE),
     inline: awarded && lines.length === 1,
   }
 }
@@ -113,15 +118,17 @@ export function buildBidResultsMessages(params: {
   leagueName: string
   kind: BidResultsKind
   movies: MovieResult[]
+  hasPendingBids?: boolean
 }): DiscordEmbed[][] {
-  const { leagueId, leagueName, kind, movies } = params
-  if (movies.length === 0) return []
+  const { leagueId, leagueName, kind, movies, hasPendingBids = false } = params
+  if (movies.length === 0 && !hasPendingBids) return []
 
   const { title, noun } = COPY[kind]
   const awardedCount = movies.filter(isAwarded).length
   const notAwardedCount = movies.length - awardedCount
   const description = `${awardedCount} ${noun}${awardedCount === 1 ? '' : 's'} awarded` +
-    (notAwardedCount > 0 ? ` · ${notAwardedCount} not awarded` : '')
+    (notAwardedCount > 0 ? ` · ${notAwardedCount} not awarded` : '') +
+    (hasPendingBids ? "\nSome bids are still pending; they'll be reported once processed." : '')
 
   // Plain awards first, so they sit together as a grid above the explanations.
   const fields = movies
@@ -129,7 +136,7 @@ export function buildBidResultsMessages(params: {
     .sort((a, b) => Number(b.inline) - Number(a.inline))
 
   // Budget each embed's fields around the largest header any of them carries.
-  const fieldBudget = MAX_EMBED_CHARS -
+  const fieldBudget = BID_RESULTS_EMBED_CHAR_BUDGET -
     (`${title} (continued)`.length + description.length + 2 * leagueName.length)
 
   const batches: typeof fields[] = [[]]
@@ -137,7 +144,7 @@ export function buildBidResultsMessages(params: {
   for (const field of fields) {
     const size = field.name.length + field.value.length
     const batch = batches[batches.length - 1]
-    if (batch.length === MAX_FIELDS || (batch.length > 0 && batchChars + size > fieldBudget)) {
+    if (batch.length === DISCORD_MAX_EMBED_FIELDS || (batch.length > 0 && batchChars + size > fieldBudget)) {
       batches.push([field])
       batchChars = size
     } else {

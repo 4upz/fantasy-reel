@@ -14,10 +14,8 @@
  * correctness bug, and the plan does not require guarding it.
  */
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, DISCORD_MAX_EMBED_FIELDS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { fetchRosterHoldings, groupHoldingsByLeague } from '../_shared/roster-holdings.ts'
-
-const MAX_FIELDS = 25
 
 export interface WeeklyDigestResult {
   leagues_notified: number
@@ -93,7 +91,7 @@ export async function runWeeklyReleasesDigest(serviceClient: SupabaseClient): Pr
     }
 
     const sortedDays = [...byDay.keys()].sort()
-    const fields = sortedDays.slice(0, MAX_FIELDS).map((day) => ({
+    const fields = sortedDays.slice(0, DISCORD_MAX_EMBED_FIELDS).map((day) => ({
       name: formatDayLabel(day),
       value: byDay.get(day)!.map((m) => `${m.title} (${m.teamName})`).join('\n'),
       inline: false,

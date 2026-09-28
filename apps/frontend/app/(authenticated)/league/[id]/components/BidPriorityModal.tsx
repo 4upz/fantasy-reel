@@ -1,11 +1,20 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, X } from 'lucide-react'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { createClient } from '@/utils/supabase/client'
 import { useBiddingContext } from '../bidding/BiddingContext'
+import { getDroppableBidHoldingIds } from './bidFitForecast'
 import BidPriorityList from './BidPriorityList'
 import CounterpickPriorityList from './CounterpickPriorityList'
+
+interface PickupCapacity {
+  slots: number
+  used: number
+  remainingDrops: number
+  droppableHoldingIds: ReadonlySet<string>
+}
 
 // Preserve the draft order while live updates refresh details and pending bids.
 function orderBids<T extends { id: string }>(bids: T[], ids: string[]): T[] {
@@ -16,8 +25,11 @@ function orderBids<T extends { id: string }>(bids: T[], ids: string[]): T[] {
 }
 
 export default function BidPriorityModal({ onClose }: { onClose: () => void }): React.ReactElement {
-  const { league, bidding, usedRosterSlots, biddingCounterpickSlots } = useBiddingContext()
+  const { league, teamId, bidding, biddingCounterpickSlots } = useBiddingContext()
   const { myBids, myCounterpickBids, biddingCounterpickCount, setBidPriorities, setCounterpickBidPriorities } = bidding
+  const hasPickupBids = myBids.length > 0
+  const supabase = useMemo(() => createClient(), [])
+  const [pickupCapacity, setPickupCapacity] = useState<PickupCapacity | null>(null)
   const [priorityOrder, setPriorityOrder] = useState(() => ({
     pickup: myBids.map((bid) => bid.id),
     counterpick: myCounterpickBids.map((bid) => bid.id),
@@ -25,6 +37,42 @@ export default function BidPriorityModal({ onClose }: { onClose: () => void }): 
   const [hasSavedChanges, setHasSavedChanges] = useState(false)
   const dialogRef = useRef<HTMLDialogElement>(null)
   const backdropPressed = useRef(false)
+
+  // Layout data can outlive a drop or trade in another tab. Read a fresh
+  // snapshot on each opening before claiming that any pickup bid will fit.
+  const loadCapacity = useCallback(async () => {
+    setPickupCapacity(null)
+    const [holdings, drops, counterpicks, settings] = await Promise.all([
+      supabase.from('team_holdings')
+        .select('holding_id, movie_id, release_date, counterpicked_by_team_id')
+        .eq('team_id', teamId),
+      supabase.rpc('get_team_drop_count', { p_team_id: teamId }),
+      supabase.from('counterpick_bids').select('movie_id')
+        .eq('league_id', league.id).in('status', ['active', 'outbid']),
+      supabase.from('leagues').select('total_slots, drop_limit, counterpicks_block_drops')
+        .eq('id', league.id).single(),
+    ])
+    if (holdings.error || drops.error || counterpicks.error || settings.error || !settings.data) {
+      throw new Error('Could not load your current roster and drop allowance. Try again.')
+    }
+    const currentHoldings = holdings.data ?? []
+    setPickupCapacity({
+      slots: settings.data.total_slots,
+      used: currentHoldings.length,
+      remainingDrops: Math.max(0, settings.data.drop_limit - (drops.data ?? 0)),
+      droppableHoldingIds: getDroppableBidHoldingIds(currentHoldings, {
+        today: new Date().toISOString().slice(0, 10),
+        counterpicksBlockDrops: settings.data.counterpicks_block_drops,
+        contestedMovieIds: new Set((counterpicks.data ?? []).map((bid) => bid.movie_id)),
+      }),
+    })
+  }, [supabase, teamId, league.id])
+  const { execute: refreshCapacity, isLoading: isLoadingCapacity, error: capacityError } = useAsyncAction(loadCapacity)
+
+  useEffect(() => {
+    if (!hasPickupBids) return
+    void refreshCapacity().catch(() => { /* The retry state is shown in the dialog. */ })
+  }, [refreshCapacity, hasPickupBids])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -85,6 +133,7 @@ export default function BidPriorityModal({ onClose }: { onClose: () => void }): 
           <h2 id="bid-priority-title" className="type-panel">Edit bid priority</h2>
           <p id="bid-priority-description" className="type-body-sm text-foreground-secondary mt-1">
             Put your favorites first. Priority decides which winning bids you keep when slots or budget run out.
+            {' '}Outbid bids can still win if higher bids cannot be honored.
           </p>
         </div>
         <button type="button" onClick={close} disabled={isSaving} className="btn btn-ghost h-11 w-11 shrink-0 rounded-full p-2" aria-label="Close priority editor">
@@ -94,13 +143,31 @@ export default function BidPriorityModal({ onClose }: { onClose: () => void }): 
 
       <div className="min-h-0 overflow-y-auto overscroll-contain space-y-6 p-4 sm:p-5" aria-busy={isSaving}>
         <p className="type-meta text-foreground-secondary">Drag the handles or choose a priority number.</p>
-        <BidPriorityList
-          bids={orderBids(myBids, priorityOrder.pickup)}
-          slots={league.total_slots}
-          used={usedRosterSlots}
-          disabled={isSaving}
-          onReorder={(pickup) => setPriorityOrder((current) => ({ ...current, pickup }))}
-        />
+        {hasPickupBids && (capacityError ? (
+          <div className="alert-error type-body-sm rounded-lg p-3" role="alert">
+            <p>{capacityError}</p>
+            <button
+              type="button"
+              className="btn btn-secondary mt-3 min-h-11 px-4 py-2"
+              disabled={isLoadingCapacity}
+              onClick={() => { void refreshCapacity().catch(() => { /* The error remains available for retry. */ }) }}
+            >
+              Try again
+            </button>
+          </div>
+        ) : pickupCapacity ? (
+          <BidPriorityList
+            bids={orderBids(myBids, priorityOrder.pickup)}
+            {...pickupCapacity}
+            disabled={isSaving}
+            onReorder={(pickup) => setPriorityOrder((current) => ({ ...current, pickup }))}
+          />
+        ) : (
+          <p className="type-body-sm text-foreground-secondary flex items-center gap-2" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            Loading your current roster and drop allowance…
+          </p>
+        ))}
         {biddingCounterpickSlots > 0 && (
           <CounterpickPriorityList
             bids={orderBids(myCounterpickBids, priorityOrder.counterpick)}
@@ -125,7 +192,7 @@ export default function BidPriorityModal({ onClose }: { onClose: () => void }): 
           <button
             type="button"
             data-testid="save-bid-priority"
-            disabled={isSaving}
+            disabled={isSaving || (hasPickupBids && !pickupCapacity)}
             className="btn btn-primary min-h-11 px-4 py-2"
             onClick={() => { void savePriority().catch(() => { /* The error is shown above. */ }) }}
           >

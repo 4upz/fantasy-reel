@@ -513,6 +513,17 @@ export const TMDB_GENRES = [
 
 export type BidStatus = 'active' | 'outbid' | 'won' | 'lost' | 'cancelled'
 
+export type BidResolutionReason =
+  | 'outbid'
+  | 'no_slots'
+  | 'insufficient_budget'
+  | 'movie_released'
+  | 'movie_dropped'
+  | 'target_owned'
+  | 'target_missing'
+  | 'user_cancelled'
+  | 'season_completed'
+
 export interface PickupBid {
   id: string
   league_id: string
@@ -521,6 +532,8 @@ export interface PickupBid {
   movie_data: TMDbSearchResult | null
   amount: number
   status: BidStatus
+  /** Null for pending/won bids or historical outcomes with no recorded reason. */
+  resolution_reason: BidResolutionReason | null
   created_at: string
   countered_at: string | null
   response_deadline: string | null
@@ -919,6 +932,8 @@ export interface CounterpickBid {
    */
   priority: number
   status: BidStatus
+  /** Null for pending/won bids or historical outcomes with no recorded reason. */
+  resolution_reason: BidResolutionReason | null
   created_at: string
   countered_at: string | null
   response_deadline: string | null

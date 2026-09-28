@@ -23,6 +23,7 @@ import { createLogger, serializeError } from './logger.ts'
 import {
   sendDiscordNotification,
   DISCORD_COLORS,
+  DISCORD_MAX_EMBED_FIELDS,
   buildLeagueUrl,
   buildEmbedAuthor,
   delay,
@@ -304,15 +305,12 @@ export function buildMovieScoreEmbed(
   }
 }
 
-/** Discord allows at most 25 fields per embed. */
-const MAX_EMBED_FIELDS = 25
-
 export function buildStandingsEmbed(
   changes: StandingChange[],
   leagueName: string,
   leagueId: string
 ): DiscordEmbed {
-  const shown = changes.slice(0, MAX_EMBED_FIELDS)
+  const shown = changes.slice(0, DISCORD_MAX_EMBED_FIELDS)
 
   const fields = shown.map((change) => {
     const lines: string[] = []
@@ -357,7 +355,7 @@ export function buildMovieRollupEmbed(
   leagueName: string,
   leagueId: string
 ): DiscordEmbed {
-  const shown = changes.slice(0, MAX_EMBED_FIELDS)
+  const shown = changes.slice(0, DISCORD_MAX_EMBED_FIELDS)
 
   const fields = shown.map((change) => ({
     name: change.title,

@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
     // Cancel the bid
     const { error: updateError } = await serviceClient
       .from('counterpick_bids')
-      .update({ status: 'cancelled' })
+      .update({ status: 'cancelled', resolution_reason: 'user_cancelled' })
       .eq('id', bid_id)
 
     if (updateError) {
@@ -126,6 +126,7 @@ Deno.serve(async (req) => {
         .from('counterpick_bids')
         .update({
           status: 'active',
+          resolution_reason: null,
           countered_at: null,
           response_deadline: null,
         })
