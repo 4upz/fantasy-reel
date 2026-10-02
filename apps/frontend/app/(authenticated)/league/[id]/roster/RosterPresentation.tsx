@@ -1,9 +1,10 @@
 import MoviePoster from '@/app/components/MoviePoster'
 import { Lock } from 'lucide-react'
-import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
+import { formatCriticScore, formatPointsText, isPreReleaseScore } from '@/utils/scoring'
 import type { HoldingMovie } from '@/types'
 
-type RosterMovie = Pick<HoldingMovie, 'title' | 'poster_url' | 'fantasy_points' | 'combined_score'>
+/** `release_date` decides whether the points count yet or are a pre-release score. */
+type RosterMovie = Pick<HoldingMovie, 'title' | 'poster_url' | 'release_date' | 'fantasy_points' | 'combined_score'>
 
 /** @design-system League */
 export function RosterHeader({
@@ -93,14 +94,20 @@ export function RosterMovieCard({
   posterSizes?: string
   reviewFocus?: boolean
 }) {
+  const isPreRelease = isPreReleaseScore(movie.fantasy_points, movie.release_date)
+
   const details = (
     <>
       <h3 className="type-row-title truncate text-foreground">{movie.title}</h3>
       <p className="type-meta text-foreground-secondary">{label}</p>
       {movie.fantasy_points !== null ? (
-        <p className="type-number mt-1 flex items-baseline gap-1.5">
-          <span className={`type-numeric ${movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}>
-            {formatFantasyPoints(movie.fantasy_points)} pts
+        <p className="type-number mt-1 flex flex-wrap items-baseline gap-x-1.5">
+          <span
+            className={`type-numeric ${
+              isPreRelease ? 'text-foreground-secondary' : movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'
+            }`}
+          >
+            {formatPointsText(movie.fantasy_points, isPreRelease)}
           </span>
           {movie.combined_score !== null && (
             <span className="type-numeric type-meta text-foreground-secondary">

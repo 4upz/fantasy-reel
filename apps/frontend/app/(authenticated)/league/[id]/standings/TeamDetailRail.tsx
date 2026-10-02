@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import MoviePoster from '@/app/components/MoviePoster'
 import { formatDate } from '@/utils/date'
-import { formatFantasyPoints } from '@/utils/scoring'
+import { describePreReleaseScore, formatFantasyPoints, isPreReleaseScore } from '@/utils/scoring'
 import type { HoldingMovie, RankedTeamFull } from '@/types'
 import TeamBudgetSummary from './TeamBudget'
 import LeagueMovieModal from '../components/LeagueMovieModal'
@@ -95,36 +95,45 @@ export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
       {startingBudget !== null && <TeamBudgetSummary budget={team?.team_budgets} startingBudget={startingBudget} />}
 
       {roster.length > 0 ? (
-        roster.map(({ key, movie, points }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setSelected(movie)}
-            aria-label={`View ${movie.title}`}
-            data-testid="rail-movie-button"
-            className="group flex w-full cursor-pointer items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px] text-left transition-colors hover:border-border-hover hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
-          >
-            <RailPoster movie={movie} />
-            <div className="min-w-0 flex-1">
-              <div
-                className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
-                title={movie.title}
-              >
-                {movie.title}
-              </div>
-              <div className="type-meta mt-0.5 text-foreground-secondary">
-                {movie.release_date ? formatDate(movie.release_date) : 'TBA'}
-              </div>
-            </div>
-            <div
-              className={`type-number flex-none ${
-                points == null ? 'text-foreground-secondary' : points >= 0 ? 'text-gold' : 'text-crimson'
-              }`}
+        roster.map(({ key, movie, points }) => {
+          // A bare number has no room to say it doesn't count yet, so the
+          // tooltip and the accessible name say it instead.
+          const preReleaseNote = isPreReleaseScore(points, movie.release_date)
+            ? describePreReleaseScore(movie.release_date)
+            : undefined
+
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setSelected(movie)}
+              aria-label={preReleaseNote ? `View ${movie.title} (${preReleaseNote})` : `View ${movie.title}`}
+              data-testid="rail-movie-button"
+              className="group flex w-full cursor-pointer items-center gap-2.5 rounded-[11px] border border-border bg-background p-[9px] text-left transition-colors hover:border-border-hover hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
             >
-              {formatFantasyPoints(points)}
-            </div>
-          </button>
-        ))
+              <RailPoster movie={movie} />
+              <div className="min-w-0 flex-1">
+                <div
+                  className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
+                  title={movie.title}
+                >
+                  {movie.title}
+                </div>
+                <div className="type-meta mt-0.5 text-foreground-secondary">
+                  {movie.release_date ? formatDate(movie.release_date) : 'TBA'}
+                </div>
+              </div>
+              <div
+                className={`type-number flex-none ${
+                  points == null || preReleaseNote ? 'text-foreground-secondary' : points >= 0 ? 'text-gold' : 'text-crimson'
+                }`}
+                title={preReleaseNote}
+              >
+                {formatFantasyPoints(points)}
+              </div>
+            </button>
+          )
+        })
       ) : (
         <p className="type-body-sm py-2 text-center text-foreground-secondary">No movies drafted yet</p>
       )}

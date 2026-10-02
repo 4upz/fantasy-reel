@@ -2,11 +2,18 @@
  * Score notification utilities.
  *
  * Detects what changed during a score update run and emits Discord
- * notifications for three events:
+ * notifications for four events:
  *   1. A movie receives its first score, or ends a run at least
- *      SCORE_CHANGE_THRESHOLD from the score last posted for it.
- *   2. A team's total moves at least SCORE_CHANGE_THRESHOLD in one run.
- *   3. A team's rank in the league standings changes.
+ *      SCORE_CHANGE_THRESHOLD from the score last posted for it. Before
+ *      release that is a pre-release score, and the post says its points
+ *      count from release day.
+ *   2. A movie whose score was posted before release has released, so its
+ *      points now count.
+ *   3. A team's total moves at least SCORE_CHANGE_THRESHOLD in one run.
+ *   4. A team's rank in the league standings changes.
+ *
+ * Team totals only count released movies, so 3 and 4 never fire for a
+ * pre-release score -- they wait for release day.
  *
  * Usage is a before/after sandwich around the score recalculation:
  *
@@ -21,6 +28,7 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { COMPLETED_STATUS } from './league-status.ts'
 import { createLogger, serializeError } from './logger.ts'
+import { hasReleased, utcDate } from './scoring.ts'
 import {
   sendDiscordNotification,
   DISCORD_COLORS,
@@ -72,6 +80,8 @@ export interface MovieScoreSnapshot {
 
 /** Snapshot taken before scores are recalculated. */
 export interface ScoreNotificationContext {
+  /** The run's UTC date, which decides whether a movie has released. */
+  today: string
   movieIds: string[]
   /** Leagues holding these movies, including via dropped roster slots. */
   leagueIds: string[]
@@ -87,6 +97,12 @@ export interface ScoreNotificationContext {
 }
 
 /**
+ * What a movie post says: its first score, a move from the score last posted,
+ * or that a score posted before release now counts because it has released.
+ */
+export type MovieScoreChangeKind = 'new' | 'moved' | 'release'
+
+/**
  * A movie's move from a starting score -- the pre-run snapshot for notable-miss
  * detection, the score last posted for it for a post -- to its current score.
  */
@@ -100,8 +116,10 @@ export interface MovieScoreChange {
   previousRtScore: number | null
   /** Tomatometer after the update. Null only if the score was withdrawn. */
   newRtScore: number | null
-  /** True when there was no starting score -- the movie just went live. */
-  isNewScore: boolean
+  kind: MovieScoreChangeKind
+  /** Whether the movie has released, so these points count toward team totals. */
+  released: boolean
+  releaseDate: string | null
 }
 
 /** A team whose score or rank changed. */
@@ -291,11 +309,51 @@ function describeMovieScoreMovement(change: MovieScoreChange): string {
   )
 }
 
-/** One line covering both the first-score and the movement cases. */
+/** A release date the way Discord posts show one, e.g. "Oct 9". */
+function formatReleaseDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, month - 1, day)))
+}
+
+/** What a pre-release score adds: it is real, but it does not count yet. */
+function describeCountsFromRelease(releaseDate: string | null): string {
+  return releaseDate
+    ? `Its points count once it releases on **${formatReleaseDate(releaseDate)}**`
+    : 'Its points count once it releases'
+}
+
+/**
+ * Release day for a score posted before release. If the score moved since
+ * that post without clearing the threshold, the post says so, so the number
+ * that now counts never contradicts the one posted earlier.
+ */
+function describeRelease(change: MovieScoreChange): string {
+  const current = formatMovieScore(change.newRtScore, change.newPoints)
+  const line = `Released: its ${current} now counts`
+  if (change.previousPoints === null) return line
+
+  const posted = formatMovieScore(change.previousRtScore, change.previousPoints)
+  if (posted === current) return line
+  const direction = movieScoreDirection(change) === 'UP' ? 'Up' : 'Down'
+  return `${line}\n${direction} from ${posted} before release`
+}
+
+/** A first score, a move, or a release, plus the pre-release caveat if it applies. */
 function describeMovieScore(change: MovieScoreChange): string {
-  return change.isNewScore
+  if (change.kind === 'release') return describeRelease(change)
+
+  const line = change.kind === 'new'
     ? `Now has a score of ${formatMovieScore(change.newRtScore, change.newPoints)}`
     : describeMovieScoreMovement(change)
+  return change.released ? line : `${line}\n${describeCountsFromRelease(change.releaseDate)}`
+}
+
+/** Blue for a first score, gold for a release, green or crimson for a move. */
+function movieScoreColor(change: MovieScoreChange): number {
+  if (change.kind === 'new') return DISCORD_COLORS.blue
+  if (change.kind === 'release') return DISCORD_COLORS.gold
+  return movieScoreDirection(change) === 'UP' ? DISCORD_COLORS.green : DISCORD_COLORS.crimson
 }
 
 export function buildMovieScoreEmbed(
@@ -304,15 +362,6 @@ export function buildMovieScoreEmbed(
   leagueName: string
 ): DiscordEmbed {
   const { leagueId } = placement
-
-  const description = describeMovieScore(change)
-
-  let color: number = DISCORD_COLORS.blue
-  if (!change.isNewScore) {
-    color = movieScoreDirection(change) === 'UP'
-      ? DISCORD_COLORS.green
-      : DISCORD_COLORS.crimson
-  }
 
   const fields = [
     { name: 'Picked by', value: placement.ownerTeamName, inline: true },
@@ -328,12 +377,12 @@ export function buildMovieScoreEmbed(
   return {
     author: buildEmbedAuthor(leagueName, leagueId),
     title: change.title,
-    description,
+    description: describeMovieScore(change),
     thumbnail: change.posterUrl
       ? { url: `https://image.tmdb.org/t/p/w92${change.posterUrl}` }
       : undefined,
     fields,
-    color,
+    color: movieScoreColor(change),
     footer: { text: leagueName },
     url: buildLeagueUrl(leagueId, '/standings'),
   }
@@ -572,9 +621,11 @@ function toScoreSnapshot(points: number | null, rtScore: number | null): MovieSc
  */
 export async function captureScoreContext(
   supabase: SupabaseClient,
-  movieIds: string[]
+  movieIds: string[],
+  today: string = utcDate()
 ): Promise<ScoreNotificationContext> {
   const empty: ScoreNotificationContext = {
+    today,
     movieIds: [],
     leagueIds: [],
     previousMovieScores: new Map(),
@@ -632,6 +683,7 @@ export async function captureScoreContext(
     ])
 
     return {
+      today,
       movieIds,
       leagueIds,
       previousMovieScores,
@@ -983,8 +1035,10 @@ export async function sendScoreNotifications(
 interface MovieRow extends MovieScoreRow {
   title: string
   poster_url: string | null
+  release_date: string | null
   announced_fantasy_points: number | null
   announced_rt_score: number | null
+  announced_before_release: boolean
 }
 
 const UNSCORED: MovieScoreSnapshot = { points: null, rtScore: null }
@@ -1008,7 +1062,7 @@ async function loadMovieScoreChanges(
 
   const { data: movies, error } = await supabase
     .from('movies')
-    .select('id, title, poster_url, fantasy_points, combined_score, announced_fantasy_points, announced_rt_score')
+    .select('id, title, poster_url, release_date, fantasy_points, combined_score, announced_fantasy_points, announced_rt_score, announced_before_release')
     .in('id', context.movieIds)
 
   if (error) {
@@ -1020,8 +1074,12 @@ async function loadMovieScoreChanges(
     const current = toScoreSnapshot(movie.fantasy_points, movie.combined_score)
     if (current.points === null) continue
     const newPoints = current.points
+    const released = hasReleased(movie.release_date, context.today)
 
-    const describeFrom = (previous: MovieScoreSnapshot): MovieScoreChange => ({
+    const describeFrom = (
+      previous: MovieScoreSnapshot,
+      kind: MovieScoreChangeKind = previous.points === null ? 'new' : 'moved'
+    ): MovieScoreChange => ({
       movieId: movie.id,
       title: movie.title,
       posterUrl: movie.poster_url,
@@ -1029,7 +1087,9 @@ async function loadMovieScoreChanges(
       newPoints,
       previousRtScore: previous.rtScore,
       newRtScore: current.rtScore,
-      isNewScore: previous.points === null,
+      kind,
+      released,
+      releaseDate: movie.release_date,
     })
 
     const previous = context.previousMovieScores.get(movie.id) ?? UNSCORED
@@ -1038,7 +1098,11 @@ async function loadMovieScoreChanges(
     }
 
     const announced = toScoreSnapshot(movie.announced_fantasy_points, movie.announced_rt_score)
-    if (shouldAnnounceScore(announced, current)) {
+    if (released && movie.announced_before_release) {
+      // The last post said these points would count from release day. They
+      // count now, whatever the size of any move since.
+      result.toAnnounce.push(describeFrom(announced, 'release'))
+    } else if (shouldAnnounceScore(announced, current)) {
       result.toAnnounce.push(describeFrom(announced))
     }
   }
@@ -1048,10 +1112,11 @@ async function loadMovieScoreChanges(
 
 /**
  * Moves each movie's announced score (`movies.announced_*`) to the score about
- * to be posted. Recording before posting means a failed write can never post
- * the same move twice: a movie whose write fails is left out of this run, and
- * because it is still as far from its old announced score, the next run posts
- * it instead.
+ * to be posted, noting whether it is posted before release (which leaves the
+ * release itself due a post). Recording before posting means a failed write
+ * can never post the same move twice: a movie whose write fails is left out
+ * of this run, and because it is still as far from its old announced score,
+ * the next run posts it instead.
  */
 async function recordAnnouncements(
   supabase: SupabaseClient,
@@ -1066,6 +1131,7 @@ async function recordAnnouncements(
         .update({
           announced_fantasy_points: change.newPoints,
           announced_rt_score: change.newRtScore,
+          announced_before_release: !change.released,
         })
         .eq('id', change.movieId)
 

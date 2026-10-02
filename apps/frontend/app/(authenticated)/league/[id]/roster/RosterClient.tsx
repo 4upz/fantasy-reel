@@ -5,7 +5,7 @@ import { Trophy, ShoppingCart, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
-import { formatFantasyPoints } from '@/utils/scoring'
+import { formatPointsText, isPreReleaseScore } from '@/utils/scoring'
 import { findDropBlocker, type DropBlocker } from './dropRules'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 import { RosterHeader, RosterMovieCard, RosterPoster } from './RosterPresentation'
@@ -150,33 +150,40 @@ export default function RosterClient({
           <p className="text-foreground-secondary">No counterpicks claimed yet.</p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {counterpicks.map((cp) => (
-              <div key={cp.id} className="card overflow-hidden">
-                <div className="relative aspect-[2/3] bg-elevated">
-                  <RosterPoster movie={cp.movies} />
-                  <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-white flex items-center gap-1">
-                    <Target className="w-3 h-3" />
-                    Counterpick
+            {counterpicks.map((cp) => {
+              // The inverted score waits on the release of the movie it targets.
+              const isPreRelease = isPreReleaseScore(cp.fantasy_points, cp.movies.release_date)
+
+              return (
+                <div key={cp.id} className="card overflow-hidden">
+                  <div className="relative aspect-[2/3] bg-elevated">
+                    <RosterPoster movie={cp.movies} />
+                    <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-white flex items-center gap-1">
+                      <Target className="w-3 h-3" />
+                      Counterpick
+                    </div>
+                  </div>
+
+                  <div className="p-3">
+                    <h3 className="type-label text-foreground truncate">
+                      {cp.movies.title}
+                    </h3>
+                    <p className="type-meta text-foreground-secondary">
+                      vs. {cp.target_team.name} ({cp.phase})
+                    </p>
+                    {cp.fantasy_points !== null && (
+                      <p
+                        className={`type-number mt-1 ${
+                          isPreRelease ? 'text-foreground-secondary' : cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'
+                        }`}
+                      >
+                        {formatPointsText(cp.fantasy_points, isPreRelease)}
+                      </p>
+                    )}
                   </div>
                 </div>
-
-                <div className="p-3">
-                  <h3 className="type-label text-foreground truncate">
-                    {cp.movies.title}
-                  </h3>
-                  <p className="type-meta text-foreground-secondary">
-                    vs. {cp.target_team.name} ({cp.phase})
-                  </p>
-                  {cp.fantasy_points !== null && (
-                    <p
-                      className={`type-number mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}
-                    >
-                      {formatFantasyPoints(cp.fantasy_points)} pts
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>

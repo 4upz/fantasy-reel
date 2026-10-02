@@ -17,8 +17,12 @@ FROM (VALUES(10,2),(20,2),(30,3)) fixture(l, members), generate_series(1, member
 INSERT INTO teams(id, participant_id, name)
 SELECT pg_temp.draft_id(1000 + l + u), pg_temp.draft_id(l + u), 'Team ' || u
 FROM (VALUES(10,2),(20,2),(30,3)) fixture(l, members), generate_series(1, members) u;
+-- Movie 101 opens today with a zero score: released, so its points count and
+-- it is scored rather than pending. The rest are unscored future releases.
 INSERT INTO movies(id, tmdb_id, title, release_date, fantasy_points)
-SELECT pg_temp.draft_id(n), 1987600000 + n, 'Atomic draft movie ' || n, current_date + 30, CASE WHEN n = 101 THEN 0 ELSE NULL END
+SELECT pg_temp.draft_id(n), 1987600000 + n, 'Atomic draft movie ' || n,
+  CASE WHEN n = 101 THEN (now() AT TIME ZONE 'UTC')::DATE ELSE current_date + 30 END,
+  CASE WHEN n = 101 THEN 0 ELSE NULL END
 FROM generate_series(101, 108) n;
 INSERT INTO discord_channels(id, league_id, guild_id, channel_id, webhook_id, webhook_url)
 VALUES(pg_temp.draft_id(500), pg_temp.draft_id(10), 'draft-test', 'draft-test-channel', 'draft-test', 'https://example.invalid/inert');

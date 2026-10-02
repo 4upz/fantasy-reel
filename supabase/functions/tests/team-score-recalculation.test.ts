@@ -13,11 +13,12 @@
 import { assertEquals, assertExists } from '@std/assert'
 import { createTestFactory, getServiceClient, uniqueName } from './_setup.ts'
 
-const currentYear = new Date().getFullYear()
 const testMovieData = {
   overview: 'A test movie for score recalculation',
   poster_url: '/test-poster.jpg',
-  release_date: `${currentYear}-12-15`,
+  // Released a month ago: team totals only count a movie's points once it
+  // has released, and these tests are about which holdings count.
+  release_date: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10),
   vote_average: 0,
   popularity: 100,
 }

@@ -4,7 +4,10 @@ Fantasy Reel uses a three-layer architecture to automatically fetch and calculat
 
 ## Overview
 
-When movies are released, ratings are fetched from three sources via MDBList:
+Ratings are fetched from three sources via MDBList, for released movies and
+for rostered movies that have not released yet (see
+[Pre-release scores](#pre-release-scores) -- a score can arrive before
+release, but its points only count from release day):
 - **Rotten Tomatoes** (Tomatometer, 0-100 scale) - Critic consensus, and the **only source that drives fantasy points**
 - **IMDb** - Broad audience ratings, stored for display only
 - **Metacritic** - Weighted critic average, stored for display only
@@ -64,7 +67,7 @@ Below the 50-point baseline the penalty slope halves every 10 points (0.5 → 0.
 │                      WORKER (update-scores Edge Function)                   │
 │                                                                             │
 │  ┌──────────────────────────────────────────────────────────────────────┐  │
-│  │  For each movie (up to 30 per invocation):                            │  │
+│  │  For each movie (nightly: 30 released + 15 not yet released):         │  │
 │  │    1. Fetch ratings from MDBList API (by TMDb ID)                     │  │
 │  │    2. Filter to IMDb, RT, Metacritic (pre-normalized 0-100)           │  │
 │  │    3. UPSERT into reviews table                                       │  │
@@ -117,10 +120,14 @@ ALTER TABLE movies ADD COLUMN scoring_bonuses JSONB;           -- Unused; always
 ALTER TABLE movies ADD COLUMN scores_updated_at TIMESTAMPTZ;
 ALTER TABLE movies ADD COLUMN announced_fantasy_points DECIMAL(6, 2);  -- fantasy_points as last posted to Discord
 ALTER TABLE movies ADD COLUMN announced_rt_score DECIMAL(5, 2);        -- combined_score as last posted to Discord
+ALTER TABLE movies ADD COLUMN announced_before_release BOOLEAN NOT NULL DEFAULT false;  -- that post came before release
 ```
 
-The `announced_*` pair belongs to score notifications; see
-[Change threshold](#change-threshold).
+The `announced_*` columns belong to score notifications; see
+[Change threshold](#change-threshold) and
+[Pre-release scores](#pre-release-scores). `fantasy_points` is what a movie is
+worth, whether or not it has released; whether it counts yet is decided by
+team scoring, not stored on the movie.
 
 `scores_updated_at` means "last **checked**", not "last scored": `update-scores`
 also stamps it when MDBList authoritatively has nothing for a movie (no entry,
@@ -138,7 +145,10 @@ run's response and `job_runs.metadata` — with a reason of `not_on_mdblist`,
 `no_ratings`, or `no_rt_score` — rather than under `errors`. Only genuine
 failures (network/auth/rate-limit errors, review upserts, RPC crashes) count
 toward `job_status`, which is what the cron proxy turns into an HTTP 500 and
-what fires ops alerts. A movie stuck pending forever is still findable:
+what fires ops alerts. The nightly run's pre-release lookups are the exception:
+an unreleased movie without a Tomatometer is the normal case, so those are only
+counted (`prerelease_checked`), never listed. A movie stuck pending forever is
+still findable:
 
 ```sql
 SELECT metadata->'unscored' FROM job_runs
@@ -248,13 +258,17 @@ so a dropped movie's points still move its old owner's total. Keying the early
 return on placements rather than leagues would black out an entire run's
 notifications whenever the only affected slot was a dropped one.
 
-Three events are reported:
+Four events are reported:
 
 | Event | Message |
 |-------|---------|
 | Movie scores for the first time | `Now has a score of **84% RT** (24.0 pts)` |
 | Movie moves far enough from its last post | `Score has gone **DOWN** from **85% RT** (25.0 pts) to **82% RT** (22.0 pts)` |
+| A movie whose score was posted before release has released | `Released: its **84% RT** (24.0 pts) now counts` |
 | Team's rank changes, or its total moves far enough in one run | `Standings Update` embed, one field per team |
+
+Before release, the first two add `Its points count once it releases on
+**Oct 9**`; see [Pre-release scores](#pre-release-scores).
 
 Each movie due a post gets its own message (titled with the movie, attributing
 the owning team and any counterpicker). Each league then gets a single
@@ -309,6 +323,51 @@ Notes:
 - The `notifications` object in the `update-scores` response counts *changes
   detected*, not messages delivered — a league with no enabled channel still
   counts. Delivery success is logged by `_shared/discord.ts`.
+
+## Pre-release scores
+
+A movie is scored as soon as Rotten Tomatoes has a Tomatometer for it, which
+is often days or weeks before it opens -- the way Fantasy Critic scores a game
+from OpenCritic before launch. A score is not points earned, though.
+
+- **Points count from release day.** `movie_has_released(release_date)` is
+  the one rule: on or before today's UTC date, and an undated movie never has.
+  `recalculate_team_score_with_counterpicks()` and `calculate_team_score()`
+  count a movie's points, for its holder and inverted against its
+  counterpicker, only once it has released. Until then it is pending, exactly
+  like a movie with no score, so `team_scores`, `league_standings()`, rank
+  changes and `Standings Update` posts all wait for release. The frontend
+  (`hasReleased` in `utils/date.ts`) and the Discord bot (`utils/points.ts`)
+  apply the same rule, showing a pre-release score muted, "at release".
+- **What is looked up.** On top of its 30 released movies, each nightly run
+  looks up `PRERELEASE_BATCH_LIMIT` (15) movies that are held or counterpicked
+  in a season still being played (`score_update_candidates.in_live_season`)
+  and have not released, soonest release first, each at most once a day. When
+  more qualify than fit, distant releases wait their turn: that is not when
+  reviews land. Explicit `movie_ids` / `league_id` runs score whatever they
+  are given, released or not.
+- **What is posted.** A pre-release score posts like any first score or move,
+  plus `Its points count once it releases on **Oct 9**`, and the post is
+  recorded with `announced_before_release`. No team total moves, so no
+  standings post follows.
+- **Release day.** Every run looks for movies on a live roster whose last post
+  came before release and which have now released. It rescores their teams
+  (`recalculate_teams_for_movie`) -- the moment the points count, which needs
+  no MDBList call, so it happens even when MDBList is down -- then posts
+  `Released: its **84% RT** (24.0 pts) now counts` beside the standings update.
+  If the score has moved since its last post, even by less than the
+  threshold, a second line says so (`Up from **82% RT** (22.0 pts) before
+  release`). A movie whose teams could not be rescored is left out of that
+  run's posts and retried by the next, so a release post never claims points
+  the standings don't show. The run reports `releases_counted`.
+- A movie whose first score arrives after release posts a plain first score,
+  as before, and counts immediately.
+- If a release date moves later after release day (`sync-release-dates` edits
+  dates up to 14 days back), the movie stops counting at its teams' next
+  rescore and counts again from its new date.
+- Acquisition rules are unchanged: a pre-release score does not lock a movie,
+  so until release it can still be dropped, bid on, traded or counterpicked
+  like any unreleased movie.
 
 ## Cron Jobs
 
@@ -398,6 +457,10 @@ A team's `total_points` is the sum of three legs:
 | Draft | `draft_picks` where `dropped_at IS NULL` | `draft_points` | As scored |
 | Pickup | `pickups` where `dropped_at IS NULL` | `pickup_points` | As scored |
 | Counterpick | `counterpicks` | `counterpick_points` | **Inverted** (`-fantasy_points`) |
+
+Every leg counts a movie only once it has released (`movie_has_released`); a
+pre-release score is pending until then. See
+[Pre-release scores](#pre-release-scores).
 
 `movies_scored`, `movies_pending`, and `average_score` cover the active roster
 (draft picks + pickups) and exclude counterpicks, which are reported separately

@@ -4,7 +4,21 @@
  */
 
 import { assertEquals } from '@std/assert'
-import { fetchMDBListRatings, fetchImdbId, MDBLIST_SOURCE_MAP } from './scoring.ts'
+import { fetchMDBListRatings, fetchImdbId, hasReleased, MDBLIST_SOURCE_MAP, utcDate } from './scoring.ts'
+
+// --- Release ---
+
+Deno.test('hasReleased - points count from release day on, matching movie_has_released()', () => {
+  assertEquals(hasReleased('2026-10-09', '2026-10-09'), true)
+  assertEquals(hasReleased('2026-09-01', '2026-10-09'), true)
+  assertEquals(hasReleased('2026-10-10', '2026-10-09'), false)
+  assertEquals(hasReleased(null, '2026-10-09'), false)
+})
+
+Deno.test('utcDate - is the UTC calendar date, whatever the local time zone says', () => {
+  // Still Oct 9 in Los Angeles, already Oct 10 in UTC
+  assertEquals(utcDate(new Date('2026-10-09T23:30:00-07:00')), '2026-10-10')
+})
 
 // --- Test helpers ---
 

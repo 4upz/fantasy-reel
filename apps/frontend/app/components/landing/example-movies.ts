@@ -1,9 +1,11 @@
-// Fixed 2026 film examples. Tomatometer snapshots checked September 14, 2026.
+// Fixed 2026 film examples, all released (US theatrical dates). Tomatometer
+// snapshots checked September 14, 2026.
 export const EXAMPLE_MOVIES = [
   {
     title: 'Toy Story 5',
     poster: 'toy-story-5',
     label: 'Round 1, Pick 1',
+    releaseDate: '2026-06-19',
     tomatometer: 93,
     source: 'https://www.rottentomatoes.com/m/toy_story_5',
   },
@@ -11,6 +13,7 @@ export const EXAMPLE_MOVIES = [
     title: 'Project Hail Mary',
     poster: 'project-hail-mary',
     label: 'Round 2, Pick 4',
+    releaseDate: '2026-03-20',
     tomatometer: 95,
     source: 'https://www.rottentomatoes.com/m/project_hail_mary',
   },
@@ -18,6 +21,7 @@ export const EXAMPLE_MOVIES = [
     title: 'Mortal Kombat II',
     poster: 'mortal-kombat-ii',
     label: 'Round 3, Pick 1',
+    releaseDate: '2026-05-15',
     tomatometer: 64,
     source: 'https://www.rottentomatoes.com/m/mortal_kombat_ii',
   },
@@ -25,6 +29,7 @@ export const EXAMPLE_MOVIES = [
     title: 'The Mandalorian and Grogu',
     poster: 'mandalorian-and-grogu',
     label: 'Round 4, Pick 4',
+    releaseDate: '2026-05-22',
     tomatometer: 60,
     source: 'https://www.rottentomatoes.com/m/star_wars_the_mandalorian_and_grogu',
   },

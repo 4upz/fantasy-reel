@@ -65,6 +65,28 @@ describe('/roster', () => {
     expect(embed.footer.text).toContain('2 movies')
   })
 
+  it('marks a pre-release score as not counted yet', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel,
+        teams: teamRow,
+        team_holdings: {
+          data: [
+            { movie_id: 'movie-1', title: 'Released Movie', release_date: '2020-06-01', fantasy_points: 20 },
+            { movie_id: 'movie-2', title: 'Festival Darling', release_date: '2099-06-01', fantasy_points: 24 },
+          ],
+        },
+      },
+    })
+    const interaction = interactionForTeam()
+
+    await roster.execute(interaction)
+
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toContain('**Released Movie** -- 20 pts\n')
+    expect(embed.description).toContain('**Festival Darling** -- 24 pts at release')
+  })
+
   it('shows critic scores alongside short rosters', async () => {
     mockSupabase({
       tables: {

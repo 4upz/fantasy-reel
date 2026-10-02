@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Film, Lock, Megaphone, TrendingDown, X } from 'lucide-react'
 import MovieDetailBody from '@/app/components/MovieDetailBody'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
-import { formatFantasyPoints } from '@/utils/scoring'
+import { formatPointsText, isPreReleaseScore } from '@/utils/scoring'
 import { getTmdbPosterUrl } from './utils'
 import { explainBlocker, type DropBlocker } from '../roster/dropRules'
 import type { League, TMDbSearchResult } from '@/types'
@@ -191,6 +191,7 @@ function LeagueActionPanel({
   onDropClick: () => void
 }) {
   const points = movie.fantasy_points
+  const isPreRelease = isPreReleaseScore(points, movie.release_date)
 
   return (
     <div className="rounded-lg border border-border bg-elevated/40 p-3 sm:p-4">
@@ -205,8 +206,12 @@ function LeagueActionPanel({
             {contextLabel}
             {contextLabel && ' · '}
             {points != null ? (
-              <span className={`type-numeric ${points >= 0 ? 'text-success' : 'text-crimson'}`}>
-                {formatFantasyPoints(points)} pts
+              <span
+                className={`type-numeric ${
+                  isPreRelease ? 'text-foreground-secondary' : points >= 0 ? 'text-success' : 'text-crimson'
+                }`}
+              >
+                {formatPointsText(points, isPreRelease)}
               </span>
             ) : (
               'Not scored yet'
@@ -286,6 +291,7 @@ function DropConfirmView({
 }) {
   const { league, dropCount, slotsFilled, isDropping, error, onConfirm } = drop
   const dropsRemainingAfter = league.drop_limit - dropCount - 1
+  const points = movie.fantasy_points
 
   return (
     <div className="mx-auto max-w-lg p-6 sm:p-8">
@@ -331,8 +337,8 @@ function DropConfirmView({
             {slotsFilled - 1}/{league.total_slots} filled.
           </Consequence>
           <Consequence icon={TrendingDown}>
-            {movie.fantasy_points != null
-              ? `You give up its ${formatFantasyPoints(movie.fantasy_points)} pts.`
+            {points != null
+              ? `You give up its ${formatPointsText(points, isPreReleaseScore(points, movie.release_date))}.`
               : 'You give up whatever it scores when it opens, good or bad.'}
           </Consequence>
           <Consequence icon={Megaphone}>
