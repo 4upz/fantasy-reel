@@ -1365,6 +1365,27 @@ Deno.test('sendScoreNotifications - release day posts that the score counts, bes
   }
 })
 
+Deno.test('sendScoreNotifications - a release whose teams were not rescored stays owed', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    const db = slowBurnDb(24, 84, scores(24, 84), 30)
+    db.movies[0].release_date = TODAY
+    db.movies[0].announced_before_release = true
+
+    const summary = await sendScoreNotifications(
+      createMockDbClient(db),
+      slowBurnContext(scores(24, 84), 30),
+      new Set(['movie-1'])
+    )
+
+    assertEquals(summary.movie_updates, 0)
+    assertEquals(calls.length, 0)
+    assertEquals(db.movies[0].announced_before_release, true, 'the next run posts it')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
 Deno.test('sendScoreNotifications - holds a post back when its score cannot be recorded', async () => {
   // The queue mock, because the filtering one cannot fail an update
   const calls = mockWebhookFetch()

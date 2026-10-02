@@ -332,9 +332,10 @@ from OpenCritic before launch. A score is not points earned, though.
 
 - **Points count from release day.** `movie_has_released(release_date)` is
   the one rule: on or before today's UTC date, and an undated movie never has.
-  `recalculate_team_score_with_counterpicks()` and `calculate_team_score()`
-  count a movie's points, for its holder and inverted against its
-  counterpicker, only once it has released. Until then it is pending, exactly
+  `calculate_team_score()` -- the one definition of a team's score, which
+  `recalculate_team_score_with_counterpicks()` stores -- counts a movie's
+  points, for its holder and inverted against its counterpicker, only once it
+  has released. Until then it is pending, exactly
   like a movie with no score, so `team_scores`, `league_standings()`, rank
   changes and `Standings Update` posts all wait for release. The frontend
   (`hasReleased` in `utils/date.ts`) and the Discord bot (`utils/points.ts`)

@@ -37,6 +37,19 @@ export function formatPointsText(points: number, preRelease: boolean): string {
   return `${formatFantasyPoints(points)} pts${preRelease ? ' at release' : ''}`
 }
 
+/**
+ * The text colour for a points value. Counted points take `positive` (success
+ * green; surfaces that show totals in gold pass that) or crimson; no score and
+ * a pre-release score are muted, because those two colours mean "counted".
+ */
+export function pointsTone(
+  points: number | null | undefined,
+  { preRelease = false, positive = 'text-success' }: { preRelease?: boolean; positive?: string } = {}
+): string {
+  if (points == null || preRelease) return 'text-foreground-secondary'
+  return points >= 0 ? positive : 'text-crimson'
+}
+
 /** Why a pre-release score is muted, for a tooltip or screen reader where there is no room to say it. */
 export function describePreReleaseScore(releaseDate: string | null | undefined): string {
   return releaseDate

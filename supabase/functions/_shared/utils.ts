@@ -228,7 +228,7 @@ export function isUpcomingMovie(
     return { valid: false, reason: 'Movie has no release date' }
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = utcDate()
 
   const releaseYear = parseInt(releaseDate.split('-')[0], 10)
   if (isNaN(releaseYear) || releaseYear < seasonYear) {
@@ -240,6 +240,24 @@ export function isUpcomingMovie(
   }
 
   return { valid: true }
+}
+
+/** Today's UTC calendar date (YYYY-MM-DD), the calendar release dates are judged on. */
+export function utcDate(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10)
+}
+
+/**
+ * Whether a movie's points count toward team totals: from its release date on.
+ * Mirrors movie_has_released() in SQL. A movie can be scored before release,
+ * but that pre-release score only counts from this day.
+ *
+ * Deliberately not isUpcomingMovie's boundary (or movie_release_boundary() in
+ * SQL), which keeps a movie open to drafts, bids and drops through its release
+ * day. Scoring has always counted a movie from its release day itself.
+ */
+export function hasReleased(releaseDate: string | null, today: string): boolean {
+  return releaseDate !== null && releaseDate <= today
 }
 
 // Characters for join codes - excludes ambiguous chars (0, O, I, 1, L)

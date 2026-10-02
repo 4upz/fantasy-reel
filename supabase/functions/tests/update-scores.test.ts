@@ -23,6 +23,7 @@ import {
   RUN_EXTERNAL_API_TESTS,
   uniqueName,
 } from './_setup.ts'
+import { utcDate } from '../_shared/utils.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
 const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/update-scores`
@@ -30,32 +31,31 @@ const FUNCTION_URL = `${SUPABASE_URL}/functions/v1/update-scores`
 /** A syntactically valid UUID that never matches a row. */
 const NONEXISTENT_UUID = '00000000-0000-0000-0000-000000000001'
 
+/**
+ * Call update-scores with the Edge Function's service role key.
+ * Parses JSON response and returns status + data.
+ */
+async function callUpdateScores(body?: Record<string, unknown>) {
+  const response = await fetch(FUNCTION_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${await getEdgeFunctionServiceRoleKey()}`,
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const data = await response.json()
+  return { status: response.status, data }
+}
+
 Deno.test({
   name: 'update-scores',
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async (t) => {
     const serviceClient = getServiceClient()
-    const SERVICE_ROLE_KEY = await getEdgeFunctionServiceRoleKey()
     const createdMovieIds: string[] = []
     let tmdbCounter = 999000
-
-    /**
-     * Call update-scores with the Edge Function's service role key.
-     * Parses JSON response and returns status + data.
-     */
-    async function callUpdateScores(body?: Record<string, unknown>) {
-      const response = await fetch(FUNCTION_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: body ? JSON.stringify(body) : undefined,
-      })
-      const data = await response.json()
-      return { status: response.status, data }
-    }
 
     /**
      * Raw fetch without service role auth (for testing auth rejection).
@@ -302,21 +302,11 @@ Deno.test({
   fn: async (t) => {
     const { client, factory } = await createTestFactory()
     const serviceClient = getServiceClient()
-    const SERVICE_ROLE_KEY = await getEdgeFunctionServiceRoleKey()
     const movieIds: string[] = []
 
-    const today = new Date().toISOString().slice(0, 10)
-    const nextWeek = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10)
+    const today = utcDate()
+    const nextWeek = utcDate(new Date(Date.now() + 7 * 86_400_000))
     const tmdbBase = -(2_000_000 + Math.floor(Math.random() * 1_000_000) * 2)
-
-    async function callUpdateScores(body: Record<string, unknown>) {
-      const response = await fetch(FUNCTION_URL, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${SERVICE_ROLE_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      return { status: response.status, data: await response.json() }
-    }
 
     /** A movie already carrying a score, drafted by the first user's team. */
     async function draftScoredMovie(

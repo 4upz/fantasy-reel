@@ -1,7 +1,8 @@
 import MoviePoster from '@/app/components/MoviePoster'
 import type { MovieTimelineItem } from '@/types'
 import TomatometerScore from '@/app/components/TomatometerScore'
-import { formatFantasyPoints, formatPointsText, isPreReleaseScore } from '@/utils/scoring'
+import { formatFantasyPoints } from '@/utils/scoring'
+import { PreReleasePoints } from '@/app/components/FantasyPoints'
 
 interface Props {
   movie: MovieTimelineItem
@@ -42,9 +43,6 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
   const isScored = movie.status === 'scored'
   const hasFantasyPoints = movie.fantasy_points != null
   const isPositive = hasFantasyPoints && movie.fantasy_points! >= 0
-  // A pre-release score never makes the movie 'scored' (see getMovieStatus), so
-  // the card keeps counting down and the score waits in the overlay, muted.
-  const isPreRelease = isPreReleaseScore(movie.fantasy_points, movie.release_date)
 
   return (
     <button
@@ -74,11 +72,9 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
           <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
             <div className="type-meta text-foreground-secondary">Tomatometer</div>
             <TomatometerScore score={movie.combined_score} size="sm" showAccolade={false} />
-            {isPreRelease && (
-              <div className="type-meta type-numeric text-foreground-secondary">
-                {formatPointsText(movie.fantasy_points!, true)}
-              </div>
-            )}
+            {/* A pre-release score never makes the movie 'scored' (see getMovieStatus),
+                so the card keeps counting down and the score waits here, muted. */}
+            <PreReleasePoints points={movie.fantasy_points} releaseDate={movie.release_date} />
           </div>
         )}
       </div>

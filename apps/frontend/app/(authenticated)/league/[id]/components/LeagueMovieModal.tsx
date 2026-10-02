@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Film, Lock, Megaphone, TrendingDown, X } from 'lucide-react'
 import MovieDetailBody from '@/app/components/MovieDetailBody'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
+import FantasyPoints from '@/app/components/FantasyPoints'
 import { formatPointsText, isPreReleaseScore } from '@/utils/scoring'
 import { getTmdbPosterUrl } from './utils'
 import { explainBlocker, type DropBlocker } from '../roster/dropRules'
@@ -191,7 +192,6 @@ function LeagueActionPanel({
   onDropClick: () => void
 }) {
   const points = movie.fantasy_points
-  const isPreRelease = isPreReleaseScore(points, movie.release_date)
 
   return (
     <div className="rounded-lg border border-border bg-elevated/40 p-3 sm:p-4">
@@ -206,13 +206,7 @@ function LeagueActionPanel({
             {contextLabel}
             {contextLabel && ' · '}
             {points != null ? (
-              <span
-                className={`type-numeric ${
-                  isPreRelease ? 'text-foreground-secondary' : points >= 0 ? 'text-success' : 'text-crimson'
-                }`}
-              >
-                {formatPointsText(points, isPreRelease)}
-              </span>
+              <FantasyPoints points={points} releaseDate={movie.release_date} />
             ) : (
               'Not scored yet'
             )}

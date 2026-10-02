@@ -2,8 +2,8 @@
 
 import MoviePoster from '@/app/components/MoviePoster'
 import { Target } from 'lucide-react'
-import { formatDate } from '@/utils/date'
-import { describePreReleaseScore, formatFantasyPoints, isPreReleaseScore } from '@/utils/scoring'
+import { formatDate, hasReleased } from '@/utils/date'
+import { describePreReleaseScore, formatFantasyPoints, isPreReleaseScore, pointsTone } from '@/utils/scoring'
 import type { HoldingMovie } from '@/types'
 import TomatometerScore from '@/app/components/TomatometerScore'
 
@@ -36,15 +36,14 @@ export default function MovieScoreCard({
   onSelect,
 }: Props) {
   const displayPoints = overridePoints !== undefined ? overridePoints : movie.fantasy_points
-  const hasScore = displayPoints != null
-  const isReleased = movie.status === 'released'
-  const isPositive = hasScore && displayPoints! >= 0
   // Keyed on this row's movie, so a counterpick's inverted score waits on the
   // release of the movie it targets.
   const isPreRelease = isPreReleaseScore(displayPoints, movie.release_date)
 
   const releaseDate = movie.release_date ? formatDate(movie.release_date) : 'TBA'
-  const pointsLabel = isPreRelease ? 'Pre-release' : hasScore ? 'Points' : isReleased ? 'Pending' : 'Upcoming'
+  const pointsLabel = isPreRelease
+    ? 'Pre-release'
+    : displayPoints != null ? 'Points' : hasReleased(movie.release_date) ? 'Pending' : 'Upcoming'
 
   const Row = onSelect ? 'button' : 'div'
 
@@ -132,11 +131,7 @@ export default function MovieScoreCard({
         className="flex-none border-l border-border pl-2.5 text-right"
         title={isPreRelease ? describePreReleaseScore(movie.release_date) : undefined}
       >
-        <div
-          className={`type-number ${
-            !hasScore || isPreRelease ? 'text-foreground-secondary' : isPositive ? 'text-gold' : 'text-crimson'
-          }`}
-        >
+        <div className={`type-number ${pointsTone(displayPoints, { preRelease: isPreRelease, positive: 'text-gold' })}`}>
           {formatFantasyPoints(displayPoints)}
         </div>
         <div className="type-meta text-foreground-secondary">{pointsLabel}</div>

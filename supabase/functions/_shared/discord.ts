@@ -333,6 +333,17 @@ export function discordTimestamp(isoInstant: string): string {
   return `<t:${seconds}:R>`
 }
 
+const SHORT_DATE = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+
+/**
+ * A calendar date (YYYY-MM-DD, e.g. a release date) as posts show it: "Oct 9".
+ * Formatted in UTC, so the day never shifts for readers west of it.
+ */
+export function formatShortDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return SHORT_DATE.format(new Date(Date.UTC(year, month - 1, day)))
+}
+
 export function buildEmbedAuthor(leagueName: string, leagueId: string): DiscordEmbed['author'] {
   return { name: leagueName, icon_url: FANTASY_REEL_ICON, url: buildLeagueUrl(leagueId) }
 }

@@ -20,17 +20,16 @@ function loadModule(relativePath, modules = {}) {
 
 // The real helpers every points display goes through, wired to the real date module.
 const date = loadModule('utils/date.ts')
-const { describePreReleaseScore, formatPointsText, isPreReleaseScore } = loadModule('utils/scoring.ts', {
+const { describePreReleaseScore, formatPointsText, isPreReleaseScore, pointsTone } = loadModule('utils/scoring.ts', {
   '@/utils/date': date,
 })
 const { getMovieStatus } = loadModule('utils/league.ts', { '@/utils/date': date })
 
-// Still Oct 9 in Los Angeles, but already Oct 10 in UTC.
-const now = new Date('2026-10-09T23:30:00-07:00')
+// The release rule itself (UTC days, bad dates) is covered in release-dates.test.cjs.
+const now = new Date('2026-10-10T12:00:00Z')
 
-test('a score counts from its UTC release day and is pre-release before it', () => {
+test('a score counts from its release day and is pre-release before it', () => {
   assert.equal(isPreReleaseScore(24, '2026-10-10', now), false)
-  assert.equal(isPreReleaseScore(24, '2026-10-09', now), false)
   assert.equal(isPreReleaseScore(24, '2026-10-11', now), true)
 })
 
@@ -42,17 +41,19 @@ test('zero and negative scores are scores too; no score is never pre-release', (
   assert.equal(isPreReleaseScore(undefined, null, now), false)
 })
 
-test('a scored movie without a usable release date has not released', () => {
-  for (const releaseDate of [null, undefined, '', 'invalid', '2026-02-30', '2026-10-01T00:00:00Z']) {
-    assert.equal(isPreReleaseScore(24, releaseDate, now), true, String(releaseDate))
-  }
-})
-
 test('pre-release points read as not counted yet', () => {
   assert.equal(formatPointsText(24, false), '24 pts')
   assert.equal(formatPointsText(-16.25, true), '-16 pts at release')
   assert.equal(describePreReleaseScore('2026-10-10'), 'Pre-release score — counts once it releases on Oct 10')
   assert.equal(describePreReleaseScore(null), 'Pre-release score — counts once it releases')
+})
+
+test('only counted points take the colours that mean counted', () => {
+  assert.equal(pointsTone(24), 'text-success')
+  assert.equal(pointsTone(-16, { positive: 'text-gold' }), 'text-crimson')
+  assert.equal(pointsTone(24, { positive: 'text-gold' }), 'text-gold')
+  assert.equal(pointsTone(24, { preRelease: true }), 'text-foreground-secondary')
+  assert.equal(pointsTone(null), 'text-foreground-secondary')
 })
 
 test('the dashboard only calls a released movie scored', () => {

@@ -1,6 +1,7 @@
 import MoviePoster from '@/app/components/MoviePoster'
+import FantasyPoints from '@/app/components/FantasyPoints'
 import { Lock } from 'lucide-react'
-import { formatCriticScore, formatPointsText, isPreReleaseScore } from '@/utils/scoring'
+import { formatCriticScore } from '@/utils/scoring'
 import type { HoldingMovie } from '@/types'
 
 /** `release_date` decides whether the points count yet or are a pre-release score. */
@@ -94,21 +95,13 @@ export function RosterMovieCard({
   posterSizes?: string
   reviewFocus?: boolean
 }) {
-  const isPreRelease = isPreReleaseScore(movie.fantasy_points, movie.release_date)
-
   const details = (
     <>
       <h3 className="type-row-title truncate text-foreground">{movie.title}</h3>
       <p className="type-meta text-foreground-secondary">{label}</p>
       {movie.fantasy_points !== null ? (
         <p className="type-number mt-1 flex flex-wrap items-baseline gap-x-1.5">
-          <span
-            className={`type-numeric ${
-              isPreRelease ? 'text-foreground-secondary' : movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'
-            }`}
-          >
-            {formatPointsText(movie.fantasy_points, isPreRelease)}
-          </span>
+          <FantasyPoints points={movie.fantasy_points} releaseDate={movie.release_date} />
           {movie.combined_score !== null && (
             <span className="type-numeric type-meta text-foreground-secondary">
               {formatCriticScore(movie.combined_score)}

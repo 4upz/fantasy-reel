@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
-import { formatCriticScore, formatPointsText, isPreReleaseScore } from '@/utils/scoring'
+import FantasyPoints from '@/app/components/FantasyPoints'
+import { formatCriticScore } from '@/utils/scoring'
 import type {
   Team,
   TradeActionResult,
@@ -604,8 +605,6 @@ function MovieSelector({
         const isSelected = selectedIds.has(movie.source_id)
         const isFocused = focusedIndex === index
         const isInvalid = invalidIds.has(movie.source_id)
-        // For a counterpick, the inverted score waits on the targeted movie's release.
-        const isPreRelease = isPreReleaseScore(movie.fantasy_points, movie.release_date)
         return (
           <div
             key={movie.source_id}
@@ -648,13 +647,8 @@ function MovieSelector({
                 )}
                 {movie.fantasy_points !== null ? (
                   <>
-                    <span
-                      className={`type-numeric ${
-                        isPreRelease ? 'text-foreground-secondary' : movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'
-                      }`}
-                    >
-                      {formatPointsText(movie.fantasy_points, isPreRelease)}
-                    </span>
+                    {/* For a counterpick, the inverted score waits on its target's release. */}
+                    <FantasyPoints points={movie.fantasy_points} releaseDate={movie.release_date} />
                     {movie.combined_score !== null && (
                       <span>{formatCriticScore(movie.combined_score)}</span>
                     )}
