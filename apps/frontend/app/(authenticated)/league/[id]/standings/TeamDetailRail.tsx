@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import MoviePoster from '@/app/components/MoviePoster'
 import { formatDate } from '@/utils/date'
-import { describePreReleaseScore, formatFantasyPoints, isPreReleaseScore } from '@/utils/scoring'
+import { describePreReleaseScore, formatFantasyPoints, isPreReleaseScore, pointsTone } from '@/utils/scoring'
 import type { HoldingMovie, RankedTeamFull } from '@/types'
 import TeamBudgetSummary from './TeamBudget'
 import LeagueMovieModal from '../components/LeagueMovieModal'
@@ -124,9 +124,7 @@ export default function TeamDetailRail({ rankedTeam, startingBudget }: Props) {
                 </div>
               </div>
               <div
-                className={`type-number flex-none ${
-                  points == null || preReleaseNote ? 'text-foreground-secondary' : points >= 0 ? 'text-gold' : 'text-crimson'
-                }`}
+                className={`type-number flex-none ${pointsTone(points, { preRelease: Boolean(preReleaseNote), positive: 'text-gold' })}`}
                 title={preReleaseNote}
               >
                 {formatFantasyPoints(points)}

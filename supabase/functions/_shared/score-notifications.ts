@@ -28,7 +28,7 @@
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { COMPLETED_STATUS } from './league-status.ts'
 import { createLogger, serializeError } from './logger.ts'
-import { hasReleased, utcDate } from './scoring.ts'
+import { hasReleased, utcDate } from './utils.ts'
 import {
   sendDiscordNotification,
   DISCORD_COLORS,
@@ -36,6 +36,7 @@ import {
   buildLeagueUrl,
   buildEmbedAuthor,
   delay,
+  formatShortDate,
   WEBHOOK_SEND_DELAY_MS,
   type DiscordEmbed,
 } from './discord.ts'
@@ -309,17 +310,10 @@ function describeMovieScoreMovement(change: MovieScoreChange): string {
   )
 }
 
-/** A release date the way Discord posts show one, e.g. "Oct 9". */
-function formatReleaseDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-').map(Number)
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
-    .format(new Date(Date.UTC(year, month - 1, day)))
-}
-
 /** What a pre-release score adds: it is real, but it does not count yet. */
 function describeCountsFromRelease(releaseDate: string | null): string {
   return releaseDate
-    ? `Its points count once it releases on **${formatReleaseDate(releaseDate)}**`
+    ? `Its points count once it releases on **${formatShortDate(releaseDate)}**`
     : 'Its points count once it releases'
 }
 
@@ -912,11 +906,16 @@ async function sendNotableMissNotifications(
  * Posts one notification per movie due one (see shouldAnnounceScore) plus a
  * standings roundup for each league whose standings moved (see diffStandings).
  *
+ * `uncountedReleases` names released movies whose teams could not be
+ * rescored this run. They get no post at all, so their release post waits
+ * for a run in which their points actually count.
+ *
  * Never throws.
  */
 export async function sendScoreNotifications(
   supabase: SupabaseClient,
-  context: ScoreNotificationContext
+  context: ScoreNotificationContext,
+  uncountedReleases: ReadonlySet<string> = new Set()
 ): Promise<ScoreNotificationSummary> {
   const summary: ScoreNotificationSummary = {
     movie_updates: 0,
@@ -953,7 +952,7 @@ export async function sendScoreNotifications(
     }
     if (context.leagueIds.length === 0) return summary
 
-    const { sinceSnapshot, toAnnounce } = await loadMovieScoreChanges(supabase, context)
+    const { sinceSnapshot, toAnnounce } = await loadMovieScoreChanges(supabase, context, uncountedReleases)
 
     summary.notable_misses = await sendNotableMissNotifications(supabase, context, sinceSnapshot)
 
@@ -1056,7 +1055,8 @@ interface MovieScoreChanges {
 
 async function loadMovieScoreChanges(
   supabase: SupabaseClient,
-  context: ScoreNotificationContext
+  context: ScoreNotificationContext,
+  uncountedReleases: ReadonlySet<string>
 ): Promise<MovieScoreChanges> {
   const result: MovieScoreChanges = { sinceSnapshot: new Map(), toAnnounce: [] }
 
@@ -1100,8 +1100,10 @@ async function loadMovieScoreChanges(
     const announced = toScoreSnapshot(movie.announced_fantasy_points, movie.announced_rt_score)
     if (released && movie.announced_before_release) {
       // The last post said these points would count from release day. They
-      // count now, whatever the size of any move since.
-      result.toAnnounce.push(describeFrom(announced, 'release'))
+      // count now, whatever the size of any move since -- unless this run
+      // could not rescore the movie's teams, and then nothing is posted, so
+      // the release stays owed rather than being claimed early.
+      if (!uncountedReleases.has(movie.id)) result.toAnnounce.push(describeFrom(announced, 'release'))
     } else if (shouldAnnounceScore(announced, current)) {
       result.toAnnounce.push(describeFrom(announced))
     }

@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import MoviePoster from '@/app/components/MoviePoster'
 import type { MovieTimelineItem, League } from '@/types'
 import { formatDate } from '@/utils/date'
-import { formatFantasyPoints, formatPointsText, isPreReleaseScore } from '@/utils/scoring'
+import { formatFantasyPoints } from '@/utils/scoring'
+import { PreReleasePoints } from '@/app/components/FantasyPoints'
 import LeagueMovieModal from './LeagueMovieModal'
 
 interface Props {
@@ -83,16 +84,6 @@ function acquisitionLabel(movie: MovieTimelineItem): string {
     : `$${movie.amount_paid} pickup`
 }
 
-/** An unreleased movie RT has already scored: worth showing, but muted - it doesn't count yet. */
-function PreReleasePoints({ movie, className = '' }: { movie: MovieTimelineItem; className?: string }) {
-  if (!isPreReleaseScore(movie.fantasy_points, movie.release_date)) return null
-  return (
-    <div className={`type-meta type-numeric text-foreground-secondary ${className}`}>
-      {formatPointsText(movie.fantasy_points!, true)}
-    </div>
-  )
-}
-
 /** The next release leads the shelf with its title over the artwork. */
 function NextUpHero({
   movie,
@@ -124,7 +115,7 @@ function NextUpHero({
           <div className="type-meta mt-2 text-white/90">
             {shortDate(movie.release_date)}
           </div>
-          <PreReleasePoints movie={movie} className="mt-0.5" />
+          <PreReleasePoints points={movie.fantasy_points} releaseDate={movie.release_date} className="mt-0.5" />
         </div>
       </MovieButton>
     </div>
@@ -170,7 +161,7 @@ function UpcomingShelf({
           </div>
           <div className="type-meta text-foreground-secondary">
             {shortDate(movie.release_date)}
-            <PreReleasePoints movie={movie} />
+            <PreReleasePoints points={movie.fantasy_points} releaseDate={movie.release_date} />
           </div>
         </MovieButton>
       ))}

@@ -14,7 +14,7 @@ import type { ReigningChampions } from '@/utils/seasonQueries'
 import { championPoints, type Champion } from '@/utils/seasons'
 import TeamStandingCard from './TeamStandingCard'
 import { formatFantasyPoints } from '@/utils/scoring'
-import { hasReleased } from '@/utils/date'
+import { getMovieStatus } from '@/utils/league'
 import TeamDetailRail from './TeamDetailRail'
 import ChampionBanner from '../components/ChampionBanner'
 
@@ -172,7 +172,7 @@ export default function StandingsClient({
       ...counterpicks.map((cp) => cp.movies),
     ]
     // Scored means counted, as in team_scores: a pre-release score is still pending.
-    const moviesScored = allMovies.filter((m) => m?.combined_score != null && hasReleased(m.release_date)).length
+    const moviesScored = allMovies.filter((m) => m && getMovieStatus(m.release_date, m.combined_score) === 'scored').length
     const moviesPending = allMovies.length - moviesScored
     return { moviesScored, moviesPending, totalMovies: allMovies.length }
   }, [draftPicks, pickups, counterpicks])

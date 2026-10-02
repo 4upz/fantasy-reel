@@ -27,6 +27,7 @@ interface HoldingRow {
   tmdb_id: number
   imdb_id: string | null
   title: string
+  release_date: string | null
 }
 
 interface UpdateScoresResult {
@@ -229,6 +230,7 @@ function buildHandler(
         }
         moviesToUpdate = ((data ?? []) as HoldingRow[]).map((row) => ({
           id: row.movie_id, tmdb_id: row.tmdb_id, imdb_id: row.imdb_id, title: row.title,
+          release_date: row.release_date,
         }))
       } else {
         const { data, error } = await supabaseClient.from('score_update_candidates').select().single()
@@ -431,6 +433,7 @@ function testMovie(overrides: Partial<MovieRecord> = {}): MovieRecord {
     tmdb_id: 550,
     imdb_id: 'tt0137523',
     title: 'Fight Club',
+    release_date: '1999-10-15',
     ...overrides,
   }
 }

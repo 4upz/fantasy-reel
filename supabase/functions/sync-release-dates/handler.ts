@@ -30,7 +30,7 @@
  * naturally idempotent against the current state.
  */
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { sendDiscordNotification, DISCORD_COLORS, DISCORD_MAX_EMBED_FIELDS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, DISCORD_MAX_EMBED_FIELDS, buildLeagueUrl, buildEmbedAuthor, formatShortDate, getLeagueName } from '../_shared/discord.ts'
 import { groupHoldingsByMovie } from '../_shared/roster-holdings.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
@@ -181,12 +181,6 @@ async function fetchCompletedLeagueIds(serviceClient: SupabaseClient, leagueIds:
 function storedPosterPath(posterUrl: string | null): string | null {
   return posterUrl?.match(/^https?:\/\/image\.tmdb\.org\/t\/p\/(?:w\d+|original)(\/[^?#]+)(?:[?#].*)?$/)?.[1]
     ?? posterUrl
-}
-
-function formatDate(isoDate: string): string {
-  const [year, month, day] = isoDate.split('-').map(Number)
-  const date = new Date(Date.UTC(year, month - 1, day))
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }).format(date)
 }
 
 /** Fetches authoritative movie metadata. A 404 means TMDb no longer has the movie, not a failed lookup. */
@@ -375,7 +369,7 @@ export async function runSyncReleaseDates(
     const leagueName = await getLeagueName(serviceClient, leagueId)
     const fields = changes.slice(0, DISCORD_MAX_EMBED_FIELDS).map((c) => ({
       name: c.title,
-      value: `Moved from **${formatDate(c.previousDate)}** to **${formatDate(c.newDate)}** -- picked by **${c.teamName}**`,
+      value: `Moved from **${formatShortDate(c.previousDate)}** to **${formatShortDate(c.newDate)}** -- picked by **${c.teamName}**`,
       inline: false,
     }))
 

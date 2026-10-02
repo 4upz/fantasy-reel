@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react
 import { createPortal } from 'react-dom'
 import MoviePoster from '@/app/components/MoviePoster'
 import { formatReleaseDateFull } from '@/utils/date'
-import { formatPointsText, isPreReleaseScore } from '@/utils/scoring'
+import { isPreReleaseScore, pointsTone } from '@/utils/scoring'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
@@ -345,12 +345,8 @@ function CounterpickMovieCard({
         {/* Score badge if available */}
         {points !== null && (
           <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-background/80 backdrop-blur-sm rounded">
-            <span
-              className={`type-numeric ${
-                isPreRelease ? 'text-foreground-secondary' : points >= 0 ? 'text-success' : 'text-crimson'
-              }`}
-            >
-              {isPreRelease ? formatPointsText(points, true) : `${points >= 0 ? '+' : ''}${points} pts`}
+            <span className={`type-numeric ${pointsTone(points, { preRelease: isPreRelease })}`}>
+              {`${points >= 0 ? '+' : ''}${points} pts${isPreRelease ? ' at release' : ''}`}
             </span>
           </div>
         )}

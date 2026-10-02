@@ -21,6 +21,7 @@ import {
   invokeFunction,
   TestDataFactory,
 } from './_setup.ts'
+import { utcDate } from '../_shared/utils.ts'
 
 /**
  * Type for start-counterpick-round response
@@ -689,7 +690,7 @@ Deno.test({
       const testPoints = -10.00 // Bad movie
       await serviceClient
         .from('movies')
-        .update({ fantasy_points: testPoints, release_date: new Date().toISOString().slice(0, 10) })
+        .update({ fantasy_points: testPoints, release_date: utcDate() })
         .eq('id', movieId)
 
       // Recalculate team 2's score

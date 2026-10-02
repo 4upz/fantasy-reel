@@ -16,6 +16,8 @@ import {
   authenticateRequest,
   authenticateUserOrServiceRole,
   isUpcomingMovie,
+  hasReleased,
+  utcDate,
 } from './utils.ts'
 import { corsHeaders } from './cors.ts'
 import { stubFetch } from './_mock-client.ts'
@@ -598,4 +600,20 @@ Deno.test('isUpcomingMovie', async (t) => {
     // and is judged only on whether it has actually released.
     assertEquals(isUpcomingMovie(`${NEXT_YEAR}-12-31`, THIS_YEAR - 1), { valid: true })
   })
+})
+
+// ============================================================================
+// hasReleased / utcDate -- when a movie's points count
+// ============================================================================
+
+Deno.test('hasReleased - points count from release day on, matching movie_has_released()', () => {
+  assertEquals(hasReleased('2026-10-09', '2026-10-09'), true)
+  assertEquals(hasReleased('2026-09-01', '2026-10-09'), true)
+  assertEquals(hasReleased('2026-10-10', '2026-10-09'), false)
+  assertEquals(hasReleased(null, '2026-10-09'), false)
+})
+
+Deno.test('utcDate - is the UTC calendar date, whatever the local time zone says', () => {
+  // Still Oct 9 in Los Angeles, already Oct 10 in UTC
+  assertEquals(utcDate(new Date('2026-10-09T23:30:00-07:00')), '2026-10-10')
 })

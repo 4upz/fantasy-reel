@@ -16,10 +16,13 @@
 
 -- ============================================================================
 -- PART 1: THE RULE
--- One definition of "released" for scoring. UTC calendar date, matching the
--- other release checks (counterpick eligibility, complete_league_season) and
--- update-scores' own `new Date().toISOString()` date. Plain SQL with no SET
--- clause so the planner can inline it into the aggregates below.
+-- One definition of "released" for scoring: the UTC calendar date, the same
+-- calendar update-scores and the other release checks use. Plain SQL with no
+-- SET clause so the planner can inline it into the aggregates below.
+--
+-- Not the acquisition boundary. movie_release_boundary() (20260824120000)
+-- keeps a movie open to drafts, bids and drops through its release day;
+-- scoring has always counted a movie from its release day itself.
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION movie_has_released(p_release_date DATE)
@@ -35,65 +38,91 @@ COMMENT ON FUNCTION movie_has_released(DATE) IS
 
 -- ============================================================================
 -- PART 2: TEAM TOTALS COUNT RELEASED MOVIES ONLY
--- Same legs and columns as before (20260728164550). Each roster movie and
--- each counterpick now contributes its points only once released; until then
--- it is pending, exactly like a movie with no score at all, so movies_scored,
--- movies_pending, average_score and counterpicks_scored all agree with the
--- total.
+-- calculate_team_score() becomes the one definition of a team's score, every
+-- leg of it, and recalculate_team_score_with_counterpicks() stores what it
+-- returns. Each used to inline the same legs (20260728164550), and that pair
+-- had already drifted apart once (issue #17).
+--
+-- Each roster movie and each counterpick contributes its points only once
+-- released; until then it is pending, exactly like a movie with no score, so
+-- movies_scored, movies_pending, average_score and counterpicks_scored all
+-- agree with the total.
+--
+-- The return type grows to everything team_scores stores, so the function is
+-- recreated; its original four columns keep their positions. It no longer
+-- needs SECURITY DEFINER: the recalculation calls it with the definer's
+-- access, and anyone else sees only what RLS already shows them.
 -- ============================================================================
 
-CREATE OR REPLACE FUNCTION recalculate_team_score_with_counterpicks(p_team_id UUID)
-RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER
+DROP FUNCTION IF EXISTS calculate_team_score(UUID);
+
+CREATE FUNCTION calculate_team_score(p_team_id UUID)
+RETURNS TABLE(
+    total_points DECIMAL,
+    movies_scored INTEGER,
+    movies_pending INTEGER,
+    average_score DECIMAL,
+    draft_points DECIMAL,
+    pickup_points DECIMAL,
+    counterpick_points DECIMAL,
+    counterpicks_made INTEGER,
+    counterpicks_scored INTEGER
+)
+LANGUAGE sql STABLE
 SET search_path = public, pg_temp
 AS $$
-DECLARE
-    v_draft_points DECIMAL := 0;
-    v_pickup_points DECIMAL := 0;
-    v_roster_points DECIMAL := 0;
-    v_roster_scored INTEGER := 0;
-    v_roster_pending INTEGER := 0;
-    v_counterpick_points DECIMAL := 0;
-    v_counterpicks_made INTEGER := 0;
-    v_counterpicks_scored INTEGER := 0;
-BEGIN
-    -- Roster points, split by acquisition source. Dropped rows are excluded by
-    -- team_active_roster: a team stops scoring a movie the moment it drops it.
-    SELECT
-        COALESCE(SUM(roster.points) FILTER (WHERE roster.source = 'draft'), 0),
-        COALESCE(SUM(roster.points) FILTER (WHERE roster.source = 'pickup'), 0),
-        COALESCE(SUM(roster.points), 0),
-        COUNT(roster.points)::INTEGER,
-        COUNT(*) FILTER (WHERE roster.points IS NULL)::INTEGER
-    INTO
-        v_draft_points,
-        v_pickup_points,
-        v_roster_points,
-        v_roster_scored,
-        v_roster_pending
-    FROM (
+    WITH roster AS (
+        -- Dropped rows are excluded by team_active_roster: a team stops
+        -- scoring a movie the moment it drops it.
         SELECT
             r.source,
             CASE WHEN movie_has_released(m.release_date) THEN m.fantasy_points END AS points
         FROM team_active_roster(p_team_id) r
         JOIN movies m ON m.id = r.movie_id
-    ) roster;
-
-    -- Counterpick points: the opponent's movie score, inverted. Counterpicks
-    -- survive drops, so there is no dropped_at filter here (see the comment
-    -- added in 20260808160000_counterpick_trade_guardrails.sql).
-    SELECT
-        COUNT(*)::INTEGER,
-        COUNT(cp.points)::INTEGER,
-        COALESCE(SUM(-cp.points), 0)
-    INTO v_counterpicks_made, v_counterpicks_scored, v_counterpick_points
-    FROM (
-        SELECT CASE WHEN movie_has_released(m.release_date) THEN m.fantasy_points END AS points
+    ),
+    counterpicked AS (
+        -- The opponent's movie score, inverted. Counterpicks survive drops, so
+        -- no dropped_at filter (see 20260808160000_counterpick_trade_guardrails).
+        SELECT CASE WHEN movie_has_released(m.release_date) THEN -m.fantasy_points END AS points
         FROM counterpicks c
         JOIN movies m ON m.id = c.movie_id
         WHERE c.counterpicker_team_id = p_team_id
-    ) cp;
+    )
+    SELECT
+        r.points + c.points,
+        r.scored,
+        r.pending,
+        CASE WHEN r.scored > 0 THEN ROUND(r.points / r.scored, 2) ELSE 0 END,
+        r.draft,
+        r.pickup,
+        c.points,
+        c.made,
+        c.scored
+    FROM (
+        SELECT
+            COALESCE(SUM(points), 0) AS points,
+            COUNT(points)::INTEGER AS scored,
+            COUNT(*) FILTER (WHERE points IS NULL)::INTEGER AS pending,
+            COALESCE(SUM(points) FILTER (WHERE source = 'draft'), 0) AS draft,
+            COALESCE(SUM(points) FILTER (WHERE source = 'pickup'), 0) AS pickup
+        FROM roster
+    ) r, (
+        SELECT
+            COALESCE(SUM(points), 0) AS points,
+            COUNT(*)::INTEGER AS made,
+            COUNT(points)::INTEGER AS scored
+        FROM counterpicked
+    ) c;
+$$;
 
+COMMENT ON FUNCTION calculate_team_score(UUID) IS
+'A team''s score from its active roster (draft picks + pickups, excluding dropped) plus counterpick points (inverted opponent scores). Only released movies count (movie_has_released); a pre-release score is pending. The one definition: recalculate_team_score_with_counterpicks stores what this returns.';
+
+CREATE OR REPLACE FUNCTION recalculate_team_score_with_counterpicks(p_team_id UUID)
+RETURNS void
+LANGUAGE sql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
     INSERT INTO team_scores (
         team_id,
         total_points,
@@ -107,21 +136,19 @@ BEGIN
         counterpicks_scored,
         last_calculated_at
     )
-    VALUES (
+    SELECT
         p_team_id,
-        v_roster_points + v_counterpick_points,
-        v_draft_points,
-        v_pickup_points,
-        v_counterpick_points,
-        v_roster_scored,
-        v_roster_pending,
-        CASE WHEN v_roster_scored > 0
-            THEN ROUND(v_roster_points / v_roster_scored, 2)
-            ELSE 0 END,
-        v_counterpicks_made,
-        v_counterpicks_scored,
+        s.total_points,
+        s.draft_points,
+        s.pickup_points,
+        s.counterpick_points,
+        s.movies_scored,
+        s.movies_pending,
+        s.average_score,
+        s.counterpicks_made,
+        s.counterpicks_scored,
         NOW()
-    )
+    FROM calculate_team_score(p_team_id) s
     ON CONFLICT (team_id) DO UPDATE SET
         total_points = EXCLUDED.total_points,
         draft_points = EXCLUDED.draft_points,
@@ -133,61 +160,10 @@ BEGIN
         counterpicks_made = EXCLUDED.counterpicks_made,
         counterpicks_scored = EXCLUDED.counterpicks_scored,
         last_calculated_at = EXCLUDED.last_calculated_at;
-END;
 $$;
 
 COMMENT ON FUNCTION recalculate_team_score_with_counterpicks(UUID) IS
-'Recalculates team scores from the active roster (draft picks + pickups, excluding dropped) plus counterpick points (inverted opponent scores). Only released movies count (movie_has_released); a pre-release score is pending.';
-
--- The read-only variant stays in step, so the two can never disagree about
--- what counts (that drift is how issue #17 happened).
-CREATE OR REPLACE FUNCTION calculate_team_score(p_team_id UUID)
-RETURNS TABLE(
-    total_points DECIMAL,
-    movies_scored INTEGER,
-    movies_pending INTEGER,
-    average_score DECIMAL
-)
-LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    v_roster_points DECIMAL := 0;
-    v_roster_scored INTEGER := 0;
-    v_roster_pending INTEGER := 0;
-    v_counterpick_points DECIMAL := 0;
-BEGIN
-    SELECT
-        COALESCE(SUM(roster.points), 0::DECIMAL),
-        COUNT(roster.points)::INTEGER,
-        COUNT(*) FILTER (WHERE roster.points IS NULL)::INTEGER
-    INTO v_roster_points, v_roster_scored, v_roster_pending
-    FROM (
-        SELECT CASE WHEN movie_has_released(m.release_date) THEN m.fantasy_points END AS points
-        FROM team_active_roster(p_team_id) r
-        JOIN movies m ON m.id = r.movie_id
-    ) roster;
-
-    SELECT COALESCE(SUM(-m.fantasy_points), 0::DECIMAL)
-    INTO v_counterpick_points
-    FROM counterpicks c
-    JOIN movies m ON c.movie_id = m.id
-    WHERE c.counterpicker_team_id = p_team_id
-      AND m.fantasy_points IS NOT NULL
-      AND movie_has_released(m.release_date);
-
-    RETURN QUERY SELECT
-        v_roster_points + v_counterpick_points,
-        v_roster_scored,
-        v_roster_pending,
-        CASE WHEN v_roster_scored > 0
-            THEN ROUND(v_roster_points / v_roster_scored, 2)
-            ELSE 0::DECIMAL END;
-END;
-$$;
-
-COMMENT ON FUNCTION calculate_team_score(UUID) IS
-'Read-only team score from the active roster (draft picks + pickups, excluding dropped) plus counterpick points. Only released movies count, as in recalculate_team_score_with_counterpicks.';
+'Stores calculate_team_score() for a team in team_scores. Only released movies count; a pre-release score is pending.';
 
 -- ============================================================================
 -- PART 3: THE RELEASE POST IS OWED

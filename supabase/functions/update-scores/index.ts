@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse } from '../_shared/utils.ts'
-import { fetchMDBListRatings, MDBLIST_NOT_FOUND, utcDate } from '../_shared/scoring.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse, hasReleased, utcDate } from '../_shared/utils.ts'
+import { fetchMDBListRatings, MDBLIST_NOT_FOUND } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
 import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
@@ -14,12 +14,16 @@ interface UpdateScoresRequest {
   league_id?: string
 }
 
+/** A MovieRecord's columns: what a lookup needs, and the release date it is judged by. */
+const MOVIE_RECORD_COLUMNS = 'id, tmdb_id, imdb_id, title, release_date'
+
 /** The team_holdings columns needed to build a MovieRecord. */
 interface HoldingRow {
   movie_id: string
   tmdb_id: number
   imdb_id: string | null
   title: string
+  release_date: string | null
 }
 
 function parseRequestBody(body: string): UpdateScoresRequest {
@@ -167,9 +171,11 @@ async function fetchNewlyCountingMovies(
   today: string,
   movieIds?: string[]
 ): Promise<{ movies: MovieRecord[]; error: unknown }> {
+  if (movieIds?.length === 0) return { movies: [], error: null }
+
   let query = client
     .from('score_update_candidates')
-    .select('id, tmdb_id, imdb_id, title')
+    .select(MOVIE_RECORD_COLUMNS)
     .eq('in_live_season', true)
     .eq('announced_before_release', true)
     .not('fantasy_points', 'is', null)
@@ -242,8 +248,7 @@ Deno.serve(async (req) => {
     let moviesToUpdate: MovieRecord[] = []
     let truncation: Truncation | undefined
     let backlogMetrics: BacklogMetrics | undefined
-    /** Nightly lookups for movies not yet released (see PRERELEASE_BATCH_LIMIT). */
-    let prereleaseIds = new Set<string>()
+    let isNightly = false
 
     if (params.movie_ids && params.movie_ids.length > 0) {
       // Update specific movies
@@ -254,7 +259,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await serviceClient
         .from('movies')
-        .select('id, tmdb_id, imdb_id, title')
+        .select(MOVIE_RECORD_COLUMNS)
         .in('id', validIds)
 
       if (error) {
@@ -275,7 +280,7 @@ Deno.serve(async (req) => {
 
       const { data, error } = await serviceClient
         .from('team_holdings')
-        .select('movie_id, tmdb_id, imdb_id, title')
+        .select('movie_id, tmdb_id, imdb_id, title, release_date')
         .eq('league_id', params.league_id)
 
       if (error) {
@@ -292,6 +297,7 @@ Deno.serve(async (req) => {
           tmdb_id: row.tmdb_id,
           imdb_id: row.imdb_id,
           title: row.title,
+          release_date: row.release_date,
         })
       }
       const capped = capMovies([...byMovieId.values()], 'league_id')
@@ -309,17 +315,19 @@ Deno.serve(async (req) => {
       // starved newly released movies of their first score indefinitely.
       // NULLS FIRST puts never-checked movies at the front; processing stamps
       // scores_updated_at, sending each movie to the back of the queue.
+      isNightly = true
       const oneDayAgo = new Date()
       oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+      const notCheckedToday = `scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`
 
       // count: 'exact' rides along on the same request and reports how many
       // rows matched BEFORE the limit -- the eligible set this run can see.
       const { data, error, count } = await serviceClient
         .from('score_update_candidates')
-        .select('id, tmdb_id, imdb_id, title', { count: 'exact' })
+        .select(MOVIE_RECORD_COLUMNS, { count: 'exact' })
         .lte('release_date', today)
         .neq('status', 'canceled')
-        .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
+        .or(notCheckedToday)
         .order('scores_updated_at', { ascending: true, nullsFirst: true })
         .order('id', { ascending: true })
         .limit(AUTO_BATCH_LIMIT)
@@ -342,11 +350,11 @@ Deno.serve(async (req) => {
       // when more qualify than the batch takes, distant releases wait.
       const { data: upcoming, error: upcomingError } = await serviceClient
         .from('score_update_candidates')
-        .select('id, tmdb_id, imdb_id, title')
+        .select(MOVIE_RECORD_COLUMNS)
         .eq('in_live_season', true)
         .gt('release_date', today)
         .neq('status', 'canceled')
-        .or(`scores_updated_at.is.null,scores_updated_at.lt.${oneDayAgo.toISOString()}`)
+        .or(notCheckedToday)
         .order('release_date', { ascending: true })
         .order('id', { ascending: true })
         .limit(PRERELEASE_BATCH_LIMIT)
@@ -356,13 +364,10 @@ Deno.serve(async (req) => {
         return errorResponse('Failed to fetch movies', 500)
       }
 
-      const prerelease = (upcoming as MovieRecord[]) || []
-      prereleaseIds = new Set(prerelease.map((m) => m.id))
-      moviesToUpdate = [...moviesToUpdate, ...prerelease]
+      moviesToUpdate = [...moviesToUpdate, ...((upcoming as MovieRecord[]) || [])]
     }
 
     // In an explicit run, only the movies asked about can start counting.
-    const isNightly = !params.movie_ids?.length && !params.league_id
     const counting = await fetchNewlyCountingMovies(
       serviceClient,
       today,
@@ -405,19 +410,19 @@ Deno.serve(async (req) => {
     // or obscure release waiting on its Tomatometer is not a degraded run, so
     // it must not turn the cron red; it is still reported (response body and
     // job_runs metadata) so a movie stuck pending forever remains findable.
-    // A movie still waiting on its release is expected to have no Tomatometer,
-    // so nightly pre-release lookups are counted instead of listed.
+    // A movie that has not released yet is expected to have no Tomatometer,
+    // so those lookups are counted (prerelease_checked) instead of listed.
     const results = {
       movies_fetched: 0,
       scores_updated: 0,
       errors: [] as Array<{ movie_id: string; title: string; error: string }>,
       unscored: [] as Array<{ movie_id: string; title: string; reason: string }>,
-      prerelease_checked: prereleaseIds.size,
+      prerelease_checked: moviesToUpdate.filter((m) => !hasReleased(m.release_date, today)).length,
       releases_counted: 0,
     }
 
     const recordUnscored = (movie: MovieRecord, reason: string) => {
-      if (!prereleaseIds.has(movie.id)) {
+      if (hasReleased(movie.release_date, today)) {
         results.unscored.push({ movie_id: movie.id, title: movie.title, reason })
       }
     }
@@ -428,12 +433,11 @@ Deno.serve(async (req) => {
     const scoreContext = await captureScoreContext(serviceClient, runMovieIds, today)
 
     // Released movies whose pre-release score was posted start counting now.
-    // One that could not be rescored is left out of this run's posts, so its
-    // release post never claims points its team total does not show yet; it
-    // is still owed one, so the next run retries both.
+    // One that could not be rescored gets no post this run (see
+    // sendScoreNotifications), so its release post never claims points its
+    // team total does not show yet; it is still owed, so the next run retries.
     const uncounted = await countReleasedScores(serviceClient, counting.movies, results.errors)
     results.releases_counted = counting.movies.length - uncounted.size
-    scoreContext.movieIds = scoreContext.movieIds.filter((id) => !uncounted.has(id))
 
     // Process each movie
     for (const movie of moviesToUpdate) {
@@ -541,7 +545,7 @@ Deno.serve(async (req) => {
     }
 
     // Must be awaited -- the runtime may abort in-flight fetches after we respond
-    const notifications = await sendScoreNotifications(serviceClient, scoreContext)
+    const notifications = await sendScoreNotifications(serviceClient, scoreContext, uncounted)
 
     // Reads the PREVIOUS run's recorded backlog, so it must happen before
     // run.finish inserts this run's row
