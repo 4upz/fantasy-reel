@@ -4,6 +4,7 @@ import { createBaseEmbed, DISCORD_COLORS, FANTASY_REEL_ICON, leagueUrl } from '.
 import { resolveLinkedLeague } from '../utils/channel-league.js'
 import { getMovieDetails, searchMovies, TMDbSearchResult } from '../utils/functions-client.js'
 import { truncate } from '../utils/format.js'
+import { hasReleased } from '../utils/points.js'
 import type { Command } from './index.js'
 
 const AUTOCOMPLETE_LIMIT = 10
@@ -142,7 +143,9 @@ export const movie: Command = {
         descriptionParts.push(`**Critic Scores:** ${reviewLines.join(' | ')}`)
       }
       if (dbMovie.fantasy_points != null) {
-        descriptionParts.push(`**Fantasy Points:** ${dbMovie.fantasy_points}`)
+        // A pre-release score is real but not banked: it counts from release day.
+        const note = hasReleased(dbMovie.release_date) ? '' : ' (counts once released)'
+        descriptionParts.push(`**Fantasy Points:** ${dbMovie.fantasy_points}${note}`)
       }
     }
 

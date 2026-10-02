@@ -134,6 +134,9 @@ identifiers. See the relevant design section in `CLAUDE.md` for token details.
   target base tables.
 - Rotten Tomatoes alone drives fantasy points; absent RT is NULL/Pending.
   See `supabase/SCORING.md` for the curve; IMDb/Metacritic are display context.
+  A movie can be scored before release, but its points count toward team totals
+  only from its release date (UTC): `movie_has_released()` in SQL, `hasReleased`
+  in TS. Show a pre-release score muted, never as counted points.
 - Resolve pickup and counterpick contests together in `_shared/bid-resolution.ts`.
   Recheck pooled capacity, budget, and drop allowance between awards. Pending bids
   may exceed capacity; priority orders a team's own wins, not competing bidders.

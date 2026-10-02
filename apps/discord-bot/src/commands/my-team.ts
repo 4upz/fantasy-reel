@@ -5,6 +5,7 @@ import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
 import { requireLinkedLeague } from '../utils/channel-league.js'
 import { fetchTeamHoldings } from '../utils/roster.js'
 import { truncate } from '../utils/format.js'
+import { formatRosterPoints } from '../utils/points.js'
 import type { Command } from './index.js'
 
 interface TeamRosterRow {
@@ -94,8 +95,7 @@ export const myTeam: Command = {
     const rosterLines = roster.length > 0
       ? roster.map((r) => {
           const title = truncate(r.title || 'Unknown movie', 40)
-          const points = r.fantasy_points != null ? `${r.fantasy_points} pts` : 'Unreleased'
-          return `**${title}** -- ${points}`
+          return `**${title}** -- ${formatRosterPoints(r.fantasy_points, r.release_date)}`
         }).join('\n')
       : 'No movies yet.'
 

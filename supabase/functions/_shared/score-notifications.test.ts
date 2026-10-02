@@ -19,6 +19,7 @@ import {
   sendScoreNotifications,
   shouldAnnounceScore,
   type MoviePlacement,
+  type MovieScoreChange,
   type MovieScoreSnapshot,
   type ScoreNotificationContext,
   type StandingChange,
@@ -255,18 +256,31 @@ const placement: MoviePlacement = {
   counterpickerTeamName: null,
 }
 
+/** The run date every context below uses, and release dates either side of it. */
+const TODAY = '2026-10-02'
+const RELEASED = '2026-09-01'
+const UPCOMING = '2026-10-09'
+
+/** A released movie's first score; tests override what they are about. */
+function movieChange(overrides: Partial<MovieScoreChange> = {}): MovieScoreChange {
+  return {
+    movieId: 'movie-1',
+    title: 'Splatoon Raiders',
+    posterUrl: null,
+    previousPoints: null,
+    newPoints: 36.0,
+    previousRtScore: null,
+    newRtScore: 93,
+    kind: 'new',
+    released: true,
+    releaseDate: RELEASED,
+    ...overrides,
+  }
+}
+
 Deno.test('buildMovieScoreEmbed - first score reads "Now has a score of"', () => {
   const embed = buildMovieScoreEmbed(
-    {
-      movieId: 'movie-1',
-      title: 'Splatoon Raiders',
-      posterUrl: '/poster.jpg',
-      previousPoints: null,
-      newPoints: 36.0,
-      previousRtScore: null,
-      newRtScore: 93,
-      isNewScore: true,
-    },
+    movieChange({ posterUrl: '/poster.jpg' }),
     placement,
     'MoC Fantasy League'
   )
@@ -284,16 +298,7 @@ Deno.test('buildMovieScoreEmbed - first score reads "Now has a score of"', () =>
 
 Deno.test('buildMovieScoreEmbed - rising score is green and reads UP', () => {
   const embed = buildMovieScoreEmbed(
-    {
-      movieId: 'movie-1',
-      title: 'Splatoon Raiders',
-      posterUrl: null,
-      previousPoints: 12.0,
-      newPoints: 18.0,
-      previousRtScore: 72,
-      newRtScore: 78,
-      isNewScore: false,
-    },
+    movieChange({ kind: 'moved', previousPoints: 12.0, newPoints: 18.0, previousRtScore: 72, newRtScore: 78 }),
     placement,
     'MoC Fantasy League'
   )
@@ -308,16 +313,7 @@ Deno.test('buildMovieScoreEmbed - rising score is green and reads UP', () => {
 
 Deno.test('buildMovieScoreEmbed - falling score is crimson and reads DOWN', () => {
   const embed = buildMovieScoreEmbed(
-    {
-      movieId: 'movie-1',
-      title: 'Splatoon Raiders',
-      posterUrl: null,
-      previousPoints: 8.0,
-      newPoints: -5.0,
-      previousRtScore: 68,
-      newRtScore: 55,
-      isNewScore: false,
-    },
+    movieChange({ kind: 'moved', previousPoints: 8.0, newPoints: -5.0, previousRtScore: 68, newRtScore: 55 }),
     placement,
     'MoC Fantasy League'
   )
@@ -330,36 +326,14 @@ Deno.test('buildMovieScoreEmbed - falling score is crimson and reads DOWN', () =
 })
 
 Deno.test('buildMovieScoreEmbed - falls back to points alone when RT is missing', () => {
-  const embed = buildMovieScoreEmbed(
-    {
-      movieId: 'movie-1',
-      title: 'Splatoon Raiders',
-      posterUrl: null,
-      previousPoints: null,
-      newPoints: 36.0,
-      previousRtScore: null,
-      newRtScore: null,
-      isNewScore: true,
-    },
-    placement,
-    'MoC Fantasy League'
-  )
+  const embed = buildMovieScoreEmbed(movieChange({ newRtScore: null }), placement, 'MoC Fantasy League')
 
   assertEquals(embed.description, 'Now has a score of **36.0** pts')
 })
 
 Deno.test('buildMovieScoreEmbed - includes counterpicker when present', () => {
   const embed = buildMovieScoreEmbed(
-    {
-      movieId: 'movie-1',
-      title: 'Avatar Legends',
-      posterUrl: null,
-      previousPoints: null,
-      newPoints: 12.0,
-      previousRtScore: null,
-      newRtScore: 72,
-      isNewScore: true,
-    },
+    movieChange({ title: 'Avatar Legends', newPoints: 12.0, newRtScore: 72 }),
     { ...placement, counterpickerTeamName: 'Polo King' },
     'MoC Fantasy League'
   )
@@ -370,6 +344,72 @@ Deno.test('buildMovieScoreEmbed - includes counterpicker when present', () => {
     value: 'Polo King',
     inline: true,
   })
+})
+
+Deno.test('buildMovieScoreEmbed - a pre-release score says its points count from release', () => {
+  const embed = buildMovieScoreEmbed(
+    movieChange({ newPoints: 24.0, newRtScore: 84, released: false, releaseDate: UPCOMING }),
+    placement,
+    'MoC Fantasy League'
+  )
+
+  assertEquals(
+    embed.description,
+    'Now has a score of **84% RT** (24.0 pts)\nIts points count once it releases on **Oct 9**'
+  )
+  assertEquals(embed.color, DISCORD_COLORS.blue)
+})
+
+Deno.test('buildMovieScoreEmbed - a pre-release move keeps the caveat', () => {
+  const embed = buildMovieScoreEmbed(
+    movieChange({
+      kind: 'moved', previousPoints: 24.0, newPoints: 18.0, previousRtScore: 84, newRtScore: 78,
+      released: false, releaseDate: UPCOMING,
+    }),
+    placement,
+    'MoC Fantasy League'
+  )
+
+  assertEquals(
+    embed.description,
+    'Score has gone **DOWN** from **84% RT** (24.0 pts) to **78% RT** (18.0 pts)\n' +
+      'Its points count once it releases on **Oct 9**'
+  )
+  assertEquals(embed.color, DISCORD_COLORS.crimson)
+})
+
+Deno.test('buildMovieScoreEmbed - an undated pre-release score still waits for release', () => {
+  const embed = buildMovieScoreEmbed(
+    movieChange({ newPoints: 24.0, newRtScore: 84, released: false, releaseDate: null }),
+    placement,
+    'MoC Fantasy League'
+  )
+
+  assertStringIncludes(embed.description as string, '\nIts points count once it releases')
+})
+
+Deno.test('buildMovieScoreEmbed - release day is gold and says the posted score now counts', () => {
+  const embed = buildMovieScoreEmbed(
+    movieChange({ kind: 'release', previousPoints: 24.0, newPoints: 24.0, previousRtScore: 84, newRtScore: 84 }),
+    placement,
+    'MoC Fantasy League'
+  )
+
+  assertEquals(embed.description, 'Released: its **84% RT** (24.0 pts) now counts')
+  assertEquals(embed.color, DISCORD_COLORS.gold)
+})
+
+Deno.test('buildMovieScoreEmbed - release day explains a move since the pre-release post', () => {
+  const embed = buildMovieScoreEmbed(
+    movieChange({ kind: 'release', previousPoints: 24.0, newPoints: 22.0, previousRtScore: 84, newRtScore: 82 }),
+    placement,
+    'MoC Fantasy League'
+  )
+
+  assertEquals(
+    embed.description,
+    'Released: its **82% RT** (22.0 pts) now counts\nDown from **84% RT** (24.0 pts) before release'
+  )
 })
 
 // ============================================================================
@@ -537,7 +577,8 @@ const NEVER_POSTED = scores(null, null)
 /**
  * A `movies` row with every column the post-run read selects. `announced` is
  * the score last posted; PRE_RUN is the steady state, where the previous run
- * posted the movie's last move.
+ * posted the movie's last move. The movie has released unless `extra` says
+ * otherwise.
  */
 function movieRow(
   current: MovieScoreSnapshot,
@@ -548,16 +589,19 @@ function movieRow(
     id: 'movie-1',
     title: 'Splatoon Raiders',
     poster_url: null,
+    release_date: RELEASED,
     fantasy_points: current.points,
     combined_score: current.rtScore,
     announced_fantasy_points: announced.points,
     announced_rt_score: announced.rtScore,
+    announced_before_release: false,
     ...extra,
   }
 }
 
 function baseContext(): ScoreNotificationContext {
   return {
+    today: TODAY,
     movieIds: ['movie-1'],
     leagueIds: ['league-1'],
     previousMovieScores: new Map([['movie-1', PRE_RUN]]),
@@ -1015,6 +1059,7 @@ function notableMissDb(
 
 function notableMissContext(overrides: Partial<ScoreNotificationContext> = {}): ScoreNotificationContext {
   return {
+    today: TODAY,
     movieIds: ['movie-1'],
     leagueIds: ['league-1'],
     previousMovieScores: new Map([['movie-1', MISS_PRE_RUN]]),
@@ -1250,6 +1295,71 @@ Deno.test('sendScoreNotifications - posts a drift once it adds up, measured from
     const rerun = await sendScoreNotifications(client, slowBurnContext(scores(23, 83), 33))
     assertEquals(rerun.movie_updates, 0)
     assertEquals(calls.length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+// ============================================================================
+// Pre-release scores
+// ============================================================================
+
+Deno.test('sendScoreNotifications - posts a pre-release score with its caveat, and no standings', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // Team totals only count released movies, so Bravo's total holds at 30
+    const db = slowBurnDb(24, 84, NEVER_POSTED, 30)
+    db.movies[0].release_date = UPCOMING
+
+    const summary = await sendScoreNotifications(createMockDbClient(db), slowBurnContext(NEVER_POSTED, 30))
+
+    assertEquals(summary.movie_updates, 1)
+    assertEquals(summary.standings_updates, 0)
+    assertEquals(calls.length, 1)
+    const embed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(
+      embed.description,
+      'Now has a score of **84% RT** (24.0 pts)\nIts points count once it releases on **Oct 9**'
+    )
+    assertEquals(db.movies[0].announced_fantasy_points, 24)
+    assertEquals(db.movies[0].announced_before_release, true, 'release day still owes a post')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - release day posts that the score counts, beside the standings move', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // Posted at 84% before release; a point higher on release day, which
+    // alone would stay under the bar. The recount moved Bravo 30 -> 55.
+    const db = slowBurnDb(25, 85, scores(24, 84), 55)
+    db.movies[0].release_date = TODAY
+    db.movies[0].announced_before_release = true
+    const client = createMockDbClient(db)
+
+    const summary = await sendScoreNotifications(client, slowBurnContext(scores(24, 84), 30))
+
+    assertEquals(summary.movie_updates, 1)
+    assertEquals(summary.standings_updates, 1)
+    assertEquals(calls.length, 2)
+    const movieEmbed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(
+      movieEmbed.description,
+      'Released: its **85% RT** (25.0 pts) now counts\nUp from **84% RT** (24.0 pts) before release'
+    )
+    assertEquals(movieEmbed.color, DISCORD_COLORS.gold)
+    const standingsEmbed = (calls[1].embeds as Array<Record<string, unknown>>)[0]
+    const fields = standingsEmbed.fields as Array<{ name: string; value: string }>
+    assertEquals(fields[0].name, 'Bravo')
+    assertEquals(fields[0].value, 'Score has gone **UP** from **30.0** to **55.0**')
+    assertEquals(db.movies[0].announced_before_release, false)
+    assertEquals(db.movies[0].announced_rt_score, 85)
+
+    // Owed once: the next run has nothing new to say
+    const rerun = await sendScoreNotifications(client, slowBurnContext(scores(25, 85), 55))
+    assertEquals(rerun.movie_updates, 0)
+    assertEquals(calls.length, 2)
   } finally {
     globalThis.fetch = originalFetch
   }

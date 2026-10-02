@@ -80,6 +80,16 @@ export function isWithinDays(date: string | null, days: number, now: Date = new 
 }
 
 /**
+ * Whether a movie is out: released on or before today's UTC calendar date, the
+ * same rule the server uses to decide which scores count toward team totals.
+ * A missing or invalid date has not released.
+ */
+export function hasReleased(date: string | null | undefined, now: Date = new Date()): boolean {
+  if (!date || !parseReleaseDate(date)) return false
+  return date <= now.toISOString().slice(0, 10)
+}
+
+/**
  * Format runtime in hours and minutes (e.g., "2h 15m")
  */
 export function formatRuntime(minutes: number): string {

@@ -62,8 +62,39 @@ describe('/movie', () => {
     const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
     expect(embed.title).toContain('Movie One')
     expect(embed.description).toContain('Fantasy Points:** 12.5')
+    expect(embed.description).not.toContain('counts once released')
     expect(embed.description).toContain('Owned by Team A')
     expect(embed.description).toContain('Movie One: Part Two')
+  })
+
+  it('marks a pre-release score as not counted yet', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel,
+        movies: {
+          data: {
+            id: 'movie-uuid-1',
+            title: 'Movie One',
+            release_date: '2099-06-01',
+            poster_url: null,
+            fantasy_points: 24,
+            combined_score: 84,
+            reviews: [{ source: 'rotten_tomatoes', score: 84 }],
+          },
+        },
+        team_holdings: { data: { team_name: 'Team A' } },
+      },
+    })
+    mockFetchOk({
+      ...searchResponse,
+      results: [{ ...searchResponse.results[0], release_date: '2099-06-01' }],
+    })
+    const interaction = makeInteraction({ stringOptions: { name: 'Movie One' } })
+
+    await movie.execute(interaction)
+
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toContain('**Fantasy Points:** 24 (counts once released)')
   })
 
   it('still resolves the movie when the channel is not linked, without roster context', async () => {

@@ -40,6 +40,22 @@ export interface MovieRecord {
   title: string
 }
 
+// --- Release ---
+
+/** Today's UTC calendar date (YYYY-MM-DD), the calendar release dates are judged on. */
+export function utcDate(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10)
+}
+
+/**
+ * Whether a movie has released, so its points count toward team totals.
+ * Mirrors movie_has_released() in SQL: a movie can be scored before release,
+ * but that pre-release score only counts from its release date.
+ */
+export function hasReleased(releaseDate: string | null, today: string = utcDate()): boolean {
+  return releaseDate !== null && releaseDate <= today
+}
+
 // --- MDBList source mapping ---
 
 /** Maps MDBList source names to our DB source names */

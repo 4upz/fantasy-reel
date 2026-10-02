@@ -745,7 +745,8 @@ Below 50, the slope halves every 10 points, so penalties approach an asymptote a
 
 ### Score Sync
 - Nightly cron job fetches latest scores from MDBList
-- Only updates movies that have been released
+- Updates released movies, and rostered movies before release: a **pre-release score** is posted to Discord as soon as RT has one
+- **Points count only from release day.** `movie_has_released()` (UTC date) gates every team-score leg, so standings, rank changes and standings posts wait for release; the release-day run rescores the movie's teams and posts that its score now counts (`movies.announced_before_release`). The frontend (`hasReleased`) and bot show a pre-release score muted, "at release". See "Pre-release scores" in `supabase/SCORING.md`
 - Recalculates fantasy points and team totals after each sync
 - A movie with no RT score yet is unscored (`combined_score` and `fantasy_points` are `NULL`, shown as "Pending")
 - Discord score posts need a `SCORE_CHANGE_THRESHOLD` move. A movie is measured from its last *posted* score (`movies.announced_*`), never the previous run; see "Change threshold" in `supabase/SCORING.md`

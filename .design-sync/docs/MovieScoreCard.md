@@ -12,7 +12,10 @@ opponent marker to an owned movie.
 For counterpicks, pass the stored counterpick score as `overridePoints`;
 the movie's own fantasy points are the default. An explicit null override
 keeps the counterpick unscored. Missing points read “Pending” for a released
-movie and “Upcoming” otherwise. Missing or failed artwork uses a film icon.
+movie and “Upcoming” otherwise. Points on a movie that has not released yet
+(UTC release day) are a pre-release score: muted and labelled “Pre-release”,
+because they don't count toward the team total until it opens; a counterpick
+follows its target movie's release. Missing or failed artwork uses a film icon.
 
 Providing `onSelect` makes the row a keyboard-accessible button and passes
 the movie to the caller, without bubbling the click to its surrounding

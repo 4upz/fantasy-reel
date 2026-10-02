@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
-import { formatCriticScore, formatFantasyPoints } from '@/utils/scoring'
+import { formatCriticScore, formatPointsText, isPreReleaseScore } from '@/utils/scoring'
 import type {
   Team,
   TradeActionResult,
@@ -604,6 +604,8 @@ function MovieSelector({
         const isSelected = selectedIds.has(movie.source_id)
         const isFocused = focusedIndex === index
         const isInvalid = invalidIds.has(movie.source_id)
+        // For a counterpick, the inverted score waits on the targeted movie's release.
+        const isPreRelease = isPreReleaseScore(movie.fantasy_points, movie.release_date)
         return (
           <div
             key={movie.source_id}
@@ -630,7 +632,7 @@ function MovieSelector({
             </div>
             <div className="min-w-0 flex-1">
               <p className="type-row-title text-foreground break-words">{movie.title}</p>
-              <div className="type-meta flex items-center gap-2 text-foreground-secondary">
+              <div className="type-meta flex flex-wrap items-center gap-x-2 text-foreground-secondary">
                 {/* The alert above carries the reason; this only says which row
                     it meant, and carries it in text rather than colour alone. */}
                 {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
@@ -646,8 +648,12 @@ function MovieSelector({
                 )}
                 {movie.fantasy_points !== null ? (
                   <>
-                    <span className={`type-numeric ${movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}>
-                      {formatFantasyPoints(movie.fantasy_points)} pts
+                    <span
+                      className={`type-numeric ${
+                        isPreRelease ? 'text-foreground-secondary' : movie.fantasy_points >= 0 ? 'text-success' : 'text-crimson'
+                      }`}
+                    >
+                      {formatPointsText(movie.fantasy_points, isPreRelease)}
                     </span>
                     {movie.combined_score !== null && (
                       <span>{formatCriticScore(movie.combined_score)}</span>
