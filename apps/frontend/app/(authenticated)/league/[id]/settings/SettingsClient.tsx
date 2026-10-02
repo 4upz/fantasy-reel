@@ -95,6 +95,12 @@ export default function SettingsClient({
           onReorder={handleParticipantsReordered}
         />
 
+        {/* Scoring stays open through the draft and locks once it is over. */}
+        <ScoringConfigSection
+          league={league}
+          onUpdate={handleLeagueUpdate}
+        />
+
         <CounterpickConfigSection
           league={league}
           isLocked={!isSetup}
@@ -109,12 +115,6 @@ export default function SettingsClient({
 
         {/* Trade settings stay editable until completion. */}
         <TradeConfigSection
-          league={league}
-          onUpdate={handleLeagueUpdate}
-        />
-
-        {/* So does scoring, and a change re-scores every team on save. */}
-        <ScoringConfigSection
           league={league}
           onUpdate={handleLeagueUpdate}
         />

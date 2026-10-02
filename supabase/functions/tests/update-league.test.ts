@@ -1782,64 +1782,53 @@ Deno.test({
   // ============================================================================
   // update_scoring_config Tests
   //
-  // The 90+ points rule. Like the trade settings it stays editable while the
-  // season runs. The database re-scores the season on every change, and
-  // supabase/tests/league_scoring_rule.sql covers that arithmetic -- these only
-  // check that the action reaches it.
+  // The 90+ points rule. Open through the draft, then locked so nobody is
+  // scored under a rule they didn't draft under. The database re-scores the
+  // season on every change, and supabase/tests/league_scoring_rule.sql covers
+  // that arithmetic and the database-level lock -- these check the action.
   // ============================================================================
 
-  await t.step('update_scoring_config: the owner switches double points on and off mid-season', async () => {
-    const leagueId = await factory.createActiveLeague(uniqueName('scoring-rule-active'))
-    const serviceClient = getServiceClient()
-
-    const { data: before } = await client
+  const readRule = async (leagueId: string) => {
+    const { data } = await client
       .from('leagues')
       .select('double_points_over_90')
       .eq('id', leagueId)
       .single()
-    assertEquals(before?.double_points_over_90, false, 'new seasons start on 1 point per point')
+    return data?.double_points_over_90
+  }
 
-    // One of the owner's drafted movies hits 95%, scored the way the nightly
-    // job scores it: 35 points under the default rule, 40 with double points.
-    const team = await factory.getTeamForUser(leagueId, client)
-    assertExists(team)
-    const { data: holding } = await serviceClient
-      .from('team_holdings')
-      .select('movie_id')
-      .eq('team_id', team.teamId)
-      .limit(1)
-      .single()
-    assertExists(holding)
-    const { error: reviewError } = await serviceClient
-      .from('reviews')
-      .insert({ movie_id: holding.movie_id, source: 'rotten_tomatoes', score: 95 })
-    assertEquals(reviewError, null)
-    const { error: scoreError } = await serviceClient.rpc('calculate_movie_score', {
-      p_movie_id: holding.movie_id,
+  const setRule = (leagueId: string, doublePoints: boolean) =>
+    invokeFunction<{ league: { double_points_over_90: boolean } }>(client, 'update-league', {
+      action: 'update_scoring_config',
+      league_id: leagueId,
+      double_points_over_90: doublePoints,
     })
-    assertEquals(scoreError, null)
 
-    const teamTotal = async () => {
-      const { data } = await serviceClient
-        .from('team_scores')
-        .select('total_points')
-        .eq('team_id', team.teamId)
-        .single()
-      return Number(data?.total_points)
-    }
-    assertEquals(await teamTotal(), 35)
+  await t.step('update_scoring_config: the owner can switch double points during setup and the draft', async () => {
+    const { id: setupLeagueId } = await factory.createLeague(uniqueName('scoring-rule-setup'))
+    assertEquals(await readRule(setupLeagueId), false, 'new seasons start on 1 point per point')
 
-    for (const [doublePoints, expectedTotal] of [[true, 40], [false, 35]] as const) {
-      const { data, error } = await invokeFunction<{ league: { double_points_over_90: boolean } }>(
-        client,
-        'update-league',
-        { action: 'update_scoring_config', league_id: leagueId, double_points_over_90: doublePoints },
-      )
-
+    for (const doublePoints of [true, false]) {
+      const { data, error } = await setRule(setupLeagueId, doublePoints)
       assertEquals(error, null)
       assertEquals(data?.league.double_points_over_90, doublePoints)
-      assertEquals(await teamTotal(), expectedTotal, `team total with double points ${doublePoints}`)
+      assertEquals(await readRule(setupLeagueId), doublePoints)
     }
+
+    const draftingLeagueId = await factory.createDraftingLeague(uniqueName('scoring-rule-drafting'))
+    const { data, error } = await setRule(draftingLeagueId, true)
+    assertEquals(error, null)
+    assertEquals(data?.league.double_points_over_90, true)
+  })
+
+  await t.step('update_scoring_config: returns 400 once the draft is over', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('scoring-rule-active'))
+
+    const result = await setRule(leagueId, true)
+
+    assertEquals(result.status, 400)
+    assertEquals(result.error, 'Scoring can only be changed before the draft ends')
+    assertEquals(await readRule(leagueId), false)
   })
 
   await t.step('update_scoring_config: returns 400 unless double_points_over_90 is a boolean', async () => {
@@ -1879,21 +1868,11 @@ Deno.test({
     })
     assertEquals(completed.error, null)
 
-    const result = await invokeFunction(client, 'update-league', {
-      action: 'update_scoring_config',
-      league_id: leagueId,
-      double_points_over_90: true,
-    })
+    const result = await setRule(leagueId, true)
 
     assertEquals(result.status, 400)
     assertEquals(result.error, 'This season is finished.')
-
-    const { data: league } = await client
-      .from('leagues')
-      .select('double_points_over_90')
-      .eq('id', leagueId)
-      .single()
-    assertEquals(league?.double_points_over_90, false)
+    assertEquals(await readRule(leagueId), false)
   })
 
   // ============================================================================

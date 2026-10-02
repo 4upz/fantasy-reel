@@ -766,18 +766,22 @@ async function handleUpdateSeasonConfig(
  * The season's 90+ points rule (Fantasy Critic's "90+ Points Rule"): whether
  * each Tomatometer point above 90 earns 2 fantasy points instead of 1.
  *
- * Not gated on `setup`, like the trade settings: every season that predates
- * the setting is already past setup, and a change is safe at any point. It
- * re-scores the whole season, so unlike `season_year` it cannot leave anything
- * already on a roster in the wrong state. Nothing is recomputed here -- the
+ * Open through the draft, one phase longer than the other draft settings, and
+ * locked once it is over: nobody should draft or counterpick under one rule
+ * and be scored under another. `guard_direct_draft_start` holds the same line
+ * for direct writes. Nothing is recomputed here -- the
  * `rescore_season_on_scoring_rule_change` trigger re-scores every team and
  * counterpick in the same transaction as this write.
  */
 async function handleUpdateScoringConfig(
   supabase: SupabaseClient,
-  league: { id: string },
+  league: { id: string; status: string },
   body: UpdateScoringConfigRequest
 ): Promise<Response> {
+  if (league.status !== 'setup' && league.status !== 'drafting') {
+    return errorResponse('Scoring can only be changed before the draft ends', 400)
+  }
+
   if (typeof body.double_points_over_90 !== 'boolean') {
     return errorResponse('double_points_over_90 must be a boolean', 400)
   }

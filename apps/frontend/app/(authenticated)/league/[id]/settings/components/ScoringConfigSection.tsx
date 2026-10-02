@@ -1,9 +1,8 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { AlertTriangle, Trophy } from 'lucide-react'
+import { Trophy } from 'lucide-react'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { fantasyPointsForTomatometer, formatSignedPoints } from '@/utils/scoring'
@@ -34,17 +33,14 @@ function examplePoints(doublePointsOver90: boolean): string {
  * 2 fantasy points or 1. Counterpicks have no rule of their own -- they lose
  * whatever the movie earns under this one.
  *
- * Editable until the season completes, like the trade settings. Unlike them, a
- * change reaches back: the database re-scores every team the moment it is
- * saved, so once teams hold movies the card says so before you save.
+ * Open through the draft, one phase longer than the other draft settings, then
+ * locked for the rest of the season: nobody should draft or counterpick under
+ * one rule and be scored under another.
  */
 export default function ScoringConfigSection({ league, onUpdate }: Props): React.ReactElement {
-  const router = useRouter()
   const [doublePoints, setDoublePoints] = useState(league.double_points_over_90)
 
-  const isCompleted = league.status === 'completed'
-  // Past setup, teams hold movies for a change to re-score.
-  const isUnderway = league.status !== 'setup'
+  const isLocked = league.status !== 'setup' && league.status !== 'drafting'
   const hasChanges = doublePoints !== league.double_points_over_90
 
   const saveScoring = useCallback(async () => {
@@ -60,11 +56,9 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
 
     if (data?.league) {
       onUpdate(data.league)
-      toast.success(isUnderway ? 'Scoring updated. Every team has been re-scored.' : 'Scoring updated')
-      // Every team total just moved; drop any cached page still showing the old ones.
-      router.refresh()
+      toast.success('Scoring updated')
     }
-  }, [doublePoints, isUnderway, league.id, onUpdate, router])
+  }, [doublePoints, league.id, onUpdate])
 
   const { execute: save, isLoading: isSubmitting } = useAsyncAction(saveScoring)
 
@@ -78,15 +72,15 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
       <SectionHeader
         icon={Trophy}
         title="Scoring"
-        description={isCompleted ? 'Locked after the season ends' : 'How Tomatometer scores become fantasy points'}
-        isLocked={isCompleted}
+        description={isLocked ? 'Locked once the draft is over' : 'How Tomatometer scores become fantasy points'}
+        isLocked={isLocked}
       />
 
-      {isCompleted ? (
+      {isLocked ? (
         <LockedMessage
-          message={`Scoring cannot be changed after the season is complete. This season paid ${
+          message={`Scoring locks once the draft is over, so the whole season plays under one rule. This season uses ${
             league.double_points_over_90 ? 'double points above 90%' : '1 point per Tomatometer point above 90%'
-          }: a ${EXAMPLE_RT}% movie earned ${examplePoints(league.double_points_over_90)}.`}
+          }: a ${EXAMPLE_RT}% movie earns ${examplePoints(league.double_points_over_90)}.`}
         />
       ) : (
         <form onSubmit={handleSubmit}>
@@ -137,16 +131,9 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
                 </p>
               </div>
 
-              {isUnderway && hasChanges && (
-                <p
-                  role="status"
-                  className="type-body-sm alert alert-warning flex items-start gap-2"
-                  data-testid="scoring-rescore-warning"
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
-                  <span>Saving re-scores every team right away, so the standings can change.</span>
-                </p>
-              )}
+              <p className="type-meta text-foreground-secondary" data-testid="scoring-lock-note">
+                You can change this until the draft is over. After that it stays fixed for the season.
+              </p>
             </div>
 
             <button

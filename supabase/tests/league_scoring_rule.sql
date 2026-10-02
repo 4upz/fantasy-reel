@@ -87,6 +87,23 @@ SELECT results_eq(
            ('83111111-1111-4111-8111-000000000024'::UUID, -52.50)$$,
   'turning it back off restores the default totals without touching the other season');
 
+-- The owner can change the rule through the draft; once it is over, it locks.
+SELECT set_config('request.jwt.claim.sub', '83111111-1111-4111-8111-000000000001', true);
+UPDATE leagues SET status = 'drafting' WHERE id = '83111111-1111-4111-8111-000000000010';
+SET LOCAL ROLE authenticated;
+SELECT lives_ok($$UPDATE leagues SET double_points_over_90 = true WHERE id = '83111111-1111-4111-8111-000000000010'$$,
+  'the owner can change the rule during the draft');
+SELECT lives_ok($$UPDATE leagues SET double_points_over_90 = false WHERE id = '83111111-1111-4111-8111-000000000010'$$,
+  'and change it back');
+RESET ROLE;
+UPDATE leagues SET status = 'active' WHERE id = '83111111-1111-4111-8111-000000000010';
+SET LOCAL ROLE authenticated;
+SELECT throws_ok($$UPDATE leagues SET double_points_over_90 = true WHERE id = '83111111-1111-4111-8111-000000000010'$$,
+  'PT409', 'Scoring cannot change after the draft', 'the owner cannot change the rule once the draft is over');
+RESET ROLE;
+SELECT is((SELECT double_points_over_90 FROM leagues WHERE id = '83111111-1111-4111-8111-000000000010'),
+  false, 'a refused change leaves the rule alone');
+
 -- A new Tomatometer reaches each season under its own rule.
 UPDATE reviews SET score = 97
 WHERE movie_id = '83111111-1111-4111-8111-000000000030' AND source = 'rotten_tomatoes';

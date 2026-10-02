@@ -49,7 +49,8 @@ export interface League {
    * The season's 90+ points rule. false (the default for new seasons): 1 point
    * per Tomatometer point all the way to 100, so 96% earns 36. true: 2 points
    * per point above 90, so 96% earns 42. Counterpicks invert whichever applies.
-   * Editable until the season completes; a change re-scores every team.
+   * The owner can change it during setup and the draft; it locks once the draft
+   * is over.
    */
   double_points_over_90: boolean
   // Draft order customization

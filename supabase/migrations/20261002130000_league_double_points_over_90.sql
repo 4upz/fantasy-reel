@@ -20,10 +20,10 @@
 --     the inverted counterpicks.fantasy_points. Stored scores are rebased at
 --     the end so old and new rows agree.
 --
---   * Changing the rule re-scores the season in the same transaction, from
---     any write path -- owners can update their league row directly, not only
---     through update-league. Completed seasons keep the rule they finished
---     under.
+--   * The owner can change it during setup and the draft. Once the draft is
+--     over it is locked, so nobody drafts or counterpicks under one rule and
+--     is scored under another; completed seasons keep it for good. A change
+--     re-scores the season in the same transaction, from any write path.
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -39,7 +39,7 @@ ALTER TABLE leagues
     ALTER COLUMN double_points_over_90 SET DEFAULT false;
 
 COMMENT ON COLUMN leagues.double_points_over_90 IS
-'The season''s 90+ points rule. false (default): 1 fantasy point per Tomatometer point above 90, the same as from 50 up. true: 2 points per point above 90. Counterpicks invert whichever rule applies. Editable until the season completes; changing it re-scores the season.';
+'The season''s 90+ points rule. false (default): 1 fantasy point per Tomatometer point above 90, the same as from 50 up. true: 2 points per point above 90. Counterpicks invert whichever rule applies. The owner can change it during setup and the draft; it locks once the draft is over. A change re-scores the season.';
 
 -- ----------------------------------------------------------------------------
 -- 2. One definition of a movie's points within a season
@@ -401,7 +401,7 @@ COMMENT ON VIEW public.team_holdings IS
 'Single read surface for active team rosters: drafted movies (draft_picks) plus auction wins (pickups), both filtered to dropped_at IS NULL, with the holding team, the counterpicking team, and the full movie row denormalized in for PostgREST. fantasy_points is the movie''s points under the holding season''s 90+ points rule (league_fantasy_points), not the raw movies.fantasy_points. Read-only -- writes still go to the base tables. Readers needing dropped rows must query the base tables directly.';
 
 -- ----------------------------------------------------------------------------
--- 7. Completed seasons keep their rule; a change re-scores the season
+-- 7. The rule locks once the draft is over; a change re-scores the season
 -- ----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION guard_league_season()
 RETURNS trigger
@@ -443,6 +443,32 @@ BEGIN
       OR NEW.final_standings IS DISTINCT FROM OLD.final_standings
       OR (NEW.status = 'completed' AND OLD.status <> 'completed') THEN
       RAISE EXCEPTION 'Season results are managed by completion' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- The owner's paths -- update-league with their JWT, or a direct row update --
+-- lock with the other draft settings, one phase later: the rule stays open
+-- through the draft and locks once it is over.
+CREATE OR REPLACE FUNCTION public.guard_direct_draft_start()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = '' AS $$
+BEGIN
+  IF current_user IN ('anon', 'authenticated') THEN
+    -- Completed-season transitions retain the existing season guard's errors.
+    IF NEW.status IS DISTINCT FROM OLD.status AND OLD.status IS DISTINCT FROM 'completed'
+      AND NEW.status IS DISTINCT FROM 'completed' THEN
+      RAISE EXCEPTION 'Use the draft action to change the league phase' USING ERRCODE = '42501';
+    END IF;
+    IF OLD.status IS DISTINCT FROM 'setup' AND
+      (NEW.draft_slots, NEW.draft_counterpick_slots, NEW.max_participants, NEW.season_year, NEW.faab_budget, NEW.owner_id, NEW.custom_draft_order)
+      IS DISTINCT FROM (OLD.draft_slots, OLD.draft_counterpick_slots, OLD.max_participants, OLD.season_year, OLD.faab_budget, OLD.owner_id, OLD.custom_draft_order) THEN
+      RAISE EXCEPTION 'Draft configuration cannot change after the draft starts' USING ERRCODE = 'PT409';
+    END IF;
+    IF OLD.status NOT IN ('setup', 'drafting')
+      AND NEW.double_points_over_90 IS DISTINCT FROM OLD.double_points_over_90 THEN
+      RAISE EXCEPTION 'Scoring cannot change after the draft' USING ERRCODE = 'PT409';
     END IF;
   END IF;
   RETURN NEW;

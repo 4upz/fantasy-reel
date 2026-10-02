@@ -314,7 +314,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
                     <div className="font-semibold text-foreground">Above 90% - Double points (league option)</div>
                     <div className="type-body-sm">
                       Leagues that turn on double points pay 2 points for each point above 90 instead of 1.
-                      The commissioner sets it for each season.
+                      The commissioner sets it for each season, and it locks once the draft is over.
                     </div>
                   </div>
                 </div>
