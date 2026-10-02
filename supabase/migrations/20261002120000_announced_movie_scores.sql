@@ -1,8 +1,7 @@
 -- The score last posted to Discord for each movie. Score notifications post a
 -- movie again only once it is SCORE_CHANGE_THRESHOLD away from this
--- (_shared/score-notifications.ts). Measuring each run against the run before
--- would never post a slow drift: a Tomatometer losing a point a day stays under
--- the bar every single run.
+-- (_shared/score-notifications.ts); supabase/SCORING.md, "Change threshold",
+-- explains why it is not measured from the previous run.
 
 ALTER TABLE movies
   ADD COLUMN announced_fantasy_points DECIMAL(6, 2),

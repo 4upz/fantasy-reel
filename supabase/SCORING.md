@@ -115,7 +115,12 @@ ALTER TABLE movies ADD COLUMN combined_score DECIMAL(5, 2);   -- RT Tomatometer 
 ALTER TABLE movies ADD COLUMN fantasy_points DECIMAL(6, 2);    -- Baseline-relative curve result (can be negative)
 ALTER TABLE movies ADD COLUMN scoring_bonuses JSONB;           -- Unused; always NULL, retained for compatibility
 ALTER TABLE movies ADD COLUMN scores_updated_at TIMESTAMPTZ;
+ALTER TABLE movies ADD COLUMN announced_fantasy_points DECIMAL(6, 2);  -- fantasy_points as last posted to Discord
+ALTER TABLE movies ADD COLUMN announced_rt_score DECIMAL(5, 2);        -- combined_score as last posted to Discord
 ```
+
+The `announced_*` pair belongs to score notifications; see
+[Change threshold](#change-threshold).
 
 `scores_updated_at` means "last **checked**", not "last scored": `update-scores`
 also stamps it when MDBList authoritatively has nothing for a movie (no entry,
@@ -216,12 +221,14 @@ const context = await captureScoreContext(client, movieIds)  // snapshot
 await sendScoreNotifications(client, context)                 // diff and post
 ```
 
-`captureScoreContext` records each movie's `fantasy_points` plus the full
-standings of every league holding those movies. Snapshotting *all* active
-participants' teams in a league — rather than only the ones whose movies
-scored — is what makes rank movement detectable for teams that were passed
-without scoring themselves. (The same `status = 'active'` filter the standings
-page uses, so Discord ranks agree with the site.)
+`captureScoreContext` records each movie's scores plus the full standings of
+every league holding those movies. Snapshotting *all* active participants'
+teams in a league — rather than only the ones whose movies scored — is what
+makes rank movement detectable for teams that were passed without scoring
+themselves. (The same `status = 'active'` filter the standings page uses, so
+Discord ranks agree with the site.) Standings are diffed against this
+snapshot; a movie's post is not — it measures from the score last posted for
+the movie (see [Change threshold](#change-threshold)).
 
 **Both acquisition paths count.** A league "holds" a movie through either
 `draft_picks` (drafted) or `pickups` (won at auction). Reading only
@@ -246,33 +253,32 @@ Three events are reported:
 | Event | Message |
 |-------|---------|
 | Movie scores for the first time | `Now has a score of **84% RT** (24.0 pts)` |
-| Movie ends a run 3+ points from its last post | `Score has gone **DOWN** from **85% RT** (25.0 pts) to **82% RT** (22.0 pts)` |
-| Team's rank changes, or its total moves 3+ in a run | `Standings Update` embed, one field per team |
+| Movie moves far enough from its last post | `Score has gone **DOWN** from **85% RT** (25.0 pts) to **82% RT** (22.0 pts)` |
+| Team's rank changes, or its total moves far enough in one run | `Standings Update` embed, one field per team |
 
 Each movie due a post gets its own message (titled with the movie, attributing
 the owning team and any counterpicker). Each league then gets a single
 `Standings Update` roundup listing every team whose rank or total moved enough.
 
-### The 3-point threshold
+### Change threshold
 
 Posting every visible change was noisy: the Tomatometer ticks a point at a
-time as reviews trickle in. `SCORE_CHANGE_THRESHOLD` (3) sets the smallest
-move worth a post.
+time as reviews trickle in. "Far enough" is `SCORE_CHANGE_THRESHOLD`, 3 points.
 
 - **Movies are measured from their last post, not from the previous run.**
   `movies.announced_rt_score` / `announced_fantasy_points` hold the score last
   posted. A movie posts again once its Tomatometer *or* its fantasy points
-  sits 3+ away from that, and the message reads from that score. Measuring
-  run to run would never post a slow drift: a movie losing a point a day stays
-  under the bar every single run. Either number counts because the curve bends
-  — above 90% one RT point is two fantasy points, while below 30% RT moves
-  barely touch points. A first score always posts.
-- **The posted score is recorded before the message goes out.** A failed write
-  holds that movie's post back rather than risking it being posted twice; it
-  is still 3+ away from its old recorded score, so the next run posts it.
-- **Teams are measured run to run.** A rank change is always reported. A total
-  needs to move 3+ within the run to be reported on its own; once a team is
-  listed for a rank change, any visible move in its total shows alongside it.
+  reaches the threshold away from that, and the message reads from that score.
+  Measuring run to run would never post a slow drift: a movie losing a point a
+  day stays under the bar every single run. Either number counts because the
+  curve bends — above 90% one RT point is two fantasy points, while below 30%
+  RT moves barely touch points. A first score always posts.
+- **The posted score is recorded before the message goes out**, so a failed
+  write holds that movie's post for the next run instead of risking a double
+  post.
+- **Teams are measured run to run.** A rank change is always reported; a total
+  needs to reach the threshold within the run to be reported on its own. Once a
+  team is listed, any visible move in its total shows alongside its rank line.
 - **Notable misses ignore the threshold.** They read every move since the
   pre-run snapshot, because a dropped movie can cross 15 points on a small step.
 

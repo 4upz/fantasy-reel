@@ -86,18 +86,21 @@ export interface ScoreNotificationContext {
   droppedPlacements: DroppedMoviePlacement[]
 }
 
-/** A movie whose displayed score changed. */
+/**
+ * A movie's move from a starting score -- the pre-run snapshot for notable-miss
+ * detection, the score last posted for it for a post -- to its current score.
+ */
 export interface MovieScoreChange {
   movieId: string
   title: string
   posterUrl: string | null
   previousPoints: number | null
   newPoints: number
-  /** Tomatometer before the update; null until the movie is first scored. */
+  /** Tomatometer at the starting score; null if there was none. */
   previousRtScore: number | null
   /** Tomatometer after the update. Null only if the score was withdrawn. */
   newRtScore: number | null
-  /** True when the movie had no score before -- it just went live. */
+  /** True when there was no starting score -- the movie just went live. */
   isNewScore: boolean
 }
 
@@ -145,36 +148,33 @@ function pointsDiffer(a: number | null, b: number | null): boolean {
 
 /**
  * The smallest move worth a post: a movie's Tomatometer or fantasy points, or
- * a team's total.
- *
- * Fantasy Critic posts at 1, but against OpenCritic's fractional averages,
- * where a whole point is already a real move. The Tomatometer only moves in
- * whole points, so 1 would let every single-review tick through.
+ * a team's total. SCORING.md ("Change threshold") explains the value.
  */
 export const SCORE_CHANGE_THRESHOLD = 3
 
-/** Decimal scores can subtract to a hair under the threshold (4.1 - 1.1). */
-function movedEnough(from: number, to: number): boolean {
+/**
+ * A score appearing or vanishing always counts. The slack is because decimal
+ * scores can subtract to a hair under the threshold (4.1 - 1.1).
+ */
+function movedEnough(from: number | null, to: number | null): boolean {
+  if (from === null || to === null) return from !== to
   return Math.abs(to - from) >= SCORE_CHANGE_THRESHOLD - 1e-9
 }
 
 /**
- * Whether a movie has moved far enough from the score last posted for it to
- * post again. Either number counts: above 90% one Tomatometer point is worth
- * two fantasy points, while in the flat tail below 30% RT moves leave points
- * almost still. A movie never posted always qualifies -- its first score is
- * the biggest news there is. A withdrawn score is never posted.
+ * Whether a movie is far enough from the score last posted for it to post
+ * again. Either number counts: above 90% one Tomatometer point is two fantasy
+ * points, while below 30% RT moves barely touch points. A movie never posted
+ * always qualifies; a withdrawn score never does.
  */
 export function shouldAnnounceScore(
   announced: MovieScoreSnapshot,
   current: MovieScoreSnapshot
 ): boolean {
-  if (current.points === null) return false
-  if (announced.points === null || movedEnough(announced.points, current.points)) return true
-  if (announced.rtScore === null || current.rtScore === null) {
-    return announced.rtScore !== current.rtScore
-  }
-  return movedEnough(announced.rtScore, current.rtScore)
+  return current.points !== null && (
+    movedEnough(announced.points, current.points) ||
+    movedEnough(announced.rtScore, current.rtScore)
+  )
 }
 
 export function ordinal(n: number): string {
@@ -558,17 +558,11 @@ interface MovieScoreRow {
   combined_score: number | null
 }
 
-/**
- * Numeric columns can arrive as strings, so coerce before comparing. A column
- * missing from the row reads as null rather than NaN.
- */
-function toScoreSnapshot(
-  points: number | null | undefined,
-  rtScore: number | null | undefined
-): MovieScoreSnapshot {
+/** Numeric columns can arrive as strings, so coerce before comparing. */
+function toScoreSnapshot(points: number | null, rtScore: number | null): MovieScoreSnapshot {
   return {
-    points: points == null ? null : Number(points),
-    rtScore: rtScore == null ? null : Number(rtScore),
+    points: points === null ? null : Number(points),
+    rtScore: rtScore === null ? null : Number(rtScore),
   }
 }
 
@@ -1002,11 +996,7 @@ interface MovieScoreChanges {
    * these: a dropped movie can cross its bar on a step too small to post.
    */
   sinceSnapshot: Map<string, MovieScoreChange>
-  /**
-   * Movies due a post, described from the score last posted for them, so a
-   * drift of a point a day is posted once it adds up instead of being lost
-   * one sub-threshold run at a time.
-   */
+  /** Movies due a post, described from the score last posted for them. */
   toAnnounce: MovieScoreChange[]
 }
 
@@ -1029,13 +1019,14 @@ async function loadMovieScoreChanges(
   for (const movie of (movies ?? []) as MovieRow[]) {
     const current = toScoreSnapshot(movie.fantasy_points, movie.combined_score)
     if (current.points === null) continue
+    const newPoints = current.points
 
     const describeFrom = (previous: MovieScoreSnapshot): MovieScoreChange => ({
       movieId: movie.id,
       title: movie.title,
       posterUrl: movie.poster_url,
       previousPoints: previous.points,
-      newPoints: current.points as number,
+      newPoints,
       previousRtScore: previous.rtScore,
       newRtScore: current.rtScore,
       isNewScore: previous.points === null,
@@ -1066,7 +1057,9 @@ async function recordAnnouncements(
   supabase: SupabaseClient,
   changes: MovieScoreChange[]
 ): Promise<Map<string, MovieScoreChange>> {
-  const recorded = await Promise.all(
+  const recorded = new Map<string, MovieScoreChange>()
+
+  await Promise.all(
     changes.map(async (change) => {
       const { error } = await supabase
         .from('movies')
@@ -1081,15 +1074,11 @@ async function recordAnnouncements(
           movie_id: change.movieId,
           error: serializeError(error),
         })
-        return null
+        return
       }
-      return change
+      recorded.set(change.movieId, change)
     })
   )
 
-  return new Map(
-    recorded
-      .filter((change): change is MovieScoreChange => change !== null)
-      .map((change) => [change.movieId, change])
-  )
+  return recorded
 }
