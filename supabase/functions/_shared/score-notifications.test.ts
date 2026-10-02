@@ -17,6 +17,7 @@ import {
   buildStandingsEmbed,
   crossesNotableMissThreshold,
   sendScoreNotifications,
+  shouldAnnounceScore,
   type MoviePlacement,
   type ScoreNotificationContext,
   type StandingChange,
@@ -175,6 +176,76 @@ Deno.test('diffStandings - skips teams absent from the earlier snapshot', () => 
   const after = [standing('a', 'Alpha', 30, 1), standing('new', 'Newcomer', 10, 2)]
 
   assertEquals(diffStandings(before, after).length, 0)
+})
+
+Deno.test('diffStandings - skips a total that moved less than 3 without changing rank', () => {
+  const before = [standing('a', 'Alpha', 45.7, 1), standing('b', 'Bravo', 30.0, 2)]
+  const after = [standing('a', 'Alpha', 47.7, 1), standing('b', 'Bravo', 30.0, 2)]
+
+  assertEquals(diffStandings(before, after).length, 0)
+})
+
+Deno.test('diffStandings - reports a total that moved exactly 3', () => {
+  const before = [standing('a', 'Alpha', 45.7, 1)]
+  const after = [standing('a', 'Alpha', 48.7, 1)]
+
+  const changes = diffStandings(before, after)
+
+  assertEquals(changes.length, 1)
+  assertEquals(changes[0].pointsChanged, true)
+  assertEquals(changes[0].rankChanged, false)
+})
+
+Deno.test('diffStandings - a rank change brings its small score move along', () => {
+  // One point is under the bar on its own, but it is what put Alpha ahead
+  const before = [standing('b', 'Bravo', 30.5, 1), standing('a', 'Alpha', 30.0, 2)]
+  const after = [standing('a', 'Alpha', 31.0, 1), standing('b', 'Bravo', 30.5, 2)]
+
+  const changes = diffStandings(before, after)
+
+  assertEquals(changes.length, 2)
+  assertEquals(changes[0].teamName, 'Alpha')
+  assertEquals(changes[0].pointsChanged, true)
+  assertEquals(changes[0].rankChanged, true)
+  assertEquals(changes[1].teamName, 'Bravo')
+  assertEquals(changes[1].pointsChanged, false)
+  assertEquals(changes[1].rankChanged, true)
+})
+
+// ============================================================================
+// Announcement threshold
+// ============================================================================
+
+function scores(points: number | null, rtScore: number | null) {
+  return { points, rtScore }
+}
+
+Deno.test('shouldAnnounceScore - a movie never announced always qualifies', () => {
+  assertEquals(shouldAnnounceScore(scores(null, null), scores(0, 60)), true)
+})
+
+Deno.test('shouldAnnounceScore - holds back moves under 3 points', () => {
+  assertEquals(shouldAnnounceScore(scores(20, 80), scores(21, 81)), false)
+  assertEquals(shouldAnnounceScore(scores(20, 80), scores(18, 78)), false)
+})
+
+Deno.test('shouldAnnounceScore - a move of exactly 3 qualifies, either direction', () => {
+  assertEquals(shouldAnnounceScore(scores(20, 80), scores(23, 83)), true)
+  assertEquals(shouldAnnounceScore(scores(20, 80), scores(17, 77)), true)
+  // Decimal subtraction lands a hair under 3 here
+  assertEquals(shouldAnnounceScore(scores(1.1, 61), scores(4.1, 64)), true)
+})
+
+Deno.test('shouldAnnounceScore - points alone qualify above 90%, where RT counts double', () => {
+  assertEquals(shouldAnnounceScore(scores(34, 92), scores(38, 94)), true)
+})
+
+Deno.test('shouldAnnounceScore - RT alone qualifies in the flat tail, where points barely move', () => {
+  assertEquals(shouldAnnounceScore(scores(-19.53, 5), scores(-19.44, 8)), true)
+})
+
+Deno.test('shouldAnnounceScore - a withdrawn score is never announced', () => {
+  assertEquals(shouldAnnounceScore(scores(20, 80), scores(null, null)), false)
 })
 
 // ============================================================================
@@ -463,6 +534,12 @@ function enabledChannel(overrides: Record<string, unknown> = {}) {
   }
 }
 
+/**
+ * The last-posted score columns, matching baseContext's pre-run snapshot --
+ * the steady state, where the previous run posted the movie's last move.
+ */
+const ANNOUNCED_AT_SNAPSHOT = { announced_fantasy_points: 20.0, announced_rt_score: 80 }
+
 function baseContext(): ScoreNotificationContext {
   return {
     movieIds: ['movie-1'],
@@ -587,7 +664,7 @@ Deno.test('sendScoreNotifications - posts a movie embed and a standings embed', 
   try {
     const { client } = createMockSupabase({
       movies: [
-        { data: [{ id: 'movie-1', title: 'Splatoon Raiders', poster_url: null, fantasy_points: 34.0, combined_score: 92 }], error: null },
+        { data: [{ id: 'movie-1', title: 'Splatoon Raiders', poster_url: null, fantasy_points: 34.0, combined_score: 92, ...ANNOUNCED_AT_SNAPSHOT }], error: null },
       ],
       league_participants: [
         { data: [{ id: 'p-a', league_id: 'league-1' }, { id: 'p-b', league_id: 'league-1' }], error: null },
@@ -652,7 +729,7 @@ Deno.test('sendScoreNotifications - sends nothing when no score moved', async ()
     const { client } = createMockSupabase({
       // Same score as the snapshot
       movies: [
-        { data: [{ id: 'movie-1', title: 'Splatoon Raiders', poster_url: null, fantasy_points: 20.0, combined_score: 80 }], error: null },
+        { data: [{ id: 'movie-1', title: 'Splatoon Raiders', poster_url: null, fantasy_points: 20.0, combined_score: 80, ...ANNOUNCED_AT_SNAPSHOT }], error: null },
       ],
       league_participants: [
         { data: [{ id: 'p-a', league_id: 'league-1' }, { id: 'p-b', league_id: 'league-1' }], error: null },
@@ -683,7 +760,18 @@ Deno.test('sendScoreNotifications - posts when the Tomatometer moves but points 
   try {
     const { client } = createMockSupabase({
       movies: [
-        { data: [{ id: 'movie-1', title: 'Straight To Video', poster_url: null, fantasy_points: -19.28, combined_score: 8 }], error: null },
+        {
+          data: [{
+            id: 'movie-1',
+            title: 'Straight To Video',
+            poster_url: null,
+            fantasy_points: -19.28,
+            combined_score: 8,
+            announced_fantasy_points: -19.28,
+            announced_rt_score: 5,
+          }],
+          error: null,
+        },
       ],
       league_participants: [{ data: [{ id: 'p-b', league_id: 'league-1' }], error: null }],
       teams: [{ data: [{ id: 'team-b', name: 'Bravo', participant_id: 'p-b' }], error: null }],
@@ -897,7 +985,8 @@ Deno.test('crossesNotableMissThreshold - true only when crossing from below 15 t
 
 /** Minimal fixture for the notable-miss dispatch tests below, using the
  * filtering mock client (_mock-client.ts) rather than createMockSupabase --
- * these need real insert-then-check dedup against discord_notification_log. */
+ * these need real insert-then-check dedup against discord_notification_log.
+ * The movie was last posted at notableMissContext's pre-run score. */
 function notableMissDb(fantasyPoints: number, rtScore: number): MockDb {
   return {
     movies: [{
@@ -906,6 +995,8 @@ function notableMissDb(fantasyPoints: number, rtScore: number): MockDb {
       poster_url: null,
       fantasy_points: fantasyPoints,
       combined_score: rtScore,
+      announced_fantasy_points: 5,
+      announced_rt_score: 65,
     }],
     discord_notification_log: [],
     discord_channels: [
@@ -1070,6 +1161,140 @@ Deno.test('sendScoreNotifications - notable miss: only dropped placements qualif
     assertEquals(calls.length, 1)
     const embed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
     assertEquals(embed.title, 'Sequel Nobody Wanted')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - notable miss fires on a step too small to post', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // A dropped movie edging from 14 to 16 points crosses the 15-point bar
+    const db = notableMissDb(16, 76)
+    Object.assign(db.movies[0], { announced_fantasy_points: 14, announced_rt_score: 74 })
+    const context = notableMissContext({
+      previousMovieScores: new Map([['movie-1', { points: 14, rtScore: 74 }]]),
+    })
+
+    const summary = await sendScoreNotifications(createMockDbClient(db), context)
+
+    assertEquals(summary.notable_misses, 1)
+    assertEquals(calls.length, 1)
+    assertEquals(db.movies[0].announced_fantasy_points, 14, 'two points is still not a score post')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+// ============================================================================
+// Last-posted score (movies.announced_*)
+// ============================================================================
+
+type Score = { points: number; rtScore: number }
+
+/**
+ * Bravo holding one movie, on the filtering mock client so a test can follow
+ * the last-posted score from one run to the next.
+ */
+function slowBurnDb(current: Score, announced: Score, teamTotal: number): MockDb {
+  return {
+    movies: [{
+      id: 'movie-1',
+      title: 'Slow Burn',
+      poster_url: null,
+      fantasy_points: current.points,
+      combined_score: current.rtScore,
+      announced_fantasy_points: announced.points,
+      announced_rt_score: announced.rtScore,
+    }],
+    league_participants: [{ id: 'p-b', league_id: 'league-1', status: 'active' }],
+    teams: [{ id: 'team-b', name: 'Bravo', participant_id: 'p-b' }],
+    team_scores: [{ team_id: 'team-b', total_points: teamTotal }],
+    discord_channels: [enabledChannel({ league_id: 'league-1', enabled: true })],
+  }
+}
+
+function slowBurnContext(preRun: Score, teamTotal: number): ScoreNotificationContext {
+  return {
+    ...baseContext(),
+    previousMovieScores: new Map([['movie-1', preRun]]),
+    previousStandings: new Map([['league-1', [standing('team-b', 'Bravo', teamTotal, 1)]]]),
+  }
+}
+
+Deno.test('sendScoreNotifications - holds back a move under 3 and keeps the last-posted score', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // A two-point move, which also moves the team two
+    const db = slowBurnDb({ points: 22, rtScore: 82 }, { points: 20, rtScore: 80 }, 32)
+
+    const summary = await sendScoreNotifications(
+      createMockDbClient(db),
+      slowBurnContext({ points: 20, rtScore: 80 }, 30)
+    )
+
+    assertEquals(summary.movie_updates, 0)
+    assertEquals(summary.standings_updates, 0)
+    assertEquals(calls.length, 0)
+    assertEquals(db.movies[0].announced_rt_score, 80, 'the gap carries into the next run')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - posts a drift once it adds up, measured from the last post', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // Posted at 80%, then a point a run: 81 and 82 stayed under the bar
+    const db = slowBurnDb({ points: 23, rtScore: 83 }, { points: 20, rtScore: 80 }, 33)
+    const client = createMockDbClient(db)
+
+    const summary = await sendScoreNotifications(client, slowBurnContext({ points: 22, rtScore: 82 }, 32))
+
+    assertEquals(summary.movie_updates, 1)
+    assertEquals(summary.standings_updates, 0, 'the team only moved 1 this run')
+    assertEquals(calls.length, 1)
+    const embed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(
+      embed.description,
+      'Score has gone **UP** from **80% RT** (20.0 pts) to **83% RT** (23.0 pts)'
+    )
+    assertEquals(db.movies[0].announced_rt_score, 83)
+    assertEquals(db.movies[0].announced_fantasy_points, 23)
+
+    // The next run measures from the new post, so holding steady stays quiet
+    const rerun = await sendScoreNotifications(client, slowBurnContext({ points: 23, rtScore: 83 }, 33))
+    assertEquals(rerun.movie_updates, 0)
+    assertEquals(calls.length, 1)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - holds a post back when its score cannot be recorded', async () => {
+  // Posting without recording would post the same move again next run.
+  // Holding it keeps the gap open, so the next run posts it exactly once.
+  const calls = mockWebhookFetch()
+  try {
+    const { client } = createMockSupabase({
+      movies: [
+        { data: [{ id: 'movie-1', title: 'Splatoon Raiders', poster_url: null, fantasy_points: 34.0, combined_score: 92, ...ANNOUNCED_AT_SNAPSHOT }], error: null },
+        // The last-posted score write
+        { data: null, error: { message: 'write failed' } },
+      ],
+      league_participants: [{ data: [{ id: 'p-b', league_id: 'league-1' }], error: null }],
+      teams: [{ data: [{ id: 'team-b', name: 'Bravo', participant_id: 'p-b' }], error: null }],
+      team_scores: [{ data: [{ team_id: 'team-b', total_points: 30.0 }], error: null }],
+      discord_channels: [{ data: [enabledChannel()], error: null }],
+    })
+
+    const context = baseContext()
+    context.previousStandings = new Map([['league-1', [standing('team-b', 'Bravo', 30.0, 1)]]])
+
+    const summary = await sendScoreNotifications(client, context)
+
+    assertEquals(summary.movie_updates, 0)
+    assertEquals(calls.length, 0)
   } finally {
     globalThis.fetch = originalFetch
   }

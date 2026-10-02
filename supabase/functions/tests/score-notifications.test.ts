@@ -13,6 +13,7 @@ import { assertEquals, assertExists } from '@std/assert'
 import { createTestFactory, getServiceClient, uniqueName } from './_setup.ts'
 import {
   captureScoreContext,
+  sendScoreNotifications,
   snapshotStandings,
 } from '../_shared/score-notifications.ts'
 
@@ -190,6 +191,44 @@ Deno.test({
       await t.step('snapshotStandings returns nothing for no leagues', async () => {
         const standings = await snapshotStandings(supabase, [])
         assertEquals(standings.size, 0)
+      })
+
+      // The league has no Discord channel, so these post nothing; what they
+      // check is the movies.announced_* read and write against the real schema.
+      const readAnnounced = async () => {
+        const { data, error } = await supabase
+          .from('movies')
+          .select('announced_fantasy_points, announced_rt_score')
+          .eq('id', draftedMovieId)
+          .single()
+        assertEquals(error, null)
+        return data
+      }
+      const seedAnnounced = async (points: number, rtScore: number) => {
+        const { error } = await supabase
+          .from('movies')
+          .update({ announced_fantasy_points: points, announced_rt_score: rtScore })
+          .eq('id', draftedMovieId)
+        assertEquals(error, null)
+      }
+
+      await t.step('sendScoreNotifications records a move that clears the bar as posted', async () => {
+        // Now 85% / 42.5 pts, last posted three points lower
+        await seedAnnounced(39.5, 82)
+
+        const context = await captureScoreContext(supabase, [draftedMovieId])
+        await sendScoreNotifications(supabase, context)
+
+        assertEquals(await readAnnounced(), { announced_fantasy_points: 42.5, announced_rt_score: 85 })
+      })
+
+      await t.step('sendScoreNotifications leaves a smaller move unrecorded', async () => {
+        await seedAnnounced(40.5, 83)
+
+        const context = await captureScoreContext(supabase, [draftedMovieId])
+        await sendScoreNotifications(supabase, context)
+
+        assertEquals(await readAnnounced(), { announced_fantasy_points: 40.5, announced_rt_score: 83 })
       })
     } finally {
       try {

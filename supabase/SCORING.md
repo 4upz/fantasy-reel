@@ -245,22 +245,51 @@ Three events are reported:
 
 | Event | Message |
 |-------|---------|
-| Movie scores for the first time | `Now has a score of **80.3**` |
-| Movie's score moves | `Score has gone **UP** from **81.2** to **82.7**` |
-| Team's score and/or rank changes | `Standings Update` embed, one field per team |
+| Movie scores for the first time | `Now has a score of **84% RT** (24.0 pts)` |
+| Movie ends a run 3+ points from its last post | `Score has gone **DOWN** from **85% RT** (25.0 pts) to **82% RT** (22.0 pts)` |
+| Team's rank changes, or its total moves 3+ in a run | `Standings Update` embed, one field per team |
 
-Each changed movie gets its own message (titled with the movie, attributing the
-owning team and any counterpicker). Each league then gets a single
-`Standings Update` roundup listing every team whose score or rank moved.
+Each movie due a post gets its own message (titled with the movie, attributing
+the owning team and any counterpicker). Each league then gets a single
+`Standings Update` roundup listing every team whose rank or total moved enough.
+
+### The 3-point threshold
+
+Posting every visible change was noisy: the Tomatometer ticks a point at a
+time as reviews trickle in. `SCORE_CHANGE_THRESHOLD` (3) sets the smallest
+move worth a post.
+
+- **Movies are measured from their last post, not from the previous run.**
+  `movies.announced_rt_score` / `announced_fantasy_points` hold the score last
+  posted. A movie posts again once its Tomatometer *or* its fantasy points
+  sits 3+ away from that, and the message reads from that score. Measuring
+  run to run would never post a slow drift: a movie losing a point a day stays
+  under the bar every single run. Either number counts because the curve bends
+  — above 90% one RT point is two fantasy points, while below 30% RT moves
+  barely touch points. A first score always posts.
+- **The posted score is recorded before the message goes out.** A failed write
+  holds that movie's post back rather than risking it being posted twice; it
+  is still 3+ away from its old recorded score, so the next run posts it.
+- **Teams are measured run to run.** A rank change is always reported. A total
+  needs to move 3+ within the run to be reported on its own; once a team is
+  listed for a rank change, any visible move in its total shows alongside it.
+- **Notable misses ignore the threshold.** They read every move since the
+  pre-run snapshot, because a dropped movie can cross 15 points on a small step.
+
+Fantasy Critic does the same thing at 1 point
+(`DiscordPushService.PostMasterGameUpdates`, `PublisherScoreChange.ScoreChanged`),
+having moved its publisher totals from "any change" to "1+" in November 2022.
+Its scores are OpenCritic's fractional averages, where a whole point is already
+a real move; the Tomatometer only moves in whole points, so 1 would let every
+tick through. Fantasy Critic also measures each refresh against the one before,
+so a drift made of sub-point steps never posts there.
 
 Notes:
 
-- **Scores** are compared at **display precision** (one decimal), so a change
-  too small to render never triggers a notification. **Ranks** are computed
-  from exact points, matching the standings page. The asymmetry is
-  intentional but visible: if a rival slips 10.01 → 10.00 you can be told you
-  "moved from 2nd to 1st" with no score line, because the change that caused
-  it rounds away at one decimal. Discord and the site agree; only the
+- **Ranks** are computed from exact points, matching the standings page, and
+  any rank change is reported. If a rival slips 10.01 → 10.00 you can be told
+  you "moved from 2nd to 1st" with no score line, because the change that
+  caused it rounds away at one decimal. Discord and the site agree; only the
   explanation is invisible.
 - Ranks use competition ordering — ties share a rank (1, 2, 2, 4). Tied teams
   get the same rank regardless of array order, so tie-break ordering can never
