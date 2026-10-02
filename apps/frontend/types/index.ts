@@ -157,9 +157,8 @@ export interface Movie {
   status: 'upcoming' | 'released' | 'canceled'
   combined_score: number | null
   /**
-   * Points under the default rule. A league surface shows the season's points:
-   * `team_holdings` rows already carry them, and `leagueFantasyPoints()`
-   * converts a raw movie row.
+   * Points under the default rule. League surfaces show the season's points,
+   * which `team_holdings` and `counterpicks` rows already carry.
    */
   fantasy_points: number | null
   scores_updated_at: string | null
@@ -390,10 +389,7 @@ export interface RankedTeam {
   isTied: boolean
 }
 
-// Counterpick with its movie and target team name for standings display.
-// The standings page rescores `movies.fantasy_points` to the season's rule, so
-// it matches the holdings beside it; the row's own `fantasy_points` is that
-// value inverted.
+// Counterpick with its movie and target team name for standings display
 export interface CounterpickWithScores extends Counterpick {
   movies: HoldingMovie
   target_team: { name: string }

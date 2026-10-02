@@ -395,11 +395,14 @@ SELECT process_score_queue();
 ### Recalculate a Team's Score
 
 ```sql
--- Read-only preview
-SELECT * FROM calculate_team_score('team-uuid-here');
-
 -- Write the result to team_scores
 SELECT recalculate_team_score_with_counterpicks('team-uuid-here');
+
+-- Preview without keeping it
+BEGIN;
+SELECT recalculate_team_score_with_counterpicks('team-uuid-here');
+SELECT * FROM team_scores WHERE team_id = 'team-uuid-here';
+ROLLBACK;
 ```
 
 ## What Counts Toward a Team Score

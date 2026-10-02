@@ -48,8 +48,6 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
   const hasChanges = doublePoints !== league.double_points_over_90
 
   const saveScoring = useCallback(async () => {
-    if (isCompleted) return
-
     const { data, error } = await callEdgeFunction<UpdateScoringConfigResponse>('update-league', {
       body: {
         action: 'update_scoring_config',
@@ -62,15 +60,13 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
 
     if (data?.league) {
       onUpdate(data.league)
-      setDoublePoints(data.league.double_points_over_90)
       toast.success(isUnderway ? 'Scoring updated. Every team has been re-scored.' : 'Scoring updated')
       // Every team total just moved; drop any cached page still showing the old ones.
       router.refresh()
     }
-  }, [doublePoints, isCompleted, isUnderway, league.id, onUpdate, router])
+  }, [doublePoints, isUnderway, league.id, onUpdate, router])
 
   const { execute: save, isLoading: isSubmitting } = useAsyncAction(saveScoring)
-  const isSubmitDisabled = isCompleted || isSubmitting || !hasChanges
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
     e.preventDefault()
@@ -155,7 +151,7 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
 
             <button
               type="submit"
-              disabled={isSubmitDisabled}
+              disabled={!hasChanges}
               className="btn btn-primary mt-6"
               data-testid="save-scoring-config"
             >

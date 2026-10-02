@@ -144,8 +144,7 @@ export const movie: Command = {
       }
       if (dbMovie.fantasy_points != null) {
         // A linked channel shows its season's points; elsewhere, the default rule's.
-        const rtScore = dbMovie.combined_score === null ? null : Number(dbMovie.combined_score)
-        const points = leagueFantasyPoints(Number(dbMovie.fantasy_points), rtScore, linked?.doublePointsOver90 ?? false)
+        const points = leagueFantasyPoints(dbMovie.fantasy_points, dbMovie.combined_score, linked?.doublePointsOver90 ?? false)
         descriptionParts.push(`**Fantasy Points:** ${points}`)
       }
     }

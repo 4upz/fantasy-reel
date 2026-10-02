@@ -5,7 +5,6 @@ import StandingsClient from './StandingsClient'
 import { HOLDING_MOVIE_COLUMNS, holdingMovie, type HoldingMovieRow } from '@/utils/holdings'
 import { fetchReigningChampions, fetchStandings } from '@/utils/seasonQueries'
 import { resolveChampions, seasonStandings } from '@/utils/seasons'
-import { leagueFantasyPoints } from '@/utils/scoring'
 import type {
   League,
   ParticipantWithTeamScore,
@@ -115,20 +114,15 @@ export default async function StandingsPage({ params }: PageProps) {
   const { data: participants } = participantsResult
   const { data: counterpicks } = counterpicksResult
 
-  // The counterpick's movie is a raw movies row, scored under the default rule.
-  // Rescore it under this season's rule so a counterpicked movie opens with the
-  // same points as every team_holdings row on the page.
-  const seasonCounterpicks = ((counterpicks ?? []) as CounterpickWithScores[]).map((counterpick) => {
-    const { fantasy_points: points, combined_score: rtScore } = counterpick.movies
-    return {
-      ...counterpick,
-      movies: {
-        ...counterpick.movies,
-        fantasy_points:
-          points === null ? null : leagueFantasyPoints(points, rtScore, typedLeague.double_points_over_90),
-      },
-    }
-  })
+  // The embedded movies row holds the default rule's points; the counterpick
+  // row holds this season's, inverted. Open the movie with the season's.
+  const seasonCounterpicks = ((counterpicks ?? []) as CounterpickWithScores[]).map((counterpick) => ({
+    ...counterpick,
+    movies: {
+      ...counterpick.movies,
+      fantasy_points: counterpick.fantasy_points === null ? null : -counterpick.fantasy_points,
+    },
+  }))
 
   const holdings = (holdingsResult.data ?? []) as StandingsHolding[]
 

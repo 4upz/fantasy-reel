@@ -44,6 +44,9 @@ COMMENT ON COLUMN leagues.double_points_over_90 IS
 -- ----------------------------------------------------------------------------
 -- 2. One definition of a movie's points within a season
 -- ----------------------------------------------------------------------------
+-- No SET search_path: a SET clause stops Postgres inlining a SQL function, and
+-- team_holdings calls this on every row. It reads no tables and is not
+-- SECURITY DEFINER, so there is nothing for a search path to protect.
 CREATE OR REPLACE FUNCTION league_fantasy_points(
     p_fantasy_points NUMERIC,
     p_combined_score NUMERIC,
@@ -53,7 +56,6 @@ RETURNS NUMERIC
 LANGUAGE sql
 IMMUTABLE
 PARALLEL SAFE
-SET search_path = ''
 AS $$
     SELECT p_fantasy_points
         + CASE WHEN p_double_points_over_90 AND p_combined_score > 90
@@ -143,30 +145,29 @@ SECURITY DEFINER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-    -- The 90+ bonus reads combined_score, so a change to either column counts.
-    IF NEW.fantasy_points IS DISTINCT FROM OLD.fantasy_points
-       OR NEW.combined_score IS DISTINCT FROM OLD.combined_score THEN
-        -- Share-lock the seasons first: a concurrent rule change commits
-        -- before the UPDATE below takes its snapshot, so it reads the new rule.
-        PERFORM 1 FROM leagues l
-        WHERE l.id IN (SELECT c.league_id FROM counterpicks c WHERE c.movie_id = NEW.id)
-        FOR SHARE;
+    -- Share-lock the seasons first: a concurrent rule change commits before
+    -- the UPDATE below takes its snapshot, so it reads the new rule.
+    PERFORM 1 FROM leagues l
+    WHERE l.id IN (SELECT c.league_id FROM counterpicks c WHERE c.movie_id = NEW.id)
+    FOR SHARE;
 
-        UPDATE counterpicks c
-        SET fantasy_points = -league_fantasy_points(NEW.fantasy_points, NEW.combined_score, l.double_points_over_90),
-            updated_at = NOW()
-        FROM leagues l
-        WHERE c.movie_id = NEW.id
-          AND l.id = c.league_id;
-    END IF;
+    UPDATE counterpicks c
+    SET fantasy_points = -league_fantasy_points(NEW.fantasy_points, NEW.combined_score, l.double_points_over_90),
+        updated_at = NOW()
+    FROM leagues l
+    WHERE c.movie_id = NEW.id
+      AND l.id = c.league_id;
     RETURN NEW;
 END;
 $$;
 
+-- The 90+ bonus reads combined_score, so a change to either column counts.
 DROP TRIGGER IF EXISTS trigger_update_counterpick_points ON movies;
 CREATE TRIGGER trigger_update_counterpick_points
     AFTER UPDATE OF fantasy_points, combined_score ON movies
     FOR EACH ROW
+    WHEN (OLD.fantasy_points IS DISTINCT FROM NEW.fantasy_points
+          OR OLD.combined_score IS DISTINCT FROM NEW.combined_score)
     EXECUTE FUNCTION update_counterpick_points();
 
 -- New rows derive the value too, so no write path (commit_counterpick,
@@ -194,7 +195,7 @@ CREATE TRIGGER set_counterpick_points_trigger
     EXECUTE FUNCTION set_counterpick_points();
 
 COMMENT ON COLUMN counterpicks.fantasy_points IS
-'Inverted fantasy points earned from this counterpick, under its season''s 90+ points rule (-league_fantasy_points). Kept in sync by update_counterpick_points and by rule changes.';
+'Inverted fantasy points earned from this counterpick, under its season''s 90+ points rule (-league_fantasy_points). Set on insert by set_counterpick_points, then kept in sync by update_counterpick_points and by rule changes.';
 
 -- ----------------------------------------------------------------------------
 -- 5. Team totals apply the season's rule
@@ -306,53 +307,9 @@ $$;
 COMMENT ON FUNCTION recalculate_team_score_with_counterpicks(UUID) IS
 'Recalculates team scores from the active roster (draft picks + pickups, excluding dropped) plus counterpick points (inverted opponent scores), every movie scored under the season''s 90+ points rule (league_fantasy_points). The counterpick leg intentionally has NO dropped_at filter: counterpicks survive drops of the underlying movie (in leagues where that is even possible -- see leagues.counterpicks_block_drops) and keep scoring the inverted points for the counterpicker. This matches Fantasy Critic''s ruleset and is deliberate, not an omission.';
 
--- The read-only preview counterpart, kept in step.
-CREATE OR REPLACE FUNCTION calculate_team_score(p_team_id UUID)
-RETURNS TABLE(total_points NUMERIC, movies_scored INTEGER, movies_pending INTEGER, average_score NUMERIC)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, pg_temp
-AS $$
-DECLARE
-    v_double_points_over_90 BOOLEAN;
-    v_roster_points DECIMAL := 0;
-    v_roster_scored INTEGER := 0;
-    v_roster_pending INTEGER := 0;
-    v_counterpick_points DECIMAL := 0;
-BEGIN
-    SELECT l.double_points_over_90 INTO v_double_points_over_90
-    FROM teams t
-    JOIN league_participants lp ON lp.id = t.participant_id
-    JOIN leagues l ON l.id = lp.league_id
-    WHERE t.id = p_team_id;
-
-    SELECT
-        COALESCE(SUM(r.points), 0::DECIMAL),
-        COUNT(r.points)::INTEGER,
-        COUNT(*) FILTER (WHERE r.points IS NULL)::INTEGER
-    INTO v_roster_points, v_roster_scored, v_roster_pending
-    FROM (
-        SELECT league_fantasy_points(m.fantasy_points, m.combined_score, v_double_points_over_90) AS points
-        FROM team_active_roster(p_team_id) ar
-        JOIN movies m ON m.id = ar.movie_id
-    ) r;
-
-    SELECT COALESCE(SUM(-league_fantasy_points(m.fantasy_points, m.combined_score, v_double_points_over_90)), 0::DECIMAL)
-    INTO v_counterpick_points
-    FROM counterpicks c
-    JOIN movies m ON c.movie_id = m.id
-    WHERE c.counterpicker_team_id = p_team_id
-      AND m.fantasy_points IS NOT NULL;
-
-    RETURN QUERY SELECT
-        v_roster_points + v_counterpick_points,
-        v_roster_scored,
-        v_roster_pending,
-        CASE WHEN v_roster_scored > 0
-            THEN ROUND(v_roster_points / v_roster_scored, 2)
-            ELSE 0::DECIMAL END;
-END;
-$$;
+-- The read-only preview had no callers (20260728164550 already said so), and
+-- keeping a second scorer in step is how the two drifted apart before.
+DROP FUNCTION IF EXISTS calculate_team_score(UUID);
 
 -- ----------------------------------------------------------------------------
 -- 6. team_holdings: each holding's points under its season's rule
@@ -392,7 +349,9 @@ WITH (security_invoker = true) AS
         m.scoring_bonuses,
         m.scores_updated_at
     FROM draft_picks dp
-    JOIN leagues l ON l.id = dp.league_id
+    -- LEFT changes no rows (league_id is a NOT NULL foreign key); it lets the
+    -- planner drop the join for readers that don't select fantasy_points.
+    LEFT JOIN leagues l ON l.id = dp.league_id
     JOIN teams t ON t.id = dp.team_id
     JOIN movies m ON m.id = dp.movie_id
     -- LEFT: most holdings are not counterpicked, and those rows must survive.
@@ -432,7 +391,7 @@ WITH (security_invoker = true) AS
         m.scoring_bonuses,
         m.scores_updated_at
     FROM pickups pk
-    JOIN leagues l ON l.id = pk.league_id
+    LEFT JOIN leagues l ON l.id = pk.league_id
     JOIN teams t ON t.id = pk.team_id
     JOIN movies m ON m.id = pk.movie_id
     LEFT JOIN teams cbt ON cbt.id = pk.counterpicked_by_team_id
@@ -513,6 +472,7 @@ BEGIN
         FROM teams t
         JOIN league_participants lp ON lp.id = t.participant_id
         WHERE lp.league_id = NEW.id
+        ORDER BY t.id
     LOOP
         PERFORM recalculate_team_score_with_counterpicks(v_team_id);
     END LOOP;
