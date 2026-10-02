@@ -748,7 +748,7 @@ Below 50, the slope halves every 10 points, so penalties approach an asymptote a
 - Only updates movies that have been released
 - Recalculates fantasy points and team totals after each sync
 - A movie with no RT score yet is unscored (`combined_score` and `fantasy_points` are `NULL`, shown as "Pending")
-- Discord score posts need a 3-point move (`SCORE_CHANGE_THRESHOLD`). A movie is measured from its last *posted* score (`movies.announced_*`), not the previous run, so slow drift still posts once it adds up; team totals are measured per run, and rank changes always post
+- Discord score posts need a `SCORE_CHANGE_THRESHOLD` move. A movie is measured from its last *posted* score (`movies.announced_*`), never the previous run; see "Change threshold" in `supabase/SCORING.md`
 - See `supabase/SCORING.md` for full architecture details
 
 ---
