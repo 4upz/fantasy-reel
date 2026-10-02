@@ -718,13 +718,12 @@ WHERE conrelid = 'draft_picks'::regclass AND contype = 'f';
 
 ### Fantasy Points Curve
 
-Movies earn fantasy points from their Rotten Tomatoes Tomatometer score alone, using a baseline-relative curve (baseline 60 = RT's own "Fresh" line):
+Movies earn fantasy points from their Rotten Tomatoes Tomatometer score alone, using a baseline-relative curve (baseline 60 = RT's own "Fresh" line). It is Fantasy Critic's curve with the baseline moved from 70 to 60:
 
 **Formula Tiers:**
 | RT Score | Calculation |
 |----------|-------------|
-| 90+ | 30 + 2 pts per point above 90 ("The 90% Club") |
-| 50-89 | RT − 60 |
+| 50-100 | RT − 60 (1 pt per point) |
 | 40-49 | −10 − 0.5 pts per point below 50 |
 | 30-39 | −15 − 0.25 pts per point below 40 |
 | 20-29 | −17.5 − 0.125 pts per point below 30 |
@@ -733,8 +732,12 @@ Movies earn fantasy points from their Rotten Tomatoes Tomatometer score alone, u
 
 Below 50, the slope halves every 10 points, so penalties approach an asymptote around -20 with no hard floor.
 
+**Double points above 90% (league setting).** `leagues.double_points_over_90` is Fantasy Critic's "90+ Points Rule": when on, each point above 90 is worth 2. It is season-scoped, defaults to off for new seasons (seasons that predate the setting are on, the rule they were scored under), carries forward on rollover, and is editable by the owner until the season completes; changing it re-scores the season in the same transaction (a DB trigger, so direct row updates count too). Counterpicks invert whichever rule applies — there is no separate counterpick rule.
+
+- `movies.fantasy_points` always holds the **default** rule. A season's points are `league_fantasy_points(points, combined_score, double)` in SQL; `team_holdings.fantasy_points`, `counterpicks.fantasy_points` and `team_scores` already apply it. Only raw `movies` reads in a league context need the rule applied by hand (`leagueFantasyPoints` in the frontend's and the bot's `utils/scoring.ts`, and in `_shared/fantasy-points.ts` for Edge Functions).
+
 **Examples:**
-- 96% → **+42 pts** (30 + 2×6)
+- 96% → **+36 pts** (96−60), or **+42** with double points (+6 more for the points above 90)
 - 84% → **+24 pts** (84−60)
 - 60% → **0 pts** (baseline)
 - 35% → **-16.25 pts** (-15 − 0.25×5)

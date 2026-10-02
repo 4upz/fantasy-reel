@@ -1575,7 +1575,6 @@ interface CounterpickMovie {
   id: string
   title: string
   release_date: string | null
-  fantasy_points: number | null
 }
 
 async function voidReleasedCounterpickContests(
@@ -1592,7 +1591,7 @@ async function voidReleasedCounterpickContests(
   const { rows: movies } = await selectByIdBatches<CounterpickMovie>(
     movieIds,
     'Failed to read movies for the counterpick release check:',
-    (batch) => serviceClient.from('movies').select('id, title, release_date, fantasy_points').in('id', batch),
+    (batch) => serviceClient.from('movies').select('id, title, release_date').in('id', batch),
   )
   const moviesById = new Map(movies.map((movie) => [movie.id, movie]))
 
@@ -1931,7 +1930,7 @@ export async function processCounterpickBids(
             pickup_id: winner.pickup_id,
             pick_order: (existingPickOrderCount ?? 0) + 1,
             phase: 'bidding',
-            fantasy_points: movie.fantasy_points != null ? -movie.fantasy_points : null,
+            // No fantasy_points: set_counterpick_points_trigger derives it under the season's 90+ rule.
           })
 
         if (counterpickError) {

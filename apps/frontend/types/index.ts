@@ -45,6 +45,13 @@ export interface League {
   draft_counterpick_slots: number
   bidding_counterpick_slots: number
   counterpicks_block_drops: boolean
+  /**
+   * The season's 90+ points rule. false (the default for new seasons): 1 point
+   * per Tomatometer point all the way to 100, so 96% earns 36. true: 2 points
+   * per point above 90, so 96% earns 42. Counterpicks invert whichever applies.
+   * Editable until the season completes; a change re-scores every team.
+   */
+  double_points_over_90: boolean
   // Draft order customization
   custom_draft_order: boolean
   // Shareable join link
@@ -149,6 +156,11 @@ export interface Movie {
   vote_count: number | null
   status: 'upcoming' | 'released' | 'canceled'
   combined_score: number | null
+  /**
+   * Points under the default rule. A league surface shows the season's points:
+   * `team_holdings` rows already carry them, and `leagueFantasyPoints()`
+   * converts a raw movie row.
+   */
   fantasy_points: number | null
   scores_updated_at: string | null
   last_synced_at: string
@@ -225,6 +237,7 @@ export interface TeamHolding {
   movie_status: Movie['status']
   imdb_id: string | null
   combined_score: number | null
+  /** Already under this season's 90+ points rule, unlike a raw `movies` row. */
   fantasy_points: number | null
   overview: string | null
   backdrop_url: string | null
@@ -377,7 +390,10 @@ export interface RankedTeam {
   isTied: boolean
 }
 
-// Counterpick with its movie and target team name for standings display
+// Counterpick with its movie and target team name for standings display.
+// The standings page rescores `movies.fantasy_points` to the season's rule, so
+// it matches the holdings beside it; the row's own `fantasy_points` is that
+// value inverted.
 export interface CounterpickWithScores extends Counterpick {
   movies: HoldingMovie
   target_team: { name: string }

@@ -14,11 +14,16 @@
  *   ...recalculate scores...
  *   await sendScoreNotifications(client, context)
  *
+ * Movie scores are compared once per movie, on the default 90+ points rule
+ * that `movies.fantasy_points` stores, and each league is shown the points
+ * under its own rule (see withLeaguePoints).
+ *
  * Follows discord.ts conventions: never throws, catches internally, logs
  * failures with console.error.
  */
 
 import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { leagueFantasyPoints } from './fantasy-points.ts'
 import { COMPLETED_STATUS } from './league-status.ts'
 import { createLogger, serializeError } from './logger.ts'
 import {
@@ -64,7 +69,7 @@ export interface DroppedMoviePlacement {
 
 /** A movie's two scores at a point in time. Both are null while unscored. */
 export interface MovieScoreSnapshot {
-  /** `movies.fantasy_points` -- the curve applied to the Tomatometer. */
+  /** `movies.fantasy_points` -- the curve applied to the Tomatometer, under the default 90+ rule. */
   points: number | null
   /** `movies.combined_score` -- the Tomatometer itself. */
   rtScore: number | null
@@ -79,6 +84,8 @@ export interface ScoreNotificationContext {
   previousMovieScores: Map<string, MovieScoreSnapshot>
   /** leagueId -> league name. */
   leagueNames: Map<string, string>
+  /** Leagues with `double_points_over_90`: 2 points per Tomatometer point above 90. */
+  doublePointsLeagueIds: Set<string>
   /** leagueId -> standings before the update. */
   previousStandings: Map<string, TeamStanding[]>
   placements: MoviePlacement[]
@@ -89,6 +96,8 @@ export interface ScoreNotificationContext {
 /**
  * A movie's move from a starting score -- the pre-run snapshot for notable-miss
  * detection, the score last posted for it for a post -- to its current score.
+ * Points are on the default 90+ rule until withLeaguePoints converts them for
+ * a league.
  */
 export interface MovieScoreChange {
   movieId: string
@@ -161,20 +170,49 @@ function movedEnough(from: number | null, to: number | null): boolean {
   return Math.abs(to - from) >= SCORE_CHANGE_THRESHOLD - 1e-9
 }
 
+/** A snapshot's points under a season's 90+ rule. Unscored stays unscored. */
+function snapshotPoints(snapshot: MovieScoreSnapshot, doublePointsOver90: boolean): number | null {
+  return snapshot.points === null
+    ? null
+    : leagueFantasyPoints(snapshot.points, snapshot.rtScore, doublePointsOver90)
+}
+
 /**
  * Whether a movie is far enough from the score last posted for it to post
- * again. Either number counts: above 90% one Tomatometer point is two fantasy
- * points, while below 30% RT moves barely touch points. A movie never posted
- * always qualifies; a withdrawn score never does.
+ * again. Either number counts: with double points over 90 one Tomatometer
+ * point above 90% is two fantasy points, while below 30% RT moves barely touch
+ * points. A movie never posted always qualifies; a withdrawn score never does.
+ *
+ * Both snapshots are on the default rule, as stored. `doublePointsOver90`
+ * measures the points move under the double rule instead, which is never the
+ * smaller move: the bonus only grows with the Tomatometer.
  */
 export function shouldAnnounceScore(
   announced: MovieScoreSnapshot,
-  current: MovieScoreSnapshot
+  current: MovieScoreSnapshot,
+  doublePointsOver90 = false
 ): boolean {
+  const points = (snapshot: MovieScoreSnapshot) => snapshotPoints(snapshot, doublePointsOver90)
   return current.points !== null && (
-    movedEnough(announced.points, current.points) ||
+    movedEnough(points(announced), points(current)) ||
     movedEnough(announced.rtScore, current.rtScore)
   )
+}
+
+/**
+ * A movie's change as one league scores it. Changes are measured on the
+ * default 90+ rule, so a league with double points over 90 adds its bonus to
+ * both ends.
+ */
+function withLeaguePoints(change: MovieScoreChange, doublePointsOver90: boolean): MovieScoreChange {
+  if (!doublePointsOver90) return change
+  return {
+    ...change,
+    previousPoints: change.previousPoints === null
+      ? null
+      : leagueFantasyPoints(change.previousPoints, change.previousRtScore, true),
+    newPoints: leagueFantasyPoints(change.newPoints, change.newRtScore, true),
+  }
 }
 
 export function ordinal(n: number): string {
@@ -579,6 +617,7 @@ export async function captureScoreContext(
     leagueIds: [],
     previousMovieScores: new Map(),
     leagueNames: new Map(),
+    doublePointsLeagueIds: new Set(),
     previousStandings: new Map(),
     placements: [],
     droppedPlacements: [],
@@ -626,16 +665,20 @@ export async function captureScoreContext(
         droppedByTeamName: h.placement.ownerTeamName,
       }))
 
-    const [leagueNames, previousStandings] = await Promise.all([
-      loadLeagueNames(supabase, leagueIds),
+    const [leagues, previousStandings] = await Promise.all([
+      loadLeagues(supabase, leagueIds),
       snapshotStandings(supabase, leagueIds),
     ])
+
+    // Without each league's 90+ rule, a double-points league would be posted
+    // the wrong points. Skip the run, as when the movie snapshot fails.
+    if (!leagues) return empty
 
     return {
       movieIds,
       leagueIds,
       previousMovieScores,
-      leagueNames,
+      ...leagues,
       previousStandings,
       placements,
       droppedPlacements,
@@ -744,21 +787,32 @@ async function attachCounterpickers(
   }
 }
 
-async function loadLeagueNames(
+interface LeagueRow {
+  id: string
+  name: string
+  double_points_over_90: boolean
+}
+
+/** Each league's name and 90+ points rule. Null if they could not be read. */
+async function loadLeagues(
   supabase: SupabaseClient,
   leagueIds: string[]
-): Promise<Map<string, string>> {
+): Promise<Pick<ScoreNotificationContext, 'leagueNames' | 'doublePointsLeagueIds'> | null> {
   const { data, error } = await supabase
     .from('leagues')
-    .select('id, name')
+    .select('id, name, double_points_over_90')
     .in('id', leagueIds)
 
   if (error) {
-    console.error('Failed to load league names:', error.message)
-    return new Map()
+    console.error('Failed to load leagues:', error.message)
+    return null
   }
 
-  return new Map((data ?? []).map((l: { id: string; name: string }) => [l.id, l.name]))
+  const leagues = (data ?? []) as LeagueRow[]
+  return {
+    leagueNames: new Map(leagues.map((l) => [l.id, l.name])),
+    doublePointsLeagueIds: new Set(leagues.filter((l) => l.double_points_over_90).map((l) => l.id)),
+  }
 }
 
 // ============================================================================
@@ -795,6 +849,8 @@ async function sendNotableMissNotifications(
   context: ScoreNotificationContext,
   movieChanges: Map<string, MovieScoreChange>
 ): Promise<number> {
+  // The bar sits at 75% under either 90+ rule, so the crossing is judged on
+  // the stored points; only the points shown are each league's.
   const candidates = context.droppedPlacements
     .map((dropped) => ({ dropped, change: movieChanges.get(dropped.movieId) }))
     .filter(
@@ -841,10 +897,11 @@ async function sendNotableMissNotifications(
 
     for (const { dropped, change } of unsent) {
       const leagueName = context.leagueNames.get(dropped.leagueId) ?? 'League'
+      const leagueChange = withLeaguePoints(change, context.doublePointsLeagueIds.has(dropped.leagueId))
       await sendDiscordNotification(supabase, {
         leagueId: dropped.leagueId,
         category: 'movie_news',
-        embeds: [buildNotableMissEmbed(change, dropped.droppedByTeamName, leagueName, dropped.leagueId)],
+        embeds: [buildNotableMissEmbed(leagueChange, dropped.droppedByTeamName, leagueName, dropped.leagueId)],
       })
       await delay(WEBHOOK_SEND_DELAY_MS)
     }
@@ -857,8 +914,9 @@ async function sendNotableMissNotifications(
 }
 
 /**
- * Posts one notification per movie due one (see shouldAnnounceScore) plus a
- * standings roundup for each league whose standings moved (see diffStandings).
+ * Posts one notification per movie due one (see shouldAnnounceScore), in each
+ * league's own points, plus a standings roundup for each league whose
+ * standings moved (see diffStandings).
  *
  * Never throws.
  */
@@ -913,6 +971,9 @@ export async function sendScoreNotifications(
     // Build the per-league work list before sending so the summary is accurate
     const perLeague = leagueIds.map((leagueId) => {
       const leagueName = context.leagueNames.get(leagueId) ?? 'League'
+      const doublePointsOver90 = context.doublePointsLeagueIds.has(leagueId)
+      const leagueChange = (movieId: string) =>
+        withLeaguePoints(announcements.get(movieId)!, doublePointsOver90)
 
       const changed = context.placements.filter(
         (p) => p.leagueId === leagueId && announcements.has(p.movieId)
@@ -920,14 +981,14 @@ export async function sendScoreNotifications(
 
       const movieEmbeds = changed
         .slice(0, MAX_MOVIE_EMBEDS_PER_LEAGUE)
-        .map((p) => buildMovieScoreEmbed(announcements.get(p.movieId)!, p, leagueName))
+        .map((p) => buildMovieScoreEmbed(leagueChange(p.movieId), p, leagueName))
 
       // Fold anything past the cap into one rollup rather than dropping it
       const overflow = changed.slice(MAX_MOVIE_EMBEDS_PER_LEAGUE)
       if (overflow.length > 0) {
         movieEmbeds.push(
           buildMovieRollupEmbed(
-            overflow.map((p) => announcements.get(p.movieId)!),
+            overflow.map((p) => leagueChange(p.movieId)),
             leagueName,
             leagueId
           )
@@ -1006,6 +1067,15 @@ async function loadMovieScoreChanges(
 ): Promise<MovieScoreChanges> {
   const result: MovieScoreChanges = { sinceSnapshot: new Map(), toAnnounce: [] }
 
+  // Every league scored double points over 90 until the rule became a setting.
+  // A movie a double-points league holds is measured that way, so it posts
+  // exactly when it always did; leagues on the default rule see that post too.
+  const doublePointsMovieIds = new Set(
+    context.placements
+      .filter((p) => context.doublePointsLeagueIds.has(p.leagueId))
+      .map((p) => p.movieId)
+  )
+
   const { data: movies, error } = await supabase
     .from('movies')
     .select('id, title, poster_url, fantasy_points, combined_score, announced_fantasy_points, announced_rt_score')
@@ -1038,7 +1108,7 @@ async function loadMovieScoreChanges(
     }
 
     const announced = toScoreSnapshot(movie.announced_fantasy_points, movie.announced_rt_score)
-    if (shouldAnnounceScore(announced, current)) {
+    if (shouldAnnounceScore(announced, current, doublePointsMovieIds.has(movie.id))) {
       result.toAnnounce.push(describeFrom(announced))
     }
   }

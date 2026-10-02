@@ -12,6 +12,8 @@ interface Props {
   /** The movie whose history this is -- the last, still-unscored point on the line. */
   movieTitle: string
   movieReleaseDate: string | null
+  /** The league season's 90+ points rule, so the projection pays what this pick would. */
+  doublePointsOver90?: boolean
   className?: string
 }
 
@@ -52,6 +54,7 @@ export default function FranchiseHistoryPanel({
   history,
   movieTitle,
   movieReleaseDate,
+  doublePointsOver90 = false,
   className = '',
 }: Props) {
   const { films } = history
@@ -175,7 +178,7 @@ export default function FranchiseHistoryPanel({
                 <>
                   ; at the series average this pick would score{' '}
                   <strong className="text-gold">
-                    {formatSignedPoints(fantasyPointsForTomatometer(history.average_rt))} pts
+                    {formatSignedPoints(fantasyPointsForTomatometer(history.average_rt, doublePointsOver90))} pts
                   </strong>
                 </>
               )}

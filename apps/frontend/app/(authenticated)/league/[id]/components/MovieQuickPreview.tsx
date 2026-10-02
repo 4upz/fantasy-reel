@@ -20,6 +20,8 @@ interface Props {
   movie: TMDbSearchResult
   isMyTurn: boolean
   seasonYear: number
+  /** The season's 90+ points rule, for the franchise projection. */
+  doublePointsOver90: boolean
   isDrafted?: boolean
   unavailableReason?: string | null
   error?: string | null
@@ -32,6 +34,7 @@ export default function MovieQuickPreview({
   movie,
   isMyTurn,
   seasonYear,
+  doublePointsOver90,
   isDrafted = false,
   unavailableReason,
   error,
@@ -221,6 +224,7 @@ export default function MovieQuickPreview({
                   history={franchise}
                   movieTitle={displayData.title}
                   movieReleaseDate={displayData.release_date}
+                  doublePointsOver90={doublePointsOver90}
                   className="mt-6 animate-fade-in"
                 />
               )}

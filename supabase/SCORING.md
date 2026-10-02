@@ -19,8 +19,7 @@ Fantasy points are not the raw Tomatometer score — they reward excellence and 
 
 | RT Score | Calculation | Example |
 |----------|-------------|---------|
-| 90+ | 30 + 2 × (RT − 90) | 96% → 30 + 2×6 = **+42** |
-| 50-89 | RT − 60 | 84% → **+24**; 60% → **0** |
+| 50-100 | RT − 60 | 96% → **+36**; 84% → **+24**; 60% → **0** |
 | 40-49 | −10 − 0.5 × (50 − RT) | 40% → **-15** |
 | 30-39 | −15 − 0.25 × (40 − RT) | 30% → **-17.5** |
 | 20-29 | −17.5 − 0.125 × (30 − RT) | 20% → **-18.75** |
@@ -29,11 +28,23 @@ Fantasy points are not the raw Tomatometer score — they reward excellence and 
 
 Below the 50-point baseline the penalty slope halves every 10 points (0.5 → 0.25 → 0.125 → 0.0625 → 0.03125 …), so the curve approaches an asymptote around -20 but never hits a hard floor — a true bomb costs a little more than a merely bad movie, but the gap keeps shrinking.
 
+This is Fantasy Critic's `StandardScoringSystem` curve with the baseline moved from 70 to 60.
+
+### Double points above 90% (league setting)
+
+`leagues.double_points_over_90` is Fantasy Critic's "90+ Points Rule": when on, each Tomatometer point above 90 is worth 2 (96% → **+42** instead of +36). Like Fantasy Critic, it is a league option that new leagues start without:
+
+- **Season-scoped.** New seasons default to off. Seasons that existed before the setting are on — the rule they had always been scored under — so nothing moved when it shipped. `start_next_season` carries it forward like the other season settings.
+- **Editable until the season completes.** The owner changes it from the settings page (`update-league` `update_scoring_config`) or by updating the row directly; either way the `rescore_season_on_scoring_rule_change` trigger refreshes every team's totals and counterpick values in the same transaction. A completed season keeps the rule it finished under (`guard_league_season`).
+- **Counterpicks invert whichever rule applies.** There is no separate counterpick rule, so in a double-points season a counterpick on a 96% movie costs 42.
+
+`movies.fantasy_points` always holds the **default** rule; the bonus is added on read by `league_fantasy_points(fantasy_points, combined_score, double_points_over_90)` — the one definition. Everything season-scoped already applies it: team totals, `team_holdings.fantasy_points`, and `counterpicks.fantasy_points` (set by triggers on insert, on rescoring, and on rule changes). Only code reading raw `movies` rows in a league context applies it by hand, through the `leagueFantasyPoints` mirrors in the frontend's and the bot's `utils/scoring.ts` and the Edge Functions' `_shared/fantasy-points.ts` (used by score notifications).
+
 ### Example Calculations
 
 | Movie | RT | Fantasy Pts |
 |-------|-----|-------------|
-| The 90% Club (96%) | 96 | **+42** |
+| The 90% Club (96%) | 96 | **+36** (**+42** with double points) |
 | Great (84%) | 84 | **+24** |
 | Exactly Fresh (60%) | 60 | **0** |
 | Underwater (35%) | 35 | **-16.25** |
@@ -41,10 +52,10 @@ Below the 50-point baseline the penalty slope halves every 10 points (0.5 → 0.
 ### Key Design Decisions
 
 1. **60 as baseline**: Matches Rotten Tomatoes' own "Fresh" cutoff — fresh earns points, rotten costs points.
-2. **The 90% Club doubles points**: Movies at 90+ earn 2 points per point above 90, on top of a +30 head start, rewarding teams who find genuine gems.
+2. **Double points above 90% is a league choice**: A double-points season rewards finding genuine gems, but it also makes a counterpick on a hit cost up to 50 while a bad pick can lose only about 20. Fantasy Critic made the same bonus optional and starts new leagues without it; so do we.
 3. **Diminishing penalties, no hard floor**: The slope below 50 halves every 10 points, so the worst-case penalty approaches roughly -20 but never bottoms out at a fixed floor — one disaster can't destroy a team's season, and it makes counterpicking a richer strategic choice (the worse a movie can plausibly get, the more a counterpick against it is worth).
 4. **Single source keeps scores predictable**: Players can reason directly about "what RT score does my movie need to be worth drafting?" without weighing three sources.
-5. **Counter-pick ready**: `fantasy_points` is stored separately from `combined_score` so counterpicks can invert it (`-fantasy_points`).
+5. **Counter-pick ready**: `fantasy_points` is stored separately from `combined_score` so counterpicks can invert it under their season's rule (`-league_fantasy_points(...)`).
 
 ## Architecture
 
@@ -100,7 +111,7 @@ The original three-layer architecture (pgmq queue → pg_cron scheduler → Edge
 ### Why Rotten Tomatoes only?
 
 - **One predictable number**: Players already know what a Tomatometer score means; scoring off a single source lets them reason directly about "what RT score do I need?" instead of weighing three inputs.
-- **Matches the target distribution**: Calibrated against Fantasy Critic's season distribution — a simulated 2024 season using RT-only scoring produced ~66% of draftable movies scoring positive and ~16% reaching the 90+ tier (~1-2 per 10-slot roster). See `docs/scoring-simulation/RESULTS.md` for the full analysis.
+- **Matches the target distribution**: Calibrated against Fantasy Critic's season distribution — a simulated 2024 season using RT-only scoring produced ~66% of draftable movies scoring positive and ~16% reaching the 90+ tier (~1-2 per 10-slot roster). See `docs/scoring-simulation/RESULTS.md` for the full analysis. (That simulation benchmarked double points above 90, Fantasy Critic's former default; both games now default to 1 point per point.)
 - **Stability**: The Tomatometer freezes shortly after a wide release, so scores (and therefore team standings) don't keep drifting weeks later.
 - **IMDb was vulnerable to review-bombing and long-term drift**, and the old three-source weighted blend diluted the top end enough that the 90+ tier was effectively unreachable — RT alone lets a genuine critical hit pay off.
 
@@ -174,9 +185,7 @@ If no Rotten Tomatoes review exists for the movie yet, it is unscored: `combined
 ### Step 2: Fantasy Points (baseline-relative curve)
 
 ```sql
-IF combined_score >= 90 THEN
-    fantasy_pts = 30 + (combined_score - 90) * 2
-ELSIF combined_score >= 50 THEN
+IF combined_score >= 50 THEN
     fantasy_pts = combined_score - 60
 ELSIF combined_score >= 40 THEN
     fantasy_pts = -10 - (50 - combined_score) * 0.5
@@ -190,6 +199,8 @@ ELSE
     fantasy_pts = -19.375 - (10 - combined_score) * 0.03125
 END IF
 ```
+
+That is the default rule, stored in `movies.fantasy_points`. A double-points season reads `league_fantasy_points()`, which adds `combined_score - 90` above 90.
 
 `scoring_bonuses` is always `NULL` under this system — the column is retained for backward compatibility, but no bonuses (Certified Fresh, Critical Darling, Critical Disaster) exist anymore.
 
@@ -271,8 +282,10 @@ time as reviews trickle in. "Far enough" is `SCORE_CHANGE_THRESHOLD`, 3 points.
   reaches the threshold away from that, and the message reads from that score.
   Measuring run to run would never post a slow drift: a movie losing a point a
   day stays under the bar every single run. Either number counts because the
-  curve bends — above 90% one RT point is two fantasy points, while below 30%
-  RT moves barely touch points. A first score always posts.
+  curve bends — below 30% RT moves barely touch points, and in a double-points
+  season one RT point above 90 is two fantasy points. Points are measured under
+  the double rule whenever a double-points season holds the movie, and each
+  league's post shows its own season's points. A first score always posts.
 - **The posted score is recorded before the message goes out**, so a failed
   write holds that movie's post for the next run instead of risking a double
   post.
@@ -397,7 +410,7 @@ A team's `total_points` is the sum of three legs:
 |-----|--------|--------|------|
 | Draft | `draft_picks` where `dropped_at IS NULL` | `draft_points` | As scored |
 | Pickup | `pickups` where `dropped_at IS NULL` | `pickup_points` | As scored |
-| Counterpick | `counterpicks` | `counterpick_points` | **Inverted** (`-fantasy_points`) |
+| Counterpick | `counterpicks` | `counterpick_points` | **Inverted** (`-league_fantasy_points(...)`) |
 
 `movies_scored`, `movies_pending`, and `average_score` cover the active roster
 (draft picks + pickups) and exclude counterpicks, which are reported separately
@@ -703,14 +716,13 @@ SELECT id, title, imdb_id FROM movies WHERE imdb_id IS NOT NULL;
 
 ### Changing the Curve Constants
 
-There are no per-source weights anymore. The curve's constants (60-point baseline, the 90+ accelerator, and the halving slopes below 50) live directly in `calculate_movie_score()`. Edit them there, e.g.:
+There are no per-source weights anymore. The curve's constants (60-point baseline and the halving slopes below 50) live directly in `calculate_movie_score()`; the double-points bonus lives in `league_fantasy_points()`. Edit them there, e.g.:
 
 ```sql
 CREATE OR REPLACE FUNCTION calculate_movie_score(p_movie_id UUID) ...
     BASELINE CONSTANT DECIMAL := 60;   -- Tuned to RT's "Fresh" cutoff
-    -- 90+ tier:   30 + (rt - 90) * 2
-    -- 50-89 tier: rt - BASELINE
-    -- below 50:   halving-slope tiers, see formula above
+    -- 50-100 tier: rt - BASELINE
+    -- below 50:    halving-slope tiers, see formula above
 ```
 
 Then recalculate all existing scores:

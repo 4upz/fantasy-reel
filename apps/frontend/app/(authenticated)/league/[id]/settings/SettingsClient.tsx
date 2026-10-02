@@ -11,6 +11,7 @@ import DraftOrderSection from './components/DraftOrderSection'
 import CounterpickConfigSection from './components/CounterpickConfigSection'
 import BiddingConfigSection from './components/BiddingConfigSection'
 import TradeConfigSection from './components/TradeConfigSection'
+import ScoringConfigSection from './components/ScoringConfigSection'
 import ParticipantsSection from './components/ParticipantsSection'
 import DiscordAnnouncementSection from './components/DiscordAnnouncementSection'
 import SeasonSection from './components/SeasonSection'
@@ -108,6 +109,12 @@ export default function SettingsClient({
 
         {/* Trade settings stay editable until completion. */}
         <TradeConfigSection
+          league={league}
+          onUpdate={handleLeagueUpdate}
+        />
+
+        {/* So does scoring, and a change re-scores every team on save. */}
+        <ScoringConfigSection
           league={league}
           onUpdate={handleLeagueUpdate}
         />

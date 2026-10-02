@@ -117,6 +117,7 @@ Deno.test({
           draft_counterpick_slots: 3,
           bidding_counterpick_slots: 2,
           counterpicks_block_drops: false,
+          double_points_over_90: true,
           invite_only: true,
           max_participants: 12,
           join_code: 'ZZZ999',
@@ -181,6 +182,7 @@ Deno.test({
       assertEquals(next!.draft_counterpick_slots, 3)
       assertEquals(next!.bidding_counterpick_slots, 2)
       assertEquals(next!.counterpicks_block_drops, false)
+      assertEquals(next!.double_points_over_90, true)
       assertEquals(next!.invite_only, true)
       assertEquals(next!.max_participants, 12)
 

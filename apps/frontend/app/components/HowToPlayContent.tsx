@@ -277,9 +277,9 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             <div className="card p-5 border-gold/30">
               <h4 className="type-label text-foreground mb-3">Counterpick rounds (optional)</h4>
               <p className="type-body-sm">
-                Some leagues enable counterpick rounds after the main draft. In counterpick mode, you can assign
-                movies from your roster to opponents. If a counterpicked movie scores poorly, your opponent
-                takes the hit instead of you!
+                Some leagues enable counterpick rounds after the main draft. A counterpick is a bet against an
+                opponent&apos;s movie: you score its points in reverse, so if it flops you gain what it loses -
+                and if it&apos;s a hit, you lose what it earns.
               </p>
             </div>
           </Section>
@@ -289,7 +289,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             <p>
               Fantasy points come from a single number: the <strong>Rotten Tomatoes Tomatometer</strong>.
               The baseline is <strong>60%</strong> - RT&apos;s own &ldquo;Fresh&rdquo; line. Fresh movies earn
-              points, rotten movies cost you points, and the 90% Club pays double.
+              points, rotten movies cost you points, and each league chooses whether points above 90% count double.
             </p>
 
             <div className="card p-6 mb-6">
@@ -301,18 +301,21 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
                     <TrendingUp className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-semibold text-foreground">90%+ - The 90% Club</div>
-                    <div className="type-body-sm">+30 base points + 2 points for each point above 90</div>
+                    <div className="font-semibold text-foreground">60%+ - Fresh</div>
+                    <div className="type-body-sm">+1 point for each point above 60, all the way to 100%</div>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-success-bg text-success">
-                    <TrendingUp className="w-4 h-4" />
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gold-muted text-gold">
+                    <Star className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-semibold text-foreground">60-89% - Fresh</div>
-                    <div className="type-body-sm">+1 point for each point above 60</div>
+                    <div className="font-semibold text-foreground">Above 90% - Double points (league option)</div>
+                    <div className="type-body-sm">
+                      Leagues that turn on double points pay 2 points for each point above 90 instead of 1.
+                      The commissioner sets it for each season.
+                    </div>
                   </div>
                 </div>
 
@@ -336,7 +339,14 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               <ScoreExample
                 title="The 90% Club"
                 avgScore="RT 96%"
-                bonuses={['+30 base (90% Club)', '+12 (2 x 6 points above 90)']}
+                bonuses={['+36 (36 points above the 60% line)', 'Default: every point counts once']}
+                total="+36 pts"
+                isPositive={true}
+              />
+              <ScoreExample
+                title="Double points above 90%"
+                avgScore="RT 96%, in a league with double points on"
+                bonuses={['+30 (30 points above the 60% line, up to 90%)', '+12 (2 x 6 points above 90)']}
                 total="+42 pts"
                 isPositive={true}
               />
@@ -359,6 +369,13 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
                 avgScore="RT 35%"
                 bonuses={['-15 at 40%, tapering below', 'Losses cap out near -20']}
                 total="-16 pts"
+                isPositive={false}
+              />
+              <ScoreExample
+                title="Counterpick on a hit"
+                avgScore="RT 96%, counterpicked"
+                bonuses={['A counterpick loses whatever the movie earns', '-42 in a league with double points on']}
+                total="-36 pts"
                 isPositive={false}
               />
             </div>
