@@ -4,6 +4,7 @@ import { createBaseEmbed, DISCORD_COLORS, FANTASY_REEL_ICON, leagueUrl } from '.
 import { resolveLinkedLeague } from '../utils/channel-league.js'
 import { getMovieDetails, searchMovies, TMDbSearchResult } from '../utils/functions-client.js'
 import { truncate } from '../utils/format.js'
+import { leagueFantasyPoints } from '../utils/scoring.js'
 import type { Command } from './index.js'
 
 const AUTOCOMPLETE_LIMIT = 10
@@ -142,7 +143,10 @@ export const movie: Command = {
         descriptionParts.push(`**Critic Scores:** ${reviewLines.join(' | ')}`)
       }
       if (dbMovie.fantasy_points != null) {
-        descriptionParts.push(`**Fantasy Points:** ${dbMovie.fantasy_points}`)
+        // A linked channel shows its season's points; elsewhere, the default rule's.
+        const rtScore = dbMovie.combined_score === null ? null : Number(dbMovie.combined_score)
+        const points = leagueFantasyPoints(Number(dbMovie.fantasy_points), rtScore, linked?.doublePointsOver90 ?? false)
+        descriptionParts.push(`**Fantasy Points:** ${points}`)
       }
     }
 

@@ -33,6 +33,8 @@ export interface LinkedLeague {
   winnerTeamIds: string[] | null
   finalStandings: SeasonStanding[] | null
   completedAt: string | null
+  /** The season's 90+ rule: 2 points per Tomatometer point above 90 instead of 1. */
+  doublePointsOver90: boolean
 }
 
 /**
@@ -45,7 +47,7 @@ export async function resolveLinkedLeague(
 ): Promise<LinkedLeague | null> {
   const { data, error } = await supabase
     .from('discord_channels')
-    .select('league_id, leagues(name, status, season_year, winner_team_ids, final_standings, completed_at)')
+    .select('league_id, leagues(name, status, season_year, winner_team_ids, final_standings, completed_at, double_points_over_90)')
     .eq('channel_id', channelId)
     .maybeSingle()
 
@@ -58,6 +60,7 @@ export async function resolveLinkedLeague(
     winner_team_ids?: string[] | null
     final_standings?: SeasonStanding[] | null
     completed_at?: string | null
+    double_points_over_90?: boolean | null
   } | null
 
   return {
@@ -68,6 +71,7 @@ export async function resolveLinkedLeague(
     winnerTeamIds: league?.winner_team_ids ?? null,
     finalStandings: league?.status === 'completed' ? league.final_standings ?? null : null,
     completedAt: league?.completed_at ?? null,
+    doublePointsOver90: league?.double_points_over_90 ?? false,
   }
 }
 

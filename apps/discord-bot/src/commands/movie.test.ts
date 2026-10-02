@@ -66,6 +66,35 @@ describe('/movie', () => {
     expect(embed.description).toContain('Movie One: Part Two')
   })
 
+  it('shows the linked season\'s points under its 90+ rule', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: {
+          data: { league_id: 'league-1', leagues: { name: 'Blockbusters', status: 'active', double_points_over_90: true } },
+        },
+        movies: {
+          data: {
+            id: 'movie-uuid-1',
+            title: 'Movie One',
+            release_date: '2026-09-01',
+            poster_url: null,
+            fantasy_points: 35,
+            combined_score: 95,
+            reviews: [{ source: 'rotten_tomatoes', score: 95 }],
+          },
+        },
+        team_holdings: { data: null },
+      },
+    })
+    mockFetchOk(searchResponse)
+    const interaction = makeInteraction({ stringOptions: { name: 'Movie One' } })
+
+    await movie.execute(interaction)
+
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toContain('Fantasy Points:** 40')
+  })
+
   it('still resolves the movie when the channel is not linked, without roster context', async () => {
     mockSupabase({ tables: { discord_channels: { data: null } } })
     mockFetchOk(searchResponse)
