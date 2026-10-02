@@ -3,8 +3,9 @@
  *
  * Detects what changed during a score update run and emits Discord
  * notifications for three events:
- *   1. A movie receives its first score, or its score moves up/down.
- *   2. A team's total score changes because one of its movies scored.
+ *   1. A movie receives its first score, or ends a run at least
+ *      SCORE_CHANGE_THRESHOLD from the score last posted for it.
+ *   2. A team's total moves at least SCORE_CHANGE_THRESHOLD in one run.
  *   3. A team's rank in the league standings changes.
  *
  * Usage is a before/after sandwich around the score recalculation:
@@ -142,10 +143,38 @@ function pointsDiffer(a: number | null, b: number | null): boolean {
   return formatPoints(a) !== formatPoints(b)
 }
 
-/** Same test for the Tomatometer, which is rendered whole-number. */
-function rtScoresDiffer(a: number | null, b: number | null): boolean {
-  if (a === null || b === null) return a !== b
-  return formatRtScore(a) !== formatRtScore(b)
+/**
+ * The smallest move worth a post: a movie's Tomatometer or fantasy points, or
+ * a team's total.
+ *
+ * Fantasy Critic posts at 1, but against OpenCritic's fractional averages,
+ * where a whole point is already a real move. The Tomatometer only moves in
+ * whole points, so 1 would let every single-review tick through.
+ */
+export const SCORE_CHANGE_THRESHOLD = 3
+
+/** Decimal scores can subtract to a hair under the threshold (4.1 - 1.1). */
+function movedEnough(from: number, to: number): boolean {
+  return Math.abs(to - from) >= SCORE_CHANGE_THRESHOLD - 1e-9
+}
+
+/**
+ * Whether a movie has moved far enough from the score last posted for it to
+ * post again. Either number counts: above 90% one Tomatometer point is worth
+ * two fantasy points, while in the flat tail below 30% RT moves leave points
+ * almost still. A movie never posted always qualifies -- its first score is
+ * the biggest news there is. A withdrawn score is never posted.
+ */
+export function shouldAnnounceScore(
+  announced: MovieScoreSnapshot,
+  current: MovieScoreSnapshot
+): boolean {
+  if (current.points === null) return false
+  if (announced.points === null || movedEnough(announced.points, current.points)) return true
+  if (announced.rtScore === null || current.rtScore === null) {
+    return announced.rtScore !== current.rtScore
+  }
+  return movedEnough(announced.rtScore, current.rtScore)
 }
 
 export function ordinal(n: number): string {
@@ -190,6 +219,11 @@ export function rankStandings(
  * Compares before/after standings for one league.
  * Teams absent from the "before" snapshot are skipped -- they have no
  * meaningful movement to report.
+ *
+ * A rank change is always reported. A total that moved without changing rank
+ * needs SCORE_CHANGE_THRESHOLD to be reported, the same bar a movie clears.
+ * Once a team is listed, any visible move in its total shows alongside, since
+ * that is what explains a rank change.
  */
 export function diffStandings(
   before: TeamStanding[],
@@ -204,7 +238,7 @@ export function diffStandings(
 
     const pointsChanged = pointsDiffer(previous.points, current.points)
     const rankChanged = previous.rank !== current.rank
-    if (!pointsChanged && !rankChanged) continue
+    if (!rankChanged && !movedEnough(previous.points, current.points)) continue
 
     changes.push({
       teamId: current.teamId,
@@ -524,11 +558,17 @@ interface MovieScoreRow {
   combined_score: number | null
 }
 
-/** Numeric columns can arrive as strings, so coerce before comparing. */
-function toScoreSnapshot(row: MovieScoreRow): MovieScoreSnapshot {
+/**
+ * Numeric columns can arrive as strings, so coerce before comparing. A column
+ * missing from the row reads as null rather than NaN.
+ */
+function toScoreSnapshot(
+  points: number | null | undefined,
+  rtScore: number | null | undefined
+): MovieScoreSnapshot {
   return {
-    points: row.fantasy_points === null ? null : Number(row.fantasy_points),
-    rtScore: row.combined_score === null ? null : Number(row.combined_score),
+    points: points == null ? null : Number(points),
+    rtScore: rtScore == null ? null : Number(rtScore),
   }
 }
 
@@ -564,7 +604,7 @@ export async function captureScoreContext(
     }
 
     const previousMovieScores = new Map<string, MovieScoreSnapshot>(
-      (movies ?? []).map((m: MovieScoreRow) => [m.id, toScoreSnapshot(m)])
+      (movies ?? []).map((m: MovieScoreRow) => [m.id, toScoreSnapshot(m.fantasy_points, m.combined_score)])
     )
 
     const holdings = await loadHoldings(supabase, movieIds)
@@ -823,8 +863,8 @@ async function sendNotableMissNotifications(
 }
 
 /**
- * Compares current state against the captured snapshot and posts one
- * notification per changed movie plus one standings roundup per league.
+ * Posts one notification per movie due one (see shouldAnnounceScore) plus a
+ * standings roundup for each league whose standings moved (see diffStandings).
  *
  * Never throws.
  */
@@ -867,9 +907,11 @@ export async function sendScoreNotifications(
     }
     if (context.leagueIds.length === 0) return summary
 
-    const movieChanges = await loadMovieScoreChanges(supabase, context)
+    const { sinceSnapshot, toAnnounce } = await loadMovieScoreChanges(supabase, context)
 
-    summary.notable_misses = await sendNotableMissNotifications(supabase, context, movieChanges)
+    summary.notable_misses = await sendNotableMissNotifications(supabase, context, sinceSnapshot)
+
+    const announcements = await recordAnnouncements(supabase, toAnnounce)
 
     const leagueIds = context.leagueIds
     const currentStandings = await snapshotStandings(supabase, leagueIds)
@@ -879,19 +921,19 @@ export async function sendScoreNotifications(
       const leagueName = context.leagueNames.get(leagueId) ?? 'League'
 
       const changed = context.placements.filter(
-        (p) => p.leagueId === leagueId && movieChanges.has(p.movieId)
+        (p) => p.leagueId === leagueId && announcements.has(p.movieId)
       )
 
       const movieEmbeds = changed
         .slice(0, MAX_MOVIE_EMBEDS_PER_LEAGUE)
-        .map((p) => buildMovieScoreEmbed(movieChanges.get(p.movieId)!, p, leagueName))
+        .map((p) => buildMovieScoreEmbed(announcements.get(p.movieId)!, p, leagueName))
 
       // Fold anything past the cap into one rollup rather than dropping it
       const overflow = changed.slice(MAX_MOVIE_EMBEDS_PER_LEAGUE)
       if (overflow.length > 0) {
         movieEmbeds.push(
           buildMovieRollupEmbed(
-            overflow.map((p) => movieChanges.get(p.movieId)!),
+            overflow.map((p) => announcements.get(p.movieId)!),
             leagueName,
             leagueId
           )
@@ -947,55 +989,107 @@ export async function sendScoreNotifications(
 interface MovieRow extends MovieScoreRow {
   title: string
   poster_url: string | null
+  announced_fantasy_points: number | null
+  announced_rt_score: number | null
 }
 
 const UNSCORED: MovieScoreSnapshot = { points: null, rtScore: null }
 
-/** Returns only movies whose displayed score actually moved. */
+/** One run's movie scores, measured from two starting points. */
+interface MovieScoreChanges {
+  /**
+   * Point moves since the pre-run snapshot. Notable-miss detection reads
+   * these: a dropped movie can cross its bar on a step too small to post.
+   */
+  sinceSnapshot: Map<string, MovieScoreChange>
+  /**
+   * Movies due a post, described from the score last posted for them, so a
+   * drift of a point a day is posted once it adds up instead of being lost
+   * one sub-threshold run at a time.
+   */
+  toAnnounce: MovieScoreChange[]
+}
+
 async function loadMovieScoreChanges(
   supabase: SupabaseClient,
   context: ScoreNotificationContext
-): Promise<Map<string, MovieScoreChange>> {
-  const changes = new Map<string, MovieScoreChange>()
+): Promise<MovieScoreChanges> {
+  const result: MovieScoreChanges = { sinceSnapshot: new Map(), toAnnounce: [] }
 
   const { data: movies, error } = await supabase
     .from('movies')
-    .select('id, title, poster_url, fantasy_points, combined_score')
+    .select('id, title, poster_url, fantasy_points, combined_score, announced_fantasy_points, announced_rt_score')
     .in('id', context.movieIds)
 
   if (error) {
     console.error('Failed to load updated movie scores:', error.message)
-    return changes
+    return result
   }
 
   for (const movie of (movies ?? []) as MovieRow[]) {
-    if (movie.fantasy_points === null) continue
+    const current = toScoreSnapshot(movie.fantasy_points, movie.combined_score)
+    if (current.points === null) continue
 
-    const current = toScoreSnapshot(movie)
-    const newPoints = current.points as number
-    const previous = context.previousMovieScores.get(movie.id) ?? UNSCORED
-
-    // Either displayed number moving is news. The Tomatometer can shift a
-    // whole point while the curve leaves points unchanged at one decimal --
-    // most visibly in the flat tail below 30 -- and it's now the headline.
-    if (
-      !pointsDiffer(previous.points, newPoints) &&
-      !rtScoresDiffer(previous.rtScore, current.rtScore)
-    ) {
-      continue
-    }
-
-    changes.set(movie.id, {
+    const describeFrom = (previous: MovieScoreSnapshot): MovieScoreChange => ({
       movieId: movie.id,
       title: movie.title,
       posterUrl: movie.poster_url,
       previousPoints: previous.points,
-      newPoints,
+      newPoints: current.points as number,
       previousRtScore: previous.rtScore,
       newRtScore: current.rtScore,
       isNewScore: previous.points === null,
     })
+
+    const previous = context.previousMovieScores.get(movie.id) ?? UNSCORED
+    if (pointsDiffer(previous.points, current.points)) {
+      result.sinceSnapshot.set(movie.id, describeFrom(previous))
+    }
+
+    const announced = toScoreSnapshot(movie.announced_fantasy_points, movie.announced_rt_score)
+    if (shouldAnnounceScore(announced, current)) {
+      result.toAnnounce.push(describeFrom(announced))
+    }
   }
 
-  return changes
+  return result
+}
+
+/**
+ * Moves each movie's announced score (`movies.announced_*`) to the score about
+ * to be posted. Recording before posting means a failed write can never post
+ * the same move twice: a movie whose write fails is left out of this run, and
+ * because it is still as far from its old announced score, the next run posts
+ * it instead.
+ */
+async function recordAnnouncements(
+  supabase: SupabaseClient,
+  changes: MovieScoreChange[]
+): Promise<Map<string, MovieScoreChange>> {
+  const recorded = await Promise.all(
+    changes.map(async (change) => {
+      const { error } = await supabase
+        .from('movies')
+        .update({
+          announced_fantasy_points: change.newPoints,
+          announced_rt_score: change.newRtScore,
+        })
+        .eq('id', change.movieId)
+
+      if (error) {
+        log.warn('Could not record announced movie score; its post waits for the next run', {
+          movie_id: change.movieId,
+          error: serializeError(error),
+        })
+        return null
+      }
+      return change
+    })
+  )
+
+  return new Map(
+    recorded
+      .filter((change): change is MovieScoreChange => change !== null)
+      .map((change) => [change.movieId, change])
+  )
 }
