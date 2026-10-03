@@ -137,18 +137,25 @@ In Supabase Dashboard → Authentication:
 - Enter Client ID and Client Secret from Discord Developer Portal
 - Redirect URL is auto-generated: `https://<project-ref>.supabase.co/auth/v1/callback`
 
-**Bot and Abuse Protection (CAPTCHA):**
+**Attack Protection (CAPTCHA):**
 
 Sign-up, password sign-in, password reset and resend-confirmation are protected by
 Cloudflare Turnstile, which Supabase Auth verifies itself. Turn it on in this order, or
 every password form fails with "The security check expired or failed":
 
-1. In Cloudflare → Turnstile, add a widget (Managed mode) for your production domain, plus
-   any preview domains that share this Supabase project. Note the site key and secret key.
+1. In Cloudflare → Turnstile, add a widget (Managed mode) for your production domain. Note
+   the site key and secret key.
 2. Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in Vercel (step 3.2) and redeploy. The widget now
    appears and its token is sent, but Supabase ignores it until step 3.
 3. Here: Authentication → Attack Protection → enable CAPTCHA protection, provider
    Turnstile, and paste the secret key.
+4. Right away, sign in once on production with a password account to confirm the token is
+   accepted. If it fails, disable CAPTCHA in Supabase (step 3) to restore logins.
+
+Set the key for Production only: random `*.vercel.app` preview hosts can't be allowlisted
+in the widget, and a widget that fails to load leaves every password form disabled. Once
+CAPTCHA is on, password logins on previews that point at the production Supabase project
+fail (no token); use OAuth there, or point previews at a separate Supabase project.
 
 Leaving `NEXT_PUBLIC_TURNSTILE_SITE_KEY` unset hides the widget (local dev and E2E). To
 turn CAPTCHA off again, disable it in Supabase first, then remove the variable.
@@ -204,7 +211,7 @@ In Vercel Dashboard → Project Settings → Environment Variables:
 | `TMDB_API_KEY` | Your TMDb API key | Production |
 | `MDBLIST_API_KEY` | Your MDBList API key | Production |
 | `CRON_SECRET` | Same value as Supabase secret | Production |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key (see 2.5). Unset = no CAPTCHA widget | Production, Preview |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key (see 2.5). Unset = no CAPTCHA widget | Production |
 
 ### 3.3 Configure Custom Domain (Optional)
 

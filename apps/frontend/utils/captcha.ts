@@ -1,7 +1,7 @@
 /**
  * Cloudflare Turnstile CAPTCHA for Supabase Auth.
  *
- * Supabase verifies the token itself (Authentication > Bot and Abuse
+ * Supabase verifies the token itself (Authentication > Attack
  * Protection), so the app only collects it in the browser and forwards it as
  * `captchaToken`. With NEXT_PUBLIC_TURNSTILE_SITE_KEY unset no widget renders
  * and no token is sent, which is what local dev and E2E rely on (local
