@@ -4,12 +4,14 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { resendConfirmationEmail } from '@/app/(public)/login/actions'
 import { FormError, FormSuccess } from '@/app/components/FormError'
+import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
 
 export default function AuthCodeErrorPage() {
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const captcha = useCaptcha()
 
   async function handleResend(e: React.FormEvent) {
     e.preventDefault()
@@ -24,7 +26,7 @@ export default function AuthCodeErrorPage() {
     setSuccess(false)
 
     try {
-      const result = await resendConfirmationEmail(email)
+      const result = await resendConfirmationEmail(email, captcha.token ?? undefined)
       if (result.success) {
         setSuccess(true)
       } else if (result.error) {
@@ -34,6 +36,7 @@ export default function AuthCodeErrorPage() {
       setError('Something went wrong. Please try again.')
     } finally {
       setIsLoading(false)
+      captcha.reset()
     }
   }
 
@@ -76,7 +79,9 @@ export default function AuthCodeErrorPage() {
                 />
               </div>
 
-              <button type="submit" disabled={isLoading} className="btn btn-primary w-full">
+              <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+
+              <button type="submit" disabled={isLoading || !captcha.ready} className="btn btn-primary w-full">
                 {isLoading ? 'Sending...' : 'Resend confirmation email'}
               </button>
             </form>

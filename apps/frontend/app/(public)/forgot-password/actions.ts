@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { headers } from 'next/headers'
+import { CAPTCHA_FAILED_MESSAGE, isCaptchaError, readCaptchaToken } from '@/utils/captcha'
 
 export async function requestPasswordReset(
   formData: FormData
@@ -21,10 +22,16 @@ export async function requestPasswordReset(
 
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
     redirectTo: `${baseUrl}/reset-password`,
+    captchaToken: readCaptchaToken(formData),
   })
 
   if (error) {
     console.error('Password reset error:', error.message)
+
+    // Nothing was sent, so don't fall through to the generic success message
+    if (isCaptchaError(error)) {
+      return { success: false, error: CAPTCHA_FAILED_MESSAGE }
+    }
 
     // Only show rate limit errors to users
     if (error.message.includes('rate limit') || error.message.includes('60 seconds') || error.message.includes('For security purposes')) {

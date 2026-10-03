@@ -137,6 +137,22 @@ In Supabase Dashboard → Authentication:
 - Enter Client ID and Client Secret from Discord Developer Portal
 - Redirect URL is auto-generated: `https://<project-ref>.supabase.co/auth/v1/callback`
 
+**Bot and Abuse Protection (CAPTCHA):**
+
+Sign-up, password sign-in, password reset and resend-confirmation are protected by
+Cloudflare Turnstile, which Supabase Auth verifies itself. Turn it on in this order, or
+every password form fails with "The security check expired or failed":
+
+1. In Cloudflare → Turnstile, add a widget (Managed mode) for your production domain, plus
+   any preview domains that share this Supabase project. Note the site key and secret key.
+2. Set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` in Vercel (step 3.2) and redeploy. The widget now
+   appears and its token is sent, but Supabase ignores it until step 3.
+3. Here: Authentication → Attack Protection → enable CAPTCHA protection, provider
+   Turnstile, and paste the secret key.
+
+Leaving `NEXT_PUBLIC_TURNSTILE_SITE_KEY` unset hides the widget (local dev and E2E). To
+turn CAPTCHA off again, disable it in Supabase first, then remove the variable.
+
 ### 2.6 Enable Realtime
 
 In Supabase Dashboard → Database → Replication, enable for:
@@ -188,6 +204,7 @@ In Vercel Dashboard → Project Settings → Environment Variables:
 | `TMDB_API_KEY` | Your TMDb API key | Production |
 | `MDBLIST_API_KEY` | Your MDBList API key | Production |
 | `CRON_SECRET` | Same value as Supabase secret | Production |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key (see 2.5). Unset = no CAPTCHA widget | Production, Preview |
 
 ### 3.3 Configure Custom Domain (Optional)
 
@@ -341,6 +358,7 @@ npx supabase functions deploy
 - [ ] RLS policies enabled on all tables
 - [ ] JWT verification enabled for Edge Functions
 - [ ] Rate limiting configured in Supabase Auth
+- [ ] Turnstile CAPTCHA enabled in Supabase Auth, with `NEXT_PUBLIC_TURNSTILE_SITE_KEY` set (see 2.5)
 - [ ] HTTPS enforced (automatic with Vercel/Supabase)
 
 ---

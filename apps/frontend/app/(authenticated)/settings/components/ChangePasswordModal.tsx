@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import { X, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
+import { CAPTCHA_FIELD } from '@/utils/captcha'
 
 interface Props {
   onClose: () => void
@@ -20,6 +22,7 @@ export default function ChangePasswordModal({
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const captcha = useCaptcha()
 
   const isValid =
     currentPassword.length > 0 &&
@@ -39,7 +42,7 @@ export default function ChangePasswordModal({
 
   const { execute, isLoading: isSubmitting, error } = useAsyncAction(submitPasswordChange)
 
-  const isDisabled = isSubmitting || !isValid
+  const isDisabled = isSubmitting || !isValid || !captcha.ready
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -48,12 +51,15 @@ export default function ChangePasswordModal({
     formData.append('currentPassword', currentPassword)
     formData.append('newPassword', newPassword)
     formData.append('confirmPassword', confirmPassword)
+    formData.append(CAPTCHA_FIELD, captcha.token ?? '')
 
     try {
       await execute(formData)
       onClose()
     } catch {
       // Error is handled by useAsyncAction and displayed in the UI
+    } finally {
+      captcha.reset()
     }
   }
 
@@ -200,6 +206,8 @@ export default function ChangePasswordModal({
               <p className="type-meta mt-1 text-error">Passwords do not match</p>
             )}
           </div>
+
+          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} className="mb-6" />
 
           {/* Actions */}
           <div className="flex gap-3 justify-end">

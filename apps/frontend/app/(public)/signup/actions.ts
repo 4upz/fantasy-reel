@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { headers } from 'next/headers'
+import { CAPTCHA_FAILED_MESSAGE, isCaptchaError, readCaptchaToken } from '@/utils/captcha'
 
 export async function signup(formData: FormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
@@ -33,10 +34,14 @@ export async function signup(formData: FormData): Promise<{ success: boolean; er
         display_name: formData.get('displayName') as string,
       },
       emailRedirectTo: `${baseUrl}/auth/callback`,
+      captchaToken: readCaptchaToken(formData),
     }
   })
 
   if (error) {
+    if (isCaptchaError(error)) {
+      return { success: false, error: CAPTCHA_FAILED_MESSAGE }
+    }
     // Return user-friendly error messages
     if (error.message.includes('already registered')) {
       return { success: false, error: 'An account with this email already exists' }
