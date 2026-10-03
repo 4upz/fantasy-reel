@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import { safeAvatarUrl } from '@/utils/avatar'
 import type { UserSearchResult } from '@/hooks/useUserSearch'
 
 interface UserAvatarProps {
@@ -13,12 +14,13 @@ function UserAvatar({ avatarUrl, displayName, size = 'md' }: UserAvatarProps): R
   const initial = displayName?.charAt(0).toUpperCase() || 'U'
   const sizeClasses = size === 'sm' ? 'w-6 h-6 text-xs' : 'w-8 h-8 text-sm'
   const imageSize = size === 'sm' ? 24 : 32
+  const safeUrl = safeAvatarUrl(avatarUrl)
 
-  if (avatarUrl) {
+  if (safeUrl) {
     return (
       <div className={`${sizeClasses} relative rounded-full overflow-hidden border border-border`}>
         <Image
-          src={avatarUrl}
+          src={safeUrl}
           alt={displayName}
           width={imageSize}
           height={imageSize}
