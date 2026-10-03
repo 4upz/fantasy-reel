@@ -1,5 +1,5 @@
 import TMDbAttribution from '@/components/TMDbAttribution'
-import GitHubLink from '../GitHubLink'
+import SocialLinks from '../SocialLinks'
 
 /**
  * Deliberately NOT tagged `@design-system`: a thin wrapper around
@@ -11,7 +11,7 @@ export default function SiteFooter(): React.ReactElement {
     <footer className="py-8 px-6 bg-background border-t border-border">
       <div className="max-w-7xl mx-auto flex flex-col items-center gap-4 md:flex-row md:justify-between">
         <TMDbAttribution variant="footer" />
-        <GitHubLink />
+        <SocialLinks />
       </div>
     </footer>
   )
