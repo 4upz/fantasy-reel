@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, isAuthorizedCronRequest } from '../_shared/utils.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
@@ -73,6 +73,12 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
+    // Operator-only: each call spends ~21 TMDb requests and rewrites shared
+    // movie rows. Cron secret OR service role key, like the other cron jobs.
+    if (!isAuthorizedCronRequest(req)) {
+      return errorResponse('Forbidden', 403)
+    }
+
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!tmdbToken) {
       log.error('TMDB_API_KEY not configured')
