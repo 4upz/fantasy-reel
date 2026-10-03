@@ -35,7 +35,10 @@ export default function GoogleLoginButton({ redirectTo }: Props): React.ReactEle
       type="button"
       onClick={handleGoogleLogin}
       disabled={isLoading}
-      className="btn w-full py-3 bg-white hover:bg-gray-100 text-gray-800 border-0 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      // Google's light button spec: white fill with a #747775 outline, so it
+      // stays distinct on the light theme's white cards. The 1px border is
+      // taken out of the padding to match the Discord button's height.
+      className="btn w-full py-[11px] bg-white hover:bg-gray-100 text-[#1f1f1f] border border-[#747775] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
       data-testid="google-login-button"
     >
       <GoogleIcon className="w-5 h-5 mr-2" />
