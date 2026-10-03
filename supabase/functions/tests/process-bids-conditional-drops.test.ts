@@ -14,7 +14,7 @@
 
 import { assertEquals } from '@std/assert'
 import { SupabaseClient } from '@supabase/supabase-js'
-import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName } from './_setup.ts'
+import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName, seedTmdbForPendingPickupBids } from './_setup.ts'
 
 /**
  * A tmdb_id outside the real TMDb range and outside every other suite's void
@@ -92,6 +92,7 @@ Deno.test({
       : await getEdgeFunctionServiceRoleKey()
 
     async function callProcessBids(body?: Record<string, unknown>) {
+    await seedTmdbForPendingPickupBids()
       const response = await fetch(FUNCTION_URL, {
         method: 'POST',
         headers: {

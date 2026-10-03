@@ -14,24 +14,21 @@ import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 import { assertLeagueWritable } from '../_shared/league-status.ts'
+import {
+  BidMovieLookupError,
+  bidMovieDataFromRow,
+  lookupBidMovieData,
+  type BidMovieData,
+} from '../_shared/bid-movie-metadata.ts'
 
 const log = createLogger('place-bid')
-
-interface MovieData {
-  title: string
-  overview?: string | null
-  poster_url: string | null
-  release_date: string | null
-  vote_average: number
-  popularity: number
-  genre_ids: number[]
-}
 
 interface PlaceBidRequest {
   league_id: string
   tmdb_id: number
   amount: number
-  movie_data?: MovieData
+  // Clients may still send `movie_data`. It is ignored: the bid's movie data
+  // comes from the `movies` row or TMDb (see bid-movie-metadata.ts).
   /**
    * A holding released only if this bid wins. At most one may be set. This is
    * what lets a team with a full roster keep bidding: the movie arriving and
@@ -75,7 +72,6 @@ Deno.serve(async (req) => {
       league_id,
       tmdb_id,
       amount,
-      movie_data,
       conditional_drop_draft_pick_id,
       conditional_drop_pickup_id,
     }: PlaceBidRequest = await req.json()
@@ -181,31 +177,31 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Look up the movie by tmdb_id in case it's already in our DB (e.g. drafted,
-    // or bid on before), so the release-date, score and eligibility checks
-    // below can use the authoritative row instead of client-supplied data.
+    // The movie's data comes from our own `movies` row when one exists (e.g.
+    // drafted, or won at auction before), else from TMDb -- never from the
+    // request, which a client could forge to plant a title or poster seen by
+    // every league, or to bid on a released film by claiming a future date.
     const { data: existingMovie } = await serviceClient
       .from('movies')
-      .select('id, release_date, fantasy_points')
+      .select('id, title, overview, poster_url, release_date, vote_average, popularity, fantasy_points')
       .eq('tmdb_id', tmdb_id)
       .maybeSingle()
 
-    // movie_data is client-supplied and only trusted when no `movies` row
-    // exists yet for this tmdb_id. process-bids rechecks before awarding, but
-    // that recheck is only authoritative for a movie that already has a `movies`
-    // row -- for one first seen at processing time it re-validates this same
-    // client data against itself (see the note there). So a forged release_date
-    // on a movie we have never seen is not caught by either layer today.
-    // Prefer the DB row's release_date once the movie exists;
-    // only fall back to this request's own movie_data when it doesn't. We do
-    // NOT fall back to movie_data captured by an earlier/other bid: that data
-    // could be stale (the movie may have since released) and isn't scoped to
-    // this caller, so trusting it would reopen the release-date exploit this
-    // guard exists to close.
-    //
+    let movieData: BidMovieData
+    if (existingMovie) {
+      movieData = bidMovieDataFromRow(existingMovie)
+    } else {
+      try {
+        movieData = await lookupBidMovieData(tmdb_id, log)
+      } catch (error) {
+        if (error instanceof BidMovieLookupError) return errorResponse(error.message, error.status)
+        throw error
+      }
+    }
+
     // A score only ever lives on the DB row: a movie we have never seen has none.
     const lock = bidLock({
-      release_date: existingMovie ? existingMovie.release_date : movie_data?.release_date,
+      release_date: movieData.release_date,
       fantasy_points: existingMovie?.fantasy_points,
     }, league.season_year)
     if (lock) {
@@ -269,7 +265,7 @@ Deno.serve(async (req) => {
           amount,
           status: 'active',
           resolution_reason: null,
-          movie_data: movie_data || existingTeamBid.movie_data,
+          movie_data: movieData,
           countered_at: null,
           response_deadline: null,
           // Re-bidding may change or clear the conditional drop, so these are
@@ -294,7 +290,7 @@ Deno.serve(async (req) => {
           league_id,
           team_id: team.id,
           tmdb_id,
-          movie_data,
+          movie_data: movieData,
           amount,
           status: 'active',
           resolution_reason: null,
@@ -347,9 +343,9 @@ Deno.serve(async (req) => {
     }
 
     // Movie details (used for notifications and Discord)
-    const movieTitle = movie_data?.title || highestBid?.movie_data?.title || `Movie #${tmdb_id}`
-    const posterPath = movie_data?.poster_url || highestBid?.movie_data?.poster_url
-    const releaseDate = movie_data?.release_date || highestBid?.movie_data?.release_date
+    const movieTitle = movieData.title
+    const posterPath = movieData.poster_url
+    const releaseDate = movieData.release_date
 
     // Track outbid email promise for parallel send with Discord
     let outbidEmailPromise: Promise<unknown> | null = null

@@ -427,6 +427,80 @@ export function getErrorMessage(error: unknown): string | undefined {
 /**
  * Result type for Edge Function invocation that properly handles error responses
  */
+export interface BidMovieFixture {
+  tmdb_id: number
+  movie_data: {
+    title?: string
+    overview?: string | null
+    poster_url?: string | null
+    release_date?: string | null
+    vote_average?: number
+    genre_ids?: number[]
+  } | null
+}
+
+/**
+ * Stand a test bid's own `movie_data` in as TMDb's answer for its movie.
+ *
+ * place-bid and process-bids never trust a bid's `movie_data`: a movie with no
+ * `movies` row gets its data from TMDb, through `tmdb_cache`. Test bids name
+ * synthetic tmdb_ids TMDb has never heard of (and CI has no TMDb key), so
+ * without this every bid on a new movie would fail its lookup.
+ *
+ * A live cache entry is left alone: that is how a test makes TMDb disagree
+ * with a forged `movie_data`.
+ */
+export async function seedTmdbFromBidMovieData(fixtures: readonly BidMovieFixture[]): Promise<void> {
+  const service = getServiceClient()
+  const byKey = new Map<string, BidMovieFixture & { movie_data: NonNullable<BidMovieFixture['movie_data']> }>()
+  for (const fixture of fixtures) {
+    if (!fixture.movie_data?.title) continue
+    byKey.set(buildCacheKey('movie_details', { tmdb_id: fixture.tmdb_id }), { ...fixture, movie_data: fixture.movie_data })
+  }
+  if (byKey.size === 0) return
+
+  const now = new Date()
+  const { data: live, error: readError } = await service.from('tmdb_cache')
+    .select('cache_key').in('cache_key', [...byKey.keys()]).gt('expires_at', now.toISOString())
+  if (readError) throw new Error(`Failed to read movie metadata cache: ${readError.message}`)
+  for (const row of live ?? []) byKey.delete(row.cache_key)
+  if (byKey.size === 0) return
+
+  const rows = [...byKey].map(([cache_key, { tmdb_id, movie_data }]) => {
+    const payload: MovieDetailsResponse = {
+      tmdb_id, title: movie_data.title!, imdb_id: null, tagline: null,
+      overview: movie_data.overview ?? null, release_date: movie_data.release_date || null,
+      runtime: null, status: 'Planned', poster_url: movie_data.poster_url ?? null, backdrop_url: null,
+      vote_average: movie_data.vote_average ?? 0, vote_count: 0,
+      genres: (movie_data.genre_ids ?? []).map((id) => ({ id, name: '' })), cast: [], director: null,
+    }
+    return {
+      cache_key, payload,
+      fetched_at: now.toISOString(), expires_at: new Date(now.getTime() + 3600_000).toISOString(),
+    }
+  })
+  const { error } = await service.from('tmdb_cache').upsert(rows)
+  if (error) throw new Error(`Failed to seed movie metadata cache: ${error.message}`)
+}
+
+/** seedTmdbFromBidMovieData for every pending pickup bid on a movie with no `movies` row. */
+export async function seedTmdbForPendingPickupBids(): Promise<void> {
+  const service = getServiceClient()
+  const { data: bids, error } = await service.from('pickup_bids')
+    .select('tmdb_id, movie_data').in('status', ['active', 'outbid'])
+  if (error) throw new Error(`Failed to read pending pickup bids: ${error.message}`)
+  const tmdbIds = [...new Set((bids ?? []).map((bid) => bid.tmdb_id as number))]
+  if (tmdbIds.length === 0) return
+  const known = new Set<number>()
+  for (let offset = 0; offset < tmdbIds.length; offset += 200) {
+    const { data: movies, error: movieError } = await service.from('movies')
+      .select('tmdb_id').in('tmdb_id', tmdbIds.slice(offset, offset + 200))
+    if (movieError) throw new Error(`Failed to read movies: ${movieError.message}`)
+    for (const movie of movies ?? []) known.add(movie.tmdb_id)
+  }
+  await seedTmdbFromBidMovieData((bids ?? []).filter((bid) => !known.has(bid.tmdb_id)) as BidMovieFixture[])
+}
+
 export interface InvokeResult<T = unknown> {
   data: T | null
   error: string | null
@@ -448,6 +522,11 @@ export async function invokeFunction<T = unknown>(
   functionName: string,
   body?: Record<string, unknown>
 ): Promise<InvokeResult<T>> {
+  // place-bid reads a new movie's data from TMDb, not the request. Let the
+  // movie_data a test sends play TMDb's part (see seedTmdbFromBidMovieData).
+  if (functionName === 'place-bid' && typeof body?.tmdb_id === 'number' && body.movie_data) {
+    await seedTmdbFromBidMovieData([body as unknown as BidMovieFixture])
+  }
   const { data, error, response } = await client.functions.invoke(functionName, { body })
 
   // If no error, return the data

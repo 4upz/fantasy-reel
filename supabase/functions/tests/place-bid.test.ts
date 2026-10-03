@@ -7,7 +7,7 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction, seedTmdbFromBidMovieData, type BidMovieFixture } from './_setup.ts'
 
 // Test movie data for bidding
 const currentYear = new Date().getFullYear()
@@ -77,6 +77,9 @@ async function callPlaceBid(
     return data ?? {}
   }
 
+  if (typeof body.tmdb_id === 'number' && body.movie_data) {
+    await seedTmdbFromBidMovieData([body as unknown as BidMovieFixture])
+  }
   const { data: { session } } = await userClient.auth.getSession()
   const response = await fetch(PLACE_BID_URL, {
     method: 'POST',
@@ -547,6 +550,92 @@ Deno.test({
           .eq('tmdb_id', tmdbId)
         assertEquals(bids?.length ?? 0, 0)
       } finally {
+        await serviceClient.from('movies').delete().eq('tmdb_id', tmdbId)
+      }
+    })
+
+    // ============================================================================
+    // Trusted movie data
+    //
+    // A request's movie_data is ignored: a new movie's data comes from TMDb,
+    // a known movie's from its movies row. Otherwise a bidder could plant a
+    // title or poster seen by every league, or bid on a released film by
+    // claiming a future release date.
+    // ============================================================================
+
+    await t.step('rejects a released movie whatever release date the request claims', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-forged-date'))
+      const tmdbId = uniqueVoidTestTmdbId()
+      await factory.cacheDraftMovie(tmdbId, { title: 'Really Released', release_date: '2020-01-01' })
+
+      const result = await invokeFunction(client, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: tmdbId,
+        amount: 10,
+        movie_data: { ...testMovieData, title: 'Really Released', release_date: '2099-01-01' },
+      })
+
+      assertEquals(result.status, 400)
+      assertEquals(result.error, 'Cannot bid on this movie: Movie was released in a previous season')
+    })
+
+    await t.step('stores TMDb\'s movie data on the bid, not the request\'s', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-forged-title'))
+      const tmdbId = uniqueVoidTestTmdbId()
+      const releaseDate = `${new Date().getFullYear() + 1}-10-10`
+      await factory.cacheDraftMovie(tmdbId, { title: 'Canonical Title', release_date: releaseDate })
+
+      const result = await invokeFunction<PlaceBidResponse>(client, 'place-bid', {
+        league_id: leagueId,
+        tmdb_id: tmdbId,
+        amount: 10,
+        movie_data: { ...testMovieData, title: 'Forged Title', poster_url: 'https://example.com/forged.png' },
+      })
+      assertExists(result.data?.bid, `bid failed: ${result.error}`)
+
+      const { data: bid } = await getServiceClient()
+        .from('pickup_bids')
+        .select('movie_data')
+        .eq('league_id', leagueId)
+        .eq('tmdb_id', tmdbId)
+        .single()
+      assertEquals(bid?.movie_data?.title, 'Canonical Title')
+      assertEquals(bid?.movie_data?.poster_url, null)
+      assertEquals(bid?.movie_data?.release_date, releaseDate)
+    })
+
+    await t.step('stores the movies row\'s data for a movie it already has', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-known-movie'))
+      const tmdbId = uniqueVoidTestTmdbId()
+      const serviceClient = getServiceClient()
+
+      const { error: movieError } = await serviceClient.from('movies').insert({
+        tmdb_id: tmdbId,
+        title: 'Known Movie',
+        release_date: '2099-03-03',
+        status: 'upcoming',
+      })
+      assertEquals(movieError, null)
+
+      try {
+        const result = await invokeFunction<PlaceBidResponse>(client, 'place-bid', {
+          league_id: leagueId,
+          tmdb_id: tmdbId,
+          amount: 10,
+          movie_data: { ...testMovieData, title: 'Forged Known Movie' },
+        })
+        assertExists(result.data?.bid, `bid failed: ${result.error}`)
+
+        const { data: bid } = await serviceClient
+          .from('pickup_bids')
+          .select('movie_data')
+          .eq('league_id', leagueId)
+          .eq('tmdb_id', tmdbId)
+          .single()
+        assertEquals(bid?.movie_data?.title, 'Known Movie')
+        assertEquals(bid?.movie_data?.release_date, '2099-03-03')
+      } finally {
+        await serviceClient.from('pickup_bids').delete().eq('league_id', leagueId)
         await serviceClient.from('movies').delete().eq('tmdb_id', tmdbId)
       }
     })
