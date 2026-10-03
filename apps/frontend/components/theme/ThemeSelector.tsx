@@ -1,7 +1,6 @@
 'use client'
 
 import { useId } from 'react'
-import { parseThemePreference } from '@/utils/theme'
 import { useTheme } from './ThemeProvider'
 
 const options = [
@@ -10,30 +9,10 @@ const options = [
   { value: 'dark', label: 'Dark' },
 ] as const
 
-export default function ThemeSelector({ compact = false }: { compact?: boolean }) {
+export default function ThemeSelector() {
   const { preference, setPreference, ready } = useTheme()
   const id = useId()
   const selectedIndex = options.findIndex(option => option.value === preference)
-
-  if (compact) {
-    return (
-      <div className="flex items-center gap-2">
-        <label htmlFor={id} className="sr-only">Theme</label>
-        <select
-          id={id}
-          value={preference}
-          onChange={event => setPreference(parseThemePreference(event.target.value))}
-          disabled={!ready}
-          className="input type-control min-h-11 w-auto cursor-pointer"
-          data-testid="theme-select"
-        >
-          {options.map(option => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </div>
-    )
-  }
 
   return (
     <fieldset disabled={!ready} data-testid="theme-selector">
