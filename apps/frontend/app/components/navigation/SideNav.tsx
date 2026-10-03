@@ -8,6 +8,7 @@ import type { Profile } from '@/types'
 import NotificationBell from '@/components/NotificationBell'
 import ProfileMenu from './ProfileMenu'
 import BrandLogo from '../BrandLogo'
+import SocialLinks from '../SocialLinks'
 import {
   LayoutDashboard,
   Film,
@@ -151,6 +152,10 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
             {globalItems.map(item => renderNavItem(item, showLabels))}
           </div>
         </nav>
+
+        <div className="sidenav-footer">
+          <SocialLinks />
+        </div>
       </div>
     )
   }

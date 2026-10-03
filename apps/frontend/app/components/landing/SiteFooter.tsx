@@ -1,4 +1,5 @@
 import TMDbAttribution from '@/components/TMDbAttribution'
+import SocialLinks from '../SocialLinks'
 
 /**
  * Deliberately NOT tagged `@design-system`: a thin wrapper around
@@ -8,8 +9,9 @@ import TMDbAttribution from '@/components/TMDbAttribution'
 export default function SiteFooter(): React.ReactElement {
   return (
     <footer className="py-8 px-6 bg-background border-t border-border">
-      <div className="max-w-7xl mx-auto flex justify-center">
+      <div className="max-w-7xl mx-auto flex flex-col items-center gap-4 md:flex-row md:justify-between">
         <TMDbAttribution variant="footer" />
+        <SocialLinks />
       </div>
     </footer>
   )

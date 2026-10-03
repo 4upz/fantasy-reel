@@ -4,6 +4,8 @@ import BrandLogo from '../BrandLogo'
 import styles from './MarketingHeader.module.css'
 import ThemeMenu from '@/components/theme/ThemeMenu'
 import ThemeSelector from '@/components/theme/ThemeSelector'
+import GitHubIcon from '../icons/GitHubIcon'
+import { GITHUB_REPO_URL } from '../SocialLinks'
 
 interface MarketingHeaderProps {
   currentPage?: 'how-to-play'
@@ -33,6 +35,17 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
           <Link href="/signup" className="btn btn-primary min-h-11 px-3 md:px-4">
             Sign up
           </Link>
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`btn btn-ghost hidden min-h-11 min-w-11 px-2 md:inline-flex ${styles.menuButton}`}
+            aria-label="Fantasy Reel on GitHub"
+            title="Fantasy Reel on GitHub"
+            data-testid="marketing-github-link"
+          >
+            <GitHubIcon className="h-5 w-5" />
+          </a>
           <ThemeMenu className="hidden md:inline-flex" />
           <button
             type="button"
@@ -50,6 +63,15 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
           <Link href="/login" className="btn btn-ghost min-h-11 justify-start px-2">
             Sign in
           </Link>
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost min-h-11 justify-start gap-2 px-2"
+          >
+            <GitHubIcon className="h-4 w-4" />
+            GitHub
+          </a>
         </nav>
         <div className="mt-3 border-t border-border pt-3">
           <ThemeSelector />
