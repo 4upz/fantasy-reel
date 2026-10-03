@@ -1,5 +1,7 @@
+import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { getMovieDetails, hasValidMovieMetadata, type MovieDetailsResponse } from './movie-details.ts'
 import { TMDbApiError } from './tmdb.ts'
+import { buildCacheKey } from './tmdb-cache.ts'
 import { serializeError, type Logger } from './logger.ts'
 
 /**
@@ -79,4 +81,41 @@ export async function lookupBidMovieData(tmdbId: number, log: Logger): Promise<B
     throw new BidMovieLookupError(LOOKUP_FAILED, 503)
   }
   return bidMovieDataFromDetails(details)
+}
+
+export type BidMovieResolution =
+  | { kind: 'found'; data: BidMovieData }
+  | { kind: 'not_found' }
+  | { kind: 'unavailable' }
+
+/**
+ * lookupBidMovieData for process-bids, which cannot answer a TMDb outage by
+ * asking the bidder to try again.
+ *
+ * When TMDb is unreachable it falls back to the last TMDb answer `tmdb_cache`
+ * holds, however old. That row was written by the server (clients cannot
+ * write the table), and place-bid wrote one when the bid was placed, so it is
+ * never less trustworthy than the bid's own placement-time snapshot was. Only
+ * a movie no TMDb answer was ever cached for is `unavailable`.
+ */
+export async function resolveBidMovieForProcessing(
+  client: SupabaseClient,
+  tmdbId: number,
+  log: Logger,
+): Promise<BidMovieResolution> {
+  try {
+    return { kind: 'found', data: await lookupBidMovieData(tmdbId, log) }
+  } catch (error) {
+    if (error instanceof BidMovieLookupError && error.status === 404) return { kind: 'not_found' }
+  }
+
+  const { data: row, error } = await client.from('tmdb_cache')
+    .select('payload')
+    .eq('cache_key', buildCacheKey('movie_details', { tmdb_id: tmdbId }))
+    .maybeSingle()
+  const details = row?.payload as MovieDetailsResponse | undefined
+  if (error || !details || !hasValidMovieMetadata(details, tmdbId)) return { kind: 'unavailable' }
+
+  log.warn('Using last cached TMDb details for a bid movie', { tmdb_id: tmdbId })
+  return { kind: 'found', data: bidMovieDataFromDetails(details) }
 }

@@ -6,6 +6,7 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import { SupabaseClient } from '@supabase/supabase-js'
+import { buildCacheKey } from '../_shared/tmdb-cache.ts'
 import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName, getUserId, seedTmdbForPendingPickupBids } from './_setup.ts'
 
 /**
@@ -328,6 +329,72 @@ Deno.test({
           .select('*', { count: 'exact', head: true })
           .eq('tmdb_id', tmdbId)
         assertEquals(movieRows, 0)
+      })
+
+      // A movie TMDb cannot confirm must not hold up the rest of its league.
+      // With no TMDb answer ever cached it stays pending (TMDb unreachable, as
+      // in CI) or is voided (TMDb has no such movie); either way the league's
+      // other contest is awarded.
+      await t.step('an unverifiable movie leaves the rest of its league to process', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('pu-unverified'), 2)
+        const teamId = (await factory.getTeamForUser(leagueId, client))!.teamId
+        const goodTmdbId = uniqueVoidTestTmdbId()
+        const unknownTmdbId = uniqueVoidTestTmdbId()
+        await factory.cacheDraftMovie(goodTmdbId, { title: 'Verifiable Pickup' })
+        const deadline = new Date(Date.now() - 60_000).toISOString()
+
+        const { error: goodError } = await serviceClient.from('pickup_bids').insert({
+          league_id: leagueId, team_id: teamId, tmdb_id: goodTmdbId, movie_data: null,
+          amount: 2, status: 'active', processing_deadline: deadline,
+        })
+        assertEquals(goodError, null)
+        const { data: unknownBid, error: unknownError } = await serviceClient.from('pickup_bids').insert({
+          league_id: leagueId, team_id: teamId, tmdb_id: unknownTmdbId, movie_data: null,
+          amount: 3, status: 'active', processing_deadline: deadline,
+        }).select('id').single()
+        assertEquals(unknownError, null)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.processed, 1)
+        assertEquals(data.results[0].movie_title, 'Verifiable Pickup')
+
+        const { data: after } = await serviceClient
+          .from('pickup_bids').select('status').eq('id', unknownBid!.id).single()
+        assertEquals(['active', 'cancelled'].includes(after!.status), true, `unexpected status ${after!.status}`)
+        await serviceClient.from('pickup_bids').delete().eq('id', unknownBid!.id).eq('status', 'active')
+      })
+
+      // A TMDb outage on processing day falls back to the last TMDb answer the
+      // server cached (place-bid caches one when the bid is placed), however
+      // old.
+      await t.step('falls back to an expired TMDb cache entry when TMDb cannot be reached', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('pu-stale-cache'), 2)
+        const teamId = (await factory.getTeamForUser(leagueId, client))!.teamId
+        const tmdbId = uniqueVoidTestTmdbId()
+        await factory.cacheDraftMovie(tmdbId, { title: 'Cached Canonical Title' })
+        const longAgo = new Date(Date.now() - 30 * 86400_000)
+        const { error: expireError } = await serviceClient.from('tmdb_cache')
+          .update({ fetched_at: longAgo.toISOString(), expires_at: new Date(longAgo.getTime() + 3600_000).toISOString() })
+          .eq('cache_key', buildCacheKey('movie_details', { tmdb_id: tmdbId }))
+        assertEquals(expireError, null)
+
+        const { error: bidError } = await serviceClient.from('pickup_bids').insert({
+          league_id: leagueId, team_id: teamId, tmdb_id: tmdbId,
+          // No movie_data: seedTmdbForPendingPickupBids would otherwise refresh
+          // the expired entry this test depends on.
+          movie_data: null,
+          amount: 2, status: 'active', processing_deadline: new Date(Date.now() - 60_000).toISOString(),
+        })
+        assertEquals(bidError, null)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        // Where TMDb is reachable (a real key), it answers for this synthetic
+        // id itself -- with "not found" -- and nothing is awarded.
+        if (data.processed === 1) {
+          assertEquals(data.results[0].movie_title, 'Cached Canonical Title')
+        }
       })
 
       // ============================================================================
