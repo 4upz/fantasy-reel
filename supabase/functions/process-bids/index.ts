@@ -13,7 +13,7 @@
  *    every bid on a movie that released or got its score while they were
  *    pending (a scored movie is locked against bids)
  * 3. Find winner (highest amount, earliest created_at for ties)
- * 4. Create movie if it doesn't exist (from movie_data)
+ * 4. Create movie if it doesn't exist (from TMDb, never the bid's movie_data)
  * 5. Create pickup record
  * 6. Deduct from team budget
  * 7. Mark winner as 'won', others as 'lost' (every bid, if no bidder could take the movie)
@@ -58,6 +58,7 @@ import {
 } from '../_shared/email-templates/counterpick-no-slots.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
+import { bidMovieDataFromRow, lookupBidMovieData, type BidMovieData } from '../_shared/bid-movie-metadata.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('process-bids')
@@ -72,7 +73,7 @@ interface PickupBid {
   league_id: string
   team_id: string
   tmdb_id: number
-  movie_data: MovieData | null
+  movie_data: BidMovieData | null
   amount: number
   status: string
   created_at: string
@@ -84,16 +85,6 @@ interface PickupBid {
   /** Holding released only if this bid wins. At most one is ever set. */
   conditional_drop_draft_pick_id: string | null
   conditional_drop_pickup_id: string | null
-}
-
-interface MovieData {
-  title: string
-  overview?: string | null
-  poster_url: string | null
-  release_date: string | null
-  vote_average: number
-  popularity: number
-  genre_ids?: number[]
 }
 
 interface ProcessResult {
@@ -1204,10 +1195,12 @@ async function settleUnawardedPickupContest(
  * budget. Resolved first and voided after, it would leave that team's other
  * bids unawarded -- and so closed out as lost -- for room it actually had.
  *
- * The release date is the `movies` row's when one exists, else the bids' own
- * `movie_data`, as in place-bid. That second source is client-supplied and only
- * checked against itself; verifying it would need a TMDb round-trip (draft-pick
- * has the same trust model). A score only ever lives on the `movies` row.
+ * The movie's data is the `movies` row's when one exists, else TMDb's, as in
+ * place-bid. It replaces every bid's stored `movie_data` in memory, so the
+ * eligibility check, the announcements and the `movies` row an award creates
+ * never rest on the stored copy, which a client may have written itself. A
+ * movie TMDb cannot confirm holds its league, like any other unread input. A
+ * score only ever lives on the `movies` row.
  *
  * @returns the contests left to resolve, and the leagues where a movie could
  *   not be read -- those cannot be decided this run (see holdUnreadLeagues).
@@ -1222,13 +1215,27 @@ async function voidUnbiddablePickupContests(
 ): Promise<{ contests: BidContest[]; unreadLeagues: Set<string> }> {
   const tmdbIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
   const { rows: movies, unreadIds } = await selectByIdBatches<
-    { id: string; tmdb_id: number; release_date: string | null; fantasy_points: number | null }
+    Parameters<typeof bidMovieDataFromRow>[0] & { id: string; tmdb_id: number; fantasy_points: number | null }
   >(
     tmdbIds,
     'Failed to read movies for the pickup release and score check:',
-    (batch) => serviceClient.from('movies').select('id, tmdb_id, release_date, fantasy_points').in('tmdb_id', batch),
+    (batch) => serviceClient.from('movies')
+      .select('id, tmdb_id, title, overview, poster_url, release_date, vote_average, popularity, fantasy_points')
+      .in('tmdb_id', batch),
   )
   const movieByTmdbId = new Map(movies.map((movie) => [String(movie.tmdb_id), movie]))
+
+  // Movies no bid has won yet. One TMDb lookup each, shared by every league.
+  const lookedUp = new Map<string, BidMovieData | null>()
+  for (const tmdbIdStr of tmdbIds) {
+    if (movieByTmdbId.has(tmdbIdStr) || unreadIds.has(tmdbIdStr)) continue
+    try {
+      lookedUp.set(tmdbIdStr, await lookupBidMovieData(parseInt(tmdbIdStr), log))
+    } catch (error) {
+      log.error('Could not verify pickup movie with TMDb', { tmdb_id: tmdbIdStr, error: serializeError(error) })
+      lookedUp.set(tmdbIdStr, null)
+    }
+  }
 
   const surviving: BidContest[] = []
   const unreadLeagues = new Set<string>()
@@ -1242,8 +1249,15 @@ async function voidUnbiddablePickupContests(
 
     const bids = bidsByKey.get(contest.key) ?? []
     const movie = movieByTmdbId.get(tmdbIdStr)
+    const movieData = movie ? bidMovieDataFromRow(movie) : lookedUp.get(tmdbIdStr)
+    if (!movieData) {
+      unreadLeagues.add(leagueId)
+      continue
+    }
+    for (const bid of bids) bid.movie_data = movieData
+
     const lock = bidLock({
-      release_date: movie ? movie.release_date : bids.find((bid) => bid.movie_data)?.movie_data?.release_date,
+      release_date: movieData.release_date,
       fantasy_points: movie?.fantasy_points,
     }, seasonYearFor(seasonYears, leagueId))
     if (!lock) {
@@ -1573,8 +1587,7 @@ async function loadSettledCounterpickContests(
  *
  * Bids can sit pending for up to a week, so a movie that was legitimately
  * upcoming and unscored at placement time may not be any more. The `movies` row
- * is authoritative here -- unlike the client-supplied `movie_data` a pickup bid
- * carries.
+ * is authoritative here: a counterpick target always has one.
  *
  * This runs before slot resolution on purpose: a contest that can never be
  * awarded must not consume one of the bidder's scarce counterpick slots, which
@@ -2416,7 +2429,8 @@ Deno.serve(async (req) => {
         const movieTitle = winner.movie_data?.title || `Movie #${winner.tmdb_id}`
 
         // Create movie if it doesn't exist. Its release date and score were
-        // already checked before resolution (voidUnbiddablePickupContests).
+        // already checked before resolution (voidUnbiddablePickupContests),
+        // which also replaced movie_data with the trusted row or TMDb's.
         let movieId: string
         const { data: existingMovie } = await serviceClient
           .from('movies')
@@ -2435,7 +2449,6 @@ Deno.serve(async (req) => {
               overview: winner.movie_data.overview,
               poster_url: winner.movie_data.poster_url,
               release_date: winner.movie_data.release_date,
-              popularity: winner.movie_data.popularity,
               vote_average: winner.movie_data.vote_average,
               status: 'upcoming',
             })

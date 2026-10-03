@@ -10,7 +10,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getEdgeFunctionServiceRoleKey, TestDataFactory } from './_setup.ts'
+import { getEdgeFunctionServiceRoleKey, seedTmdbForPendingPickupBids, TestDataFactory } from './_setup.ts'
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'http://127.0.0.1:54321'
 
@@ -46,6 +46,7 @@ export async function createProcessBidsCaller(): Promise<
     : await getEdgeFunctionServiceRoleKey()
 
   return async function callProcessBids(body: Record<string, unknown>): Promise<ProcessBidsResponse> {
+    await seedTmdbForPendingPickupBids()
     const response = await fetch(PROCESS_BIDS_FUNCTION_URL, {
       method: 'POST',
       headers: {

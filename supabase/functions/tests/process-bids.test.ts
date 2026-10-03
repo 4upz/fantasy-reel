@@ -6,7 +6,7 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import { SupabaseClient } from '@supabase/supabase-js'
-import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName, getUserId } from './_setup.ts'
+import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName, getUserId, seedTmdbForPendingPickupBids } from './_setup.ts'
 
 /**
  * Generate a tmdb_id well outside both the real TMDb ID range and the shared
@@ -75,6 +75,7 @@ Deno.test({
       : await getEdgeFunctionServiceRoleKey()
 
     async function callProcessBids(body?: Record<string, unknown>) {
+    await seedTmdbForPendingPickupBids()
       const response = await fetch(FUNCTION_URL, {
         method: 'POST',
         headers: {
@@ -252,6 +253,81 @@ Deno.test({
           .eq('league_id', leagueId)
           .eq('type', 'bid_won')
         assertEquals(wonNotifications, 1)
+      })
+
+      // A bid's movie_data is a client's word: anyone can write their own bid
+      // row. The movie an award creates, and the release check before it, come
+      // from TMDb instead.
+      await t.step('creates a won movie from TMDb, not the bid\'s movie_data', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('pu-forged-title'), 2)
+        const teamId = (await factory.getTeamForUser(leagueId, client))!.teamId
+        const tmdbId = uniqueVoidTestTmdbId()
+        const releaseDate = `${new Date().getFullYear() + 1}-11-20`
+        await factory.cacheDraftMovie(tmdbId, { title: 'Canonical Pickup Title', release_date: releaseDate })
+
+        const { error: bidError } = await serviceClient.from('pickup_bids').insert({
+          league_id: leagueId,
+          team_id: teamId,
+          tmdb_id: tmdbId,
+          movie_data: {
+            title: 'Forged Pickup Title',
+            poster_url: 'https://example.com/forged.png',
+            release_date: releaseDate,
+            vote_average: 10,
+            popularity: 999,
+          },
+          amount: 3,
+          status: 'active',
+          processing_deadline: new Date(Date.now() - 60_000).toISOString(),
+        })
+        assertEquals(bidError, null)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.processed, 1)
+        assertEquals(data.results[0].movie_title, 'Canonical Pickup Title')
+
+        const { data: movie } = await serviceClient
+          .from('movies')
+          .select('title, poster_url, release_date')
+          .eq('tmdb_id', tmdbId)
+          .single()
+        assertEquals(movie, { title: 'Canonical Pickup Title', poster_url: null, release_date: releaseDate })
+      })
+
+      await t.step('cancels a pickup bid whose movie_data hides a release TMDb reports', async () => {
+        const leagueId = await factory.createActiveLeague(uniqueName('pu-forged-date'), 2)
+        const teamId = (await factory.getTeamForUser(leagueId, client))!.teamId
+        const tmdbId = uniqueVoidTestTmdbId()
+        await factory.cacheDraftMovie(tmdbId, { title: 'Already Released', release_date: '2020-06-01' })
+
+        const { data: bid, error: bidError } = await serviceClient.from('pickup_bids').insert({
+          league_id: leagueId,
+          team_id: teamId,
+          tmdb_id: tmdbId,
+          movie_data: { title: 'Already Released', release_date: '2099-01-01', vote_average: 5, popularity: 10 },
+          amount: 4,
+          status: 'active',
+          processing_deadline: new Date(Date.now() - 60_000).toISOString(),
+        }).select('id').single()
+        assertEquals(bidError, null)
+
+        const { status, data } = await callProcessBids({ mode: 'weekly', league_id: leagueId })
+        assertEquals(status, 200)
+        assertEquals(data.processed, 0)
+
+        const { data: bidAfter } = await serviceClient
+          .from('pickup_bids')
+          .select('status, resolution_reason')
+          .eq('id', bid!.id)
+          .single()
+        assertEquals(bidAfter, { status: 'cancelled', resolution_reason: 'movie_released' })
+
+        const { count: movieRows } = await serviceClient
+          .from('movies')
+          .select('*', { count: 'exact', head: true })
+          .eq('tmdb_id', tmdbId)
+        assertEquals(movieRows, 0)
       })
 
       // ============================================================================
