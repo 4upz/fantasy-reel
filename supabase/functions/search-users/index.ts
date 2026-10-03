@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, authenticateRequest, isAuthError, internalErrorResponse } from '../_shared/utils.ts'
-import { createLogger } from '../_shared/logger.ts'
+import { createLogger, serializeError } from '../_shared/logger.ts'
+import { escapeLikePattern, maskEmail } from '../_shared/user-search.ts'
 
 const log = createLogger('search-users')
 
@@ -15,16 +16,6 @@ interface UserSearchResult {
   display_name: string
   email_hint: string
   avatar_url: string | null
-}
-
-/**
- * Truncate email for privacy (e.g., "john@example.com" -> "j***@example.com")
- */
-function truncateEmail(email: string): string {
-  const [local, domain] = email.split('@')
-  if (!domain) return '***'
-  const maskedLocal = local[0] + '***'
-  return `${maskedLocal}@${domain}`
 }
 
 /**
@@ -66,7 +57,7 @@ Deno.serve(async (req) => {
     // Verify user is the league owner
     const { data: league, error: leagueError } = await supabaseClient
       .from('leagues')
-      .select('owner_id')
+      .select('owner_id, status')
       .eq('id', league_id)
       .single()
 
@@ -76,6 +67,12 @@ Deno.serve(async (req) => {
 
     if (league.owner_id !== user.id) {
       return errorResponse('Only the league owner can search for users to invite', 403)
+    }
+
+    // Invitations are only possible during setup (send-invite enforces the
+    // same rule), so there is nothing to search for afterwards.
+    if (league.status !== 'setup') {
+      return errorResponse('Cannot send invitations - draft has already started', 400)
     }
 
     const supabaseAdmin = createAdminClient()
@@ -105,12 +102,12 @@ Deno.serve(async (req) => {
     const { data: profiles, error: profilesError } = await supabaseAdmin
       .from('profiles')
       .select('user_id, display_name, avatar_url')
-      .ilike('display_name', `%${searchQuery}%`)
+      .ilike('display_name', `%${escapeLikePattern(searchQuery)}%`)
       .not('user_id', 'in', `(${excludeIds.map(id => `"${id}"`).join(',')})`)
       .limit(resultLimit + 10) // Fetch extra to account for filtering
 
     if (profilesError) {
-      console.error('Error searching profiles:', profilesError)
+      log.error('Error searching profiles', { error: serializeError(profilesError) })
       return errorResponse('Failed to search users', 500)
     }
 
@@ -125,7 +122,7 @@ Deno.serve(async (req) => {
     })
 
     if (authError) {
-      console.error('Error fetching auth users:', authError)
+      log.error('Error fetching auth users', { error: serializeError(authError) })
       return errorResponse('Failed to search users', 500)
     }
 
@@ -152,7 +149,7 @@ Deno.serve(async (req) => {
       results.push({
         user_id: profile.user_id,
         display_name: profile.display_name || 'Unknown User',
-        email_hint: truncateEmail(email),
+        email_hint: maskEmail(email),
         avatar_url: profile.avatar_url
       })
     }

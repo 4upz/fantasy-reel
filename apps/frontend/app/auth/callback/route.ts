@@ -2,20 +2,12 @@ import { createClient } from '@/utils/supabase/server'
 import { getDisplayNameFromUser, getAvatarUrlFromUser } from '@/utils/oauth'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
-
-/**
- * Validate redirect path to prevent open redirect attacks.
- * Only allows relative paths starting with / but not // (protocol-relative URLs).
- */
-function isValidRedirectPath(path: string): boolean {
-  return path.startsWith('/') && !path.startsWith('//')
-}
+import { safeRedirectPath } from '@/utils/redirect'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const rawNext = searchParams.get('next') ?? '/dashboard'
-  const next = isValidRedirectPath(rawNext) ? rawNext : '/dashboard'
+  const next = safeRedirectPath(searchParams.get('next'), '/dashboard')
   const isLinking = searchParams.get('linking') === 'true'
 
   if (code) {
