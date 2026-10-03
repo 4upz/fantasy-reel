@@ -18,6 +18,8 @@ export interface BiddingContextValue {
   teams: TeamWithOwner[]
   bidding: UseBiddingReturn
   ownedTmdbIds: number[]
+  /** Upcoming movies that already have a score, so are locked against bids. */
+  scoredTmdbIds: ReadonlySet<number>
   /**
    * Active holdings across the whole roster -- draft picks and pickups alike,
    * since they share `total_slots`.

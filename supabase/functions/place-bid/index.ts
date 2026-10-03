@@ -4,7 +4,7 @@ import {
   errorResponse,
   handleCorsPreflightRequest,
   isValidUUID,
-  isUpcomingMovie,
+  bidLock,
   internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
@@ -182,11 +182,11 @@ Deno.serve(async (req) => {
     }
 
     // Look up the movie by tmdb_id in case it's already in our DB (e.g. drafted,
-    // or bid on before), so the release-date and eligibility checks below can
-    // use the authoritative row instead of client-supplied data.
+    // or bid on before), so the release-date, score and eligibility checks
+    // below can use the authoritative row instead of client-supplied data.
     const { data: existingMovie } = await serviceClient
       .from('movies')
-      .select('id, release_date')
+      .select('id, release_date, fantasy_points')
       .eq('tmdb_id', tmdb_id)
       .maybeSingle()
 
@@ -202,10 +202,14 @@ Deno.serve(async (req) => {
     // could be stale (the movie may have since released) and isn't scoped to
     // this caller, so trusting it would reopen the release-date exploit this
     // guard exists to close.
-    const releaseDateToCheck = existingMovie ? existingMovie.release_date : movie_data?.release_date
-    const releaseCheck = isUpcomingMovie(releaseDateToCheck, league.season_year)
-    if (!releaseCheck.valid) {
-      return errorResponse(`Cannot bid on this movie: ${releaseCheck.reason}`, 400)
+    //
+    // A score only ever lives on the DB row: a movie we have never seen has none.
+    const lock = bidLock({
+      release_date: existingMovie ? existingMovie.release_date : movie_data?.release_date,
+      fantasy_points: existingMovie?.fantasy_points,
+    }, league.season_year)
+    if (lock) {
+      return errorResponse(`Cannot bid on this movie: ${lock.reason}`, 400)
     }
 
     // Check movie eligibility

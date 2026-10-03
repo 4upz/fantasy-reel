@@ -5,7 +5,8 @@ import Image from 'next/image'
 import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
 import FantasyPoints from '@/app/components/FantasyPoints'
-import { formatCriticScore } from '@/utils/scoring'
+import { formatCriticScore, isScoreLocked } from '@/utils/scoring'
+import ScoreLockLabel from '@/app/components/ScoreLockLabel'
 import type {
   Team,
   TradeActionResult,
@@ -518,6 +519,13 @@ function MovieSelector({
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const listRef = useRef<HTMLDivElement>(null)
 
+  // A scored movie is locked against trades, so it can't be added -- but one
+  // already selected can still be taken back out.
+  const canToggle = useCallback(
+    (movie: TradeableMovie) => !isScoreLocked(movie.fantasy_points) || selectedIds.has(movie.source_id),
+    [selectedIds]
+  )
+
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -535,7 +543,7 @@ function MovieSelector({
         case ' ':
         case 'Enter':
           e.preventDefault()
-          if (focusedIndex >= 0 && focusedIndex < movies.length) {
+          if (focusedIndex >= 0 && focusedIndex < movies.length && canToggle(movies[focusedIndex])) {
             onToggle(movies[focusedIndex].source_id)
           }
           break
@@ -549,7 +557,7 @@ function MovieSelector({
           break
       }
     },
-    [movies, focusedIndex, onToggle]
+    [movies, focusedIndex, onToggle, canToggle]
   )
 
   // Scroll focused item into view
@@ -605,19 +613,24 @@ function MovieSelector({
         const isSelected = selectedIds.has(movie.source_id)
         const isFocused = focusedIndex === index
         const isInvalid = invalidIds.has(movie.source_id)
+        const isLocked = isScoreLocked(movie.fantasy_points)
+        const isDisabled = !canToggle(movie)
         return (
           <div
             key={movie.source_id}
             role="option"
             aria-selected={isSelected}
-            onClick={() => onToggle(movie.source_id)}
-            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors cursor-pointer ${
+            aria-disabled={isDisabled || undefined}
+            onClick={isDisabled ? undefined : () => onToggle(movie.source_id)}
+            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors ${
               isInvalid
                 ? 'bg-crimson/15 border border-crimson'
                 : isSelected
                   ? 'bg-gold/20 border border-gold'
-                  : 'bg-surface-hover hover:bg-elevated border border-transparent'
-            } ${isFocused ? 'ring-2 ring-gold ring-offset-2 ring-offset-surface' : ''}`}
+                  : isDisabled
+                    ? 'bg-surface-hover border border-transparent opacity-60'
+                    : 'bg-surface-hover hover:bg-elevated border border-transparent'
+            } ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${isFocused ? 'ring-2 ring-gold ring-offset-2 ring-offset-surface' : ''}`}
           >
             <div className="relative w-8 h-12 shrink-0 rounded bg-surface-hover">
               <MoviePoster
@@ -635,6 +648,7 @@ function MovieSelector({
                 {/* The alert above carries the reason; this only says which row
                     it meant, and carries it in text rather than colour alone. */}
                 {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
+                {isLocked && !isInvalid && <ScoreLockLabel>can&apos;t be traded</ScoreLockLabel>}
                 {movie.source === 'counterpick' && (
                   <span className="text-crimson">
                     {movie.counterpick_target_team_name

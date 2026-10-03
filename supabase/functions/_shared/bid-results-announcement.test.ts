@@ -88,11 +88,13 @@ Deno.test('every bid on a movie gets its own line, the winner first', () => {
 Deno.test('cancelled bids say what changed while they were pending', () => {
   const [embed] = embedsOf('counterpick', [
     oneBid('Released', 'Eve', 10, { kind: 'cancelled', reason: 'movie_released' }),
+    oneBid('Scored', 'Gus', 7, { kind: 'cancelled', reason: 'movie_scored' }),
     oneBid('Dropped', 'Finn', 4, { kind: 'cancelled', reason: 'movie_dropped' }),
   ])
 
   assertEquals(embed.fields?.map((field) => field.value), [
     "**Eve**'s $10 bid was cancelled: the movie released before processing",
+    "**Gus**'s $7 bid was cancelled: the movie got its score before processing",
     "**Finn**'s $4 bid was cancelled: the movie was dropped by its holder",
   ])
 })

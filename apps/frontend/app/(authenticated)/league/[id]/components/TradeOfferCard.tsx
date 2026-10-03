@@ -14,6 +14,8 @@ import type {
   TeamBudget,
 } from '@/types'
 import { formatRelativeDate, getReleaseYear } from '@/utils/date'
+import { isScoreLocked } from '@/utils/scoring'
+import ScoreLockLabel from '@/app/components/ScoreLockLabel'
 import AcceptConfirmModal from './AcceptConfirmModal'
 import OfferExpiryPicker, { Chip } from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
@@ -954,26 +956,34 @@ function MovieSelector({
       {movies.map((movie) => {
         const isSelected = selectedIds.has(movie.source_id)
         const isInvalid = invalidIds.has(movie.source_id)
+        // A scored movie is locked against trades: it can be taken out of a
+        // counter, never added. The other team's side carries no score (it is
+        // the offer's snapshot), so the server is the check there.
+        const isLocked = isScoreLocked(movie.fantasy_points)
+        const isDisabled = isLocked && !isSelected
         return (
           <div
             key={movie.source_id}
             role="option"
             aria-selected={isSelected}
-            onClick={() => onToggle(movie.source_id)}
-            tabIndex={0}
-            onKeyDown={(e) => {
+            aria-disabled={isDisabled || undefined}
+            onClick={isDisabled ? undefined : () => onToggle(movie.source_id)}
+            tabIndex={isDisabled ? -1 : 0}
+            onKeyDown={isDisabled ? undefined : (e) => {
               if (e.key === ' ' || e.key === 'Enter') {
                 e.preventDefault()
                 onToggle(movie.source_id)
               }
             }}
-            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors cursor-pointer ${
+            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors ${
               isInvalid
                 ? 'bg-crimson/15 border border-crimson'
                 : isSelected
                   ? 'bg-gold/20 border border-gold'
-                  : 'bg-surface-hover hover:bg-elevated border border-transparent'
-            } focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface`}
+                  : isDisabled
+                    ? 'bg-surface-hover border border-transparent opacity-60'
+                    : 'bg-surface-hover hover:bg-elevated border border-transparent'
+            } ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface`}
           >
             <div className="relative w-8 h-12 shrink-0 rounded bg-surface-hover">
               <MoviePoster
@@ -989,6 +999,7 @@ function MovieSelector({
               <p className="type-row-title text-foreground break-words">{movie.title}</p>
               <div className="type-meta flex items-center gap-2 text-foreground-secondary">
                 {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
+                {isLocked && !isInvalid && <ScoreLockLabel>can&apos;t be traded</ScoreLockLabel>}
                 {movie.source === 'counterpick' && (
                   <span className="text-crimson">
                     {movie.counterpick_target_team_name

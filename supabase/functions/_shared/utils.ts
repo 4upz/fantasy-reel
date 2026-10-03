@@ -242,6 +242,33 @@ export function isUpcomingMovie(
   return { valid: true }
 }
 
+/** Why a movie can no longer be bid on, as process-bids records it on a cancelled bid. */
+export type BidLockCode = 'movie_released' | 'movie_scored'
+
+/**
+ * Why a movie can no longer be bid on -- picked up, or counterpicked by bid --
+ * or null while it still can.
+ *
+ * A released movie is out of play (isUpcomingMovie). So is a scored one: once
+ * it has a Tomatometer (`fantasy_points`, NULL until then) its outcome is
+ * known, and a scored movie is locked against bids and trades, released or not.
+ * Placement refuses with `reason`; process-bids cancels a bid still pending on
+ * the movie, uncharged, recording `code`.
+ */
+export function bidLock(
+  movie: { release_date: string | null | undefined; fantasy_points: number | null | undefined },
+  seasonYear: number
+): { code: BidLockCode; reason: string } | null {
+  const release = isUpcomingMovie(movie.release_date, seasonYear)
+  if (!release.valid) {
+    return { code: 'movie_released', reason: release.reason ?? 'Movie has already been released' }
+  }
+  if (movie.fantasy_points != null) {
+    return { code: 'movie_scored', reason: 'Movie already has a score' }
+  }
+  return null
+}
+
 /** Today's UTC calendar date (YYYY-MM-DD), the calendar release dates are judged on. */
 export function utcDate(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10)

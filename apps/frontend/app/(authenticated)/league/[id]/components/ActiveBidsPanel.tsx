@@ -10,6 +10,7 @@ import CounterpickBidCard from './CounterpickBidCard'
 import BiddingModalLoading from '../bidding/BiddingModalLoading'
 import { groupBy, isMovieBiddable, latestOpenCounterWindow } from './utils'
 import { useBiddingContext } from '../bidding/BiddingContext'
+import { isScoreLocked } from '@/utils/scoring'
 
 const BidPriorityModal = dynamic(() => import('./BidPriorityModal'), {
   loading: BiddingModalLoading,
@@ -91,6 +92,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
     teamId,
     bidding,
     myHoldings,
+    scoredTmdbIds,
     biddingCounterpickSlots,
     canPlaceCounterpickBid,
     isCounterBidPhase,
@@ -168,12 +170,17 @@ export default function ActiveBidsPanel(): React.ReactElement {
   )
 
   function renderBidItem(item: UnifiedBidItem, isOwner: boolean): React.ReactElement {
-    // A released movie can't be bid on any more, so offering "Counter bid" on
-    // one is a dead end -- the server rejects it once the modal is filled in.
+    // A released or scored movie can't be bid on any more, so offering
+    // "Counter bid" on one is a dead end -- the server rejects it once the modal
+    // is filled in. A scored one says so: its bids cancel at processing.
     const releaseDate = item.type === 'pickup'
       ? item.bid.movie_data?.release_date ?? null
       : item.bid.movies?.release_date ?? null
-    const canCounter = bidding.hasLoaded && bidding.budget !== null && !bidding.error && isMovieBiddable(releaseDate)
+    const scoreLocked = item.type === 'pickup'
+      ? scoredTmdbIds.has(item.bid.tmdb_id)
+      : isScoreLocked(item.bid.movies?.fantasy_points)
+    const canCounter = bidding.hasLoaded && bidding.budget !== null && !bidding.error &&
+      isMovieBiddable(releaseDate) && !scoreLocked
 
     if (item.type === 'pickup') {
       // Only the bid's own team holds the drop target, so only they can be
@@ -194,6 +201,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
           cancelLocked={isOwner && isCounterBidPhase}
           onCounter={canCounter ? () => openPlaceBid(item.bid) : undefined}
           counterWindowClosesAt={pickupCounterWindows.get(item.bid.tmdb_id) ?? null}
+          scoreLocked={scoreLocked}
         />
       )
     }
@@ -206,6 +214,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
         cancelLocked={isOwner && isCounterBidPhase}
         onCounter={canCounter ? () => openCounterpickBid(item.bid) : undefined}
         counterWindowClosesAt={counterpickCounterWindows.get(item.bid.movie_id) ?? null}
+        scoreLocked={scoreLocked}
       />
     )
   }

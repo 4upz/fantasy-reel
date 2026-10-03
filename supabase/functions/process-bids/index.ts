@@ -10,7 +10,8 @@
  * Processing logic:
  * 1. Group bids by movie (league_id + tmdb_id)
  * 2. Skip movies where any bid still has an open response window, and cancel
- *    every bid on a movie that released while they were pending
+ *    every bid on a movie that released or got its score while they were
+ *    pending (a scored movie is locked against bids)
  * 3. Find winner (highest amount, earliest created_at for ties)
  * 4. Create movie if it doesn't exist (from movie_data)
  * 5. Create pickup record
@@ -20,7 +21,7 @@
  */
 // Trigger deploy
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie, internalErrorResponse } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, bidLock, internalErrorResponse } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
@@ -147,10 +148,11 @@ interface DeferredGroup {
   counter_window_ends: string
 }
 
-// A winning bid that was voided at processing time because the movie released
+// A bid voided at processing time because its movie released or got its score
 // while the bid was pending (bids can sit for up to a week - see
-// get_next_processing_deadline). Placement-time checks can't catch this since
-// the movie may not have released yet when the bid was placed.
+// get_next_processing_deadline), or its counterpick target went stale.
+// Placement-time checks can't catch this since none of it had happened yet
+// when the bid was placed.
 interface VoidedBidResult {
   bid_id: string
   league_id: string
@@ -801,7 +803,7 @@ async function getTeamUserId(
 
 /**
  * Title/body copy for a voided-bid notification, one entry per `VoidReasonCode`.
- * All four share the same shape (a movie became un-winnable while the bid sat
+ * All share the same shape (a movie became un-winnable while the bid sat
  * pending) but need distinct wording, and each must say plainly that the
  * budget was not charged.
  */
@@ -816,6 +818,11 @@ function voidedBidCopy(
       return {
         title,
         body: `${movieTitle} was released before your bid of $${amount} could be processed. Your bid was cancelled and your budget was not charged.`,
+      }
+    case 'movie_scored':
+      return {
+        title,
+        body: `${movieTitle} got its Rotten Tomatoes score before your bid of $${amount} could be processed. A scored movie can't be bid on, so your bid was cancelled and your budget was not charged.`,
       }
     case 'movie_dropped':
       return {
@@ -837,9 +844,9 @@ function voidedBidCopy(
 
 /**
  * Notify a team's owner that their bid was voided at processing time -- the
- * movie released, was dropped by its holder, was traded to the bidder's own
- * team, or its target holding disappeared entirely. Reuses the 'bid_lost'
- * notification type since no dedicated type exists for any of these;
+ * movie released or got its score, was dropped by its holder, was traded to the
+ * bidder's own team, or its target holding disappeared entirely. Reuses the
+ * 'bid_lost' notification type since no dedicated type exists for any of these;
  * `data.reason` carries the reason code so the frontend can special-case copy
  * later.
  *
@@ -1188,10 +1195,11 @@ async function settleUnawardedPickupContest(
 }
 
 /**
- * Drop every pickup contest whose movie has already released, cancelling all
- * of its bids.
+ * Drop every pickup contest whose movie can no longer be bid on -- it has
+ * released, or it has a score and is locked (bidLock) -- cancelling all of its
+ * bids.
  *
- * Runs before resolution for the reason voidReleasedCounterpickContests does:
+ * Runs before resolution for the reason voidUnbiddableCounterpickContests does:
  * a contest that can never be awarded must not spend its bidder's room or
  * budget. Resolved first and voided after, it would leave that team's other
  * bids unawarded -- and so closed out as lost -- for room it actually had.
@@ -1199,12 +1207,12 @@ async function settleUnawardedPickupContest(
  * The release date is the `movies` row's when one exists, else the bids' own
  * `movie_data`, as in place-bid. That second source is client-supplied and only
  * checked against itself; verifying it would need a TMDb round-trip (draft-pick
- * has the same trust model).
+ * has the same trust model). A score only ever lives on the `movies` row.
  *
  * @returns the contests left to resolve, and the leagues where a movie could
  *   not be read -- those cannot be decided this run (see holdUnreadLeagues).
  */
-async function voidReleasedPickupContests(
+async function voidUnbiddablePickupContests(
   serviceClient: ServiceClient,
   contests: BidContest[],
   bidsByKey: Map<string, PickupBid[]>,
@@ -1214,11 +1222,11 @@ async function voidReleasedPickupContests(
 ): Promise<{ contests: BidContest[]; unreadLeagues: Set<string> }> {
   const tmdbIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
   const { rows: movies, unreadIds } = await selectByIdBatches<
-    { id: string; tmdb_id: number; release_date: string | null }
+    { id: string; tmdb_id: number; release_date: string | null; fantasy_points: number | null }
   >(
     tmdbIds,
-    'Failed to read movies for the pickup release check:',
-    (batch) => serviceClient.from('movies').select('id, tmdb_id, release_date').in('tmdb_id', batch),
+    'Failed to read movies for the pickup release and score check:',
+    (batch) => serviceClient.from('movies').select('id, tmdb_id, release_date, fantasy_points').in('tmdb_id', batch),
   )
   const movieByTmdbId = new Map(movies.map((movie) => [String(movie.tmdb_id), movie]))
 
@@ -1234,34 +1242,33 @@ async function voidReleasedPickupContests(
 
     const bids = bidsByKey.get(contest.key) ?? []
     const movie = movieByTmdbId.get(tmdbIdStr)
-    const releaseDate = movie
-      ? movie.release_date
-      : bids.find((bid) => bid.movie_data)?.movie_data?.release_date
-    const releaseCheck = isUpcomingMovie(releaseDate, seasonYearFor(seasonYears, leagueId))
-    if (releaseCheck.valid) {
+    const lock = bidLock({
+      release_date: movie ? movie.release_date : bids.find((bid) => bid.movie_data)?.movie_data?.release_date,
+      fantasy_points: movie?.fantasy_points,
+    }, seasonYearFor(seasonYears, leagueId))
+    if (!lock) {
       surviving.push(contest)
       continue
     }
 
     const movieTitle = pickupMovieTitle(bids, parseInt(tmdbIdStr))
-    const reason = releaseCheck.reason ?? 'Movie has already been released'
 
     // Every bid in the group, not just the leader: none can ever be honored,
     // and one left 'active' past its deadline would be reconsidered every run.
     let claimed: PickupBid[]
     try {
-      claimed = await settlePendingBids(serviceClient, 'pickup_bids', bids, 'cancelled', 'movie_released')
+      claimed = await settlePendingBids(serviceClient, 'pickup_bids', bids, 'cancelled', lock.code)
     } catch (error) {
-      log.error('Failed to cancel released pickup bids', { error: serializeError(error) })
+      log.error('Failed to cancel unbiddable pickup bids', { reason: lock.code, error: serializeError(error) })
       unreadLeagues.add(leagueId)
       continue
     }
 
     for (const bid of claimed) {
-      await notifyVoidedBidder(serviceClient, bid, movieTitle, 'movie_released', {
+      await notifyVoidedBidder(serviceClient, bid, movieTitle, lock.code, {
         tmdb_id: bid.tmdb_id,
         movie_id: movie?.id,
-      }, reason)
+      }, lock.reason)
 
       recordVoided(voided, ledger, contest.key, {
         bid_id: bid.id,
@@ -1269,13 +1276,14 @@ async function voidReleasedPickupContests(
         team_id: bid.team_id,
         amount: bid.amount,
         movie_title: movieTitle,
-        reason,
+        reason: lock.reason,
         tmdb_id: bid.tmdb_id,
         movie_id: movie?.id,
-      }, 'movie_released')
+      }, lock.code)
     }
 
-    log.info('Voided pickup bid(s): movie released before processing', {
+    log.info('Voided pickup bid(s): movie can no longer be bid on', {
+      reason: lock.code,
       voided_count: claimed.length,
       movie_title: movieTitle,
     })
@@ -1559,13 +1567,14 @@ async function loadSettledCounterpickContests(
 }
 
 /**
- * Drop every contest whose target movie has already released, cancelling all of
- * that contest's bids.
+ * Drop every contest whose target movie can no longer be bid on -- it has
+ * released, or it has a score and is locked (bidLock) -- cancelling all of that
+ * contest's bids.
  *
  * Bids can sit pending for up to a week, so a movie that was legitimately
- * upcoming at placement time may have released by now. The `movies` row is the
- * authoritative release date here -- unlike the client-supplied `movie_data` a
- * pickup bid carries.
+ * upcoming and unscored at placement time may not be any more. The `movies` row
+ * is authoritative here -- unlike the client-supplied `movie_data` a pickup bid
+ * carries.
  *
  * This runs before slot resolution on purpose: a contest that can never be
  * awarded must not consume one of the bidder's scarce counterpick slots, which
@@ -1578,7 +1587,7 @@ interface CounterpickMovie {
   fantasy_points: number | null
 }
 
-async function voidReleasedCounterpickContests(
+async function voidUnbiddableCounterpickContests(
   serviceClient: ServiceClient,
   contests: BidContest[],
   bidsByContest: Map<string, CounterpickBid[]>,
@@ -1591,7 +1600,7 @@ async function voidReleasedCounterpickContests(
 
   const { rows: movies } = await selectByIdBatches<CounterpickMovie>(
     movieIds,
-    'Failed to read movies for the counterpick release check:',
+    'Failed to read movies for the counterpick release and score check:',
     (batch) => serviceClient.from('movies').select('id, title, release_date, fantasy_points').in('id', batch),
   )
   const moviesById = new Map(movies.map((movie) => [movie.id, movie]))
@@ -1607,27 +1616,26 @@ async function voidReleasedCounterpickContests(
 
     if (!movie) continue
 
-    const releaseCheck = isUpcomingMovie(movie.release_date, seasonYearFor(seasonYears, leagueId))
-    if (releaseCheck.valid) {
+    const lock = bidLock(movie, seasonYearFor(seasonYears, leagueId))
+    if (!lock) {
       surviving.push(contest)
       continue
     }
 
     const movieTitle = movie.title || `Movie ${movieId}`
-    const reason = releaseCheck.reason ?? 'Movie has already been released'
 
     // Void every bid in the group, not just the leader: once the target has
-    // released none of them can ever be honored, and a bid left 'active' with an
-    // expired deadline would be reconsidered on every later run and would keep
-    // rendering as live in the UI.
+    // released or been scored none of them can ever be honored, and a bid left
+    // 'active' with an expired deadline would be reconsidered on every later run
+    // and would keep rendering as live in the UI.
     const bidsToVoid = await settlePendingBids(serviceClient, 'counterpick_bids',
-      bidsByContest.get(contest.key) ?? [], 'cancelled', 'movie_released')
+      bidsByContest.get(contest.key) ?? [], 'cancelled', lock.code)
 
     for (const bid of bidsToVoid) {
-      await notifyVoidedBidder(serviceClient, bid, movieTitle, 'movie_released', {
+      await notifyVoidedBidder(serviceClient, bid, movieTitle, lock.code, {
         movie_id: movieId,
         bid_type: 'counterpick',
-      }, reason)
+      }, lock.reason)
 
       recordVoided(voided, ledger, contest.key, {
         bid_id: bid.id,
@@ -1635,12 +1643,13 @@ async function voidReleasedCounterpickContests(
         team_id: bid.team_id,
         amount: bid.amount,
         movie_title: movieTitle,
-        reason,
+        reason: lock.reason,
         movie_id: movieId,
-      }, 'movie_released')
+      }, lock.code)
     }
 
-    log.info('Voided counterpick bid(s): movie released before processing', {
+    log.info('Voided counterpick bid(s): movie can no longer be bid on', {
+      reason: lock.code,
       voided_count: bidsToVoid.length,
       movie_title: movieTitle,
     })
@@ -1668,7 +1677,7 @@ const TARGET_VOID_REASON_TEXT: Record<TargetVoidReason, string> = {
  * draft_pick row and another at the live pickup row, and only the former
  * should die here.
  *
- * Runs before slot resolution for the same reason `voidReleasedCounterpickContests`
+ * Runs before slot resolution for the same reason `voidUnbiddableCounterpickContests`
  * does: a bid that can never be awarded must not consume one of the bidder's
  * scarce counterpick slots.
  *
@@ -1863,7 +1872,7 @@ export async function processCounterpickBids(
     serviceClient, settledContests, bidsByContest, ledger, errors,
   )
 
-  const { contests: unreleasedContests, movies } = await voidReleasedCounterpickContests(
+  const { contests: biddableContests, movies } = await voidUnbiddableCounterpickContests(
     serviceClient,
     unawardedContests,
     bidsByContest,
@@ -1872,14 +1881,15 @@ export async function processCounterpickBids(
     seasonYears,
     errors,
   )
-  if (unreleasedContests.length === 0) return results
+  if (biddableContests.length === 0) return results
 
-  // Must run before slot resolution, same as the release check above: a bid
-  // whose target has gone stale (dropped, traded away, traded to itself) can
-  // never be awarded, so it must not occupy one of the bidder's scarce slots.
+  // Must run before slot resolution, same as the release and score check
+  // above: a bid whose target has gone stale (dropped, traded away, traded to
+  // itself) can never be awarded, so it must not occupy one of the bidder's
+  // scarce slots.
   const contests = await revalidateCounterpickTargets(
     serviceClient,
-    unreleasedContests,
+    biddableContests,
     bidsByContest,
     voided,
     ledger,
@@ -2352,8 +2362,8 @@ Deno.serve(async (req) => {
     const unawardedPickupContests = await reconcileAwardedPickupContests(
       serviceClient, pickupContests, bidsByKey, pickupLedger, errors,
     )
-    const { contests: unreleasedContests, unreadLeagues: unreadMovieLeagues } =
-      await voidReleasedPickupContests(
+    const { contests: biddableContests, unreadLeagues: unreadMovieLeagues } =
+      await voidUnbiddablePickupContests(
         serviceClient,
         unawardedPickupContests,
         bidsByKey,
@@ -2363,11 +2373,11 @@ Deno.serve(async (req) => {
       )
     const { capacities: pickupCapacities, unreadableLeagues } = await getTeamCapacities(
       serviceClient,
-      unreleasedContests,
+      biddableContests,
       'pickup',
     )
     const resolvableContests = holdUnreadLeagues(
-      unreleasedContests,
+      biddableContests,
       new Set([...unreadPickupLeagues, ...unreadMovieLeagues, ...unreadableLeagues]),
       errors,
     )
@@ -2405,8 +2415,8 @@ Deno.serve(async (req) => {
         const winner = allBidsForMovie.find((bid) => bid.id === resolved.id)!
         const movieTitle = winner.movie_data?.title || `Movie #${winner.tmdb_id}`
 
-        // Create movie if it doesn't exist. Its release date was already
-        // checked before resolution (voidReleasedPickupContests).
+        // Create movie if it doesn't exist. Its release date and score were
+        // already checked before resolution (voidUnbiddablePickupContests).
         let movieId: string
         const { data: existingMovie } = await serviceClient
           .from('movies')
@@ -2641,7 +2651,7 @@ Deno.serve(async (req) => {
     const settledCount =
       results.length + counterpickResults.length + voidedCount + unawardedPickups.length + counterpicksUnawarded + reconciledBids
     const voidedSuffix = voidedCount > 0
-      ? `; voided ${voidedCount} bid(s) for movies that released before processing`
+      ? `; voided ${voidedCount} bid(s) on movies that could no longer be bid on`
       : ''
     const unawardedSuffix = unawardedPickups.length > 0
       ? `; ${unawardedPickups.length} movie(s) went unawarded (no bidder could take them)`

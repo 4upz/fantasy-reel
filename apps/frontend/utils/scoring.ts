@@ -50,6 +50,17 @@ export function pointsTone(
   return points >= 0 ? positive : 'text-crimson'
 }
 
+/**
+ * Whether a movie is locked against bids and trades: once it has a score its
+ * outcome is known, so it no longer changes hands, released or not. The server
+ * enforces this; the UI says so up front instead of letting a request fail.
+ * Pass the movie's points -- or a counterpick's, which are the movie's
+ * inverted and so set exactly when it is scored.
+ */
+export function isScoreLocked(points: number | null | undefined): boolean {
+  return points != null
+}
+
 /** Why a pre-release score is muted, for a tooltip or screen reader where there is no room to say it. */
 export function describePreReleaseScore(releaseDate: string | null | undefined): string {
   return releaseDate

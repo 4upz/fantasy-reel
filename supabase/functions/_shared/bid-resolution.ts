@@ -441,11 +441,11 @@ export function droppableHoldingIds(
  * the bid were awarded as-is.
  *
  * This is the same staleness process-bids already guards against for a
- * released movie (see `voidReleasedBidContests`): what a bid was
- * placed against is not what processing must trust, so the holding row is
- * re-read at settlement time. Kept free of Supabase calls, like the rest of
- * this module, so the decision can be tested directly; the caller supplies the
- * holding row it read (or says the read failed).
+ * released or scored movie (see `voidUnbiddableCounterpickContests` there):
+ * what a bid was placed against is not what processing must trust, so the
+ * holding row is re-read at settlement time. Kept free of Supabase calls, like
+ * the rest of this module, so the decision can be tested directly; the caller
+ * supplies the holding row it read (or says the read failed).
  */
 
 export interface RetargetableCounterpickBid {
@@ -470,8 +470,12 @@ export interface CounterpickTargetRow {
  */
 export type TargetVoidReason = 'movie_dropped' | 'target_owned' | 'target_missing'
 
-/** Every reason a pending bid can be voided at processing time instead of settled. */
-export type VoidReasonCode = 'movie_released' | TargetVoidReason
+/**
+ * Every reason a pending bid can be voided at processing time instead of
+ * settled: its movie released or got a score (bidLock in utils.ts), or its
+ * counterpick target went stale.
+ */
+export type VoidReasonCode = 'movie_released' | 'movie_scored' | TargetVoidReason
 
 export type TargetRevalidation =
   | { outcome: 'keep'; targetTeamId: string }
@@ -489,7 +493,7 @@ export type TargetRevalidation =
  *  - the read of it failed for infrastructure reasons, in which case the bid
  *    is left untouched (`keep`, at its previously stored target) rather than
  *    voided on the strength of a failed read. This mirrors the fail-open
- *    posture `voidReleasedBidContests` takes for a movie it could not
+ *    posture `voidUnbiddablePickupContests` takes for a movie it could not
  *    read: an outage must not cost a bidder a live bid.
  *
  * Checked in the order the guardrail spec lists them: dropped, then
