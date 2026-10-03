@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { formatDate, isExpired } from '@/utils/date'
-import type { Invitation } from '@/types'
+import type { LeagueInvitation } from '@/types'
 import { ErrorAlert } from '@/app/components/FormError'
 import { LoadingSpinner } from '@/app/components/LoadingSpinner'
 
@@ -19,7 +19,7 @@ type EffectiveStatus = 'pending' | 'accepted' | 'declined' | 'expired' | 'cancel
 export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Props): React.ReactElement | null {
   const supabase = useMemo(() => createClient(), [])
 
-  const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [invitations, setInvitations] = useState<LeagueInvitation[]>([])
   const [loading, setLoading] = useState(true)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
@@ -31,11 +31,10 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
     setLoading(true)
     setError(null)
 
+    // Owners can't read username invites directly; this RPC lists every
+    // invitation with those invitees' emails withheld.
     const { data, error: queryError } = await supabase
-      .from('invitations')
-      .select('*')
-      .eq('league_id', leagueId)
-      .order('sent_at', { ascending: false })
+      .rpc('get_league_invitations', { p_league_id: leagueId })
 
     if (queryError) {
       console.error('Error fetching invitations:', queryError)
@@ -77,7 +76,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
     }
   }, [supabase, leagueId, isOwner, fetchInvitations])
 
-  async function handleCopy(invitation: Invitation): Promise<void> {
+  async function handleCopy(invitation: LeagueInvitation): Promise<void> {
     const inviteUrl = `${window.location.origin}/join?token=${invitation.token}`
 
     try {
@@ -114,7 +113,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
             ? {
                 ...inv,
                 token: data.invitation.token,
-                status: data.invitation.status as Invitation['status'],
+                status: data.invitation.status as LeagueInvitation['status'],
                 expires_at: data.invitation.expires_at,
                 sent_at: new Date().toISOString(),
                 responded_at: null,
@@ -216,7 +215,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
   )
 }
 
-function getEffectiveStatus(invitation: Invitation): EffectiveStatus {
+function getEffectiveStatus(invitation: LeagueInvitation): EffectiveStatus {
   if (invitation.status === 'pending' && isExpired(invitation.expires_at)) {
     return 'expired'
   }
@@ -232,8 +231,8 @@ const STATUS_CONFIG: Record<EffectiveStatus, { bg: string; dot: string; label: s
 }
 
 interface InvitationRowProps {
-  invitation: Invitation
-  onCopy: (invitation: Invitation) => void
+  invitation: LeagueInvitation
+  onCopy: (invitation: LeagueInvitation) => void
   onResend: (id: string) => void
   onCancel: (id: string) => void
   isResending: boolean
@@ -269,7 +268,9 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
       {/* Left side: Email and metadata */}
       <div className="flex-1 min-w-0 pr-4">
         <div className="flex items-center gap-2.5">
-          <span className="font-medium text-foreground truncate">{invitation.email}</span>
+          <span className="font-medium text-foreground truncate">
+            {invitation.email ?? invitation.invitee_display_name ?? 'Invited user'}
+          </span>
           <span className="type-meta inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-foreground-secondary bg-surface border border-border shrink-0">
             <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
             {statusConfig.label}

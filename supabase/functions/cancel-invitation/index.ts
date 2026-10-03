@@ -6,8 +6,10 @@ import {
   authenticateRequest,
   isAuthError,
   internalErrorResponse,
+  createServiceClient,
 } from '../_shared/utils.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { toOwnerInvitation } from '../_shared/invitations.ts'
 
 const log = createLogger('cancel-invitation')
 
@@ -23,17 +25,21 @@ Deno.serve(async (req) => {
     const authResult = await authenticateRequest(req)
     if (isAuthError(authResult)) return authResult
 
-    const { user, supabase } = authResult
+    const { user } = authResult
     const { invitation_id }: CancelInvitationRequest = await req.json()
 
     if (!invitation_id || !isValidUUID(invitation_id)) {
       return errorResponse('Valid invitation_id is required', 400)
     }
 
+    // Service role: owners can't read username invites directly (their email
+    // is hidden), so ownership is checked here instead of by RLS.
+    const serviceClient = createServiceClient()
+
     // Get invitation with league info to verify ownership
-    const { data: invitation, error: invitationError } = await supabase
+    const { data: invitation, error: invitationError } = await serviceClient
       .from('invitations')
-      .select('id, league_id, email, status, leagues(owner_id)')
+      .select('id, league_id, status, leagues(owner_id)')
       .eq('id', invitation_id)
       .single()
 
@@ -51,14 +57,14 @@ Deno.serve(async (req) => {
       return errorResponse(`Invitation has already been ${invitation.status}`, 400)
     }
 
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await serviceClient
       .from('invitations')
       .update({
         status: 'cancelled',
         responded_at: new Date().toISOString(),
       })
       .eq('id', invitation_id)
-      .select('id, league_id, email, status, responded_at')
+      .select('id, league_id, email, invited_user_id, status, responded_at')
       .single()
 
     if (updateError) {
@@ -67,7 +73,7 @@ Deno.serve(async (req) => {
     }
 
     return jsonResponse({
-      invitation: updated,
+      invitation: toOwnerInvitation(updated),
       message: 'Invitation cancelled successfully',
     })
   } catch (error) {

@@ -78,14 +78,17 @@ Deno.serve(async (req) => {
       return errorResponse('Only the league owner can search for users to invite', 403)
     }
 
-    // Fetch participants and pending invites in parallel
+    const supabaseAdmin = createAdminClient()
+
+    // Fetch participants and pending invites in parallel. Pending invites need
+    // the admin client: owners can't read username invites (email hidden).
     const [participantsResult, pendingInvitesResult] = await Promise.all([
       supabaseClient
         .from('league_participants')
         .select('user_id')
         .eq('league_id', league_id)
         .eq('status', 'active'),
-      supabaseClient
+      supabaseAdmin
         .from('invitations')
         .select('email')
         .eq('league_id', league_id)
@@ -97,7 +100,6 @@ Deno.serve(async (req) => {
       pendingInvitesResult.data?.map(i => i.email.toLowerCase()) ?? []
     )
 
-    const supabaseAdmin = createAdminClient()
     const excludeIds = [user.id, ...participantUserIds]
 
     const { data: profiles, error: profilesError } = await supabaseAdmin

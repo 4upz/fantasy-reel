@@ -13,8 +13,8 @@ interface Props {
 interface InviteResponse {
   invitation: {
     id: string
-    // Omitted for invites by username: the server never reveals that address.
-    email?: string
+    // Null for invites by username: the server never reveals that address.
+    email: string | null
     token: string
   }
   invite_url: string
