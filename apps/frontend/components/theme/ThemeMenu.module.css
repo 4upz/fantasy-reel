@@ -1,0 +1,37 @@
+.trigger {
+  touch-action: manipulation;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
+}
+
+.panel {
+  position: absolute;
+  inset: 4.75rem 1rem auto auto;
+  display: none;
+  width: min(17rem, calc(100% - 2rem));
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  box-shadow: var(--shadow-medium);
+}
+
+.panel:popover-open {
+  display: block;
+}
+
+/* Anchor the panel under its trigger where the browser supports it; the
+   popoverTarget invoker is the implicit anchor. */
+@supports (position-area: bottom) {
+  .panel {
+    inset: auto;
+    margin-top: 0.5rem;
+    position-area: bottom span-left;
+    position-try-fallbacks: flip-block;
+  }
+}

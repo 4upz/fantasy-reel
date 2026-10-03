@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { Menu, SunMoon } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import BrandLogo from '../BrandLogo'
 import styles from './MarketingHeader.module.css'
+import ThemeMenu from '@/components/theme/ThemeMenu'
 import ThemeSelector from '@/components/theme/ThemeSelector'
 
 interface MarketingHeaderProps {
@@ -32,16 +33,7 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
           <Link href="/signup" className="btn btn-primary min-h-11 px-3 md:px-4">
             Sign up
           </Link>
-          <button
-            type="button"
-            popoverTarget="marketing-menu"
-            className={`btn btn-ghost hidden min-h-11 min-w-11 px-2 md:inline-flex ${styles.menuButton}`}
-            aria-label="Change theme"
-            title="Change theme"
-            data-testid="marketing-theme-button"
-          >
-            <SunMoon size={20} aria-hidden="true" />
-          </button>
+          <ThemeMenu className="hidden md:inline-flex" />
           <button
             type="button"
             popoverTarget="marketing-menu"
@@ -54,12 +46,12 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
         </nav>
       </div>
       <div id="marketing-menu" popover="auto" className={styles.menu}>
-        <nav className="grid gap-1 md:hidden" aria-label="More navigation">
+        <nav className="grid gap-1" aria-label="More navigation">
           <Link href="/login" className="btn btn-ghost min-h-11 justify-start px-2">
             Sign in
           </Link>
         </nav>
-        <div className="mt-3 border-t border-border pt-3 md:mt-0 md:border-t-0 md:pt-0">
+        <div className="mt-3 border-t border-border pt-3">
           <ThemeSelector />
         </div>
       </div>

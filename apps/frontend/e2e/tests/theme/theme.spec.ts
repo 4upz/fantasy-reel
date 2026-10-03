@@ -13,6 +13,21 @@ async function expectTheme(
   await expect(page.locator('html')).toHaveCSS('color-scheme', theme)
 }
 
+type ThemeLabel = 'System' | 'Light' | 'Dark'
+
+/** A radio in the standalone ThemeMenu; readable while its popover is closed. */
+function themeMenuRadio(page: Page, label: ThemeLabel) {
+  return page.getByTestId('theme-menu')
+    .getByRole('radio', { name: label, exact: true, includeHidden: true })
+}
+
+async function chooseTheme(page: Page, label: ThemeLabel) {
+  await page.getByTestId('theme-menu-button').click()
+  await page.getByTestId('theme-menu').getByText(label, { exact: true }).click()
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('theme-menu')).toBeHidden()
+}
+
 function collectHydrationErrors(page: Page): string[] {
   const errors: string[] = []
   const record = (message: string) => {
@@ -31,8 +46,8 @@ test.describe('Theme preferences', () => {
   test('defaults to System and follows live device color changes', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' })
     await page.goto('/login')
-    await expect(page.getByTestId('theme-select')).toBeEnabled()
-    await expect(page.getByTestId('theme-select')).toHaveValue('system')
+    await expect(themeMenuRadio(page, 'System')).toBeEnabled()
+    await expect(themeMenuRadio(page, 'System')).toBeChecked()
     await expectTheme(page, 'light', 'system')
     const lightBackground = await page.locator('body').evaluate(element => getComputedStyle(element).backgroundColor)
 
@@ -49,33 +64,31 @@ test.describe('Theme preferences', () => {
     const hydrationErrors = collectHydrationErrors(page)
     await page.emulateMedia({ colorScheme: 'light' })
     await page.goto('/')
-    await page.getByTestId('marketing-theme-button').click()
-    await page.locator('#marketing-menu').getByText('Dark', { exact: true }).click()
+    await chooseTheme(page, 'Dark')
     await expectTheme(page, 'dark', 'dark')
     expect(await page.evaluate(key => localStorage.getItem(key), THEME_STORAGE_KEY)).toBe('dark')
-    await page.keyboard.press('Escape')
 
     await page.getByRole('navigation', { name: 'Main navigation', exact: true })
       .getByRole('link', { name: 'Sign in', exact: true }).click()
     await page.waitForURL('/login')
-    await expect(page.getByTestId('theme-select')).toHaveValue('dark')
+    await expect(themeMenuRadio(page, 'Dark')).toBeChecked()
     await expectTheme(page, 'dark', 'dark')
 
     await page.reload()
-    await expect(page.getByTestId('theme-select')).toBeEnabled()
+    await expect(themeMenuRadio(page, 'System')).toBeEnabled()
     await expectTheme(page, 'dark', 'dark')
     await page.emulateMedia({ colorScheme: 'dark' })
     await page.emulateMedia({ colorScheme: 'light' })
     await expectTheme(page, 'dark', 'dark')
 
-    await page.getByTestId('theme-select').selectOption('light')
+    await chooseTheme(page, 'Light')
     await page.emulateMedia({ colorScheme: 'dark' })
     await expectTheme(page, 'light', 'light')
     await page.reload()
-    await expect(page.getByTestId('theme-select')).toHaveValue('light')
+    await expect(themeMenuRadio(page, 'Light')).toBeChecked()
     await expectTheme(page, 'light', 'light')
 
-    await page.getByTestId('theme-select').selectOption('system')
+    await chooseTheme(page, 'System')
     await expectTheme(page, 'dark', 'system')
     expect(hydrationErrors).toEqual([])
   })
@@ -107,7 +120,7 @@ test.describe('Theme preferences', () => {
         const page = await context.newPage()
         await page.goto('/login')
         await expectTheme(page, scenario.theme, scenario.preference)
-        await expect(page.getByTestId('theme-select')).toBeDisabled()
+        await expect(themeMenuRadio(page, 'System')).toBeDisabled()
         expect(blockedScripts).toBeGreaterThan(0)
       } finally {
         await context.close()
@@ -121,19 +134,19 @@ test.describe('Theme preferences', () => {
     const otherPage = await context.newPage()
     await otherPage.emulateMedia({ colorScheme: 'dark' })
     await otherPage.goto('/login')
-    await expect(otherPage.getByTestId('theme-select')).toBeEnabled()
+    await expect(themeMenuRadio(otherPage, 'System')).toBeEnabled()
 
-    await page.getByTestId('theme-select').selectOption('light')
+    await chooseTheme(page, 'Light')
     await expectTheme(otherPage, 'light', 'light')
-    await expect(otherPage.getByTestId('theme-select')).toHaveValue('light')
+    await expect(themeMenuRadio(otherPage, 'Light')).toBeChecked()
 
-    await otherPage.getByTestId('theme-select').selectOption('dark')
+    await chooseTheme(otherPage, 'Dark')
     await expectTheme(page, 'dark', 'dark')
-    await expect(page.getByTestId('theme-select')).toHaveValue('dark')
+    await expect(themeMenuRadio(page, 'Dark')).toBeChecked()
 
     await otherPage.evaluate(key => localStorage.removeItem(key), THEME_STORAGE_KEY)
     await expectTheme(page, 'dark', 'system')
-    await expect(page.getByTestId('theme-select')).toHaveValue('system')
+    await expect(themeMenuRadio(page, 'System')).toBeChecked()
     await page.emulateMedia({ colorScheme: 'light' })
     await expectTheme(page, 'light', 'system')
   })
@@ -159,17 +172,17 @@ test.describe('Theme preferences', () => {
       : route.continue())
     await page.goto('/login')
     await expectTheme(page, 'dark', 'system')
-    await expect(page.getByTestId('theme-select')).toBeDisabled()
+    await expect(themeMenuRadio(page, 'System')).toBeDisabled()
 
     await page.unroute('**/_next/**')
     await page.reload()
-    await page.getByTestId('theme-select').selectOption('light')
+    await chooseTheme(page, 'Light')
     await expectTheme(page, 'light', 'light')
     await page.emulateMedia({ colorScheme: 'light' })
     await page.emulateMedia({ colorScheme: 'dark' })
     await expectTheme(page, 'light', 'light')
 
-    await page.getByTestId('theme-select').selectOption('system')
+    await chooseTheme(page, 'System')
     await expectTheme(page, 'dark', 'system')
     await page.emulateMedia({ colorScheme: 'light' })
     await expectTheme(page, 'light', 'system')
@@ -194,10 +207,10 @@ test.describe('Theme preferences', () => {
       } else {
         await expect(signIn).toBeVisible()
       }
-      const trigger = page.getByTestId(isMobile ? 'marketing-menu-button' : 'marketing-theme-button')
-      const menu = page.locator('#marketing-menu')
+      // Desktop gets the standalone ThemeMenu; mobile folds it into the nav menu.
+      const trigger = page.getByTestId(isMobile ? 'marketing-menu-button' : 'theme-menu-button')
+      const menu = page.locator(isMobile ? '#marketing-menu' : '#theme-menu')
       const selector = menu.getByTestId('theme-selector')
-      await expect(page.getByTestId('theme-select')).toHaveCount(0)
       await expect(selector).toBeHidden()
       await trigger.click()
       await expect(signIn).toBeVisible()
