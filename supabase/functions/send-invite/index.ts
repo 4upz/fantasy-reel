@@ -1,7 +1,7 @@
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError, internalErrorResponse, createServiceClient } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { ownerVisibleEmail } from '../_shared/invitations.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('send-invite')
@@ -13,16 +13,6 @@ interface SendInviteRequest {
 }
 
 /**
- * Create admin client for looking up user emails
- */
-function createAdminClient() {
-  return createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  )
-}
-
-/**
  * Resolve email from user_id lookup or validate provided email
  */
 async function resolveEmail(user_id?: string, email?: string): Promise<string | Response> {
@@ -30,8 +20,7 @@ async function resolveEmail(user_id?: string, email?: string): Promise<string | 
     if (!isValidUUID(user_id)) {
       return errorResponse('Valid user_id is required', 400)
     }
-    const supabaseAdmin = createAdminClient()
-    const { data: targetUser, error } = await supabaseAdmin.auth.admin.getUserById(user_id)
+    const { data: targetUser, error } = await createServiceClient().auth.admin.getUserById(user_id)
     if (error || !targetUser?.user?.email) {
       return errorResponse('User not found', 404)
     }
@@ -111,8 +100,12 @@ Deno.serve(async (req) => {
       return errorResponse('League is full', 400)
     }
 
+    // Ownership is verified above. Invitation rows go through the service
+    // role because owners can't read username invites (their email is hidden).
+    const serviceClient = createServiceClient()
+
     // Check for existing invitation
-    const { data: existingInvite } = await supabaseClient
+    const { data: existingInvite } = await serviceClient
       .from('invitations')
       .select('id, status')
       .eq('league_id', league_id)
@@ -127,7 +120,7 @@ Deno.serve(async (req) => {
         return errorResponse('An invitation has already been sent to this email', 400)
       }
       // For expired/cancelled/declined: delete old invitation to allow resend
-      const { error: deleteError } = await supabaseClient
+      const { error: deleteError } = await serviceClient
         .from('invitations')
         .delete()
         .eq('id', existingInvite.id)
@@ -139,12 +132,13 @@ Deno.serve(async (req) => {
     }
 
     // Create invitation
-    const { data: invitation, error: inviteError } = await supabaseClient
+    const { data: invitation, error: inviteError } = await serviceClient
       .from('invitations')
       .insert({
         league_id,
         invited_by: user.id,
         email: normalizedEmail,
+        invited_user_id: user_id ?? null,
         status: 'pending'
         // token and expires_at have DB defaults
       })
@@ -186,7 +180,7 @@ Deno.serve(async (req) => {
       console.warn('Failed to send invitation email:', emailResult.error)
     }
 
-    await logNotificationDelivery(createServiceClient(), {
+    await logNotificationDelivery(serviceClient, {
       notificationType: 'invitation',
       recipientEmail: normalizedEmail,
       recipientUserId: user_id ?? null,
@@ -198,7 +192,7 @@ Deno.serve(async (req) => {
 
     // An invite by user_id resolved the address server-side. Echoing it would
     // hand the caller another user's email, so only echo what they typed.
-    const echoedEmail = user_id ? undefined : normalizedEmail
+    const echoedEmail = ownerVisibleEmail(invitation)
     const recipient = echoedEmail ?? 'this user'
 
     return jsonResponse({
