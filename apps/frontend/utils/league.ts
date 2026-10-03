@@ -1,4 +1,5 @@
 import type { League, ParticipantWithProfile, MovieTimelineItem } from '@/types'
+import { hasReleased } from '@/utils/date'
 
 /**
  * CSS classes for league status badges
@@ -101,13 +102,17 @@ export function buildTeamInfoByTeamId(
 }
 
 /**
- * Determine movie status based on release date and score availability
+ * Determine movie status based on release date and score availability.
+ *
+ * Only a released movie is 'scored'. RT can score a movie before it opens, but
+ * that pre-release score does not count yet, so the movie keeps counting down
+ * to release like any other.
  */
 export function getMovieStatus(
   releaseDate: string | null,
   combinedScore: number | null
 ): MovieTimelineItem['status'] {
-  if (combinedScore !== null) return 'scored'
+  if (combinedScore !== null && hasReleased(releaseDate)) return 'scored'
   if (!releaseDate) return 'upcoming'
 
   const release = new Date(releaseDate)

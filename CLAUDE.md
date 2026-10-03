@@ -734,7 +734,7 @@ Below 50, the slope halves every 10 points, so penalties approach an asymptote a
 
 **Double points above 90% (league setting).** `leagues.double_points_over_90` is Fantasy Critic's "90+ Points Rule": when on, each point above 90 is worth 2. It is season-scoped, defaults to off for new seasons (seasons that predate the setting are on, the rule they were scored under), carries forward on rollover, and the owner can change it during setup and the draft. Once the draft is over it is locked (`update-league` refuses, and `guard_direct_draft_start` blocks direct row updates), so nobody drafts or counterpicks under one rule and is scored under another. A change re-scores the season in the same transaction (a DB trigger, so every write path counts). Counterpicks invert whichever rule applies — there is no separate counterpick rule.
 
-- `movies.fantasy_points` always holds the **default** rule. A season's points are `league_fantasy_points(points, combined_score, double)` in SQL; `team_holdings.fantasy_points`, `counterpicks.fantasy_points` and `team_scores` already apply it. Only raw `movies` reads in a league context need the rule applied by hand (`leagueFantasyPoints` in the frontend's and the bot's `utils/scoring.ts`, and in `_shared/fantasy-points.ts` for Edge Functions).
+- `movies.fantasy_points` always holds the **default** rule. A season's points are `league_fantasy_points(points, combined_score, double)` in SQL; `team_holdings.fantasy_points`, `counterpicks.fantasy_points` and `team_scores` already apply it. Only raw `movies` reads in a league context need the rule applied by hand (`leagueFantasyPoints` in the frontend's `utils/scoring.ts`, the bot's `utils/points.ts`, and `_shared/fantasy-points.ts` for Edge Functions).
 
 **Examples:**
 - 96% → **+36 pts** (96−60), or **+42** with double points (+6 more for the points above 90)
@@ -748,9 +748,11 @@ Below 50, the slope halves every 10 points, so penalties approach an asymptote a
 
 ### Score Sync
 - Nightly cron job fetches latest scores from MDBList
-- Only updates movies that have been released
+- Updates released movies, and rostered movies before release: a **pre-release score** is posted to Discord as soon as RT has one
+- **Points count only from release day.** `movie_has_released()` (UTC date) gates every team-score leg, so standings, rank changes and standings posts wait for release; the release-day run rescores the movie's teams and posts that its score now counts (`movies.announced_before_release`). The frontend (`hasReleased`) and bot show a pre-release score muted, "at release". See "Pre-release scores" in `supabase/SCORING.md`
 - Recalculates fantasy points and team totals after each sync
 - A movie with no RT score yet is unscored (`combined_score` and `fantasy_points` are `NULL`, shown as "Pending")
+- **Scored movies are locked.** Once a movie has a score (`fantasy_points` set) its outcome is known, so it can no longer be bid on (pickup or counterpick) or traded (itself, or the counterpick on it), released or not. Placement refuses it, `process-bids` cancels bids still pending on it (uncharged, `resolution_reason = 'movie_scored'`), `validate_trade_items` / `_shared/trade-validation.ts` refuse it with the same sentence, and `process-trades` expires open offers naming it. Drops, the draft and the draft's counterpick round are unaffected. See "Pre-release scores" in `supabase/SCORING.md`
 - Discord score posts need a `SCORE_CHANGE_THRESHOLD` move. A movie is measured from its last *posted* score (`movies.announced_*`), never the previous run; see "Change threshold" in `supabase/SCORING.md`
 - See `supabase/SCORING.md` for full architecture details
 
@@ -796,7 +798,8 @@ League owners configure bidding via `/league/[id]/settings`:
 
 ```
 1. Team places bid on undrafted movie
-   └── place-bid validates: league active, movie available, amount valid
+   └── place-bid validates: league active, movie available (not owned,
+       released or scored), amount valid
        └── Creates pickup_bid with status='pending'
        └── Sends "outbid" email to previous high bidder (if any)
 
@@ -845,9 +848,9 @@ one pending "for a later run" — past its `processing_deadline` it can no longe
 be cancelled, yet it still shows as live and is re-resolved every week, so it
 wins whenever a slot next frees up. Closing out is only sound if resolution sees
 nothing but awardable contests with fully read inputs, so before resolving,
-movies that released while bids were pending are voided (as counterpick
-contests are), and a league where any input could not be *read* is held whole
-for the next run as a job error — a failed read is not a full roster.
+movies that released or got a score while bids were pending are voided (as
+counterpick contests are), and a league where any input could not be *read* is
+held whole for the next run as a job error — a failed read is not a full roster.
 Outbid bids remain committed offers until cancelled or processed. After every
 counter window closes, both pickup and counterpick contests consider all
 `active` and `outbid` bids: if a higher bidder cannot take the movie, award it
@@ -967,7 +970,8 @@ Teams can trade movies with each other during the active season.
 5. Processing
    └── process-trades cron (Vercel Cron, every 5 min) executes trades that are
        'accepted' or whose review window has expired, and expires any trade that
-       no longer validates
+       no longer validates -- including any open offer naming a scored movie
+       (expire_scored_trade_offers), since a scored movie can't be traded
 ```
 
 **Nothing else executes a trade.** `execute_trade()` has exactly two callers:

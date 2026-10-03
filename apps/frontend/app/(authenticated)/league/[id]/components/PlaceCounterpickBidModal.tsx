@@ -247,6 +247,7 @@ export default function PlaceCounterpickBidModal({
                 isMyTurn={true}
                 isPicking={false}
                 onPick={handlePickerSelect}
+                lockScored
               />
             </div>
           ) : selectedMovie ? (

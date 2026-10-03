@@ -50,7 +50,27 @@ export const topAvailable: Command = {
       return
     }
 
-    const available = browseData.results.filter((m) => !rosteredTmdbIds.has(m.tmdb_id)).slice(0, TOP_N)
+    const unrostered = browseData.results.filter((m) => !rosteredTmdbIds.has(m.tmdb_id))
+
+    // An unrostered movie that already has a score is locked against bids, so
+    // it is not available either.
+    const { data: scoredRows, error: scoredError } = unrostered.length === 0
+      ? { data: [], error: null }
+      : await supabase
+        .from('movies')
+        .select('tmdb_id')
+        .in('tmdb_id', unrostered.map((m) => m.tmdb_id))
+        .not('fantasy_points', 'is', null)
+        .returns<TmdbIdRow[]>()
+
+    if (scoredError) {
+      console.error('Failed to fetch scored movies:', scoredError)
+      await interaction.editReply('Failed to load top available movies. Please try again.')
+      return
+    }
+
+    const scoredTmdbIds = new Set((scoredRows || []).map((r) => r.tmdb_id))
+    const available = unrostered.filter((m) => !scoredTmdbIds.has(m.tmdb_id)).slice(0, TOP_N)
 
     if (available.length === 0) {
       const embed = createBaseEmbed(leagueName, leagueId)

@@ -17,7 +17,7 @@ import {
   isAuthError,
   isValidUUID,
   createServiceClient,
-  isUpcomingMovie,
+  bidLock,
   internalErrorResponse,
 } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
@@ -195,16 +195,19 @@ Deno.serve(async (req) => {
       return errorResponse('This movie has already been counterpicked', 400)
     }
 
-    // Fetch movie info (used for the release-date guard below and, later, notifications)
+    // Fetch movie info (used for the release and score guard below and, later, notifications)
     const { data: movieInfo } = await serviceClient
       .from('movies')
-      .select('title, poster_url, release_date')
+      .select('title, poster_url, release_date, fantasy_points')
       .eq('id', movie_id)
       .single()
 
-    const releaseCheck = isUpcomingMovie(movieInfo?.release_date, league.season_year)
-    if (!releaseCheck.valid) {
-      return errorResponse(`Cannot counterpick this movie: ${releaseCheck.reason}`, 400)
+    const lock = bidLock({
+      release_date: movieInfo?.release_date,
+      fantasy_points: movieInfo?.fantasy_points,
+    }, league.season_year)
+    if (lock) {
+      return errorResponse(`Cannot counterpick this movie: ${lock.reason}`, 400)
     }
 
     // Get processing deadline (next Saturday 8pm UTC)
@@ -335,7 +338,7 @@ Deno.serve(async (req) => {
       }, 201)
     }
 
-    // movieInfo was fetched above for the release-date guard; reuse it for notifications
+    // movieInfo was fetched above for the release and score guard; reuse it for notifications
     const movieTitle = movieInfo?.title || 'Unknown Movie'
     const posterUrl = movieInfo?.poster_url
     const releaseDate = movieInfo?.release_date

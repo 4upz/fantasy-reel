@@ -58,6 +58,46 @@ describe('/top-available', () => {
     expect(embed.description).not.toContain('Already Rostered')
   })
 
+  it('excludes movies that already have a score, which are locked against bids', async () => {
+    const client = mockSupabase({
+      tables: {
+        discord_channels: linkedChannel,
+        team_holdings: { data: [] },
+        movies: { data: [{ tmdb_id: 400 }] },
+      },
+    })
+    mockFetchOk([
+      { tmdb_id: 400, title: 'Already Scored', release_date: '2026-11-01', poster_url: null },
+      { tmdb_id: 500, title: 'Still Open', release_date: '2026-11-05', poster_url: null },
+    ])
+    const interaction = makeInteraction()
+
+    await topAvailable.execute(interaction)
+
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toContain('Still Open')
+    expect(embed.description).not.toContain('Already Scored')
+    const scoredQuery = client.getBuilder('movies')
+    expect(scoredQuery.in).toHaveBeenCalledWith('tmdb_id', [400, 500])
+    expect(scoredQuery.not).toHaveBeenCalledWith('fantasy_points', 'is', null)
+  })
+
+  it('reports a failed score lookup rather than listing locked movies', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel,
+        team_holdings: { data: [] },
+        movies: { error: { message: 'db down' } },
+      },
+    })
+    mockFetchOk([{ tmdb_id: 500, title: 'Still Open', release_date: '2026-11-05', poster_url: null }])
+    const interaction = makeInteraction()
+
+    await topAvailable.execute(interaction)
+
+    expect(interaction.editReply).toHaveBeenCalledWith(expect.stringContaining('Failed to load top available movies'))
+  })
+
   it('shows an empty state when nothing is available', async () => {
     mockSupabase({
       tables: { discord_channels: linkedChannel, team_holdings: { data: [] } },

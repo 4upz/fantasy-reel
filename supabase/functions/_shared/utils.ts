@@ -228,7 +228,7 @@ export function isUpcomingMovie(
     return { valid: false, reason: 'Movie has no release date' }
   }
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = utcDate()
 
   const releaseYear = parseInt(releaseDate.split('-')[0], 10)
   if (isNaN(releaseYear) || releaseYear < seasonYear) {
@@ -240,6 +240,51 @@ export function isUpcomingMovie(
   }
 
   return { valid: true }
+}
+
+/** Why a movie can no longer be bid on, as process-bids records it on a cancelled bid. */
+export type BidLockCode = 'movie_released' | 'movie_scored'
+
+/**
+ * Why a movie can no longer be bid on -- picked up, or counterpicked by bid --
+ * or null while it still can.
+ *
+ * A released movie is out of play (isUpcomingMovie). So is a scored one: once
+ * it has a Tomatometer (`fantasy_points`, NULL until then) its outcome is
+ * known, and a scored movie is locked against bids and trades, released or not.
+ * Placement refuses with `reason`; process-bids cancels a bid still pending on
+ * the movie, uncharged, recording `code`.
+ */
+export function bidLock(
+  movie: { release_date: string | null | undefined; fantasy_points: number | null | undefined },
+  seasonYear: number
+): { code: BidLockCode; reason: string } | null {
+  const release = isUpcomingMovie(movie.release_date, seasonYear)
+  if (!release.valid) {
+    return { code: 'movie_released', reason: release.reason ?? 'Movie has already been released' }
+  }
+  if (movie.fantasy_points != null) {
+    return { code: 'movie_scored', reason: 'Movie already has a score' }
+  }
+  return null
+}
+
+/** Today's UTC calendar date (YYYY-MM-DD), the calendar release dates are judged on. */
+export function utcDate(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10)
+}
+
+/**
+ * Whether a movie's points count toward team totals: from its release date on.
+ * Mirrors movie_has_released() in SQL. A movie can be scored before release,
+ * but that pre-release score only counts from this day.
+ *
+ * Deliberately not isUpcomingMovie's boundary (or movie_release_boundary() in
+ * SQL), which keeps a movie open to drafts, bids and drops through its release
+ * day. Scoring has always counted a movie from its release day itself.
+ */
+export function hasReleased(releaseDate: string | null, today: string): boolean {
+  return releaseDate !== null && releaseDate <= today
 }
 
 // Characters for join codes - excludes ambiguous chars (0, O, I, 1, L)

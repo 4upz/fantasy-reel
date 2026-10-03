@@ -2,6 +2,7 @@ import MoviePoster from '@/app/components/MoviePoster'
 import type { MovieTimelineItem } from '@/types'
 import TomatometerScore from '@/app/components/TomatometerScore'
 import { formatFantasyPoints } from '@/utils/scoring'
+import { PreReleasePoints } from '@/app/components/FantasyPoints'
 
 interface Props {
   movie: MovieTimelineItem
@@ -67,10 +68,13 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
         />
 
         {/* Hover Overlay with the Tomatometer */}
-        {isScored && movie.combined_score != null && (
+        {movie.combined_score != null && (
           <div className="absolute inset-0 bg-background/90 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1.5 p-2">
             <div className="type-meta text-foreground-secondary">Tomatometer</div>
             <TomatometerScore score={movie.combined_score} size="sm" showAccolade={false} />
+            {/* A pre-release score never makes the movie 'scored' (see getMovieStatus),
+                so the card keeps counting down and the score waits here, muted. */}
+            <PreReleasePoints points={movie.fantasy_points} releaseDate={movie.release_date} />
           </div>
         )}
       </div>

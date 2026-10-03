@@ -27,6 +27,7 @@ export default function RosterPreviewScene() {
               movie={{
                 title: movie.title,
                 poster_url: null,
+                release_date: movie.releaseDate,
                 fantasy_points: fantasyPointsForTomatometer(movie.tomatometer),
                 combined_score: movie.tomatometer,
               }}

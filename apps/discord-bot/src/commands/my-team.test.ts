@@ -78,6 +78,29 @@ describe('/my-team', () => {
     )
   })
 
+  it('marks a pre-release score as not counted yet', async () => {
+    mockSupabase({
+      tables: {
+        discord_channels: linkedChannel,
+        teams: { data: { id: 'team-1', name: 'My Team' } },
+        team_scores: { data: [] },
+        team_holdings: {
+          data: [
+            { title: 'Released Movie', release_date: '2020-06-01', fantasy_points: 20 },
+            { title: 'Festival Darling', release_date: '2099-06-01', fantasy_points: 24 },
+          ],
+        },
+      },
+      rpc: { get_user_by_discord_id: { data: 'user-1' } },
+    })
+    const interaction = makeInteraction()
+
+    await myTeam.execute(interaction)
+
+    const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
+    expect(embed.description).toBe('**Released Movie** -- 20 pts\n**Festival Darling** -- 24 pts at release')
+  })
+
   it('replies with a friendly error when Supabase fails', async () => {
     mockSupabase({
       tables: { discord_channels: linkedChannel },

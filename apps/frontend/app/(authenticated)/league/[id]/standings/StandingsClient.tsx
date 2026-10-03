@@ -14,6 +14,7 @@ import type { ReigningChampions } from '@/utils/seasonQueries'
 import { championPoints, type Champion } from '@/utils/seasons'
 import TeamStandingCard from './TeamStandingCard'
 import { formatFantasyPoints } from '@/utils/scoring'
+import { getMovieStatus } from '@/utils/league'
 import TeamDetailRail from './TeamDetailRail'
 import ChampionBanner from '../components/ChampionBanner'
 
@@ -170,7 +171,8 @@ export default function StandingsClient({
       ...pickups.map((p) => p.movie),
       ...counterpicks.map((cp) => cp.movies),
     ]
-    const moviesScored = allMovies.filter((m) => m?.combined_score != null).length
+    // Scored means counted, as in team_scores: a pre-release score is still pending.
+    const moviesScored = allMovies.filter((m) => m && getMovieStatus(m.release_date, m.combined_score) === 'scored').length
     const moviesPending = allMovies.length - moviesScored
     return { moviesScored, moviesPending, totalMovies: allMovies.length }
   }, [draftPicks, pickups, counterpicks])
@@ -213,9 +215,9 @@ export default function StandingsClient({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <p className="font-medium">No scores available yet</p>
+              <p className="font-medium">No points counted yet</p>
               <p className="type-body-sm mt-1 opacity-80">
-                Scores are calculated nightly for released movies. Check back after movies in your draft have been released!
+                Scores update nightly, and a movie&apos;s points count once it releases. Check back after movies in your draft have been released!
               </p>
             </div>
           </div>

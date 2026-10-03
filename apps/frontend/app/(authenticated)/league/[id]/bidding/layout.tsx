@@ -50,11 +50,17 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
   // The new-bid cutoff and the deadline it hangs off both come from the
   // database rather than being recomputed here, so the client can never drift
   // from get_next_processing_deadline()'s idea of when the week turns over.
+  //
+  // A scored movie is locked against bids, so the pickers show it as such
+  // rather than letting a bid fail. Only upcoming ones are read: a released
+  // movie is out of play anyway, and that keeps the list to a handful.
+  const today = new Date().toISOString().slice(0, 10)
   const [
     participantsResult,
     holdingsResult,
     cutoffResult,
     deadlineResult,
+    scoredResult,
   ] = await Promise.all([
     supabase
       .from('league_participants')
@@ -66,6 +72,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
     ).eq('league_id', id),
     supabase.rpc('get_new_bid_cutoff', { p_league_id: id }),
     supabase.rpc('get_next_processing_deadline'),
+    supabase.from('movies').select('tmdb_id').not('fantasy_points', 'is', null).gte('release_date', today),
   ])
 
   const participants = (participantsResult.data ?? []) as ParticipantWithProfile[]
@@ -93,6 +100,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
   const holdings = (holdingsResult.data ?? []) as HoldingRow[]
 
   const ownedTmdbIds = [...new Set(holdings.map((holding) => holding.tmdb_id))]
+  const scoredTmdbIds = (scoredResult.data ?? []).map((movie: { tmdb_id: number }) => movie.tmdb_id)
 
   // Pooled roster: draft picks and pickups share total_slots, so dropping a
   // drafted movie frees room for a pickup. That is what makes a conditional
@@ -108,6 +116,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
       teamId={team.id}
       teams={teams}
       ownedTmdbIds={ownedTmdbIds}
+      scoredTmdbIds={scoredTmdbIds}
       usedRosterSlots={usedRosterSlots}
       myHoldings={myHoldings}
       biddingCounterpickSlots={league.bidding_counterpick_slots ?? 0}

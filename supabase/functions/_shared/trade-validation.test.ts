@@ -11,7 +11,7 @@ import {
   tradeItemLabel,
   validateCounterpickPlacement,
   validateCounterpickSlots,
-  validateMovieOwnership,
+  validateItemsTradeable,
 } from './trade-validation.ts'
 import type { LeagueTradeConfig, TradeItems, TradeItemSource, TradeMovieItem } from './trade-validation.ts'
 
@@ -141,31 +141,31 @@ Deno.test('tradeItemLabel - distinguishes a counterpick from the movie it target
   assertEquals(tradeItemLabel({ ...item('counterpick', 'c1'), title: 'Dune' }), 'Counterpick: Dune')
 })
 
-Deno.test('validateMovieOwnership - a team may give up a counterpick it owns', async () => {
+Deno.test('validateItemsTradeable - a team may give up a counterpick it owns', async () => {
   const db = mockDb({
     counterpicks: [{ id: 'cp-1', counterpicker_team_id: 'team-a', movies: { title: 'Dune' } }],
   })
 
-  assertEquals(await validateMovieOwnership(db, 'team-a', items(item('counterpick', 'cp-1'))), {
+  assertEquals(await validateItemsTradeable(db, 'team-a', items(item('counterpick', 'cp-1'))), {
     valid: true,
   })
 })
 
-Deno.test('validateMovieOwnership - rejects a counterpick owned by another team', async () => {
+Deno.test('validateItemsTradeable - rejects a counterpick owned by another team', async () => {
   const db = mockDb({
     counterpicks: [
       { id: 'cp-1', counterpicker_team_id: 'team-b', movies: { title: 'Dune' } },
     ],
   })
 
-  assertEquals(await validateMovieOwnership(db, 'team-a', items(item('counterpick', 'cp-1'))), {
+  assertEquals(await validateItemsTradeable(db, 'team-a', items(item('counterpick', 'cp-1'))), {
     valid: false,
     error: `The counterpick on "Dune" is no longer owned by that team, so it can't be traded.`,
     invalidSourceIds: ['cp-1'],
   })
 })
 
-Deno.test('validateMovieOwnership - rejects a dropped draft pick', async () => {
+Deno.test('validateItemsTradeable - rejects a dropped draft pick', async () => {
   const db = mockDb({
     draft_picks: [
       {
@@ -177,11 +177,82 @@ Deno.test('validateMovieOwnership - rejects a dropped draft pick', async () => {
     ],
   })
 
-  assertEquals(await validateMovieOwnership(db, 'team-a', items(item('draft_pick', 'pick-1'))), {
+  assertEquals(await validateItemsTradeable(db, 'team-a', items(item('draft_pick', 'pick-1'))), {
     valid: false,
     error: `"Dune" has been dropped and can no longer be traded.`,
     invalidSourceIds: ['pick-1'],
   })
+})
+
+// A scored movie is locked against trades. The wording matches
+// scored_trade_item_error() in SQL, which supabase/tests/lock_scored_movies.sql
+// pins to the same strings.
+
+Deno.test('validateItemsTradeable - rejects a scored movie the team still holds', async () => {
+  const db = mockDb({
+    draft_picks: [
+      { id: 'pick-1', team_id: 'team-a', dropped_at: null, movies: { title: 'Dune', fantasy_points: 12 } },
+    ],
+    pickups: [
+      { id: 'pickup-1', team_id: 'team-a', dropped_at: null, movies: { title: 'Wicked', fantasy_points: 0 } },
+    ],
+  })
+
+  assertEquals(await validateItemsTradeable(db, 'team-a', items(item('draft_pick', 'pick-1'))), {
+    valid: false,
+    error: `"Dune" already has a score, so it can no longer be traded.`,
+    invalidSourceIds: ['pick-1'],
+  })
+  // A score of zero is still a score.
+  assertEquals(await validateItemsTradeable(db, 'team-a', items(item('pickup', 'pickup-1'))), {
+    valid: false,
+    error: `"Wicked" already has a score, so it can no longer be traded.`,
+    invalidSourceIds: ['pickup-1'],
+  })
+})
+
+Deno.test('validateItemsTradeable - rejects the counterpick on a scored movie', async () => {
+  const db = mockDb({
+    counterpicks: [
+      { id: 'cp-1', counterpicker_team_id: 'team-a', movies: { title: 'Dune', fantasy_points: -6 } },
+    ],
+  })
+
+  assertEquals(await validateItemsTradeable(db, 'team-a', items(item('counterpick', 'cp-1'))), {
+    valid: false,
+    error: `"Dune" already has a score, so the counterpick on it can no longer be traded.`,
+    invalidSourceIds: ['cp-1'],
+  })
+})
+
+Deno.test('validateItemsTradeable - judges ownership before the score', async () => {
+  const db = mockDb({
+    draft_picks: [
+      { id: 'pick-1', team_id: 'team-b', dropped_at: null, movies: { title: 'Dune', fantasy_points: 12 } },
+    ],
+  })
+
+  assertEquals((await validateItemsTradeable(db, 'team-a', items(item('draft_pick', 'pick-1')))).error,
+    `"Dune" is no longer on that team's roster, so it can't be traded.`)
+})
+
+Deno.test('validateItemsTradeable - marks the scored item, not the whole offer', async () => {
+  const db = mockDb({
+    draft_picks: [
+      { id: 'pick-1', team_id: 'team-a', dropped_at: null, movies: { title: 'Unscored', fantasy_points: null } },
+      { id: 'pick-2', team_id: 'team-a', dropped_at: null, movies: { title: 'Scored', fantasy_points: 30 } },
+    ],
+  })
+
+  assertEquals(
+    await validateItemsTradeable(db, 'team-a', items(item('draft_pick', 'pick-1'), item('draft_pick', 'pick-2'))),
+    {
+      valid: false,
+      error: `"Scored" already has a score, so it can no longer be traded.`,
+      invalidSourceIds: ['pick-2'],
+    },
+  )
+  assertEquals(await validateItemsTradeable(db, 'team-a', items(item('draft_pick', 'pick-1'))), { valid: true })
 })
 
 Deno.test('validateCounterpickPlacement - rejects sending a movie to the team that counterpicked it', async () => {

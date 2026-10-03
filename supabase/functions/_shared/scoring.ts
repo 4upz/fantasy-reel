@@ -38,6 +38,7 @@ export interface MovieRecord {
   tmdb_id: number
   imdb_id: string | null
   title: string
+  release_date: string | null
 }
 
 // --- MDBList source mapping ---

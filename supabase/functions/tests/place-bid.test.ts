@@ -511,6 +511,46 @@ Deno.test({
       assertEquals(bids?.length ?? 0, 0)
     })
 
+    // A scored movie is locked, released or not: its outcome is known. The
+    // score lives only on our movies row, so this is the movie's own row
+    // speaking, whatever the request's movie_data claims.
+    await t.step('returns 400 when the movie already has a score', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('bid-scored'))
+      const tmdbId = uniqueVoidTestTmdbId()
+      const serviceClient = getServiceClient()
+
+      const { error: movieError } = await serviceClient.from('movies').insert({
+        tmdb_id: tmdbId,
+        title: 'Scored Free Agent',
+        release_date: '2099-01-01',
+        combined_score: 88,
+        fantasy_points: 28,
+        status: 'upcoming',
+      })
+      assertEquals(movieError, null)
+
+      try {
+        const result = await invokeFunction(client, 'place-bid', {
+          league_id: leagueId,
+          tmdb_id: tmdbId,
+          amount: 10,
+          movie_data: { ...testMovieData, title: 'Scored Free Agent', release_date: '2099-01-01' },
+        })
+
+        assertEquals(result.status, 400)
+        assertEquals(result.error, 'Cannot bid on this movie: Movie already has a score')
+
+        const { data: bids } = await serviceClient
+          .from('pickup_bids')
+          .select('id')
+          .eq('league_id', leagueId)
+          .eq('tmdb_id', tmdbId)
+        assertEquals(bids?.length ?? 0, 0)
+      } finally {
+        await serviceClient.from('movies').delete().eq('tmdb_id', tmdbId)
+      }
+    })
+
     await t.step('Discord embed distinguishes a counter bid, with amounts and results window', async () => {
       const leagueId = await factory.createActiveLeague(uniqueName('bid-discord'))
 

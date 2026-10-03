@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { formatFantasyPoints } from '@/utils/scoring'
+import { formatFantasyPoints, pointsTone } from '@/utils/scoring'
 import type { HoldingMovie, RankedTeamFull } from '@/types'
 import MovieScoreCard from './MovieScoreCard'
 import TeamBudgetSummary, { remainingBudget } from './TeamBudget'
@@ -21,10 +21,6 @@ interface Props {
   isSelected: boolean
   onActivate: () => void
   animationDelay?: number
-}
-
-function pointsTone(points: number): string {
-  return points >= 0 ? 'text-gold' : 'text-crimson'
 }
 
 /** One segment of the points total. Value colour tells you which way it pulled. */
@@ -107,8 +103,8 @@ export default function TeamStandingCard({
           {/* The breakdown lives here rather than in the collapsed row - it is
               detail you go looking for, not something to scan the table by. */}
           <div className="flex flex-wrap gap-1.5">
-            <BreakdownChip label="Draft" value={draftPoints} tone={pointsTone(draftPoints)} />
-            <BreakdownChip label="Pickups" value={pickupPoints} tone={pointsTone(pickupPoints)} />
+            <BreakdownChip label="Draft" value={draftPoints} tone={pointsTone(draftPoints, { positive: 'text-gold' })} />
+            <BreakdownChip label="Pickups" value={pickupPoints} tone={pointsTone(pickupPoints, { positive: 'text-gold' })} />
             <BreakdownChip
               label="Counterpicks"
               value={counterpickPoints}

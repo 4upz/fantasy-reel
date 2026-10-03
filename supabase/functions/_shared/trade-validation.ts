@@ -462,39 +462,58 @@ export function validateLeagueTradingEnabled(
 }
 
 /**
- * Validate a team owns everything it is putting on the table: its roster
- * holdings are still its own and undropped, and its counterpicks are still
- * counterpicked by it.
+ * Why a trade item is refused once its movie has a score: a scored movie is
+ * locked, and so is the counterpick on it -- either way the deal would change
+ * hands on a known result. Worded identically to scored_trade_item_error() in
+ * SQL, which validate_trade_items and the expiry of open offers use.
+ */
+export function scoredItemError(source: TradeItemSource, title: string | null | undefined): string {
+  return source === 'counterpick'
+    ? `${quoteTitle(title)} already has a score, so the counterpick on it can no longer be traded.`
+    : `${quoteTitle(title)} already has a score, so it can no longer be traded.`
+}
+
+/** The movie embedded on an item's source row: its title, and whether it is scored. */
+type ItemMovie = { title: string; fantasy_points: number | null } | null
+
+/**
+ * Validate a team can put everything it is offering on the table: its roster
+ * holdings are still its own and undropped, its counterpicks are still
+ * counterpicked by it, and no item's movie has a score yet (a scored movie is
+ * locked -- see scoredItemError).
  *
- * Ownership only. Whether an item may land where the trade is sending it is
- * the separate question `validateCounterpickPlacement` answers, because that
- * one cannot be decided from one side of the deal alone.
+ * Per item, in that order, as validate_trade_items checks them. Whether an item
+ * may land where the trade is sending it is the separate question
+ * `validateCounterpickPlacement` answers, because that one cannot be decided
+ * from one side of the deal alone.
  *
  * A counterpick has no dropped_at to check: it deliberately survives a drop of
  * the movie it targets and keeps scoring (see
  * recalculate_team_score_with_counterpicks), so a row that still exists is
- * still worth points and still tradeable.
+ * still worth points and, until that movie is scored, still tradeable.
  */
-export async function validateMovieOwnership(
+export async function validateItemsTradeable(
   supabase: SupabaseClient,
   teamId: string,
   items: TradeItems
 ): Promise<ValidationResult> {
   for (const movie of items.movies) {
-    // The title comes from the same row we already have to read for ownership,
-    // so naming the movie in the error costs no extra query. `movie.title` is
-    // the fallback for an item that was enriched at propose time but whose row
-    // has since vanished.
+    // The title and score come from the same row we already have to read for
+    // ownership, so they cost no extra query. `movie.title` is the fallback
+    // for an item that was enriched at propose time but whose row has since
+    // vanished.
     const invalid = [movie.source_id]
+    let itemMovie: ItemMovie
 
     if (movie.source === 'counterpick') {
       const { data, error } = await supabase
         .from('counterpicks')
-        .select('id, counterpicker_team_id, movies(title)')
+        .select('id, counterpicker_team_id, movies(title, fantasy_points)')
         .eq('id', movie.source_id)
         .single()
 
-      const title = (data?.movies as unknown as { title: string } | null)?.title ?? movie.title
+      itemMovie = data?.movies as unknown as ItemMovie
+      const title = itemMovie?.title ?? movie.title
 
       if (error || !data) {
         return {
@@ -510,37 +529,45 @@ export async function validateMovieOwnership(
           invalidSourceIds: invalid,
         }
       }
-      continue
-    }
+    } else {
+      const table = movie.source === 'draft_pick' ? 'draft_picks' : 'pickups'
 
-    const table = movie.source === 'draft_pick' ? 'draft_picks' : 'pickups'
+      const { data, error } = await supabase
+        .from(table)
+        .select('id, team_id, dropped_at, movies(title, fantasy_points)')
+        .eq('id', movie.source_id)
+        .single()
 
-    const { data, error } = await supabase
-      .from(table)
-      .select('id, team_id, dropped_at, movies(title)')
-      .eq('id', movie.source_id)
-      .single()
+      itemMovie = data?.movies as unknown as ItemMovie
+      const title = itemMovie?.title ?? movie.title
 
-    const title = (data?.movies as unknown as { title: string } | null)?.title ?? movie.title
-
-    if (error || !data) {
-      return {
-        valid: false,
-        error: `${quoteTitle(title)} is no longer available to trade.`,
-        invalidSourceIds: invalid,
+      if (error || !data) {
+        return {
+          valid: false,
+          error: `${quoteTitle(title)} is no longer available to trade.`,
+          invalidSourceIds: invalid,
+        }
+      }
+      if (data.team_id !== teamId) {
+        return {
+          valid: false,
+          error: `${quoteTitle(title)} is no longer on that team's roster, so it can't be traded.`,
+          invalidSourceIds: invalid,
+        }
+      }
+      if (data.dropped_at) {
+        return {
+          valid: false,
+          error: `${quoteTitle(title)} has been dropped and can no longer be traded.`,
+          invalidSourceIds: invalid,
+        }
       }
     }
-    if (data.team_id !== teamId) {
+
+    if (itemMovie?.fantasy_points != null) {
       return {
         valid: false,
-        error: `${quoteTitle(title)} is no longer on that team's roster, so it can't be traded.`,
-        invalidSourceIds: invalid,
-      }
-    }
-    if (data.dropped_at) {
-      return {
-        valid: false,
-        error: `${quoteTitle(title)} has been dropped and can no longer be traded.`,
+        error: scoredItemError(movie.source, itemMovie.title),
         invalidSourceIds: invalid,
       }
     }
@@ -964,11 +991,11 @@ export async function validateTradeProposal(
     return { valid: false, error: 'Both teams must be in the same league' }
   }
 
-  // 7. Validate ownership of every item each side is giving up
-  result = await validateMovieOwnership(supabase, initiatorTeamId, initiatorItems)
+  // 7. Validate every item each side is giving up: still owned, not scored
+  result = await validateItemsTradeable(supabase, initiatorTeamId, initiatorItems)
   if (!result.valid) return result
 
-  result = await validateMovieOwnership(supabase, recipientTeamId, recipientItems)
+  result = await validateItemsTradeable(supabase, recipientTeamId, recipientItems)
   if (!result.valid) return result
 
   // 7b. Validate no team ends up holding both a movie and the bet against it

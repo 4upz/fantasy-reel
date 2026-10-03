@@ -43,6 +43,16 @@ export const AwaitingReviews = () => (
   </div>
 )
 
+/** Scored before it opens: the number is muted and labelled, since it doesn't count yet. */
+export const PreRelease = () => (
+  <div className="max-w-md">
+    <MovieScoreCard
+      movie={{ ...scoredMovie(), status: 'upcoming', release_date: daysOut(21) }}
+      badge={{ type: 'draft', round: 1, pick: 2 }}
+    />
+  </div>
+)
+
 export const Counterpick = () => {
   const points = fantasyPointsForTomatometer(35)
 

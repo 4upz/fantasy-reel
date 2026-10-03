@@ -7,6 +7,7 @@ import { createBaseEmbed, DISCORD_COLORS, leagueUrl } from '../utils/embeds.js'
 import { requireLinkedLeague } from '../utils/channel-league.js'
 import { fetchTeamHoldings } from '../utils/roster.js'
 import { truncate } from '../utils/format.js'
+import { formatRosterPoints } from '../utils/points.js'
 import type { Command } from './index.js'
 
 const COMPACT_THRESHOLD = 8
@@ -120,7 +121,7 @@ export const roster: Command = {
 
     const lines = rosterRows.map((row) => {
       const title = truncate(row.title || 'Untitled', 40)
-      const pointsStr = row.fantasy_points != null ? `${row.fantasy_points} pts` : 'Unreleased'
+      const pointsStr = formatRosterPoints(row.fantasy_points, row.release_date)
 
       if (isCompact) {
         return `**${title}** -- ${pointsStr}`

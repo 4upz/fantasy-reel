@@ -217,6 +217,42 @@ Deno.test({
       assertEquals(bids?.length ?? 0, 0)
     })
 
+    // A scored movie is locked, released or not: its outcome is known.
+    await t.step('returns 400 when the targeted movie already has a score', async () => {
+      const leagueId = await factory.createActiveLeague(uniqueName('cpbid-scored'), 2)
+      await serviceClient.from('leagues').update({ bidding_counterpick_slots: 2 }).eq('id', leagueId)
+
+      const tmdbId = uniqueVoidTestTmdbId()
+      const draftPickId = await factory.createDraftPickForUser(leagueId, secondClient, {
+        tmdb_id: tmdbId,
+        title: `Scored CP Bid Movie ${tmdbId}`,
+        release_date: '2099-01-01',
+      })
+      const { data: draftPick } = await serviceClient
+        .from('draft_picks')
+        .select('movie_id')
+        .eq('id', draftPickId)
+        .single()
+      if (!draftPick) throw new Error('Draft pick not found')
+      await serviceClient.from('movies').update({ combined_score: 41, fantasy_points: -14.5 }).eq('id', draftPick.movie_id)
+
+      const result = await invokeFunction(client, 'place-counterpick-bid', {
+        league_id: leagueId,
+        movie_id: draftPick.movie_id,
+        amount: 5,
+      })
+
+      assertEquals(result.status, 400)
+      assertEquals(result.error, 'Cannot counterpick this movie: Movie already has a score')
+
+      const { data: bids } = await serviceClient
+        .from('counterpick_bids')
+        .select('id')
+        .eq('league_id', leagueId)
+        .eq('movie_id', draftPick.movie_id)
+      assertEquals(bids?.length ?? 0, 0)
+    })
+
     // ============================================================================
     // Pickup-Sourced Targets
     //

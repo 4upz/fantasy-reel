@@ -21,6 +21,7 @@ import {
   invokeFunction,
   TestDataFactory,
 } from './_setup.ts'
+import { utcDate } from '../_shared/utils.ts'
 
 /**
  * Type for start-counterpick-round response
@@ -684,11 +685,12 @@ Deno.test({
         })
       }
 
-      // Score the counterpicked movie (negative score = positive for counterpicker)
+      // The counterpicked movie releases and scores badly (negative score =
+      // positive for counterpicker). Points only count once it has released.
       const testPoints = -10.00 // Bad movie
       await serviceClient
         .from('movies')
-        .update({ fantasy_points: testPoints })
+        .update({ fantasy_points: testPoints, release_date: utcDate() })
         .eq('id', movieId)
 
       // Recalculate team 2's score

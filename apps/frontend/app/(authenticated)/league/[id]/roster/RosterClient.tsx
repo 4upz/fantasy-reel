@@ -5,7 +5,7 @@ import { Trophy, ShoppingCart, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
-import { formatFantasyPoints } from '@/utils/scoring'
+import FantasyPoints from '@/app/components/FantasyPoints'
 import { findDropBlocker, type DropBlocker } from './dropRules'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 import { RosterHeader, RosterMovieCard, RosterPoster } from './RosterPresentation'
@@ -168,10 +168,9 @@ export default function RosterClient({
                     vs. {cp.target_team.name} ({cp.phase})
                   </p>
                   {cp.fantasy_points !== null && (
-                    <p
-                      className={`type-number mt-1 ${cp.fantasy_points >= 0 ? 'text-success' : 'text-crimson'}`}
-                    >
-                      {formatFantasyPoints(cp.fantasy_points)} pts
+                    <p className="type-number mt-1">
+                      {/* The inverted score waits on the release of the movie it targets. */}
+                      <FantasyPoints points={cp.fantasy_points} releaseDate={cp.movies.release_date} />
                     </p>
                   )}
                 </div>

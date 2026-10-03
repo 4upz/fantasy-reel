@@ -5,6 +5,7 @@ import MoviePoster from '@/app/components/MoviePoster'
 import type { MovieTimelineItem, League } from '@/types'
 import { formatDate } from '@/utils/date'
 import { formatFantasyPoints } from '@/utils/scoring'
+import { PreReleasePoints } from '@/app/components/FantasyPoints'
 import LeagueMovieModal from './LeagueMovieModal'
 
 interface Props {
@@ -114,6 +115,7 @@ function NextUpHero({
           <div className="type-meta mt-2 text-white/90">
             {shortDate(movie.release_date)}
           </div>
+          <PreReleasePoints points={movie.fantasy_points} releaseDate={movie.release_date} className="mt-0.5" />
         </div>
       </MovieButton>
     </div>
@@ -157,7 +159,10 @@ function UpcomingShelf({
           >
             {movie.title}
           </div>
-          <div className="type-meta text-foreground-secondary">{shortDate(movie.release_date)}</div>
+          <div className="type-meta text-foreground-secondary">
+            {shortDate(movie.release_date)}
+            <PreReleasePoints points={movie.fantasy_points} releaseDate={movie.release_date} />
+          </div>
         </MovieButton>
       ))}
     </div>
@@ -220,6 +225,8 @@ export default function MovieGrid({ movies, leagueStatus }: Props) {
   const [selected, setSelected] = useState<MovieTimelineItem | null>(null)
 
   const { hero, upcoming, scored } = useMemo(() => {
+    // Ranked by counted points only: 'scored' means released, so a pre-release
+    // score stays on the upcoming shelf rather than ranking as if earned.
     const scoredMovies = movies
       .filter((m) => m.status === 'scored')
       .sort((a, b) => (b.fantasy_points || 0) - (a.fantasy_points || 0))

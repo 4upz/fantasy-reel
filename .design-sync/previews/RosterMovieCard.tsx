@@ -1,7 +1,7 @@
 import { RosterMovieCard } from 'fantasy-reel'
-import { POSTERS } from './_fixtures'
+import { POSTERS, daysOut } from './_fixtures'
 
-const movie = { title: 'Dune: Part Two', poster_url: POSTERS.dune, fantasy_points: 34, combined_score: 92 }
+const movie = { title: 'Dune: Part Two', poster_url: POSTERS.dune, release_date: daysOut(-30), fantasy_points: 34, combined_score: 92 }
 
 export const Default = () => (
   <div className="w-52">
@@ -17,5 +17,12 @@ export const Pending = () => (
       isLocked={false}
       posterSizes="208px"
     />
+  </div>
+)
+
+/** Scored before it opens: the points show muted, "at release", and don't count yet. */
+export const PreRelease = () => (
+  <div className="w-52">
+    <RosterMovieCard movie={{ ...movie, release_date: daysOut(21) }} label="Round 1, Pick 2" isLocked={false} posterSizes="208px" />
   </div>
 )

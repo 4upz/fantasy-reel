@@ -200,67 +200,99 @@ COMMENT ON COLUMN counterpicks.fantasy_points IS
 -- ----------------------------------------------------------------------------
 -- 5. Team totals apply the season's rule
 -- ----------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION recalculate_team_score_with_counterpicks(p_team_id UUID)
-RETURNS void
-LANGUAGE plpgsql
-SECURITY DEFINER
+-- calculate_team_score() is the one definition of a team's score
+-- (20261002180000): every movie and counterpick counts once released. Each
+-- now counts under the team's season rule. Same signature and columns.
+CREATE OR REPLACE FUNCTION calculate_team_score(p_team_id UUID)
+RETURNS TABLE(
+    total_points DECIMAL,
+    movies_scored INTEGER,
+    movies_pending INTEGER,
+    average_score DECIMAL,
+    draft_points DECIMAL,
+    pickup_points DECIMAL,
+    counterpick_points DECIMAL,
+    counterpicks_made INTEGER,
+    counterpicks_scored INTEGER
+)
+LANGUAGE sql STABLE
 SET search_path = public, pg_temp
 AS $$
-DECLARE
-    v_double_points_over_90 BOOLEAN;
-    v_draft_points DECIMAL := 0;
-    v_pickup_points DECIMAL := 0;
-    v_roster_points DECIMAL := 0;
-    v_roster_scored INTEGER := 0;
-    v_roster_pending INTEGER := 0;
-    v_counterpick_points DECIMAL := 0;
-    v_counterpicks_made INTEGER := 0;
-    v_counterpicks_scored INTEGER := 0;
-BEGIN
-    -- The season's 90+ rule, under a share lock: a concurrent rule change
-    -- re-scores every team itself, and must not then be overwritten with
-    -- totals this call computed under the old rule.
-    SELECT l.double_points_over_90 INTO v_double_points_over_90
+    WITH season AS (
+        SELECT l.double_points_over_90
+        FROM teams t
+        JOIN league_participants lp ON lp.id = t.participant_id
+        JOIN leagues l ON l.id = lp.league_id
+        WHERE t.id = p_team_id
+    ),
+    roster AS (
+        -- Dropped rows are excluded by team_active_roster: a team stops
+        -- scoring a movie the moment it drops it.
+        SELECT
+            r.source,
+            CASE WHEN movie_has_released(m.release_date)
+                THEN league_fantasy_points(m.fantasy_points, m.combined_score, s.double_points_over_90)
+            END AS points
+        FROM team_active_roster(p_team_id) r
+        JOIN movies m ON m.id = r.movie_id
+        CROSS JOIN season s
+    ),
+    counterpicked AS (
+        -- The opponent's movie score, inverted. Counterpicks survive drops, so
+        -- no dropped_at filter (see 20260808160000_counterpick_trade_guardrails).
+        SELECT
+            CASE WHEN movie_has_released(m.release_date)
+                THEN -league_fantasy_points(m.fantasy_points, m.combined_score, s.double_points_over_90)
+            END AS points
+        FROM counterpicks c
+        JOIN movies m ON m.id = c.movie_id
+        CROSS JOIN season s
+        WHERE c.counterpicker_team_id = p_team_id
+    )
+    SELECT
+        r.points + c.points,
+        r.scored,
+        r.pending,
+        CASE WHEN r.scored > 0 THEN ROUND(r.points / r.scored, 2) ELSE 0 END,
+        r.draft,
+        r.pickup,
+        c.points,
+        c.made,
+        c.scored
+    FROM (
+        SELECT
+            COALESCE(SUM(points), 0) AS points,
+            COUNT(points)::INTEGER AS scored,
+            COUNT(*) FILTER (WHERE points IS NULL)::INTEGER AS pending,
+            COALESCE(SUM(points) FILTER (WHERE source = 'draft'), 0) AS draft,
+            COALESCE(SUM(points) FILTER (WHERE source = 'pickup'), 0) AS pickup
+        FROM roster
+    ) r, (
+        SELECT
+            COALESCE(SUM(points), 0) AS points,
+            COUNT(*)::INTEGER AS made,
+            COUNT(points)::INTEGER AS scored
+        FROM counterpicked
+    ) c;
+$$;
+
+COMMENT ON FUNCTION calculate_team_score(UUID) IS
+'A team''s score from its active roster (draft picks + pickups, excluding dropped) plus counterpick points (inverted opponent scores), each under the season''s 90+ points rule (league_fantasy_points). Only released movies count (movie_has_released); a pre-release score is pending. The one definition: recalculate_team_score_with_counterpicks stores what this returns.';
+
+CREATE OR REPLACE FUNCTION recalculate_team_score_with_counterpicks(p_team_id UUID)
+RETURNS void
+LANGUAGE sql SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+    -- Share-lock the season first, so the score below is read after any
+    -- concurrent rule change commits (that change re-scores every team itself)
+    -- and never stores totals computed under the old rule.
+    SELECT 1
     FROM teams t
     JOIN league_participants lp ON lp.id = t.participant_id
     JOIN leagues l ON l.id = lp.league_id
     WHERE t.id = p_team_id
     FOR SHARE OF l;
-
-    -- Roster points, split by acquisition source.
-    -- Dropped rows are excluded from both legs: a team stops scoring a movie
-    -- the moment it drops it.
-    SELECT
-        COALESCE(SUM(r.points) FILTER (WHERE r.source = 'draft'), 0),
-        COALESCE(SUM(r.points) FILTER (WHERE r.source = 'pickup'), 0),
-        COALESCE(SUM(r.points), 0),
-        COUNT(r.points)::INTEGER,
-        COUNT(*) FILTER (WHERE r.points IS NULL)::INTEGER
-    INTO
-        v_draft_points,
-        v_pickup_points,
-        v_roster_points,
-        v_roster_scored,
-        v_roster_pending
-    FROM (
-        SELECT ar.source,
-               league_fantasy_points(m.fantasy_points, m.combined_score, v_double_points_over_90) AS points
-        FROM team_active_roster(p_team_id) ar
-        JOIN movies m ON m.id = ar.movie_id
-    ) r;
-
-    -- Counterpick points (inverted scores from counterpicked movies).
-    -- Positive points on opponent's movie = negative for counterpicker.
-    SELECT
-        COUNT(*)::INTEGER,
-        COUNT(m.fantasy_points)::INTEGER,
-        COALESCE(SUM(
-            -league_fantasy_points(m.fantasy_points, m.combined_score, v_double_points_over_90)
-        ), 0)
-    INTO v_counterpicks_made, v_counterpicks_scored, v_counterpick_points
-    FROM counterpicks c
-    JOIN movies m ON c.movie_id = m.id
-    WHERE c.counterpicker_team_id = p_team_id;
 
     INSERT INTO team_scores (
         team_id,
@@ -275,21 +307,19 @@ BEGIN
         counterpicks_scored,
         last_calculated_at
     )
-    VALUES (
+    SELECT
         p_team_id,
-        v_roster_points + v_counterpick_points,
-        v_draft_points,
-        v_pickup_points,
-        v_counterpick_points,
-        v_roster_scored,
-        v_roster_pending,
-        CASE WHEN v_roster_scored > 0
-            THEN ROUND(v_roster_points / v_roster_scored, 2)
-            ELSE 0 END,
-        v_counterpicks_made,
-        v_counterpicks_scored,
+        s.total_points,
+        s.draft_points,
+        s.pickup_points,
+        s.counterpick_points,
+        s.movies_scored,
+        s.movies_pending,
+        s.average_score,
+        s.counterpicks_made,
+        s.counterpicks_scored,
         NOW()
-    )
+    FROM calculate_team_score(p_team_id) s
     ON CONFLICT (team_id) DO UPDATE SET
         total_points = EXCLUDED.total_points,
         draft_points = EXCLUDED.draft_points,
@@ -301,15 +331,10 @@ BEGIN
         counterpicks_made = EXCLUDED.counterpicks_made,
         counterpicks_scored = EXCLUDED.counterpicks_scored,
         last_calculated_at = EXCLUDED.last_calculated_at;
-END;
 $$;
 
 COMMENT ON FUNCTION recalculate_team_score_with_counterpicks(UUID) IS
-'Recalculates team scores from the active roster (draft picks + pickups, excluding dropped) plus counterpick points (inverted opponent scores), every movie scored under the season''s 90+ points rule (league_fantasy_points). The counterpick leg intentionally has NO dropped_at filter: counterpicks survive drops of the underlying movie (in leagues where that is even possible -- see leagues.counterpicks_block_drops) and keep scoring the inverted points for the counterpicker. This matches Fantasy Critic''s ruleset and is deliberate, not an omission.';
-
--- The read-only preview had no callers (20260728164550 already said so), and
--- keeping a second scorer in step is how the two drifted apart before.
-DROP FUNCTION IF EXISTS calculate_team_score(UUID);
+'Stores calculate_team_score() for a team in team_scores: every movie and counterpick under the season''s 90+ points rule, counted once released. Takes a share lock on the season first so a concurrent rule change is never overwritten.';
 
 -- ----------------------------------------------------------------------------
 -- 6. team_holdings: each holding's points under its season's rule

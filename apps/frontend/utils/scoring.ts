@@ -1,3 +1,5 @@
+import { formatReleaseDateShort, hasReleased } from '@/utils/date'
+
 /**
  * Fantasy points display helpers.
  *
@@ -5,12 +7,65 @@
  * sign - gold for positive, crimson for negative - so a positive value renders
  * bare ("37") and only negatives keep their marker ("-16"). `combined_score` is
  * the Tomatometer itself, not points - never render it with a "pts" suffix.
+ *
+ * A movie can be scored before it opens, but its points only count toward team
+ * totals from release day. Until then it is a pre-release score: still shown,
+ * but muted, never in the colours that mean "counted".
  */
 
 /** Whole-number fantasy points (e.g. "36", "-16"). Unscored renders as "--". */
 export function formatFantasyPoints(points: number | null | undefined): string {
   if (points == null) return '--'
   return String(Math.round(points))
+}
+
+/**
+ * Whether `points` is a pre-release score: the movie has one but has not
+ * released, so it does not count toward team totals yet. For a counterpick,
+ * pass the counterpicked movie's release date.
+ */
+export function isPreReleaseScore(
+  points: number | null | undefined,
+  releaseDate: string | null | undefined,
+  now: Date = new Date()
+): boolean {
+  return points != null && !hasReleased(releaseDate, now)
+}
+
+/** Inline points copy: "24 pts" once they count, "24 pts at release" before. */
+export function formatPointsText(points: number, preRelease: boolean): string {
+  return `${formatFantasyPoints(points)} pts${preRelease ? ' at release' : ''}`
+}
+
+/**
+ * The text colour for a points value. Counted points take `positive` (success
+ * green; surfaces that show totals in gold pass that) or crimson; no score and
+ * a pre-release score are muted, because those two colours mean "counted".
+ */
+export function pointsTone(
+  points: number | null | undefined,
+  { preRelease = false, positive = 'text-success' }: { preRelease?: boolean; positive?: string } = {}
+): string {
+  if (points == null || preRelease) return 'text-foreground-secondary'
+  return points >= 0 ? positive : 'text-crimson'
+}
+
+/**
+ * Whether a movie is locked against bids and trades: once it has a score its
+ * outcome is known, so it no longer changes hands, released or not. The server
+ * enforces this; the UI says so up front instead of letting a request fail.
+ * Pass the movie's points -- or a counterpick's, which are the movie's
+ * inverted and so set exactly when it is scored.
+ */
+export function isScoreLocked(points: number | null | undefined): boolean {
+  return points != null
+}
+
+/** Why a pre-release score is muted, for a tooltip or screen reader where there is no room to say it. */
+export function describePreReleaseScore(releaseDate: string | null | undefined): string {
+  return releaseDate
+    ? `Pre-release score — counts once it releases on ${formatReleaseDateShort(releaseDate)}`
+    : 'Pre-release score — counts once it releases'
 }
 
 /**

@@ -4,7 +4,7 @@ import { createBaseEmbed, DISCORD_COLORS, FANTASY_REEL_ICON, leagueUrl } from '.
 import { resolveLinkedLeague } from '../utils/channel-league.js'
 import { getMovieDetails, searchMovies, TMDbSearchResult } from '../utils/functions-client.js'
 import { truncate } from '../utils/format.js'
-import { leagueFantasyPoints } from '../utils/scoring.js'
+import { hasReleased, leagueFantasyPoints } from '../utils/points.js'
 import type { Command } from './index.js'
 
 const AUTOCOMPLETE_LIMIT = 10
@@ -145,7 +145,9 @@ export const movie: Command = {
       if (dbMovie.fantasy_points != null) {
         // A linked channel shows its season's points; elsewhere, the default rule's.
         const points = leagueFantasyPoints(dbMovie.fantasy_points, dbMovie.combined_score, linked?.doublePointsOver90 ?? false)
-        descriptionParts.push(`**Fantasy Points:** ${points}`)
+        // A pre-release score is real but not banked: it counts from release day.
+        const note = hasReleased(dbMovie.release_date) ? '' : ' (counts once released)'
+        descriptionParts.push(`**Fantasy Points:** ${points}${note}`)
       }
     }
 

@@ -7,6 +7,7 @@ import type { PickupBid } from '@/types'
 import BidAmountAndDeadline from './BidAmountAndDeadline'
 import BidSummary from './BidSummary'
 import { getBidTypeClass } from './utils'
+import ScoreLockLabel from '@/app/components/ScoreLockLabel'
 
 interface BidCardProps {
   bid: PickupBid
@@ -32,6 +33,8 @@ interface BidCardProps {
    * conditional drop. Only ever set for the bid's own team.
    */
   dropTitle?: string | null
+  /** The movie got its score while the bid was pending: processing will cancel it, uncharged. */
+  scoreLocked?: boolean
 }
 
 interface CancelBidModalProps {
@@ -159,7 +162,7 @@ function CancelBidModal({
 }
 
 /** @design-system League */
-export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt, dropTitle }: BidCardProps) {
+export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt, dropTitle, scoreLocked }: BidCardProps) {
   const [showCancelModal, setShowCancelModal] = useState(false)
 
   const movieData = bid.movie_data as {
@@ -219,6 +222,12 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
                 <AlertTriangle className="w-4 h-4" />
                 <span>You&apos;ve been outbid!</span>
               </div>
+            )}
+
+            {scoreLocked && isPending && (
+              <ScoreLockLabel className="type-meta mt-2">
+                {isOwner ? 'this bid will be cancelled, uncharged' : 'bids on it will be cancelled'}
+              </ScoreLockLabel>
             )}
           </BidSummary>
 
