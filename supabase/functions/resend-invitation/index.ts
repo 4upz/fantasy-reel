@@ -10,7 +10,14 @@ import {
 } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
 import { createLogger } from '../_shared/logger.ts'
-import { ownerVisibleEmail, toOwnerInvitation } from '../_shared/invitations.ts'
+import {
+  consumeInvitationEmailAllowance,
+  countOpenInvitations,
+  maxPendingInvitations,
+  ownerVisibleEmail,
+  toOwnerInvitation,
+  tooManyOpenInvitationsResponse,
+} from '../_shared/invitations.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('resend-invitation')
@@ -43,7 +50,7 @@ Deno.serve(async (req) => {
     // Fetch invitation
     const { data: invitation, error: invitationError } = await serviceClient
       .from('invitations')
-      .select('id, league_id, status')
+      .select('id, league_id, email, status, expires_at')
       .eq('id', invitation_id)
       .single()
 
@@ -54,7 +61,7 @@ Deno.serve(async (req) => {
     // Fetch league separately for cleaner type inference
     const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
-      .select('id, name, owner_id, status')
+      .select('id, name, owner_id, status, max_participants')
       .eq('id', invitation.league_id)
       .single()
 
@@ -77,6 +84,19 @@ Deno.serve(async (req) => {
     if (invitation.status === 'declined') {
       return errorResponse('Cannot resend - invitation was declined', 400)
     }
+
+    // Reopening a cancelled or expired invitation adds to the league's open ones.
+    const isOpen = invitation.status === 'pending' && new Date(invitation.expires_at) > new Date()
+    if (!isOpen && await countOpenInvitations(serviceClient, league.id) >= maxPendingInvitations(league.max_participants)) {
+      return tooManyOpenInvitationsResponse(league.max_participants)
+    }
+
+    const rateLimited = await consumeInvitationEmailAllowance(
+      serviceClient,
+      { ownerId: user.id, leagueId: league.id, email: invitation.email },
+      log
+    )
+    if (rateLimited) return rateLimited
 
     const { data: updated, error: updateError } = await serviceClient
       .from('invitations')
