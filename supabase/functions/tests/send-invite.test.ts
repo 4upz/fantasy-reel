@@ -122,6 +122,17 @@ Deno.test({
     assertEquals(result.error, 'Only the league owner can send invitations')
   })
 
+  await t.step('returns 403 to a non-owner inviting by user_id before looking the user up', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('invite-not-owner-userid'))
+    await factory.addSecondParticipant(leagueId)
+
+    const result = await invokeFunction(secondClient, 'send-invite', {
+      league_id: leagueId,
+      user_id: '00000000-0000-0000-0000-000000000000',
+    })
+    assertEquals(result.error, 'Only the league owner can send invitations')
+  })
+
   // ============================================================================
   // Business Logic Tests
   // ============================================================================
@@ -213,7 +224,9 @@ Deno.test({
 
     assertEquals(error, null)
     assertExists(data.invitation)
-    assertEquals(data.invitation.email, TEST_USER_2.email)
+    // The address was resolved server-side, so it must not be echoed back
+    assertEquals(data.invitation.email, undefined)
+    assertEquals(JSON.stringify(data).includes(TEST_USER_2.email), false)
   })
 
   // ============================================================================

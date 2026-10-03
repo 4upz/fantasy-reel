@@ -65,13 +65,8 @@ Deno.serve(async (req) => {
       return errorResponse('Valid league_id is required', 400)
     }
 
-    // Resolve email from user_id or validate provided email
-    const normalizedEmail = await resolveEmail(user_id, email)
-    if (normalizedEmail instanceof Response) return normalizedEmail
-
-    // Prevent self-invitation
-    if (normalizedEmail === user.email?.toLowerCase()) {
-      return errorResponse('You cannot invite yourself to a league', 400)
+    if (!email && !user_id) {
+      return errorResponse('Either email or user_id is required', 400)
     }
 
     // Fetch the league and verify ownership
@@ -88,6 +83,16 @@ Deno.serve(async (req) => {
     // Verify user is the league owner
     if (league.owner_id !== user.id) {
       return errorResponse('Only the league owner can send invitations', 403)
+    }
+
+    // Resolve the email only after ownership is confirmed, so a non-owner
+    // can't use the admin lookup to probe accounts by user_id.
+    const normalizedEmail = await resolveEmail(user_id, email)
+    if (normalizedEmail instanceof Response) return normalizedEmail
+
+    // Prevent self-invitation
+    if (normalizedEmail === user.email?.toLowerCase()) {
+      return errorResponse('You cannot invite yourself to a league', 400)
     }
 
     // Check league status
@@ -191,11 +196,16 @@ Deno.serve(async (req) => {
       metadata: { league_id, league_name: league.name, invitation_id: invitation.id },
     })
 
+    // An invite by user_id resolved the address server-side. Echoing it would
+    // hand the caller another user's email, so only echo what they typed.
+    const echoedEmail = user_id ? undefined : normalizedEmail
+    const recipient = echoedEmail ?? 'this user'
+
     return jsonResponse({
       invitation: {
         id: invitation.id,
         league_id: invitation.league_id,
-        email: invitation.email,
+        email: echoedEmail,
         token: invitation.token,
         status: invitation.status,
         expires_at: invitation.expires_at
@@ -203,8 +213,8 @@ Deno.serve(async (req) => {
       invite_url: inviteUrl,
       email_sent: emailResult.success,
       message: emailResult.success
-        ? `Invitation sent to ${normalizedEmail}`
-        : `Invitation created for ${normalizedEmail} (email delivery pending)`
+        ? `Invitation sent to ${recipient}`
+        : `Invitation created for ${recipient} (email delivery pending)`
     }, 201)
 
   } catch (error) {

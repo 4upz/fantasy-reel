@@ -13,11 +13,21 @@ interface Props {
 interface InviteResponse {
   invitation: {
     id: string
-    email: string
+    // Omitted for invites by username: the server never reveals that address.
+    email?: string
     token: string
   }
   invite_url: string
+  email_sent: boolean
   message: string
+}
+
+// Username invites name the person rather than the address the server used.
+function inviteMessage(data: InviteResponse, displayName?: string): string {
+  if (!displayName) return data.message || 'Invitation sent'
+  return data.email_sent
+    ? `Invitation sent to ${displayName}`
+    : `Invitation created for ${displayName} (email delivery pending)`
 }
 
 type InviteMode = 'email' | 'username'
@@ -109,7 +119,7 @@ export default function InviteModal({ leagueId, onClose }: Props): React.ReactEl
     } else if (data) {
       setResult({
         success: true,
-        message: data.message || 'Invitation sent',
+        message: inviteMessage(data, mode === 'username' ? selectedUser?.display_name : undefined),
         url: data.invite_url,
       })
       setEmail('')
