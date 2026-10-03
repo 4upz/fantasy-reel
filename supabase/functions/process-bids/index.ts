@@ -58,10 +58,18 @@ import {
 } from '../_shared/email-templates/counterpick-no-slots.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
-import { bidMovieDataFromRow, lookupBidMovieData, type BidMovieData } from '../_shared/bid-movie-metadata.ts'
+import {
+  bidMovieDataFromRow,
+  resolveBidMovieForProcessing,
+  type BidMovieData,
+  type BidMovieResolution,
+} from '../_shared/bid-movie-metadata.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('process-bids')
+
+/** TMDb lookups in flight at once while verifying pickup movies. */
+const TMDB_LOOKUP_CONCURRENCY = 5
 
 interface ProcessBidsRequest {
   mode?: 'weekly' | 'extended'
@@ -1199,11 +1207,13 @@ async function settleUnawardedPickupContest(
  * place-bid. It replaces every bid's stored `movie_data` in memory, so the
  * eligibility check, the announcements and the `movies` row an award creates
  * never rest on the stored copy, which a client may have written itself. A
- * movie TMDb cannot confirm holds its league, like any other unread input. A
- * score only ever lives on the `movies` row.
+ * movie TMDb has no record of is voided like a movie with no release date. One
+ * TMDb cannot be reached for, with no earlier answer cached, leaves just that
+ * contest pending for the next run. A score only ever lives on the `movies` row.
  *
- * @returns the contests left to resolve, and the leagues where a movie could
- *   not be read -- those cannot be decided this run (see holdUnreadLeagues).
+ * @returns the contests left to resolve, the leagues where a movie could not
+ *   be read -- those cannot be decided this run (see holdUnreadLeagues) -- and
+ *   the contests left pending because their movie could not be verified.
  */
 async function voidUnbiddablePickupContests(
   serviceClient: ServiceClient,
@@ -1212,7 +1222,7 @@ async function voidUnbiddablePickupContests(
   voided: VoidedBidResult[],
   ledger: ResultsLedger,
   seasonYears: Map<string, number>,
-): Promise<{ contests: BidContest[]; unreadLeagues: Set<string> }> {
+): Promise<{ contests: BidContest[]; unreadLeagues: Set<string>; unverified: string[] }> {
   const tmdbIds = [...new Set(contests.map(({ key }) => key.split(':')[1]))]
   const { rows: movies, unreadIds } = await selectByIdBatches<
     Parameters<typeof bidMovieDataFromRow>[0] & { id: string; tmdb_id: number; fantasy_points: number | null }
@@ -1225,20 +1235,19 @@ async function voidUnbiddablePickupContests(
   )
   const movieByTmdbId = new Map(movies.map((movie) => [String(movie.tmdb_id), movie]))
 
-  // Movies no bid has won yet. One TMDb lookup each, shared by every league.
-  const lookedUp = new Map<string, BidMovieData | null>()
-  for (const tmdbIdStr of tmdbIds) {
-    if (movieByTmdbId.has(tmdbIdStr) || unreadIds.has(tmdbIdStr)) continue
-    try {
-      lookedUp.set(tmdbIdStr, await lookupBidMovieData(parseInt(tmdbIdStr), log))
-    } catch (error) {
-      log.error('Could not verify pickup movie with TMDb', { tmdb_id: tmdbIdStr, error: serializeError(error) })
-      lookedUp.set(tmdbIdStr, null)
-    }
+  // Movies with no row yet: one TMDb lookup each, shared by every league, a
+  // few at a time so a slow TMDb cannot run the job past its time limit.
+  const resolutions = new Map<string, BidMovieResolution>()
+  const toLookUp = tmdbIds.filter((id) => !movieByTmdbId.has(id) && !unreadIds.has(id))
+  for (let i = 0; i < toLookUp.length; i += TMDB_LOOKUP_CONCURRENCY) {
+    await Promise.all(toLookUp.slice(i, i + TMDB_LOOKUP_CONCURRENCY).map(async (id) => {
+      resolutions.set(id, await resolveBidMovieForProcessing(serviceClient, parseInt(id), log))
+    }))
   }
 
   const surviving: BidContest[] = []
   const unreadLeagues = new Set<string>()
+  const unverified: string[] = []
 
   for (const contest of contests) {
     const [leagueId, tmdbIdStr] = contest.key.split(':')
@@ -1249,17 +1258,23 @@ async function voidUnbiddablePickupContests(
 
     const bids = bidsByKey.get(contest.key) ?? []
     const movie = movieByTmdbId.get(tmdbIdStr)
-    const movieData = movie ? bidMovieDataFromRow(movie) : lookedUp.get(tmdbIdStr)
-    if (!movieData) {
-      unreadLeagues.add(leagueId)
+    const resolution: BidMovieResolution = movie
+      ? { kind: 'found', data: bidMovieDataFromRow(movie) }
+      : resolutions.get(tmdbIdStr) ?? { kind: 'unavailable' }
+    if (resolution.kind === 'unavailable') {
+      log.error('Could not verify pickup movie with TMDb; contest left pending', { tmdb_id: tmdbIdStr })
+      unverified.push(contest.key)
       continue
     }
+    const movieData = resolution.kind === 'found' ? resolution.data : null
     for (const bid of bids) bid.movie_data = movieData
 
-    const lock = bidLock({
-      release_date: movieData.release_date,
-      fantasy_points: movie?.fantasy_points,
-    }, seasonYearFor(seasonYears, leagueId))
+    const lock = movieData
+      ? bidLock({
+        release_date: movieData.release_date,
+        fantasy_points: movie?.fantasy_points,
+      }, seasonYearFor(seasonYears, leagueId))
+      : { code: 'movie_released' as const, reason: 'Movie could not be found on TMDb' }
     if (!lock) {
       surviving.push(contest)
       continue
@@ -1303,7 +1318,7 @@ async function voidUnbiddablePickupContests(
     })
   }
 
-  return { contests: surviving, unreadLeagues }
+  return { contests: surviving, unreadLeagues, unverified }
 }
 
 async function getRecipient(
@@ -2375,7 +2390,7 @@ Deno.serve(async (req) => {
     const unawardedPickupContests = await reconcileAwardedPickupContests(
       serviceClient, pickupContests, bidsByKey, pickupLedger, errors,
     )
-    const { contests: biddableContests, unreadLeagues: unreadMovieLeagues } =
+    const { contests: biddableContests, unreadLeagues: unreadMovieLeagues, unverified } =
       await voidUnbiddablePickupContests(
         serviceClient,
         unawardedPickupContests,
@@ -2384,6 +2399,9 @@ Deno.serve(async (req) => {
         pickupLedger,
         pickupSeasonYears,
       )
+    for (const key of unverified) {
+      errors.push({ movie_key: key, error: 'Could not verify the movie with TMDb; bids left pending' })
+    }
     const { capacities: pickupCapacities, unreadableLeagues } = await getTeamCapacities(
       serviceClient,
       biddableContests,
