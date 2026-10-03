@@ -10,6 +10,8 @@ SELECT ok(is_allowed_avatar_url(NULL), 'no avatar is allowed');
 SELECT ok(is_allowed_avatar_url('https://abcdefghijklmnop.supabase.co/storage/v1/object/public/avatars/u1/1700000000.png'), 'profile upload URL');
 SELECT ok(is_allowed_avatar_url('https://abcdefghijklmnop.supabase.co/storage/v1/object/public/team-avatars/t1/1700000000.webp'), 'team upload URL');
 SELECT ok(is_allowed_avatar_url('http://127.0.0.1:54321/storage/v1/object/public/avatars/u1/1.png'), 'local upload URL');
+SELECT ok(is_allowed_avatar_url('https://api.fantasyreel.com/storage/v1/object/public/avatars/u1/1.png'), 'production custom-domain upload URL');
+SELECT ok(NOT is_allowed_avatar_url('https://api.fantasyreel.com.attacker.example/storage/v1/object/public/avatars/u1/1.png'), 'custom-domain-prefixed host');
 SELECT ok(is_allowed_avatar_url('https://cdn.discordapp.com/avatars/123/abc.png'), 'Discord sign-in photo');
 SELECT ok(is_allowed_avatar_url('https://lh3.googleusercontent.com/a/ACg8ocK=s96-c'), 'Google sign-in photo');
 
@@ -52,6 +54,25 @@ SELECT lives_ok(
   $$UPDATE profiles SET avatar_url = NULL WHERE user_id = '87111111-1111-4111-8111-000000000001'$$,
   'member can remove their avatar');
 RESET ROLE;
+
+-- An upload on the API origin that issued the member's JWT is accepted, even
+-- when that host is not in the list
+SELECT set_config('request.jwt.claims', '{"sub":"87111111-1111-4111-8111-000000000001","role":"authenticated","iss":"https://auth.example.test/auth/v1"}', true);
+SET LOCAL ROLE authenticated;
+SELECT lives_ok(
+  $$UPDATE profiles SET avatar_url = 'https://auth.example.test/storage/v1/object/public/avatars/87111111-1111-4111-8111-000000000001/2.png' WHERE user_id = '87111111-1111-4111-8111-000000000001'$$,
+  'member can save an upload on their JWT issuer origin');
+SELECT throws_ok(
+  $$UPDATE profiles SET avatar_url = 'https://auth.example.test/storage/v1/object/public/posters/x.png' WHERE user_id = '87111111-1111-4111-8111-000000000001'$$,
+  '23514', 'Avatar must be an uploaded image', 'issuer origin still needs an avatar bucket path');
+SELECT throws_ok(
+  $$UPDATE profiles SET avatar_url = 'https://auth.example.test.attacker.example/storage/v1/object/public/avatars/x.png' WHERE user_id = '87111111-1111-4111-8111-000000000001'$$,
+  '23514', 'Avatar must be an uploaded image', 'issuer-prefixed host is refused');
+SELECT lives_ok(
+  $$UPDATE profiles SET avatar_url = NULL WHERE user_id = '87111111-1111-4111-8111-000000000001'$$,
+  'member can clear the issuer-origin avatar');
+RESET ROLE;
+SELECT set_config('request.jwt.claims', '{"sub":"87111111-1111-4111-8111-000000000001","role":"authenticated"}', true);
 
 -- A row saved before the check stays editable as long as the avatar is untouched
 ALTER TABLE profiles DISABLE TRIGGER enforce_allowed_avatar_url;
