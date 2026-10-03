@@ -1,4 +1,5 @@
 import Image from 'next/image'
+import { safeAvatarUrl } from '@/utils/avatar'
 import ChampionCrown from '../components/ChampionCrown'
 import { ChevronDown } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
@@ -51,6 +52,7 @@ export default function TeamStandingSummary({
   budgetFocus,
 }: Props) {
   const initials = displayName.split(' ').map((word) => word[0]).join('').slice(0, 2).toUpperCase()
+  const safeUrl = safeAvatarUrl(avatarUrl)
 
   return (
     <>
@@ -64,8 +66,8 @@ export default function TeamStandingSummary({
         </div>
 
         <div className={`relative flex-none overflow-hidden rounded-full border-[1.5px] border-gold bg-gold-muted ${inline ? 'h-[38px] w-[38px]' : 'h-[34px] w-[34px] lg:h-[38px] lg:w-[38px]'}`}>
-          {avatarUrl ? (
-            <Image src={avatarUrl} alt={displayName} fill sizes="38px" className="object-cover" unoptimized />
+          {safeUrl ? (
+            <Image src={safeUrl} alt={displayName} fill sizes="38px" className="object-cover" unoptimized />
           ) : (
             <div className="type-meta flex h-full w-full items-center justify-center text-gold">{initials}</div>
           )}
