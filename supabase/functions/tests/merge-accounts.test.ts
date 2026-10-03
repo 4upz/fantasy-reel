@@ -10,7 +10,20 @@
  */
 
 import { assertEquals } from '@std/assert'
-import { createTestFactory, getAnonClient, getUserId, invokeFunction } from './_setup.ts'
+import {
+  createTestFactory,
+  getAnonClient,
+  getServiceClient,
+  getUserId,
+  invokeFunction,
+} from './_setup.ts'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+async function getAccessToken(client: SupabaseClient): Promise<string> {
+  const { data } = await client.auth.getSession()
+  if (!data.session) throw new Error('Test client has no session')
+  return data.session.access_token
+}
 
 Deno.test({
   name: 'merge-accounts',
@@ -20,6 +33,8 @@ Deno.test({
   const { client, secondClient } = await createTestFactory()
   const userId = await getUserId(client)
   const secondUserId = await getUserId(secondClient)
+  const firstToken = await getAccessToken(client)
+  const secondToken = await getAccessToken(secondClient)
 
   // ============================================================================
   // Authentication Tests
@@ -94,6 +109,15 @@ Deno.test({
     assertEquals(result.error, 'Cannot merge an account with itself')
   })
 
+  await t.step('returns 400 when duplicateAccessToken is missing', async () => {
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: secondUserId,
+      provider: 'discord',
+    })
+    assertEquals(result.error, 'duplicateAccessToken is required')
+  })
+
   // ============================================================================
   // Authorization Tests
   // ============================================================================
@@ -103,46 +127,48 @@ Deno.test({
     const result = await invokeFunction(secondClient, 'merge-accounts', {
       originalUserId: userId, // First user's ID
       duplicateUserId: '00000000-0000-0000-0000-000000000002',
+      duplicateAccessToken: secondToken,
       provider: 'discord',
     })
     assertEquals(result.error, 'You must be signed in as the original account to merge')
   })
 
-  // ============================================================================
-  // Not Found Tests
-  // ============================================================================
+  await t.step('returns 403 when the token does not belong to the duplicate account', async () => {
+    // The takeover: name a victim's id while proving only your own session.
+    const result = await invokeFunction(client, 'merge-accounts', {
+      originalUserId: userId,
+      duplicateUserId: secondUserId,
+      duplicateAccessToken: firstToken,
+      provider: 'discord',
+    })
+    assertEquals(result.error, 'Could not verify the account to link. Please sign in again.')
+  })
 
-  await t.step('returns 404 when duplicate account does not exist', async () => {
+  await t.step('returns 403 when the token is not a valid session', async () => {
     const result = await invokeFunction(client, 'merge-accounts', {
       originalUserId: userId,
       duplicateUserId: '00000000-0000-0000-0000-000000000099',
+      duplicateAccessToken: 'not-a-jwt',
       provider: 'discord',
     })
-    assertEquals(result.error, 'Duplicate account not found')
+    assertEquals(result.error, 'Could not verify the account to link. Please sign in again.')
   })
 
-  // ============================================================================
-  // Business Logic Tests
-  // ============================================================================
-
-  await t.step('returns 400 when duplicate account has no Discord identity', async () => {
-    // Second user is a regular email user without Discord identity
+  await t.step('returns 403 when the duplicate account has a different email', async () => {
+    // Even holding both sessions, unrelated accounts are never merged.
     const result = await invokeFunction(client, 'merge-accounts', {
       originalUserId: userId,
       duplicateUserId: secondUserId,
+      duplicateAccessToken: secondToken,
       provider: 'discord',
     })
-    assertEquals(result.error, 'No Discord identity found on duplicate account')
+    assertEquals(result.error, 'Accounts can only be linked when their emails match')
   })
 
-  await t.step('returns 400 when duplicate account has no Google identity', async () => {
-    // Second user is a regular email user without Google identity
-    const result = await invokeFunction(client, 'merge-accounts', {
-      originalUserId: userId,
-      duplicateUserId: secondUserId,
-      provider: 'google',
-    })
-    assertEquals(result.error, 'No Google identity found on duplicate account')
+  await t.step('leaves the named account in place after a refused merge', async () => {
+    const { data, error } = await getServiceClient().auth.admin.getUserById(secondUserId)
+    assertEquals(error, null)
+    assertEquals(data.user?.id, secondUserId)
   })
 
   // ============================================================================

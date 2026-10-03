@@ -15,8 +15,17 @@ const log = createLogger('merge-accounts')
 interface MergeAccountsRequest {
   originalUserId: string
   duplicateUserId: string
+  // Access token of the duplicate (OAuth) session, captured by the link-account
+  // server action before it signs in as the original account. It is the proof
+  // that the caller controls the account about to be deleted.
+  duplicateAccessToken: string
   provider: 'discord' | 'google'
 }
+
+// The duplicate is created by the OAuth sign-in that sends the user to the
+// link-account page, whose context cookie lives for 10 minutes. An older
+// account is not a fresh duplicate and must never be merged away.
+const MAX_DUPLICATE_AGE_MS = 60 * 60 * 1000
 
 /**
  * Create admin client with service role for privileged operations
@@ -40,7 +49,8 @@ Deno.serve(async (req) => {
     const { user } = authResult
 
     // Parse request body
-    const { originalUserId, duplicateUserId, provider }: MergeAccountsRequest = await req.json()
+    const { originalUserId, duplicateUserId, duplicateAccessToken, provider }: MergeAccountsRequest =
+      await req.json()
     const providerName = provider === 'discord' ? 'Discord' : 'Google'
 
     // Validate required fields
@@ -66,7 +76,20 @@ Deno.serve(async (req) => {
       return errorResponse('Cannot merge an account with itself', 400)
     }
 
+    if (!duplicateAccessToken || typeof duplicateAccessToken !== 'string') {
+      return errorResponse('duplicateAccessToken is required', 400)
+    }
+
     const supabaseAdmin = createAdminClient()
+
+    // The caller must prove they are signed in as the duplicate too. Without
+    // this, anyone could name another user's id and take their OAuth login.
+    const { data: duplicateSession, error: duplicateSessionError } =
+      await supabaseAdmin.auth.getUser(duplicateAccessToken)
+
+    if (duplicateSessionError || duplicateSession?.user?.id !== duplicateUserId) {
+      return errorResponse('Could not verify the account to link. Please sign in again.', 403)
+    }
 
     // Step 1: Get the duplicate user's data to verify it exists and has Discord
     const { data: duplicateUserData, error: duplicateUserError } =
@@ -78,6 +101,40 @@ Deno.serve(async (req) => {
     }
 
     const duplicateUser = duplicateUserData.user
+
+    // The duplicate exists only because the same email signed in with OAuth.
+    const callerEmail = user.email?.toLowerCase()
+    if (!callerEmail || duplicateUser.email?.toLowerCase() !== callerEmail) {
+      return errorResponse('Accounts can only be linked when their emails match', 403)
+    }
+
+    if (Date.now() - new Date(duplicateUser.created_at).getTime() > MAX_DUPLICATE_AGE_MS) {
+      return errorResponse('This account is too old to link automatically', 403)
+    }
+
+    // Deleting a user cascades to the leagues it owns and its teams, so never
+    // merge away an account that has joined or created anything.
+    const [participants, ownedLeagues, ownedSeries] = await Promise.all([
+      supabaseAdmin
+        .from('league_participants')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', duplicateUserId),
+      supabaseAdmin
+        .from('leagues')
+        .select('id', { count: 'exact', head: true })
+        .eq('owner_id', duplicateUserId),
+      supabaseAdmin
+        .from('league_series')
+        .select('id', { count: 'exact', head: true })
+        .eq('owner_id', duplicateUserId),
+    ])
+
+    const membershipError = participants.error ?? ownedLeagues.error ?? ownedSeries.error
+    if (membershipError) throw membershipError
+
+    if ((participants.count ?? 0) + (ownedLeagues.count ?? 0) + (ownedSeries.count ?? 0) > 0) {
+      return errorResponse('This account already belongs to a league and cannot be merged', 403)
+    }
 
     // Verify the duplicate has the specified provider identity
     const hasProvider = duplicateUser.identities?.some((i) => i.provider === provider)

@@ -9,15 +9,57 @@ interface ActionResult {
   error?: string
 }
 
-export async function verifyAndMergeAccounts(
-  password: string,
-  duplicateUserId: string,
-  email: string,
-  provider: 'discord' | 'google'
-): Promise<ActionResult> {
+interface LinkAccountContext {
+  duplicateUserId?: string
+  email?: string
+  oauthProvider?: string
+}
+
+/**
+ * The context the OAuth callback stored in an httpOnly cookie. It is the only
+ * source for which accounts to merge: client arguments can name anyone.
+ */
+async function readLinkAccountContext(): Promise<LinkAccountContext | null> {
+  const cookieStore = await cookies()
+  const raw = cookieStore.get('link_account_context')?.value
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as LinkAccountContext
+  } catch {
+    return null
+  }
+}
+
+export async function verifyAndMergeAccounts(password: string): Promise<ActionResult> {
+  const context = await readLinkAccountContext()
+  const provider = context?.oauthProvider
+  if (
+    !context?.duplicateUserId ||
+    !context.email ||
+    (provider !== 'discord' && provider !== 'google')
+  ) {
+    return { success: false, error: 'Your linking session expired. Please sign in again.' }
+  }
+  const { duplicateUserId, email } = context
+
   const supabase = await createClient()
 
-  // Step 1: Verify the password against the original account
+  // Step 1: Capture the duplicate (OAuth) session before signing in as the
+  // original account replaces it. The edge function verifies this token to
+  // confirm the caller controls the account it is about to delete.
+  const {
+    data: { user: currentUser },
+  } = await supabase.auth.getUser()
+  const {
+    data: { session: duplicateSession },
+  } = await supabase.auth.getSession()
+
+  if (currentUser?.id !== duplicateUserId || !duplicateSession?.access_token) {
+    return { success: false, error: 'Your linking session expired. Please sign in again.' }
+  }
+  const duplicateAccessToken = duplicateSession.access_token
+
+  // Step 2: Verify the password against the original account
   const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -37,11 +79,12 @@ export async function verifyAndMergeAccounts(
     return { success: true }
   }
 
-  // Step 2: Call the edge function to merge accounts
+  // Step 3: Call the edge function to merge accounts
   const { data, error: mergeError } = await supabase.functions.invoke('merge-accounts', {
     body: {
       originalUserId,
       duplicateUserId,
+      duplicateAccessToken,
       provider,
     },
   })
@@ -55,7 +98,7 @@ export async function verifyAndMergeAccounts(
     return { success: false, error: data?.error || 'Failed to link accounts.' }
   }
 
-  // Step 3: Clear the context cookie
+  // Step 4: Clear the context cookie
   const cookieStore = await cookies()
   cookieStore.delete('link_account_context')
 
