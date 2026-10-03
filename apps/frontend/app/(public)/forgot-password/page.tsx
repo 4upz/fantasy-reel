@@ -5,15 +5,19 @@ import { requestPasswordReset } from './actions'
 import Link from 'next/link'
 import { FormError } from '../../components/FormError'
 import NavLogo from '../../components/navigation/NavLogo'
+import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
+import { CAPTCHA_FIELD } from '@/utils/captcha'
 
 export default function ForgotPasswordPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const captcha = useCaptcha()
 
   async function handleSubmit(formData: FormData) {
     setError(null)
     setIsLoading(true)
+    formData.set(CAPTCHA_FIELD, captcha.token ?? '')
 
     try {
       const result = await requestPasswordReset(formData)
@@ -26,6 +30,7 @@ export default function ForgotPasswordPage() {
       setError('An unexpected error occurred')
     } finally {
       setIsLoading(false)
+      captcha.reset()
     }
   }
 
@@ -103,9 +108,11 @@ export default function ForgotPasswordPage() {
             />
           </div>
 
+          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !captcha.ready}
             className="btn btn-primary w-full py-3"
             data-testid="reset-button"
           >

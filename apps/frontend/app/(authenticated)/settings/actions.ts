@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { CAPTCHA_FAILED_MESSAGE, isCaptchaError, readCaptchaToken } from '@/utils/captcha'
 
 export interface UpdateProfileResult {
   success: boolean
@@ -116,9 +117,13 @@ export async function changePassword(formData: FormData): Promise<UpdateProfileR
   const { error: signInError } = await supabase.auth.signInWithPassword({
     email: user.email,
     password: currentPassword,
+    options: { captchaToken: readCaptchaToken(formData) },
   })
 
   if (signInError) {
+    if (isCaptchaError(signInError)) {
+      return { success: false, error: CAPTCHA_FAILED_MESSAGE }
+    }
     if (signInError.message.includes('Invalid login credentials')) {
       return { success: false, error: 'Current password is incorrect' }
     }

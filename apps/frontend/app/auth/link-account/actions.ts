@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { getDisplayNameFromUser, getAvatarUrlFromUser } from '@/utils/oauth'
 import { cookies } from 'next/headers'
+import { CAPTCHA_FAILED_MESSAGE, isCaptchaError } from '@/utils/captcha'
 
 interface ActionResult {
   success: boolean
@@ -30,7 +31,10 @@ async function readLinkAccountContext(): Promise<LinkAccountContext | null> {
   }
 }
 
-export async function verifyAndMergeAccounts(password: string): Promise<ActionResult> {
+export async function verifyAndMergeAccounts(
+  password: string,
+  captchaToken?: string
+): Promise<ActionResult> {
   const context = await readLinkAccountContext()
   const provider = context?.oauthProvider
   if (
@@ -63,8 +67,12 @@ export async function verifyAndMergeAccounts(password: string): Promise<ActionRe
   const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
     email,
     password,
+    options: { captchaToken },
   })
 
+  if (signInError && isCaptchaError(signInError)) {
+    return { success: false, error: CAPTCHA_FAILED_MESSAGE }
+  }
   if (signInError || !signInData.user) {
     return { success: false, error: 'Incorrect password. Please try again.' }
   }

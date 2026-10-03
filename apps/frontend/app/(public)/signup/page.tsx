@@ -7,6 +7,8 @@ import { FormError } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import NavLogo from '../../components/navigation/NavLogo'
+import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
+import { CAPTCHA_FIELD } from '@/utils/captcha'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
@@ -14,6 +16,7 @@ export default function SignupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [signupSuccess, setSignupSuccess] = useState(false)
   const [email, setEmail] = useState('')
+  const captcha = useCaptcha()
 
   async function handleSubmit(formData: FormData) {
     setError(null)
@@ -22,6 +25,7 @@ export default function SignupPage() {
     // Store email for the success message
     const submittedEmail = formData.get('email') as string
     setEmail(submittedEmail)
+    formData.set(CAPTCHA_FIELD, captcha.token ?? '')
 
     try {
       const result = await signup(formData)
@@ -36,6 +40,7 @@ export default function SignupPage() {
       setError('An unexpected error occurred')
     } finally {
       setIsLoading(false)
+      captcha.reset()
     }
   }
 
@@ -166,7 +171,9 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="signup-button">
+            <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+
+            <button type="submit" disabled={isLoading || !captcha.ready} className="btn btn-primary w-full py-3" data-testid="signup-button">
               {isLoading ? 'Creating account...' : 'Sign up'}
             </button>
 

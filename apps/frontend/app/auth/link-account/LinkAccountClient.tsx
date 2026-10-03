@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import DiscordIcon from '@/app/components/icons/DiscordIcon'
 import GoogleIcon from '@/app/components/icons/GoogleIcon'
 import { FormError } from '@/app/components/FormError'
+import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
 import { verifyAndMergeAccounts, keepSeparateAccount } from './actions'
 
 type OAuthProvider = 'discord' | 'google'
@@ -44,6 +45,7 @@ export default function LinkAccountClient({
   const [error, setError] = useState<string | null>(null)
   const [isLinking, setIsLinking] = useState(false)
   const [isKeepingSeparate, setIsKeepingSeparate] = useState(false)
+  const captcha = useCaptcha()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,7 +53,7 @@ export default function LinkAccountClient({
     setIsLinking(true)
 
     try {
-      const result = await verifyAndMergeAccounts(password)
+      const result = await verifyAndMergeAccounts(password, captcha.token ?? undefined)
 
       if (result.success) {
         toast.success('Accounts linked successfully!')
@@ -63,6 +65,7 @@ export default function LinkAccountClient({
       setError('Something went wrong. Please try again.')
     } finally {
       setIsLinking(false)
+      captcha.reset()
     }
   }
 
@@ -149,9 +152,11 @@ export default function LinkAccountClient({
 
           {error && <FormError message={error} />}
 
+          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+
           <button
             type="submit"
-            disabled={isLinking || !password}
+            disabled={isLinking || !password || !captcha.ready}
             className="btn btn-primary w-full py-3"
             data-testid="merge-account-button"
           >
