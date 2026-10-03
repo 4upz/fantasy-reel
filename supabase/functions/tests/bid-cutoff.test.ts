@@ -12,7 +12,7 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createTestFactory, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
+import { createTestFactory, getServiceClient, uniqueName, invokeFunction, invokePlaceBid } from './_setup.ts'
 
 const currentYear = new Date().getFullYear()
 const testMovieData = {
@@ -88,7 +88,7 @@ Deno.test({
       await setCutoffHours(serviceClient, leagueId, 0)
       const tmdbId = freshTmdbId()
 
-      const { data, error } = await client.functions.invoke('place-bid', {
+      const { data, error } = await invokePlaceBid(client, {
         body: { league_id: leagueId, tmdb_id: tmdbId, amount: 10, movie_data: testMovieData },
       })
 
@@ -102,7 +102,7 @@ Deno.test({
       await setCutoffHours(serviceClient, leagueId, 0)
       const tmdbId = freshTmdbId()
 
-      const { data: placed } = await client.functions.invoke('place-bid', {
+      const { data: placed } = await invokePlaceBid(client, {
         body: { league_id: leagueId, tmdb_id: tmdbId, amount: 10, movie_data: testMovieData },
       })
 
@@ -147,14 +147,14 @@ Deno.test({
 
         // Open the contest while the window is still open...
         await setCutoffHours(serviceClient, leagueId, 0)
-        const { data: opened } = await client.functions.invoke('place-bid', {
+        const { data: opened } = await invokePlaceBid(client, {
           body: { league_id: leagueId, tmdb_id: tmdbId, amount: 10, movie_data: testMovieData },
         })
         assertExists(opened.bid)
 
         // ...then close it and have a second team pile in.
         await setCutoffHours(serviceClient, leagueId, closedHours!)
-        const { data, error } = await secondClient.functions.invoke('place-bid', {
+        const { data, error } = await invokePlaceBid(secondClient, {
           body: { league_id: leagueId, tmdb_id: tmdbId, amount: 20, movie_data: testMovieData },
         })
 
@@ -173,12 +173,12 @@ Deno.test({
         const tmdbId = freshTmdbId()
 
         await setCutoffHours(serviceClient, leagueId, 0)
-        await client.functions.invoke('place-bid', {
+        await invokePlaceBid(client, {
           body: { league_id: leagueId, tmdb_id: tmdbId, amount: 10, movie_data: testMovieData },
         })
 
         await setCutoffHours(serviceClient, leagueId, closedHours!)
-        const { data, error } = await client.functions.invoke('place-bid', {
+        const { data, error } = await invokePlaceBid(client, {
           body: { league_id: leagueId, tmdb_id: tmdbId, amount: 25, movie_data: testMovieData },
         })
 
@@ -197,7 +197,7 @@ Deno.test({
         const tmdbId = freshTmdbId()
 
         await setCutoffHours(serviceClient, leagueId, 0)
-        const { data: placed } = await client.functions.invoke('place-bid', {
+        const { data: placed } = await invokePlaceBid(client, {
           body: { league_id: leagueId, tmdb_id: tmdbId, amount: 10, movie_data: testMovieData },
         })
         await client.functions.invoke('cancel-bid', { body: { bid_id: placed.bid.id } })
@@ -229,7 +229,7 @@ Deno.test({
         const tmdbId = freshTmdbId()
 
         await setCutoffHours(serviceClient, leagueId, 0)
-        const { data: placed } = await client.functions.invoke('place-bid', {
+        const { data: placed } = await invokePlaceBid(client, {
           body: { league_id: leagueId, tmdb_id: tmdbId, amount: 10, movie_data: testMovieData },
         })
 
@@ -263,7 +263,7 @@ Deno.test({
       await setCutoffHours(serviceClient, leagueId, 0)
       const tmdbId = freshTmdbId()
 
-      const { data: placed } = await client.functions.invoke('place-bid', {
+      const { data: placed } = await invokePlaceBid(client, {
         body: { league_id: leagueId, tmdb_id: tmdbId, amount: 10, movie_data: testMovieData },
       })
 

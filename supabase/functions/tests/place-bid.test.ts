@@ -7,7 +7,7 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction, seedTmdbFromBidMovieData, type BidMovieFixture } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction, invokePlaceBid, seedTmdbFromBidMovieData, type BidMovieFixture } from './_setup.ts'
 
 // Test movie data for bidding
 const currentYear = new Date().getFullYear()
@@ -262,7 +262,7 @@ Deno.test({
     await t.step('successfully places bid on eligible movie', async () => {
       const leagueId = await factory.createActiveLeague(uniqueName('bid-success'))
 
-      const { data, error } = await client.functions.invoke('place-bid', {
+      const { data, error } = await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300003,
@@ -284,7 +284,7 @@ Deno.test({
     await t.step('successfully places $0 bid', async () => {
       const leagueId = await factory.createActiveLeague(uniqueName('bid-zero'))
 
-      const { data, error } = await client.functions.invoke('place-bid', {
+      const { data, error } = await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300004,
@@ -307,7 +307,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('bid-outbid'))
 
       // First user places bid
-      await client.functions.invoke('place-bid', {
+      await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300005,
@@ -317,7 +317,7 @@ Deno.test({
       })
 
       // Second user outbids
-      const { data, error } = await secondClient.functions.invoke('place-bid', {
+      const { data, error } = await invokePlaceBid(secondClient, {
         body: {
           league_id: leagueId,
           tmdb_id: 300005,
@@ -337,7 +337,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('bid-not-higher'))
 
       // First user places bid of $20
-      await client.functions.invoke('place-bid', {
+      await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300006,
@@ -361,7 +361,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('bid-equal'))
 
       // First user places bid of $25
-      await client.functions.invoke('place-bid', {
+      await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300007,
@@ -390,7 +390,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('bid-update'))
 
       // First bid
-      await client.functions.invoke('place-bid', {
+      await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300008,
@@ -400,7 +400,7 @@ Deno.test({
       })
 
       // Update bid. The real client always resupplies movie_data.
-      const { data, error } = await client.functions.invoke('place-bid', {
+      const { data, error } = await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300008,
@@ -419,7 +419,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('bid-counter'))
 
       // First user bids $10
-      await client.functions.invoke('place-bid', {
+      await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300009,
@@ -430,7 +430,7 @@ Deno.test({
 
       // Second user outbids with $15. The real client always resupplies
       // movie_data, including on a counter-bid.
-      await secondClient.functions.invoke('place-bid', {
+      await invokePlaceBid(secondClient, {
         body: {
           league_id: leagueId,
           tmdb_id: 300009,
@@ -440,7 +440,7 @@ Deno.test({
       })
 
       // First user counters with $20
-      const { data, error } = await client.functions.invoke('place-bid', {
+      const { data, error } = await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 300009,
