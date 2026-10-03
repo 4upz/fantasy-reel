@@ -62,6 +62,7 @@ const COPY: Record<BidResultsKind, { title: string; noun: string; wonBy: string;
 
 const CANCELLED_BECAUSE: Record<VoidReasonCode, string> = {
   movie_released: 'the movie released before processing',
+  movie_scored: 'the movie got its score before processing',
   movie_dropped: 'the movie was dropped by its holder',
   target_owned: 'the movie was traded to the bidder',
   target_missing: 'the targeted holding no longer exists',

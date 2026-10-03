@@ -80,6 +80,8 @@ interface Props {
   userId: string
   teams: TeamWithOwner[]
   ownedTmdbIds: number[]
+  /** Upcoming movies that already have a score: locked against bids. */
+  scoredTmdbIds: number[]
   /** Active holdings across the whole roster: draft picks and pickups share total_slots. */
   usedRosterSlots: number
   /** The team's own holdings, offered as conditional drop targets in the bid modal. */
@@ -97,6 +99,7 @@ export default function BiddingShell({
   userId,
   teams,
   ownedTmdbIds,
+  scoredTmdbIds: scoredTmdbIdList,
   usedRosterSlots,
   myHoldings,
   biddingCounterpickSlots,
@@ -116,6 +119,7 @@ export default function BiddingShell({
     biddingCounterpickCount, loading, refreshing, hasLoaded, error,
   } = bidding
 
+  const scoredTmdbIds = useMemo(() => new Set(scoredTmdbIdList), [scoredTmdbIdList])
   const hasCounterpicks = biddingCounterpickSlots > 0
   // Roster slots are pooled: draft picks and pickups draw on the same total.
   const rosterSlots = league.total_slots
@@ -190,6 +194,7 @@ export default function BiddingShell({
       teams,
       bidding,
       ownedTmdbIds,
+      scoredTmdbIds,
       usedRosterSlots,
       freeRosterSlots,
       myHoldings,
@@ -206,6 +211,7 @@ export default function BiddingShell({
       teams,
       bidding,
       ownedTmdbIds,
+      scoredTmdbIds,
       usedRosterSlots,
       freeRosterSlots,
       myHoldings,
@@ -339,6 +345,7 @@ export default function BiddingShell({
           bidsReady={bidding.bidsReady && !error}
           bidsError={!!error}
           ownedTmdbIds={ownedTmdbIds}
+          scoredTmdbIds={scoredTmdbIds}
           onPlaceBid={bidding.placeBid}
           myHoldings={droppableHoldings}
           freeRosterSlots={freeRosterSlots}

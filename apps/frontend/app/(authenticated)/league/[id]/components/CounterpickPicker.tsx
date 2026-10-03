@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react
 import { createPortal } from 'react-dom'
 import MoviePoster from '@/app/components/MoviePoster'
 import { formatReleaseDateFull } from '@/utils/date'
-import { isPreReleaseScore, pointsTone } from '@/utils/scoring'
+import { isPreReleaseScore, isScoreLocked, pointsTone } from '@/utils/scoring'
+import ScoreLockLabel from '@/app/components/ScoreLockLabel'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
@@ -19,6 +20,11 @@ interface Props {
   onPick: (movieId: string, option: CounterpickOption) => Promise<void>
   revision?: number
   draftRound?: boolean
+  /**
+   * Show scored movies as locked. Counterpick bids can't target a scored movie;
+   * the draft's counterpick round is unaffected, so this is opt-in.
+   */
+  lockScored?: boolean
 }
 
 interface GroupedOptions {
@@ -35,6 +41,7 @@ export default function CounterpickPicker({
   onPick,
   revision = 0,
   draftRound = false,
+  lockScored = false,
 }: Props) {
   const [options, setOptions] = useState<CounterpickOption[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,8 +104,10 @@ export default function CounterpickPicker({
     )
   }, [options])
 
+  const isLocked = (option: CounterpickOption) => lockScored && isScoreLocked(option.fantasy_points)
+
   const handleSelectOption = (option: CounterpickOption) => {
-    if (!isMyTurn || isPicking) return
+    if (!isMyTurn || isPicking || isLocked(option)) return
     resetPickError()
     setSelectedOption(option)
   }
@@ -209,6 +218,7 @@ export default function CounterpickPicker({
                   option={option}
                   isSelected={selectedOption?.movie_id === option.movie_id}
                   isSelectable={isMyTurn && !isPicking && !confirming}
+                  isLocked={isLocked(option)}
                   onSelect={handleSelectOption}
                 />
               ))}
@@ -290,24 +300,32 @@ interface CounterpickMovieCardProps {
   option: CounterpickOption
   isSelected: boolean
   isSelectable: boolean
+  /** Already scored, so it can't be counterpicked by bid. */
+  isLocked: boolean
   onSelect: (option: CounterpickOption) => void
 }
 
 function CounterpickMovieCard({
   option,
   isSelected,
-  isSelectable,
+  isSelectable: canSelect,
+  isLocked,
   onSelect,
 }: CounterpickMovieCardProps) {
   const points = option.fantasy_points
   // Options are mostly unreleased, so a score here is usually a pre-release one.
   const isPreRelease = isPreReleaseScore(points, option.release_date)
+  // `canSelect` is the turn. A locked movie is never selectable, and says why
+  // itself rather than with the turn tooltip.
+  const isSelectable = canSelect && !isLocked
 
   return (
     <button
       onClick={() => onSelect(option)}
       disabled={!isSelectable}
-      title={!isSelectable ? "Wait for your turn to make a counterpick" : undefined}
+      title={isLocked
+        ? "Already scored, so it can't be counterpicked"
+        : !canSelect ? "Wait for your turn to make a counterpick" : undefined}
       className={`relative group text-left rounded-xl overflow-hidden transition-all ${
         isSelected
           ? 'ring-2 ring-crimson shadow-glow-crimson scale-[1.02]'
@@ -332,6 +350,13 @@ function CounterpickMovieCard({
               <Target className="w-3.5 h-3.5 text-white" />
               <span className="type-meta text-white">Counterpick</span>
             </div>
+          </div>
+        )}
+
+        {/* Where the hover prompt would be: the card is too narrow to explain more */}
+        {isLocked && (
+          <div className="absolute inset-x-0 bottom-0 flex justify-center pb-3">
+            <ScoreLockLabel className="type-meta px-2.5 py-1 rounded-full bg-background/85 backdrop-blur-sm" />
           </div>
         )}
 

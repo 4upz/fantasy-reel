@@ -366,9 +366,25 @@ from OpenCritic before launch. A score is not points earned, though.
 - If a release date moves later after release day (`sync-release-dates` edits
   dates up to 14 days back), the movie stops counting at its teams' next
   rescore and counts again from its new date.
-- Acquisition rules are unchanged: a pre-release score does not lock a movie,
-  so until release it can still be dropped, bid on, traded or counterpicked
-  like any unreleased movie.
+- **A scored movie is locked against bids and trades**, released or not: its
+  outcome is known (`20261002200000_lock_scored_movies.sql`). "Scored" means
+  `movies.fantasy_points` is set.
+  - No pickup or counterpick bid can be placed on it (`bidLock` in
+    `_shared/utils.ts`, used by `place-bid` and `place-counterpick-bid`;
+    `is_movie_eligible_for_pickup` backs `place-bid` up).
+  - A bid already pending when the score lands is cancelled, uncharged, the
+    next time bids are processed: `process-bids` voids it before resolution
+    with `resolution_reason = 'movie_scored'`, notifies the bidder, and lists it
+    in the results post.
+  - Neither the movie nor the counterpick on it can be traded:
+    `validate_trade_items` (re-run by `execute_trade` under the trade row lock)
+    and `_shared/trade-validation.ts` refuse it with the same sentence, so
+    proposing, countering, accepting and approving all fail.
+  - `process-trades` ends any open offer that names one
+    (`expire_scored_trade_offers`): `veto_reason` names the movie and both
+    sides are notified. The run reports `expired_by_score`.
+  - Drops, the draft and the draft's counterpick round are unchanged, so a
+    movie with a pre-release score can still be dropped before release.
 
 ## Cron Jobs
 

@@ -12,6 +12,7 @@ const RESOLUTION_REASONS: Record<string, string> = {
   no_slots: 'No slots available',
   insufficient_budget: 'Insufficient budget',
   movie_released: 'Movie already released',
+  movie_scored: 'Movie already has a score',
   movie_dropped: 'Target movie was dropped',
   target_owned: 'Team now owns the target movie',
   target_missing: 'Target movie is no longer available',

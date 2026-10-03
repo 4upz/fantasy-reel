@@ -77,6 +77,8 @@ interface ProcessResults {
   expired_by_clock: number
   /** Open offers dropped because their season finished under them. */
   expired_by_season: number
+  /** Open offers ended because a movie in them got its score (scored movies are locked). */
+  expired_by_score: number
   /** Release-anchored offers whose movie moved, so their clock moved with it. */
   reresolved: number
   /** Open offers nudged because their clock is nearly out. One per window. */
@@ -109,6 +111,7 @@ Deno.serve(async (req) => {
       invalidated: 0,
       expired_by_clock: 0,
       expired_by_season: 0,
+      expired_by_score: 0,
       reresolved: 0,
       expiry_reminders_sent: 0,
       errors: [],
@@ -124,13 +127,18 @@ Deno.serve(async (req) => {
     // First of the maintenance steps: an offer in a season that has ended must
     // not have its anchor re-resolved, must not earn an "expiring soon" nudge,
     // and must never reach the execution loop. Taking it out here means the
-    // other three steps never see it.
+    // other steps never see it.
     //
     // Without this the offer would still not execute -- validateTradeProposal
     // refuses a completed league (see _shared/league-status.ts) -- but it would
     // be expired down in the loop as a *validation failure*, which counts into
     // results.failed and fires the ops alert for something that is not a fault.
     await expireFinishedSeasonOffers(serviceClient, results)
+    // Next, before the other steps see the offers: one naming a scored movie
+    // can never execute, so it must not have its anchor moved, be nudged, or
+    // reach the execution loop -- where an agreed trade would be expired as a
+    // validation *failure*, firing the ops alert for an ordinary score update.
+    await expireScoredOffers(serviceClient, results)
     await reresolveReleaseAnchors(serviceClient, results)
     await sweepExpiredOffers(serviceClient, results)
     // Reminders run LAST of the three, and the order is load-bearing:
@@ -162,6 +170,7 @@ Deno.serve(async (req) => {
         metadata: {
           expired_by_clock: results.expired_by_clock,
           expired_by_season: results.expired_by_season,
+          expired_by_score: results.expired_by_score,
           reresolved: results.reresolved,
           expiry_reminders_sent: results.expiry_reminders_sent,
         },
@@ -263,6 +272,7 @@ Deno.serve(async (req) => {
         invalidated: results.invalidated,
         expired_by_clock: results.expired_by_clock,
         expired_by_season: results.expired_by_season,
+        expired_by_score: results.expired_by_score,
         reresolved: results.reresolved,
         expiry_reminders_sent: results.expiry_reminders_sent,
       },
@@ -275,6 +285,9 @@ Deno.serve(async (req) => {
         (results.expired_by_clock > 0 ? `, ${results.expired_by_clock} offers lapsed` : '') +
         (results.expired_by_season > 0
           ? `, ${results.expired_by_season} offers ended with their season`
+          : '') +
+        (results.expired_by_score > 0
+          ? `, ${results.expired_by_score} offers ended by a scored movie`
           : '') +
         (results.expiry_reminders_sent > 0
           ? `, ${results.expiry_reminders_sent} expiry reminders sent`
@@ -457,6 +470,48 @@ async function expireFinishedSeasonOffers(
   await forEachWithConcurrency(expired, (trade) =>
     notifyOfferExpired(supabase, trade, expiredReasonText(trade))
   )
+}
+
+/**
+ * End every open offer that names a scored movie, or the counterpick on one,
+ * and tell both sides why.
+ *
+ * A scored movie is locked against trades (validate_trade_items refuses it), so
+ * such an offer can never execute. Left open it would keep rendering as live,
+ * fail whenever someone tried to accept or approve it, and -- once agreed --
+ * expire in the execution loop as a failure. expire_scored_trade_offers() names
+ * the movie in veto_reason, worded as the validators word the refusal, and
+ * claims and flips in one statement, so only rows this call changed are
+ * notified.
+ *
+ * An agreed trade gets the words the execution loop uses for a trade that could
+ * not go through; an unanswered offer, those of any other expiry. accepted_at
+ * tells them apart: accepting sets it, and countering clears it.
+ */
+async function expireScoredOffers(
+  supabase: ReturnType<typeof createServiceClient>,
+  results: ProcessResults
+): Promise<void> {
+  const { data, error } = await supabase.rpc('expire_scored_trade_offers')
+
+  if (error) {
+    log.error('Failed to expire offers naming a scored movie', { error: serializeError(error) })
+    recordStepFailure(results, 'Scored-movie offer sweep', error)
+    return
+  }
+
+  const expired = (data ?? []) as TradeRecord[]
+  if (expired.length === 0) return
+
+  results.expired_by_score = expired.length
+  log.info('Trade offers ended by a scored movie', { count: expired.length })
+
+  await forEachWithConcurrency(expired, (trade) => {
+    const reason = trade.veto_reason ?? 'A movie in it already has a score.'
+    return trade.accepted_at
+      ? notifyTradeExpired(supabase, trade, reason)
+      : notifyOfferExpired(supabase, trade, reason)
+  })
 }
 
 /**

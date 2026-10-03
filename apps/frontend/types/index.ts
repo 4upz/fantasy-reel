@@ -518,6 +518,7 @@ export type BidResolutionReason =
   | 'no_slots'
   | 'insufficient_budget'
   | 'movie_released'
+  | 'movie_scored'
   | 'movie_dropped'
   | 'target_owned'
   | 'target_missing'

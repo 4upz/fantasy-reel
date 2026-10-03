@@ -5,6 +5,7 @@ import { AlertTriangle, Lock, Target, Trash2 } from 'lucide-react'
 import type { CounterpickBid } from '@/types'
 import BidAmountAndDeadline from './BidAmountAndDeadline'
 import { getBidTypeClass } from './utils'
+import ScoreLockLabel from '@/app/components/ScoreLockLabel'
 
 interface CounterpickBidCardProps {
   bid: CounterpickBid
@@ -20,10 +21,12 @@ interface CounterpickBidCardProps {
    * window's end so the card explains the delay instead of "Processing soon".
    */
   counterWindowClosesAt?: string | null
+  /** See BidCard: the movie got its score, so processing will cancel the bid. */
+  scoreLocked?: boolean
 }
 
 /** @design-system League */
-export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt }: CounterpickBidCardProps) {
+export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocked, onCounter, bidType, counterWindowClosesAt, scoreLocked }: CounterpickBidCardProps) {
   const isOutbid = bid.status === 'outbid'
   const isActive = bid.status === 'active'
   const isPending = isActive || isOutbid
@@ -81,6 +84,12 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
               <AlertTriangle className="w-4 h-4" />
               <span>You&apos;ve been outbid!</span>
             </div>
+          )}
+
+          {scoreLocked && isPending && (
+            <ScoreLockLabel className="type-meta mt-2">
+              {isOwner ? 'this bid will be cancelled, uncharged' : 'bids on it will be cancelled'}
+            </ScoreLockLabel>
           )}
         </div>
 

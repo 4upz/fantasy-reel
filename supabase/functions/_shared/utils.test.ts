@@ -16,6 +16,7 @@ import {
   authenticateRequest,
   authenticateUserOrServiceRole,
   isUpcomingMovie,
+  bidLock,
   hasReleased,
   utcDate,
 } from './utils.ts'
@@ -599,6 +600,42 @@ Deno.test('isUpcomingMovie', async (t) => {
     // The same movie, seen by a season two years back, clears the year cutoff
     // and is judged only on whether it has actually released.
     assertEquals(isUpcomingMovie(`${NEXT_YEAR}-12-31`, THIS_YEAR - 1), { valid: true })
+  })
+})
+
+// ============================================================================
+// bidLock -- released and scored movies are out of play for bids
+// ============================================================================
+
+Deno.test('bidLock', async (t) => {
+  const THIS_YEAR = new Date().getFullYear()
+  const UPCOMING = `${THIS_YEAR + 1}-06-15`
+
+  await t.step('leaves an upcoming, unscored movie open', () => {
+    assertEquals(bidLock({ release_date: UPCOMING, fantasy_points: null }, THIS_YEAR), null)
+    assertEquals(bidLock({ release_date: UPCOMING, fantasy_points: undefined }, THIS_YEAR), null)
+  })
+
+  await t.step('locks a scored movie, even one still to come', () => {
+    assertEquals(bidLock({ release_date: UPCOMING, fantasy_points: 12 }, THIS_YEAR), {
+      code: 'movie_scored',
+      reason: 'Movie already has a score',
+    })
+  })
+
+  await t.step('treats a score of zero as a score', () => {
+    assertEquals(bidLock({ release_date: UPCOMING, fantasy_points: 0 }, THIS_YEAR)?.code, 'movie_scored')
+  })
+
+  await t.step('reports a released movie as released, scored or not', () => {
+    // Yesterday in UTC, judged by its own season, so this holds on 1 January too.
+    const yesterday = utcDate(new Date(Date.now() - 24 * 60 * 60 * 1000))
+    const released = { release_date: yesterday, fantasy_points: 30 }
+    assertEquals(bidLock(released, Number(yesterday.slice(0, 4))), {
+      code: 'movie_released',
+      reason: 'Movie has already been released',
+    })
+    assertEquals(bidLock({ release_date: null, fantasy_points: null }, THIS_YEAR)?.reason, 'Movie has no release date')
   })
 })
 

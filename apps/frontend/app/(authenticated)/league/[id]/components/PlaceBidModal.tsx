@@ -10,6 +10,7 @@ import { getReleaseYear, formatReleaseDateFull, isMovieBiddable, formatDeadlineS
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import FranchiseSummary from '@/app/components/FranchiseSummary'
+import ScoreLockLabel from '@/app/components/ScoreLockLabel'
 import { useWishlist } from '@/hooks/useWishlist'
 import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 
@@ -24,6 +25,8 @@ interface PlaceBidModalProps {
   bidsReady: boolean
   bidsError: boolean
   ownedTmdbIds: number[]
+  /** Movies that already have a score: listed, but locked against bids. */
+  scoredTmdbIds: ReadonlySet<number>
   onPlaceBid: (
     tmdbId: number,
     amount: number,
@@ -142,6 +145,7 @@ export default function PlaceBidModal({
   bidsReady,
   bidsError,
   ownedTmdbIds,
+  scoredTmdbIds,
   onPlaceBid,
   myHoldings,
   freeRosterSlots,
@@ -307,6 +311,10 @@ export default function PlaceBidModal({
       toast.error(`${selectedMovie.title} has already released and can no longer be bid on`)
       return
     }
+    if (scoredTmdbIds.has(selectedMovie.tmdb_id)) {
+      toast.error(`${selectedMovie.title} already has a score and can no longer be bid on`)
+      return
+    }
 
     const movieData = {
       title: selectedMovie.title,
@@ -338,7 +346,7 @@ export default function PlaceBidModal({
         : `Bid of $${bidAmount} placed on ${selectedMovie.title}`
     )
     onClose()
-  }, [selectedMovie, budget, bidsReady, bidAmount, dropHoldingId, myHoldings, onPlaceBid, onClose])
+  }, [selectedMovie, budget, bidsReady, scoredTmdbIds, bidAmount, dropHoldingId, myHoldings, onPlaceBid, onClose])
 
   const { execute: handleSubmit, isLoading: isSubmitting } = useAsyncAction(submitBidAction)
 
@@ -358,10 +366,10 @@ export default function PlaceBidModal({
 
       const data = bid.movie_data as Partial<TMDbSearchResult> | null
 
-      // A released movie can no longer be bid on, so listing one here would be
-      // a dead end -- the server rejects it once the amount is filled in. The
-      // bid cards gate their "Counter bid" button the same way.
-      if (!isMovieBiddable(data?.release_date ?? null)) continue
+      // A released or scored movie can no longer be bid on, so listing one here
+      // would be a dead end -- the server rejects it once the amount is filled
+      // in. The bid cards gate their "Counter bid" button the same way.
+      if (!isMovieBiddable(data?.release_date ?? null) || scoredTmdbIds.has(bid.tmdb_id)) continue
 
       byTmdbId.set(bid.tmdb_id, {
         tmdb_id: bid.tmdb_id,
@@ -378,13 +386,14 @@ export default function PlaceBidModal({
     return [...byTmdbId.values()].sort(
       (a, b) => (activeBidsByTmdbId.get(b.tmdb_id)?.high ?? 0) - (activeBidsByTmdbId.get(a.tmdb_id)?.high ?? 0)
     )
-  }, [existingBids, excludedTmdbIds, activeBidsByTmdbId])
+  }, [existingBids, excludedTmdbIds, scoredTmdbIds, activeBidsByTmdbId])
 
   const searchResults = showWishlistedOnly
     ? results.filter(m => isWishlisted(m.tmdb_id))
     : results
 
   const displayedResults = isCounterBidPhase ? contestedMovies : searchResults
+  const biddableCount = displayedResults.filter((movie) => !scoredTmdbIds.has(movie.tmdb_id)).length
 
   const resultsState = getBidResultsState({
     isCounterBidPhase,
@@ -570,53 +579,69 @@ export default function PlaceBidModal({
                     <p className="type-body-sm text-foreground-secondary mb-3">
                       {isCounterBidPhase
                         ? `${displayedResults.length} ${displayedResults.length === 1 ? 'movie' : 'movies'} still being bid on`
-                        : `${displayedResults.length} available movies loaded`}
+                        : `${biddableCount} available ${biddableCount === 1 ? 'movie' : 'movies'} loaded`}
                     </p>
-                    {displayedResults.map((movie, index) => (
-                      <div
-                        key={movie.tmdb_id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => selectMovie(movie)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault()
-                            selectMovie(movie)
-                          }
-                        }}
-                        data-testid={`bid-movie-result-${movie.tmdb_id}`}
-                        className="w-full card card-interactive p-3 flex gap-4 text-left group cursor-pointer"
-                        style={{ animationDelay: `${index * 30}ms` }}
-                      >
-                        <div className="relative w-14 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
-                          <MoviePoster
-                            src={movie.poster_url}
-                            alt={movie.title}
-                            sizes="56px"
-                            posterSize="w154"
-                          />
-                          <WishlistToggle movie={movie} size="sm" variant="overlay" className="absolute top-0.5 right-0.5" />
-                        </div>
-                        <div className="flex-1 min-w-0 py-0.5">
-                          <h4 className="type-row-title text-foreground truncate group-hover:text-gold transition-colors">
-                            {movie.title}
-                          </h4>
-                          {movie.release_date && (
-                            <div className="type-body-sm flex items-center gap-1 mt-1.5 text-foreground-secondary">
-                              <Calendar className="w-3.5 h-3.5" />
-                              {getReleaseYear(movie.release_date)}
+                    {displayedResults.map((movie, index) => {
+                      // Listed rather than hidden, so a search for it explains
+                      // itself instead of coming up empty.
+                      const locked = scoredTmdbIds.has(movie.tmdb_id)
+                      return (
+                        <div
+                          key={movie.tmdb_id}
+                          role="button"
+                          tabIndex={locked ? -1 : 0}
+                          aria-disabled={locked || undefined}
+                          onClick={locked ? undefined : () => selectMovie(movie)}
+                          onKeyDown={locked ? undefined : (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              selectMovie(movie)
+                            }
+                          }}
+                          data-testid={`bid-movie-result-${movie.tmdb_id}`}
+                          className={`w-full card p-3 flex gap-4 text-left ${
+                            locked ? 'opacity-70 cursor-not-allowed' : 'card-interactive group cursor-pointer'
+                          }`}
+                          style={{ animationDelay: `${index * 30}ms` }}
+                        >
+                          <div className="relative w-14 h-20 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
+                            <MoviePoster
+                              src={movie.poster_url}
+                              alt={movie.title}
+                              sizes="56px"
+                              posterSize="w154"
+                            />
+                            {!locked && (
+                              <WishlistToggle movie={movie} size="sm" variant="overlay" className="absolute top-0.5 right-0.5" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0 py-0.5">
+                            <h4 className="type-row-title text-foreground truncate group-hover:text-gold transition-colors">
+                              {movie.title}
+                            </h4>
+                            {movie.release_date && (
+                              <div className="type-body-sm flex items-center gap-1 mt-1.5 text-foreground-secondary">
+                                <Calendar className="w-3.5 h-3.5" />
+                                {getReleaseYear(movie.release_date)}
+                              </div>
+                            )}
+                            {locked ? (
+                              <ScoreLockLabel className="type-meta mt-1.5">can&apos;t be bid on</ScoreLockLabel>
+                            ) : (
+                              <ActiveBidChip
+                                tmdbId={movie.tmdb_id}
+                                info={activeBidsByTmdbId.get(movie.tmdb_id)}
+                              />
+                            )}
+                          </div>
+                          {!locked && (
+                            <div className="flex items-center text-foreground-secondary group-hover:text-gold transition-colors">
+                              <TrendingUp className="w-5 h-5" />
                             </div>
                           )}
-                          <ActiveBidChip
-                            tmdbId={movie.tmdb_id}
-                            info={activeBidsByTmdbId.get(movie.tmdb_id)}
-                          />
                         </div>
-                        <div className="flex items-center text-foreground-secondary group-hover:text-gold transition-colors">
-                          <TrendingUp className="w-5 h-5" />
-                        </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </>
                 )}
                 {!isCounterBidPhase && (hasMore || loadingMore) && (
