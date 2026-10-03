@@ -1,14 +1,13 @@
 import GitHubIcon from './icons/GitHubIcon'
-
-export const GITHUB_REPO_URL = 'https://github.com/4upz/fantasy-reel'
+import { GITHUB_REPO_URL } from './SocialLinks'
 
 interface Props {
   className?: string
 }
 
 /**
- * Footer link to the project's source on GitHub. Shared by the marketing and
- * authenticated footers so the label and destination stay in one place.
+ * Labeled link to the project's source on GitHub, for the marketing footer.
+ * The app shell uses the icon-only SocialLinks row instead.
  *
  * @design-system Identity & brand
  */

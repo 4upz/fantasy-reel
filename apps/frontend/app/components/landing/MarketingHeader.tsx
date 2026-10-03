@@ -4,7 +4,7 @@ import BrandLogo from '../BrandLogo'
 import styles from './MarketingHeader.module.css'
 import ThemeSelector from '@/components/theme/ThemeSelector'
 import GitHubIcon from '../icons/GitHubIcon'
-import { GITHUB_REPO_URL } from '../GitHubLink'
+import { GITHUB_REPO_URL } from '../SocialLinks'
 
 interface MarketingHeaderProps {
   currentPage?: 'how-to-play'

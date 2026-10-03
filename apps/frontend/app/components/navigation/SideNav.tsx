@@ -8,8 +8,7 @@ import type { Profile } from '@/types'
 import NotificationBell from '@/components/NotificationBell'
 import ProfileMenu from './ProfileMenu'
 import BrandLogo from '../BrandLogo'
-import GitHubIcon from '../icons/GitHubIcon'
-import { GITHUB_REPO_URL } from '../GitHubLink'
+import SocialLinks from '../SocialLinks'
 import {
   LayoutDashboard,
   Film,
@@ -155,18 +154,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         </nav>
 
         <div className="sidenav-footer">
-          <a
-            href={GITHUB_REPO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="sidenav-item"
-            title="Fantasy Reel on GitHub"
-            aria-label={showLabels ? undefined : 'Fantasy Reel on GitHub'}
-            data-testid="sidenav-github-link"
-          >
-            <span className="sidenav-icon"><GitHubIcon /></span>
-            {showLabels && <span className="sidenav-label">GitHub</span>}
-          </a>
+          <SocialLinks />
         </div>
       </div>
     )
