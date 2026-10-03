@@ -23,6 +23,7 @@ export interface LeagueMovieRef {
   overview?: string | null
   vote_average?: number | null
   popularity?: number | null
+  /** The movie's points under this season's 90+ rule, as `team_holdings` carries them. */
   fantasy_points?: number | null
 }
 

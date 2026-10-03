@@ -252,7 +252,7 @@ e2e/tests/
 | Test | Description | Edge Functions |
 |------|-------------|----------------|
 | `shows score sources` | IMDb, RT, Metacritic visible (RT drives scoring) | - |
-| `shows fantasy points` | RT-based points with 90% Club accelerator | - |
+| `shows fantasy points` | RT-based points under the league's 90+ rule | - |
 
 ### 4. League Settings - `league/league-settings.spec.ts`
 

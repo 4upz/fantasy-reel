@@ -1941,7 +1941,7 @@ export async function processCounterpickBids(
             pickup_id: winner.pickup_id,
             pick_order: (existingPickOrderCount ?? 0) + 1,
             phase: 'bidding',
-            fantasy_points: movie.fantasy_points != null ? -movie.fantasy_points : null,
+            // No fantasy_points: set_counterpick_points_trigger derives it under the season's 90+ rule.
           })
 
         if (counterpickError) {

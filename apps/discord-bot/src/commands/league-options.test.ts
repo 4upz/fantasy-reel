@@ -38,6 +38,7 @@ describe('/league-options', () => {
             draft_counterpick_slots: 1,
             bidding_counterpick_slots: 0,
             counterpicks_block_drops: true,
+            double_points_over_90: true,
             faab_budget: 100,
             trades_enabled: true,
             trade_review_enabled: true,
@@ -56,6 +57,7 @@ describe('/league-options', () => {
     expect(embed.description).toContain('Invite only: On')
     expect(embed.description).toContain('Rounds: 5')
     expect(embed.description).toContain('Fantasy budget: $100')
+    expect(embed.description).toContain('Double points above 90%: On')
     expect(embed.description).not.toContain('undefined')
     // Sensitive: join_code must never be exposed via the bot
     expect(embed.description).not.toContain('join_code')
@@ -91,6 +93,7 @@ describe('/league-options', () => {
 
     const embed = interaction.editReply.mock.calls[0][0].embeds[0].data
     expect(embed.description).toContain('Max participants: Unlimited')
+    expect(embed.description).toContain('Double points above 90%: Off')
   })
 
   it('replies with a friendly error when Supabase fails', async () => {

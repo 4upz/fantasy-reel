@@ -114,6 +114,16 @@ export default async function StandingsPage({ params }: PageProps) {
   const { data: participants } = participantsResult
   const { data: counterpicks } = counterpicksResult
 
+  // The embedded movies row holds the default rule's points; the counterpick
+  // row holds this season's, inverted. Open the movie with the season's.
+  const seasonCounterpicks = ((counterpicks ?? []) as CounterpickWithScores[]).map((counterpick) => ({
+    ...counterpick,
+    movies: {
+      ...counterpick.movies,
+      fantasy_points: counterpick.fantasy_points === null ? null : -counterpick.fantasy_points,
+    },
+  }))
+
   const holdings = (holdingsResult.data ?? []) as StandingsHolding[]
 
   const draftPicks: DraftHolding[] = holdings
@@ -156,7 +166,7 @@ export default async function StandingsPage({ params }: PageProps) {
       standings={rows}
       draftPicks={draftPicks}
       pickups={pickups}
-      counterpicks={(counterpicks ?? []) as CounterpickWithScores[]}
+      counterpicks={seasonCounterpicks}
       currentUserId={user.id}
       startingBudget={league.faab_budget ?? 0}
       seasonYear={typedLeague.season_year}

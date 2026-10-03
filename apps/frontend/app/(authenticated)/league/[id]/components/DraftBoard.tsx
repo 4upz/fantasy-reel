@@ -206,6 +206,7 @@ export default function DraftBoard({
         <MoviePicker
           draftedTmdbIds={draftedTmdbIds}
           seasonYear={league.season_year}
+          doublePointsOver90={league.double_points_over_90}
           isMyTurn={isMyTurn && !updatesUnavailable}
           picking={picking}
           unavailableReason={updatesUnavailable ? 'Draft updates are unavailable. Retry updates before picking.' : undefined}

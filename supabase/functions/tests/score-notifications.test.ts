@@ -230,6 +230,21 @@ Deno.test({
 
         assertEquals(await readAnnounced(), { announced_fantasy_points: 40.5, announced_rt_score: 83 })
       })
+
+      // Last on purpose: changing the rule re-scores every team in the season,
+      // which would give the unscored team the team_scores row it must lack.
+      await t.step("captureScoreContext reads each league's 90+ points rule", async () => {
+        const before = await captureScoreContext(supabase, [draftedMovieId])
+        assertEquals(before.doublePointsLeagueIds.has(leagueId), false, 'new seasons start on the default rule')
+
+        const { error } = await supabase
+          .from('leagues').update({ double_points_over_90: true }).eq('id', leagueId)
+        assertEquals(error, null)
+
+        const after = await captureScoreContext(supabase, [draftedMovieId])
+        assertEquals(after.doublePointsLeagueIds.has(leagueId), true)
+        assertEquals(after.leagueNames.has(leagueId), true)
+      })
     } finally {
       try {
         await factory.cleanup()

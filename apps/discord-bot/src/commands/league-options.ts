@@ -14,6 +14,7 @@ interface LeagueSettingsRow {
   draft_counterpick_slots: number | null
   bidding_counterpick_slots: number | null
   counterpicks_block_drops: boolean | null
+  double_points_over_90: boolean | null
   faab_budget: number | null
   trades_enabled: boolean | null
   trade_review_enabled: boolean | null
@@ -50,7 +51,7 @@ export const leagueOptions: Command = {
       .from('leagues')
       .select(
         'invite_only, max_participants, draft_slots, total_slots, drop_limit, counterbid_hours, ' +
-        'draft_counterpick_slots, bidding_counterpick_slots, counterpicks_block_drops, faab_budget, ' +
+        'draft_counterpick_slots, bidding_counterpick_slots, counterpicks_block_drops, double_points_over_90, faab_budget, ' +
         'trades_enabled, trade_review_enabled, trade_veto_hours, trade_deadline, ' +
         'trade_offer_expiry_default_hours, trade_offer_expiry_min_hours, trade_offer_expiry_max_days'
       )
@@ -67,6 +68,9 @@ export const leagueOptions: Command = {
       '**Membership**',
       `Invite only: ${onOff(settings.invite_only)}`,
       `Max participants: ${settings.max_participants ?? 'Unlimited'}`,
+      '',
+      '**Scoring**',
+      `Double points above 90%: ${onOff(settings.double_points_over_90)}`,
       '',
       '**Draft**',
       `Rounds: ${settings.draft_slots ?? '?'}`,

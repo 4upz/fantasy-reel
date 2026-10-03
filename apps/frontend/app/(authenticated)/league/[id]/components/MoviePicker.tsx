@@ -14,6 +14,8 @@ interface Props {
   draftedTmdbIds: Set<number>
   /** The league's season year, which decides which movies are still in play. */
   seasonYear: number
+  /** The season's 90+ points rule, which the preview's franchise projection pays out under. */
+  doublePointsOver90: boolean
   isMyTurn: boolean
   picking: boolean
   unavailableReason?: string | null
@@ -72,6 +74,7 @@ function wishlistToTMDbResult(wm: WishlistedMovie): TMDbSearchResult {
 export default function MoviePicker({
   draftedTmdbIds,
   seasonYear,
+  doublePointsOver90,
   isMyTurn,
   picking,
   unavailableReason,
@@ -290,6 +293,7 @@ export default function MoviePicker({
         <MovieQuickPreview
           movie={previewMovie}
           seasonYear={seasonYear}
+          doublePointsOver90={doublePointsOver90}
           isMyTurn={isMyTurn}
           isDrafted={draftedTmdbIds.has(previewMovie.tmdb_id)}
           unavailableReason={unavailableReason}

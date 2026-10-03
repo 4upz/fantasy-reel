@@ -233,8 +233,15 @@ Deno.test('shouldAnnounceScore - a move of exactly 3 qualifies, either direction
   assertEquals(shouldAnnounceScore(scores(1.1, 61), scores(4.1, 64)), true)
 })
 
-Deno.test('shouldAnnounceScore - points alone qualify above 90%, where RT counts double', () => {
-  assertEquals(shouldAnnounceScore(scores(34, 92), scores(38, 94)), true)
+Deno.test('shouldAnnounceScore - above 90% the default rule moves points one for one with RT', () => {
+  assertEquals(shouldAnnounceScore(scores(32, 92), scores(34, 94)), false)
+})
+
+Deno.test('shouldAnnounceScore - points alone qualify above 90% with double points', () => {
+  // Stored on the default rule; doubled, 92% -> 94% is 34 -> 38 points
+  assertEquals(shouldAnnounceScore(scores(32, 92), scores(34, 94), true), true)
+  // Below 90% the double rule changes nothing
+  assertEquals(shouldAnnounceScore(scores(20, 80), scores(22, 82), true), false)
 })
 
 Deno.test('shouldAnnounceScore - RT alone qualifies in the flat tail, where points barely move', () => {
@@ -606,6 +613,7 @@ function baseContext(): ScoreNotificationContext {
     leagueIds: ['league-1'],
     previousMovieScores: new Map([['movie-1', PRE_RUN]]),
     leagueNames: new Map([['league-1', 'MoC Fantasy League']]),
+    doublePointsLeagueIds: new Set(),
     previousStandings: new Map([
       [
         'league-1',
@@ -713,6 +721,53 @@ Deno.test('captureScoreContext - a movie held in two leagues yields one placemen
 
   assertEquals(context.leagueIds.sort(), ['league-1', 'league-2'])
   assertEquals(context.placements.length, 2)
+})
+
+Deno.test("captureScoreContext - reads each league's 90+ points rule with its name", async () => {
+  const { client } = createMockSupabase({
+    movies: [{ data: [{ id: 'movie-1', fantasy_points: 35, combined_score: 95 }], error: null }],
+    draft_picks: [{
+      data: [{ movie_id: 'movie-1', league_id: 'league-1', dropped_at: null, teams: { name: 'Alpha' } }],
+      error: null,
+    }],
+    pickups: [{
+      data: [{ movie_id: 'movie-1', league_id: 'league-2', dropped_at: null, teams: { name: 'Bravo' } }],
+      error: null,
+    }],
+    ...CAPTURE_LEAGUE_TABLES,
+    leagues: [{
+      data: [
+        { id: 'league-1', name: 'Double League', double_points_over_90: true },
+        { id: 'league-2', name: 'Default League', double_points_over_90: false },
+      ],
+      error: null,
+    }],
+  })
+
+  const context = await captureScoreContext(client, ['movie-1'])
+
+  assertEquals(context.leagueNames.get('league-2'), 'Default League')
+  assertEquals([...context.doublePointsLeagueIds], ['league-1'])
+})
+
+Deno.test('captureScoreContext - skips the run when the leagues cannot be read', async () => {
+  // Without each league's 90+ rule, a double-points league's posts would show
+  // the wrong points
+  const { client } = createMockSupabase({
+    movies: [{ data: [{ id: 'movie-1', fantasy_points: 20, combined_score: 80 }], error: null }],
+    draft_picks: [{
+      data: [{ movie_id: 'movie-1', league_id: 'league-1', dropped_at: null, teams: { name: 'Alpha' } }],
+      error: null,
+    }],
+    pickups: [{ data: [], error: null }],
+    ...CAPTURE_LEAGUE_TABLES,
+    leagues: [{ data: null, error: { message: 'database unavailable' } }],
+  })
+
+  const context = await captureScoreContext(client, ['movie-1'])
+
+  assertEquals(context.leagueIds, [])
+  assertEquals(context.placements, [])
 })
 
 // ============================================================================
@@ -1064,6 +1119,7 @@ function notableMissContext(overrides: Partial<ScoreNotificationContext> = {}): 
     leagueIds: ['league-1'],
     previousMovieScores: new Map([['movie-1', MISS_PRE_RUN]]),
     leagueNames: new Map([['league-1', 'The League']]),
+    doublePointsLeagueIds: new Set(),
     previousStandings: new Map(),
     placements: [],
     droppedPlacements: [{ movieId: 'movie-1', leagueId: 'league-1', droppedByTeamName: 'Dropper' }],
@@ -1406,6 +1462,119 @@ Deno.test('sendScoreNotifications - holds a post back when its score cannot be r
 
     assertEquals(summary.movie_updates, 0)
     assertEquals(calls.length, 0)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+// ============================================================================
+// The 90+ points rule (leagues.double_points_over_90)
+// ============================================================================
+
+/** Last posted at 92%: 32 points on the default rule, 34 doubled. */
+const POSTED_AT_92 = scores(32, 92)
+
+/** The first embed of each Discord message, keyed by its league (the footer). */
+function embedsByLeague(calls: Array<Record<string, unknown>>): Map<string, Record<string, unknown>> {
+  const embeds = calls.map((call) => (call.embeds as Array<Record<string, unknown>>)[0])
+  return new Map(embeds.map((embed) => [(embed.footer as { text: string }).text, embed]))
+}
+
+Deno.test('sendScoreNotifications - a 90+ move under the bar on the default rule stays quiet', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // 92% -> 94%: two points on the default rule
+    const db = slowBurnDb(34, 94, POSTED_AT_92, 30)
+
+    const summary = await sendScoreNotifications(createMockDbClient(db), slowBurnContext(POSTED_AT_92, 30))
+
+    assertEquals(summary.movie_updates, 0)
+    assertEquals(calls.length, 0)
+    assertEquals(db.movies[0].announced_fantasy_points, 32, 'the gap carries into the next run')
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - a double-points holder posts the move, each league in its own points', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // The same move is four points doubled, so it posts -- in both leagues
+    const db = slowBurnDb(34, 94, POSTED_AT_92, 30)
+    db.discord_channels.push({ ...db.discord_channels[0], id: 'ch-2', league_id: 'league-2' })
+    const context = slowBurnContext(POSTED_AT_92, 30)
+    context.leagueIds = ['league-1', 'league-2']
+    context.leagueNames = new Map([['league-1', 'Double League'], ['league-2', 'Default League']])
+    context.doublePointsLeagueIds = new Set(['league-1'])
+    context.placements = [...context.placements, { ...context.placements[0], leagueId: 'league-2' }]
+
+    const summary = await sendScoreNotifications(createMockDbClient(db), context)
+
+    assertEquals(summary.movie_updates, 2)
+    const embeds = embedsByLeague(calls)
+    assertEquals(
+      embeds.get('Double League')?.description,
+      'Score has gone **UP** from **92% RT** (34.0 pts) to **94% RT** (38.0 pts)'
+    )
+    assertEquals(
+      embeds.get('Default League')?.description,
+      'Score has gone **UP** from **92% RT** (32.0 pts) to **94% RT** (34.0 pts)'
+    )
+    // Recorded as stored, on the default rule
+    assertEquals(db.movies[0].announced_fantasy_points, 34)
+    assertEquals(db.movies[0].announced_rt_score, 94)
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - the rollup shows a double-points league its own points', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // First scores of 91% to 99%; the ninth is past the cap and rolls up
+    const movies = Array.from({ length: 9 }, (_, i) =>
+      movieRow(scores(31 + i, 91 + i), NEVER_POSTED, { id: `movie-${i}`, title: `Movie ${i}` })
+    )
+    const { client } = createMockSupabase({
+      movies: [{ data: movies, error: null }],
+      discord_channels: [{ data: [enabledChannel()], error: null }],
+    })
+
+    const context = baseContext()
+    context.movieIds = movies.map((m) => m.id)
+    context.previousMovieScores = new Map(movies.map((m) => [m.id, NEVER_POSTED]))
+    context.placements = movies.map((m) => ({ ...context.placements[0], movieId: m.id }))
+    context.doublePointsLeagueIds = new Set(['league-1'])
+
+    await sendScoreNotifications(client, context)
+
+    assertEquals(calls.length, 9)
+    assertEquals(
+      (calls[0].embeds as Array<Record<string, unknown>>)[0].description,
+      'Now has a score of **91% RT** (32.0 pts)'
+    )
+    const rollup = (calls[8].embeds as Array<Record<string, unknown>>)[0]
+    assertEquals(
+      (rollup.fields as Array<{ value: string }>)[0].value,
+      'Now has a score of **99% RT** (48.0 pts)'
+    )
+  } finally {
+    globalThis.fetch = originalFetch
+  }
+})
+
+Deno.test('sendScoreNotifications - notable miss: a double-points league sees its own points', async () => {
+  const calls = mockWebhookFetch()
+  try {
+    // Dropped at 65%, now 95%: 35 points on the default rule, 40 doubled
+    const db = notableMissDb(35, 95)
+    const context = notableMissContext({ doublePointsLeagueIds: new Set(['league-1']) })
+
+    const summary = await sendScoreNotifications(createMockDbClient(db), context)
+
+    assertEquals(summary.notable_misses, 1)
+    const embed = (calls[0].embeds as Array<Record<string, unknown>>)[0]
+    assertStringIncludes(embed.description as string, '**95% RT** (40.0 pts)')
   } finally {
     globalThis.fetch = originalFetch
   }

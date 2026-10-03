@@ -16,7 +16,7 @@ import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('update-league')
 
-type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'update_trade_config' | 'update_season_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
+type Action = 'update_info' | 'update_draft_config' | 'update_bidding_config' | 'update_counterpick_config' | 'update_trade_config' | 'update_season_config' | 'update_scoring_config' | 'randomize_draft_order' | 'reorder_participants' | 'kick_participant' | 'delete_league' | 'complete_league'
 
 interface UpdateInfoRequest {
   action: 'update_info'
@@ -88,6 +88,13 @@ interface UpdateSeasonConfigRequest {
   season_end?: string
 }
 
+interface UpdateScoringConfigRequest {
+  action: 'update_scoring_config'
+  league_id: string
+  /** true: 2 fantasy points per Tomatometer point above 90. false (default): 1. */
+  double_points_over_90: boolean
+}
+
 interface RandomizeDraftOrderRequest {
   action: 'randomize_draft_order'
   league_id: string
@@ -106,6 +113,7 @@ type UpdateLeagueRequest =
   | UpdateCounterpickConfigRequest
   | UpdateTradeConfigRequest
   | UpdateSeasonConfigRequest
+  | UpdateScoringConfigRequest
   | RandomizeDraftOrderRequest
   | ReorderParticipantsRequest
   | KickParticipantRequest
@@ -190,7 +198,11 @@ Deno.serve(async (req) => {
     }
 
     // Series names remain editable across years. Season settings are frozen.
-    if (action === 'update_season_config' || action === 'update_trade_config') {
+    if (
+      action === 'update_season_config' ||
+      action === 'update_trade_config' ||
+      action === 'update_scoring_config'
+    ) {
       const writable = assertLeagueWritable(league)
       if (!writable.ok) return writable.response
     }
@@ -226,6 +238,9 @@ Deno.serve(async (req) => {
 
       case 'update_season_config':
         return await handleUpdateSeasonConfig(supabase, league, body as UpdateSeasonConfigRequest)
+
+      case 'update_scoring_config':
+        return await handleUpdateScoringConfig(supabase, league, body as UpdateScoringConfigRequest)
 
       case 'complete_league':
         return await handleCompleteLeague(league)
@@ -522,7 +537,7 @@ async function handleUpdateCounterpickConfig(
  * Trade settings: the season deadline, the commissioner review window, and the
  * per-offer expiry bounds added in 20260827120000.
  *
- * Deliberately NOT gated on `setup` status, unlike every other config handler
+ * Deliberately NOT gated on `setup` status, unlike most config handlers
  * here. Trading only happens once a league is active, so a gate that let these
  * be edited only before the draft would mean they could never be edited when
  * they matter -- a commissioner moving the trade deadline mid-season is the
@@ -745,6 +760,45 @@ async function handleUpdateSeasonConfig(
   }
 
   return jsonResponse({ league: updatedLeague, message: 'Season settings updated successfully' })
+}
+
+/**
+ * The season's 90+ points rule (Fantasy Critic's "90+ Points Rule"): whether
+ * each Tomatometer point above 90 earns 2 fantasy points instead of 1.
+ *
+ * Open through the draft, one phase longer than the other draft settings, and
+ * locked once it is over: nobody should draft or counterpick under one rule
+ * and be scored under another. `guard_direct_draft_start` holds the same line
+ * for direct writes. Nothing is recomputed here -- the
+ * `rescore_season_on_scoring_rule_change` trigger re-scores every team and
+ * counterpick in the same transaction as this write.
+ */
+async function handleUpdateScoringConfig(
+  supabase: SupabaseClient,
+  league: { id: string; status: string },
+  body: UpdateScoringConfigRequest
+): Promise<Response> {
+  if (league.status !== 'setup' && league.status !== 'drafting') {
+    return errorResponse('Scoring can only be changed before the draft ends', 400)
+  }
+
+  if (typeof body.double_points_over_90 !== 'boolean') {
+    return errorResponse('double_points_over_90 must be a boolean', 400)
+  }
+
+  const { data: updatedLeague, error } = await supabase
+    .from('leagues')
+    .update({ double_points_over_90: body.double_points_over_90 })
+    .eq('id', league.id)
+    .select()
+    .single()
+
+  if (error) {
+    log.error('Error updating scoring config', { league_id: league.id, error: serializeError(error) })
+    return errorResponse('Failed to update scoring configuration', 500)
+  }
+
+  return jsonResponse({ league: updatedLeague, message: 'Scoring configuration updated successfully' })
 }
 
 async function handleKickParticipant(

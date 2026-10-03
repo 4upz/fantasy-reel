@@ -1508,7 +1508,7 @@ Deno.test({
   // ============================================================================
   // update_trade_config Tests
   //
-  // The only config action that is NOT gated on `setup` status -- trading
+  // NOT gated on `setup` status, unlike most config actions -- trading
   // happens in an active league, so gating it there would mean these could
   // never be edited when they matter. The active-league step below is the one
   // that would catch a gate being added by reflex.
@@ -1777,6 +1777,102 @@ Deno.test({
     })
 
     assertEquals(result.error, 'Only the league owner can modify settings')
+  })
+
+  // ============================================================================
+  // update_scoring_config Tests
+  //
+  // The 90+ points rule. Open through the draft, then locked so nobody is
+  // scored under a rule they didn't draft under. The database re-scores the
+  // season on every change, and supabase/tests/league_scoring_rule.sql covers
+  // that arithmetic and the database-level lock -- these check the action.
+  // ============================================================================
+
+  const readRule = async (leagueId: string) => {
+    const { data } = await client
+      .from('leagues')
+      .select('double_points_over_90')
+      .eq('id', leagueId)
+      .single()
+    return data?.double_points_over_90
+  }
+
+  const setRule = (leagueId: string, doublePoints: boolean) =>
+    invokeFunction<{ league: { double_points_over_90: boolean } }>(client, 'update-league', {
+      action: 'update_scoring_config',
+      league_id: leagueId,
+      double_points_over_90: doublePoints,
+    })
+
+  await t.step('update_scoring_config: the owner can switch double points during setup and the draft', async () => {
+    const { id: setupLeagueId } = await factory.createLeague(uniqueName('scoring-rule-setup'))
+    assertEquals(await readRule(setupLeagueId), false, 'new seasons start on 1 point per point')
+
+    for (const doublePoints of [true, false]) {
+      const { data, error } = await setRule(setupLeagueId, doublePoints)
+      assertEquals(error, null)
+      assertEquals(data?.league.double_points_over_90, doublePoints)
+      assertEquals(await readRule(setupLeagueId), doublePoints)
+    }
+
+    const draftingLeagueId = await factory.createDraftingLeague(uniqueName('scoring-rule-drafting'))
+    const { data, error } = await setRule(draftingLeagueId, true)
+    assertEquals(error, null)
+    assertEquals(data?.league.double_points_over_90, true)
+  })
+
+  await t.step('update_scoring_config: returns 400 once the draft is over', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('scoring-rule-active'))
+
+    const result = await setRule(leagueId, true)
+
+    assertEquals(result.status, 400)
+    assertEquals(result.error, 'Scoring can only be changed before the draft ends')
+    assertEquals(await readRule(leagueId), false)
+  })
+
+  await t.step('update_scoring_config: returns 400 unless double_points_over_90 is a boolean', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('scoring-rule-invalid'))
+
+    // undefined drops out of the JSON body, so it covers a missing field.
+    for (const value of ['true', 1, null, undefined]) {
+      const result = await invokeFunction(client, 'update-league', {
+        action: 'update_scoring_config',
+        league_id: leagueId,
+        double_points_over_90: value,
+      })
+
+      assertEquals(result.status, 400)
+      assertEquals(result.error, 'double_points_over_90 must be a boolean')
+    }
+  })
+
+  await t.step('update_scoring_config: returns 403 for a non-owner', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('scoring-rule-403'))
+    await factory.addSecondParticipant(leagueId)
+
+    const result = await invokeFunction(secondClient, 'update-league', {
+      action: 'update_scoring_config',
+      league_id: leagueId,
+      double_points_over_90: true,
+    })
+
+    assertEquals(result.error, 'Only the league owner can modify settings')
+  })
+
+  await t.step('update_scoring_config: a finished season keeps the rule it was scored under', async () => {
+    const leagueId = await factory.createActiveLeague(uniqueName('scoring-rule-completed'))
+    const completed = await invokeFunction(client, 'update-league', {
+      action: 'complete_league',
+      league_id: leagueId,
+    })
+    assertEquals(completed.error, null)
+
+    const result = await setRule(leagueId, true)
+
+    assertEquals(result.status, 400)
+    assertEquals(result.error, 'This season is finished.')
+    assertEquals(await readRule(leagueId), false)
   })
 
   // ============================================================================
