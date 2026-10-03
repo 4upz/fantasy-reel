@@ -1,7 +1,13 @@
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, isValidEmail, authenticateRequest, isAuthError, internalErrorResponse, createServiceClient } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
 import { createLogger } from '../_shared/logger.ts'
-import { ownerVisibleEmail } from '../_shared/invitations.ts'
+import {
+  consumeInvitationEmailAllowance,
+  countOpenInvitations,
+  maxPendingInvitations,
+  ownerVisibleEmail,
+  tooManyOpenInvitationsResponse,
+} from '../_shared/invitations.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('send-invite')
@@ -119,6 +125,20 @@ Deno.serve(async (req) => {
       if (existingInvite.status === 'pending') {
         return errorResponse('An invitation has already been sent to this email', 400)
       }
+    }
+
+    if (await countOpenInvitations(serviceClient, league_id) >= maxPendingInvitations(league.max_participants)) {
+      return tooManyOpenInvitationsResponse(league.max_participants)
+    }
+
+    const rateLimited = await consumeInvitationEmailAllowance(
+      serviceClient,
+      { ownerId: user.id, leagueId: league_id, email: normalizedEmail },
+      log
+    )
+    if (rateLimited) return rateLimited
+
+    if (existingInvite) {
       // For expired/cancelled/declined: delete old invitation to allow resend
       const { error: deleteError } = await serviceClient
         .from('invitations')
