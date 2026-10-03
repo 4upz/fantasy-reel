@@ -10,6 +10,7 @@ import {
 } from '../_shared/utils.ts'
 import { sendInvitationEmail } from '../_shared/email.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { ownerVisibleEmail, toOwnerInvitation } from '../_shared/invitations.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('resend-invitation')
@@ -35,10 +36,14 @@ Deno.serve(async (req) => {
       return errorResponse('Valid invitation_id is required', 400)
     }
 
+    // Service role: owners can't read username invites directly (their email
+    // is hidden), so ownership is checked below against the league instead.
+    const serviceClient = createServiceClient()
+
     // Fetch invitation
-    const { data: invitation, error: invitationError } = await supabase
+    const { data: invitation, error: invitationError } = await serviceClient
       .from('invitations')
-      .select('id, league_id, email, status')
+      .select('id, league_id, status')
       .eq('id', invitation_id)
       .single()
 
@@ -47,7 +52,7 @@ Deno.serve(async (req) => {
     }
 
     // Fetch league separately for cleaner type inference
-    const { data: league, error: leagueError } = await supabase
+    const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
       .select('id, name, owner_id, status')
       .eq('id', invitation.league_id)
@@ -73,7 +78,7 @@ Deno.serve(async (req) => {
       return errorResponse('Cannot resend - invitation was declined', 400)
     }
 
-    const { data: updated, error: updateError } = await supabase
+    const { data: updated, error: updateError } = await serviceClient
       .from('invitations')
       .update({
         token: crypto.randomUUID(),
@@ -83,7 +88,7 @@ Deno.serve(async (req) => {
         responded_at: null,
       })
       .eq('id', invitation_id)
-      .select('id, league_id, email, token, status, expires_at')
+      .select('id, league_id, email, invited_user_id, token, status, expires_at')
       .single()
 
     if (updateError) {
@@ -116,22 +121,25 @@ Deno.serve(async (req) => {
       console.warn('Failed to send invitation email:', emailResult.error)
     }
 
-    await logNotificationDelivery(createServiceClient(), {
+    await logNotificationDelivery(serviceClient, {
       notificationType: 'invitation',
       recipientEmail: updated.email,
+      recipientUserId: updated.invited_user_id,
       status: statusFromEmailResult(emailResult),
       messageId: emailResult.messageId,
       errorMessage: emailResult.error,
       metadata: { league_id: updated.league_id, league_name: league.name, invitation_id: updated.id },
     })
 
+    const recipient = ownerVisibleEmail(updated) ?? 'this user'
+
     return jsonResponse({
-      invitation: updated,
+      invitation: toOwnerInvitation(updated),
       invite_url: inviteUrl,
       email_sent: emailResult.success,
       message: emailResult.success
-        ? `Invitation resent to ${updated.email}`
-        : `Invitation refreshed for ${updated.email} (email delivery pending)`,
+        ? `Invitation resent to ${recipient}`
+        : `Invitation refreshed for ${recipient} (email delivery pending)`,
     })
   } catch (error) {
     return internalErrorResponse(error, log)

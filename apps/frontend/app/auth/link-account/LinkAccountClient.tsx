@@ -51,7 +51,7 @@ export default function LinkAccountClient({
     setIsLinking(true)
 
     try {
-      const result = await verifyAndMergeAccounts(password, duplicateUserId, email, oauthProvider)
+      const result = await verifyAndMergeAccounts(password)
 
       if (result.success) {
         toast.success('Accounts linked successfully!')

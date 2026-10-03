@@ -321,6 +321,17 @@ export interface Invitation {
   updated_at: string
 }
 
+/**
+ * An invitation as its league owner sees it (`get_league_invitations`).
+ * Username invites carry the invitee's display name instead of their email,
+ * which the owner never typed and must not see.
+ */
+export interface LeagueInvitation extends Omit<Invitation, 'email'> {
+  email: string | null
+  invited_user_id: string | null
+  invitee_display_name: string | null
+}
+
 export interface Profile {
   id: string
   user_id: string

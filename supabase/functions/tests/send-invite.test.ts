@@ -122,6 +122,17 @@ Deno.test({
     assertEquals(result.error, 'Only the league owner can send invitations')
   })
 
+  await t.step('returns 403 to a non-owner inviting by user_id before looking the user up', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('invite-not-owner-userid'))
+    await factory.addSecondParticipant(leagueId)
+
+    const result = await invokeFunction(secondClient, 'send-invite', {
+      league_id: leagueId,
+      user_id: '00000000-0000-0000-0000-000000000000',
+    })
+    assertEquals(result.error, 'Only the league owner can send invitations')
+  })
+
   // ============================================================================
   // Business Logic Tests
   // ============================================================================
@@ -213,7 +224,62 @@ Deno.test({
 
     assertEquals(error, null)
     assertExists(data.invitation)
-    assertEquals(data.invitation.email, TEST_USER_2.email)
+    // The address was resolved server-side, so it must not be echoed back
+    assertEquals(data.invitation.email, null)
+    assertEquals(JSON.stringify(data).includes(TEST_USER_2.email), false)
+
+    // Nor read back from the table: the owner sees the row only through the
+    // RPC, which names the invitee instead of giving their address
+    const { data: rows } = await client.from('invitations').select('email').eq('id', data.invitation.id)
+    assertEquals(rows, [])
+
+    const { data: listed, error: listError } = await client.rpc('get_league_invitations', { p_league_id: leagueId })
+    assertEquals(listError, null)
+    const row = listed.find((i: { id: string }) => i.id === data.invitation.id)
+    assertExists(row)
+    assertEquals(row.email, null)
+    assertEquals(row.invited_user_id, secondUserId)
+    assertExists(row.invitee_display_name)
+  })
+
+  await t.step('owner can resend and cancel a username invite without seeing the email', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('invite-userid-actions'))
+    const secondUserId = await getUserId(secondClient)
+
+    const { data: sent } = await client.functions.invoke('send-invite', {
+      body: { league_id: leagueId, user_id: secondUserId },
+    })
+    const invitationId = sent.invitation.id
+
+    const { data: resent, error: resendError } = await client.functions.invoke('resend-invitation', {
+      body: { invitation_id: invitationId },
+    })
+    assertEquals(resendError, null)
+    assertEquals(resent.invitation.status, 'pending')
+    assertEquals(JSON.stringify(resent).includes(TEST_USER_2.email), false)
+
+    const { data: cancelled, error: cancelError } = await client.functions.invoke('cancel-invitation', {
+      body: { invitation_id: invitationId },
+    })
+    assertEquals(cancelError, null)
+    assertEquals(cancelled.invitation.status, 'cancelled')
+    assertEquals(JSON.stringify(cancelled).includes(TEST_USER_2.email), false)
+  })
+
+  await t.step('invitee still sees a username invite', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('invite-userid-invitee'))
+    const secondUserId = await getUserId(secondClient)
+
+    const { data: sent } = await client.functions.invoke('send-invite', {
+      body: { league_id: leagueId, user_id: secondUserId },
+    })
+
+    const { data: rows } = await secondClient
+      .from('invitations')
+      .select('id, email')
+      .eq('id', sent.invitation.id)
+    assertEquals(rows?.length, 1)
+    assertEquals(rows![0].email, TEST_USER_2.email.toLowerCase())
   })
 
   // ============================================================================
