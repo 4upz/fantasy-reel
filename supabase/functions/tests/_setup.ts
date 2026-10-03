@@ -501,6 +501,16 @@ export async function seedTmdbForPendingPickupBids(): Promise<void> {
   await seedTmdbFromBidMovieData((bids ?? []).filter((bid) => !known.has(bid.tmdb_id)) as BidMovieFixture[])
 }
 
+/** `client.functions.invoke('place-bid', ...)`, with its movie_data playing TMDb (seedTmdbFromBidMovieData). */
+export async function invokePlaceBid(client: SupabaseClient, options: { body: Record<string, unknown> }) {
+  const { body } = options
+  if (typeof body.tmdb_id === 'number' && body.movie_data) {
+    await seedTmdbFromBidMovieData([body as unknown as BidMovieFixture])
+  }
+  // deno-lint-ignore no-explicit-any
+  return client.functions.invoke<any>('place-bid', options)
+}
+
 export interface InvokeResult<T = unknown> {
   data: T | null
   error: string | null

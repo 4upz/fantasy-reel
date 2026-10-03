@@ -6,7 +6,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction, invokePlaceBid } from './_setup.ts'
 import { cancelClosedMessage, computeBidWindow, CANCEL_IN_PROCESSING_MESSAGE } from '../_shared/bid-window.ts'
 
 // Test movie data for bidding
@@ -75,7 +75,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('cancel-not-owner'))
 
       // First user places a bid
-      const { data: bidData } = await client.functions.invoke('place-bid', {
+      const { data: bidData } = await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 400001,
@@ -200,7 +200,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('cancel-success'))
 
       // Place a bid
-      const { data: bidData } = await client.functions.invoke('place-bid', {
+      const { data: bidData } = await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 400003,
@@ -223,7 +223,7 @@ Deno.test({
       const leagueId = await factory.createActiveLeague(uniqueName('cancel-restore'))
 
       // First user places bid of $10
-      await client.functions.invoke('place-bid', {
+      await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 400004,
@@ -233,7 +233,7 @@ Deno.test({
       })
 
       // Second user outbids with $20. The real client always resupplies movie_data.
-      const { data: secondBidData } = await secondClient.functions.invoke('place-bid', {
+      const { data: secondBidData } = await invokePlaceBid(secondClient, {
         body: {
           league_id: leagueId,
           tmdb_id: 400004,
@@ -261,7 +261,7 @@ Deno.test({
       const thirdClient = await factory.createThirdClient()
 
       // First user bids $10
-      await client.functions.invoke('place-bid', {
+      await invokePlaceBid(client, {
         body: {
           league_id: leagueId,
           tmdb_id: 400005,
@@ -271,7 +271,7 @@ Deno.test({
       })
 
       // Second user bids $20. The real client always resupplies movie_data.
-      await secondClient.functions.invoke('place-bid', {
+      await invokePlaceBid(secondClient, {
         body: {
           league_id: leagueId,
           tmdb_id: 400005,
@@ -281,7 +281,7 @@ Deno.test({
       })
 
       // Third user bids $30
-      const { data: thirdBidData } = await thirdClient.functions.invoke('place-bid', {
+      const { data: thirdBidData } = await invokePlaceBid(thirdClient, {
         body: {
           league_id: leagueId,
           tmdb_id: 400005,
