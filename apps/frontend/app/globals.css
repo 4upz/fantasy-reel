@@ -564,6 +564,18 @@
     padding-top: 3.5rem;
   }
 
+  /* Leave room for the absolutely positioned collapse toggle. */
+  .sidenav-desktop .sidenav-inner {
+    padding-bottom: 3.5rem;
+  }
+
+  /* Secondary links pinned to the bottom of the sidebar. */
+  .sidenav-footer {
+    margin-top: auto;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--color-border);
+  }
+
   /* Safe area bottom padding - for mobile navigation elements */
   .safe-area-bottom {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));

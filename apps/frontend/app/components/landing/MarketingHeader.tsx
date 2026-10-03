@@ -3,6 +3,8 @@ import { Menu, SunMoon } from 'lucide-react'
 import BrandLogo from '../BrandLogo'
 import styles from './MarketingHeader.module.css'
 import ThemeSelector from '@/components/theme/ThemeSelector'
+import GitHubIcon from '../icons/GitHubIcon'
+import { GITHUB_REPO_URL } from '../GitHubLink'
 
 interface MarketingHeaderProps {
   currentPage?: 'how-to-play'
@@ -32,6 +34,17 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
           <Link href="/signup" className="btn btn-primary min-h-11 px-3 md:px-4">
             Sign up
           </Link>
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`btn btn-ghost hidden min-h-11 min-w-11 px-2 md:inline-flex ${styles.menuButton}`}
+            aria-label="Fantasy Reel on GitHub"
+            title="Fantasy Reel on GitHub"
+            data-testid="marketing-github-link"
+          >
+            <GitHubIcon className="h-5 w-5" />
+          </a>
           <button
             type="button"
             popoverTarget="marketing-menu"
@@ -58,6 +71,15 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
           <Link href="/login" className="btn btn-ghost min-h-11 justify-start px-2">
             Sign in
           </Link>
+          <a
+            href={GITHUB_REPO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost min-h-11 justify-start gap-2 px-2"
+          >
+            <GitHubIcon className="h-4 w-4" />
+            GitHub
+          </a>
         </nav>
         <div className="mt-3 border-t border-border pt-3 md:mt-0 md:border-t-0 md:pt-0">
           <ThemeSelector />
