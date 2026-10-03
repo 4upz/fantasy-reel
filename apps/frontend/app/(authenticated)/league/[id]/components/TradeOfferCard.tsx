@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import Image from 'next/image'
+import { safeAvatarUrl } from '@/utils/avatar'
 import MoviePoster from '@/app/components/MoviePoster'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
@@ -596,11 +597,12 @@ export default function TradeOfferCard(props: Props) {
 }
 
 function TeamAvatar({ team }: { team: { name: string; avatar_url: string | null } }) {
+  const avatarUrl = safeAvatarUrl(team.avatar_url)
   return (
     <div className="w-8 h-8 rounded-full bg-surface-hover border-2 border-background flex items-center justify-center overflow-hidden">
-      {team.avatar_url ? (
+      {avatarUrl ? (
         <Image
-          src={team.avatar_url}
+          src={avatarUrl}
           alt={team.name}
           width={32}
           height={32}

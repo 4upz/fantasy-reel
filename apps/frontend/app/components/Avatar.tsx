@@ -1,6 +1,7 @@
 'use client'
 
 import Image from 'next/image'
+import { safeAvatarUrl } from '@/utils/avatar'
 
 interface Props {
   src: string | null | undefined
@@ -26,12 +27,13 @@ export default function Avatar({ src, name, size = 'md', className = '' }: Props
   const initial = name.charAt(0).toUpperCase()
   const sizeClass = sizeClasses[size]
   const imageSize = imageSizes[size]
+  const safeSrc = safeAvatarUrl(src)
 
-  if (src) {
+  if (safeSrc) {
     return (
       <div className={`${sizeClass} relative rounded-full overflow-hidden border-2 border-gold ${className}`}>
         <Image
-          src={src}
+          src={safeSrc}
           alt={name}
           width={imageSize}
           height={imageSize}
