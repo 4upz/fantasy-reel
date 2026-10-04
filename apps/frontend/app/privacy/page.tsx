@@ -130,9 +130,9 @@ const SECTIONS: LegalSection[] = [
           account removes your sign-in details, email address, profile name and photo, uploaded team photos,
           wishlist, notifications, invitations sent to your email, and our records of emails sent to you.
           Leagues you run pass to another member, or are deleted if nobody else has joined. You are removed from
-          leagues that have not drafted yet. In seasons that have started, your team stays so other players&apos;
-          results do not change, shown as &ldquo;Former member&rdquo;: its name, roster, scores, trades, and trade
-          messages remain part of that league&apos;s history. Your pending bids and trade offers are cancelled. An
+          leagues that have not drafted yet. In seasons that have started, your team stays, shown as &ldquo;Former
+          member&rdquo;: its name, roster, scores, trades, and trade messages remain part of that league&apos;s
+          history. A season still in progress no longer ranks your team; a finished season keeps its result. Your pending bids and trade offers are cancelled. An
           account in a draft that is underway can be deleted once the draft ends. Limited records may remain where
           legally necessary, and backups and service logs may persist until they expire. Copies held
           independently by other users or services are outside our control.

@@ -100,9 +100,11 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
                 <li>Leagues you run pass to their longest-standing member. A league nobody else has joined is deleted.</li>
                 <li>You&apos;re removed from leagues that haven&apos;t drafted yet.</li>
                 <li>
-                  In active and finished seasons your team stays so other players&apos; results
-                  don&apos;t change, shown as &ldquo;Former member&rdquo;. Your pending bids and trade
-                  offers are cancelled.
+                  In active and finished seasons your team and roster stay, shown as &ldquo;Former
+                  member&rdquo;, so trades and counterpicks involving it still hold. A season in
+                  progress stops ranking your team; finished seasons keep their results.
+                </li>
+                <li>Your pending bids and trade offers are cancelled.
                 </li>
               </ul>
               <p>If you&apos;re in a draft that&apos;s underway, finish it first.</p>

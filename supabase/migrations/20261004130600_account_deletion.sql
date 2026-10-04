@@ -25,11 +25,13 @@
 --     season with nobody else in it is deleted. Each series they own follows
 --     its newest season's owner, or is deleted once it has no seasons.
 --   * Seasons still in setup simply lose the person, as if they had never
---     joined. In active and completed seasons the team stays, so nobody
---     else's counterpicks, trades or standings change. The person is marked
---     'left' (which keeps them out of standings and out of next season's
---     rollover), their pending bids and open trade offers are cancelled, and
---     their profile becomes an anonymous "Former member" with no photo.
+--     joined. In active and completed seasons the team and its roster stay,
+--     so other teams' counterpicks on it and trades with it hold. The person
+--     is marked 'left', which takes the team out of an active season's live
+--     standings and final result (as for anyone who leaves mid-season) and
+--     out of next season's rollover; a completed season's frozen result is
+--     kept. Their pending bids and open trade offers are cancelled, and their
+--     profile becomes an anonymous "Former member" with no photo.
 --   * Their email is removed from notification_log and from invitations
 --     addressed to it, and final_standings shows them as "Former member".
 --

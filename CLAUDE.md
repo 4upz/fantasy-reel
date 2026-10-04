@@ -470,8 +470,10 @@ and merge-accounts behave the same way:
   (`account_deletion_blockers()`).
 - Owned seasons pass to the longest-standing other member; a season nobody else
   joined is deleted. Owned series follow their newest season's owner.
-- Setup seasons drop the person. Active and completed seasons keep the team:
-  the participant becomes `status = 'left'`, pending bids and open trade offers
+- Setup seasons drop the person. Active and completed seasons keep the team
+  and roster: the participant becomes `status = 'left'` (so an active season's
+  `league_standings()` and its eventual `final_standings` no longer rank the
+  team, like anyone who leaves mid-season), pending bids and open trade offers
   are cancelled, and the profile row stays as an anonymous "Former member".
   **`profiles.user_id` and `league_participants.user_id` may therefore point at
   a user that no longer exists** — neither references `auth.users` any more.
