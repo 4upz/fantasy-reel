@@ -54,6 +54,16 @@ SET LOCAL ROLE authenticated;
 SELECT is((SELECT count(*)::int FROM league_join_links), 0, 'a pending invitee cannot read the join code');
 RESET ROLE;
 
+-- admin_growth_stats() counts a league with a join link as invited.
+INSERT INTO app_admins(user_id) VALUES ('88111111-1111-4111-8111-000000000001');
+SELECT set_config('request.jwt.claims', '{"sub":"88111111-1111-4111-8111-000000000001","role":"authenticated"}', true);
+SET LOCAL ROLE authenticated;
+SELECT is(
+  (SELECT x->>'invited' FROM jsonb_array_elements(admin_growth_stats()->'league_list') x
+   WHERE x->>'id' = '88111111-1111-4111-8111-0000000000a1'),
+  'true', 'admin growth stats read the join link from league_join_links');
+RESET ROLE;
+
 -- Deleting the league removes its code.
 DELETE FROM leagues WHERE id = '88111111-1111-4111-8111-0000000000a1';
 SELECT is((SELECT count(*)::int FROM league_join_links WHERE join_code = 'JKCDEF23'), 0, 'the code goes with its league');

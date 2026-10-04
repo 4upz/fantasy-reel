@@ -24,7 +24,7 @@ export default function JoinLinkCard({ leagueId }: Props): React.ReactElement {
     }
   }, [])
 
-  const { joinCode, generate } = useLeagueJoinLink(leagueId)
+  const { joinCode, loadError, generate } = useLeagueJoinLink(leagueId)
   const hasJoinLink = !!joinCode
 
   // Build the join URL
@@ -60,7 +60,9 @@ export default function JoinLinkCard({ leagueId }: Props): React.ReactElement {
         <h3 className="type-panel text-foreground">Share join link</h3>
       </div>
 
-      {joinCode === undefined ? (
+      {loadError ? (
+        <p className="type-body-sm text-error" role="alert">{loadError}</p>
+      ) : joinCode === undefined ? (
         <LoadingSpinner />
       ) : hasJoinLink ? (
         <div className="space-y-3">

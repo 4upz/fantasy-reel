@@ -33,7 +33,7 @@ export default function JoinLinkSection({
     }
   }, [])
 
-  const { joinCode, generate } = useLeagueJoinLink(leagueId)
+  const { joinCode, loadError, generate } = useLeagueJoinLink(leagueId)
   const hasJoinLink = !!joinCode
 
   // Build the join URL
@@ -85,6 +85,8 @@ export default function JoinLinkSection({
 
       {isLocked ? (
         <LockedMessage message="Join links are disabled once the draft has started. New members cannot join after drafting begins." />
+      ) : loadError ? (
+        <p className="type-body-sm text-error" role="alert">{loadError}</p>
       ) : joinCode === undefined ? (
         <LoadingSpinner />
       ) : (
