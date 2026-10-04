@@ -1,4 +1,5 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie, internalErrorResponse, authenticateUserOrServiceRole } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isUpcomingMovie, internalErrorResponse, authenticateCaller } from '../_shared/utils.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { discoveryPage } from '../_shared/movie-discovery.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
@@ -13,6 +14,13 @@ const log = createLogger('search-movies')
  * without anyone seeing a stale result set.
  */
 const SEARCH_TTL_SECONDS = 60 * 60
+
+/**
+ * Room for any title someone would type (a longer one is found by its first
+ * words). Every distinct query is a cache miss -- a TMDb call plus a 90-day
+ * tmdb_cache row -- so unbounded strings only serve cache-busting.
+ */
+const MAX_QUERY_LENGTH = 100
 
 interface SearchMoviesRequest {
   query: string
@@ -109,9 +117,9 @@ Deno.serve(async (req) => {
 
   try {
     // Any signed-in user, or the service role (the Discord bot) -- see
-    // authenticateUserOrServiceRole for why that is the whole check here.
-    const authError = await authenticateUserOrServiceRole(req)
-    if (authError) return authError
+    // authenticateCaller for why that is the whole check here.
+    const caller = await authenticateCaller(req)
+    if (caller instanceof Response) return caller
 
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!tmdbToken) {
@@ -134,10 +142,16 @@ Deno.serve(async (req) => {
     if (typeof query !== 'string' || query.trim().length === 0) {
       return errorResponse('Query is required', 400)
     }
+    if (query.trim().length > MAX_QUERY_LENGTH) {
+      return errorResponse(`Query must be at most ${MAX_QUERY_LENGTH} characters`, 400)
+    }
 
     if (!Number.isInteger(page) || page < 1 || page > 500) {
       return errorResponse('Page must be between 1 and 500', 400)
     }
+
+    const throttled = await throttleUser('movie_search', caller.userId, log)
+    if (throttled) return throttled
 
     const tmdbUrl = new URL('https://api.themoviedb.org/3/search/movie')
     tmdbUrl.searchParams.set('query', query.trim())

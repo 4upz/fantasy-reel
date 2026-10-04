@@ -4,10 +4,11 @@ import {
   errorResponse,
   handleCorsPreflightRequest,
   internalErrorResponse,
-  authenticateUserOrServiceRole,
+  authenticateCaller,
   createServiceClient,
 } from '../_shared/utils.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { buildCacheKey, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
 import { tmdbGetJson } from '../_shared/tmdb.ts'
 import { fetchMDBListRatings } from '../_shared/scoring.ts'
@@ -311,8 +312,8 @@ Deno.serve(async (req) => {
   if (corsResponse) return corsResponse
 
   try {
-    const authError = await authenticateUserOrServiceRole(req)
-    if (authError) return authError
+    const caller = await authenticateCaller(req)
+    if (caller instanceof Response) return caller
 
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!tmdbToken) {
@@ -333,6 +334,9 @@ Deno.serve(async (req) => {
     if (!tmdbIds) {
       return errorResponse(`tmdb_ids must be 1-${MAX_IDS_PER_REQUEST} positive integers`, 400)
     }
+
+    const throttled = await throttleUser('franchise_history', caller.userId, log)
+    if (throttled) return throttled
 
     const collectionRecords = new Map<number, Promise<CollectionRecord>>()
 
