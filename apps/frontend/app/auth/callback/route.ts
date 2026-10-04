@@ -98,6 +98,11 @@ export async function GET(request: Request) {
 
       return NextResponse.redirect(`${origin}${next}`)
     }
+
+    // The code was issued but this browser can't redeem it. That is what an
+    // email link opened outside the browser that requested it looks like:
+    // the email is confirmed, but only the requesting browser gets a session.
+    return NextResponse.redirect(`${origin}/login?error=link_not_signed_in`)
   }
 
   // Return to login page with error if OAuth flow fails

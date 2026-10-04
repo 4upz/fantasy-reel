@@ -22,7 +22,7 @@ function LinkNotice(): React.ReactElement | null {
   if (searchParams.get('notice') === 'email_confirmed') {
     return <FormSuccess message="Your email is confirmed. Sign in to continue." />
   }
-  if (searchParams.get('error') === 'auth_callback_error') {
+  if (searchParams.get('error') === 'link_not_signed_in') {
     return (
       <div className="alert alert-info" data-testid="link-notice">
         We couldn&apos;t finish signing you in. If you opened a confirmation email on a different
