@@ -27,7 +27,7 @@ export default function LegalLinks(): React.ReactElement {
           <Link
             href={href}
             prefetch={false}
-            className="type-label footer-link"
+            className="type-label inline-flex min-h-11 items-center rounded-lg px-2 text-foreground-secondary underline-offset-4 transition-colors hover:text-gold hover:underline aria-[current=page]:text-foreground"
             aria-current={pathname === href ? 'page' : undefined}
             data-testid={testId}
           >

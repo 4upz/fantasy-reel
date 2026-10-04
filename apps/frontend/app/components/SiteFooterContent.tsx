@@ -25,18 +25,22 @@ export default function SiteFooterContent({
   return (
     <div className={`max-w-7xl mx-auto flex flex-col items-center gap-4 md:flex-row md:justify-between ${className}`}>
       <TMDbAttribution variant="footer" />
-      <div className="flex flex-wrap items-center justify-center gap-x-1">
-        <Link
-          href={discordGuideHref}
-          prefetch={false}
-          className="type-label footer-link"
-          data-testid="footer-discord-bot-link"
-        >
-          <DiscordIcon className="h-4 w-4" />
-          Discord bot
-        </Link>
+      <div className="flex items-center gap-2">
         <LegalLinks />
-        <SocialLinks />
+        {/* Grouped with the GitHub icon, matching the social-links spacing. */}
+        <div className="flex items-center gap-1">
+          <Link
+            href={discordGuideHref}
+            prefetch={false}
+            className="social-link"
+            aria-label="Fantasy Reel Discord bot"
+            title="Fantasy Reel Discord bot"
+            data-testid="footer-discord-bot-link"
+          >
+            <DiscordIcon className="h-5 w-5" />
+          </Link>
+          <SocialLinks />
+        </div>
       </div>
     </div>
   )
