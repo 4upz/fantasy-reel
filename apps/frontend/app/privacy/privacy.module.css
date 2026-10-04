@@ -3,9 +3,7 @@
   display: grid;
   grid-template-areas: 'header' 'toc' 'policy';
   gap: 2rem;
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: 2.5rem 1rem 4rem;
+  padding-block: 2.5rem 4rem;
 }
 
 .header { grid-area: header; }
@@ -13,9 +11,6 @@
 .toc {
   grid-area: toc;
   padding: 1.25rem;
-  border: 1px solid var(--color-border);
-  border-radius: 0.75rem;
-  background: var(--color-surface);
 }
 
 .tocList {
@@ -86,10 +81,9 @@
   scroll-margin-top: 1.5rem;
 }
 
-.section h2 { margin-bottom: 0.75rem; }
-
-@media (min-width: 40rem) {
-  .layout { padding-inline: 1.5rem; }
+.section h2 {
+  margin-bottom: 0.75rem;
+  text-wrap: balance;
 }
 
 @media (min-width: 64rem) {
@@ -110,5 +104,6 @@
     padding: 0;
     border: 0;
     background: none;
+    box-shadow: none;
   }
 }
