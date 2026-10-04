@@ -1,5 +1,7 @@
 # Account Linking Plan for Fantasy Reel
 
+> **Status (2026-10):** Scenario 2 no longer produces duplicate accounts. Supabase Auth now links an OAuth identity with a verified email to the existing user with that email, and a partial unique index on `auth.users(email)` blocks a second non-SSO account with the same address. The OAuth callback's duplicate check (and the `count_users_by_email` function it used) was removed in `20261003152000_drop_count_users_by_email.sql`. The `/auth/link-account` page and `merge-accounts` function remain but are not reached from sign-in.
+
 ## Problem Statement
 
 There are two scenarios that need to be handled:

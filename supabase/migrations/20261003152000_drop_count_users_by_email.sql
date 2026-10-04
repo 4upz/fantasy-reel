@@ -1,0 +1,17 @@
+-- Drop count_users_by_email(text).
+--
+-- It is a SECURITY DEFINER count over auth.users that any signed-in user could
+-- call with any address, so it told them whether that email has an account
+-- (20261003150100 only took it away from anon). Login and password reset
+-- deliberately hide that.
+--
+-- Its only caller was the OAuth callback route, which used it to detect a
+-- second account sharing an email. That check could never fire: it ran only
+-- when the new user had no profile, but handle_new_user always creates one,
+-- and it read `count` (always null for an RPC) instead of `data`. It is also
+-- unnecessary: Supabase Auth links an OAuth identity with a verified email to
+-- the existing user with that email, and the partial unique index on
+-- auth.users(email) prevents two non-SSO users from sharing one. The callback
+-- no longer calls it, and nothing else does (frontend, Edge Functions, bot,
+-- SQL).
+DROP FUNCTION IF EXISTS public.count_users_by_email(TEXT);
