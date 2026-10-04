@@ -180,7 +180,7 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
   - Session replay masking and media blocking come from `replayIntegration()` defaults in `utils/sentry.ts`; set those options explicitly before changing that call.
   - Wishlists are private by default (`profiles.wishlist_public` defaults to `false`).
   - Commissioners and trade participants can *currently* read recipient emails in trade notification records, through the `notification_log` SELECT policies for league owners and trade participants. Remove that sentence, and this note, in the PR that tightens those policies.
-- **Terms of service:** `apps/frontend/app/terms/page.tsx` (`/terms`) follows the same rules when a change affects what the service offers or how it may be used (fees or prizes, native apps, new kinds of user content). People accept the Terms through `LegalNotice` (`app/components/legal/`), so keep it beside every way to create an account: the sign-up form, and the Google and Discord buttons on both sign-up and login.
+- **Terms of service:** `apps/frontend/app/terms/page.tsx` (`/terms`) follows the same rules when a change affects what the service offers or how it may be used (fees or prizes, native apps, new kinds of user content). People accept the Terms through `LegalNotice` (`app/components/legal/`), so keep it beside every way to create an account: under the Sign up button, which covers the whole sign-up page, and under the Google and Discord buttons on login.
 
 ---
 
