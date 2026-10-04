@@ -97,8 +97,8 @@ const SECTIONS: PolicySection[] = [
       <>
         <p>
           We share information with providers that help operate Fantasy Reel: Supabase for accounts, data, and
-          images; Vercel for hosting, analytics, and performance measurement; Sentry for diagnostics and session
-          replay; and Resend for email delivery.
+          images; Vercel for hosting, analytics, and performance measurement; Railway for hosting our Discord bot;
+          Sentry for diagnostics and session replay; and Resend for email delivery.
         </p>
         <p>
           Google and Discord process information when you use their sign-in or connected features, under their
