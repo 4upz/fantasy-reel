@@ -76,9 +76,8 @@ export default function SettingsClient({
         />
 
         <JoinLinkSection
-          league={league}
+          leagueId={league.id}
           isLocked={!isSetup}
-          onUpdate={handleLeagueUpdate}
         />
 
         <DraftConfigSection

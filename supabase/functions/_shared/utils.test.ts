@@ -270,9 +270,9 @@ Deno.test('handleCorsPreflightRequest', async (t) => {
 // ============================================================================
 
 Deno.test('generateJoinCode', async (t) => {
-  await t.step('generates a 6-character code by default', () => {
+  await t.step('generates an 8-character code by default', () => {
     const code = generateJoinCode()
-    assertEquals(code.length, 6)
+    assertEquals(code.length, 8)
   })
 
   await t.step('generates codes of custom length', () => {
@@ -311,12 +311,20 @@ Deno.test('generateJoinCode', async (t) => {
     }
   })
 
+  await t.step('uses every character of the alphabet', () => {
+    const seen = new Set<string>()
+    for (let i = 0; i < 200; i++) {
+      for (const char of generateJoinCode()) seen.add(char)
+    }
+    assertEquals(seen.size, 31)
+  })
+
   await t.step('generates unique codes (statistically)', () => {
     const codes = new Set<string>()
     for (let i = 0; i < 100; i++) {
       codes.add(generateJoinCode())
     }
-    // With 29^6 possible codes, 100 codes should all be unique
+    // With 31^8 possible codes, 100 codes should all be unique
     assertEquals(codes.size, 100, 'Expected 100 unique codes')
   })
 })
@@ -331,6 +339,11 @@ Deno.test('isValidJoinCode', async (t) => {
     for (const code of validCodes) {
       assertEquals(isValidJoinCode(code), true, `Expected "${code}" to be valid`)
     }
+  })
+
+  await t.step('returns true for valid 8-character codes', () => {
+    assertEquals(isValidJoinCode('ABC234XY'), true)
+    assertEquals(isValidJoinCode('abc234xy'), true)
   })
 
   await t.step('returns true for lowercase codes (case-insensitive)', () => {
@@ -349,6 +362,7 @@ Deno.test('isValidJoinCode', async (t) => {
   await t.step('returns false for wrong length codes', () => {
     assertEquals(isValidJoinCode('ABC23'), false)   // 5 chars
     assertEquals(isValidJoinCode('ABC2345'), false) // 7 chars
+    assertEquals(isValidJoinCode('ABC23456X'), false) // 9 chars
     assertEquals(isValidJoinCode('AB'), false)      // 2 chars
     assertEquals(isValidJoinCode(''), false)        // empty
   })

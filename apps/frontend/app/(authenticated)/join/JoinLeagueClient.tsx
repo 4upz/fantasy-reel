@@ -29,8 +29,9 @@ interface JoinResponse {
   }
 }
 
-// Regex for valid join code format (6 chars, uppercase alphanumeric excluding ambiguous)
-const JOIN_CODE_REGEX = /^[A-HJ-KM-NP-Z2-9]{6}$/i
+// Valid join code format: uppercase alphanumeric excluding ambiguous characters.
+// New codes are 8 characters; leagues may still hold 6-character codes from before.
+const JOIN_CODE_REGEX = /^(?:[A-HJ-KM-NP-Z2-9]{6}|[A-HJ-KM-NP-Z2-9]{8})$/i
 
 export default function JoinLeagueClient({ token, code, userDisplayName }: Props) {
   const router = useRouter()
@@ -86,7 +87,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
     }
 
     if (isManualEntry && !JOIN_CODE_REGEX.test(manualCode.trim())) {
-      setJoinError('Invalid code format. Codes are 6 characters (letters and numbers).')
+      setJoinError('Invalid code format. Codes are 6 or 8 characters (letters and numbers).')
       return
     }
 
@@ -99,7 +100,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
     const cleaned = value
       .toUpperCase()
       .replace(/[^A-HJ-KM-NP-Z2-9]/g, '')
-      .slice(0, 6)
+      .slice(0, 8)
     setManualCode(cleaned)
     setJoinError(null)
   }
@@ -117,7 +118,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             </div>
             <h1 className="type-page text-foreground">Join a league</h1>
             <p className="text-foreground-secondary mt-2">
-              Enter the 6-character code shared by your league commissioner
+              Enter the code shared by your league commissioner
             </p>
             {userDisplayName && (
               <p className="type-body-sm text-foreground-secondary mt-1">Joining as {userDisplayName}</p>
@@ -178,7 +179,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
 
             <button
               type="submit"
-              disabled={isLoading || manualCode.length !== 6}
+              disabled={isLoading || !JOIN_CODE_REGEX.test(manualCode)}
               className="btn btn-primary w-full py-3 text-lg"
               data-testid="join-league-button"
             >
