@@ -8,6 +8,8 @@ import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
+import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
+import { CAPTCHA_FIELD } from '@/utils/captcha'
 import { toast } from 'sonner'
 
 export default function LoginPage() {
@@ -17,6 +19,7 @@ export default function LoginPage() {
   const [showResendOption, setShowResendOption] = useState(false)
   const [lastEmail, setLastEmail] = useState('')
   const [resendSuccess, setResendSuccess] = useState(false)
+  const captcha = useCaptcha()
 
   async function handleSubmit(formData: FormData) {
     setError(null)
@@ -26,6 +29,7 @@ export default function LoginPage() {
 
     const email = formData.get('email') as string
     setLastEmail(email)
+    formData.set(CAPTCHA_FIELD, captcha.token ?? '')
 
     try {
       const result = await login(formData)
@@ -44,6 +48,7 @@ export default function LoginPage() {
       setError('An unexpected error occurred')
     } finally {
       setIsLoading(false)
+      captcha.reset()
     }
   }
 
@@ -54,7 +59,7 @@ export default function LoginPage() {
     setError(null)
 
     try {
-      const result = await resendConfirmationEmail(lastEmail)
+      const result = await resendConfirmationEmail(lastEmail, captcha.token ?? undefined)
       if (result.success) {
         setResendSuccess(true)
         setShowResendOption(false)
@@ -65,6 +70,7 @@ export default function LoginPage() {
       setError('Failed to resend email')
     } finally {
       setIsResending(false)
+      captcha.reset()
     }
   }
 
@@ -94,7 +100,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={handleResend}
-                  disabled={isResending}
+                  disabled={isResending || !captcha.ready}
                   className="type-control text-gold hover:text-gold-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {isResending ? 'Sending...' : 'Resend confirmation email'}
@@ -137,7 +143,9 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="login-button">
+            <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+
+            <button type="submit" disabled={isLoading || !captcha.ready} className="btn btn-primary w-full py-3" data-testid="login-button">
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
 
