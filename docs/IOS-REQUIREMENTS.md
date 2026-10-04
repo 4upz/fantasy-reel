@@ -88,7 +88,7 @@ The web changes league-tab visibility and prominence by phase (`leagueNav.ts`). 
 | Bidding | — | — | — | ✓ | — | Badge shows the user's outbid count. |
 | Trading | — | — | — | ✓ | — | Header shows how many trades need the user's response. |
 | History | 2+ seasons | 2+ seasons | 2+ seasons | 2+ seasons | 2+ seasons | Hidden until the series has a second season; always secondary. |
-| Settings | owner | owner | owner | owner | owner | Members have no settings or read-only rules view today (see D-09). |
+| Settings | owner | owner | owner | owner | owner | Members have no settings or read-only rules view today; iOS v1 adds League Rules for everyone (D-09). |
 
 ## 3. Feature requirements and acceptance criteria
 
@@ -532,7 +532,7 @@ Create the Apple project/app identity, signing/provisioning, App Store Connect r
 
 Verify real-device signup/recovery/OAuth/invitation links, offline recovery, small-screen layouts, accessible text sizes, and TestFlight upgrade behavior. Verify movie-data attribution and the rights/terms for the actual data and imagery used before submission. No new money/prize/payment capability is in this scope.
 
-## 8. Optional native enhancements
+## 8. Optional enhancements and approved v1 additions
 
 These are separate from full parity and must not consume time needed to finish the existing workflows without a scope decision.
 
@@ -540,7 +540,12 @@ These are separate from full parity and must not consume time needed to finish t
 - **O-02 Widgets/Live Activities:** possible turn/deadline/status surfaces, with explicit refresh/staleness limits. These require their own privacy, extension, and update design.
 - **O-03 iPad/Mac expansion:** richer board/split-view layouts and keyboard support if those targets are approved; do not imply Catalyst/macOS is included by writing a SwiftUI app.
 - **O-04 Local conveniences:** biometric unlock of an already-authenticated session, saved searches, or offline research improvements. None replaces backend authentication or allows offline gameplay commits.
-- **O-05 League Rules screen:** read-only summary of the selected season's configuration for every member (D-09). Recommended for v1 because the iOS app has no other place to show it.
+
+### Approved v1 additions
+
+These go beyond web parity but are in the iOS v1 scope by the owner's decision.
+
+- **V-01 League Rules:** a read-only screen, reachable by every member from the league, showing the selected season's configuration: roster and draft slots, drops per season, Fantasy Budget, bid response window and new-bid cutoff, counterpick slots and drop blocking, the double-points rule with a worked example, trading on/off, trade deadline, review period, offer-window bounds, and season year and end date. Values come from the `leagues` row the member can already read; locked or not-applicable settings are shown as such, not hidden. **Accept:** a member and the owner see identical values, and an owner's change appears after refresh.
 
 ## 9. Build sequence and work packages
 
@@ -551,9 +556,9 @@ These are separate from full parity and must not consume time needed to finish t
 | 2 — Membership and research | F-04–F-07, F-10 | Same account sees leagues/seasons; create/join/invite; movie/franchise research, wishlist/privacy; team identity; cross-client persistence verified. |
 | 3 — Draft and score visibility | F-08–F-09, F-11, F-14 | Mixed web/iOS draft through activation, connection recovery, roster/standings/scoring parity. Implement server transaction contracts before polishing the board. |
 | 4 — In-season economy | F-12–F-13 | Bids/priorities/conditional drops and complete trade lifecycle, server outcomes and mixed-client race coverage. |
-| 5 — Full role/lifecycle parity | F-15–F-18 | Every commissioner setting, completion/history/rollover, inbox and communications, authorized admin charts. |
+| 5 — Full role/lifecycle parity | F-15–F-18, V-01 | Every commissioner setting, completion/history/rollover, inbox and communications, authorized admin charts. |
 | 6 — Distribution readiness | L-01–L-05, §12 | Apple login where applicable, deletion/moderation/privacy work, real-device and accessibility verification, TestFlight, review materials and release checklist. |
-| Optional track | O-01–O-05 | Explicitly approved additions; independent acceptance gates. |
+| Optional track | O-01–O-04 | Explicitly approved additions; independent acceptance gates. |
 
 For parallel agent work, establish shared DTOs, identifier/date types, repository interfaces, route names, and design tokens first. Assign bounded feature directories; give one owner responsibility for shared contracts and integration. Suitable independent later streams are movie/wishlist UI and league/commissioner UI. Draft, bidding, and trades share holdings/budget/state assumptions and require coordinated contracts. Backend changes must include migrations, RLS tests, and compatibility with the existing web client. Reuse the project's migration workflow; do not reset a database to fix fixtures.
 
@@ -570,7 +575,7 @@ The baseline behavior below is what an implementation agent should expect today.
 | D-05 — Leave/ownership controls | Rollover confirmation says people can leave the new season, but no self-service leave handler/UI or ownership-transfer workflow was found. Owner can kick another participant during setup. | Correct the promise or implement a shared, authorized leave policy. Do not invent a working leave/transfer API in the native client. Deletion planning must address ownership. |
 | D-06 — Mobile auth orchestration | Profile initialization, duplicate detection/linking cookies, recovery redirects, and several edits live in Next routes/server actions. | Implement native orchestration or narrowly shared APIs; verify linking against existing accounts. Do not scrape HTML or call unstable server-action internals. |
 | D-07 — Bounded feeds | Notification unread counts cover the latest 50 loaded rows. Bid history fetches at most 500 won/lost records per bid table, excluding cancellations. Trade UI initially loads 50; the API's total count needs review when filters are supplied. | Match current minimum behavior and label it honestly. If adding complete pagination/unread totals, specify and test shared query contracts rather than trusting a misleading total. |
-| D-09 — Member-visible league rules | League Settings is owner-only, and no read-only rules view exists for members. Roster shows capacity and drops remaining, but a member has nowhere to see the double-points rule, counterpick slots, bid response window, trade deadline, or review period, even though these decide their moves. | Recommended: add a read-only **League Rules** screen on iOS built from the same `leagues` row (no backend change), and add the same view to web so the clients don't diverge. Until approved, treat it as optional (O-05). |
+| D-09 — Member-visible league rules | League Settings is owner-only, and no read-only rules view exists for members. Roster shows capacity and drops remaining, but a member has nowhere to see the double-points rule, counterpick slots, bid response window, trade deadline, or review period, even though these decide their moves. | **Decided (October 4, 2026): League Rules ships in iOS v1.** A read-only screen for every member, built from the same `leagues` row (no backend change). Adding the same view to web is recommended so the clients don't diverge. Tracked as V-01. |
 | D-10 — Notification preferences | There are no user-level email preferences and no unsubscribe link; Discord preferences are per-channel and set only through the bot. | Required before O-01 push ships: decide per-user, per-event preferences and whether they also govern email. Do not add a preference screen that controls nothing. |
 | D-11 — Support-only account actions | Email change, data export, and (today) deletion are by email to support, per the privacy policy and settings copy. | Settings/About must link to support for each of these until self-service exists. L-02 replaces deletion only. |
 | D-08 — Production and external setup | Source audit cannot establish active migrations, configured CAPTCHA/providers/redirects, deployed function versions, cron health, real notification delivery, or Apple app identity. | Verify these in the intended environment during implementation and before TestFlight; do not mark production parity from repository inspection alone. |
@@ -663,7 +668,7 @@ A review compared this document against a fresh inventory of every web route, le
 - the bidding screen's structure, post-cutoff mode, and client-side fit forecast (F-12), which is logic iOS must port rather than a server contract;
 - invitation-email rate limits (F-05), overview states (F-10), standings and trade-screen details (F-13, F-14), confirmation strength for destructive owner actions (F-15), and the notification badge (F-17);
 - the full list of Realtime subscriptions (N-05), and corrected draft-picker tab and release-window labels (F-06);
-- three gaps the web itself has, which an iOS app makes more visible: no member-facing league rules (D-09, O-05), no notification preferences (D-10, a prerequisite for push), and support-only email change and data export (D-11).
+- three gaps the web itself has, which an iOS app makes more visible: no member-facing league rules (D-09, now V-01 in v1), no notification preferences (D-10, a prerequisite for push), and support-only email change and data export (D-11).
 
 Web-only surfaces that are intentionally not parity targets: the marketing landing page's demo scenes, the PWA manifest, the collapsible desktop side navigation, `/api/health`, the cron proxies, and the operator-only `sync-movies` function.
 
@@ -695,7 +700,7 @@ This is the list a mockup pass should cover. It follows the four-tab proposal in
 | League · active | Trading | Pending, My Trades, All Active, History; action-needed count; offer cards with contested markers, clocks, and actions (accept/reject/counter/cancel/extend; owner veto/approve) | F-13 |
 | League · active | Trade composer | Counterparty, give/receive assets (movies, pickups, counterpicks, budget), message, expiry picker, review step, server validation with invalid rows marked | F-13 |
 | League | History | Every season with champions and runners-up, links to frozen standings | F-16 |
-| League | League rules (proposed) | Read-only season configuration for every member | O-05 |
+| League | League rules | Read-only season configuration for every member | V-01 |
 | League · owner | Settings | Every section in the F-15 table, locked-state explanations, Discord announcement, end season (type year), start next season, delete (type name), remove participant | F-15, F-16 |
 | Movies tab | Search | Search field, year filter, results grid, detail | F-06 |
 | Wishlist tab | My wishlist / League wishlists | Sort, remove, league status labels, share toggle, league-mate picker with overlaps | F-07 |
