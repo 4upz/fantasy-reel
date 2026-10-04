@@ -140,6 +140,12 @@ SELECT is(
   1,
   'an existing row is returned once, not duplicated'
 );
+-- A profile whose auth user is gone is skipped, not an FK error.
+SELECT is(
+  (SELECT count(*)::int FROM ensure_email_preferences(ARRAY['8d600000-0000-4000-8000-0000000000ee']::uuid[])),
+  0,
+  'an id with no auth user is skipped'
+);
 RESET ROLE;
 
 -- A user sets their own preference, upsert style, and nobody else's.

@@ -183,22 +183,25 @@ CREATE POLICY "Users can update their own email preferences"
 CREATE FUNCTION public.ensure_email_preferences(p_user_ids uuid[])
 RETURNS TABLE (user_id uuid, season_recap_emails boolean, unsubscribe_token uuid)
 LANGUAGE sql
-SET search_path = public
+-- Definer so the insert can filter on auth.users itself, which service_role
+-- can't read: an id whose account is gone (a profile can outlive its user) is
+-- skipped instead of failing the FK and dropping every recipient's email.
+-- Execute is service_role only.
+SECURITY DEFINER
+SET search_path = ''
 AS $$
   WITH inserted AS (
-    INSERT INTO email_preferences (user_id)
-    -- Through profiles (1:1 with auth.users, which service_role can't read)
-    -- so an id whose account is gone is skipped instead of failing the FK.
-    SELECT DISTINCT pr.user_id
+    INSERT INTO public.email_preferences (user_id)
+    SELECT DISTINCT u.id
     FROM unnest(p_user_ids) AS ids(id)
-    JOIN profiles pr ON pr.user_id = ids.id
+    JOIN auth.users u ON u.id = ids.id
     ON CONFLICT (user_id) DO NOTHING
     RETURNING email_preferences.user_id, email_preferences.season_recap_emails, email_preferences.unsubscribe_token
   )
   SELECT * FROM inserted
   UNION ALL
   SELECT p.user_id, p.season_recap_emails, p.unsubscribe_token
-  FROM email_preferences p
+  FROM public.email_preferences p
   WHERE p.user_id = ANY (p_user_ids);
 $$;
 
