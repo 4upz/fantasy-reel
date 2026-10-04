@@ -88,6 +88,56 @@ export const FANTASY_REEL_ICON = 'https://fantasy-reel.vercel.app/icon-128.png'
  */
 export const WEBHOOK_SEND_DELAY_MS = 450
 
+/**
+ * The only places sendToWebhook will POST. Discord webhook URLs come from the
+ * bot (discord.js `webhook.url`, https://discord.com/api/webhooks/<id>/<token>);
+ * older rows may use discordapp.com, and the canary/ptb hosts and versioned API
+ * paths are the same service. Anything else would let whoever wrote the row
+ * point our functions at an arbitrary address. Keep in sync with the
+ * discord_channels_webhook_url_host CHECK constraint.
+ */
+const DISCORD_WEBHOOK_URL = /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d+)?\/webhooks\//
+
+/**
+ * The integration tests capture webhook payloads with a mock server on the
+ * host machine. Those URLs are honoured only while the functions run against a
+ * local Supabase stack (SUPABASE_URL is kong inside the local edge runtime, or
+ * 127.0.0.1/localhost for a standalone function), never in production.
+ */
+const LOCAL_WEBHOOK_URL = /^http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal):\d+\//
+const LOCAL_SUPABASE_HOSTS = new Set(['kong', '127.0.0.1', 'localhost'])
+
+function isLocalSupabase(): boolean {
+  try {
+    return LOCAL_SUPABASE_HOSTS.has(new URL(Deno.env.get('SUPABASE_URL') ?? '').hostname)
+  } catch {
+    return false
+  }
+}
+
+export function isAllowedWebhookUrl(url: string): boolean {
+  if (DISCORD_WEBHOOK_URL.test(url)) return true
+  return LOCAL_WEBHOOK_URL.test(url) && isLocalSupabase()
+}
+
+/**
+ * Webhook URLs embed a token that lets anyone post to the channel, and Deno's
+ * fetch errors quote the request URL in their message and stack. Strip the
+ * id/token path before anything reaches the logs.
+ */
+export function redactWebhookTokens(text: string): string {
+  return text.replace(/\/webhooks\/[^\s)'"]+/g, '/webhooks/[redacted]')
+}
+
+function serializeWebhookError(error: unknown) {
+  const serialized = serializeError(error)
+  return {
+    ...serialized,
+    message: redactWebhookTokens(serialized.message),
+    ...(serialized.stack ? { stack: redactWebhookTokens(serialized.stack) } : {}),
+  }
+}
+
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -173,7 +223,7 @@ export async function sendDiscordNotification(
       if (results[i].status === 'rejected') {
         log.error('Discord webhook failed', {
           channel_id: eligibleChannels[i].id,
-          error: serializeError((results[i] as PromiseRejectedResult).reason),
+          error: serializeWebhookError((results[i] as PromiseRejectedResult).reason),
         })
       }
     }
@@ -212,6 +262,12 @@ export async function sendToWebhook(
   if (finalContent) body.content = finalContent
   if (embeds && embeds.length > 0) body.embeds = embeds
 
+  if (!isAllowedWebhookUrl(channel.webhook_url)) {
+    log.error('Refusing to send to a non-Discord webhook URL', { channel_id: channel.id })
+    await trackFailure(supabase, channel.id)
+    return false
+  }
+
   try {
     const webhookUrl = new URL(channel.webhook_url)
     if (channel.thread_id) webhookUrl.searchParams.set('thread_id', channel.thread_id)
@@ -247,7 +303,7 @@ export async function sendToWebhook(
       return false
     }
   } catch (error) {
-    log.error('Discord webhook network error', { channel_id: channel.id, error: serializeError(error) })
+    log.error('Discord webhook network error', { channel_id: channel.id, error: serializeWebhookError(error) })
     await trackFailure(supabase, channel.id)
     return false
   }
