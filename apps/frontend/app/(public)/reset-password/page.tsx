@@ -82,7 +82,7 @@ export default function ResetPasswordPage() {
         <div className="card p-8 text-center">
           <h1 className="type-panel text-foreground mb-4">Invalid or expired link</h1>
           <p className="text-foreground-secondary mb-6">
-            This password reset link is invalid or has expired. Please request a new one.
+            This password reset link is invalid or has expired. Reset links only work in the browser you requested them from. Please request a new one.
           </p>
           <Link href="/forgot-password" className="btn btn-primary">
             Request new link
