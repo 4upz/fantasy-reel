@@ -45,12 +45,26 @@ Deno.test({
         assertEquals(error?.code, '42501')
       })
 
-      await t.step('nobody can read the admin list through the API', async () => {
-        for (const client of [getAnonClient(), admin]) {
-          const { data, error } = await client.from('app_admins').select('user_id')
-          assertEquals(data, null)
-          assertEquals(error?.code, '42501')
+      await t.step('nobody can read or change the admin list through the API', async () => {
+        const nonAdmin = await getAuthenticatedClient()
+        const nonAdminId = await getUserId(nonAdmin)
+        const table = (client: typeof admin) => client.from('app_admins')
+
+        for (const client of [getAnonClient(), nonAdmin, admin]) {
+          const attempts = [
+            table(client).select('user_id'),
+            table(client).insert({ user_id: nonAdminId }),
+            table(client).upsert({ user_id: nonAdminId }, { onConflict: 'user_id' }),
+            table(client).update({ user_id: nonAdminId }).eq('user_id', adminId),
+            table(client).delete().eq('user_id', adminId),
+          ]
+          for (const { error } of await Promise.all(attempts)) {
+            assertEquals(error?.code, '42501')
+          }
         }
+
+        const { data } = await service.from('app_admins').select('user_id').eq('user_id', nonAdminId)
+        assertEquals(data, [], 'no attempt made the non-admin an admin')
       })
 
       await t.step('returns the dashboard document to an admin', async () => {
@@ -72,6 +86,15 @@ Deno.test({
             funnel.second_player >= funnel.drafted &&
             funnel.drafted >= funnel.live,
           `league funnel must never widen: ${JSON.stringify(funnel)}`,
+        )
+
+        const growth = data.growth as { users: number; leagues: number }[]
+        const lastWeek = growth[growth.length - 1]
+        assertEquals(lastWeek.users, data.users.total, 'the line ends at the headline user count')
+        assertEquals(lastWeek.leagues, data.leagues.total, 'the line ends at the headline league count')
+        assert(
+          growth.every((w, i) => i === 0 || (w.users >= growth[i - 1].users && w.leagues >= growth[i - 1].leagues)),
+          'running totals never fall',
         )
 
         const users = data.user_funnel

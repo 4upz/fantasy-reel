@@ -14,6 +14,14 @@ export interface MonthlyGrowth {
   leagues: number
 }
 
+/** Running totals at the end of each week since the first signup. */
+export interface WeeklyGrowth {
+  /** Monday of the week, UTC (YYYY-MM-DD). */
+  week: string
+  users: number
+  leagues: number
+}
+
 /** A league's current season; created_at is when its first season was. */
 export interface AdminLeagueRow {
   id: string
@@ -42,6 +50,7 @@ export interface AdminGrowthStats {
   leagues: { total: number; new_30d: number }
   rosters: { holdings: number; drafted: number; picked_up: number }
   monthly: MonthlyGrowth[]
+  growth: WeeklyGrowth[]
   league_funnel: { created: number; invited: number; second_player: number; drafted: number; live: number }
   user_funnel: { in_league: number; with_others: number; drafted: number }
   activity: {

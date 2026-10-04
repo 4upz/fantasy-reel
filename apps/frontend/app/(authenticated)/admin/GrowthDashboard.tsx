@@ -1,9 +1,9 @@
 import { formatDate, formatRelativeDate } from '@/utils/date'
 import { STATUS_BADGE_CLASS, getStatusLabel } from '@/utils/league'
 import { SEASON_YEAR_CLASS } from '@/utils/seasons'
+import { count, utcDate } from './format'
+import GrowthLineChart from './GrowthLineChart'
 import type { AdminGrowthStats, MonthlyGrowth, PeriodCount } from './types'
-
-const count = (n: number) => n.toLocaleString('en-US')
 
 const PROVIDER_LABEL: Record<string, string> = {
   email: 'Email',
@@ -67,6 +67,12 @@ export default function GrowthDashboard({ stats }: { stats: AdminGrowthStats }) 
           </div>
         ))}
       </dl>
+
+      <section className="card mb-6 p-5" aria-labelledby="admin-growth">
+        <h2 id="admin-growth" className="type-panel text-foreground">Growth over time</h2>
+        <p className="type-body-sm mt-1 mb-4 text-foreground-secondary">Running totals at the end of each week.</p>
+        <GrowthLineChart points={stats.growth} />
+      </section>
 
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <Funnel
@@ -228,21 +234,19 @@ function Funnel({ title, description, steps }: { title: string; description: str
 function MonthlyBars({ title, months, field }: { title: string; months: MonthlyGrowth[]; field: 'signups' | 'leagues' }) {
   const max = Math.max(1, ...months.map((m) => m[field]))
   const total = months.reduce((sum, m) => sum + m[field], 0)
-  const monthName = (m: MonthlyGrowth, options: Intl.DateTimeFormatOptions) =>
-    new Date(`${m.month}T00:00:00Z`).toLocaleDateString('en-US', { ...options, timeZone: 'UTC' })
 
   return (
     <section className="card p-5" aria-label={title}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4">
         <h2 className="type-panel text-foreground">{title}</h2>
         <p className="type-meta text-foreground-secondary">
-          {count(total)} since {monthName(months[0], { month: 'short', year: 'numeric' })}
+          {count(total)} since {utcDate(months[0].month, { month: 'short', year: 'numeric' })}
         </p>
       </div>
       <ol className="mt-4 flex h-44 items-end gap-1 border-b border-border pt-5">
         {months.map((m) => {
           const value = m[field]
-          const label = `${monthName(m, { month: 'long', year: 'numeric' })}: ${value}`
+          const label = `${utcDate(m.month, { month: 'long', year: 'numeric' })}: ${count(value)}`
           return (
             <li key={m.month} className="flex h-full flex-1 items-end justify-center" title={label}>
               <span className="sr-only">{label}</span>
@@ -264,8 +268,8 @@ function MonthlyBars({ title, months, field }: { title: string; months: MonthlyG
       <ol className="mt-2 flex gap-1" aria-hidden="true">
         {months.map((m) => (
           <li key={m.month} className="type-meta flex-1 text-center text-foreground-secondary">
-            <span className="sm:hidden">{monthName(m, { month: 'narrow' })}</span>
-            <span className="hidden sm:inline">{monthName(m, { month: 'short' })}</span>
+            <span className="sm:hidden">{utcDate(m.month, { month: 'narrow' })}</span>
+            <span className="hidden sm:inline">{utcDate(m.month, { month: 'short' })}</span>
           </li>
         ))}
       </ol>
