@@ -10,6 +10,7 @@ import { updateProfile, changePassword } from './actions'
 import AvatarUpload from './components/AvatarUpload'
 import ConnectedAccounts from './components/ConnectedAccounts'
 import ChangePasswordModal from './components/ChangePasswordModal'
+import EmailPreferences from './components/EmailPreferences'
 
 interface Props {
   userId: string
@@ -17,6 +18,7 @@ interface Props {
   email: string
   identities: UserIdentity[]
   hasPassword: boolean
+  seasonRecapEmails: boolean
 }
 
 const MAX_DISPLAY_NAME_LENGTH = 100
@@ -27,6 +29,7 @@ export default function SettingsClient({
   email,
   identities,
   hasPassword,
+  seasonRecapEmails,
 }: Props): React.ReactElement {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '')
@@ -189,6 +192,8 @@ export default function SettingsClient({
           </p>
         </div>
       </section>
+
+      <EmailPreferences seasonRecapEmails={seasonRecapEmails} />
 
       {/* Connected accounts Section */}
       <ConnectedAccounts email={email} identities={identities} hasPassword={hasPassword} />

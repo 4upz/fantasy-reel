@@ -126,6 +126,14 @@ const SECTIONS: LegalSection[] = [
           league or disconnecting a provider does not delete your account or historical results.
         </p>
         <p>
+          A daily job deletes some records once they reach a set age: email delivery records after 90 days;
+          invitations 30 days after they are declined, cancelled, or expire, and accepted invitations 30 days after
+          that season ends; in-app notifications 90 days after you read them, or 180 days if unread; records of
+          draft updates sent to Discord 7 days after delivery (30 days if delivery failed); and records used to
+          avoid repeating other Discord posts 90 days after the season ends. Scheduled-job logs are kept for 90
+          days.
+        </p>
+        <p>
           You can request deletion at <SupportEmailLink />. Subject to applicable exceptions, we will delete or
           anonymize your information. Limited records may remain where legally necessary, and backups may persist
           until they expire. Copies held independently by other users or services are outside our control.
@@ -139,7 +147,9 @@ const SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          You can edit your profile and wishlist-sharing preferences in the app. Depending on your location, you
+          You can edit your profile and wishlist-sharing preferences in the app. You can turn off season recap
+          emails in Settings or with the unsubscribe link in any of them; emails about your invitations, bids, and
+          trades are part of the service and still arrive. Depending on your location, you
           may have rights to access, correct, delete, or receive a portable copy of your information; restrict or
           object to processing; withdraw consent; appeal a refusal; or complain to a data protection authority.
         </p>
@@ -207,7 +217,7 @@ export default function PrivacyPage(): React.ReactElement {
   return (
     <LegalPage
       title="Privacy policy"
-      effectiveDate="2026-10-03"
+      effectiveDate="2026-10-04"
       intro={
         <>
           <p>
