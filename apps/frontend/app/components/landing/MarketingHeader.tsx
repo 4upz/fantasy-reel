@@ -31,19 +31,20 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
           >
             How to play
           </Link>
-          <Link
-            href={DISCORD_GUIDE_HREF}
-            className="btn btn-ghost hidden min-h-11 gap-2 px-3 md:inline-flex"
-            data-testid="marketing-discord-bot-link"
-          >
-            <DiscordIcon className="h-4 w-4" />
-            Discord bot
-          </Link>
           <Link href="/login" className="btn btn-ghost hidden min-h-11 px-3 md:inline-flex">
             Sign in
           </Link>
           <Link href="/signup" className="btn btn-primary min-h-11 px-3 md:px-4">
             Sign up
+          </Link>
+          <Link
+            href={DISCORD_GUIDE_HREF}
+            className={`btn btn-ghost hidden min-h-11 min-w-11 px-2 md:inline-flex ${styles.menuButton}`}
+            aria-label="Fantasy Reel Discord bot"
+            title="Fantasy Reel Discord bot"
+            data-testid="marketing-discord-bot-link"
+          >
+            <DiscordIcon className="h-5 w-5" />
           </Link>
           <a
             href={GITHUB_REPO_URL}
