@@ -231,7 +231,7 @@ export default function PrivacyPage(): React.ReactElement {
       <a href="#main-content" className={landingStyles.skipLink}>Skip to content</a>
       <MarketingHeader />
       <main id="main-content" tabIndex={-1}>
-        <div className={styles.layout}>
+        <div className={`mx-auto max-w-6xl px-4 sm:px-6 ${styles.layout}`}>
           <header className={styles.header}>
             <h1 className="type-page text-foreground">Privacy policy</h1>
             <p className="type-body-sm mt-3 text-foreground-secondary">
@@ -239,7 +239,7 @@ export default function PrivacyPage(): React.ReactElement {
             </p>
           </header>
 
-          <nav className={styles.toc} aria-labelledby="privacy-toc-label" data-testid="privacy-toc">
+          <nav className={`card ${styles.toc}`} aria-labelledby="privacy-toc-label" data-testid="privacy-toc">
             <p id="privacy-toc-label" className="type-label text-foreground">On this page</p>
             <ol className={styles.tocList}>
               {SECTIONS.map(({ id, title }) => (
