@@ -17,7 +17,7 @@ const JPEG_BACKGROUND = '#1c1c1c'
  * Each owner holds one object, at this name inside their folder. The storage
  * policies only accept writes to `<folder>/avatar`, so re-uploading replaces
  * the file instead of adding another (see
- * supabase/migrations/20261003152100_single_avatar_object_per_owner.sql).
+ * supabase/migrations/20261004130200_single_avatar_object_per_owner.sql).
  */
 const AVATAR_OBJECT_NAME = 'avatar'
 
