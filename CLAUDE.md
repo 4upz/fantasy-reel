@@ -1169,6 +1169,7 @@ cd supabase/functions && deno test tests/create-league.test.ts
 | `supabase/SCORING.md` | Nightly score update architecture |
 | `supabase/functions/TESTING.md` | Edge Function testing guide |
 | `supabase/README.md` | Supabase local development setup |
+| `docs/CLOUD-SESSIONS.md` | Claude Code cloud environment setup (network allowlist, setup script, provider keys) |
 
 ---
 
