@@ -11,6 +11,7 @@ interface LegalLink {
 
 /** Add new policy pages here; every footer picks them up. */
 const LEGAL_LINKS: LegalLink[] = [
+  { label: 'Terms of service', href: '/terms', testId: 'footer-terms-link' },
   { label: 'Privacy policy', href: '/privacy', testId: 'footer-privacy-link' },
 ]
 

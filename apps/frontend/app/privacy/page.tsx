@@ -1,9 +1,5 @@
 import type { Metadata } from 'next'
-import { ExternalLink } from 'lucide-react'
-import MarketingHeader from '@/app/components/landing/MarketingHeader'
-import SiteFooter from '@/app/components/landing/SiteFooter'
-import landingStyles from '@/app/components/landing/landing.module.css'
-import styles from './privacy.module.css'
+import LegalPage, { ExternalLink, SupportEmailLink, type LegalSection } from '@/app/components/legal/LegalPage'
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | Fantasy Reel',
@@ -11,20 +7,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
 }
 
-const SUPPORT_EMAIL = 'support@fantasyreel.com'
-
-function SupportEmailLink(): React.ReactElement {
-  return <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
-}
-
-interface PolicySection {
-  id: string
-  title: string
-  content: React.ReactNode
-}
-
-/** One list drives both the headings and the table of contents. */
-const SECTIONS: PolicySection[] = [
+const SECTIONS: LegalSection[] = [
   {
     id: 'information-we-collect',
     title: 'Information we collect',
@@ -126,12 +109,7 @@ const SECTIONS: PolicySection[] = [
           We use Sentry for error reporting, performance monitoring, and session replay to find and fix problems.
           Session replay records website interactions, such as clicks, scrolling, and navigation, in a sample of
           sessions, including sessions with errors. Text and form inputs are masked, and media is blocked. See{' '}
-          <a href="https://sentry.io/privacy/" target="_blank" rel="noopener noreferrer">
-            Sentry’s privacy policy
-            <ExternalLink className={styles.externalIcon} aria-hidden="true" />
-            <span className="sr-only"> (opens in a new tab)</span>
-          </a>
-          .
+          <ExternalLink href="https://sentry.io/privacy/">Sentry’s privacy policy</ExternalLink>.
         </p>
         <p>Fantasy Reel does not currently respond to browser “Do Not Track” signals.</p>
       </>
@@ -227,49 +205,23 @@ const SECTIONS: PolicySection[] = [
 
 export default function PrivacyPage(): React.ReactElement {
   return (
-    <div className={`min-h-screen bg-background ${landingStyles.page}`}>
-      <a href="#main-content" className={landingStyles.skipLink}>Skip to content</a>
-      <MarketingHeader />
-      <main id="main-content" tabIndex={-1}>
-        <div className={`mx-auto max-w-6xl px-4 sm:px-6 ${styles.layout}`}>
-          <header className={styles.header}>
-            <h1 className="type-page text-foreground">Privacy policy</h1>
-            <p className="type-body-sm mt-3 text-foreground-secondary">
-              Effective date: <time dateTime="2026-10-03">October 3, 2026</time>
-            </p>
-          </header>
-
-          <nav className={`card ${styles.toc}`} aria-labelledby="privacy-toc-label" data-testid="privacy-toc">
-            <p id="privacy-toc-label" className="type-label text-foreground">On this page</p>
-            <ol className={styles.tocList}>
-              {SECTIONS.map(({ id, title }) => (
-                <li key={id}>
-                  <a href={`#${id}`} className="type-body-sm">{title}</a>
-                </li>
-              ))}
-            </ol>
-          </nav>
-
-          <div className={`type-body ${styles.policy}`}>
-            <p>
-              Fantasy Reel is operated by Arik Smith, an individual in Maryland, United States. This policy
-              explains how we handle personal information on fantasyreel.com and through our connected Discord
-              features. The operator is responsible for that information (the “data controller,” where
-              applicable).
-            </p>
-            <p>
-              For privacy questions or requests, email <SupportEmailLink />.
-            </p>
-            {SECTIONS.map(({ id, title, content }) => (
-              <section key={id} id={id} className={styles.section}>
-                <h2 className="type-section text-foreground">{title}</h2>
-                {content}
-              </section>
-            ))}
-          </div>
-        </div>
-      </main>
-      <SiteFooter />
-    </div>
+    <LegalPage
+      title="Privacy policy"
+      effectiveDate="2026-10-03"
+      intro={
+        <>
+          <p>
+            Fantasy Reel is operated by Arik Smith, an individual in Maryland, United States. This policy
+            explains how we handle personal information on fantasyreel.com and through our connected Discord
+            features. The operator is responsible for that information (the “data controller,” where
+            applicable).
+          </p>
+          <p>
+            For privacy questions or requests, email <SupportEmailLink />.
+          </p>
+        </>
+      }
+      sections={SECTIONS}
+    />
   )
 }

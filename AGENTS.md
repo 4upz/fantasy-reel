@@ -170,16 +170,17 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 - **Product events:** `trackEvent(name, props)` from `utils/analytics.ts` (wraps Vercel Analytics). Fire only on success paths, ids-only props (no names/emails). Canonical event names are listed in that file's doc comment — reuse them, don't invent variants.
 - **Health:** `/api/health` probes Supabase reachability (200/503) for external uptime monitors — keep it dependency-light and unauthenticated.
 
-## Privacy Policy
+## Privacy Policy and Terms
 
 `apps/frontend/app/privacy/page.tsx` (served at `/privacy`) is the published privacy policy, and its claims describe this codebase. When a change makes one of them untrue, update the policy in the same PR — never as a follow-up:
 
 - **Triggers:** storing new personal data (columns, tables, uploads, profile fields); a new provider, SDK, or outbound host that receives user data; tracking changes (`trackEvent` events, Sentry replay sampling or masking in `utils/sentry.ts`, cookies, browser storage keys); new places personal data is shown or shared (public pages, Discord posts, emails, RLS that widens who can read it); and retention or deletion changes. A PR in one of these areas that leaves the policy accurate says so in its description.
-- **Editing:** the text is a legal commitment. Propose new wording in the PR for the owner to approve, and never promise behavior the code doesn't guarantee. Update the effective date (the `<time dateTime>` value and its visible text) and summarize the policy change in the PR description.
+- **Editing:** the text is a legal commitment. Propose new wording in the PR for the owner to approve, and never promise behavior the code doesn't guarantee. Update the page's `effectiveDate` and summarize the policy change in the PR description.
 - **Claims tied to specific code:**
   - Session replay masking and media blocking come from `replayIntegration()` defaults in `utils/sentry.ts`; set those options explicitly before changing that call.
   - Wishlists are private by default (`profiles.wishlist_public` defaults to `false`).
   - Commissioners and trade participants can *currently* read recipient emails in trade notification records, through the `notification_log` SELECT policies for league owners and trade participants. Remove that sentence, and this note, in the PR that tightens those policies.
+- **Terms of service:** `apps/frontend/app/terms/page.tsx` (`/terms`) follows the same rules when a change affects what the service offers or how it may be used (fees or prizes, native apps, new kinds of user content). People accept the Terms through `LegalNotice` (`app/components/legal/`), so keep it beside every way to create an account: the sign-up form, and the Google and Discord buttons on both sign-up and login.
 
 ---
 

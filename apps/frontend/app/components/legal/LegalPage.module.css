@@ -1,7 +1,7 @@
-/* A readable policy column; wide screens keep the contents beside it. */
+/* A readable document column; wide screens keep the contents beside it. */
 .layout {
   display: grid;
-  grid-template-areas: 'header' 'toc' 'policy';
+  grid-template-areas: 'header' 'toc' 'document';
   gap: 2rem;
   padding-block: 2.5rem 4rem;
 }
@@ -33,28 +33,28 @@
 }
 
 /* 36rem keeps body lines near 65 characters (typography guide: 45–70). */
-.policy {
-  grid-area: policy;
+.document {
+  grid-area: document;
   max-width: 36rem;
   color: var(--color-foreground-secondary);
 }
 
-.policy :is(p, ul) + :is(p, ul) { margin-top: 1rem; }
+.document :is(p, ul) + :is(p, ul) { margin-top: 1rem; }
 
-.policy ul {
+.document ul {
   padding-left: 1.25rem;
   list-style: disc;
 }
 
-.policy li + li { margin-top: 0.75rem; }
-.policy li::marker { color: var(--color-gold); }
+.document li + li { margin-top: 0.75rem; }
+.document li::marker { color: var(--color-gold); }
 
-.policy strong {
+.document strong {
   color: var(--color-foreground);
   font-weight: 600;
 }
 
-.policy a {
+.document a {
   color: var(--color-gold);
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--color-gold) 45%, transparent);
@@ -63,7 +63,7 @@
   transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
 
-.policy a:hover {
+.document a:hover {
   color: var(--color-gold-hover);
   text-decoration-color: currentColor;
 }
@@ -89,7 +89,7 @@
 @media (min-width: 64rem) {
   .layout {
     grid-template-columns: minmax(0, 1fr) 17rem;
-    grid-template-areas: 'header toc' 'policy toc';
+    grid-template-areas: 'header toc' 'document toc';
     grid-template-rows: auto 1fr;
     column-gap: 4rem;
     row-gap: 2.5rem;

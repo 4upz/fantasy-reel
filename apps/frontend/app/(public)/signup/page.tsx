@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { FormError } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
+import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
 import { toast } from 'sonner'
 
@@ -166,9 +167,12 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="signup-button">
-              {isLoading ? 'Creating account...' : 'Sign up'}
-            </button>
+            <div className="space-y-3">
+              <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="signup-button">
+                {isLoading ? 'Creating account...' : 'Sign up'}
+              </button>
+              <LegalNotice action="creating an account" />
+            </div>
 
             <div className="relative my-6">
               <div className="absolute inset-0 flex items-center">
