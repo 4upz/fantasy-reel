@@ -1,4 +1,5 @@
 import ThemeMenu from '@/components/theme/ThemeMenu'
+import LegalLinks from '../components/LegalLinks'
 
 interface Props {
   children: React.ReactNode
@@ -13,6 +14,10 @@ export default function PublicLayout({ children }: Props) {
       <div className="flex flex-1 items-center justify-center">
         {children}
       </div>
+      {/* Sign-up collects personal information, so the policy stays one tap away. */}
+      <footer className="flex justify-center px-4 py-6">
+        <LegalLinks />
+      </footer>
     </div>
   )
 }

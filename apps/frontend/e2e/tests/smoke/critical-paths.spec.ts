@@ -79,6 +79,17 @@ test.describe('Critical Path: Navigation @critical @smoke', () => {
     await page.waitForURL(/\/login/)
   })
 
+  test('unauthenticated user can open the privacy policy from the footer', async ({
+    page,
+  }) => {
+    await page.goto('/')
+    await page.getByTestId('footer-privacy-link').click()
+
+    // Public page: no redirect to login
+    await page.waitForURL('/privacy')
+    await expect(page.getByRole('heading', { level: 1, name: 'Privacy policy' })).toBeVisible()
+  })
+
   test('login page loads without errors', async ({ page }) => {
     await page.goto('/login')
 
