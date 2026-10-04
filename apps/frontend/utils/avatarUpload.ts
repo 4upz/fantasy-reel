@@ -23,8 +23,12 @@ const AVATAR_OBJECT_NAME = 'avatar'
 
 async function decodeImage(file: Blob): Promise<CanvasImageSource & { width: number; height: number }> {
   if (typeof createImageBitmap === 'function') {
-    // Applies the EXIF orientation before the metadata is thrown away.
-    return createImageBitmap(file, { imageOrientation: 'from-image' })
+    try {
+      // Applies the EXIF orientation before the metadata is thrown away.
+      return await createImageBitmap(file, { imageOrientation: 'from-image' })
+    } catch {
+      // Some browsers reject the options or the format here; <img> can still decode it.
+    }
   }
 
   const url = URL.createObjectURL(file)
