@@ -20,6 +20,7 @@ import {
 } from '../_shared/trade-validation.ts'
 import { resolveOfferExpiry, deriveExpiryBounds, type ExpiryRequest } from '../_shared/trade-expiry.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
+import { tradeMessageError, openTradeOfferLimitError } from '../_shared/trade-limits.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 
 const log = createLogger('propose-trade')
@@ -62,6 +63,9 @@ Deno.serve(async (req) => {
       return errorResponse('Valid recipient_team_id is required', 400)
     }
 
+    const messageError = tradeMessageError(message)
+    if (messageError) return errorResponse(messageError, 400)
+
     // Get initiator's team in this league
     const { data: initiatorParticipant, error: participantError } = await serviceClient
       .from('league_participants')
@@ -85,6 +89,9 @@ Deno.serve(async (req) => {
     if (initiatorTeamId === recipient_team_id) {
       return errorResponse('Cannot propose a trade with yourself', 400)
     }
+
+    const offerLimitError = await openTradeOfferLimitError(serviceClient, initiatorTeamId)
+    if (offerLimitError) return errorResponse(offerLimitError, 400)
 
     const validationResult = await validateTradeProposal(
       serviceClient,

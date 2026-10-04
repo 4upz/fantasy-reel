@@ -578,3 +578,42 @@ Deno.test('sendDiscordNotification - general category bypasses all per-channel t
     restoreFetch()
   }
 })
+
+Deno.test('sendDiscordNotification - clips embed text to Discord limits', async () => {
+  mockFetch()
+  try {
+    const supabase = createMockSupabase([
+      {
+        id: 'ch-1',
+        webhook_url: 'https://discord.com/api/webhooks/1/token1',
+        bid_alert_role_id: null,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        consecutive_failures: 0,
+        thread_id: null,
+      },
+    ])
+
+    await sendDiscordNotification(supabase, {
+      leagueId: 'league-1',
+      category: 'trades',
+      embeds: [{
+        title: 't'.repeat(300),
+        fields: [
+          { name: 'Message', value: 'm'.repeat(1500), inline: false },
+          { name: 'Short', value: 'ok', inline: true },
+        ],
+      }],
+    })
+
+    const embed = (fetchCalls[0].body.embeds as Array<{ title: string; fields: Array<{ value: string }> }>)[0]
+    assertEquals(embed.title.length, 256)
+    assertEquals(embed.fields[0].value.length, 1024)
+    assertEquals(embed.fields[0].value.endsWith('…'), true)
+    assertEquals(embed.fields[1].value, 'ok')
+  } finally {
+    restoreFetch()
+  }
+})

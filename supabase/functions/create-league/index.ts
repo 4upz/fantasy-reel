@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, createServiceClient } from '../_shared/utils.ts'
 import { MIN_NEW_BID_CUTOFF_HOURS, MAX_NEW_BID_CUTOFF_HOURS } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
 
@@ -18,6 +18,10 @@ const MAX_COUNTERBID_HOURS = 72
 const MIN_COUNTERPICK_SLOTS = 0
 const MAX_DRAFT_COUNTERPICK_SLOTS = 5
 const MAX_BIDDING_COUNTERPICK_SLOTS = 3
+const MAX_NAME_LENGTH = 255
+const MAX_TEAM_NAME_LENGTH = 100
+// Seasons a user can own that haven't finished. Far above real use; stops bulk creation.
+const MAX_OPEN_LEAGUES_PER_OWNER = 50
 
 interface CreateLeagueRequest {
   name: string
@@ -86,8 +90,14 @@ Deno.serve(async (req) => {
     }: CreateLeagueRequest = await req.json()
 
     // Validate required fields
-    if (!name || name.trim().length === 0) {
+    if (typeof name !== 'string' || name.trim().length === 0) {
       return errorResponse('League name is required', 400)
+    }
+    if (name.trim().length > MAX_NAME_LENGTH) {
+      return errorResponse(`League name can be at most ${MAX_NAME_LENGTH} characters`, 400)
+    }
+    if (team_name !== undefined && (typeof team_name !== 'string' || team_name.trim().length > MAX_TEAM_NAME_LENGTH)) {
+      return errorResponse(`Team name can be at most ${MAX_TEAM_NAME_LENGTH} characters`, 400)
     }
 
     // Validate max_participants bounds
@@ -207,8 +217,25 @@ Deno.serve(async (req) => {
     if (bidding_counterpick_slots !== undefined) leagueInsert.bidding_counterpick_slots = bidding_counterpick_slots
     if (counterpicks_block_drops !== undefined) leagueInsert.counterpicks_block_drops = counterpicks_block_drops
 
+    // Clients can't insert leagues directly (20261003152600), so this function
+    // is the only way to create one and its checks above always apply.
+    const serviceClient = createServiceClient()
+
+    const { count: openLeagues, error: countError } = await serviceClient
+      .from('leagues')
+      .select('id', { count: 'exact', head: true })
+      .eq('owner_id', user.id)
+      .neq('status', 'completed')
+    if (countError) throw countError
+    if ((openLeagues ?? 0) >= MAX_OPEN_LEAGUES_PER_OWNER) {
+      return errorResponse(
+        `You already run ${MAX_OPEN_LEAGUES_PER_OWNER} unfinished leagues. Finish or delete one before creating another.`,
+        400
+      )
+    }
+
     // Create the league
-    const { data: league, error: leagueError } = await supabaseClient
+    const { data: league, error: leagueError } = await serviceClient
       .from('leagues')
       .insert(leagueInsert)
       .select()

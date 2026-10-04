@@ -401,31 +401,11 @@ from OpenCritic before launch. A score is not points earned, though.
 
 ## Cron Jobs
 
-Two pg_cron jobs manage the scoring system:
-
-### 1. Queue Movies (Daily at Midnight UTC)
-
-```sql
-SELECT cron.schedule(
-    'queue-movies-for-scoring',
-    '0 0 * * *',
-    $$SELECT queue_movies_for_scoring()$$
-);
-```
-
-Finds all released, drafted movies that haven't been scored today.
-
-### 2. Process Queue (Every Minute)
-
-```sql
-SELECT cron.schedule(
-    'process-score-queue',
-    '* * * * *',
-    $$SELECT process_score_queue()$$
-);
-```
-
-Processes batches of 5 movies from the queue.
+Scoring runs from Vercel Cron: `/api/cron/update-scores` (see
+`apps/frontend/vercel.json`) calls the `update-scores` Edge Function. The old
+pg_cron queue jobs were unscheduled in `20260209_disable_scoring_pgcron.sql`,
+and `process_score_queue()`, which read the service-role key from a database
+setting, was dropped in `20261003152600_size_and_count_limits.sql`.
 
 ## Configuration
 
@@ -440,18 +420,9 @@ TMDB_API_KEY=your_tmdb_api_key
 
 ### Database Settings
 
-For the queue processor to invoke Edge Functions, configure these in your database:
-
-```sql
--- Set in Supabase Dashboard > Database > Settings > Database Settings
-ALTER DATABASE postgres SET app.supabase_url = 'https://your-project.supabase.co';
-ALTER DATABASE postgres SET app.service_role_key = 'your-service-role-key';
-```
-
-**Security Note**: The service role key is stored in the database for pg_cron to use. This is secure because:
-- Only the database can access these settings
-- pg_cron runs with database privileges
-- The key is not exposed to client applications
+None. Never store the service-role key in a database setting
+(`ALTER DATABASE ... SET app.service_role_key`) or Vault for this: every
+database role can read a database setting.
 
 ## Manual Operations
 
@@ -463,10 +434,7 @@ SELECT queue_movie_for_scoring('movie-uuid-here');
 
 ### Trigger Immediate Score Update
 
-```sql
--- Process one batch immediately
-SELECT process_score_queue();
-```
+Call `/api/cron/update-scores` with the cron secret, as Vercel Cron does.
 
 ### Recalculate a Team's Score
 

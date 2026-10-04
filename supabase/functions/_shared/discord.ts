@@ -62,6 +62,9 @@ export const DISCORD_MAX_EMBED_FIELDS = 25
 export const DISCORD_MAX_FIELD_NAME = 256
 export const DISCORD_MAX_FIELD_VALUE = 1024
 export const DISCORD_MAX_EMBED_CHARS = 6000
+const DISCORD_MAX_TITLE = 256
+const DISCORD_MAX_DESCRIPTION = 4096
+const DISCORD_MAX_FOOTER = 2048
 
 /** Color constants matching design system tokens in globals.css */
 export const DISCORD_COLORS = {
@@ -119,6 +122,32 @@ const CATEGORY_COLUMN: Partial<Record<NotificationCategory, keyof DiscordChannel
  * IMPORTANT: Must be awaited, not fire-and-forget. Supabase Edge Functions
  * may terminate after sending the response, aborting in-flight fetch() calls.
  */
+/** Shortens text to at most `max` characters, marking the cut with an ellipsis. */
+export function clipText(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
+}
+
+/**
+ * Clips an embed's text to Discord's per-part limits. Discord rejects the
+ * whole message when one part is too long, so a long trade message or veto
+ * reason would otherwise cost the entire post.
+ */
+export function fitEmbedToLimits(embed: DiscordEmbed): DiscordEmbed {
+  return {
+    ...embed,
+    ...(embed.title !== undefined && { title: clipText(embed.title, DISCORD_MAX_TITLE) }),
+    ...(embed.description !== undefined && { description: clipText(embed.description, DISCORD_MAX_DESCRIPTION) }),
+    ...(embed.footer && { footer: { ...embed.footer, text: clipText(embed.footer.text, DISCORD_MAX_FOOTER) } }),
+    ...(embed.fields && {
+      fields: embed.fields.map((field) => ({
+        ...field,
+        name: clipText(field.name, DISCORD_MAX_FIELD_NAME),
+        value: clipText(field.value, DISCORD_MAX_FIELD_VALUE),
+      })),
+    }),
+  }
+}
+
 export async function sendDiscordNotification(
   supabase: SupabaseClient,
   params: {
@@ -210,7 +239,7 @@ export async function sendToWebhook(
   }
 
   if (finalContent) body.content = finalContent
-  if (embeds && embeds.length > 0) body.embeds = embeds
+  if (embeds && embeds.length > 0) body.embeds = embeds.map(fitEmbedToLimits)
 
   try {
     const webhookUrl = new URL(channel.webhook_url)

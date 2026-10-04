@@ -103,7 +103,7 @@ RESET ROLE;
 SELECT set_config('request.jwt.claim.sub', '81111111-1111-4111-8111-000000000002', true);
 SET LOCAL ROLE authenticated;
 SELECT throws_ok($$INSERT INTO leagues(name, owner_id, series_id, season_year) SELECT 'Foreign attachment', '81111111-1111-4111-8111-000000000002', series_id, season_year + 4 FROM leagues WHERE id = '81111111-1111-4111-8111-000000000003'$$,
-  '42501', 'Only the series owner can create its seasons', 'member cannot attach a season to another owner series');
+  '42501', 'permission denied for table leagues', 'member cannot attach a season to another owner series');
 SELECT throws_ok($$UPDATE leagues SET status = 'completed' WHERE id = '81111111-1111-4111-8111-000000000004'$$, '42501', 'Season results are managed by completion', 'owner cannot bypass finalization with a direct status update');
 RESET ROLE;
 
