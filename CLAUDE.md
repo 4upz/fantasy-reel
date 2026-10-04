@@ -458,6 +458,31 @@ apps/frontend/app/
 
 `auth.users` → `profiles` (1:1) → `league_participants` (1:N) → `teams` (1:1 per league) → `draft_picks`/`pickup_bids`/`trades`/`team_scores`. Movies have reviews (1:N). Leagues have bidding config (1:1).
 
+### Account deletion
+
+Users delete their own account from Settings through the `delete-account` Edge
+Function (typed confirmation + a sign-in within 15 minutes, read from the JWT
+`amr` claim). The database work is the `on_auth_user_deleted` BEFORE DELETE
+trigger on `auth.users` (`handle_auth_user_deletion()`), so dashboard deletes
+and merge-accounts behave the same way:
+
+- A live draft (`drafting`/`counterpicking`) blocks deletion
+  (`account_deletion_blockers()`).
+- Owned seasons pass to the longest-standing other member; a season nobody else
+  joined is deleted. Owned series follow their newest season's owner.
+- Setup seasons drop the person. Active and completed seasons keep the team:
+  the participant becomes `status = 'left'`, pending bids and open trade offers
+  are cancelled, and the profile row stays as an anonymous "Former member".
+  **`profiles.user_id` and `league_participants.user_id` may therefore point at
+  a user that no longer exists** — neither references `auth.users` any more.
+  Notifications to such ids are dropped by a trigger rather than failing the
+  insert; email lookups already tolerate a missing auth user.
+- `final_standings` names them "Former member", and `notification_log` rows and
+  invitations addressed to their email are deleted (skipped when another
+  account shares the email, which is merge-accounts' duplicate).
+- `leagues.owner_id` / `league_series.owner_id` are `ON DELETE RESTRICT`: never
+  make them cascade again.
+
 ### Series and Seasons
 
 A `leagues` row is **one season**. `league_series` is the identity that spans

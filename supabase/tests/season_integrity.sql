@@ -107,8 +107,8 @@ SELECT throws_ok($$INSERT INTO leagues(name, owner_id, series_id, season_year) S
 SELECT throws_ok($$UPDATE leagues SET status = 'completed' WHERE id = '81111111-1111-4111-8111-000000000004'$$, '42501', 'Season results are managed by completion', 'owner cannot bypass finalization with a direct status update');
 RESET ROLE;
 
-SELECT lives_ok($$DELETE FROM auth.users WHERE id = '81111111-1111-4111-8111-000000000002'$$, 'account deletion cascades through completed counterpick references');
-SELECT is((SELECT counterpicked_by_team_id FROM draft_picks WHERE id = '81111111-1111-4111-8111-000000000017'), NULL::UUID, 'counterpick team FK is detached');
+SELECT lives_ok($$DELETE FROM auth.users WHERE id = '81111111-1111-4111-8111-000000000002'$$, 'account deletion succeeds with completed counterpick references');
+SELECT is((SELECT counterpicked_by_team_id FROM draft_picks WHERE id = '81111111-1111-4111-8111-000000000017'), '81111111-1111-4111-8111-000000000010'::UUID, 'a deleted member''s completed counterpick is kept');
 SELECT is((SELECT jsonb_array_length(final_standings) FROM leagues WHERE id = '81111111-1111-4111-8111-000000000003'), 2, 'frozen history retains the deleted participant');
 SELECT * FROM finish();
 ROLLBACK;
