@@ -53,6 +53,10 @@
   --color-warning-bg: oklch(0.7 0.15 70 / 0.15);
   --color-info: #3b82f6;
   --color-info-bg: oklch(0.55 0.2 260 / 0.15);
+  /* Categorical chart series, in this order. Gold is stepped off the accent so
+     the two lines carry equal weight; validated for color-vision deficiency. */
+  --color-series-1: #ad8a1c;
+  --color-series-2: #3987e5;
   --color-overlay: rgba(0, 0, 0, 0.85);
   --color-overlay-soft: rgba(0, 0, 0, 0.6);
 
@@ -121,6 +125,8 @@
   --color-warning-bg: rgba(132, 83, 7, 0.08);
   --color-info: #1d4ed8;
   --color-info-bg: rgba(29, 78, 216, 0.08);
+  --color-series-1: #8a6a10;
+  --color-series-2: #2a78d6;
   --color-overlay: rgba(0, 0, 0, 0.45);
   --color-overlay-soft: rgba(0, 0, 0, 0.35);
   --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.06);
