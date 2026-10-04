@@ -11,7 +11,7 @@ INSERT INTO auth.users(id, email) VALUES
   ('8c000000-0000-4000-8000-000000000004', 'drafter-a@example.test'),
   ('8c000000-0000-4000-8000-000000000005', 'drafter-b@example.test'),
   ('8c000000-0000-4000-8000-000000000006', 'shared@example.test'),
-  ('8c000000-0000-4000-8000-000000000007', 'shared@example.test'),
+  ('8c000000-0000-4000-8000-000000000007', 'Shared@Example.test'),
   ('8c000000-0000-4000-8000-000000000008', 'loner@example.test');
 UPDATE profiles SET display_name = 'Leaving Person', avatar_url = 'https://cdn.discordapp.com/avatars/1/a.png', wishlist_public = TRUE
 WHERE user_id = '8c000000-0000-4000-8000-000000000001';
@@ -149,7 +149,8 @@ SELECT lives_ok($$INSERT INTO notifications(user_id, league_id, type, title, bod
 SELECT is((SELECT array_agg(user_id) FROM notifications WHERE league_id = '8c000000-0000-4000-8000-000000000011'),
   ARRAY['8c000000-0000-4000-8000-000000000002']::UUID[], 'only the remaining member is notified');
 
--- merge-accounts deletes a duplicate that shares the original's email.
+-- merge-accounts deletes a duplicate that shares the original's email (auth.users
+-- keeps emails unique byte-for-byte, so the duplicate differs only in case).
 SELECT lives_ok($$DELETE FROM auth.users WHERE id = '8c000000-0000-4000-8000-000000000007'$$, 'a duplicate account is deleted');
 SELECT ok(EXISTS (SELECT 1 FROM invitations WHERE id = '8c000000-0000-4000-8000-000000000063'), 'data addressed to the shared email stays with the original');
 SELECT ok(EXISTS (SELECT 1 FROM notification_log WHERE id = '8c000000-0000-4000-8000-000000000054'), 'including its delivery log');
