@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
     if (bidding_counterpick_slots !== undefined) leagueInsert.bidding_counterpick_slots = bidding_counterpick_slots
     if (counterpicks_block_drops !== undefined) leagueInsert.counterpicks_block_drops = counterpicks_block_drops
 
-    // Clients can't insert leagues directly (20261003152600), so this function
+    // Clients can't insert leagues directly (20261004130500), so this function
     // is the only way to create one and its checks above always apply.
     const serviceClient = createServiceClient()
 

@@ -4,7 +4,7 @@ SET search_path = public, extensions;
 SELECT no_plan();
 
 -- Size and count limits on client-writable tables
--- (20261003152600_size_and_count_limits.sql).
+-- (20261004130500_size_and_count_limits.sql).
 
 INSERT INTO auth.users(id, email) VALUES
   ('86111111-1111-4111-8111-000000000001', 'limits-owner@example.test'),

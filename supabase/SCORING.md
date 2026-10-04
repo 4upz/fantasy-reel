@@ -405,7 +405,7 @@ Scoring runs from Vercel Cron: `/api/cron/update-scores` (see
 `apps/frontend/vercel.json`) calls the `update-scores` Edge Function. The old
 pg_cron queue jobs were unscheduled in `20260209_disable_scoring_pgcron.sql`,
 and `process_score_queue()`, which read the service-role key from a database
-setting, was dropped in `20261003152600_size_and_count_limits.sql`.
+setting, was dropped in `20261004130500_size_and_count_limits.sql`.
 
 ## Configuration
 

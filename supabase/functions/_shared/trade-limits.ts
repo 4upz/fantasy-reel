@@ -2,7 +2,7 @@ import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 /**
  * Limits on trade offers, mirrored by the enforce_trade_offer_limits trigger
- * (20261003152600_size_and_count_limits.sql). The functions check first so the
+ * (20261004130500_size_and_count_limits.sql). The functions check first so the
  * caller gets a clear 400 instead of a constraint error.
  */
 export const MAX_TRADE_MESSAGE_LENGTH = 1500
