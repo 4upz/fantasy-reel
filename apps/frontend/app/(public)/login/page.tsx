@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { login, resendConfirmationEmail } from './actions'
 import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
@@ -11,6 +12,26 @@ import NavLogo from '../../components/navigation/NavLogo'
 import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
 import { toast } from 'sonner'
+
+/**
+ * Explains how the visitor got here from an email link. Email links only sign
+ * in the browser that requested them, so one opened elsewhere lands here.
+ */
+function LinkNotice(): React.ReactElement | null {
+  const searchParams = useSearchParams()
+  if (searchParams.get('notice') === 'email_confirmed') {
+    return <FormSuccess message="Your email is confirmed. Sign in to continue." />
+  }
+  if (searchParams.get('error') === 'auth_callback_error') {
+    return (
+      <div className="alert alert-info" data-testid="link-notice">
+        We couldn&apos;t finish signing you in. If you opened a confirmation email on a different
+        browser or device, your email is still confirmed, so sign in below.
+      </div>
+    )
+  }
+  return null
+}
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
@@ -88,6 +109,9 @@ export default function LoginPage() {
 
         <div className="card p-8">
           <form action={handleSubmit} className="space-y-6">
+            <Suspense fallback={null}>
+              <LinkNotice />
+            </Suspense>
             <FormError message={error} />
             {resendSuccess && (
               <FormSuccess message="Confirmation email sent! Check your inbox." />
