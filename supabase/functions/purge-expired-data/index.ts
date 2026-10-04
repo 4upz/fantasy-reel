@@ -5,7 +5,7 @@
  * email delivery records, dead invitations, old in-app notifications, delivered
  * draft notifications and finished seasons' Discord dedupe rows. The windows,
  * and what is never deleted, live in the `purge_expired_data` SQL function
- * (migration 20261003152800) so they are enforced in one transaction and
+ * (migration 20261004130700) so they are enforced in one transaction and
  * covered by supabase/tests/data_retention.sql.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
