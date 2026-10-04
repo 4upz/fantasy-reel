@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
+import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
 import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
@@ -160,6 +161,8 @@ export default function LoginPage() {
             <div className="space-y-3">
               <GoogleLoginButton />
               <DiscordLoginButton />
+              {/* Either button creates an account on first use. */}
+              <LegalNotice action="continuing with Google or Discord" />
             </div>
 
             <div className="text-center space-y-3">

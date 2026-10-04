@@ -1,7 +1,6 @@
 import { redirect } from 'next/navigation'
-import TMDbAttribution from '@/components/TMDbAttribution'
 import SideNav from '../components/navigation/SideNav'
-import SocialLinks from '../components/SocialLinks'
+import SiteFooterContent from '../components/SiteFooterContent'
 import { getCachedUser, getCachedProfile } from '@/utils/supabase/cached'
 import { AuthenticatedProviders } from './Providers'
 
@@ -32,10 +31,7 @@ export default async function AuthenticatedLayout({ children }: Props) {
         {/* TMDb requires the attribution notice wherever their data is shown,
             and every authenticated page shows it. */}
         <footer className="shrink-0 border-t border-border lg:pl-[var(--sidenav-width,68px)] transition-[padding] duration-250 ease-out">
-          <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col items-center gap-4 md:flex-row md:justify-between">
-            <TMDbAttribution variant="footer" />
-            <SocialLinks />
-          </div>
+          <SiteFooterContent className="px-6 py-6" />
         </footer>
       </AuthenticatedProviders>
     </div>

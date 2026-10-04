@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Image from 'next/image'
+import { safeAvatarUrl } from '@/utils/avatar'
 import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
 import FantasyPoints from '@/app/components/FantasyPoints'
@@ -300,32 +301,35 @@ export default function ProposeTradeModal({
                 Choose a team to trade with:
               </p>
               <div role="listbox" aria-labelledby="team-selection-label">
-                {otherTeams.map((otherTeam) => (
-                  <button
-                    key={otherTeam.id}
-                    onClick={() => handleSelectTeam(otherTeam.id)}
-                    className="w-full card-interactive p-4 flex items-center gap-3 text-left mb-2"
-                    role="option"
-                    aria-selected={selectedTeamId === otherTeam.id}
-                  >
-                    <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center overflow-hidden">
-                      {otherTeam.avatar_url ? (
-                        <Image
-                          src={otherTeam.avatar_url}
-                          alt=""
-                          width={40}
-                          height={40}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="type-label text-foreground-secondary" aria-hidden="true">
-                          {otherTeam.name.charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    <span className="type-row-title text-foreground">{otherTeam.name}</span>
-                  </button>
-                ))}
+                {otherTeams.map((otherTeam) => {
+                  const avatarUrl = safeAvatarUrl(otherTeam.avatar_url)
+                  return (
+                    <button
+                      key={otherTeam.id}
+                      onClick={() => handleSelectTeam(otherTeam.id)}
+                      className="w-full card-interactive p-4 flex items-center gap-3 text-left mb-2"
+                      role="option"
+                      aria-selected={selectedTeamId === otherTeam.id}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center overflow-hidden">
+                        {avatarUrl ? (
+                          <Image
+                            src={avatarUrl}
+                            alt=""
+                            width={40}
+                            height={40}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span className="type-label text-foreground-secondary" aria-hidden="true">
+                            {otherTeam.name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="type-row-title text-foreground">{otherTeam.name}</span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ) : (

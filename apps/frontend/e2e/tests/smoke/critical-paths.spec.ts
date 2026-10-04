@@ -79,6 +79,20 @@ test.describe('Critical Path: Navigation @critical @smoke', () => {
     await page.waitForURL(/\/login/)
   })
 
+  for (const { name, path, testId } of [
+    { name: 'Privacy policy', path: '/privacy', testId: 'footer-privacy-link' },
+    { name: 'Terms of service', path: '/terms', testId: 'footer-terms-link' },
+  ]) {
+    test(`unauthenticated user can open the ${name.toLowerCase()} from the footer`, async ({ page }) => {
+      await page.goto('/')
+      await page.getByTestId(testId).click()
+
+      // Public page: no redirect to login
+      await page.waitForURL(path)
+      await expect(page.getByRole('heading', { level: 1, name })).toBeVisible()
+    })
+  }
+
   test('login page loads without errors', async ({ page }) => {
     await page.goto('/login')
 
@@ -87,6 +101,7 @@ test.describe('Critical Path: Navigation @critical @smoke', () => {
     await expect(page.getByTestId('password-input')).toBeVisible()
     await expect(page.getByTestId('login-button')).toBeVisible()
     await expect(page.getByTestId('discord-login-button')).toBeVisible()
+    await expect(page.getByTestId('legal-notice')).toBeVisible()
   })
 
   test('signup page loads without errors', async ({ page }) => {
@@ -97,6 +112,7 @@ test.describe('Critical Path: Navigation @critical @smoke', () => {
     await expect(page.getByTestId('email-input')).toBeVisible()
     await expect(page.getByTestId('password-input')).toBeVisible()
     await expect(page.getByTestId('signup-button')).toBeVisible()
+    await expect(page.getByTestId('legal-notice')).toBeVisible()
   })
 })
 

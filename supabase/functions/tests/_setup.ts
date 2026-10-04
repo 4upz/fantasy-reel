@@ -89,6 +89,16 @@ export async function getThirdAuthenticatedClient(): Promise<SupabaseClient> {
 }
 
 /**
+ * Clear the invitation email rate limits (_shared/invitations.ts). The suite
+ * sends far more invites from the same test users in a day than any real
+ * commissioner, so setup helpers reset them before sending.
+ */
+export async function resetInviteRateLimits(): Promise<void> {
+  const { error } = await getServiceClient().from('rate_limit_counters').delete().like('bucket', 'invite_email:%')
+  if (error) throw new Error(`Failed to reset invite rate limits: ${error.message}`)
+}
+
+/**
  * Get a service role client for direct database operations
  */
 export function getServiceClient(): SupabaseClient {
@@ -657,6 +667,7 @@ export class TestDataFactory {
     leagueId: string,
     email: string
   ): Promise<{ id: string; token: string }> {
+    await resetInviteRateLimits()
     const result = await invokeFunction<{ invitation: { id: string; token: string } }>(
       this.client,
       'send-invite',
@@ -1288,6 +1299,7 @@ export async function createTestFactory(): Promise<{
   secondClient: SupabaseClient
   factory: TestDataFactory
 }> {
+  await resetInviteRateLimits()
   const client = await getAuthenticatedClient()
   const secondClient = await getSecondAuthenticatedClient()
   const factory = new TestDataFactory(client, secondClient)
