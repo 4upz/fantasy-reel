@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
 import NavLogo from '../../components/navigation/NavLogo'
 import { createClient } from '@/utils/supabase/client'
+import { PASSWORD_HINT } from '@/utils/password'
 import { toast } from 'sonner'
 
 export default function ResetPasswordPage() {
@@ -133,7 +134,7 @@ export default function ResetPasswordPage() {
                 required
                 disabled={isLoading}
                 className="input"
-                placeholder="New password (min 6 characters)"
+                placeholder={`New password (${PASSWORD_HINT})`}
                 data-testid="password-input"
               />
             </div>
