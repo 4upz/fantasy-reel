@@ -15,6 +15,9 @@ const BOT_PERMISSIONS = (1 << 10) | (1 << 29)
 /** Anchor of the bot guide on How to Play (/how-to-play publicly, /help in the app). */
 export const DISCORD_GUIDE_ID = 'discord'
 
+/** The public guide link, for pages anyone can see (landing page, header, marketing footer). */
+export const DISCORD_GUIDE_HREF = `/how-to-play#${DISCORD_GUIDE_ID}`
+
 /** Server-install link for the bot, or null when the client ID is unset. */
 export const DISCORD_BOT_INSTALL_URL = DISCORD_CLIENT_ID
   ? `https://discord.com/oauth2/authorize?${new URLSearchParams({

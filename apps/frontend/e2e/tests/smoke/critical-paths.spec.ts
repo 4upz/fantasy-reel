@@ -95,6 +95,7 @@ test.describe('Critical Path: Navigation @critical @smoke', () => {
 
   for (const [where, testId] of [
     ['the home page', 'landing-discord-bot-link'],
+    ['the header', 'marketing-discord-bot-link'],
     ['the footer', 'footer-discord-bot-link'],
   ]) {
     test(`unauthenticated user can open the Discord bot guide from ${where}`, async ({ page }) => {

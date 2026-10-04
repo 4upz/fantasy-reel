@@ -3,7 +3,7 @@ import TMDbAttribution from '@/components/TMDbAttribution'
 import DiscordIcon from './icons/DiscordIcon'
 import LegalLinks from './LegalLinks'
 import SocialLinks from './SocialLinks'
-import { DISCORD_GUIDE_ID } from '@/utils/discordBot'
+import { DISCORD_GUIDE_HREF } from '@/utils/discordBot'
 
 interface Props {
   className?: string
@@ -20,7 +20,7 @@ interface Props {
  */
 export default function SiteFooterContent({
   className = '',
-  discordGuideHref = `/how-to-play#${DISCORD_GUIDE_ID}`,
+  discordGuideHref = DISCORD_GUIDE_HREF,
 }: Props): React.ReactElement {
   return (
     <div className={`max-w-7xl mx-auto flex flex-col items-center gap-4 md:flex-row md:justify-between ${className}`}>
