@@ -12,6 +12,8 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import Link from 'next/link'
+import DiscordIcon from './icons/DiscordIcon'
+import DiscordBotGuide from './DiscordBotGuide'
 
 function Section({
   id,
@@ -96,6 +98,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               { href: '#scoring', label: 'Scoring', icon: <Trophy className="w-4 h-4" /> },
               { href: '#pickups', label: 'Pickups & drops', icon: <CircleDollarSign className="w-4 h-4" /> },
               { href: '#trading', label: 'Trading', icon: <Handshake className="w-4 h-4" /> },
+              { href: '#discord', label: 'Discord bot', icon: <DiscordIcon className="w-4 h-4" /> },
             ].map(item => (
               <a
                 key={item.href}
@@ -497,6 +500,18 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
                 <strong>League Owner Veto:</strong> League owners can veto trades that appear
                 unfair or collusive. Use this power responsibly!
               </p>
+            </div>
+          </Section>
+
+          {/* Discord bot */}
+          <Section id="discord" icon={<DiscordIcon className="w-5 h-5" />} title="Discord bot">
+            <p>
+              Bring your league into your Discord server. The Fantasy Reel bot posts draft picks, bid results,
+              trades, and score updates to the channel you choose, and answers commands like standings and
+              rosters without leaving the chat.
+            </p>
+            <div className="card p-5">
+              <DiscordBotGuide />
             </div>
           </Section>
 
