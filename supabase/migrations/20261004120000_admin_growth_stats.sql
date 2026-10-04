@@ -17,11 +17,14 @@ ALTER TABLE public.app_admins ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.app_admins FROM PUBLIC, anon, authenticated;
 GRANT ALL ON TABLE public.app_admins TO service_role;
 
--- The app owner. Inserts nothing on a database without that account (local
--- and CI, where seed.sql makes Alice an admin instead). Add another admin with
--- a service-role insert of their auth.users id; no migration needed.
+-- The app owner's production account, pinned by id rather than email: on a
+-- fresh database (a preview branch, a rebuilt project) an email match would
+-- make whoever signed up with that address first an admin. Inserts nothing
+-- where the account doesn't exist (local and CI, where seed.sql makes Alice an
+-- admin instead). Add another admin with a service-role insert of their
+-- auth.users id; no migration needed.
 INSERT INTO public.app_admins (user_id)
-SELECT id FROM auth.users WHERE lower(email) = 'ams382@case.edu'
+SELECT id FROM auth.users WHERE id = '3c634b1b-1c1d-4a79-bb47-b6f26621a731'
 ON CONFLICT DO NOTHING;
 
 -- One JSON document with everything /admin renders. Anyone not in app_admins
@@ -103,6 +106,14 @@ BEGIN
       date_trunc('month', v_now),
       interval '1 month'
     ) AS month
+  ),
+  -- Every week since the first signup, for the running-total line chart.
+  weeks AS (
+    SELECT generate_series(
+      date_trunc('week', (SELECT min(created_at) FROM user_activity)),
+      date_trunc('week', v_now),
+      interval '1 week'
+    ) AS week
   )
   SELECT jsonb_build_object(
     'generated_at', v_now,
@@ -147,6 +158,27 @@ BEGIN
       LEFT JOIN (
         SELECT date_trunc('month', created_at) AS month, count(*) AS n FROM first_seasons GROUP BY 1
       ) l USING (month)
+    ),
+
+    'growth', (
+      SELECT coalesce(jsonb_agg(jsonb_build_object(
+        'week', to_char(g.week, 'YYYY-MM-DD'),
+        'users', g.users,
+        'leagues', g.leagues
+      ) ORDER BY g.week), '[]'::jsonb)
+      FROM (
+        SELECT
+          w.week,
+          sum(coalesce(u.n, 0)) OVER (ORDER BY w.week) AS users,
+          sum(coalesce(l.n, 0)) OVER (ORDER BY w.week) AS leagues
+        FROM weeks w
+        LEFT JOIN (
+          SELECT date_trunc('week', created_at) AS week, count(*) AS n FROM user_activity GROUP BY 1
+        ) u USING (week)
+        LEFT JOIN (
+          SELECT date_trunc('week', created_at) AS week, count(*) AS n FROM first_seasons GROUP BY 1
+        ) l USING (week)
+      ) g
     ),
 
     -- Each step counts leagues that reached it or went further, so the funnel
