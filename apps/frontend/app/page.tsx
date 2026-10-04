@@ -7,6 +7,9 @@ import SpotlightPreview from './components/landing/SpotlightPreview'
 import DraftPreviewScene from './components/landing/DraftPreviewScene'
 import RosterPreviewScene from './components/landing/RosterPreviewScene'
 import MovesPreviewScene from './components/landing/MovesPreviewScene'
+import DiscordCommandsPreview from './components/landing/DiscordCommandsPreview'
+import DiscordIcon from './components/icons/DiscordIcon'
+import { DISCORD_GUIDE_ID } from '@/utils/discordBot'
 import SiteFooter from './components/landing/SiteFooter'
 import ScrollDepth from './components/landing/ScrollDepth'
 import styles from './components/landing/landing.module.css'
@@ -82,6 +85,15 @@ export default function LandingPage(): React.ReactElement {
           ]}>
             <MovesPreviewScene />
           </SpotlightPreview>
+        </section>
+        <section className={`${styles.section} ${styles.discord}`} aria-labelledby="discord-title" data-scroll-depth>
+          <div>
+            <p className={`type-meta ${styles.sectionNumber}`}><span><DiscordIcon className="h-4 w-4" /></span> ALSO ON DISCORD</p>
+            <h2 id="discord-title" className={`type-page ${styles.sectionTitle}`}>Bring the rivalry<br />to your server.</h2>
+            <p className={`type-lead ${styles.sectionIntro}`}>Add the Fantasy Reel bot to Discord. Picks, bids, trades, and score updates post to your league’s channel, and the standings are one slash command away.</p>
+            <Link href={`/how-to-play#${DISCORD_GUIDE_ID}`} className={`type-control ${styles.guideLink}`} data-testid="landing-discord-bot-link">Set up the Discord bot <ArrowRight size={16} aria-hidden="true" /></Link>
+          </div>
+          <DiscordCommandsPreview />
         </section>
         <section className={`${styles.section} ${styles.faq}`} aria-labelledby="questions-title" data-scroll-depth>
           <div className={styles.sectionHeader}><h2 id="questions-title" className={`type-page ${styles.sectionTitle}`}>Frequently asked questions</h2></div>

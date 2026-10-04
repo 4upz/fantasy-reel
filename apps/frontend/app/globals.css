@@ -616,6 +616,30 @@
     outline-offset: 2px;
   }
 
+  /* Text links in the footer row: policy pages and the Discord bot guide. */
+  .footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 2.75rem;
+    padding-inline: 0.5rem;
+    border-radius: 0.5rem;
+    color: var(--color-foreground-secondary);
+    text-underline-offset: 4px;
+    transition: color 0.15s ease;
+  }
+
+  @media (hover: hover) {
+    .footer-link:hover {
+      color: var(--color-gold);
+      text-decoration-line: underline;
+    }
+  }
+
+  .footer-link[aria-current='page'] {
+    color: var(--color-foreground);
+  }
+
   /* Safe area bottom padding - for mobile navigation elements */
   .safe-area-bottom {
     padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));

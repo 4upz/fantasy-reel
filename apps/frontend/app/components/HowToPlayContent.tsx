@@ -14,6 +14,7 @@ import {
 import Link from 'next/link'
 import DiscordIcon from './icons/DiscordIcon'
 import DiscordBotGuide from './DiscordBotGuide'
+import { DISCORD_GUIDE_ID } from '@/utils/discordBot'
 
 function Section({
   id,
@@ -98,7 +99,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               { href: '#scoring', label: 'Scoring', icon: <Trophy className="w-4 h-4" /> },
               { href: '#pickups', label: 'Pickups & drops', icon: <CircleDollarSign className="w-4 h-4" /> },
               { href: '#trading', label: 'Trading', icon: <Handshake className="w-4 h-4" /> },
-              { href: '#discord', label: 'Discord bot', icon: <DiscordIcon className="w-4 h-4" /> },
+              { href: `#${DISCORD_GUIDE_ID}`, label: 'Discord bot', icon: <DiscordIcon className="w-4 h-4" /> },
             ].map(item => (
               <a
                 key={item.href}
@@ -504,7 +505,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
           </Section>
 
           {/* Discord bot */}
-          <Section id="discord" icon={<DiscordIcon className="w-5 h-5" />} title="Discord bot">
+          <Section id={DISCORD_GUIDE_ID} icon={<DiscordIcon className="w-5 h-5" />} title="Discord bot">
             <p>
               Bring your league into your Discord server. The Fantasy Reel bot posts draft picks, bid results,
               trades, and score updates to the channel you choose, and answers commands like standings and

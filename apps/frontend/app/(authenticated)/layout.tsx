@@ -3,6 +3,7 @@ import SideNav from '../components/navigation/SideNav'
 import SiteFooterContent from '../components/SiteFooterContent'
 import { getCachedUser, getCachedProfile } from '@/utils/supabase/cached'
 import { AuthenticatedProviders } from './Providers'
+import { DISCORD_GUIDE_ID } from '@/utils/discordBot'
 
 interface Props {
   children: React.ReactNode
@@ -31,7 +32,7 @@ export default async function AuthenticatedLayout({ children }: Props) {
         {/* TMDb requires the attribution notice wherever their data is shown,
             and every authenticated page shows it. */}
         <footer className="shrink-0 border-t border-border lg:pl-[var(--sidenav-width,68px)] transition-[padding] duration-250 ease-out">
-          <SiteFooterContent className="px-6 py-6" />
+          <SiteFooterContent className="px-6 py-6" discordGuideHref={`/help#${DISCORD_GUIDE_ID}`} />
         </footer>
       </AuthenticatedProviders>
     </div>
