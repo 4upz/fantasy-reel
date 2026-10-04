@@ -433,15 +433,20 @@ export default function ProposeTradeModal({
 
               {/* Message */}
               <div>
-                <label className="type-label text-foreground-secondary">
+                <label htmlFor="trade-message" className="type-label text-foreground-secondary">
                   Message (optional)
                 </label>
                 <textarea
+                  id="trade-message"
+                  aria-describedby="trade-message-visibility"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   className="input mt-1 w-full h-20 resize-none"
                   placeholder="Add a note to your trade proposal..."
                 />
+                <p id="trade-message-visibility" className="type-meta text-foreground-secondary mt-1">
+                  Everyone in the league can see this message.
+                </p>
               </div>
 
               {error && (
