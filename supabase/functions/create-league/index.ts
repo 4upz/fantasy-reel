@@ -20,8 +20,10 @@ const MAX_DRAFT_COUNTERPICK_SLOTS = 5
 const MAX_BIDDING_COUNTERPICK_SLOTS = 3
 const MAX_NAME_LENGTH = 255
 const MAX_TEAM_NAME_LENGTH = 100
-// Seasons a user can own that haven't finished. Far above real use; stops bulk creation.
-const MAX_OPEN_LEAGUES_PER_OWNER = 50
+// Seasons a user can own that haven't finished. Far above real use; stops
+// unbounded bulk creation. The integration suites create ~100 leagues per file
+// with one test user, so keep this comfortably above that.
+const MAX_OPEN_LEAGUES_PER_OWNER = 200
 
 interface CreateLeagueRequest {
   name: string
