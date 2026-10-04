@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { errorResponse } from './utils.ts'
+import { createServiceClient, errorResponse } from './utils.ts'
 import type { Logger } from './logger.ts'
 
 /**
@@ -74,4 +74,77 @@ export function rateLimitResponse(message: string, retryAfterSeconds: number): R
 export async function hashSubject(value: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+const MINUTE_SECONDS = 60
+const HOUR_SECONDS = 60 * MINUTE_SECONDS
+
+/**
+ * Per-user throttles for Edge Functions a scripted account could use to run
+ * up invocation cost, TMDb quota or other members' inboxes. Each sits well
+ * above what a person clicking through the app does: about one movie lookup a
+ * second sustained for five minutes, and more trades and bids in an hour than
+ * a busy deadline day needs. Only automation should ever reach them.
+ */
+export const USER_RATE_LIMITS = {
+  /** search-movies: the draft board and /movies typeahead (debounced). */
+  movie_search: { max: 300, windowSeconds: 5 * MINUTE_SECONDS },
+  /** browse-movies: one call per browse page. */
+  movie_browse: { max: 300, windowSeconds: 5 * MINUTE_SECONDS },
+  /** get-movie-details: one call per opened movie. */
+  movie_details: { max: 300, windowSeconds: 5 * MINUTE_SECONDS },
+  /** get-franchise-history: batches of up to 40 movies per call. */
+  franchise_history: { max: 120, windowSeconds: 5 * MINUTE_SECONDS },
+  /** search-users: the invite dialog's username typeahead. */
+  user_search: { max: 120, windowSeconds: 5 * MINUTE_SECONDS },
+  /** propose-trade: each proposal emails and posts to Discord. */
+  trade_propose: { max: 30, windowSeconds: HOUR_SECONDS },
+  /** counter-trade: each counter emails and posts to Discord. */
+  trade_counter: { max: 30, windowSeconds: HOUR_SECONDS },
+  /** place-bid: each bid can send an outbid email and a Discord post. */
+  pickup_bid: { max: 60, windowSeconds: HOUR_SECONDS },
+  /** place-counterpick-bid: same notifications as place-bid. */
+  counterpick_bid: { max: 60, windowSeconds: HOUR_SECONDS },
+} as const satisfies Record<string, { max: number; windowSeconds: number }>
+
+export type UserRateLimitName = keyof typeof USER_RATE_LIMITS
+
+/**
+ * Counts one call by `userId` against `USER_RATE_LIMITS[name]`. Returns the
+ * 429 to send when the allowance is used up, or null when the call may go on.
+ *
+ * A null `userId` is the service role (the Discord bot acting for a guild),
+ * which is not limited per user. Without `serviceClient` one is created here;
+ * if that fails the call is allowed, like any other limiter failure.
+ */
+export async function throttleUser(
+  name: UserRateLimitName,
+  userId: string | null,
+  log?: Logger,
+  serviceClient?: SupabaseClient
+): Promise<Response | null> {
+  if (!userId) return null
+
+  let client = serviceClient
+  if (!client) {
+    try {
+      client = createServiceClient()
+    } catch (error) {
+      log?.warn('rate limit client unavailable; allowing request', {
+        bucket: `user:${name}`,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return null
+    }
+  }
+
+  const { max, windowSeconds } = USER_RATE_LIMITS[name]
+  const result = await consumeRateLimit(client, { bucket: `user:${name}`, subject: userId, max, windowSeconds }, log)
+  if (result.allowed) return null
+
+  log?.warn('user rate limit reached', { bucket: `user:${name}`, user_id: userId })
+  return rateLimitResponse(
+    `You're doing that too often. Please try again in ${describeRetryAfter(result.retryAfterSeconds)}.`,
+    result.retryAfterSeconds
+  )
 }
