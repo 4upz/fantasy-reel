@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { isPasswordLongEnough, PASSWORD_TOO_SHORT_MESSAGE, passwordPolicyErrorMessage } from '@/utils/password'
 
 export async function updatePassword(
   formData: FormData
@@ -16,8 +17,8 @@ export async function updatePassword(
   }
 
   // Validate password length
-  if (password.length < 6) {
-    return { success: false, error: 'Password must be at least 6 characters' }
+  if (!isPasswordLongEnough(password)) {
+    return { success: false, error: PASSWORD_TOO_SHORT_MESSAGE }
   }
 
   const { error } = await supabase.auth.updateUser({
@@ -26,6 +27,11 @@ export async function updatePassword(
 
   if (error) {
     console.error('Password update error:', error.message)
+
+    const policyMessage = passwordPolicyErrorMessage(error)
+    if (policyMessage) {
+      return { success: false, error: policyMessage }
+    }
 
     if (error.message.includes('should be different')) {
       return { success: false, error: 'New password must be different from your current password' }

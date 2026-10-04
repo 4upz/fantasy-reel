@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { headers } from 'next/headers'
 import { CAPTCHA_FAILED_MESSAGE, isCaptchaError, readCaptchaToken } from '@/utils/captcha'
+import { isPasswordLongEnough, PASSWORD_TOO_SHORT_MESSAGE, passwordPolicyErrorMessage } from '@/utils/password'
 
 export async function signup(formData: FormData): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
@@ -16,8 +17,8 @@ export async function signup(formData: FormData): Promise<{ success: boolean; er
   }
 
   // Validate password length
-  if (password.length < 6) {
-    return { success: false, error: 'Password must be at least 6 characters' }
+  if (!isPasswordLongEnough(password)) {
+    return { success: false, error: PASSWORD_TOO_SHORT_MESSAGE }
   }
 
   // Get the origin for the email redirect URL
@@ -41,6 +42,10 @@ export async function signup(formData: FormData): Promise<{ success: boolean; er
   if (error) {
     if (isCaptchaError(error)) {
       return { success: false, error: CAPTCHA_FAILED_MESSAGE }
+    }
+    const policyMessage = passwordPolicyErrorMessage(error)
+    if (policyMessage) {
+      return { success: false, error: policyMessage }
     }
     // Return user-friendly error messages
     if (error.message.includes('already registered')) {
