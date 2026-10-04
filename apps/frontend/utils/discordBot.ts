@@ -12,6 +12,9 @@ const DISCORD_CLIENT_ID = process.env.NEXT_PUBLIC_DISCORD_CLIENT_ID
  */
 const BOT_PERMISSIONS = (1 << 10) | (1 << 29)
 
+/** Anchor of the bot guide on How to Play (/how-to-play publicly, /help in the app). */
+export const DISCORD_GUIDE_ID = 'discord'
+
 /** Server-install link for the bot, or null when the client ID is unset. */
 export const DISCORD_BOT_INSTALL_URL = DISCORD_CLIENT_ID
   ? `https://discord.com/oauth2/authorize?${new URLSearchParams({
@@ -21,3 +24,16 @@ export const DISCORD_BOT_INSTALL_URL = DISCORD_CLIENT_ID
       integration_type: '0',
     })}`
   : null
+
+/**
+ * A few everyday commands, shown in the in-app guide and on the landing page.
+ * The bot's full list appears when you type `/` in Discord.
+ */
+export const DISCORD_BOT_COMMANDS = [
+  { name: '/standings', description: 'League standings' },
+  { name: '/my-team', description: 'Your roster, shown only to you' },
+  { name: '/roster', description: "Any team's roster" },
+  { name: '/movie', description: 'Look up a movie and who owns it' },
+  { name: '/upcoming', description: 'Rostered movies releasing soon' },
+  { name: '/current-bids', description: 'Movies with active bids' },
+]

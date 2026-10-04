@@ -2,17 +2,7 @@ import Link from 'next/link'
 import { ExternalLink } from 'lucide-react'
 import DiscordIcon from './icons/DiscordIcon'
 import CopyLeagueLink from './CopyLeagueLink'
-import { DISCORD_BOT_INSTALL_URL } from '@/utils/discordBot'
-
-/** A few everyday commands; the bot's full list shows when you type `/` in Discord. */
-const HIGHLIGHTED_COMMANDS = [
-  { name: '/standings', description: 'League standings' },
-  { name: '/my-team', description: 'Your roster, shown only to you' },
-  { name: '/roster', description: "Any team's roster" },
-  { name: '/movie', description: 'Look up a movie and who owns it' },
-  { name: '/upcoming', description: 'Rostered movies releasing soon' },
-  { name: '/current-bids', description: 'Movies with active bids' },
-]
+import { DISCORD_BOT_COMMANDS, DISCORD_BOT_INSTALL_URL } from '@/utils/discordBot'
 
 function SlashCommand({ name }: { name: string }): React.ReactElement {
   return <code className="font-mono text-foreground bg-elevated rounded px-1.5 py-0.5">{name}</code>
@@ -81,7 +71,7 @@ export default function DiscordBotGuide({ leagueLink }: Props): React.ReactEleme
       <div>
         <h3 className="type-label text-foreground mb-3">Commands to try</h3>
         <ul className="grid gap-2 sm:grid-cols-2">
-          {HIGHLIGHTED_COMMANDS.map((command) => (
+          {DISCORD_BOT_COMMANDS.map((command) => (
             <li key={command.name} className="rounded-lg bg-surface-hover px-3 py-2.5">
               <code className="type-body-sm font-mono text-gold">{command.name}</code>
               <p className="type-body-sm text-foreground-secondary">{command.description}</p>
