@@ -93,6 +93,20 @@ test.describe('Critical Path: Navigation @critical @smoke', () => {
     })
   }
 
+  for (const [where, testId] of [
+    ['the home page', 'landing-discord-bot-link'],
+    ['the header', 'marketing-discord-bot-link'],
+    ['the footer', 'footer-discord-bot-link'],
+  ]) {
+    test(`unauthenticated user can open the Discord bot guide from ${where}`, async ({ page }) => {
+      await page.goto('/')
+      await page.getByTestId(testId).click()
+
+      await page.waitForURL('/how-to-play#discord')
+      await expect(page.getByRole('heading', { level: 2, name: 'Discord bot' })).toBeVisible()
+    })
+  }
+
   test('login page loads without errors', async ({ page }) => {
     await page.goto('/login')
 

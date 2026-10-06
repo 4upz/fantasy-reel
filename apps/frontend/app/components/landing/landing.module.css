@@ -118,6 +118,7 @@
 .faq details p { margin: 0 32px 24px 0; color: var(--color-foreground-secondary); }
 .guideLink { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 20px; color: var(--color-gold); }
 .guideLink:hover { text-decoration: underline; text-underline-offset: 4px; }
+.discord { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); align-items: center; gap: 64px; }
 .closing { text-align: center; padding: 90px 24px 100px; border-top: 1px solid var(--color-border); background: radial-gradient(ellipse at 50% 100%, rgb(201 162 39 / .055), transparent 70%); }
 .closing h2 { max-width: 720px; margin: auto; }
 .closing p { color: var(--color-foreground-secondary); margin: 24px auto 0; max-width: 560px; }
@@ -126,6 +127,7 @@
   .previewBeside > .previewNotes .previewControls { flex-direction: row; }
   .previewBeside > .previewNotes .previewControl { padding: 10px 14px; }
   .controlDescription { display: none; }
+  .discord { grid-template-columns: minmax(0, 1fr); gap: 36px; }
   .previewBeside > .previewNotes .caption { position: static; width: auto; height: auto; min-height: 40px; padding: 0; margin: 12px auto 0; overflow: visible; clip-path: none; white-space: normal; }
 }
 @media (max-width: 767px) {

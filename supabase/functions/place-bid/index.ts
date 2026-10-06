@@ -12,6 +12,7 @@ import { getOutbidEmailHtml, getOutbidEmailText } from '../_shared/email-templat
 import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, DiscordEmbed } from '../_shared/discord.ts'
 import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 import { assertLeagueWritable } from '../_shared/league-status.ts'
 import {
@@ -254,6 +255,9 @@ Deno.serve(async (req) => {
     if (highestBid && highestBid.amount >= amount) {
       return errorResponse(`There is already a bid of $${highestBid.amount}. You must bid higher.`, 400)
     }
+
+    const throttled = await throttleUser('pickup_bid', user.id, log, serviceClient)
+    if (throttled) return throttled
 
     let newBid
 
