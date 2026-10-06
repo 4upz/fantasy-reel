@@ -13,6 +13,7 @@ import BiddingConfigSection from './components/BiddingConfigSection'
 import TradeConfigSection from './components/TradeConfigSection'
 import ScoringConfigSection from './components/ScoringConfigSection'
 import ParticipantsSection from './components/ParticipantsSection'
+import DiscordBotSection from './components/DiscordBotSection'
 import DiscordAnnouncementSection from './components/DiscordAnnouncementSection'
 import SeasonSection from './components/SeasonSection'
 import DangerZoneSection from './components/DangerZoneSection'
@@ -135,6 +136,8 @@ export default function SettingsClient({
           isLocked={!isSetup}
           onKick={handleParticipantKicked}
         />
+
+        <DiscordBotSection leagueId={league.id} />
 
         <DiscordAnnouncementSection leagueId={league.id} />
 

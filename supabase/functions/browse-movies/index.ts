@@ -1,4 +1,5 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateUserOrServiceRole, isUpcomingMovie } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateCaller, isUpcomingMovie } from '../_shared/utils.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { buildCacheKey, cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
 import { discoveryPage, releaseDateRange } from '../_shared/movie-discovery.ts'
@@ -88,9 +89,9 @@ Deno.serve(async (req) => {
 
   try {
     // Any signed-in user, or the service role (the Discord bot) -- see
-    // authenticateUserOrServiceRole for why that is the whole check here.
-    const authError = await authenticateUserOrServiceRole(req)
-    if (authError) return authError
+    // authenticateCaller for why that is the whole check here.
+    const caller = await authenticateCaller(req)
+    if (caller instanceof Response) return caller
 
     const tmdbToken = Deno.env.get('TMDB_API_KEY')
     if (!tmdbToken) {
@@ -121,6 +122,9 @@ Deno.serve(async (req) => {
     if (!Number.isInteger(season_year) || season_year < 1900 || season_year > 3000) {
       return errorResponse('Invalid season year', 400)
     }
+
+    const throttled = await throttleUser('movie_browse', caller.userId, log)
+    if (throttled) return throttled
 
     // Computed once and threaded through both the cache key and the fetch:
     // "today" appearing twice could otherwise straddle midnight and key a page

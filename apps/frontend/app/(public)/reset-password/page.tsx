@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
 import NavLogo from '../../components/navigation/NavLogo'
 import { createClient } from '@/utils/supabase/client'
+import { PASSWORD_HINT } from '@/utils/password'
 import { toast } from 'sonner'
 
 export default function ResetPasswordPage() {
@@ -82,7 +83,7 @@ export default function ResetPasswordPage() {
         <div className="card p-8 text-center">
           <h1 className="type-panel text-foreground mb-4">Invalid or expired link</h1>
           <p className="text-foreground-secondary mb-6">
-            This password reset link is invalid or has expired. Please request a new one.
+            This password reset link is invalid or has expired. Reset links only work in the browser you requested them from. Please request a new one.
           </p>
           <Link href="/forgot-password" className="btn btn-primary">
             Request new link
@@ -133,7 +134,7 @@ export default function ResetPasswordPage() {
                 required
                 disabled={isLoading}
                 className="input"
-                placeholder="New password (min 6 characters)"
+                placeholder={`New password (${PASSWORD_HINT})`}
                 data-testid="password-input"
               />
             </div>
