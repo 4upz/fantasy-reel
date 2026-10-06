@@ -6,7 +6,7 @@
  */
 
 import { assertEquals } from '@std/assert'
-import { leagueFantasyPoints } from './fantasy-points.ts'
+import { fantasyPointsForTomatometer, leagueFantasyPoints } from './fantasy-points.ts'
 
 Deno.test('leagueFantasyPoints - double points add the points above 90', () => {
   assertEquals(leagueFantasyPoints(35, 95, true), 40)
@@ -24,4 +24,21 @@ Deno.test('leagueFantasyPoints - double points only apply above 90', () => {
 
 Deno.test('leagueFantasyPoints - points without a Tomatometer get no bonus', () => {
   assertEquals(leagueFantasyPoints(35, null, true), 35)
+})
+
+Deno.test('fantasyPointsForTomatometer - follows the CLAUDE.md curve examples', () => {
+  assertEquals(fantasyPointsForTomatometer(96), 36)
+  assertEquals(fantasyPointsForTomatometer(96, true), 42)
+  assertEquals(fantasyPointsForTomatometer(84), 24)
+  assertEquals(fantasyPointsForTomatometer(60), 0)
+  assertEquals(fantasyPointsForTomatometer(35), -16.25)
+})
+
+Deno.test('fantasyPointsForTomatometer - each tier joins the next without a jump', () => {
+  assertEquals(fantasyPointsForTomatometer(50), -10)
+  assertEquals(fantasyPointsForTomatometer(40), -15)
+  assertEquals(fantasyPointsForTomatometer(30), -17.5)
+  assertEquals(fantasyPointsForTomatometer(20), -18.75)
+  assertEquals(fantasyPointsForTomatometer(10), -19.37) // Math.round half-up, as on the frontend
+  assertEquals(fantasyPointsForTomatometer(0), -19.69)
 })

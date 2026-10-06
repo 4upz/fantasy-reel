@@ -22,3 +22,22 @@ export function leagueFantasyPoints(
     ? points + (rtScore - 90)
     : points
 }
+
+/**
+ * Fantasy points a Tomatometer would earn, on the curve of
+ * `calculate_movie_score()` in the database (see CLAUDE.md, Scoring System),
+ * with the season's 90+ rule applied through `leagueFantasyPoints`. Mirrors
+ * the frontend's `fantasyPointsForTomatometer` (`apps/frontend/utils/scoring.ts`)
+ * -- change them together. For projections only: real points always come from
+ * the database.
+ */
+export function fantasyPointsForTomatometer(rt: number, doublePointsOver90 = false): number {
+  let points: number
+  if (rt >= 50) points = rt - 60
+  else if (rt >= 40) points = -10 - (50 - rt) * 0.5
+  else if (rt >= 30) points = -15 - (40 - rt) * 0.25
+  else if (rt >= 20) points = -17.5 - (30 - rt) * 0.125
+  else if (rt >= 10) points = -18.75 - (20 - rt) * 0.0625
+  else points = -19.375 - (10 - rt) * 0.03125
+  return leagueFantasyPoints(Math.round(points * 100) / 100, rt, doublePointsOver90)
+}
