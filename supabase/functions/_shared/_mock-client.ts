@@ -2,12 +2,12 @@
  * Shared in-memory mock Supabase client for unit-testing the scheduled
  * notification Edge Functions (release-day-announcements,
  * weekly-releases-digest, sync-release-dates, send-announcement,
- * bid-cutoff-announcement).
+ * bid-cutoff-announcement) and ingest-film-corpus.
  *
  * Not a test file itself (no `.test.ts` suffix), so `deno task test:unit`
  * does not execute it directly -- it's imported by the test files that do.
  *
- * Filters (`eq`/`is`/`in`/`gt`/`lt`/`gte`/`lte`) actually filter the seeded
+ * Filters (`eq`/`neq`/`is`/`not is null`/`in`/`gt`/`lt`/`gte`/`lte`) actually filter the seeded
  * rows, so tests can assert on realistic query results (e.g. per-league
  * discord channel filtering, notification-log dedup across two handler calls)
  * instead of returning one canned response regardless of arguments.
@@ -18,7 +18,8 @@
  *
  * `update(...)` accumulates filters and reports the affected rows through
  * `.select()`, so a compare-and-swap can be tested end to end -- including the
- * losing side, which sees no row back. `options.users` backs
+ * losing side, which sees no row back. `upsert(...)` merges on `onConflict`
+ * (or `options.unique`) columns and honours `ignoreDuplicates`. `options.users` backs
  * `auth.admin.getUserById` for the email lookups that cannot go through
  * PostgREST.
  */
@@ -40,8 +41,10 @@ function applyEq(rows: Row[], col: string, val: unknown): Row[] {
   return rows.filter((r) => r[col] === val)
 }
 
+// A column a fixture never set is NULL to Postgres, so `.is(col, null)`
+// matches it too.
 function applyIs(rows: Row[], col: string, val: unknown): Row[] {
-  return rows.filter((r) => (val === null ? r[col] === null : r[col] === val))
+  return rows.filter((r) => (val === null ? r[col] == null : r[col] === val))
 }
 
 function applyIn(rows: Row[], col: string, vals: unknown[]): Row[] {
@@ -57,9 +60,16 @@ function chain(rows: Row[]) {
     is: (col: string, val: unknown) => chain(applyIs(rows, col, val)),
     in: (col: string, vals: unknown[]) => chain(applyIn(rows, col, vals)),
     gt: (col: string, val: string | number) => chain(rows.filter((r) => r[col] > val)),
-    lt: (col: string, val: string | number) => chain(rows.filter((r) => r[col] < val)),
+    // Guarded against null explicitly: `null < 'anything'` is true in JS but
+    // NULL never satisfies a comparison in Postgres.
+    lt: (col: string, val: string | number) => chain(rows.filter((r) => r[col] != null && r[col] < val)),
     gte: (col: string, val: string | number) => chain(rows.filter((r) => r[col] >= val)),
     lte: (col: string, val: string | number) => chain(rows.filter((r) => r[col] <= val)),
+    neq: (col: string, val: unknown) => chain(rows.filter((r) => r[col] !== val)),
+    not: (col: string, op: string, val: unknown) => {
+      if (op === 'is' && val === null) return chain(rows.filter((r) => r[col] != null))
+      throw new Error(`mock not() supports only ('col', 'is', null); got ${op}`)
+    },
     order: () => chain(rows),
     limit: (n: number) => chain(rows.slice(0, n)),
     single: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
@@ -79,17 +89,17 @@ function chain(rows: Row[]) {
  * running a second update. `.select()` returning no row is how a caller learns
  * its compare-and-swap lost.
  */
-type UpdateFilter = ['eq', string, unknown] | ['in', string, unknown[]]
+type UpdateFilter = ['eq', string, unknown] | ['in', string, unknown[]] | ['is', string, unknown]
+
+function applyUpdateFilter(rows: Row[], [op, col, val]: UpdateFilter): Row[] {
+  if (op === 'eq') return applyEq(rows, col, val)
+  if (op === 'in') return applyIn(rows, col, val as unknown[])
+  return applyIs(rows, col, val)
+}
 
 function updateChain(rows: Row[], patch: Row, filters: UpdateFilter[]) {
   const apply = (): Row[] => {
-    const matched = filters.reduce(
-      (acc, filter) =>
-        filter[0] === 'eq'
-          ? applyEq(acc, filter[1], filter[2])
-          : applyIn(acc, filter[1], filter[2] as unknown[]),
-      rows
-    )
+    const matched = filters.reduce(applyUpdateFilter, rows)
     for (const row of matched) Object.assign(row, patch)
     return matched
   }
@@ -97,6 +107,7 @@ function updateChain(rows: Row[], patch: Row, filters: UpdateFilter[]) {
   return {
     eq: (col: string, val: unknown) => updateChain(rows, patch, [...filters, ['eq', col, val]]),
     in: (col: string, vals: unknown[]) => updateChain(rows, patch, [...filters, ['in', col, vals]]),
+    is: (col: string, val: unknown) => updateChain(rows, patch, [...filters, ['is', col, val]]),
     select: (_cols?: string) => {
       const matched = apply()
       return {
@@ -219,6 +230,17 @@ export function createMockDbClient(db: MockDb, options: MockClientOptions = {}) 
             }
           }
           db[table].push(...arr)
+          return Promise.resolve({ data: arr, error: null })
+        },
+        upsert: (rowsToUpsert: Row | Row[], opts: { onConflict?: string; ignoreDuplicates?: boolean } = {}) => {
+          const arr = Array.isArray(rowsToUpsert) ? rowsToUpsert : [rowsToUpsert]
+          const keyCols = opts.onConflict?.split(',').map((c) => c.trim()) ?? options.unique?.[table]
+          if (!keyCols) throw new Error(`mock upsert on ${table} needs onConflict or options.unique`)
+          for (const candidate of arr) {
+            const existing = db[table].find((row) => keyCols.every((col) => row[col] === candidate[col]))
+            if (!existing) db[table].push({ ...candidate })
+            else if (!opts.ignoreDuplicates) Object.assign(existing, candidate)
+          }
           return Promise.resolve({ data: arr, error: null })
         },
         update: (patch: Row) => updateChain(db[table], patch, []),

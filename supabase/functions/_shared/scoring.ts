@@ -1,7 +1,7 @@
 /**
  * Shared scoring utilities for movie score processing.
  *
- * Used by: update-scores
+ * Used by: update-scores, get-franchise-history, ingest-film-corpus
  */
 
 import { fetchWithRetry } from './http.ts'
@@ -21,6 +21,17 @@ export interface MDBListRating {
 export interface MDBListResponse {
   title: string
   ratings: MDBListRating[]
+  budget?: number | null
+  certification?: string | null
+  production_companies?: Array<{ id: number; name: string }>
+}
+
+/** Film facts MDBList returns with the ratings; stored on film_corpus by ingestion. */
+export interface MDBListDetails {
+  budget: number | null
+  certification: string | null
+  company_ids: number[]
+  rt_critic_votes: number | null
 }
 
 export interface TMDbExternalIds {
@@ -74,7 +85,7 @@ export const MDBLIST_NOT_FOUND = 'Movie not found on MDBList'
 export async function fetchMDBListRatings(
   tmdbId: number,
   apiKey: string
-): Promise<{ ratings: NormalizedRating[]; error?: string }> {
+): Promise<{ ratings: NormalizedRating[]; details?: MDBListDetails; status?: number; error?: string }> {
   if (!apiKey) {
     return { ratings: [], error: 'MDBList API key not configured' }
   }
@@ -87,16 +98,18 @@ export async function fetchMDBListRatings(
     )
 
     if (!res.ok) {
-      if (res.status === 401) return { ratings: [], error: 'MDBList API authentication failed' }
-      if (res.status === 404) return { ratings: [], error: MDBLIST_NOT_FOUND }
-      if (res.status === 429) return { ratings: [], error: 'MDBList API rate limit exceeded' }
-      return { ratings: [], error: `MDBList API error: ${res.status}` }
+      const status = res.status
+      if (status === 401) return { ratings: [], status, error: 'MDBList API authentication failed' }
+      if (status === 404) return { ratings: [], status, error: MDBLIST_NOT_FOUND }
+      if (status === 429) return { ratings: [], status, error: 'MDBList API rate limit exceeded' }
+      return { ratings: [], status, error: `MDBList API error: ${status}` }
     }
 
     const data: MDBListResponse = await res.json()
+    const details = toDetails(data)
 
     if (!data.ratings || !Array.isArray(data.ratings)) {
-      return { ratings: [] }
+      return { ratings: [], details }
     }
 
     const ratings: NormalizedRating[] = []
@@ -114,10 +127,20 @@ export async function fetchMDBListRatings(
       })
     }
 
-    return { ratings }
+    return { ratings, details }
   } catch (err) {
     log.warn('Failed to fetch ratings from MDBList', { tmdb_id: tmdbId, error: serializeError(err) })
     return { ratings: [], error: 'Failed to fetch ratings from MDBList' }
+  }
+}
+
+function toDetails(data: MDBListResponse): MDBListDetails {
+  const tomatoes = Array.isArray(data.ratings) ? data.ratings.find((r) => r.source === 'tomatoes') : undefined
+  return {
+    budget: typeof data.budget === 'number' && data.budget > 0 ? data.budget : null,
+    certification: data.certification || null,
+    company_ids: (data.production_companies ?? []).map((c) => c.id).filter((id) => typeof id === 'number'),
+    rt_critic_votes: tomatoes?.votes || null,
   }
 }
 

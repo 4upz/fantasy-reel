@@ -48,6 +48,10 @@
     {
       "path": "/api/cron/complete-seasons",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/ingest-film-corpus",
+      "schedule": "0 10 * * *"
     }
   ]
 }
