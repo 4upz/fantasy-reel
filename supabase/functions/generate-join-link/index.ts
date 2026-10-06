@@ -82,11 +82,11 @@ Deno.serve(async (req) => {
     const join_code = generateJoinCode()
     const join_token = crypto.randomUUID()
 
-    // Update league
+    // Replaces the league's previous code, if any. Stored apart from `leagues`
+    // so only the owner can read it.
     const { error: updateError } = await serviceClient
-      .from('leagues')
-      .update({ join_code, join_token })
-      .eq('id', league_id)
+      .from('league_join_links')
+      .upsert({ league_id, join_code, join_token, created_at: new Date().toISOString() })
 
     if (updateError) {
       console.error('Error updating league:', updateError)
