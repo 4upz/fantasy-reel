@@ -116,5 +116,15 @@ Deno.test({
         assertEquals(response.headers.has('Access-Control-Allow-Origin'), true)
       })
     }
+
+    await t.step('search-movies - rejects a query over 100 characters before calling TMDb', async () => {
+      const result = await invokeFunction(client, 'search-movies', { query: 'a'.repeat(101) })
+      if (result.status === 503) {
+        assertEquals(result.error, 'Search service not configured')
+      } else {
+        assertEquals(result.status, 400)
+        assertEquals(result.error, 'Query must be at most 100 characters')
+      }
+    })
   },
 })

@@ -5,25 +5,19 @@ import { toast } from 'sonner'
 import { Camera, Trash2, Loader2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import Avatar from '@/app/components/Avatar'
+import {
+  AVATAR_INPUT_TYPES,
+  MAX_AVATAR_INPUT_BYTES,
+  prepareAvatarImage,
+  removeAvatarFiles,
+  uploadAvatar,
+} from '@/utils/avatarUpload'
 import { updateAvatarUrl } from '../actions'
 
 interface Props {
   userId: string
   currentAvatarUrl: string | null
   displayName: string
-}
-
-const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
-const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
-
-function extractPathFromUrl(url: string): string | null {
-  try {
-    const urlObj = new URL(url)
-    const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/avatars\/(.+)/)
-    return pathMatch ? pathMatch[1] : null
-  } catch {
-    return null
-  }
 }
 
 export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props): React.ReactElement {
@@ -37,14 +31,14 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
     if (!file) return
 
     // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    if (!AVATAR_INPUT_TYPES.includes(file.type)) {
       toast.error('Please select a PNG, JPEG, WebP, or GIF image')
       return
     }
 
     // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error('Image must be less than 2MB')
+    if (file.size > MAX_AVATAR_INPUT_BYTES) {
+      toast.error('Image must be less than 10MB')
       return
     }
 
@@ -53,36 +47,22 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
     try {
       const supabase = createClient()
 
-      // Generate unique filename with timestamp to avoid CDN cache issues
-      const timestamp = Date.now()
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const filePath = `${userId}/${timestamp}.${ext}`
-
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          contentType: file.type,
-          upsert: false,
-        })
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError)
-        toast.error('Failed to upload image')
+      let image: Blob
+      try {
+        image = await prepareAvatarImage(file)
+      } catch (error) {
+        console.error('Avatar decode error:', error)
+        toast.error('Could not read that image')
         return
       }
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath)
-
-      // Delete old avatar if exists
-      if (avatarUrl) {
-        const oldPath = extractPathFromUrl(avatarUrl)
-        if (oldPath) {
-          await supabase.storage.from('avatars').remove([oldPath])
-        }
+      let publicUrl: string
+      try {
+        publicUrl = await uploadAvatar(supabase, 'avatars', userId, image)
+      } catch (error) {
+        console.error('Upload error:', error)
+        toast.error('Failed to upload image')
+        return
       }
 
       // Update profile with new URL
@@ -91,6 +71,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
       if (result.success) {
         setAvatarUrl(publicUrl)
         toast.success('Profile photo updated')
+        await removeAvatarFiles(supabase, 'avatars', userId, { keepCurrent: true })
       } else {
         toast.error(result.error ?? 'Failed to update profile')
       }
@@ -114,17 +95,11 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
     try {
       const supabase = createClient()
 
-      // Delete from storage
-      const oldPath = extractPathFromUrl(avatarUrl)
-      if (oldPath) {
-        await supabase.storage.from('avatars').remove([oldPath])
-      }
-
-      // Update profile to remove avatar URL
       const result = await updateAvatarUrl(null)
 
       if (result.success) {
         setAvatarUrl(null)
+        await removeAvatarFiles(supabase, 'avatars', userId, { keepCurrent: false })
         toast.success('Profile photo removed')
       } else {
         toast.error(result.error ?? 'Failed to remove profile photo')
@@ -222,7 +197,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
         )}
 
         <p className="type-meta text-foreground-secondary mt-1">
-          PNG, JPEG, WebP or GIF. Max 2MB.
+          PNG, JPEG, WebP or GIF. Max 10MB.
         </p>
       </div>
     </div>

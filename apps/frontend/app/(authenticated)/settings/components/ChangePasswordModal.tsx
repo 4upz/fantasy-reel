@@ -5,6 +5,7 @@ import { X, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
+import { isPasswordLongEnough, MIN_PASSWORD_LENGTH } from '@/utils/password'
 
 interface Props {
   onClose: () => void
@@ -26,7 +27,7 @@ export default function ChangePasswordModal({
 
   const isValid =
     currentPassword.length > 0 &&
-    newPassword.length >= 6 &&
+    isPasswordLongEnough(newPassword) &&
     confirmPassword === newPassword
 
   const submitPasswordChange = useCallback(
@@ -162,7 +163,7 @@ export default function ChangePasswordModal({
               </button>
             </div>
             <p className="type-meta mt-1 text-foreground-secondary">
-              Must be at least 6 characters
+              Must be at least {MIN_PASSWORD_LENGTH} characters
             </p>
           </div>
 

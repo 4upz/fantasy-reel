@@ -14,7 +14,7 @@ import {
   isValidJoinCode,
   isServiceRoleRequest,
   authenticateRequest,
-  authenticateUserOrServiceRole,
+  authenticateCaller,
   isUpcomingMovie,
   bidLock,
   hasReleased,
@@ -369,7 +369,7 @@ Deno.test('isValidJoinCode', async (t) => {
 })
 
 // ============================================================================
-// isServiceRoleRequest / authenticateUserOrServiceRole Tests
+// isServiceRoleRequest / authenticateCaller Tests
 //
 // Stubbed Auth HTTP responses exercise the real SDK's error classification.
 // Real JWT validation also lives in tests/movie-endpoints-auth.test.ts.
@@ -433,24 +433,24 @@ Deno.test('isServiceRoleRequest', async (t) => {
   })
 })
 
-Deno.test('authenticateUserOrServiceRole', async (t) => {
+Deno.test('authenticateCaller', async (t) => {
   await t.step('lets a service role caller through', async () => {
     await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, async () => {
-      const result = await authenticateUserOrServiceRole(
+      const result = await authenticateCaller(
         requestWithAuthorization(`Bearer ${TEST_SERVICE_ROLE_KEY}`)
       )
-      assertEquals(result, null)
+      assertEquals(result, { userId: null })
     })
   })
 
   await t.step('returns the standard 401 when no Authorization header is sent', async () => {
     await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, async () => {
-      const result = await authenticateUserOrServiceRole(requestWithAuthorization())
+      const result = await authenticateCaller(requestWithAuthorization())
 
-      assertExists(result)
-      assertEquals(result!.status, 401)
-      assertEquals(await result!.json(), { error: 'Unauthorized' })
-      assertHasCorsHeaders(result!)
+      if (!(result instanceof Response)) throw new Error('Expected an error response')
+      assertEquals(result.status, 401)
+      assertEquals(await result.json(), { error: 'Unauthorized' })
+      assertHasCorsHeaders(result)
     })
   })
 })
@@ -512,8 +512,8 @@ Deno.test({
           try {
             const req = requestWithAuthorization('Bearer test-user-token')
             handleCorsPreflightRequest(req)
-            const result = await authenticateUserOrServiceRole(req)
-            assertExists(result)
+            const result = await authenticateCaller(req)
+            if (!(result instanceof Response)) throw new Error('Expected an error response')
             assertEquals(result.status, 503)
             assertHasCorsHeaders(result)
             const requestId = result.headers.get('X-Request-Id')
