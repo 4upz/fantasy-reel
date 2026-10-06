@@ -1,5 +1,5 @@
 import { assertEquals } from '@std/assert'
-import { sendDiscordNotification, DISCORD_COLORS } from './discord.ts'
+import { sendDiscordNotification, DISCORD_COLORS, isAllowedWebhookUrl, redactWebhookTokens } from './discord.ts'
 
 // ============================================================================
 // Mock Setup
@@ -575,6 +575,150 @@ Deno.test('sendDiscordNotification - general category bypasses all per-channel t
     // Every toggle is off, but 'general' has no gating column -- still sends
     assertEquals(fetchCalls.length, 1)
   } finally {
+    restoreFetch()
+  }
+})
+
+// ============================================================================
+// Webhook URL allowlist and token redaction
+// ============================================================================
+
+function withSupabaseUrl<T>(url: string | undefined, fn: () => T): T {
+  Deno.env.get = (key: string) => (key === 'SUPABASE_URL' ? url : originalEnvGet.call(Deno.env, key))
+  try {
+    return fn()
+  } finally {
+    Deno.env.get = originalEnvGet
+  }
+}
+
+Deno.test('isAllowedWebhookUrl - accepts Discord webhook hosts and paths', () => {
+  withSupabaseUrl('https://api.fantasyreel.com', () => {
+    for (const url of [
+      'https://discord.com/api/webhooks/123/abc-DEF_456',
+      'https://discordapp.com/api/webhooks/123/abc',
+      'https://canary.discord.com/api/webhooks/123/abc',
+      'https://ptb.discord.com/api/webhooks/123/abc',
+      'https://discord.com/api/v10/webhooks/123/abc',
+    ]) {
+      assertEquals(isAllowedWebhookUrl(url), true, url)
+    }
+  })
+})
+
+Deno.test('isAllowedWebhookUrl - refuses everything else in production', () => {
+  withSupabaseUrl('https://api.fantasyreel.com', () => {
+    for (const url of [
+      'http://169.254.169.254/latest/meta-data',
+      'https://example.com/api/webhooks/1/token',
+      'http://discord.com/api/webhooks/1/token',
+      'https://discord.com.evil.example/api/webhooks/1/token',
+      'https://evil.example/?https://discord.com/api/webhooks/1/token',
+      'https://discord.com@evil.example/api/webhooks/1/token',
+      'https://discord.com:8443/api/webhooks/1/token',
+      'https://discord.com/api/users/@me',
+      'https://cdn.discordapp.com/api/webhooks/1/token',
+      'http://127.0.0.1:54321/webhook',
+      'http://host.docker.internal:9000/webhook',
+      'not a url',
+    ]) {
+      assertEquals(isAllowedWebhookUrl(url), false, url)
+    }
+  })
+})
+
+Deno.test('isAllowedWebhookUrl - allows the test mock server only on a local stack', () => {
+  for (const supabaseUrl of ['http://kong:8000', 'http://127.0.0.1:54321', 'http://localhost:54321']) {
+    withSupabaseUrl(supabaseUrl, () => {
+      assertEquals(isAllowedWebhookUrl('http://host.docker.internal:9000/webhook'), true, supabaseUrl)
+      assertEquals(isAllowedWebhookUrl('http://127.0.0.1:9000/webhook'), true, supabaseUrl)
+      assertEquals(isAllowedWebhookUrl('http://169.254.169.254/latest/meta-data'), false, supabaseUrl)
+    })
+  }
+  withSupabaseUrl(undefined, () => {
+    assertEquals(isAllowedWebhookUrl('http://127.0.0.1:9000/webhook'), false)
+  })
+})
+
+Deno.test('sendDiscordNotification - refuses a non-Discord webhook URL without fetching', async () => {
+  mockFetch()
+  try {
+    const channels = [
+      {
+        id: 'ch-ssrf',
+        webhook_url: 'http://169.254.169.254/latest/meta-data',
+        bid_alert_role_id: null,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        consecutive_failures: 0,
+        thread_id: null,
+      },
+    ]
+    const supabase = createMockSupabase(channels)
+
+    await sendDiscordNotification(supabase, {
+      leagueId: 'league-1',
+      category: 'drafts',
+      embeds: [{ title: 'Test' }],
+    })
+
+    assertEquals(fetchCalls.length, 0)
+    // Counted as a failure, so the ops alert fires if the row stays broken.
+    const tracker = (supabase as unknown as { _rpcTracker: MockRpcTracker })._rpcTracker
+    assertEquals(tracker.calls.length, 1)
+    assertEquals(tracker.calls[0].params.p_channel_id, 'ch-ssrf')
+  } finally {
+    restoreFetch()
+  }
+})
+
+Deno.test('redactWebhookTokens - strips the webhook id and token', () => {
+  assertEquals(
+    redactWebhookTokens('error sending request for url (https://discord.com/api/webhooks/123/s3cr3t-token?thread_id=9): connection reset'),
+    'error sending request for url (https://discord.com/api/webhooks/[redacted]): connection reset'
+  )
+  assertEquals(redactWebhookTokens('no url here'), 'no url here')
+})
+
+Deno.test('sendDiscordNotification - network error logs never contain the webhook token', async () => {
+  globalThis.fetch = (input: string | URL | Request) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    return Promise.reject(new TypeError(`error sending request for url (${url}): connection reset`))
+  }
+  const originalConsoleError = console.error
+  const originalConsoleWarn = console.warn
+  const lines: string[] = []
+  console.error = (line: string) => lines.push(line)
+  console.warn = (line: string) => lines.push(line)
+  try {
+    const channels = [
+      {
+        id: 'ch-1',
+        webhook_url: 'https://discord.com/api/webhooks/123/s3cr3t-token',
+        bid_alert_role_id: null,
+        notify_drafts: true,
+        notify_bids: true,
+        notify_trades: true,
+        notify_scores: true,
+        consecutive_failures: 0,
+        thread_id: null,
+      },
+    ]
+
+    await sendDiscordNotification(createMockSupabase(channels), {
+      leagueId: 'league-1',
+      category: 'drafts',
+      embeds: [{ title: 'Test' }],
+    })
+
+    const networkError = lines.find((line) => line.includes('Discord webhook network error'))
+    assertEquals(networkError !== undefined, true)
+    assertEquals(lines.some((line) => line.includes('s3cr3t-token')), false)
+  } finally {
+    console.error = originalConsoleError
+    console.warn = originalConsoleWarn
     restoreFetch()
   }
 })
