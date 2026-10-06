@@ -25,7 +25,7 @@ SELECT pg_temp.draft_id(n), 1987600000 + n, 'Atomic draft movie ' || n,
   CASE WHEN n = 101 THEN 0 ELSE NULL END
 FROM generate_series(101, 108) n;
 INSERT INTO discord_channels(id, league_id, guild_id, channel_id, webhook_id, webhook_url)
-VALUES(pg_temp.draft_id(500), pg_temp.draft_id(10), 'draft-test', 'draft-test-channel', 'draft-test', 'https://example.invalid/inert');
+VALUES(pg_temp.draft_id(500), pg_temp.draft_id(10), 'draft-test', 'draft-test-channel', 'draft-test', 'https://discord.com/api/webhooks/0/inert');
 
 SELECT set_config('request.jwt.claim.sub', pg_temp.draft_id(1)::TEXT, true);
 SET LOCAL ROLE authenticated;

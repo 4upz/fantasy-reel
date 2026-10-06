@@ -128,7 +128,7 @@ Deno.test({
         const channel = crypto.randomUUID()
         assertEquals((await service.from('discord_channels').insert({
           id: channel, league_id: league, guild_id: channel, channel_id: channel,
-          webhook_id: 'inert', webhook_url: 'https://example.invalid/inert',
+          webhook_id: 'inert', webhook_url: 'https://discord.com/api/webhooks/0/inert',
         })).error, null)
         assertEquals((await service.from('draft_notification_outbox').insert([
           { league_id: league, channel_id: channel, event_key: 'first', kind: 'draft_started' },
