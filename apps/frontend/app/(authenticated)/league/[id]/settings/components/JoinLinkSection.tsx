@@ -6,6 +6,7 @@ import { Link2, Copy, RefreshCw, Check, AlertTriangle } from 'lucide-react'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { useLeagueJoinLink } from '@/hooks/useLeagueJoinLink'
 import { LoadingSpinner } from '@/app/components/LoadingSpinner'
+import { APP_URL } from '@/utils/appUrl'
 import { ButtonSpinner } from '../../components/Icons'
 import { SectionHeader, LockedMessage } from './shared'
 
@@ -37,8 +38,7 @@ export default function JoinLinkSection({
   const hasJoinLink = !!joinCode
 
   // Build the join URL
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://fantasyreel.com'
-  const joinUrl = hasJoinLink ? `${appUrl}/join?code=${joinCode}` : ''
+  const joinUrl = hasJoinLink ? `${APP_URL}/join?code=${joinCode}` : ''
 
   const generateAction = useCallback(async () => {
     await generate()

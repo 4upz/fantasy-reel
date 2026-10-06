@@ -6,6 +6,13 @@ import { X, Camera, Trash2, Loader2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import Avatar from '@/app/components/Avatar'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import {
+  AVATAR_INPUT_TYPES,
+  MAX_AVATAR_INPUT_BYTES,
+  prepareAvatarImage,
+  removeAvatarFiles,
+  uploadAvatar,
+} from '@/utils/avatarUpload'
 import { updateTeamName, updateTeamAvatarUrl } from '../dashboard/actions'
 
 interface Props {
@@ -17,18 +24,6 @@ interface Props {
 }
 
 const MAX_NAME_LENGTH = 100
-const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
-const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
-
-function extractPathFromUrl(url: string): string | null {
-  try {
-    const urlObj = new URL(url)
-    const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/team-avatars\/(.+)/)
-    return pathMatch ? pathMatch[1] : null
-  } catch {
-    return null
-  }
-}
 
 export default function EditTeamModal({
   teamId,
@@ -94,13 +89,13 @@ export default function EditTeamModal({
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    if (!AVATAR_INPUT_TYPES.includes(file.type)) {
       toast.error('Please select a PNG, JPEG, WebP, or GIF image')
       return
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error('Image must be less than 2MB')
+    if (file.size > MAX_AVATAR_INPUT_BYTES) {
+      toast.error('Image must be less than 10MB')
       return
     }
 
@@ -109,33 +104,22 @@ export default function EditTeamModal({
     try {
       const supabase = createClient()
 
-      const timestamp = Date.now()
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const filePath = `${teamId}/${timestamp}.${ext}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('team-avatars')
-        .upload(filePath, file, {
-          contentType: file.type,
-          upsert: false,
-        })
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError)
-        toast.error('Failed to upload image')
+      let image: Blob
+      try {
+        image = await prepareAvatarImage(file)
+      } catch (error) {
+        console.error('Avatar decode error:', error)
+        toast.error('Could not read that image')
         return
       }
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('team-avatars')
-        .getPublicUrl(filePath)
-
-      // Delete old avatar if exists
-      if (avatarUrl) {
-        const oldPath = extractPathFromUrl(avatarUrl)
-        if (oldPath) {
-          await supabase.storage.from('team-avatars').remove([oldPath])
-        }
+      let publicUrl: string
+      try {
+        publicUrl = await uploadAvatar(supabase, 'team-avatars', teamId, image)
+      } catch (error) {
+        console.error('Upload error:', error)
+        toast.error('Failed to upload image')
+        return
       }
 
       const result = await updateTeamAvatarUrl(teamId, leagueId, publicUrl)
@@ -143,6 +127,7 @@ export default function EditTeamModal({
       if (result.success) {
         setAvatarUrl(publicUrl)
         toast.success('Team avatar updated')
+        await removeAvatarFiles(supabase, 'team-avatars', teamId, { keepCurrent: true })
       } else {
         toast.error(result.error ?? 'Failed to update avatar')
       }
@@ -165,15 +150,11 @@ export default function EditTeamModal({
     try {
       const supabase = createClient()
 
-      const oldPath = extractPathFromUrl(avatarUrl)
-      if (oldPath) {
-        await supabase.storage.from('team-avatars').remove([oldPath])
-      }
-
       const result = await updateTeamAvatarUrl(teamId, leagueId, null)
 
       if (result.success) {
         setAvatarUrl(null)
+        await removeAvatarFiles(supabase, 'team-avatars', teamId, { keepCurrent: false })
         toast.success('Team avatar removed')
       } else {
         toast.error(result.error ?? 'Failed to remove avatar')
@@ -291,7 +272,7 @@ export default function EditTeamModal({
               </button>
             )}
 
-            <p className="type-meta text-foreground-secondary">PNG, JPEG, WebP or GIF. Max 2MB.</p>
+            <p className="type-meta text-foreground-secondary">PNG, JPEG, WebP or GIF. Max 10MB.</p>
           </div>
         </div>
 

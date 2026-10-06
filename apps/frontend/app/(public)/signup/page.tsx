@@ -10,6 +10,7 @@ import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
 import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
+import { PASSWORD_HINT } from '@/utils/password'
 import { toast } from 'sonner'
 
 export default function SignupPage() {
@@ -151,7 +152,7 @@ export default function SignupPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Password (min 6 characters)"
+                  placeholder={`Password (${PASSWORD_HINT})`}
                   data-testid="password-input"
                 />
               </div>

@@ -6,6 +6,7 @@ import { Link2, Copy, Check, RefreshCw, ChevronDown, ChevronUp } from 'lucide-re
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { LoadingSpinner } from '@/app/components/LoadingSpinner'
 import { useLeagueJoinLink } from '@/hooks/useLeagueJoinLink'
+import { APP_URL } from '@/utils/appUrl'
 
 interface Props {
   leagueId: string
@@ -28,8 +29,7 @@ export default function JoinLinkCard({ leagueId }: Props): React.ReactElement {
   const hasJoinLink = !!joinCode
 
   // Build the join URL
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://fantasyreel.com'
-  const joinUrl = hasJoinLink ? `${appUrl}/join?code=${joinCode}` : ''
+  const joinUrl = hasJoinLink ? `${APP_URL}/join?code=${joinCode}` : ''
 
   const generateAction = useCallback(async () => {
     await generate()
