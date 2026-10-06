@@ -1,7 +1,11 @@
+'use client'
+
 import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
 import type { TradeItems, TradeMovieItem } from '@/types'
 import CounterpickMark from './CounterpickMark'
+import { useMovieProjectionsByMovieId } from '@/hooks/useMovieProjections'
+import { HoldingProjection } from '@/app/components/projections/ProjectionChip'
 
 /** @design-system League */
 export default function TradeItemsSection({
@@ -19,6 +23,7 @@ export default function TradeItemsSection({
   focus?: string
 }) {
   const hasItems = items.movies.length > 0 || items.faab > 0
+  const projections = useMovieProjectionsByMovieId(items.movies.map((movie) => movie.movie_id))
 
   const content = (
     <>
@@ -58,6 +63,13 @@ export default function TradeItemsSection({
                     movie, which is the part that matters on a multi-movie offer. */}
                 {contestedSourceIds.has(movie.source_id) && (
                   <p className="type-meta text-warning">Also in another trade</p>
+                )}
+                {projections.get(movie.movie_id) && (
+                  <HoldingProjection
+                    projection={projections.get(movie.movie_id)!}
+                    counterpick={movie.source === 'counterpick'}
+                    className="mt-1"
+                  />
                 )}
               </div>
             </div>

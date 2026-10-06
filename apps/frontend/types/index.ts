@@ -483,6 +483,49 @@ export interface FranchiseHistory {
   last_rt: number | null
 }
 
+/** One factor's push on a projection, in Tomatometer points from the genre baseline. */
+export interface ProjectionContribution {
+  factor: string
+  label: string
+  delta_rt: number
+}
+
+/**
+ * A movie's projected Tomatometer (Beta), as `get-movie-projections` returns
+ * it. Only ever reached through that function, which applies the league's
+ * feature gate; a released and scored movie never has one.
+ */
+export interface MovieProjection {
+  tmdb_id: number
+  /** Point estimate, 0-100. */
+  projected_rt: number
+  /** The middle 50% of likely outcomes, calibrated. */
+  range50: [number, number]
+  range80: [number, number]
+  /** range50 is wider than 10 points: show the point estimate, tagged. */
+  low_confidence: boolean
+  /** Too little history to say anything: show no number at all. */
+  insufficient_history: boolean
+  p_rotten: number
+  p_fresh: number
+  p_90: number
+  /** Already under this league's 90+ points rule. A counterpick scores its negation. */
+  expected_points: number
+  /** The genre baseline the contributions stack on. */
+  baseline_rt: number
+  contributions: ProjectionContribution[]
+  coverage: number
+  /** Predecessors are still being collected, so the estimate may move. */
+  partial: boolean
+  includes_early_reviews: boolean
+  early_rt: { score: number; reviews: number } | null
+  computed_at: string
+}
+
+export type GetMovieProjectionsResponse =
+  | { enabled: false }
+  | { enabled: true; model_version: number; projections: Record<string, MovieProjection | null> }
+
 export interface TMDbCastMember {
   id: number
   name: string

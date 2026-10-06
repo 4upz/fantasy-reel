@@ -23,6 +23,8 @@ import OfferExpiryPicker from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
 import type { ExpiryBounds, ResolvedExpiry } from '@/utils/tradeExpiry'
 import CounterpickMark from './CounterpickMark'
+import { useMovieProjectionsByMovieId } from '@/hooks/useMovieProjections'
+import { HoldingProjection } from '@/app/components/projections/ProjectionChip'
 
 /** Stable empty set so a modal with no rejected rows doesn't allocate one per render. */
 const EMPTY_INVALID: ReadonlySet<string> = new Set<string>()
@@ -522,6 +524,7 @@ function MovieSelector({
 }: MovieSelectorProps) {
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const listRef = useRef<HTMLDivElement>(null)
+  const projections = useMovieProjectionsByMovieId(movies.map((movie) => movie.movie_id))
 
   // A scored movie is locked against trades, so it can't be added -- but one
   // already selected can still be taken back out.
@@ -619,6 +622,7 @@ function MovieSelector({
         const isInvalid = invalidIds.has(movie.source_id)
         const isLocked = isScoreLocked(movie.fantasy_points)
         const isDisabled = !canToggle(movie)
+        const projection = movie.fantasy_points === null ? projections.get(movie.movie_id) : null
         return (
           <div
             key={movie.source_id}
@@ -675,6 +679,15 @@ function MovieSelector({
                   <span>Pending</span>
                 )}
               </div>
+              {/* The row is the option itself, so the chip only reads. */}
+              {projection && (
+                <HoldingProjection
+                  projection={projection}
+                  counterpick={movie.source === 'counterpick'}
+                  interactive={false}
+                  className="mt-1"
+                />
+              )}
             </div>
             <div
               className={`w-5 h-5 rounded border-2 flex items-center justify-center ${

@@ -17,6 +17,9 @@ import { formatFantasyPoints } from '@/utils/scoring'
 import { getMovieStatus } from '@/utils/league'
 import TeamDetailRail from './TeamDetailRail'
 import ChampionBanner from '../components/ChampionBanner'
+import BetaBadge from '@/app/components/projections/BetaBadge'
+import { useProjectedStandings, type ProjectedStandingInputs } from '@/hooks/useProjectedStandings'
+import ProjectedStandingsTable from './ProjectedStandingsTable'
 
 interface Props {
   participants: ParticipantWithTeamScore[]
@@ -32,6 +35,8 @@ interface Props {
   /** The league's configured starting purse; 0 means this league doesn't use a fantasy budget. */
   startingBudget: number
   seasonYear: number
+  /** The season's 90+ points rule, which the projected table's spread is measured under. */
+  doublePointsOver90: boolean
   isCompleted: boolean
   /** Every team at rank 1 on a completed season; empty while it is still running. */
   champions: Champion[]
@@ -128,11 +133,13 @@ export default function StandingsClient({
   currentUserId,
   startingBudget,
   seasonYear,
+  doublePointsOver90,
   isCompleted,
   champions,
   reigningChampions,
 }: Props) {
   const showBudget = startingBudget > 0
+  const [view, setView] = useState<'current' | 'projected'>('current')
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
 
@@ -142,6 +149,41 @@ export default function StandingsClient({
   )
 
   const rankedByTeamId = new Map(rankedTeams.map((team) => [teamKey(team), team]))
+
+  // Projected standings (Beta): null -- and so no toggle at all -- unless the
+  // league has projections on and some movie still to come rests on one.
+  const projectionInputs = useMemo<ProjectedStandingInputs | null>(
+    () =>
+      isCompleted
+        ? null
+        : {
+            teams: standings.map((row) => ({
+              team_id: row.team_id,
+              team_name: row.team_name,
+              earned: row.total_points,
+              rank: row.rank,
+            })),
+            holdings: [...draftPicks, ...pickups].map((holding) => ({ team_id: holding.team_id, ...holding.movie })),
+            counterpicks: counterpicks.map((counterpick) => ({
+              ...counterpick.movies,
+              counterpicker_team_id: counterpick.counterpicker_team_id,
+              // The counterpick row's own points: the movie's, inverted.
+              fantasy_points: counterpick.fantasy_points,
+            })),
+          },
+    [isCompleted, standings, draftPicks, pickups, counterpicks]
+  )
+  const projected = useProjectedStandings(projectionInputs, doublePointsOver90)
+  const showProjected = projected != null && view === 'projected'
+  const ownerNameByTeamId = useMemo(
+    () =>
+      new Map(
+        rankedTeams.map((team) => [teamKey(team), team.participant.profiles?.display_name ?? null] as const)
+      ),
+    [rankedTeams]
+  )
+  const currentUserTeamId = rankedTeams.find((team) => team.participant.user_id === currentUserId)
+    ?.participant.teams?.id ?? null
 
   // The rail opens on your own team - the one you came to the page to check.
   const railTeam = useMemo(() => {
@@ -224,8 +266,38 @@ export default function StandingsClient({
         </div>
       )}
 
+      {projected && (
+        <div className="flex flex-none justify-end">
+          <div className="inline-flex gap-1 rounded-lg border border-border bg-surface p-1" role="group" aria-label="Standings view">
+            {(['current', 'projected'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setView(option)}
+                aria-pressed={view === option}
+                data-testid={`standings-view-${option}`}
+                className={`type-control inline-flex h-10 items-center gap-2 rounded-md px-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold ${
+                  view === option ? 'bg-elevated text-foreground' : 'text-foreground-secondary hover:text-foreground'
+                }`}
+              >
+                {option === 'current' ? 'Current' : 'Projected'}
+                {option === 'projected' && <BetaBadge />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showProjected && (
+        <ProjectedStandingsTable
+          standings={projected}
+          ownerNameByTeamId={ownerNameByTeamId}
+          currentUserTeamId={currentUserTeamId}
+        />
+      )}
+
       {/* Leaderboard */}
-      {standings.map((row, index) => {
+      {!showProjected && standings.map((row, index) => {
         const rankedTeam = rankedByTeamId.get(row.team_id)
         if (!rankedTeam) {
           return (

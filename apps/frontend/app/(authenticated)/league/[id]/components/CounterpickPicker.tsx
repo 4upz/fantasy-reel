@@ -9,7 +9,9 @@ import ScoreLockLabel from '@/app/components/ScoreLockLabel'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
-import type { CounterpickOption } from '@/types'
+import { useMovieProjectionsByMovieId } from '@/hooks/useMovieProjections'
+import { CounterpickProjection } from '@/app/components/projections/ProjectionChip'
+import type { CounterpickOption, MovieProjection } from '@/types'
 import { SpinnerIcon } from './Icons'
 
 interface Props {
@@ -103,6 +105,9 @@ export default function CounterpickPicker({
       a.teamName.localeCompare(b.teamName)
     )
   }, [options])
+
+  const projections = useMovieProjectionsByMovieId(options.map((option) => option.movie_id))
+  const selectedProjection = selectedOption ? projections.get(selectedOption.movie_id) ?? null : null
 
   const isLocked = (option: CounterpickOption) => lockScored && isScoreLocked(option.fantasy_points)
 
@@ -219,6 +224,7 @@ export default function CounterpickPicker({
                   isSelected={selectedOption?.movie_id === option.movie_id}
                   isSelectable={isMyTurn && !isPicking && !confirming}
                   isLocked={isLocked(option)}
+                  projection={projections.get(option.movie_id) ?? null}
                   onSelect={handleSelectOption}
                 />
               ))}
@@ -254,6 +260,9 @@ export default function CounterpickPicker({
                     <p className="type-meta text-foreground-secondary">
                       {formatReleaseDateFull(selectedOption.release_date)}
                     </p>
+                  )}
+                  {selectedProjection && selectedOption.fantasy_points === null && (
+                    <CounterpickProjection projection={selectedProjection} className="mt-1" />
                   )}
                 </div>
               </div>
@@ -302,6 +311,8 @@ interface CounterpickMovieCardProps {
   isSelectable: boolean
   /** Already scored, so it can't be counterpicked by bid. */
   isLocked: boolean
+  /** The target's projected score (Beta), or null when there is none to show. */
+  projection: MovieProjection | null
   onSelect: (option: CounterpickOption) => void
 }
 
@@ -310,6 +321,7 @@ function CounterpickMovieCard({
   isSelected,
   isSelectable: canSelect,
   isLocked,
+  projection,
   onSelect,
 }: CounterpickMovieCardProps) {
   const points = option.fantasy_points
@@ -384,6 +396,10 @@ function CounterpickMovieCard({
           <p className="type-meta text-foreground-secondary mt-0.5">
             {formatReleaseDateFull(option.release_date)}
           </p>
+        )}
+        {/* The card is the select button, so the chip only reads here. */}
+        {projection && points === null && (
+          <CounterpickProjection projection={projection} interactive={false} className="mt-1.5" />
         )}
       </div>
     </button>

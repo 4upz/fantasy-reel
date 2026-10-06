@@ -86,6 +86,7 @@ export function RosterMovieCard({
   posterSrc,
   posterSizes,
   reviewFocus = false,
+  projection,
 }: {
   movie: RosterMovie
   label: string
@@ -94,6 +95,8 @@ export function RosterMovieCard({
   posterSrc?: string
   posterSizes?: string
   reviewFocus?: boolean
+  /** A projected score (Beta) under "Pending"; absent unless the league has projections on. */
+  projection?: React.ReactNode
 }) {
   const details = (
     <>
@@ -111,6 +114,7 @@ export function RosterMovieCard({
       ) : (
         <p className="type-meta mt-1 text-foreground-secondary">Pending</p>
       )}
+      {projection}
     </>
   )
 

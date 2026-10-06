@@ -4,6 +4,7 @@ import MoviePoster from '@/app/components/MoviePoster'
 import type { FranchiseHistory, TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import { seriesName } from '@/utils/franchise'
+import { MovieProjectionChip } from '@/app/components/projections/ProjectionChip'
 
 import { formatReleaseDateShort, getReleaseYear, getPopularityBadge, cn } from './utils'
 
@@ -79,6 +80,16 @@ export default function DraftMovieCard({
             <WishlistToggle movie={movie} size="sm" variant="overlay" className="relative z-20 ml-auto" />
           )}
         </div>
+
+        {/* Projected score (Beta): nothing at all unless the league has projections on. */}
+        {!isDrafted && (
+          <MovieProjectionChip
+            tmdbId={movie.tmdb_id}
+            size="sm"
+            overlay
+            className="absolute bottom-2 left-2 z-20 max-w-[calc(100%-1rem)]"
+          />
+        )}
 
         {/* Release Date Badge */}
         <div className="absolute bottom-12 right-2">

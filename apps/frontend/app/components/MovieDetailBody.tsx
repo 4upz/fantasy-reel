@@ -24,6 +24,8 @@ interface MovieDetailBodyProps {
    * than the point; off on discover, where browsing the cast IS the point.
    */
   collapsibleCast?: boolean
+  /** League-only context below the headline facts, such as the projected score. */
+  insights?: React.ReactNode
 }
 
 /**
@@ -40,6 +42,7 @@ export default function MovieDetailBody({
   loading,
   actions,
   collapsibleCast = false,
+  insights,
 }: MovieDetailBodyProps) {
   const displayData = details || movie
   const releaseYear = getReleaseYear(displayData.release_date)
@@ -140,6 +143,8 @@ export default function MovieDetailBody({
             )}
           </div>
         </div>
+
+        {insights}
 
         {loading && (
           <div className="mt-8 flex items-center justify-center py-8">

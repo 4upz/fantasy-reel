@@ -170,6 +170,7 @@ export default async function StandingsPage({ params }: PageProps) {
       currentUserId={user.id}
       startingBudget={league.faab_budget ?? 0}
       seasonYear={typedLeague.season_year}
+      doublePointsOver90={typedLeague.double_points_over_90}
       isCompleted={typedLeague.status === 'completed'}
       champions={champions}
       reigningChampions={reigningChampions}

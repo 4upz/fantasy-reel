@@ -11,6 +11,8 @@ import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 import type { TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import FranchiseHistoryPanel from '@/app/components/FranchiseHistoryPanel'
+import { MovieProjectionChip } from '@/app/components/projections/ProjectionChip'
+import { MovieProjectionPanel } from '@/app/components/projections/ProjectionBreakdown'
 import { CloseIcon, CalendarIcon, ClockIcon, CheckIcon, ExternalLinkIcon, UserIcon, SpinnerIcon } from './Icons'
 import { formatReleaseDateFull, formatRuntime, getReleaseYear } from './utils'
 
@@ -168,6 +170,9 @@ export default function MovieQuickPreview({
                       <CalendarIcon className="w-4 h-4" />
                       <span>{formatReleaseDateFull(displayData.release_date)}</span>
                     </div>
+
+                    {/* The breakdown is below, so the chip here only reads. */}
+                    <MovieProjectionChip tmdbId={movie.tmdb_id} interactive={false} />
                   </div>
 
                   {/* Genres */}
@@ -228,6 +233,9 @@ export default function MovieQuickPreview({
                   className="mt-6 animate-fade-in"
                 />
               )}
+
+              {/* Projected score (Beta), beside the franchise line it never repeats. */}
+              <MovieProjectionPanel tmdbId={movie.tmdb_id} className="mt-6 animate-fade-in" />
 
               {/* Cast Section */}
               {loading ? (

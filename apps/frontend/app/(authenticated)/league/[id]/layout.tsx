@@ -10,6 +10,7 @@ import LeagueTabs from './components/LeagueTabs'
 import LeagueBottomNav from './components/LeagueBottomNav'
 import { LeagueNavigation } from './components/LeagueNavigation'
 import LeaguePageLoading from './components/LeaguePageLoading'
+import { ProjectionsProvider } from '@/hooks/useMovieProjections'
 import type { League } from '@/types'
 
 interface LayoutProps {
@@ -114,7 +115,7 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
           {/* Keep this boundary across tabs so transitions retain revealed data.
               A loading.tsx boundary would reset on every destination change. */}
           <Suspense fallback={<LeaguePageLoading />}>
-            {children}
+            <ProjectionsProvider leagueId={typedLeague.id}>{children}</ProjectionsProvider>
           </Suspense>
         </div>
 

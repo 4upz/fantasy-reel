@@ -11,6 +11,7 @@ import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { WishlistToggle } from '@/components/WishlistToggle'
 import FranchiseSummary from '@/app/components/FranchiseSummary'
 import ScoreLockLabel from '@/app/components/ScoreLockLabel'
+import { MovieProjectionChip } from '@/app/components/projections/ProjectionChip'
 import { useWishlist } from '@/hooks/useWishlist'
 import { useFranchiseHistory } from '@/hooks/useFranchiseHistory'
 
@@ -628,10 +629,15 @@ export default function PlaceBidModal({
                             {locked ? (
                               <ScoreLockLabel className="type-meta mt-1.5">can&apos;t be bid on</ScoreLockLabel>
                             ) : (
-                              <ActiveBidChip
-                                tmdbId={movie.tmdb_id}
-                                info={activeBidsByTmdbId.get(movie.tmdb_id)}
-                              />
+                              <>
+                                <ActiveBidChip
+                                  tmdbId={movie.tmdb_id}
+                                  info={activeBidsByTmdbId.get(movie.tmdb_id)}
+                                />
+                                {/* The row is the select control, so this chip only reads;
+                                    its breakdown opens from the chosen movie below. */}
+                                <MovieProjectionChip tmdbId={movie.tmdb_id} size="sm" interactive={false} className="mt-1.5" />
+                              </>
                             )}
                           </div>
                           {!locked && (
@@ -673,6 +679,7 @@ export default function PlaceBidModal({
                       <Calendar className="w-4 h-4" />
                       {formatReleaseDateFull(selectedMovie.release_date) || 'Release date TBA'}
                     </p>
+                    <MovieProjectionChip tmdbId={selectedMovie.tmdb_id} className="mt-2" />
                     {highestBid !== null && (
                       <div className="mt-3 px-3 py-1.5 bg-warning-bg/30 border border-warning/20 rounded-lg inline-flex items-center gap-1.5">
                         <DollarSign className="w-4 h-4 text-warning" />
