@@ -135,32 +135,40 @@ CREATE UNIQUE INDEX idx_projection_models_active ON projection_models (is_active
 ALTER TABLE projection_models ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE movie_projections (
-  tmdb_id            integer PRIMARY KEY,
-  model_version      integer NOT NULL REFERENCES projection_models(version),
-  projected_rt       numeric(4,1) NOT NULL,
-  sigma              numeric(4,1) NOT NULL,
-  p_rotten           numeric(4,3) NOT NULL,
-  p_fresh            numeric(4,3) NOT NULL,
-  p_club90           numeric(4,3) NOT NULL,
-  expected_points    numeric(6,2) NOT NULL,
-  factors            jsonb NOT NULL,
-  coverage           numeric(3,2) NOT NULL,
-  partial            boolean NOT NULL,
-  computed_at        timestamptz NOT NULL DEFAULT now(),
-  frozen_at          timestamptz,
-  actual_rt          smallint,
-  draft_position_avg numeric(5,2),
-  bid_total          integer,
-  counterpick_count  integer,
-  signals_updated_at timestamptz
+  tmdb_id                integer PRIMARY KEY,
+  model_version          integer NOT NULL REFERENCES projection_models(version),
+  projected_rt           numeric(4,1) NOT NULL,
+  range50_lo             numeric(4,1) NOT NULL,
+  range50_hi             numeric(4,1) NOT NULL,
+  range80_lo             numeric(4,1) NOT NULL,
+  range80_hi             numeric(4,1) NOT NULL,
+  p_rotten               numeric(4,3) NOT NULL,
+  p_fresh                numeric(4,3) NOT NULL,
+  p_club90               numeric(4,3) NOT NULL,
+  expected_points        numeric(6,2) NOT NULL,
+  expected_points_double numeric(6,2) NOT NULL,
+  baseline_rt            numeric(4,1) NOT NULL,
+  factors                jsonb NOT NULL,
+  coverage               numeric(3,2) NOT NULL,
+  partial                boolean NOT NULL,
+  includes_early_reviews boolean NOT NULL DEFAULT false,
+  early_rt_score         smallint,
+  early_rt_reviews       integer,
+  computed_at            timestamptz NOT NULL DEFAULT now(),
+  frozen_at              timestamptz,
+  actual_rt              smallint
 );
-COMMENT ON TABLE movie_projections IS 'Cached projection per TMDb movie (Beta). Service-role only: clients read projections through get-movie-projections, which applies the projections_display gate. frozen_at/actual_rt are set by update-scores when the real Tomatometer first lands.';
-COMMENT ON COLUMN movie_projections.expected_points IS 'Fantasy points integrated over the projected RT distribution -- NOT the curve applied to projected_rt.';
+COMMENT ON TABLE movie_projections IS 'Cached projection per TMDb movie (Beta). Service-role only: clients read projections through get-movie-projections, which applies the projections_display gate. frozen_at/actual_rt are set by update-scores once the movie has released and has a Tomatometer.';
+COMMENT ON COLUMN movie_projections.range50_lo IS 'Calibrated middle-50% range (lo/hi), 0-100. range80_* is the 80% range.';
+COMMENT ON COLUMN movie_projections.expected_points IS 'Fantasy points integrated over the projected RT distribution under the standard rule -- NOT the curve applied to projected_rt. expected_points_double is the same under double points above 90.';
+COMMENT ON COLUMN movie_projections.baseline_rt IS 'Genre baseline the factor contributions in factors are measured from.';
+COMMENT ON COLUMN movie_projections.factors IS 'Contributions [{factor, label, delta_rt}] that sum with baseline_rt to projected_rt.';
 COMMENT ON COLUMN movie_projections.partial IS 'True while some factor''s prior films are still queued for ingestion.';
+COMMENT ON COLUMN movie_projections.includes_early_reviews IS 'The projection was updated with an early Tomatometer (early_rt_score on early_rt_reviews reviews).';
 
--- Service role only. The crowd-signal columns (draft_position_avg, bid_total,
--- counterpick_count) aggregate across leagues, so they must never become
--- readable by league members directly.
+-- Service role only. Cross-league crowd signals (draft position, bids,
+-- counterpicks) are deliberately not stored here; if they return, they get a
+-- service-only table of their own.
 ALTER TABLE movie_projections ENABLE ROW LEVEL SECURITY;
 
 -- Belt and braces on top of RLS: revoke the default table grants so a policy
