@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { CAPTCHA_FAILED_MESSAGE, isCaptchaError, readCaptchaToken } from '@/utils/captcha'
+import { isPasswordLongEnough, PASSWORD_TOO_SHORT_MESSAGE, passwordPolicyErrorMessage } from '@/utils/password'
 
 export interface UpdateProfileResult {
   success: boolean
@@ -109,8 +110,8 @@ export async function changePassword(formData: FormData): Promise<UpdateProfileR
     return { success: false, error: 'New passwords do not match' }
   }
 
-  if (newPassword.length < 6) {
-    return { success: false, error: 'New password must be at least 6 characters' }
+  if (!isPasswordLongEnough(newPassword)) {
+    return { success: false, error: PASSWORD_TOO_SHORT_MESSAGE }
   }
 
   // Re-authenticate with current password to verify it's correct
@@ -138,6 +139,11 @@ export async function changePassword(formData: FormData): Promise<UpdateProfileR
 
   if (updateError) {
     console.error('Password update error:', updateError.message)
+
+    const policyMessage = passwordPolicyErrorMessage(updateError)
+    if (policyMessage) {
+      return { success: false, error: policyMessage }
+    }
 
     if (updateError.message.includes('should be different')) {
       return { success: false, error: 'New password must be different from your current password' }

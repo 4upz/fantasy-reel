@@ -6,6 +6,7 @@ import { Link2, Copy, RefreshCw, Check, AlertTriangle } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import type { League, GenerateJoinLinkResponse } from '@/types'
+import { APP_URL } from '@/utils/appUrl'
 import { ButtonSpinner } from '../../components/Icons'
 import { SectionHeader, LockedMessage } from './shared'
 
@@ -39,8 +40,7 @@ export default function JoinLinkSection({
   const hasJoinLink = !!joinCode
 
   // Build the join URL
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://fantasyreel.com'
-  const joinUrl = hasJoinLink ? `${appUrl}/join?code=${joinCode}` : ''
+  const joinUrl = hasJoinLink ? `${APP_URL}/join?code=${joinCode}` : ''
 
   const generateAction = useCallback(async () => {
     const { data, error } = await callEdgeFunction<GenerateJoinLinkResponse>(

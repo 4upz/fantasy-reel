@@ -212,6 +212,7 @@ In Vercel Dashboard → Project Settings → Environment Variables:
 | `MDBLIST_API_KEY` | Your MDBList API key | Production |
 | `CRON_SECRET` | Same value as Supabase secret | Production |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Cloudflare Turnstile site key (see 2.5). Unset = no CAPTCHA widget | Production |
+| `NEXT_PUBLIC_DISCORD_CLIENT_ID` | The Discord bot's application ID (same as the bot's `DISCORD_CLIENT_ID`). Builds the "Add to Discord" link on How to Play and league settings. Unset = no install button | Production |
 
 ### 3.3 Configure Custom Domain (Optional)
 

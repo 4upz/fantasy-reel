@@ -108,21 +108,23 @@ export function isServiceRoleRequest(req: Request): boolean {
  * Authorizes an endpoint that needs *a* caller but no particular one: any
  * signed-in user, or the service role key.
  *
- * The TMDb read endpoints (browse-movies, search-movies, get-movie-details)
- * use this. They run before any league context, so there is no membership or
- * role to check -- but they do spend the league's TMDb quota, and every one of
- * them carries `verify_jwt = false` (the CLI's ES256 bug), so without this
- * anyone holding the public anon key could drive TMDb traffic through them.
+ * The TMDb read endpoints (browse-movies, search-movies, get-movie-details,
+ * get-franchise-history) use this. They run before any league context, so
+ * there is no membership or role to check -- but they do spend the league's
+ * TMDb quota, and every one of them carries `verify_jwt = false` (the CLI's
+ * ES256 bug), so without this anyone holding the public anon key could drive
+ * TMDb traffic through them.
  *
- * Returns null when the request may proceed, or the authentication error response.
+ * Returns who called -- the signed-in user's id, or null for the service
+ * role, which per-user rate limits skip -- or the authentication error response.
  */
-export async function authenticateUserOrServiceRole(req: Request): Promise<Response | null> {
+export async function authenticateCaller(req: Request): Promise<{ userId: string | null } | Response> {
   // A missing header never reaches Auth or the service-role comparison.
   if (!req.headers.get('Authorization')) return errorResponse('Unauthorized', 401)
-  if (isServiceRoleRequest(req)) return null
+  if (isServiceRoleRequest(req)) return { userId: null }
 
   const result = await authenticateRequest(req)
-  return isAuthError(result) ? result : null
+  return isAuthError(result) ? result : { userId: result.user.id }
 }
 
 export function isInvitationExpired(expiresAt: string): boolean {
