@@ -30,6 +30,12 @@
 import { parseArgs } from 'jsr:@std/cli@^1.0.0/parse-args'
 import { syntheticCorpus } from '../supabase/functions/_shared/projection-synthetic.ts'
 import type { CorpusCredit, CorpusFilm } from '../supabase/functions/_shared/projection-types.ts'
+import {
+  asCorpusClient,
+  loadCorpus,
+  normalizeCredit,
+  normalizeFilm,
+} from '../supabase/functions/_shared/projection-corpus.ts'
 import { type BacktestResult, renderReport, runBacktest } from './projections/backtest.ts'
 
 export interface Corpus {
@@ -37,66 +43,7 @@ export interface Corpus {
   credits: CorpusCredit[]
 }
 
-const FILM_COLUMNS = [
-  'tmdb_id',
-  'title',
-  'release_date',
-  'us_wide_date',
-  'us_limited_date',
-  'us_release_type',
-  'collection_id',
-  'genre_ids',
-  'company_ids',
-  'label_id',
-  'festival_premiere',
-  'keyword_flags',
-  'original_language',
-  'budget',
-  'runtime',
-  'certification',
-  'rt_critic',
-  'rt_critic_votes',
-  'rt_settled_at',
-] as const
-
-const toNumber = (v: unknown) => (v == null || v === '' ? null : Number(v))
-const toText = (v: unknown) => (v == null ? null : String(v))
-
-/** Coerces an exported or selected row to `CorpusFilm`, tolerating missing optional columns. */
-export function normalizeFilm(row: Record<string, unknown>): CorpusFilm {
-  return {
-    tmdb_id: Number(row.tmdb_id),
-    title: String(row.title ?? ''),
-    release_date: toText(row.release_date),
-    us_wide_date: toText(row.us_wide_date),
-    us_limited_date: toText(row.us_limited_date),
-    us_release_type: toNumber(row.us_release_type),
-    collection_id: toNumber(row.collection_id),
-    genre_ids: Array.isArray(row.genre_ids) ? row.genre_ids.map(Number) : [],
-    company_ids: Array.isArray(row.company_ids) ? row.company_ids.map(Number) : [],
-    label_id: toText(row.label_id),
-    festival_premiere: toText(row.festival_premiere),
-    keyword_flags: Array.isArray(row.keyword_flags) ? row.keyword_flags.map(String) : [],
-    original_language: toText(row.original_language),
-    budget: toNumber(row.budget),
-    runtime: toNumber(row.runtime),
-    certification: toText(row.certification),
-    rt_critic: toNumber(row.rt_critic),
-    rt_critic_votes: toNumber(row.rt_critic_votes),
-    rt_settled_at: toText(row.rt_settled_at),
-  }
-}
-
-export function normalizeCredit(row: Record<string, unknown>): CorpusCredit {
-  const role = String(row.role)
-  if (role !== 'director' && role !== 'writer' && role !== 'cast') throw new Error(`unknown credit role: ${role}`)
-  return {
-    tmdb_id: Number(row.tmdb_id),
-    tmdb_person_id: Number(row.tmdb_person_id),
-    role,
-    billing: toNumber(row.billing),
-  }
-}
+export { normalizeCredit, normalizeFilm }
 
 /** Parses a JSON {films, credits} export, or NDJSON rows (credits are the rows with tmdb_person_id). */
 export function parseCorpus(text: string, path: string): Corpus {
@@ -121,22 +68,7 @@ async function loadFromSupabase(): Promise<Corpus> {
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
   if (!url || !key) throw new Error('--supabase needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY')
   const { createClient } = await import('https://esm.sh/@supabase/supabase-js@2')
-  const client = createClient(url, key, { auth: { persistSession: false } })
-  const page = 1000
-  const all = async (table: string, columns: string, order: string[]) => {
-    const rows: Record<string, unknown>[] = []
-    for (let from = 0;; from += page) {
-      let query = client.from(table).select(columns)
-      for (const column of order) query = query.order(column)
-      const { data, error } = await query.range(from, from + page - 1)
-      if (error) throw new Error(`${table}: ${error.message}`)
-      rows.push(...(data as unknown as Record<string, unknown>[]))
-      if (!data || data.length < page) return rows
-    }
-  }
-  const films = await all('film_corpus', FILM_COLUMNS.join(','), ['tmdb_id'])
-  const credits = await all('film_credits', 'tmdb_id,tmdb_person_id,role,billing', ['tmdb_id', 'tmdb_person_id', 'role'])
-  return { films: films.map(normalizeFilm), credits: credits.map(normalizeCredit) }
+  return loadCorpus(asCorpusClient(createClient(url, key, { auth: { persistSession: false } })))
 }
 
 /** The JSON summary: everything but the per-film records and the model. */

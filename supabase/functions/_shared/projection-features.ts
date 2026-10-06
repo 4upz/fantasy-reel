@@ -25,9 +25,14 @@ const DAYS_PER_YEAR = 365.25
 // Dates and scale
 // ---------------------------------------------------------------------------
 
-/** Effective US release date: wide, else limited, else TMDb's primary date. */
+/**
+ * Effective US release date: film_corpus's stored `effective_release_date`
+ * when the row carries it, else the same rule computed here -- wide, else
+ * limited, else digital, else TMDb's primary date.
+ */
 export function effectiveUsDate(film: CorpusFilm): string | null {
-  return film.us_wide_date ?? film.us_limited_date ?? film.release_date
+  return film.effective_release_date ?? film.us_wide_date ?? film.us_limited_date ?? film.us_digital_date ??
+    film.release_date
 }
 
 /** Whole UTC days since the epoch for an ISO date (time of day ignored). */

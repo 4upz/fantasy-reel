@@ -502,5 +502,11 @@ verify_jwt = false
 [functions.ingest-film-corpus]
 verify_jwt = false
 
+[functions.fit-projection-model]
+verify_jwt = false
+
+[functions.get-movie-projections]
+verify_jwt = false
+
 [functions.process-draft-notifications]
 verify_jwt = false

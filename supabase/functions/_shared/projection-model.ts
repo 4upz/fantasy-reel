@@ -105,8 +105,10 @@ export interface FitOptions {
   lambdas?: readonly number[]
   /** Candidate k per shrunk factor. */
   shrinkageGrid?: readonly number[]
-  /** Choose each factor's k by inner validation (default true); otherwise use DEFAULT_SHRINKAGE. */
+  /** Choose each factor's k by inner validation (default true); otherwise keep the starting k. */
   searchShrinkage?: boolean
+  /** Starting k per shrunk factor (default DEFAULT_SHRINKAGE), e.g. a previous model's. */
+  shrinkage?: Shrinkage
   innerFolds?: number
   minTrainFraction?: number
 }
@@ -138,7 +140,7 @@ export function fitRegression(rows: readonly ModelRow[], options: FitOptions = {
   }
   const mseAt = (result: PenaltySearchResult) => result.scores.find((s) => s.lambda === result.lambda)!.mse
 
-  let shrinkage: Shrinkage = { ...DEFAULT_SHRINKAGE }
+  let shrinkage: Shrinkage = { ...(options.shrinkage ?? DEFAULT_SHRINKAGE) }
   let search = validate(shrinkage, lambdas)
   if ((options.searchShrinkage ?? true) && Number.isFinite(mseAt(search))) {
     let best = mseAt(search)
