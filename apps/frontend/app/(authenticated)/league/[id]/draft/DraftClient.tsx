@@ -296,10 +296,7 @@ export default function DraftClient({
 
           {isOwner && league.status === 'setup' && (
             <>
-              <JoinLinkCard
-                league={league}
-                onUpdate={() => { void refresh() }}
-              />
+              <JoinLinkCard leagueId={league.id} />
               <InvitationsList
                 leagueId={league.id}
                 isOwner={isOwner}

@@ -6,7 +6,8 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, uniqueName, invokeFunction, TEST_USER_2 } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction, resetJoinCodeRateLimits, TEST_USER_2 } from './_setup.ts'
+import { generateJoinCode } from '../_shared/utils.ts'
 
 Deno.test({
   name: 'join-league',
@@ -203,6 +204,74 @@ Deno.test({
 
     assertEquals(error, null)
     assertEquals(data.team.name, 'My Awesome Team')
+  })
+
+  // ============================================================================
+  // Join codes
+  // ============================================================================
+
+  await t.step('joins league via a generated join code', async () => {
+    await resetJoinCodeRateLimits()
+    const { id: leagueId } = await factory.createLeague(uniqueName('join-via-code'))
+    const { data: link } = await client.functions.invoke('generate-join-link', { body: { league_id: leagueId } })
+
+    const { data, error } = await secondClient.functions.invoke('join-league', {
+      body: { join_code: link.join_code.toLowerCase() },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.id, leagueId)
+  })
+
+  await t.step('still accepts a 6-character code issued before codes got longer', async () => {
+    await resetJoinCodeRateLimits()
+    const { id: leagueId } = await factory.createLeague(uniqueName('join-legacy-code'))
+    const legacyCode = generateJoinCode(6)
+    const { error: insertError } = await getServiceClient()
+      .from('league_join_links')
+      .insert({ league_id: leagueId, join_code: legacyCode, join_token: crypto.randomUUID() })
+    assertEquals(insertError, null)
+
+    const { data, error } = await secondClient.functions.invoke('join-league', {
+      body: { join_code: legacyCode },
+    })
+
+    assertEquals(error, null)
+    assertEquals(data.league.id, leagueId)
+  })
+
+  await t.step('gives the same error for an unknown code and a league past setup', async () => {
+    await resetJoinCodeRateLimits()
+    const unknown = await invokeFunction(secondClient, 'join-league', { join_code: 'ZZZZ2222' })
+
+    const { id: leagueId } = await factory.createLeague(uniqueName('join-code-drafting'))
+    const { data: link } = await client.functions.invoke('generate-join-link', { body: { league_id: leagueId } })
+    await getServiceClient().from('leagues').update({ status: 'drafting' }).eq('id', leagueId)
+    const started = await invokeFunction(secondClient, 'join-league', { join_code: link.join_code })
+
+    assertEquals(unknown.error, 'Invalid or expired join code')
+    assertEquals(started.error, unknown.error)
+  })
+
+  await t.step('limits join code attempts per user', async () => {
+    await resetJoinCodeRateLimits()
+    for (let i = 0; i < 10; i++) {
+      const attempt = await invokeFunction(secondClient, 'join-league', { join_code: 'ZZZZ2222' })
+      assertEquals(attempt.error, 'Invalid or expired join code')
+    }
+    const refused = await invokeFunction(secondClient, 'join-league', { join_code: 'ZZZZ2222' })
+    assertEquals(refused.error?.startsWith('Too many join code attempts'), true)
+    await resetJoinCodeRateLimits()
+  })
+
+  await t.step('members cannot read the join code', async () => {
+    const { id: leagueId } = await factory.createLeague(uniqueName('join-code-privacy'))
+    await client.functions.invoke('generate-join-link', { body: { league_id: leagueId } })
+    const { token } = await factory.createInvitation(leagueId, TEST_USER_2.email)
+    await secondClient.functions.invoke('join-league', { body: { invitation_token: token } })
+
+    const { data } = await secondClient.from('league_join_links').select('join_code').eq('league_id', leagueId)
+    assertEquals(data, [])
   })
 
   // ============================================================================

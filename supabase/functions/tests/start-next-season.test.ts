@@ -120,11 +120,13 @@ Deno.test({
           double_points_over_90: true,
           invite_only: true,
           max_participants: 12,
-          join_code: 'ZZZ999',
           custom_draft_order: true,
           trade_deadline: '2026-11-01',
         })
         .eq('id', leagueId)
+      await serviceClient
+        .from('league_join_links')
+        .insert({ league_id: leagueId, join_code: 'ZZZ999', join_token: crypto.randomUUID() })
 
       const { data: before } = await serviceClient
         .from('leagues')
@@ -196,8 +198,11 @@ Deno.test({
       assertEquals(next!.trade_deadline, null)
       assertEquals(next!.custom_draft_order, false)
       // Last season's join code must not admit anyone to this one.
-      assertEquals(next!.join_code, null)
-      assertEquals(next!.join_token, null)
+      const { data: nextLink } = await serviceClient
+        .from('league_join_links')
+        .select('join_code')
+        .eq('league_id', next!.id)
+      assertEquals(nextLink, [])
 
       // The people came, with their team names, and no draft order yet.
       const { data: participants } = await serviceClient
