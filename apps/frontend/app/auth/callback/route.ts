@@ -1,6 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
 import { getDisplayNameFromUser, getAvatarUrlFromUser } from '@/utils/oauth'
-import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { safeRedirectPath } from '@/utils/redirect'
 
@@ -25,69 +24,20 @@ export async function GET(request: Request) {
           return NextResponse.redirect(`${origin}${next}`)
         }
 
-        // Check if this user was just created (OAuth signup)
-        const createdAt = new Date(user.created_at)
-        const now = new Date()
-        const isNewUser = now.getTime() - createdAt.getTime() < 60000 // Created within last minute
-
-        // Check if profile exists for this user
+        // handle_new_user creates the profile when the auth user is inserted;
+        // this covers accounts created before that trigger existed.
+        //
+        // There is no duplicate-email check here. Supabase Auth links an OAuth
+        // identity with a verified email to the existing account with that
+        // email, and a unique index on auth.users(email) stops a second
+        // account from being created with it.
         const { data: profile } = await supabase
           .from('profiles')
           .select('user_id')
           .eq('user_id', user.id)
           .single()
 
-        if (isNewUser && user.email) {
-          if (!profile) {
-            // Check if there's an existing user with this email
-            // Uses a SECURITY DEFINER function to query auth.users
-            const { count } = await supabase.rpc('count_users_by_email', {
-              email_to_check: user.email,
-            })
-
-            if (count && count > 1) {
-              // Duplicate detected! Store context and redirect to link-account page
-              const oauthIdentity = user.identities?.find(
-                (i) => i.provider === 'discord' || i.provider === 'google'
-              )
-              const oauthUsername =
-                user.user_metadata.global_name || // Discord
-                user.user_metadata.full_name || // Google
-                user.user_metadata.name ||
-                'OAuth User'
-
-              // Store duplicate context in a cookie
-              const cookieStore = await cookies()
-              cookieStore.set(
-                'link_account_context',
-                JSON.stringify({
-                  duplicateUserId: user.id,
-                  email: user.email,
-                  oauthProvider: oauthIdentity?.provider,
-                  oauthUsername,
-                  oauthIdentityId: oauthIdentity?.identity_id,
-                }),
-                {
-                  httpOnly: true,
-                  secure: process.env.NODE_ENV === 'production',
-                  sameSite: 'lax',
-                  maxAge: 600, // 10 minutes
-                  path: '/',
-                }
-              )
-
-              return NextResponse.redirect(`${origin}/auth/link-account`)
-            }
-
-            // No duplicate - create profile for new OAuth user
-            await supabase.from('profiles').insert({
-              user_id: user.id,
-              display_name: getDisplayNameFromUser(user),
-              avatar_url: getAvatarUrlFromUser(user),
-            })
-          }
-        } else if (!profile) {
-          // Existing user without profile (edge case) - create profile
+        if (!profile) {
           await supabase.from('profiles').insert({
             user_id: user.id,
             display_name: getDisplayNameFromUser(user),
@@ -98,6 +48,11 @@ export async function GET(request: Request) {
 
       return NextResponse.redirect(`${origin}${next}`)
     }
+
+    // The code was issued but this browser can't redeem it. That is what an
+    // email link opened outside the browser that requested it looks like:
+    // the email is confirmed, but only the requesting browser gets a session.
+    return NextResponse.redirect(`${origin}/login?error=link_not_signed_in`)
   }
 
   // Return to login page with error if OAuth flow fails

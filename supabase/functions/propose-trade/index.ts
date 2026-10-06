@@ -21,6 +21,7 @@ import {
 import { resolveOfferExpiry, deriveExpiryBounds, type ExpiryRequest } from '../_shared/trade-expiry.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 
 const log = createLogger('propose-trade')
 
@@ -125,6 +126,9 @@ Deno.serve(async (req) => {
     if (!expiry.valid) {
       return errorResponse(expiry.error, 400)
     }
+
+    const throttled = await throttleUser('trade_propose', user.id, log, serviceClient)
+    if (throttled) return throttled
 
     const { data: tradeOffer, error: insertError } = await serviceClient
       .from('trade_offers')

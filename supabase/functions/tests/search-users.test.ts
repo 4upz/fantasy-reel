@@ -6,7 +6,7 @@
  */
 
 import { assertEquals, assertExists } from '@std/assert'
-import { createTestFactory, getAnonClient, invokeFunction, uniqueName } from './_setup.ts'
+import { createTestFactory, getAnonClient, getServiceClient, invokeFunction, uniqueName } from './_setup.ts'
 
 Deno.test({
   name: 'search-users',
@@ -130,6 +130,36 @@ Deno.test({
       assertExists(firstUser.email_hint)
       // Email hint should be truncated (e.g., "t***@example.com")
       assertEquals(firstUser.email_hint.includes('***'), true)
+    }
+  })
+
+  await t.step('finds the newest user regardless of how many accounts exist', async () => {
+    // The function used to read emails from the first page of listUsers, so
+    // accounts beyond the first 100 never appeared. Look up a brand-new user.
+    const { id: leagueId } = await factory.createLeague(uniqueName('search-new-user'))
+    const displayName = uniqueName('Searchable Newcomer')
+    const email = `${displayName.replace(/\W+/g, '-').toLowerCase()}@example.com`
+    const admin = getServiceClient()
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password: 'search-users-test-password-1!',
+      email_confirm: true,
+      user_metadata: { display_name: displayName },
+    })
+    if (createError) throw createError
+
+    try {
+      const { data, error } = await client.functions.invoke('search-users', {
+        body: { query: displayName, league_id: leagueId },
+      })
+
+      assertEquals(error, null)
+      assertEquals(data.users.length, 1)
+      assertEquals(data.users[0].user_id, created.user.id)
+      assertEquals(data.users[0].display_name, displayName)
+      assertEquals(data.users[0].email_hint.includes('***'), true)
+    } finally {
+      await admin.auth.admin.deleteUser(created.user.id)
     }
   })
 

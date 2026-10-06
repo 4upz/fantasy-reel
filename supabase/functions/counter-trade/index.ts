@@ -22,6 +22,7 @@ import {
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
 import { resolveOfferExpiry, deriveExpiryBounds, hasLapsed, type ExpiryRequest } from '../_shared/trade-expiry.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 
 const log = createLogger('counter-trade')
 
@@ -131,6 +132,9 @@ Deno.serve(async (req) => {
     if (!expiry.valid) {
       return errorResponse(expiry.error, 400)
     }
+
+    const throttled = await throttleUser('trade_counter', user.id, log, serviceClient)
+    if (throttled) return throttled
 
     // Use the atomic database function with row-level locking
     const { data: rpcResult, error: rpcError } = await serviceClient.rpc('counter_trade', {

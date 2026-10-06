@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, authenticateRequest, isAuthError, internalErrorResponse } from '../_shared/utils.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { escapeLikePattern, maskEmail } from '../_shared/user-search.ts'
 
 const log = createLogger('search-users')
@@ -75,6 +76,9 @@ Deno.serve(async (req) => {
       return errorResponse('Cannot send invitations - draft has already started', 400)
     }
 
+    const throttled = await throttleUser('user_search', user.id, log)
+    if (throttled) return throttled
+
     const supabaseAdmin = createAdminClient()
 
     // Fetch participants and pending invites in parallel. Pending invites need
@@ -115,24 +119,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ users: [] })
     }
 
-    // Get emails for these users from auth.users
-    const userIds = profiles.map(p => p.user_id)
-    const { data: authUsers, error: authError } = await supabaseAdmin.auth.admin.listUsers({
-      perPage: 100
-    })
+    // Look up emails for just the matched users. Listing auth users instead
+    // loads unrelated accounts and misses anyone past the first page.
+    const lookups = await Promise.all(
+      profiles.map(p => supabaseAdmin.auth.admin.getUserById(p.user_id))
+    )
 
+    // A profile whose auth user is gone (404) is skipped; any other failure
+    // would silently drop results, so treat it as an error.
+    const authError = lookups.find(l => l.error && l.error.status !== 404)?.error
     if (authError) {
       log.error('Error fetching auth users', { error: serializeError(authError) })
       return errorResponse('Failed to search users', 500)
     }
 
-    // Create a map of user_id to email
     const userEmailMap = new Map<string, string>()
-    authUsers.users.forEach(u => {
-      if (userIds.includes(u.id) && u.email) {
-        userEmailMap.set(u.id, u.email)
-      }
-    })
+    for (const { data } of lookups) {
+      if (data.user?.email) userEmailMap.set(data.user.id, data.user.email)
+    }
 
     // Build results, excluding users with pending invitations
     const results: UserSearchResult[] = []

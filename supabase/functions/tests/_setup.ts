@@ -99,6 +99,16 @@ export async function resetInviteRateLimits(): Promise<void> {
 }
 
 /**
+ * Clear the per-user Edge Function throttles (`throttleUser` in
+ * _shared/rate-limit.ts). The suite reuses a few test users for far more
+ * bids, trades and searches than a person makes in an hour.
+ */
+export async function resetUserRateLimits(): Promise<void> {
+  const { error } = await getServiceClient().from('rate_limit_counters').delete().like('bucket', 'user:%')
+  if (error) throw new Error(`Failed to reset user rate limits: ${error.message}`)
+}
+
+/**
  * Get a service role client for direct database operations
  */
 export function getServiceClient(): SupabaseClient {
@@ -1300,6 +1310,7 @@ export async function createTestFactory(): Promise<{
   factory: TestDataFactory
 }> {
   await resetInviteRateLimits()
+  await resetUserRateLimits()
   const client = await getAuthenticatedClient()
   const secondClient = await getSecondAuthenticatedClient()
   const factory = new TestDataFactory(client, secondClient)
