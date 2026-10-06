@@ -398,13 +398,12 @@ export async function generateJoinLink(
 ): Promise<{ joinCode: string }> {
   const client = getAdminClient()
 
-  // Generate a random 6-char join code (matches Edge Function format and VARCHAR(8) column limit)
-  const joinCode = generateRandomCode(6)
+  // Random 8-char join code (matches the Edge Function's format)
+  const joinCode = generateRandomCode(8)
 
   const { error } = await client
-    .from('leagues')
-    .update({ join_code: joinCode })
-    .eq('id', leagueId)
+    .from('league_join_links')
+    .upsert({ league_id: leagueId, join_code: joinCode, join_token: crypto.randomUUID() })
 
   if (error) {
     throw new Error(`Failed to generate join link: ${error.message}`)
@@ -422,10 +421,10 @@ export async function getLeagueJoinCode(
   const client = getAdminClient()
 
   const { data, error } = await client
-    .from('leagues')
+    .from('league_join_links')
     .select('join_code')
-    .eq('id', leagueId)
-    .single()
+    .eq('league_id', leagueId)
+    .maybeSingle()
 
   if (error) {
     throw new Error(`Failed to get join code: ${error.message}`)
@@ -441,9 +440,9 @@ export async function clearJoinCode(leagueId: string): Promise<void> {
   const client = getAdminClient()
 
   const { error } = await client
-    .from('leagues')
-    .update({ join_code: null })
-    .eq('id', leagueId)
+    .from('league_join_links')
+    .delete()
+    .eq('league_id', leagueId)
 
   if (error) {
     throw new Error(`Failed to clear join code: ${error.message}`)

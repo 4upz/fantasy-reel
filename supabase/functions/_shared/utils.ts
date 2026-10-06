@@ -292,15 +292,26 @@ export function hasReleased(releaseDate: string | null, today: string): boolean 
 // Characters for join codes - excludes ambiguous chars (0, O, I, 1, L)
 const JOIN_CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
 
-export function generateJoinCode(length = 6): string {
+/** Length of newly generated join codes. Older leagues may still hold 6-character codes. */
+export const JOIN_CODE_LENGTH = 8
+
+/**
+ * A random join code from a CSPRNG. Bytes at or above the largest multiple of
+ * the alphabet size are rejected so every character is equally likely.
+ */
+export function generateJoinCode(length = JOIN_CODE_LENGTH): string {
+  const limit = 256 - (256 % JOIN_CODE_CHARS.length)
   let code = ''
-  for (let i = 0; i < length; i++) {
-    code += JOIN_CODE_CHARS[Math.floor(Math.random() * JOIN_CODE_CHARS.length)]
+  while (code.length < length) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(length * 2))) {
+      if (byte < limit && code.length < length) code += JOIN_CODE_CHARS[byte % JOIN_CODE_CHARS.length]
+    }
   }
   return code
 }
 
-const JOIN_CODE_REGEX = /^[A-HJ-KM-NP-Z2-9]{6}$/
+// 6 characters for codes issued before JOIN_CODE_LENGTH became 8.
+const JOIN_CODE_REGEX = /^(?:[A-HJ-KM-NP-Z2-9]{6}|[A-HJ-KM-NP-Z2-9]{8})$/
 
 export function isValidJoinCode(code: string): boolean {
   return Boolean(code) && JOIN_CODE_REGEX.test(code.toUpperCase())
