@@ -46,4 +46,21 @@ Deno.test('_mock-client extensions', async (t) => {
     await client.from('t').update({ x: 1 }).eq('id', 2).is('x', null)
     assertEquals(db.t, [{ id: 1, x: 1 }, { id: 2, x: 1 }, { id: 3, x: null }])
   })
+
+  await t.step('upsert().select() returns only the rows written', async () => {
+    const db: MockDb = { t: [{ id: 1, x: 'old' }] }
+    const client = createMockDbClient(db)
+    const ignored = await client.from('t').upsert([{ id: 1, x: 'new' }, { id: 2 }], { onConflict: 'id', ignoreDuplicates: true }).select('id')
+    assertEquals(ignored.data.map((r: { id: number }) => r.id), [2])
+    const merged = await client.from('t').upsert([{ id: 1, x: 'new' }], { onConflict: 'id' }).select('id')
+    assertEquals(merged.data.length, 1)
+  })
+
+  await t.step('delete() removes matching rows; range() slices inclusively', async () => {
+    const db: MockDb = { t: [{ id: 1, k: 'a' }, { id: 2, k: 'b' }, { id: 3, k: 'a' }] }
+    const client = createMockDbClient(db)
+    assertEquals((await client.from('t').select('*').range(1, 2)).data.map((r: { id: number }) => r.id), [2, 3])
+    await client.from('t').delete().eq('k', 'a')
+    assertEquals(db.t, [{ id: 2, k: 'b' }])
+  })
 })

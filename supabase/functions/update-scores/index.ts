@@ -530,9 +530,10 @@ Deno.serve(async (req) => {
             log.info('Calculated score', { movie_title: movie.title, fantasy_points: fantasyPts })
             results.scores_updated++
 
-            // Freeze the projection (if any) at the first real Tomatometer so
-            // projected-vs-actual is never rewritten. No row is fine.
-            await freezeProjection(serviceClient, movie.tmdb_id, ratings)
+            // Freeze the projection (if any) once the movie has released, so
+            // projected-vs-actual is never rewritten and a pre-release score
+            // is never recorded as the outcome. No row is fine.
+            await freezeProjection(serviceClient, movie.tmdb_id, ratings, hasReleased(movie.release_date, today))
           }
         }
 

@@ -17,10 +17,12 @@ import { createLogger, serializeError } from './logger.ts'
 const log = createLogger('shared/mdblist-budget')
 
 export const MDBLIST_PROJECTIONS_KEY = 'mdblist:projections'
-/** Free-plan account cap. */
-export const MDBLIST_ACCOUNT_CAP = 1000
-/** Calls ingestion always leaves for the evening score sync, whatever the flag says. */
-export const MDBLIST_SCORING_RESERVE = 100
+/**
+ * Calls projections never spend, whatever the flag says: the account's daily
+ * cap minus this is the most MDBList may have counted before ingestion stops.
+ * Covers the evening score sync and a margin for franchise-history bursts.
+ */
+export const MDBLIST_SAFETY_RESERVE = 150
 
 export interface MdblistUsage {
   /** Daily request cap on the account. */
