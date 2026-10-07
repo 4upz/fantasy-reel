@@ -25,36 +25,58 @@ A11Y_REPORT_DIR=/tmp/a11y npx playwright test e2e/tests/accessibility --project=
 
 `A11Y_REPORT_DIR` additionally writes each scan's violations to JSON.
 
-## Baseline (before, `origin/main` at 25362e7, 2026-10-06)
+## Baseline (before, `origin/main` at 138d079, 2026-10-07)
 
-**axe-core:** 78 scans (39 page/state combinations × 2 themes). **0 scans
-clean.** 277 violation instances across 8 rules:
+Measured with the same suite and lint rules as "Current status", run against
+the unmodified `origin/main` build. A first audit of the earlier 25362e7 drove
+the work; it was re-measured here once account deletion, email preferences and
+unsubscribe had merged, and those are included.
+
+**axe-core: 0 of 92 scans clean** (282 violation instances, 8 rules). Another 26
+of the suite's 118 scans could not run at all: the dialogs they open were not
+reachable from the keyboard or not exposed as dialogs.
 
 | Rule | Impact | Scans affected | What it was |
 |---|---|---|---|
 | `select-name` | critical | 2 | Wishlist sort `<select>` had no label |
-| `link-in-text-block` | serious | 64 | TMDb credit (every page) and inline links distinguishable by color only |
-| `target-size` | serious | 43 | Sidebar toggle overlapped (dev-overlay artifact; not an app bug) |
+| `link-in-text-block` | serious | 74 | TMDb credit (every page) and inline links distinguishable by color only |
 | `color-contrast` | serious | 14 | Dark theme: crimson text 3.2:1, completed badge 3.6:1, muted text 4.4:1, info/setup blue, Discord blurple |
-| `region` | moderate | 15 | Auth pages' content outside any landmark |
-| `heading-order` | moderate | 20 | Skipped heading levels (h1→h3, h2→h4) on dashboard, help, bidding, dialogs |
-| `landmark-one-main` | moderate | 14 | No `<main>` on login, signup, forgot/reset password, auth error, error, 404 |
+| `nested-interactive` | serious | 2 | Bid search results: a wishlist button inside a `div role="button"` |
+| `region` | moderate | 20 | Auth and unsubscribe pages' content outside any landmark |
+| `heading-order` | moderate | 26 | Skipped heading levels (h1→h3, h2→h4) on dashboard, help, bidding, dialogs |
+| `landmark-one-main` | moderate | 16 | No `<main>` on login, signup, forgot/reset password, unsubscribe, auth error, error, 404 |
 | `landmark-unique` | moderate | 2 | Two unlabeled `<nav>`s with the mobile drawer open |
 
-**Page structure:** 19 of 27 routes had the generic title "Fantasy Reel", so
-Next's route announcer read the same thing on every navigation. 7 routes had no
-`<main>`; 4 had zero or two `<h1>`s; only 4 public pages had a skip link.
+**Page structure:** 19 of 28 routes had the generic title "Fantasy Reel". Next's
+route announcer speaks only when the title changes, so client-side navigation
+between them was silent. 8 routes had no `<main>`, 4 had zero or two `<h1>`s,
+and only 4 public pages had a skip link.
 
-**jsx-a11y strict lint:** 33 errors in 20 files (10 unassociated labels,
+**Keyboard and dialogs:**
+- 12 dialogs and menus failed a keyboard check.
+  - Change password and Invite were not exposed as dialogs at all.
+  - Six opened without moving focus inside: accept trade, cancel bid, edit
+    team, end season, and both mobile sheets.
+  - Create league and Place bid let Tab wander to the page behind.
+  - Create league ignored Escape, and neither returned focus.
+  - The notifications menu had no expanded state and ignored Escape.
+- 23 of the 26 modals, sheets and drawers were hand-built `div` overlays.
+- 0 of 3 screen-reader flows passed:
+  - live draft announcements;
+  - a failed sign-in that is announced and keeps what was typed;
+  - a busy dialog that survives repeated Escape.
+
+**jsx-a11y strict lint:** 32 errors in 17 files (10 unassociated labels,
 9 handlers on non-interactive elements, 7 click-without-key handlers, autofocus,
 non-interactive tabindex, misused roles).
 
-**Manual audit:** 492 findings in 140 component files — **22 blockers, 184
-major, 286 minor**. The patterns:
+**Manual audit:** 501 findings in 143 component files (**22 blockers, 189
+major, 290 minor**): 492 from the first audit, plus 9 in the newly merged
+delete-account dialog, email preferences switch and unsubscribe page. The
+patterns:
 
-- 22 modals, sheets and drawers were hand-built `div` overlays: no focus move,
-  no focus trap, page behind them still reachable, no focus return, several with
-  no dialog role or name.
+- Hand-built `div` modals: no focus move, no focus trap, page behind them still
+  reachable, no focus return, several with no dialog role or name.
 - The live draft announced nothing on desktop (its only live region was
   `lg:hidden`), and nobody was ever told what was picked.
 - `aria-label="View {title}"` on roster, standings and movie cards replaced the
@@ -68,14 +90,16 @@ major, 286 minor**. The patterns:
 
 ## Current status (after the October 2026 pass)
 
-| Check | Baseline | Now |
+| Check | Baseline (138d079) | Now |
 |---|---|---|
-| axe-core scans clean | 0 of 78 (277 violations, 8 rules) | **118 of 118** (59 pages, dialogs, menus and sheets × 2 themes; 0 violations) |
-| Routes with their own `<title>` | 8 of 27 | **27 of 27** (league tabs also name the league) |
-| Routes with one `<main>` + skip link | 4 of 27 | **27 of 27** |
-| jsx-a11y strict lint errors | 33 in 20 files | **0** (now enforced by `next lint` / `next build`) |
-| Manual audit findings | 492 (22 blockers, 184 major, 286 minor) | All blockers and majors fixed; minors fixed except the few declined below |
-| Modal dialogs on native `<dialog>` with focus containment, Escape, focus return | 3 of 25 | **25 of 25** |
+| axe-core scans clean | 0 of 92 (282 violations, 8 rules; 26 more could not run) | **122 of 122** (61 pages, dialogs, menus and sheets × 2 themes; 0 violations) |
+| Routes with their own `<title>` | 9 of 28 | **28 of 28** (league tabs also name the league) |
+| Routes with one `<main>` + skip link | 4 of 28 | **28 of 28** |
+| Dialogs and menus passing every keyboard check | 12 of 19 failing (2 not exposed as dialogs) | **All 19 exercised pass** (focus in, Tab contained, Escape closes, focus returns) |
+| Modal dialogs on native `<dialog>` | 3 of 26 | **26 of 26** |
+| Screen-reader flow tests | 0 of 3 | **3 of 3** |
+| jsx-a11y strict lint errors | 32 in 17 files | **0** (now enforced by `next lint` / `next build`) |
+| Manual audit findings | 501 (22 blockers, 189 major, 290 minor) | All blockers and majors fixed; minors fixed except the few declined below |
 
 How the blocker patterns were resolved:
 
@@ -111,10 +135,12 @@ Declined, with reasons (from the fix reports):
   rather than a screen-reader issue; its consequence is exposed through
   `aria-describedby`.
 
-Verified locally against a fresh run of the full E2E suite. The draft Realtime
-specs and the avatar-upload specs fail identically on unmodified `origin/main`
-in a local stack, because of local Realtime delivery and an unapplied storage
-migration, so CI is the authoritative run for those.
+Verified locally on a production build (`next build` + `next start`, as CI
+runs it): the accessibility suite passes in full. The full E2E suite fails
+locally in exactly the same 10 specs as unmodified `origin/main`. Those depend
+on local Realtime delivery or on migrations not yet applied to the local
+database (draft Realtime, avatar upload, join links, email preferences). CI
+runs on a fresh stack and is the authoritative run for them.
 
 ## Conventions (keep it at 100%)
 
