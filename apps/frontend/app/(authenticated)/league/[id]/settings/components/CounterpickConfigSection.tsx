@@ -6,7 +6,7 @@ import { Target } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League } from '@/types'
 import { ButtonSpinner } from '../../components/Icons'
-import { SectionHeader, LockedMessage } from './shared'
+import { SectionHeader, LockedMessage, NumberField } from './shared'
 
 interface Props {
   league: League
@@ -105,69 +105,35 @@ export default function CounterpickConfigSection({
           <div className="space-y-6">
             {/* Counterpick Slots */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Draft Counterpick Slots */}
-              <div>
-                <label
-                  htmlFor="draft_counterpick_slots"
-                  className="type-label block text-foreground-secondary mb-2"
-                >
-                  Draft counterpick slots
-                </label>
-                <input
-                  type="number"
-                  id="draft_counterpick_slots"
-                  value={draftCounterpickSlots}
-                  onChange={(e) =>
-                    setDraftCounterpickSlots(
-                      parseInt(e.target.value, 10) || MIN_DRAFT_COUNTERPICK_SLOTS
-                    )
-                  }
-                  min={MIN_DRAFT_COUNTERPICK_SLOTS}
-                  max={MAX_DRAFT_COUNTERPICK_SLOTS}
-                  className={`type-input type-numeric input w-24 ${draftSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
-                />
-                <p className="type-meta text-foreground-secondary mt-1.5">
-                  Counterpicks per team after draft (0 to disable)
-                </p>
-                {draftSlotsOutOfRange && (
-                  <p className="type-meta text-error mt-1">
-                    Must be between {MIN_DRAFT_COUNTERPICK_SLOTS} and{' '}
-                    {MAX_DRAFT_COUNTERPICK_SLOTS}
-                  </p>
-                )}
-              </div>
+              <NumberField
+                id="draft_counterpick_slots"
+                label="Draft counterpick slots"
+                value={draftCounterpickSlots}
+                onChange={(raw) =>
+                  setDraftCounterpickSlots(parseInt(raw, 10) || MIN_DRAFT_COUNTERPICK_SLOTS)
+                }
+                min={MIN_DRAFT_COUNTERPICK_SLOTS}
+                max={MAX_DRAFT_COUNTERPICK_SLOTS}
+                help="Counterpicks per team after draft (0 to disable)"
+                error={draftSlotsOutOfRange
+                  ? `Must be between ${MIN_DRAFT_COUNTERPICK_SLOTS} and ${MAX_DRAFT_COUNTERPICK_SLOTS}`
+                  : null}
+              />
 
-              {/* Bidding Counterpick Slots */}
-              <div>
-                <label
-                  htmlFor="bidding_counterpick_slots"
-                  className="type-label block text-foreground-secondary mb-2"
-                >
-                  Bidding counterpick slots
-                </label>
-                <input
-                  type="number"
-                  id="bidding_counterpick_slots"
-                  value={biddingCounterpickSlots}
-                  onChange={(e) =>
-                    setBiddingCounterpickSlots(
-                      parseInt(e.target.value, 10) || MIN_BIDDING_COUNTERPICK_SLOTS
-                    )
-                  }
-                  min={MIN_BIDDING_COUNTERPICK_SLOTS}
-                  max={MAX_BIDDING_COUNTERPICK_SLOTS}
-                  className={`type-input type-numeric input w-24 ${biddingSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
-                />
-                <p className="type-meta text-foreground-secondary mt-1.5">
-                  Counterpicks per team during bidding (0 to disable)
-                </p>
-                {biddingSlotsOutOfRange && (
-                  <p className="type-meta text-error mt-1">
-                    Must be between {MIN_BIDDING_COUNTERPICK_SLOTS} and{' '}
-                    {MAX_BIDDING_COUNTERPICK_SLOTS}
-                  </p>
-                )}
-              </div>
+              <NumberField
+                id="bidding_counterpick_slots"
+                label="Bidding counterpick slots"
+                value={biddingCounterpickSlots}
+                onChange={(raw) =>
+                  setBiddingCounterpickSlots(parseInt(raw, 10) || MIN_BIDDING_COUNTERPICK_SLOTS)
+                }
+                min={MIN_BIDDING_COUNTERPICK_SLOTS}
+                max={MAX_BIDDING_COUNTERPICK_SLOTS}
+                help="Counterpicks per team during bidding (0 to disable)"
+                error={biddingSlotsOutOfRange
+                  ? `Must be between ${MIN_BIDDING_COUNTERPICK_SLOTS} and ${MAX_BIDDING_COUNTERPICK_SLOTS}`
+                  : null}
+              />
             </div>
 
             {/* Counterpick Info */}
@@ -193,6 +159,7 @@ export default function CounterpickConfigSection({
                   id="counterpicks_block_drops"
                   checked={counterpicksBlockDrops}
                   onChange={(e) => setCounterpicksBlockDrops(e.target.checked)}
+                  aria-describedby="counterpicks_block_drops_help"
                   className="w-4 h-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-0 focus:ring-2 cursor-pointer"
                 />
               </div>
@@ -203,7 +170,7 @@ export default function CounterpickConfigSection({
                 >
                   Block drops on counterpicked movies
                 </label>
-                <p className="type-meta text-foreground-secondary mt-1">
+                <p id="counterpicks_block_drops_help" className="type-meta text-foreground-secondary mt-1">
                   Prevent dropping movies that have been counterpicked by opponents
                 </p>
               </div>

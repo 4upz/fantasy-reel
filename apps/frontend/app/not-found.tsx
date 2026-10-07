@@ -1,9 +1,12 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import BrandLogo from './components/BrandLogo'
 
+export const metadata: Metadata = { title: 'Page not found' }
+
 export default function NotFound() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <main id="main-content" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="card animate-fade-in w-full max-w-md space-y-6 p-8 text-center">
         <div className="flex justify-center">
           <BrandLogo markOnly className="h-auto w-16" />
@@ -20,6 +23,6 @@ export default function NotFound() {
           Back to home
         </Link>
       </div>
-    </div>
+    </main>
   )
 }

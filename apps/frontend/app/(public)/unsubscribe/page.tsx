@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import UnsubscribeClient from './UnsubscribeClient'
 
 export const metadata: Metadata = {
-  title: 'Unsubscribe | Fantasy Reel',
+  title: 'Unsubscribe',
   robots: { index: false },
   // The token in the URL is a credential; don't hand it to anything linked from here.
   referrer: 'no-referrer',

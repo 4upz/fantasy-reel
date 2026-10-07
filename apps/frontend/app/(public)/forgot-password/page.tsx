@@ -1,44 +1,67 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { requestPasswordReset } from './actions'
 import Link from 'next/link'
 import { FormError } from '../../components/FormError'
 import NavLogo from '../../components/navigation/NavLogo'
-import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
+import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
+import { useHydrated } from '@/hooks/useHydrated'
 
 export default function ForgotPasswordPage() {
+  // Until React attaches onSubmit, a native submit would put the fields in the URL.
+  const hydrated = useHydrated()
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const captcha = useCaptcha()
+  const submitRef = useRef<HTMLButtonElement>(null)
+  const successHeadingRef = useRef<HTMLHeadingElement>(null)
 
-  async function handleSubmit(formData: FormData) {
+  // onSubmit rather than a form action: an action clears the field when it
+  // resolves, so a failed request would make the user retype the address.
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!captcha.ready) {
+      setError(CAPTCHA_PENDING_MESSAGE)
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
     setError(null)
     setIsLoading(true)
     formData.set(CAPTCHA_FIELD, captcha.token ?? '')
 
+    let result: Awaited<ReturnType<typeof requestPasswordReset>>
     try {
-      const result = await requestPasswordReset(formData)
-      if (result.error) {
-        setError(result.error)
-      } else if (result.success) {
-        setSuccess(true)
-      }
+      result = await requestPasswordReset(formData)
     } catch {
-      setError('An unexpected error occurred')
-    } finally {
-      setIsLoading(false)
-      captcha.reset()
+      result = { success: false, error: 'An unexpected error occurred' }
     }
+
+    // The disabled form dropped focus: re-enable it (or swap in the success
+    // view), then focus what the user needs next. The error announces itself,
+    // so focus goes back to the button.
+    flushSync(() => {
+      setIsLoading(false)
+      if (result.error) setError(result.error)
+      else if (result.success) setSuccess(true)
+    })
+    captcha.reset()
+
+    if (result.error) submitRef.current?.focus()
+    else if (result.success) successHeadingRef.current?.focus()
   }
 
   if (success) {
     return (
       <div className="w-full max-w-md space-y-8 text-center px-4">
         <div className="card p-8">
-          <h2 className="type-panel text-foreground">Check your email</h2>
+          <h1 ref={successHeadingRef} tabIndex={-1} className="type-panel text-foreground focus:outline-none">
+            Check your email
+          </h1>
           <div className="mt-6 space-y-4">
             <p className="text-foreground-secondary">
               If an account exists with that email, we sent a password reset link.
@@ -84,7 +107,7 @@ export default function ForgotPasswordPage() {
       </div>
 
       <div className="card p-8">
-        <form action={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <FormError message={error} />
 
           <p className="type-body-sm text-foreground-secondary">
@@ -92,7 +115,7 @@ export default function ForgotPasswordPage() {
           </p>
 
           <div>
-            <label htmlFor="email" className="sr-only">
+            <label htmlFor="email" className="type-label block text-foreground-secondary mb-2">
               Email address
             </label>
             <input
@@ -103,7 +126,6 @@ export default function ForgotPasswordPage() {
               required
               disabled={isLoading}
               className="input"
-              placeholder="Email address"
               data-testid="email-input"
             />
           </div>
@@ -111,8 +133,9 @@ export default function ForgotPasswordPage() {
           <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
 
           <button
+            ref={submitRef}
             type="submit"
-            disabled={isLoading || !captcha.ready}
+            disabled={isLoading || !hydrated}
             className="btn btn-primary w-full py-3"
             data-testid="reset-button"
           >

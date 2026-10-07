@@ -1,19 +1,30 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { updatePassword } from './actions'
+import { useState, useEffect, useId, useRef } from 'react'
+import { flushSync } from 'react-dom'
+import { updatePassword, type ResetPasswordField } from './actions'
 import Link from 'next/link'
-import { FormError, FormSuccess } from '../../components/FormError'
+import { FormError, FormSuccess, fieldErrorProps } from '../../components/FormError'
 import NavLogo from '../../components/navigation/NavLogo'
 import { createClient } from '@/utils/supabase/client'
-import { PASSWORD_HINT } from '@/utils/password'
-import { toast } from 'sonner'
+import { MIN_PASSWORD_LENGTH } from '@/utils/password'
+import { useHydrated } from '@/hooks/useHydrated'
 
 export default function ResetPasswordPage() {
+  // Until React attaches onSubmit, a native submit would put the fields in the URL.
+  const hydrated = useHydrated()
   const [error, setError] = useState<string | null>(null)
+  const [errorField, setErrorField] = useState<ResetPasswordField | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [isValidSession, setIsValidSession] = useState<boolean | null>(null)
+  const errorId = useId()
+  const passwordHintId = useId()
+  const submitRef = useRef<HTMLButtonElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
+  const confirmPasswordRef = useRef<HTMLInputElement>(null)
+  const successHeadingRef = useRef<HTMLHeadingElement>(null)
+  const fieldRefs = { password: passwordRef, confirmPassword: confirmPasswordRef }
 
   useEffect(() => {
     const supabase = createClient()
@@ -41,24 +52,42 @@ export default function ResetPasswordPage() {
     return () => subscription.unsubscribe()
   }, [])
 
-  async function handleSubmit(formData: FormData) {
+  // onSubmit rather than a form action: an action clears the fields when it
+  // resolves, so one mistake would make the user retype both.
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
     setError(null)
+    setErrorField(null)
     setIsLoading(true)
 
+    let result: Awaited<ReturnType<typeof updatePassword>>
     try {
-      const result = await updatePassword(formData)
-      if (result.error) {
-        setError(result.error)
-        toast.error(result.error)
-      } else if (result.success) {
-        setSuccess(true)
-        toast.success('Password updated successfully!')
-      }
+      result = await updatePassword(formData)
     } catch (err) {
       console.error('Password update failed:', err)
-      setError('An unexpected error occurred')
-    } finally {
+      result = { success: false, error: 'An unexpected error occurred' }
+    }
+
+    // The disabled form dropped focus: re-enable it (or swap in the success
+    // view), then focus what the user needs next: the field an error is about
+    // (it reads the error as its description) or, for any other error, the
+    // button, since the error announces itself.
+    flushSync(() => {
       setIsLoading(false)
+      if (result.error) {
+        setError(result.error)
+        setErrorField(result.field ?? null)
+      } else if (result.success) {
+        setSuccess(true)
+      }
+    })
+
+    if (result.error) {
+      if (result.field) fieldRefs[result.field].current?.focus()
+      else submitRef.current?.focus()
+    } else if (result.success) {
+      successHeadingRef.current?.focus()
     }
   }
 
@@ -66,7 +95,8 @@ export default function ResetPasswordPage() {
   if (isValidSession === null) {
     return (
       <div className="w-full max-w-md space-y-8 px-4">
-        <div className="card p-8 text-center">
+        <h1 className="sr-only">Set your new password</h1>
+        <div className="card p-8 text-center" role="status">
           <p className="text-foreground-secondary">Loading...</p>
         </div>
       </div>
@@ -97,7 +127,10 @@ export default function ResetPasswordPage() {
     return (
       <div className="w-full max-w-md space-y-8 text-center px-4">
         <div className="card p-8">
-          <FormSuccess message="Your password has been updated successfully!" />
+          {/* The message below says it visually; the heading gives focus a landing
+              spot and is what's read, so the message stays quiet. */}
+          <h1 ref={successHeadingRef} tabIndex={-1} className="sr-only">Password updated</h1>
+          <FormSuccess message="Your password has been updated successfully!" announce={false} />
           <div className="mt-6">
             <Link href="/login" className="btn btn-primary">
               Sign in with new password
@@ -118,15 +151,16 @@ export default function ResetPasswordPage() {
       </div>
 
       <div className="card p-8">
-        <form action={handleSubmit} className="space-y-6">
-          <FormError message={error} />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <FormError message={error} id={errorId} announce={!errorField} />
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="password" className="sr-only">
+              <label htmlFor="password" className="type-label block text-foreground-secondary mb-2">
                 New password
               </label>
               <input
+                ref={passwordRef}
                 id="password"
                 name="password"
                 type="password"
@@ -134,15 +168,19 @@ export default function ResetPasswordPage() {
                 required
                 disabled={isLoading}
                 className="input"
-                placeholder={`New password (${PASSWORD_HINT})`}
                 data-testid="password-input"
+                {...fieldErrorProps(errorField === 'password', errorId, passwordHintId)}
               />
+              <p id={passwordHintId} className="type-meta mt-1 text-foreground-secondary">
+                Must be at least {MIN_PASSWORD_LENGTH} characters
+              </p>
             </div>
             <div>
-              <label htmlFor="confirmPassword" className="sr-only">
+              <label htmlFor="confirmPassword" className="type-label block text-foreground-secondary mb-2">
                 Confirm new password
               </label>
               <input
+                ref={confirmPasswordRef}
                 id="confirmPassword"
                 name="confirmPassword"
                 type="password"
@@ -150,13 +188,19 @@ export default function ResetPasswordPage() {
                 required
                 disabled={isLoading}
                 className="input"
-                placeholder="Confirm new password"
                 data-testid="confirm-password-input"
+                {...fieldErrorProps(errorField === 'confirmPassword', errorId)}
               />
             </div>
           </div>
 
-          <button type="submit" disabled={isLoading} className="btn btn-primary w-full py-3" data-testid="submit-button">
+          <button
+            ref={submitRef}
+            type="submit"
+            disabled={isLoading || !hydrated}
+            className="btn btn-primary w-full py-3"
+            data-testid="submit-button"
+          >
             {isLoading ? 'Updating...' : 'Update password'}
           </button>
         </form>

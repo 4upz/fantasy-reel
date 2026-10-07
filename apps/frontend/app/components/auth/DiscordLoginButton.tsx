@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
 import DiscordIcon from '../icons/DiscordIcon'
 
@@ -10,6 +12,7 @@ interface Props {
 
 export default function DiscordLoginButton({ redirectTo }: Props): React.ReactElement {
   const [isLoading, setIsLoading] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleDiscordLogin = async () => {
     setIsLoading(true)
@@ -25,13 +28,17 @@ export default function DiscordLoginButton({ redirectTo }: Props): React.ReactEl
 
     if (error) {
       console.error('Discord login error:', error)
-      setIsLoading(false)
+      toast.error("Couldn't connect to Discord. Please try again.")
+      // Disabling the button dropped focus; give it back once it is enabled again.
+      flushSync(() => setIsLoading(false))
+      buttonRef.current?.focus()
     }
     // If successful, user will be redirected to Discord
   }
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={handleDiscordLogin}
       disabled={isLoading}

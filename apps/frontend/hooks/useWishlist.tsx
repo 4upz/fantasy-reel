@@ -1,7 +1,9 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
+import { announce } from '@/utils/announce'
 import type { TMDbSearchResult, WishlistedMovie } from '@/types'
 
 interface WishlistContextValue {
@@ -15,6 +17,16 @@ interface WishlistContextValue {
 }
 
 const WishlistContext = createContext<WishlistContextValue | null>(null)
+
+/**
+ * A failed toggle reverts the heart, which on its own says nothing. Toasts
+ * render beneath an open modal dialog (hidden and silent there), so inside
+ * one the message is also announced from within the dialog.
+ */
+function reportToggleFailure(message: string): void {
+  toast.error(message)
+  if (document.querySelector('dialog[open]')) announce(message, 'assertive')
+}
 
 function clearLegacyLocalStorageFavorites(): void {
   if (typeof window === 'undefined') return
@@ -97,6 +109,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         inFlightRef.current.delete(tmdbId)
+        reportToggleFailure('Sign in again to update your wishlist')
         return
       }
 
@@ -161,6 +174,11 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         applyOptimisticUpdate(wasWishlisted)
         console.error('Failed to toggle wishlist:', err)
+        reportToggleFailure(
+          wasWishlisted
+            ? `Could not remove ${movie.title} from your wishlist`
+            : `Could not add ${movie.title} to your wishlist`
+        )
       } finally {
         inFlightRef.current.delete(tmdbId)
       }

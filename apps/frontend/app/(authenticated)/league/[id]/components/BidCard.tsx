@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import Modal from '@/app/components/Modal'
 import MoviePoster from '@/app/components/MoviePoster'
 import { AlertTriangle, Lock, Scissors, Trash2, X } from 'lucide-react'
 import type { PickupBid } from '@/types'
@@ -38,7 +39,6 @@ interface BidCardProps {
 }
 
 interface CancelBidModalProps {
-  isOpen: boolean
   onClose: () => void
   onConfirm: () => void
   movieTitle: string
@@ -47,67 +47,37 @@ interface CancelBidModalProps {
 }
 
 function CancelBidModal({
-  isOpen,
   onClose,
   onConfirm,
   movieTitle,
   moviePoster,
   bidAmount,
 }: CancelBidModalProps) {
-  const modalRef = useRef<HTMLDivElement>(null)
-
-  // Close on escape
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape)
-      return () => document.removeEventListener('keydown', handleEscape)
-    }
-  }, [isOpen, onClose])
-
-  // Close on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-        onClose()
-      }
-    }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [isOpen, onClose])
-
-  if (!isOpen) return null
+  const titleId = useId()
+  const questionId = useId()
+  const movieId = useId()
 
   return (
-    <div className="modal-overlay">
-      <div
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="cancel-bid-title"
-        className="glass modal-panel max-w-sm w-full mx-4 rounded-xl border border-border shadow-heavy"
-      >
+    <Modal onClose={onClose} labelledBy={titleId} describedBy={`${questionId} ${movieId}`}>
+      <div className="glass modal-panel max-w-sm w-full rounded-xl border border-border shadow-heavy motion-reduce:animate-none">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 id="cancel-bid-title" className="type-section text-foreground">
+          <h2 id={titleId} className="type-section text-foreground">
             Cancel bid
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-ghost p-1.5 rounded-full"
-            aria-label="Close"
+            aria-label="Close cancel bid dialog"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
         {/* Content */}
         <div className="p-4">
-          <p className="text-foreground-secondary mb-3">
+          <p id={questionId} className="text-foreground-secondary mb-3">
             Are you sure you want to cancel your bid?
           </p>
 
@@ -116,17 +86,17 @@ function CancelBidModal({
               <div className="relative w-12 h-18 flex-shrink-0 rounded overflow-hidden bg-elevated">
                 <MoviePoster
                   src={moviePoster}
-                  alt={movieTitle}
+                  alt=""
                   sizes="48px"
                   posterSize="w154"
                 />
               </div>
-              <div className="flex-1 min-w-0">
+              <div id={movieId} className="flex-1 min-w-0">
                 <p className="type-row-title text-foreground break-words">
                   {movieTitle}
                 </p>
                 <p className="type-number bid-amount-display">
-                  ${bidAmount}
+                  <span className="sr-only">Bid: </span>${bidAmount}
                 </p>
               </div>
             </div>
@@ -139,12 +109,15 @@ function CancelBidModal({
           {/* Actions */}
           <div className="flex gap-3">
             <button
+              type="button"
               onClick={onClose}
               className="btn btn-ghost flex-1"
+              data-dialog-initial-focus
             >
               Keep bid
             </button>
             <button
+              type="button"
               onClick={() => {
                 onConfirm()
                 onClose()
@@ -157,7 +130,7 @@ function CancelBidModal({
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -185,11 +158,33 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
   const showCancelButton = isOwner && isPending && !!onCancel
   const showCancelLock = isOwner && isPending && !onCancel && !!cancelLocked
 
+  // The bidding page's clock can pass the new-bid cutoff while this card is on
+  // screen, taking the Cancel button away. A confirmation left open would then
+  // confirm nothing, so close it, and land focus on the note that says why
+  // rather than on <body>. The same goes for focus left on the vanished button.
+  const lockNoteRef = useRef<HTMLParagraphElement>(null)
+  const cancelHasFocus = useRef(false)
+  const focusLockNote = useRef(false)
+  useEffect(() => {
+    if (showCancelButton) return
+    if (showCancelModal) {
+      // Focus moves once the dialog has unmounted and let go of it.
+      focusLockNote.current = true
+      setShowCancelModal(false)
+      return
+    }
+    if (focusLockNote.current || cancelHasFocus.current) {
+      focusLockNote.current = false
+      cancelHasFocus.current = false
+      lockNoteRef.current?.focus()
+    }
+  }, [showCancelButton, showCancelModal])
+
   return (
     <>
       <div
         className={`card bid-card-interactive p-4 ${typeClass} ${
-          isOutbid ? 'border-warning bg-warning-bg/20 outbid-pulse' : ''
+          isOutbid ? 'border-warning bg-warning-bg/20 outbid-pulse motion-reduce:animate-none' : ''
         }`}
         data-testid={`bid-card-${bid.tmdb_id}`}
       >
@@ -209,17 +204,17 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
             {dropTitle && (
               <span
-                className="type-meta inline-flex items-center gap-1 mt-2 px-2 py-0.5 rounded-full bg-warning-bg/30 text-warning border border-warning/20"
+                className="type-meta inline-flex max-w-full items-start gap-1 mt-2 px-2 py-0.5 rounded-xl bg-warning-bg/30 text-warning border border-warning/20"
                 data-testid="conditional-drop-chip"
               >
-                <Scissors className="w-3 h-3 shrink-0" />
-                <span className="truncate">Drops {dropTitle} if won</span>
+                <Scissors className="w-3 h-3 shrink-0 mt-0.5" aria-hidden="true" />
+                <span className="min-w-0 break-words">Drops {dropTitle} if won</span>
               </span>
             )}
 
             {isOutbid && (
               <div className="type-label flex items-center gap-1.5 mt-2 text-warning">
-                <AlertTriangle className="w-4 h-4" />
+                <AlertTriangle className="w-4 h-4" aria-hidden="true" />
                 <span>You&apos;ve been outbid!</span>
               </div>
             )}
@@ -236,9 +231,11 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
             <div className="flex flex-col items-end gap-2">
               {showRecoverButton && (
                 <button
+                  type="button"
                   onClick={onCounter}
                   className="type-control btn btn-primary px-4"
                   data-testid={`counter-bid-${bid.tmdb_id}`}
+                  aria-label={`Counter bid on ${movieTitle}`}
                 >
                   Counter bid
                 </button>
@@ -246,9 +243,11 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
               {showRaiseButton && (
                 <button
+                  type="button"
                   onClick={onCounter}
                   className="type-control btn btn-secondary px-4"
                   data-testid={isOwner ? `raise-bid-${bid.tmdb_id}` : `counter-bid-${bid.tmdb_id}`}
+                  aria-label={`${isOwner ? 'Raise bid' : 'Counter bid'} on ${movieTitle}`}
                 >
                   {isOwner ? 'Raise bid' : 'Counter bid'}
                 </button>
@@ -256,22 +255,30 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
 
               {showCancelButton && (
                 <button
+                  type="button"
                   onClick={() => setShowCancelModal(true)}
-                  className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-crimson/10"
+                  onFocus={() => { cancelHasFocus.current = true }}
+                  onBlur={() => { cancelHasFocus.current = false }}
+                  className="type-control btn btn-ghost text-crimson-text hover:text-crimson-text-hover hover:bg-crimson/10"
                   data-testid={`cancel-bid-${bid.tmdb_id}`}
+                  aria-haspopup="dialog"
+                  aria-label={`Cancel bid on ${movieTitle}`}
                 >
-                  <Trash2 className="w-4 h-4 mr-1.5" />
+                  <Trash2 className="w-4 h-4 mr-1.5" aria-hidden="true" />
                   Cancel
                 </button>
               )}
 
               {showCancelLock && (
                 <p
+                  ref={lockNoteRef}
+                  tabIndex={-1}
                   className="type-meta flex items-center gap-1.5 text-foreground-secondary px-2"
                   data-testid={`bid-locked-${bid.tmdb_id}`}
                 >
                   <Lock className="w-3.5 h-3.5" aria-hidden="true" />
                   Locked in
+                  <span className="sr-only">: bids can&apos;t be cancelled after the new-bid cutoff</span>
                 </p>
               )}
             </div>
@@ -279,14 +286,15 @@ export default function BidCard({ bid, isOwner, onCancel, cancelLocked, onCounte
         </div>
       </div>
 
-      <CancelBidModal
-        isOpen={showCancelModal}
-        onClose={() => setShowCancelModal(false)}
-        onConfirm={() => onCancel?.()}
-        movieTitle={movieTitle}
-        moviePoster={movieData?.poster_url || null}
-        bidAmount={bid.amount}
-      />
+      {showCancelModal && (
+        <CancelBidModal
+          onClose={() => setShowCancelModal(false)}
+          onConfirm={() => onCancel?.()}
+          movieTitle={movieTitle}
+          moviePoster={movieData?.poster_url || null}
+          bidAmount={bid.amount}
+        />
+      )}
     </>
   )
 }

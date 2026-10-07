@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { MailX } from 'lucide-react'
 import { FormError } from '../../components/FormError'
@@ -25,6 +25,17 @@ export default function UnsubscribeClient({ token }: Props): React.ReactElement 
     setDone(true)
   }, [token])
   const { execute, isLoading, error } = useAsyncAction(unsubscribe)
+  const doneHeadingRef = useRef<HTMLHeadingElement>(null)
+  const buttonRef = useRef<HTMLButtonElement>(null)
+
+  // The button that had focus either disappears (success) or was disabled
+  // while the request ran (failure); put focus where the user reads on.
+  useEffect(() => {
+    if (done) doneHeadingRef.current?.focus()
+  }, [done])
+  useEffect(() => {
+    if (error) buttonRef.current?.focus()
+  }, [error])
 
   return (
     <div className="w-full max-w-md space-y-8 px-4">
@@ -46,7 +57,7 @@ export default function UnsubscribeClient({ token }: Props): React.ReactElement 
           </>
         ) : done ? (
           <>
-            <h1 className="type-panel text-foreground" data-testid="unsubscribed-heading">
+            <h1 ref={doneHeadingRef} tabIndex={-1} className="type-panel text-foreground focus:outline-none" data-testid="unsubscribed-heading">
               You&apos;re unsubscribed
             </h1>
             <p className="mt-3 text-foreground-secondary">
@@ -63,6 +74,7 @@ export default function UnsubscribeClient({ token }: Props): React.ReactElement 
             <div className="mt-6 space-y-4 text-left">
               <FormError message={error} />
               <button
+                ref={buttonRef}
                 type="button"
                 onClick={() => execute()}
                 disabled={isLoading}

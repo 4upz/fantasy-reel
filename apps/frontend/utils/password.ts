@@ -13,9 +13,6 @@ export const MIN_PASSWORD_LENGTH = 8
 
 export const PASSWORD_TOO_SHORT_MESSAGE = `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
 
-/** Placeholder hint shown in new-password inputs. */
-export const PASSWORD_HINT = `min ${MIN_PASSWORD_LENGTH} characters`
-
 export function isPasswordLongEnough(password: string): boolean {
   return password.length >= MIN_PASSWORD_LENGTH
 }

@@ -23,8 +23,10 @@ const dmSans = localFont({
   display: "swap",
 });
 
+// Every page names itself: Next's route announcer reads document.title to
+// screen readers on each client-side navigation.
 export const metadata: Metadata = {
-  title: "Fantasy Reel",
+  title: { default: "Fantasy Reel", template: "%s | Fantasy Reel" },
   description: "Fantasy leagues for movies",
 };
 
@@ -39,6 +41,8 @@ export default function RootLayout({
         <ThemeScript />
       </head>
       <body className="antialiased">
+        {/* Every page renders <main id="main-content" tabIndex={-1}>. */}
+        <a href="#main-content" className="skip-link">Skip to main content</a>
         <Providers>{children}</Providers>
         <Analytics />
         <SpeedInsights />

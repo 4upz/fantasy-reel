@@ -1,17 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import { resendConfirmationEmail } from '@/app/(public)/login/actions'
 import { FormError, FormSuccess } from '@/app/components/FormError'
-import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
+import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '@/app/components/auth/Turnstile'
+import { useHydrated } from '@/hooks/useHydrated'
 
 export default function AuthCodeErrorPage() {
+  // Until React attaches onSubmit, a native submit would put the fields in the URL.
+  const hydrated = useHydrated()
   const [email, setEmail] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   const captcha = useCaptcha()
+  const submitRef = useRef<HTMLButtonElement>(null)
+  const successRef = useRef<HTMLDivElement>(null)
 
   async function handleResend(e: React.FormEvent) {
     e.preventDefault()
@@ -20,28 +26,40 @@ export default function AuthCodeErrorPage() {
       setError('Please enter your email address')
       return
     }
+    if (!captcha.ready) {
+      setError(CAPTCHA_PENDING_MESSAGE)
+      return
+    }
 
     setIsLoading(true)
     setError(null)
     setSuccess(false)
 
+    let sent = false
+    let message: string | null = null
     try {
       const result = await resendConfirmationEmail(email, captcha.token ?? undefined)
-      if (result.success) {
-        setSuccess(true)
-      } else if (result.error) {
-        setError(result.error)
-      }
+      sent = result.success
+      message = result.error ?? null
     } catch {
-      setError('Something went wrong. Please try again.')
-    } finally {
-      setIsLoading(false)
-      captcha.reset()
+      message = 'Something went wrong. Please try again.'
     }
+
+    // The disabled form dropped focus, and on success the form is gone:
+    // re-render, then focus the confirmation (read on focus), or the button
+    // again after an error, which announces itself.
+    flushSync(() => {
+      setIsLoading(false)
+      if (sent) setSuccess(true)
+      else setError(message)
+    })
+    captcha.reset()
+    if (sent) successRef.current?.focus()
+    else if (message) submitRef.current?.focus()
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <main id="main-content" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
           <h1 className="type-page text-foreground">Authentication error</h1>
@@ -52,17 +70,20 @@ export default function AuthCodeErrorPage() {
 
         {/* Resend confirmation section */}
         <div className="card p-6">
-          <h3 className="type-panel text-foreground mb-4">Resend confirmation email</h3>
+          <h2 className="type-panel text-foreground mb-4">Resend confirmation email</h2>
 
           <FormError message={error} />
           {success && (
-            <FormSuccess message="If an account exists with this email, a new confirmation link has been sent." />
+            <FormSuccess
+              message="If an account exists with this email, a new confirmation link has been sent."
+              ref={successRef}
+            />
           )}
 
           {!success && (
             <form onSubmit={handleResend} className="space-y-4">
               <div>
-                <label htmlFor="email" className="sr-only">
+                <label htmlFor="email" className="type-label block text-foreground-secondary mb-2">
                   Email address
                 </label>
                 <input
@@ -75,13 +96,12 @@ export default function AuthCodeErrorPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
                   className="input"
-                  placeholder="Email address"
                 />
               </div>
 
               <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
 
-              <button type="submit" disabled={isLoading || !captcha.ready} className="btn btn-primary w-full">
+              <button ref={submitRef} type="submit" disabled={isLoading || !hydrated} className="btn btn-primary w-full">
                 {isLoading ? 'Sending...' : 'Resend confirmation email'}
               </button>
             </form>
@@ -111,6 +131,6 @@ export default function AuthCodeErrorPage() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

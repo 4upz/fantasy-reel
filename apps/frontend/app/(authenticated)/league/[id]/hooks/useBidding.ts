@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo, useRef } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { trackEvent } from '@/utils/analytics'
+import { announce } from '@/utils/announce'
 import type { PickupBid, TeamBudget, CounterpickBid } from '@/types'
 
 interface UseBiddingOptions {
@@ -305,6 +306,8 @@ export function useBidding({ leagueId, teamId, userId }: UseBiddingOptions): Use
     [counterpickBids, teamId]
   )
 
+  useOutbidAnnouncement(hasLoaded, myBids, myCounterpickBids)
+
   return {
     bids,
     myBids,
@@ -325,4 +328,39 @@ export function useBidding({ leagueId, teamId, userId }: UseBiddingOptions): Use
     cancelCounterpickBid,
     setCounterpickBidPriorities,
   }
+}
+
+/**
+ * Says so when one of the team's bids is outbid. Realtime moves the card to
+ * "Action Required" and starts its response window, which a screen-reader user
+ * would otherwise never notice. Only a live active -> outbid change counts, so
+ * the first load and bids that arrive already outbid stay quiet.
+ */
+function useOutbidAnnouncement(
+  hasLoaded: boolean,
+  myBids: PickupBid[],
+  myCounterpickBids: CounterpickBid[],
+): void {
+  const previousStatuses = useRef<Map<string, string> | null>(null)
+
+  useEffect(() => {
+    if (!hasLoaded) return
+    const statuses = new Map<string, string>()
+    const outbidTitles: string[] = []
+    const track = (key: string, status: string, title: string) => {
+      statuses.set(key, status)
+      if (status === 'outbid' && previousStatuses.current?.get(key) === 'active') outbidTitles.push(title)
+    }
+    for (const bid of myBids) track(`pickup-${bid.id}`, bid.status, bid.movie_data?.title || 'a movie')
+    for (const bid of myCounterpickBids) {
+      track(`counterpick-${bid.id}`, bid.status, `the counterpick on ${bid.movies?.title || 'a movie'}`)
+    }
+    previousStatuses.current = statuses
+
+    if (outbidTitles.length === 0) return
+    announce(
+      `You've been outbid on ${outbidTitles.join(' and ')}. Counter before your response window closes.`,
+      'assertive',
+    )
+  }, [hasLoaded, myBids, myCounterpickBids])
 }

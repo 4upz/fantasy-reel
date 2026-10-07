@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Camera, Trash2, Loader2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
@@ -25,6 +25,16 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
   const [isUploading, setIsUploading] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadButtonRef = useRef<HTMLButtonElement>(null)
+  // Removing unmounts the focused Remove button; Upload takes focus once it
+  // is enabled again.
+  const [focusUploadAfterRemove, setFocusUploadAfterRemove] = useState(false)
+
+  useEffect(() => {
+    if (!focusUploadAfterRemove || isRemoving) return
+    uploadButtonRef.current?.focus()
+    setFocusUploadAfterRemove(false)
+  }, [focusUploadAfterRemove, isRemoving])
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -99,6 +109,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
 
       if (result.success) {
         setAvatarUrl(null)
+        setFocusUploadAfterRemove(true)
         await removeAvatarFiles(supabase, 'avatars', userId, { keepCurrent: false })
         toast.success('Profile photo removed')
       } else {
@@ -125,13 +136,15 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
           className="transition-all duration-200 group-hover:border-gold-hover group-hover:shadow-glow-gold"
         />
 
-        {/* Upload overlay */}
+        {/* Upload overlay -- a mouse shortcut for "Upload photo" below, so it
+            stays out of the tab order instead of taking invisible focus */}
         {!isLoading && (
           <button
             type="button"
+            tabIndex={-1}
+            aria-hidden="true"
             onClick={() => fileInputRef.current?.click()}
             className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-            aria-label="Change profile photo"
           >
             <Camera className="w-6 h-6 text-white" />
           </button>
@@ -139,7 +152,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
 
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+          <div aria-hidden="true" className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
             <Loader2 className="w-6 h-6 text-white animate-spin" />
           </div>
         )}
@@ -157,9 +170,11 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
         />
 
         <button
+          ref={uploadButtonRef}
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
+          aria-describedby="avatar-upload-hint"
           className="type-control btn btn-secondary"
         >
           {isUploading ? (
@@ -180,7 +195,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
             type="button"
             onClick={handleRemove}
             disabled={isLoading}
-            className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-error-bg"
+            className="type-control btn btn-ghost text-crimson-text hover:text-crimson-text-hover hover:bg-error-bg"
           >
             {isRemoving ? (
               <>
@@ -190,13 +205,13 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
             ) : (
               <>
                 <Trash2 className="w-4 h-4 mr-2" />
-                Remove
+                Remove photo
               </>
             )}
           </button>
         )}
 
-        <p className="type-meta text-foreground-secondary mt-1">
+        <p id="avatar-upload-hint" className="type-meta text-foreground-secondary mt-1">
           PNG, JPEG, WebP or GIF. Max 10MB.
         </p>
       </div>

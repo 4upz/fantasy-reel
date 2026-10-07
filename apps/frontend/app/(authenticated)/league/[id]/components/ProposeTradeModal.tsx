@@ -1,13 +1,9 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useId, useRef } from 'react'
 import Image from 'next/image'
 import { safeAvatarUrl } from '@/utils/avatar'
-import MoviePoster from '@/app/components/MoviePoster'
-import { getReleaseYear } from '@/utils/date'
-import FantasyPoints from '@/app/components/FantasyPoints'
-import { formatCriticScore, isScoreLocked } from '@/utils/scoring'
-import ScoreLockLabel from '@/app/components/ScoreLockLabel'
+import Modal from '@/app/components/Modal'
 import type {
   Team,
   TradeActionResult,
@@ -22,7 +18,7 @@ import { useAsyncAction } from '@/hooks/useAsyncAction'
 import OfferExpiryPicker from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
 import type { ExpiryBounds, ResolvedExpiry } from '@/utils/tradeExpiry'
-import CounterpickMark from './CounterpickMark'
+import { DialogCloseButton, TradeBudgetField, TradeMovieChecklist } from './TradeComposerFields'
 
 /** Stable empty set so a modal with no rejected rows doesn't allocate one per render. */
 const EMPTY_INVALID: ReadonlySet<string> = new Set<string>()
@@ -42,48 +38,6 @@ interface Props {
     message?: string,
     expiry?: ResolvedExpiry
   ) => Promise<TradeActionResult>
-}
-
-/**
- * Focus trap hook - keeps focus within modal
- */
-function useFocusTrap(isActive: boolean) {
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!isActive || !containerRef.current) return
-
-    const container = containerRef.current
-    const focusableElements = container.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    )
-    const firstElement = focusableElements[0]
-    const lastElement = focusableElements[focusableElements.length - 1]
-
-    // Focus first element on mount
-    firstElement?.focus()
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return
-
-      if (e.shiftKey) {
-        if (document.activeElement === firstElement) {
-          e.preventDefault()
-          lastElement?.focus()
-        }
-      } else {
-        if (document.activeElement === lastElement) {
-          e.preventDefault()
-          firstElement?.focus()
-        }
-      }
-    }
-
-    container.addEventListener('keydown', handleKeyDown)
-    return () => container.removeEventListener('keydown', handleKeyDown)
-  }, [isActive])
-
-  return containerRef
 }
 
 export default function ProposeTradeModal({
@@ -117,18 +71,28 @@ export default function ProposeTradeModal({
   const [invalidSourceIds, setInvalidSourceIds] = useState<ReadonlySet<string>>(EMPTY_INVALID)
 
   const supabase = useMemo(() => createClient(), [])
-  const modalRef = useFocusTrap(true)
 
-  // Handle escape key to close modal
+  const titleId = useId()
+  const teamPromptId = useId()
+  const giveHeadingId = useId()
+  const receiveHeadingId = useId()
+  const messageId = useId()
+  const submitHintId = useId()
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
+
+  // Each step replaces the control that had focus (a team button, or "Change
+  // trade partner"), so every step starts at its heading, which also says
+  // which partner the dialog is now about.
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
-  }, [onClose])
+    headingRef.current?.focus()
+  }, [step])
+
+  // The submit button is disabled while the request runs, which drops focus;
+  // a refusal puts it back on the message that explains it.
+  useEffect(() => {
+    if (error) errorRef.current?.focus()
+  }, [error])
 
   // Fetch recipient's tradeable movies when team is selected
   useEffect(() => {
@@ -261,81 +225,60 @@ export default function ProposeTradeModal({
   const { execute: handleSubmit, isLoading } = useAsyncAction(submitTradeAction)
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="propose-trade-title"
-    >
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-overlay-soft backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Modal */}
-      <div
-        ref={modalRef}
-        className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
-      >
+    <Modal onClose={onClose} preventClose={isLoading} labelledBy={titleId} closeOnBackdrop>
+      <div className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 id="propose-trade-title" className="type-panel text-foreground">
+          <h2 id={titleId} ref={headingRef} tabIndex={-1} className="type-panel text-foreground">
             {step === 'select-team' ? 'Select Trade Partner' : `Trade with ${selectedTeam?.name}`}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-foreground-secondary hover:text-foreground transition-colors"
-            aria-label="Close trade proposal"
-          >
-            ✕
-          </button>
+          <DialogCloseButton label="Close trade proposal" onClick={onClose} />
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {step === 'select-team' ? (
             <div className="space-y-2">
-              <p id="team-selection-label" className="type-body-sm text-foreground-secondary mb-4">
+              <p id={teamPromptId} className="type-body-sm text-foreground-secondary mb-4">
                 Choose a team to trade with:
               </p>
-              <div role="listbox" aria-labelledby="team-selection-label">
+              <ul role="list" aria-labelledby={teamPromptId}>
                 {otherTeams.map((otherTeam) => {
                   const avatarUrl = safeAvatarUrl(otherTeam.avatar_url)
                   return (
-                    <button
-                      key={otherTeam.id}
-                      onClick={() => handleSelectTeam(otherTeam.id)}
-                      className="w-full card-interactive p-4 flex items-center gap-3 text-left mb-2"
-                      role="option"
-                      aria-selected={selectedTeamId === otherTeam.id}
-                    >
-                      <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center overflow-hidden">
-                        {avatarUrl ? (
-                          <Image
-                            src={avatarUrl}
-                            alt=""
-                            width={40}
-                            height={40}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <span className="type-label text-foreground-secondary" aria-hidden="true">
-                            {otherTeam.name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <span className="type-row-title text-foreground">{otherTeam.name}</span>
-                    </button>
+                    <li key={otherTeam.id}>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectTeam(otherTeam.id)}
+                        className="w-full card-interactive p-4 flex items-center gap-3 text-left mb-2 cursor-pointer"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-surface-hover flex items-center justify-center overflow-hidden">
+                          {avatarUrl ? (
+                            <Image
+                              src={avatarUrl}
+                              alt=""
+                              width={40}
+                              height={40}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="type-label text-foreground-secondary" aria-hidden="true">
+                              {otherTeam.name.charAt(0).toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+                        <span className="type-row-title text-foreground">{otherTeam.name}</span>
+                      </button>
+                    </li>
                   )
                 })}
-              </div>
+              </ul>
             </div>
           ) : (
             <div className="space-y-6">
               {/* Back button */}
               <button
+                type="button"
                 onClick={() => {
                   setStep('select-team')
                   setSelectedTeamId(null)
@@ -348,75 +291,64 @@ export default function ProposeTradeModal({
                   setError(null)
                   setInvalidSourceIds(EMPTY_INVALID)
                 }}
-                className="type-control text-gold hover:text-gold-hover transition-colors"
+                className="type-control text-gold hover:text-gold-hover transition-colors cursor-pointer"
               >
-                ← Change trade partner
+                <span aria-hidden="true">←</span> Change trade partner
               </button>
 
               {/* Your side */}
               <div>
-                <h3 className="type-label text-foreground mb-3">
+                <h3 id={giveHeadingId} className="type-label text-foreground mb-3">
                   You give ({team.name})
                 </h3>
-                <MovieSelector
+                <TradeMovieChecklist
                   movies={tradeableMovies}
                   selectedIds={offeredMovies}
                   onToggle={toggleOfferedMovie}
+                  labelledBy={giveHeadingId}
                   invalidIds={invalidSourceIds}
+                  emptyState={<NoTradeableMovies />}
                 />
-                <div className="mt-3">
-                  <label className="type-label text-foreground-secondary">
-                    {budget ? `Budget (max $${budget.remaining_budget})` : 'Budget unavailable'}
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={budget?.remaining_budget ?? 0}
-                    value={offeredBudget}
-                    disabled={!budget}
-                    onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="type-input type-numeric input mt-1 w-24"
-                  />
-                </div>
+                <TradeBudgetField
+                  side="you give"
+                  available={budget ? budget.remaining_budget : null}
+                  value={offeredBudget}
+                  onChange={setOfferedBudget}
+                />
               </div>
 
               {/* Their side */}
               <div>
-                <h3 className="type-label text-foreground mb-3">
+                <h3 id={receiveHeadingId} className="type-label text-foreground mb-3">
                   You receive ({selectedTeam?.name})
                 </h3>
                 {isLoadingRecipient ? (
                   <div role="status" aria-label="Loading trade partner" aria-busy="true">
-                    <MovieSelectorSkeleton />
-                    <div className="h-5 w-36 skeleton rounded mt-3" aria-hidden="true" />
-                    <div className="h-10 w-24 skeleton rounded mt-1" aria-hidden="true" />
+                    <span className="sr-only">Loading {selectedTeam?.name}&apos;s movies and budget…</span>
+                    <div aria-hidden="true">
+                      <MovieSelectorSkeleton />
+                      <div className="h-5 w-36 skeleton rounded mt-3" />
+                      <div className="h-10 w-24 skeleton rounded mt-1" />
+                    </div>
                   </div>
                 ) : recipientError ? (
                   <p className="alert alert-error" role="alert">{recipientError}</p>
                 ) : (
                   <>
-                    <MovieSelector
+                    <TradeMovieChecklist
                       movies={recipientMovies}
                       selectedIds={requestedMovies}
                       onToggle={toggleRequestedMovie}
+                      labelledBy={receiveHeadingId}
                       invalidIds={invalidSourceIds}
+                      emptyState={<NoTradeableMovies />}
                     />
-                    <div className="mt-3">
-                      <label className="type-label text-foreground-secondary">
-                        {recipientBudget ? `Budget (max $${recipientBudget.remaining_budget})` : 'Budget unavailable'}
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={recipientBudget?.remaining_budget ?? 0}
-                        value={requestedBudget}
-                        disabled={!recipientBudget}
-                        onChange={(e) =>
-                          setRequestedBudget(Math.max(0, parseInt(e.target.value) || 0))
-                        }
-                        className="type-input type-numeric input mt-1 w-24"
-                      />
-                    </div>
+                    <TradeBudgetField
+                      side={`you request from ${selectedTeam?.name ?? 'them'}`}
+                      available={recipientBudget ? recipientBudget.remaining_budget : null}
+                      value={requestedBudget}
+                      onChange={setRequestedBudget}
+                    />
                   </>
                 )}
               </div>
@@ -433,11 +365,11 @@ export default function ProposeTradeModal({
 
               {/* Message */}
               <div>
-                <label htmlFor="trade-message" className="type-label text-foreground-secondary">
+                <label htmlFor={messageId} className="type-label text-foreground-secondary">
                   Message (optional)
                 </label>
                 <textarea
-                  id="trade-message"
+                  id={messageId}
                   aria-describedby="trade-message-visibility"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
@@ -451,7 +383,7 @@ export default function ProposeTradeModal({
               </div>
 
               {error && (
-                <div className="alert alert-error">
+                <div ref={errorRef} tabIndex={-1} className="alert alert-error" role="alert">
                   <p>{error}</p>
                 </div>
               )}
@@ -463,24 +395,59 @@ export default function ProposeTradeModal({
         {step === 'select-items' && (
           <div className="p-4 border-t border-border flex justify-end gap-2">
             <button
+              type="button"
               onClick={onClose}
               className="btn btn-ghost"
               aria-label="Cancel trade proposal"
             >
               Cancel
             </button>
+            {!hasItems && (
+              <p id={submitHintId} className="sr-only">
+                Add at least one movie or some budget to propose a trade.
+              </p>
+            )}
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={!hasItems || !expiry.resolution.ok || isLoading || isLoadingRecipient || !!recipientError}
               className="btn btn-primary"
-              aria-label={isLoading ? 'Proposing trade...' : 'Submit trade proposal'}
               aria-busy={isLoading}
+              aria-describedby={hasItems ? undefined : submitHintId}
             >
               {isLoading ? 'Proposing...' : 'Propose trade'}
             </button>
           </div>
         )}
       </div>
+    </Modal>
+  )
+}
+
+function NoTradeableMovies() {
+  return (
+    <div className="card p-6 text-center">
+      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-hover flex items-center justify-center">
+        <svg
+          className="w-6 h-6 text-foreground-muted"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+          />
+        </svg>
+      </div>
+      <p className="type-label text-foreground-secondary mb-1">No tradeable movies</p>
+      <p className="type-meta text-foreground-secondary">
+        Draft movies or pick them up during the bidding phase to start trading.
+      </p>
     </div>
   )
 }
@@ -504,207 +471,6 @@ function MovieSelectorSkeleton() {
           <div className="w-5 h-5 skeleton rounded" />
         </div>
       ))}
-    </div>
-  )
-}
-
-interface MovieSelectorProps {
-  movies: TradeableMovie[]
-  selectedIds: Set<string>
-  onToggle: (sourceId: string) => void
-  listId?: string
-  emptyMessage?: string
-  /** Items the server rejected on the last submit. */
-  invalidIds?: ReadonlySet<string>
-}
-
-function MovieSelector({
-  movies,
-  selectedIds,
-  onToggle,
-  listId = 'movie-list',
-  emptyMessage,
-  invalidIds = EMPTY_INVALID,
-}: MovieSelectorProps) {
-  const [focusedIndex, setFocusedIndex] = useState(-1)
-  const listRef = useRef<HTMLDivElement>(null)
-
-  // A scored movie is locked against trades, so it can't be added -- but one
-  // already selected can still be taken back out.
-  const canToggle = useCallback(
-    (movie: TradeableMovie) => !isScoreLocked(movie.fantasy_points) || selectedIds.has(movie.source_id),
-    [selectedIds]
-  )
-
-  // Handle keyboard navigation
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (movies.length === 0) return
-
-      switch (e.key) {
-        case 'ArrowDown':
-          e.preventDefault()
-          setFocusedIndex((prev) => Math.min(prev + 1, movies.length - 1))
-          break
-        case 'ArrowUp':
-          e.preventDefault()
-          setFocusedIndex((prev) => Math.max(prev - 1, 0))
-          break
-        case ' ':
-        case 'Enter':
-          e.preventDefault()
-          if (focusedIndex >= 0 && focusedIndex < movies.length && canToggle(movies[focusedIndex])) {
-            onToggle(movies[focusedIndex].source_id)
-          }
-          break
-        case 'Home':
-          e.preventDefault()
-          setFocusedIndex(0)
-          break
-        case 'End':
-          e.preventDefault()
-          setFocusedIndex(movies.length - 1)
-          break
-      }
-    },
-    [movies, focusedIndex, onToggle, canToggle]
-  )
-
-  // Scroll focused item into view
-  useEffect(() => {
-    if (focusedIndex >= 0 && listRef.current) {
-      const items = listRef.current.querySelectorAll('[role="option"]')
-      items[focusedIndex]?.scrollIntoView({ block: 'nearest' })
-    }
-  }, [focusedIndex])
-
-  // Empty state with helpful message (FE#7)
-  if (movies.length === 0) {
-    const message = emptyMessage || 'No tradeable movies'
-    return (
-      <div className="card p-6 text-center">
-        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-hover flex items-center justify-center">
-          <svg
-            className="w-6 h-6 text-foreground-muted"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
-            />
-          </svg>
-        </div>
-        <p className="type-label text-foreground-secondary mb-1">{message}</p>
-        <p className="type-meta text-foreground-secondary">
-          Draft movies or pick them up during the bidding phase to start trading.
-        </p>
-      </div>
-    )
-  }
-
-  return (
-    <div
-      ref={listRef}
-      role="listbox"
-      id={listId}
-      aria-label="Select movies to trade"
-      aria-multiselectable="true"
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
-      onFocus={() => focusedIndex === -1 && setFocusedIndex(0)}
-      className="space-y-2 max-h-48 overflow-y-auto focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface rounded-lg"
-    >
-      {movies.map((movie, index) => {
-        const isSelected = selectedIds.has(movie.source_id)
-        const isFocused = focusedIndex === index
-        const isInvalid = invalidIds.has(movie.source_id)
-        const isLocked = isScoreLocked(movie.fantasy_points)
-        const isDisabled = !canToggle(movie)
-        return (
-          <div
-            key={movie.source_id}
-            role="option"
-            aria-selected={isSelected}
-            aria-disabled={isDisabled || undefined}
-            onClick={isDisabled ? undefined : () => onToggle(movie.source_id)}
-            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors ${
-              isInvalid
-                ? 'bg-crimson/15 border border-crimson'
-                : isSelected
-                  ? 'bg-gold/20 border border-gold'
-                  : isDisabled
-                    ? 'bg-surface-hover border border-transparent opacity-60'
-                    : 'bg-surface-hover hover:bg-elevated border border-transparent'
-            } ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} ${isFocused ? 'ring-2 ring-gold ring-offset-2 ring-offset-surface' : ''}`}
-          >
-            <div className="relative w-8 h-12 shrink-0 rounded bg-surface-hover">
-              <MoviePoster
-                src={movie.poster_url}
-                alt=""
-                sizes="32px"
-                posterSize="w92"
-                className="rounded"
-              />
-              {movie.source === 'counterpick' && <CounterpickMark />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="type-row-title text-foreground break-words">{movie.title}</p>
-              <div className="type-meta flex flex-wrap items-center gap-x-2 text-foreground-secondary">
-                {/* The alert above carries the reason; this only says which row
-                    it meant, and carries it in text rather than colour alone. */}
-                {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
-                {isLocked && !isInvalid && <ScoreLockLabel>can&apos;t be traded</ScoreLockLabel>}
-                {movie.source === 'counterpick' && (
-                  <span className="text-crimson">
-                    {movie.counterpick_target_team_name
-                      ? `vs. ${movie.counterpick_target_team_name}`
-                      : 'Counterpick'}
-                  </span>
-                )}
-                {movie.release_date && (
-                  <span>{getReleaseYear(movie.release_date)}</span>
-                )}
-                {movie.fantasy_points !== null ? (
-                  <>
-                    {/* For a counterpick, the inverted score waits on its target's release. */}
-                    <FantasyPoints points={movie.fantasy_points} releaseDate={movie.release_date} />
-                    {movie.combined_score !== null && (
-                      <span>{formatCriticScore(movie.combined_score)}</span>
-                    )}
-                  </>
-                ) : (
-                  <span>Pending</span>
-                )}
-              </div>
-            </div>
-            <div
-              className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                isSelected ? 'border-gold bg-gold' : 'border-border'
-              }`}
-              aria-hidden="true"
-            >
-              {isSelected && (
-                <svg className="w-3 h-3 text-foreground-inverse" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              )}
-            </div>
-          </div>
-        )
-      })}
-      {/* Screen reader announcement for selection count */}
-      <div className="sr-only" aria-live="polite" aria-atomic="true">
-        {selectedIds.size} movie{selectedIds.size !== 1 ? 's' : ''} selected
-      </div>
     </div>
   )
 }

@@ -41,7 +41,7 @@ export default function EmailPreferences({ seasonRecapEmails }: Props): React.Re
       <div className="flex items-center justify-between gap-4">
         <div>
           <p id="season-recap-label" className="type-label text-foreground">Season recaps</p>
-          <p className="type-meta text-foreground-secondary mt-0.5">
+          <p id="season-recap-description" className="type-meta text-foreground-secondary mt-0.5">
             Final standings when a season you played in ends. Emails about your invitations, bids and trades
             always arrive.
           </p>
@@ -49,13 +49,16 @@ export default function EmailPreferences({ seasonRecapEmails }: Props): React.Re
         <button
           type="button"
           onClick={() => execute(!enabled)}
-          disabled={isLoading}
-          className={`relative w-10 h-6 shrink-0 rounded-full transition-colors disabled:opacity-60 ${
+          // aria-disabled rather than disabled: disabling the focused switch
+          // would drop keyboard focus to the page while the change saves.
+          aria-disabled={isLoading || undefined}
+          className={`relative w-10 h-6 shrink-0 cursor-pointer rounded-full transition-colors aria-disabled:cursor-wait aria-disabled:opacity-60 ${
             enabled ? 'bg-gold' : 'bg-elevated border border-border'
           }`}
           role="switch"
           aria-checked={enabled}
           aria-labelledby="season-recap-label"
+          aria-describedby="season-recap-description"
           data-testid="season-recap-toggle"
         >
           <span

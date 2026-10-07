@@ -7,6 +7,8 @@ interface Props {
   totalTeams: number
   leagueName: string
   onEditTeam?: () => void
+  /** Lets a control that removes itself (the season welcome) land focus here. */
+  headingId?: string
 }
 
 /**
@@ -15,7 +17,7 @@ interface Props {
  * catch the eye, and two stacked panels would fight over that.
  * @design-system League
  */
-export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }: Props) {
+export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam, headingId }: Props) {
   const isPositive = team.total_points >= 0
 
   return (
@@ -23,6 +25,8 @@ export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }:
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1">
           <h2
+            id={headingId}
+            tabIndex={headingId ? -1 : undefined}
             className="type-row-title truncate text-foreground"
             data-testid="team-name"
           >
@@ -32,8 +36,8 @@ export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }:
             <button
               type="button"
               onClick={onEditTeam}
-              className="flex-none rounded-md p-1 text-foreground-secondary transition-colors hover:text-gold"
-              aria-label="Edit team"
+              className="flex-none cursor-pointer rounded-md p-1.5 text-foreground-secondary transition-colors hover:text-gold"
+              aria-label={`Edit team ${team.name}`}
               data-testid="edit-team-button"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -41,14 +45,18 @@ export default function TeamHeader({ team, totalTeams, leagueName, onEditTeam }:
           )}
         </div>
         <p className="type-meta mt-0.5 truncate text-foreground-secondary">
-          #{team.rank} of {totalTeams} · {leagueName}
+          <span aria-hidden="true">#{team.rank}</span>
+          <span className="sr-only">Rank {team.rank}</span> of {totalTeams}
+          <span aria-hidden="true"> · </span>
+          <span className="sr-only">, </span>
+          {leagueName}
         </p>
       </div>
 
       <div className="flex flex-none items-center gap-4 text-right sm:gap-5">
         <div data-testid="team-points">
           <div
-            className={`type-number-lg ${isPositive ? 'text-gold' : 'text-crimson'}`}
+            className={`type-number-lg ${isPositive ? 'text-gold' : 'text-crimson-text'}`}
           >
             {formatFantasyPoints(team.total_points)}
           </div>

@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { announce } from '@/utils/announce'
 import { toast } from 'sonner'
 import { Package } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League } from '@/types'
 import { ButtonSpinner } from '../../components/Icons'
-import { SectionHeader, LockedMessage } from './shared'
+import { SectionHeader, LockedMessage, NumberField } from './shared'
 
 interface Props {
   league: League
@@ -59,10 +60,12 @@ export default function BiddingConfigSection({
   const [newBidCutoffHours, setNewBidCutoffHours] = useState(league.new_bid_cutoff_hours)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Ensure draft_slots doesn't exceed total_slots
+  // Ensure draft_slots doesn't exceed total_slots -- and say so, since the
+  // change happens in a field the user isn't looking at.
   useEffect(() => {
     if (draftSlots > totalSlots) {
       setDraftSlots(totalSlots)
+      announce(`Draft slots reduced to ${totalSlots} to fit the roster.`)
     }
   }, [totalSlots, draftSlots])
 
@@ -135,59 +138,27 @@ export default function BiddingConfigSection({
           <div className="space-y-6">
             {/* Slot Configuration */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Total Slots */}
-              <div>
-                <label
-                  htmlFor="total_slots"
-                  className="type-label block text-foreground-secondary mb-2"
-                >
-                  Total roster slots
-                </label>
-                <input
-                  type="number"
-                  id="total_slots"
-                  value={totalSlots}
-                  onChange={(e) => setTotalSlots(parseInt(e.target.value, 10) || MIN_TOTAL_SLOTS)}
-                  min={MIN_TOTAL_SLOTS}
-                  max={MAX_TOTAL_SLOTS}
-                  className={`type-input type-numeric input w-24 ${totalSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
-                />
-                <p className="type-meta text-foreground-secondary mt-1.5">
-                  Total movies per team ({MIN_TOTAL_SLOTS}-{MAX_TOTAL_SLOTS})
-                </p>
-                {totalSlotsOutOfRange && (
-                  <p className="type-meta text-error mt-1">
-                    Must be between {MIN_TOTAL_SLOTS} and {MAX_TOTAL_SLOTS}
-                  </p>
-                )}
-              </div>
+              <NumberField
+                id="total_slots"
+                label="Total roster slots"
+                value={totalSlots}
+                onChange={(raw) => setTotalSlots(parseInt(raw, 10) || MIN_TOTAL_SLOTS)}
+                min={MIN_TOTAL_SLOTS}
+                max={MAX_TOTAL_SLOTS}
+                help={`Total movies per team (${MIN_TOTAL_SLOTS}-${MAX_TOTAL_SLOTS})`}
+                error={totalSlotsOutOfRange ? `Must be between ${MIN_TOTAL_SLOTS} and ${MAX_TOTAL_SLOTS}` : null}
+              />
 
-              {/* Draft Slots */}
-              <div>
-                <label
-                  htmlFor="draft_slots"
-                  className="type-label block text-foreground-secondary mb-2"
-                >
-                  Draft slots
-                </label>
-                <input
-                  type="number"
-                  id="draft_slots"
-                  value={draftSlots}
-                  onChange={(e) => setDraftSlots(parseInt(e.target.value, 10) || MIN_DRAFT_SLOTS)}
-                  min={MIN_DRAFT_SLOTS}
-                  max={totalSlots}
-                  className={`type-input type-numeric input w-24 ${draftSlotsOutOfRange ? 'border-error focus:border-error' : ''}`}
-                />
-                <p className="type-meta text-foreground-secondary mt-1.5">
-                  Movies to draft (also = draft rounds)
-                </p>
-                {draftSlotsOutOfRange && (
-                  <p className="type-meta text-error mt-1">
-                    Must be between {MIN_DRAFT_SLOTS} and {totalSlots}
-                  </p>
-                )}
-              </div>
+              <NumberField
+                id="draft_slots"
+                label="Draft slots"
+                value={draftSlots}
+                onChange={(raw) => setDraftSlots(parseInt(raw, 10) || MIN_DRAFT_SLOTS)}
+                min={MIN_DRAFT_SLOTS}
+                max={totalSlots}
+                help="Movies to draft (also = draft rounds)"
+                error={draftSlotsOutOfRange ? `Must be between ${MIN_DRAFT_SLOTS} and ${totalSlots}` : null}
+              />
             </div>
 
             {/* Roster slots are pooled: the draft fills some, bidding fills the
@@ -206,97 +177,42 @@ export default function BiddingConfigSection({
 
             {/* Bidding Rules */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Drop Limit */}
-              <div>
-                <label
-                  htmlFor="drop_limit"
-                  className="type-label block text-foreground-secondary mb-2"
-                >
-                  Drop limit
-                </label>
-                <input
-                  type="number"
-                  id="drop_limit"
-                  value={dropLimit}
-                  onChange={(e) => setDropLimit(parseInt(e.target.value, 10) || MIN_DROP_LIMIT)}
-                  min={MIN_DROP_LIMIT}
-                  max={MAX_DROP_LIMIT}
-                  className={`type-input type-numeric input w-24 ${dropLimitOutOfRange ? 'border-error focus:border-error' : ''}`}
-                />
-                <p className="type-meta text-foreground-secondary mt-1.5">
-                  Max drops per team per season ({MIN_DROP_LIMIT}-{MAX_DROP_LIMIT})
-                </p>
-                {dropLimitOutOfRange && (
-                  <p className="type-meta text-error mt-1">
-                    Must be between {MIN_DROP_LIMIT} and {MAX_DROP_LIMIT}
-                  </p>
-                )}
-              </div>
+              <NumberField
+                id="drop_limit"
+                label="Drop limit"
+                value={dropLimit}
+                onChange={(raw) => setDropLimit(parseInt(raw, 10) || MIN_DROP_LIMIT)}
+                min={MIN_DROP_LIMIT}
+                max={MAX_DROP_LIMIT}
+                help={`Max drops per team per season (${MIN_DROP_LIMIT}-${MAX_DROP_LIMIT})`}
+                error={dropLimitOutOfRange ? `Must be between ${MIN_DROP_LIMIT} and ${MAX_DROP_LIMIT}` : null}
+              />
 
-              {/* Counterbid Hours */}
-              <div>
-                <label
-                  htmlFor="counterbid_hours"
-                  className="type-label block text-foreground-secondary mb-2"
-                >
-                  Counterbid window
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    id="counterbid_hours"
-                    value={counterbidHours}
-                    onChange={(e) => setCounterbidHours(parseInt(e.target.value, 10) || MIN_COUNTERBID_HOURS)}
-                    min={MIN_COUNTERBID_HOURS}
-                    max={MAX_COUNTERBID_HOURS}
-                    className={`type-input type-numeric input w-24 ${counterbidHoursOutOfRange ? 'border-error focus:border-error' : ''}`}
-                  />
-                  <span className="type-body-sm text-foreground-secondary">hours</span>
-                </div>
-                <p className="type-meta text-foreground-secondary mt-1.5">
-                  Time to counter when outbid ({MIN_COUNTERBID_HOURS}-{MAX_COUNTERBID_HOURS}h)
-                </p>
-                {counterbidHoursOutOfRange && (
-                  <p className="type-meta text-error mt-1">
-                    Must be between {MIN_COUNTERBID_HOURS} and {MAX_COUNTERBID_HOURS} hours
-                  </p>
-                )}
-              </div>
+              <NumberField
+                id="counterbid_hours"
+                label="Counterbid window"
+                unit="hours"
+                value={counterbidHours}
+                onChange={(raw) => setCounterbidHours(parseInt(raw, 10) || MIN_COUNTERBID_HOURS)}
+                min={MIN_COUNTERBID_HOURS}
+                max={MAX_COUNTERBID_HOURS}
+                help={`Time to counter when outbid (${MIN_COUNTERBID_HOURS}-${MAX_COUNTERBID_HOURS}h)`}
+                error={counterbidHoursOutOfRange ? `Must be between ${MIN_COUNTERBID_HOURS} and ${MAX_COUNTERBID_HOURS} hours` : null}
+              />
 
-              {/* New Bid Cutoff */}
-              <div>
-                <label
-                  htmlFor="new_bid_cutoff_hours"
-                  className="type-label block text-foreground-secondary mb-2"
-                >
-                  New bid cutoff
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    id="new_bid_cutoff_hours"
-                    value={newBidCutoffHours}
-                    onChange={(e) => setNewBidCutoffHours(parseInt(e.target.value, 10) || MIN_NEW_BID_CUTOFF_HOURS)}
-                    min={MIN_NEW_BID_CUTOFF_HOURS}
-                    max={MAX_NEW_BID_CUTOFF_HOURS}
-                    className={`type-input type-numeric input w-24 ${newBidCutoffOutOfRange ? 'border-error focus:border-error' : ''}`}
-                    aria-describedby="new_bid_cutoff_help"
-                  />
-                  <span className="type-body-sm text-foreground-secondary">
-                    hours before processing
-                  </span>
-                </div>
-                <p id="new_bid_cutoff_help" className="type-meta text-foreground-secondary mt-1.5">
-                  {newBidCutoffHours === 0
-                    ? 'New bids stay open all week (0 turns the cutoff off)'
-                    : `After this point teams can only raise or counter bids already placed. ${newBidCutoffHours} puts the cutoff at ${cutoffDayLabel(newBidCutoffHours)}.`}
-                </p>
-                {newBidCutoffOutOfRange && (
-                  <p className="type-meta text-error mt-1">
-                    Must be between {MIN_NEW_BID_CUTOFF_HOURS} and {MAX_NEW_BID_CUTOFF_HOURS} hours
-                  </p>
-                )}
-              </div>
+              <NumberField
+                id="new_bid_cutoff_hours"
+                label="New bid cutoff"
+                unit="hours before processing"
+                value={newBidCutoffHours}
+                onChange={(raw) => setNewBidCutoffHours(parseInt(raw, 10) || MIN_NEW_BID_CUTOFF_HOURS)}
+                min={MIN_NEW_BID_CUTOFF_HOURS}
+                max={MAX_NEW_BID_CUTOFF_HOURS}
+                help={newBidCutoffHours === 0
+                  ? 'New bids stay open all week (0 turns the cutoff off)'
+                  : `After this point teams can only raise or counter bids already placed. ${newBidCutoffHours} puts the cutoff at ${cutoffDayLabel(newBidCutoffHours)}.`}
+                error={newBidCutoffOutOfRange ? `Must be between ${MIN_NEW_BID_CUTOFF_HOURS} and ${MAX_NEW_BID_CUTOFF_HOURS} hours` : null}
+              />
             </div>
           </div>
 

@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import LegalPage, { ExternalLink, SupportEmailLink, type LegalSection } from '@/app/components/legal/LegalPage'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | Fantasy Reel',
+  title: 'Privacy Policy',
   description: 'How Fantasy Reel collects, uses, shares, and protects personal information.',
   alternates: { canonical: '/privacy' },
 }

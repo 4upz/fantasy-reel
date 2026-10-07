@@ -1,8 +1,11 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import TradingClient from './TradingClient'
 import type { League, Team, TeamWithOwner, ParticipantWithProfile } from '@/types'
+
+export const metadata: Metadata = { title: 'Trading' }
 
 interface PageProps {
   params: Promise<{ id: string }>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Clapperboard, Link2 } from 'lucide-react'
@@ -33,11 +33,15 @@ interface JoinResponse {
 // New codes are 8 characters; leagues may still hold 6-character codes from before.
 const JOIN_CODE_REGEX = /^(?:[A-HJ-KM-NP-Z2-9]{6}|[A-HJ-KM-NP-Z2-9]{8})$/i
 
+const INVALID_CODE_MESSAGE =
+  'Invalid code format. Codes are 6 or 8 characters, letters and numbers, without I, L, O, 0 or 1.'
+
 export default function JoinLeagueClient({ token, code, userDisplayName }: Props) {
   const router = useRouter()
   const [teamName, setTeamName] = useState('')
   const [manualCode, setManualCode] = useState(code?.toUpperCase() || '')
   const [joinError, setJoinError] = useState<string | null>(null)
+  const codeInputRef = useRef<HTMLInputElement>(null)
 
   // Determine the mode based on what was provided
   const hasToken = !!token
@@ -83,25 +87,24 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
 
     if (isManualEntry && !manualCode.trim()) {
       setJoinError('Please enter a join code')
+      codeInputRef.current?.focus()
       return
     }
 
     if (isManualEntry && !JOIN_CODE_REGEX.test(manualCode.trim())) {
-      setJoinError('Invalid code format. Codes are 6 or 8 characters (letters and numbers).')
+      setJoinError(INVALID_CODE_MESSAGE)
+      codeInputRef.current?.focus()
       return
     }
 
     handleJoin()
   }
 
-  // Format the code input (uppercase, remove invalid chars)
+  // Format the code input. Only separators are dropped: silently discarding a
+  // mistyped character (O for 0, say) would leave a screen-reader user with a
+  // code that doesn't match what they typed, so validation reports it instead.
   const handleCodeChange = (value: string) => {
-    // Convert to uppercase, remove spaces and invalid characters
-    const cleaned = value
-      .toUpperCase()
-      .replace(/[^A-HJ-KM-NP-Z2-9]/g, '')
-      .slice(0, 8)
-    setManualCode(cleaned)
+    setManualCode(value.toUpperCase().replace(/[\s-]/g, ''))
     setJoinError(null)
   }
 
@@ -117,7 +120,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
               </div>
             </div>
             <h1 className="type-page text-foreground">Join a league</h1>
-            <p className="text-foreground-secondary mt-2">
+            <p id="join-code-hint" className="text-foreground-secondary mt-2">
               Enter the code shared by your league commissioner
             </p>
             {userDisplayName && (
@@ -135,6 +138,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
                 Join code
               </label>
               <input
+                ref={codeInputRef}
                 type="text"
                 id="joinCode"
                 value={manualCode}
@@ -143,7 +147,8 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
-                aria-describedby={joinError ? 'join-error' : undefined}
+                aria-invalid={joinError ? true : undefined}
+                aria-describedby={joinError ? 'join-code-hint join-error' : 'join-code-hint'}
                 className="input text-center font-mono text-2xl font-bold tracking-[0.3em] uppercase placeholder:text-foreground-muted/50 placeholder:tracking-[0.3em]"
               />
             </div>
@@ -163,9 +168,10 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 placeholder="My Production Company"
+                aria-describedby="team-name-hint"
                 className="input"
               />
-              <p className="type-meta text-foreground-secondary mt-1">
+              <p id="team-name-hint" className="type-meta text-foreground-secondary mt-1">
                 Leave blank to use a default name based on your username
               </p>
             </div>
@@ -179,7 +185,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
 
             <button
               type="submit"
-              disabled={isLoading || !JOIN_CODE_REGEX.test(manualCode)}
+              disabled={isLoading}
               className="btn btn-primary w-full py-3 text-lg"
               data-testid="join-league-button"
             >
@@ -219,9 +225,11 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
         {hasCode && (
           <div className="mb-6 text-center">
             <p className="type-meta text-foreground-secondary mb-1">Joining with code</p>
-            <div className="font-mono text-xl font-bold tracking-[0.3em] text-gold">
+            {/* Spelled out for screen readers, which read "ABC123" as a word and a number */}
+            <div aria-hidden="true" className="font-mono text-xl font-bold tracking-[0.3em] text-gold">
               {code?.toUpperCase()}
             </div>
+            <span className="sr-only">{code?.toUpperCase().split('').join(' ')}</span>
           </div>
         )}
 
@@ -240,9 +248,10 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
               value={teamName}
               onChange={(e) => setTeamName(e.target.value)}
               placeholder="My Production Company"
+              aria-describedby="team-name-token-hint"
               className="input"
             />
-            <p className="type-meta text-foreground-secondary mt-1">
+            <p id="team-name-token-hint" className="type-meta text-foreground-secondary mt-1">
               Leave blank to use a default name based on your username
             </p>
           </div>

@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { Heart } from 'lucide-react'
 import { toast } from 'sonner'
 import { useWishlist } from '@/hooks/useWishlist'
+import { announce } from '@/utils/announce'
 import type { TMDbSearchResult } from '@/types'
 
 function cn(...classes: (string | boolean | undefined | null)[]): string {
@@ -46,7 +47,11 @@ export function WishlistToggle({
 
       toggleWishlist(movie)
 
-      if (willBeWishlisted) {
+      // Toasts render behind a modal <dialog>, unseen and unheard; inside one,
+      // speak the result instead.
+      if (e.currentTarget.closest('dialog[open]')) {
+        announce(willBeWishlisted ? `${movie.title} added to your wishlist` : `${movie.title} removed from your wishlist`)
+      } else if (willBeWishlisted) {
         toast('Added to Wishlist', {
           action: {
             label: 'View',
@@ -72,17 +77,23 @@ export function WishlistToggle({
     if (variant === 'overlay') {
       return wishlisted
         ? 'bg-crimson text-white'
-        : 'bg-background/60 backdrop-blur-sm text-foreground-muted hover:text-crimson hover:bg-background/80'
+        : 'bg-background/60 backdrop-blur-sm text-foreground-muted hover:text-crimson-text hover:bg-background/80'
     }
     return wishlisted
-      ? 'text-crimson'
-      : 'text-foreground-muted hover:text-crimson'
+      ? 'text-crimson-text'
+      : 'text-foreground-muted hover:text-crimson-text'
   }
 
   return (
     <button
       type="button"
       onClick={handleClick}
+      // Callers nest the heart inside selectable cards; Enter/Space here must
+      // not also reach a parent's key handler and select the card. Other keys
+      // (Escape closing a dialog) still bubble.
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
+      }}
       aria-pressed={wishlisted}
       aria-label={`Wishlist ${movie.title}`}
       className={cn(

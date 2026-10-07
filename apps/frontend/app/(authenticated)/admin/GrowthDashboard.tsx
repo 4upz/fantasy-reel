@@ -13,7 +13,9 @@ const PROVIDER_LABEL: Record<string, string> = {
 
 const HEAD_ROW =
   'type-meta text-left text-foreground-secondary [&>th]:pb-2 [&>th]:font-medium [&>th:not(:last-child)]:pr-4'
-const BODY_ROW = 'border-t border-border [&>td]:py-2.5 [&>td:not(:last-child)]:pr-4'
+const BODY_ROW = 'border-t border-border [&>*]:py-2.5 [&>*:not(:last-child)]:pr-4'
+/** The first cell of each body row names the row for screen readers. */
+const ROW_HEADER = 'text-left font-normal'
 
 interface FunnelStep {
   label: string
@@ -78,6 +80,7 @@ export default function GrowthDashboard({ stats }: { stats: AdminGrowthStats }) 
         <Funnel
           title="Where leagues stall"
           description="Each step counts leagues that reached it or went further, judged on their first season."
+          shareOf="leagues created"
           steps={[
             { label: 'Created', value: league_funnel.created },
             { label: 'Invited someone', value: league_funnel.invited },
@@ -89,6 +92,7 @@ export default function GrowthDashboard({ stats }: { stats: AdminGrowthStats }) 
         <Funnel
           title="Where users stall"
           description="Based on the leagues each user is an active member of."
+          shareOf="users who signed up"
           steps={[
             { label: 'Signed up', value: users.total },
             { label: 'In a league', value: user_funnel.in_league },
@@ -108,15 +112,15 @@ export default function GrowthDashboard({ stats }: { stats: AdminGrowthStats }) 
         <table className="mt-4 w-full">
           <thead>
             <tr className={HEAD_ROW}>
-              <th>Action</th>
-              <th className="text-right">Last 30 days</th>
-              <th className="text-right">All time</th>
+              <th scope="col">Action</th>
+              <th scope="col" className="text-right">Last 30 days</th>
+              <th scope="col" className="text-right">All time</th>
             </tr>
           </thead>
           <tbody>
             {activityRows.map(([label, period]) => (
               <tr key={label} className={BODY_ROW}>
-                <td className="type-body-sm text-foreground">{label}</td>
+                <th scope="row" className={`${ROW_HEADER} type-body-sm text-foreground`}>{label}</th>
                 <td className="type-number text-right text-foreground">{count(period.last_30d)}</td>
                 <td className="type-number text-right text-foreground-secondary">{count(period.total)}</td>
               </tr>
@@ -131,28 +135,32 @@ export default function GrowthDashboard({ stats }: { stats: AdminGrowthStats }) 
           <table className="w-full min-w-[40rem]" data-testid="admin-league-table">
             <thead>
               <tr className={HEAD_ROW}>
-                <th>League</th>
-                <th>Owner</th>
-                <th>Status</th>
-                <th className="text-right">Players</th>
-                <th>Invite sent</th>
-                <th className="text-right">Created</th>
+                <th scope="col">League</th>
+                <th scope="col">Owner</th>
+                <th scope="col">Status</th>
+                <th scope="col" className="text-right">Players</th>
+                <th scope="col">Invite sent</th>
+                <th scope="col" className="text-right">Created</th>
               </tr>
             </thead>
             <tbody>
               {stats.league_list.map((league) => (
                 <tr key={league.id} className={BODY_ROW}>
-                  <td>
+                  <th scope="row" className={ROW_HEADER}>
                     <span className="type-row-title text-foreground">{league.name}</span>
                     <span className={`${SEASON_YEAR_CLASS} ml-2 text-foreground-secondary`}>{league.season_year}</span>
-                  </td>
+                  </th>
                   <td className="type-body-sm text-foreground-secondary">{league.owner ?? 'Unknown'}</td>
                   <td>
                     <span className={`badge ${STATUS_BADGE_CLASS[league.status]}`}>{getStatusLabel(league.status)}</span>
                   </td>
                   <td className="type-number text-right text-foreground">
                     {league.players}
-                    <span className="text-foreground-secondary"> / {league.max_players}</span>
+                    <span className="text-foreground-secondary">
+                      <span aria-hidden="true"> / </span>
+                      <span className="sr-only"> of </span>
+                      {league.max_players}
+                    </span>
                   </td>
                   <td className="type-body-sm text-foreground-secondary">{league.invited ? 'Yes' : 'No'}</td>
                   <td className="type-body-sm text-right text-foreground-secondary">{formatDate(league.created_at)}</td>
@@ -169,17 +177,19 @@ export default function GrowthDashboard({ stats }: { stats: AdminGrowthStats }) 
           <table className="w-full min-w-[36rem]" data-testid="admin-user-table">
             <thead>
               <tr className={HEAD_ROW}>
-                <th>Name</th>
-                <th>Signed in with</th>
-                <th>Signed up</th>
-                <th>Last active</th>
-                <th className="text-right">Leagues</th>
+                <th scope="col">Name</th>
+                <th scope="col">Signed in with</th>
+                <th scope="col">Signed up</th>
+                <th scope="col">Last active</th>
+                <th scope="col" className="text-right">Leagues</th>
               </tr>
             </thead>
             <tbody>
               {stats.recent_users.map((user) => (
                 <tr key={user.id} className={BODY_ROW}>
-                  <td className="type-row-title text-foreground">{user.display_name ?? 'No profile'}</td>
+                  <th scope="row" className={`${ROW_HEADER} type-row-title text-foreground`}>
+                    {user.display_name ?? 'No profile'}
+                  </th>
                   <td className="type-body-sm text-foreground-secondary">
                     {user.provider ? PROVIDER_LABEL[user.provider] ?? user.provider : 'Unknown'}
                   </td>
@@ -198,14 +208,25 @@ export default function GrowthDashboard({ stats }: { stats: AdminGrowthStats }) 
   )
 }
 
-function Funnel({ title, description, steps }: { title: string; description: string; steps: FunnelStep[] }) {
+function Funnel({
+  title,
+  description,
+  shareOf,
+  steps,
+}: {
+  title: string
+  description: string
+  /** What each percentage is a share of, read after it: "40% of leagues created". */
+  shareOf: string
+  steps: FunnelStep[]
+}) {
   const start = steps[0].value
 
   return (
     <section className="card p-5" aria-label={title}>
       <h2 className="type-panel text-foreground">{title}</h2>
       <p className="type-body-sm mt-1 text-foreground-secondary">{description}</p>
-      <ol className="mt-5 space-y-3">
+      <ol role="list" className="mt-5 space-y-3">
         {steps.map((step) => {
           const share = start > 0 ? step.value / start : 0
           return (
@@ -215,6 +236,7 @@ function Funnel({ title, description, steps }: { title: string; description: str
                 {count(step.value)}
                 <span className="type-meta ml-2 inline-block w-9 text-right text-foreground-secondary">
                   {Math.round(share * 100)}%
+                  <span className="sr-only"> of {shareOf}</span>
                 </span>
               </span>
               <span className="col-span-2 h-2 rounded-full bg-elevated" aria-hidden="true">
@@ -243,7 +265,7 @@ function MonthlyBars({ title, months, field }: { title: string; months: MonthlyG
           {count(total)} since {utcDate(months[0].month, { month: 'short', year: 'numeric' })}
         </p>
       </div>
-      <ol className="mt-4 flex h-44 items-end gap-1 border-b border-border pt-5">
+      <ol role="list" className="mt-4 flex h-44 items-end gap-1 border-b border-border pt-5">
         {months.map((m) => {
           const value = m[field]
           const label = `${utcDate(m.month, { month: 'long', year: 'numeric' })}: ${count(value)}`

@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import type { Metadata } from 'next'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedUser, getCachedLeague, getCachedActiveParticipant, getCachedParticipantCount } from '@/utils/supabase/cached'
@@ -15,6 +16,14 @@ import type { League } from '@/types'
 interface LayoutProps {
   children: React.ReactNode
   params: Promise<{ id: string }>
+}
+
+/** Tab pages set their own name ("Standings"); this adds which league it is. */
+export async function generateMetadata({ params }: Pick<LayoutProps, 'params'>): Promise<Metadata> {
+  const { id } = await params
+  const { data: league } = await getCachedLeague(id)
+  const name = league?.name ?? 'League'
+  return { title: { default: name, template: `%s · ${name} | Fantasy Reel` } }
 }
 
 export default async function LeagueLayout({ children, params }: LayoutProps): Promise<React.ReactElement> {
@@ -66,8 +75,11 @@ export default async function LeagueLayout({ children, params }: LayoutProps): P
           league you are looking at stays named while the table scrolls. On desktop it
           unwraps into today's three rows. Rendering it once keeps a single <h1> and a
           single switcher rather than a hidden duplicate of each.
+
+          On a short viewport (a laptop at 200% zoom) it scrolls away instead of
+          pinning, so the fixed app header and bottom bar leave room to read.
         */}
-        <div className="sticky top-14 z-20 border-b border-border bg-background lg:static lg:z-auto lg:border-0">
+        <div className="sticky top-14 z-20 border-b border-border bg-background lg:static lg:z-auto lg:border-0 [@media(max-height:500px)]:static">
           <div className="mx-auto max-w-6xl px-4 pt-1.5 pb-2.5 sm:px-6 lg:px-8 lg:pt-6 lg:pb-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 lg:gap-x-3">
               {/* Shares line 1 with the badge on mobile; owns its own row on desktop */}

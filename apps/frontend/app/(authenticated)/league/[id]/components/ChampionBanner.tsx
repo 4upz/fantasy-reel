@@ -2,6 +2,11 @@ import { Trophy } from 'lucide-react'
 import { formatFantasyPoints } from '@/utils/scoring'
 import { championName, formatChampionNames, type Champion } from '@/utils/seasons'
 
+/** "A", "A and B", "A, B and C": every name, read as a sentence rather than "A dot B". */
+function joinNames(names: string[]): string {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
 interface Props {
   seasonYear: number
   /** Every team at rank 1. More than one means the title is shared. */
@@ -50,10 +55,10 @@ export default function ChampionBanner({
           <h2 className="mt-1 type-section text-foreground">
             {champions.length === 0
               ? 'No champion recorded'
-              : champions.map(championName).join(' · ')}
+              : joinNames(champions.map(championName))}
           </h2>
           {owners.length > 0 && (
-            <p className="mt-0.5 text-sm text-foreground-secondary">{owners.join(' · ')}</p>
+            <p className="mt-0.5 text-sm text-foreground-secondary">{joinNames(owners)}</p>
           )}
         </div>
 

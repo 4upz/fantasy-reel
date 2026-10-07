@@ -121,7 +121,7 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
                 </div>
                 <div className="type-body-sm mt-1 flex items-center justify-between gap-3">
                   <span className="text-foreground-secondary">A counterpick on it scores</span>
-                  <span className="type-numeric font-semibold text-crimson">
+                  <span className="type-numeric font-semibold text-crimson-text">
                     {formatSignedPoints(-fantasyPointsForTomatometer(EXAMPLE_RT, doublePoints))} pts
                   </span>
                 </div>

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useId, useRef } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { createClient } from '@/utils/supabase/client'
+import Modal from '@/app/components/Modal'
 
 const CONFIRMATION = 'DELETE'
 
@@ -18,6 +19,10 @@ class ReauthRequiredError extends Error {}
 export default function DeleteAccountModal({ onClose }: Props): React.ReactElement {
   const [confirmation, setConfirmation] = useState('')
   const [needsReauth, setNeedsReauth] = useState(false)
+  const titleId = useId()
+  const confirmationHintId = useId()
+  const warningId = useId()
+  const signInAgainRef = useRef<HTMLButtonElement>(null)
 
   const deleteAccount = useCallback(async () => {
     const { error, errorBody } = await callEdgeFunction<{ deleted: boolean }>('delete-account', {
@@ -36,6 +41,12 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
 
   const { execute, isLoading, error } = useAsyncAction(deleteAccount)
 
+  // The form, and the button that had focus, are replaced by the sign-in
+  // prompt; its alert is read and focus lands on the action it asks for.
+  useEffect(() => {
+    if (needsReauth) signInAgainRef.current?.focus()
+  }, [needsReauth])
+
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault()
     try {
@@ -46,19 +57,14 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
   }
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-account-heading"
-        className="glass card p-6 w-full max-w-md animate-slide-up"
-      >
+    <Modal onClose={onClose} preventClose={isLoading} labelledBy={titleId} describedBy={needsReauth ? undefined : warningId}>
+      <div className="glass card p-6 w-full max-w-md animate-slide-up">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-error-bg">
-              <AlertTriangle className="w-5 h-5 text-crimson" aria-hidden="true" />
+              <AlertTriangle className="w-5 h-5 text-crimson-text" aria-hidden="true" />
             </div>
-            <h2 id="delete-account-heading" className="type-panel text-foreground">
+            <h2 id={titleId} className="type-panel text-foreground">
               Delete account
             </h2>
           </div>
@@ -66,16 +72,16 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            aria-label="Close"
-            className="p-1 text-foreground-secondary hover:text-foreground transition-colors"
+            aria-label="Close delete account"
+            className="p-1 cursor-pointer text-foreground-secondary hover:text-foreground transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
 
         {needsReauth ? (
           <>
-            <div className="alert alert-warning mb-6">
+            <div role="alert" className="alert alert-warning mb-6">
               <p>
                 For your security, deleting your account needs a recent sign-in. Sign in again,
                 then come back to Settings to finish.
@@ -87,7 +93,7 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
               </button>
               <form action="/auth/signout" method="post">
                 <input type="hidden" name="next" value="/settings" />
-                <button type="submit" className="btn btn-primary">
+                <button ref={signInAgainRef} type="submit" className="btn btn-primary">
                   Sign in again
                 </button>
               </form>
@@ -96,7 +102,7 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="type-body-sm text-foreground-secondary space-y-3 mb-6">
-              <p>This permanently deletes your account, profile and photo. It can&apos;t be undone.</p>
+              <p id={warningId}>This permanently deletes your account, profile and photo. It can&apos;t be undone.</p>
               <ul className="list-disc pl-5 space-y-1.5">
                 <li>Leagues you run pass to their longest-standing member. A league nobody else has joined is deleted.</li>
                 <li>You&apos;re removed from leagues that haven&apos;t drafted yet.</li>
@@ -111,8 +117,9 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
               <p>If you&apos;re in a draft that&apos;s underway, finish it first.</p>
             </div>
 
+            {/* Toasts are hidden behind an open dialog, so errors render here. */}
             {error && (
-              <div className="alert alert-error mb-4">
+              <div role="alert" className="alert alert-error mb-4">
                 <p>{error}</p>
               </div>
             )}
@@ -130,7 +137,12 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
                 autoComplete="off"
                 spellCheck={false}
                 disabled={isLoading}
+                aria-describedby={confirmationHintId}
+                data-dialog-initial-focus
               />
+              <p id={confirmationHintId} className="sr-only">
+                The Delete account button stays unavailable until you type {CONFIRMATION} exactly.
+              </p>
             </div>
 
             <div className="flex gap-3 justify-end">
@@ -144,7 +156,7 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
               >
                 {isLoading ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin mr-2" />
+                    <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin mr-2" aria-hidden="true" />
                     Deleting...
                   </>
                 ) : (
@@ -155,6 +167,6 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
           </form>
         )}
       </div>
-    </div>
+    </Modal>
   )
 }

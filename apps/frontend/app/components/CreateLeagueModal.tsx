@@ -7,6 +7,7 @@ import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
 import { FormError } from '@/app/components/FormError'
+import Modal from '@/app/components/Modal'
 import type { League } from '@/types'
 
 interface Props {
@@ -128,33 +129,33 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
   const pickupSlots = formData.total_slots - formData.draft_slots
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="create-league-title"
-        className="glass card p-6 w-full max-w-lg animate-slide-up my-auto max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-        data-testid="create-league-modal"
-      >
+    <Modal
+      onClose={handleClose}
+      preventClose={creating}
+      labelledBy="create-league-title"
+      describedBy="create-league-subtitle"
+      data-testid="create-league-modal"
+    >
+      <div className="glass card p-6 w-full max-w-lg animate-slide-up motion-reduce:animate-none">
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <div>
             <h2 id="create-league-title" className="type-panel text-foreground">
               Create new league
             </h2>
-            <p className="type-body-sm text-foreground-secondary mt-1">
+            <p id="create-league-subtitle" className="type-body-sm text-foreground-secondary mt-1">
               Set up your fantasy movie league
             </p>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             disabled={creating}
-            className="text-foreground-secondary hover:text-foreground transition-colors disabled:opacity-50"
-            aria-label="Close"
+            className="rounded p-1 text-foreground-secondary hover:text-foreground transition-colors disabled:opacity-50"
+            aria-label="Close create league"
             data-testid="close-modal-button"
           >
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -175,7 +176,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               className="input"
               placeholder="e.g., Oscar Contenders 2026"
               required
-              autoFocus
+              data-dialog-initial-focus
               data-testid="league-name-input"
             />
           </div>
@@ -211,8 +212,10 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                 className="type-numeric input"
                 min="2"
                 max="20"
+                aria-describedby="max-participants-hint"
                 data-testid="max-participants-input"
               />
+              <p id="max-participants-hint" className="sr-only">2 to 20</p>
             </div>
 
             <div className="flex items-end pb-2">
@@ -234,6 +237,8 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
+            aria-expanded={showAdvanced}
+            aria-controls="create-league-advanced"
             className="type-control flex items-center gap-2 text-foreground-secondary hover:text-gold transition-colors w-full"
           >
             <ChevronDown
@@ -244,10 +249,10 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
 
           {/* Advanced Settings */}
           {showAdvanced && (
-            <div className="space-y-5 pt-2 border-t border-border">
+            <div id="create-league-advanced" className="space-y-5 pt-2 border-t border-border">
               {/* Roster configuration */}
-              <div>
-                <h4 className="type-label text-foreground mb-3">Roster configuration</h4>
+              <div role="group" aria-labelledby="create-league-roster-heading">
+                <h3 id="create-league-roster-heading" className="type-label text-foreground mb-3">Roster configuration</h3>
                 <div className="grid grid-cols-2 gap-4">
                   {/* Total slots */}
                   <div>
@@ -262,8 +267,11 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       className="type-numeric input w-20"
                       min={MIN_TOTAL_SLOTS}
                       max={MAX_TOTAL_SLOTS}
+                      aria-describedby="total-slots-hint"
                     />
-                    <p className="type-meta text-foreground-secondary mt-1">Movies per team</p>
+                    <Hint id="total-slots-hint" spoken={`Movies per team, ${MIN_TOTAL_SLOTS} to ${MAX_TOTAL_SLOTS}`}>
+                      Movies per team
+                    </Hint>
                   </div>
 
                   {/* Draft slots */}
@@ -279,8 +287,14 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       className="type-numeric input w-20"
                       min={MIN_DRAFT_SLOTS}
                       max={formData.total_slots}
+                      aria-describedby="draft-slots-hint"
                     />
-                    <p className="type-meta text-foreground-secondary mt-1">= draft rounds</p>
+                    <Hint
+                      id="draft-slots-hint"
+                      spoken={`Sets the number of draft rounds. At most the total roster slots, now ${formData.total_slots}.`}
+                    >
+                      = draft rounds
+                    </Hint>
                   </div>
 
                   {/* Drop limit */}
@@ -296,14 +310,17 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       className="type-numeric input w-20"
                       min={MIN_DROP_LIMIT}
                       max={MAX_DROP_LIMIT}
+                      aria-describedby="drop-limit-hint"
                     />
-                    <p className="type-meta text-foreground-secondary mt-1">Max drops/season</p>
+                    <Hint id="drop-limit-hint" spoken={`Maximum drops per season, ${MIN_DROP_LIMIT} to ${MAX_DROP_LIMIT}`}>
+                      Max drops/season
+                    </Hint>
                   </div>
 
                   {/* Counterbid window */}
                   <div>
                     <label htmlFor="counterbid-hours" className="type-label block text-foreground-secondary mb-1">
-                      Counterbid window
+                      Counterbid window<span className="sr-only"> (hours)</span>
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -314,16 +331,22 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                         className="type-numeric input w-16"
                         min={MIN_COUNTERBID_HOURS}
                         max={MAX_COUNTERBID_HOURS}
+                        aria-describedby="counterbid-hours-hint"
                       />
-                      <span className="type-meta text-foreground-secondary">hrs</span>
+                      <span aria-hidden="true" className="type-meta text-foreground-secondary">hrs</span>
                     </div>
-                    <p className="type-meta text-foreground-secondary mt-1">Time to counter</p>
+                    <Hint
+                      id="counterbid-hours-hint"
+                      spoken={`Time to counter, ${MIN_COUNTERBID_HOURS} to ${MAX_COUNTERBID_HOURS} hours`}
+                    >
+                      Time to counter
+                    </Hint>
                   </div>
 
                   {/* New bid cutoff */}
                   <div>
                     <label htmlFor="new-bid-cutoff-hours" className="type-label block text-foreground-secondary mb-1">
-                      New bid cutoff
+                      New bid cutoff<span className="sr-only"> (hours)</span>
                     </label>
                     <div className="flex items-center gap-1.5">
                       <input
@@ -334,12 +357,16 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                         className="type-numeric input w-16"
                         min={MIN_NEW_BID_CUTOFF_HOURS}
                         max={MAX_NEW_BID_CUTOFF_HOURS}
+                        aria-describedby="new-bid-cutoff-hours-hint"
                       />
-                      <span className="type-meta text-foreground-secondary">hrs</span>
+                      <span aria-hidden="true" className="type-meta text-foreground-secondary">hrs</span>
                     </div>
-                    <p className="type-meta text-foreground-secondary mt-1">
+                    <Hint
+                      id="new-bid-cutoff-hours-hint"
+                      spoken={`${formData.new_bid_cutoff_hours === 0 ? 'Open all week' : 'Then counters only'}, ${MIN_NEW_BID_CUTOFF_HOURS} to ${MAX_NEW_BID_CUTOFF_HOURS} hours`}
+                    >
                       {formData.new_bid_cutoff_hours === 0 ? 'Open all week' : 'Then counters only'}
-                    </p>
+                    </Hint>
                   </div>
                 </div>
 
@@ -354,12 +381,17 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       ? 'Filled by bidding, or by dropping a movie and bidding on a replacement'
                       : 'The draft fills every roster slot. Teams bid by dropping a movie first.'}
                   </p>
+                  {/* Lowering total slots also lowers draft slots to match, so
+                      say both numbers whenever either changes. */}
+                  <p className="sr-only" aria-live="polite">
+                    {formData.draft_slots} draft {formData.draft_slots === 1 ? 'slot' : 'slots'}, {pickupSlots} open after the draft
+                  </p>
                 </div>
               </div>
 
               {/* Counterpick configuration */}
-              <div>
-                <h4 className="type-label text-foreground mb-1">Counterpick configuration</h4>
+              <div role="group" aria-labelledby="create-league-counterpick-heading">
+                <h3 id="create-league-counterpick-heading" className="type-label text-foreground mb-1">Counterpick configuration</h3>
                 <p className="type-meta text-foreground-secondary mb-3">
                   Bet against opponent movies to earn points if they underperform
                 </p>
@@ -377,8 +409,14 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       className="type-numeric input w-20"
                       min={MIN_DRAFT_COUNTERPICK_SLOTS}
                       max={MAX_DRAFT_COUNTERPICK_SLOTS}
+                      aria-describedby="draft-counterpick-slots-hint"
                     />
-                    <p className="type-meta text-foreground-secondary mt-1">After draft (0-5)</p>
+                    <Hint
+                      id="draft-counterpick-slots-hint"
+                      spoken={`After the draft, ${MIN_DRAFT_COUNTERPICK_SLOTS} to ${MAX_DRAFT_COUNTERPICK_SLOTS}`}
+                    >
+                      After draft ({MIN_DRAFT_COUNTERPICK_SLOTS}-{MAX_DRAFT_COUNTERPICK_SLOTS})
+                    </Hint>
                   </div>
 
                   {/* Bidding Counterpick Slots */}
@@ -394,8 +432,14 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                       className="type-numeric input w-20"
                       min={MIN_BIDDING_COUNTERPICK_SLOTS}
                       max={MAX_BIDDING_COUNTERPICK_SLOTS}
+                      aria-describedby="bidding-counterpick-slots-hint"
                     />
-                    <p className="type-meta text-foreground-secondary mt-1">During bidding (0-3)</p>
+                    <Hint
+                      id="bidding-counterpick-slots-hint"
+                      spoken={`During bidding, ${MIN_BIDDING_COUNTERPICK_SLOTS} to ${MAX_BIDDING_COUNTERPICK_SLOTS}`}
+                    >
+                      During bidding ({MIN_BIDDING_COUNTERPICK_SLOTS}-{MAX_BIDDING_COUNTERPICK_SLOTS})
+                    </Hint>
                   </div>
                 </div>
 
@@ -406,12 +450,17 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
                     id="counterpicks-block-drops"
                     checked={formData.counterpicks_block_drops}
                     onChange={(e) => setFormData(prev => ({ ...prev, counterpicks_block_drops: e.target.checked }))}
+                    aria-describedby="counterpicks-block-drops-hint"
                     className="mt-0.5 w-4 h-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-0 focus:ring-2 cursor-pointer"
                   />
-                  <label htmlFor="counterpicks-block-drops" className="type-label cursor-pointer">
-                    <span className="type-meta text-foreground">Block drops on counterpicked movies</span>
-                    <p className="type-meta text-foreground-secondary">Prevent dropping movies that have been counterpicked</p>
-                  </label>
+                  <div>
+                    <label htmlFor="counterpicks-block-drops" className="type-label block cursor-pointer">
+                      <span className="type-meta text-foreground">Block drops on counterpicked movies</span>
+                    </label>
+                    <p id="counterpicks-block-drops-hint" className="type-meta text-foreground-secondary">
+                      Prevent dropping movies that have been counterpicked
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -429,7 +478,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
             >
               {creating ? (
                 <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4\" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
@@ -450,6 +499,19 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
+  )
+}
+
+/**
+ * Helper text under a field. `spoken` replaces the compact visible wording
+ * ("= draft rounds", "(0-5)") for screen readers, which read symbols badly.
+ */
+function Hint({ id, spoken, children }: { id: string; spoken: string; children: React.ReactNode }): React.ReactElement {
+  return (
+    <p id={id} className="type-meta text-foreground-secondary mt-1">
+      <span aria-hidden="true">{children}</span>
+      <span className="sr-only">{spoken}</span>
+    </p>
   )
 }

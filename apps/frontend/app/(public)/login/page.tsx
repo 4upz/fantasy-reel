@@ -1,7 +1,8 @@
 'use client'
 
-import { Suspense, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { Suspense, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { unstable_rethrow, useSearchParams } from 'next/navigation'
 import { login, resendConfirmationEmail } from './actions'
 import Link from 'next/link'
 import { FormError, FormSuccess } from '../../components/FormError'
@@ -9,9 +10,9 @@ import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
-import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
+import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
-import { toast } from 'sonner'
+import { useHydrated } from '@/hooks/useHydrated'
 
 /**
  * Explains how the visitor got here from an email link. Email links only sign
@@ -49,6 +50,8 @@ function OAuthButtons(): React.ReactElement {
 }
 
 export default function LoginPage() {
+  // Until React attaches onSubmit, a native submit would put the fields in the URL.
+  const hydrated = useHydrated()
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isResending, setIsResending] = useState(false)
@@ -56,8 +59,20 @@ export default function LoginPage() {
   const [lastEmail, setLastEmail] = useState('')
   const [resendSuccess, setResendSuccess] = useState(false)
   const captcha = useCaptcha()
+  const submitRef = useRef<HTMLButtonElement>(null)
+  const resendRef = useRef<HTMLButtonElement>(null)
+  const resendSuccessRef = useRef<HTMLDivElement>(null)
 
-  async function handleSubmit(formData: FormData) {
+  // onSubmit rather than a form action: an action clears the fields when it
+  // resolves, so a failed sign-in would make the user retype both.
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!captcha.ready) {
+      setError(CAPTCHA_PENDING_MESSAGE)
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
     setError(null)
     setIsLoading(true)
     setShowResendOption(false)
@@ -68,47 +83,64 @@ export default function LoginPage() {
     formData.set(CAPTCHA_FIELD, captcha.token ?? '')
     formData.set('next', readNextPath() ?? '')
 
+    let message: string | null = null
     try {
       const result = await login(formData)
-      if (result?.error) {
-        setError(result.error)
-        toast.error(result.error)
-
-        // Check if error is about unconfirmed email
-        if (result.error.toLowerCase().includes('confirm')) {
-          setShowResendOption(true)
-        }
-      }
-    } catch {
-      // If redirect happens, this won't execute
-      // If some other error occurs, show generic message
-      setError('An unexpected error occurred')
-    } finally {
-      setIsLoading(false)
-      captcha.reset()
+      message = result?.error ?? null
+    } catch (err) {
+      // A successful sign-in redirects, which reaches here as Next's redirect
+      // signal; rethrow it for the router rather than flash an error.
+      unstable_rethrow(err)
+      message = 'An unexpected error occurred'
     }
+
+    const unconfirmed = message?.toLowerCase().includes('confirm') ?? false
+    // The disabled form dropped focus: re-enable it, then focus what the user
+    // acts on next. The error announces itself, so focus goes to a control.
+    flushSync(() => {
+      setError(message)
+      setShowResendOption(unconfirmed)
+      setIsLoading(false)
+    })
+    captcha.reset()
+    if (unconfirmed) resendRef.current?.focus()
+    else if (message) submitRef.current?.focus()
   }
 
   async function handleResend() {
     if (!lastEmail) return
+    if (!captcha.ready) {
+      setError(CAPTCHA_PENDING_MESSAGE)
+      return
+    }
 
     setIsResending(true)
     setError(null)
 
+    let sent = false
+    let message: string | null = null
     try {
       const result = await resendConfirmationEmail(lastEmail, captcha.token ?? undefined)
-      if (result.success) {
+      sent = result.success
+      message = result.error ?? null
+    } catch {
+      message = 'Failed to resend email'
+    }
+
+    flushSync(() => {
+      setIsResending(false)
+      if (sent) {
         setResendSuccess(true)
         setShowResendOption(false)
-      } else if (result.error) {
-        setError(result.error)
+      } else {
+        setError(message)
       }
-    } catch {
-      setError('Failed to resend email')
-    } finally {
-      setIsResending(false)
-      captcha.reset()
-    }
+    })
+    captcha.reset()
+    // On success the Resend button is gone, so focus the confirmation instead
+    // (it is read on focus); on failure the error announces itself.
+    if (sent) resendSuccessRef.current?.focus()
+    else resendRef.current?.focus()
   }
 
   return (
@@ -124,13 +156,13 @@ export default function LoginPage() {
         </div>
 
         <div className="card p-8">
-          <form action={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <Suspense fallback={null}>
               <LinkNotice />
             </Suspense>
             <FormError message={error} />
             {resendSuccess && (
-              <FormSuccess message="Confirmation email sent! Check your inbox." />
+              <FormSuccess message="Confirmation email sent! Check your inbox." ref={resendSuccessRef} />
             )}
 
             {/* Show resend option when email not confirmed */}
@@ -138,10 +170,11 @@ export default function LoginPage() {
               <div className="alert alert-warning">
                 <p className="mb-3">Your email address hasn&apos;t been confirmed yet.</p>
                 <button
+                  ref={resendRef}
                   type="button"
                   onClick={handleResend}
-                  disabled={isResending || !captcha.ready}
-                  className="type-control text-gold hover:text-gold-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  disabled={isResending}
+                  className="type-control cursor-pointer text-gold hover:text-gold-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {isResending ? 'Sending...' : 'Resend confirmation email'}
                 </button>
@@ -150,7 +183,7 @@ export default function LoginPage() {
 
             <div className="space-y-4">
               <div>
-                <label htmlFor="email" className="sr-only">
+                <label htmlFor="email" className="type-label block text-foreground-secondary mb-2">
                   Email address
                 </label>
                 <input
@@ -161,12 +194,11 @@ export default function LoginPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Email address"
                   data-testid="email-input"
                 />
               </div>
               <div>
-                <label htmlFor="password" className="sr-only">
+                <label htmlFor="password" className="type-label block text-foreground-secondary mb-2">
                   Password
                 </label>
                 <input
@@ -177,7 +209,6 @@ export default function LoginPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Password"
                   data-testid="password-input"
                 />
               </div>
@@ -185,7 +216,13 @@ export default function LoginPage() {
 
             <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
 
-            <button type="submit" disabled={isLoading || !captcha.ready} className="btn btn-primary w-full py-3" data-testid="login-button">
+            <button
+              ref={submitRef}
+              type="submit"
+              disabled={isLoading || !hydrated}
+              className="btn btn-primary w-full py-3"
+              data-testid="login-button"
+            >
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>
 

@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { Link2, Eye, EyeOff } from 'lucide-react'
 import { toast } from 'sonner'
 import DiscordIcon from '@/app/components/icons/DiscordIcon'
 import GoogleIcon from '@/app/components/icons/GoogleIcon'
 import { FormError } from '@/app/components/FormError'
-import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
+import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '@/app/components/auth/Turnstile'
 import { verifyAndMergeAccounts, keepSeparateAccount } from './actions'
+import { useHydrated } from '@/hooks/useHydrated'
 
 type OAuthProvider = 'discord' | 'google'
 
@@ -38,20 +40,35 @@ export default function LinkAccountClient({
   oauthUsername,
   duplicateUserId,
 }: Props): React.ReactElement {
+  // Until React attaches onSubmit, a native submit would put the fields in the URL.
+  const hydrated = useHydrated()
   const { name: providerName, icon: providerIcon, bgClass: providerBgClass } = PROVIDER_DISPLAY[oauthProvider]
   const router = useRouter()
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // A failed link describes the password field, which focus returns to.
+  const [errorOnPassword, setErrorOnPassword] = useState(false)
   const [isLinking, setIsLinking] = useState(false)
   const [isKeepingSeparate, setIsKeepingSeparate] = useState(false)
   const captcha = useCaptcha()
+  const errorId = useId()
+  const passwordRef = useRef<HTMLInputElement>(null)
+  const keepSeparateRef = useRef<HTMLButtonElement>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!captcha.ready) {
+      setError(CAPTCHA_PENDING_MESSAGE)
+      setErrorOnPassword(false)
+      return
+    }
+
     setError(null)
+    setErrorOnPassword(false)
     setIsLinking(true)
 
+    let message: string | null = null
     try {
       const result = await verifyAndMergeAccounts(password, captcha.token ?? undefined)
 
@@ -59,19 +76,29 @@ export default function LinkAccountClient({
         toast.success('Accounts linked successfully!')
         router.push('/dashboard')
       } else {
-        setError(result.error || 'Failed to link accounts')
+        message = result.error || 'Failed to link accounts'
       }
     } catch {
-      setError('Something went wrong. Please try again.')
-    } finally {
-      setIsLinking(false)
-      captcha.reset()
+      message = 'Something went wrong. Please try again.'
     }
+
+    // The disabled field dropped focus: re-enable it, then return focus to
+    // the password, which reads the error as its description.
+    flushSync(() => {
+      setIsLinking(false)
+      setError(message)
+      setErrorOnPassword(message !== null)
+    })
+    captcha.reset()
+    if (message) passwordRef.current?.focus()
   }
 
   const handleKeepSeparate = async () => {
+    setError(null)
+    setErrorOnPassword(false)
     setIsKeepingSeparate(true)
 
+    let message: string | null = null
     try {
       const result = await keepSeparateAccount(duplicateUserId)
 
@@ -79,13 +106,19 @@ export default function LinkAccountClient({
         toast.success('Continuing with new account')
         router.push('/dashboard')
       } else {
-        setError(result.error || 'Failed to continue')
+        message = result.error || 'Failed to continue'
       }
     } catch {
-      setError('Something went wrong. Please try again.')
-    } finally {
-      setIsKeepingSeparate(false)
+      message = 'Something went wrong. Please try again.'
     }
+
+    // The disabled button dropped focus: re-enable it and focus it again. The
+    // error announces itself.
+    flushSync(() => {
+      setIsKeepingSeparate(false)
+      setError(message)
+    })
+    if (message) keepSeparateRef.current?.focus()
   }
 
   return (
@@ -130,6 +163,7 @@ export default function LinkAccountClient({
             </label>
             <div className="relative">
               <input
+                ref={passwordRef}
                 type={showPassword ? 'text' : 'password'}
                 id="password"
                 value={password}
@@ -138,25 +172,27 @@ export default function LinkAccountClient({
                 className="input pr-10"
                 required
                 disabled={isLinking}
+                aria-describedby={errorOnPassword ? errorId : undefined}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-foreground-muted hover:text-foreground-secondary transition-colors"
-                tabIndex={-1}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1.5 text-foreground-muted hover:text-foreground-secondary transition-colors"
+                aria-label="Show password"
+                aria-pressed={showPassword}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
 
-          {error && <FormError message={error} />}
+          <FormError message={error} id={errorId} announce={!errorOnPassword} />
 
           <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
 
           <button
             type="submit"
-            disabled={isLinking || !password || !captcha.ready}
+            disabled={isLinking || !hydrated}
             className="btn btn-primary w-full py-3"
             data-testid="merge-account-button"
           >
@@ -175,6 +211,7 @@ export default function LinkAccountClient({
         <div className="mt-6 pt-6 border-t border-border text-center">
           <p className="type-body-sm text-foreground-secondary mb-3">Don&apos;t want to link accounts?</p>
           <button
+            ref={keepSeparateRef}
             onClick={handleKeepSeparate}
             disabled={isKeepingSeparate || isLinking}
             className="type-control btn btn-ghost text-foreground-secondary hover:text-foreground"
