@@ -617,6 +617,7 @@ export type NotificationType =
   | 'trade_vetoed'
   | 'season_completed'
   | 'season_started'
+  | 'league_ownership_transferred'
 
 export interface Notification {
   id: string

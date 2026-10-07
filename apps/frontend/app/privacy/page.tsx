@@ -128,8 +128,9 @@ const SECTIONS: LegalSection[] = [
         <p>
           You can delete your account in Settings, or request deletion at <SupportEmailLink />. Deleting your
           account removes your sign-in details, email address, profile name and photo, uploaded team photos,
-          wishlist, notifications, invitations sent to your email, and our records of emails sent to you.
-          Leagues you run pass to another member, or are deleted if nobody else has joined. You are removed from
+          wishlist, notifications, invitations sent to your email or sent by you, and our records of emails sent
+          to you. Leagues you run pass to another member, who is told, or are deleted if no other member can take
+          them over. You are removed from
           leagues that have not drafted yet. In seasons that have started, your team stays, shown as &ldquo;Former
           member&rdquo;: its name, roster, scores, trades, and trade messages remain part of that league&apos;s
           history. A season still in progress no longer ranks your team; a finished season keeps its result. Your pending bids and trade offers are cancelled. An

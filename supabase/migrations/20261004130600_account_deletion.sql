@@ -21,9 +21,10 @@
 --
 --   * Live drafts block deletion. A team that never picks would stall the
 --     draft (there are no auto-picks), so the person finishes the draft first.
---   * Each season they own passes to the longest-standing other member; a
---     season with nobody else in it is deleted. Each series they own follows
---     its newest season's owner, or is deleted once it has no seasons.
+--   * Each season they own passes to the longest-standing other member, who
+--     is told in the app; a season with nobody else in it (or only members
+--     who were removed from it) is deleted. Each series they own follows its
+--     newest season's owner, or is deleted once it has no seasons.
 --   * Seasons still in setup simply lose the person, as if they had never
 --     joined. In active and completed seasons the team and its roster stay,
 --     so other teams' counterpicks on it and trades with it hold. The person
@@ -67,6 +68,9 @@ ALTER TABLE public.trade_offers DROP CONSTRAINT trade_offers_approved_by_fkey;
 -- ----------------------------------------------------------------------------
 -- 2. Notifications for a former member are dropped, not errors
 -- ----------------------------------------------------------------------------
+-- Sent to whoever inherits a season (section 5).
+ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'league_ownership_transferred';
+
 -- Former members are still participants, so batch notifications (season
 -- started, bids processed, ...) include them. notifications.user_id still
 -- references auth.users, and one dangling id would fail the whole batch insert.
@@ -239,12 +243,14 @@ BEGIN
 
   -- Seasons they own: hand each to the longest-standing other member, or
   -- delete it when nobody else ever played in it.
-  FOR v_league IN SELECT l.id FROM leagues l WHERE l.owner_id = v_user_id LOOP
+  FOR v_league IN SELECT l.id, l.name, l.status FROM leagues l WHERE l.owner_id = v_user_id LOOP
     SELECT lp.user_id INTO v_new_owner
     FROM league_participants lp
     WHERE lp.league_id = v_league.id
       AND lp.user_id <> v_user_id
-      AND lp.status IN ('active', 'left', 'kicked')
+      -- Someone who left can still open the season; someone removed cannot,
+      -- so a season left with only removed members is deleted instead.
+      AND lp.status IN ('active', 'left')
       -- A former member is not an owner.
       AND EXISTS (SELECT 1 FROM auth.users u WHERE u.id = lp.user_id)
     ORDER BY (lp.status = 'active') DESC, lp.joined_at, lp.id
@@ -256,6 +262,16 @@ BEGIN
       UPDATE leagues SET owner_id = v_new_owner WHERE id = v_league.id;
       UPDATE league_participants SET role = 'owner'
       WHERE league_id = v_league.id AND user_id = v_new_owner;
+
+      -- A finished season has nothing left to run.
+      IF v_league.status <> 'completed' THEN
+        INSERT INTO notifications (user_id, league_id, type, title, body)
+        VALUES (
+          v_new_owner, v_league.id, 'league_ownership_transferred',
+          format('You now run %s', v_league.name),
+          format('The commissioner of %s deleted their account, so the league passed to you.', v_league.name)
+        );
+      END IF;
     END IF;
   END LOOP;
 
@@ -334,3 +350,37 @@ REVOKE ALL ON FUNCTION public.handle_auth_user_deletion() FROM PUBLIC, anon, aut
 CREATE TRIGGER on_auth_user_deleted
   BEFORE DELETE ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_auth_user_deletion();
+
+-- ----------------------------------------------------------------------------
+-- 6. A deleted account's leftover session cannot undo the anonymizing
+-- ----------------------------------------------------------------------------
+-- Deleting the auth user does not revoke access tokens already issued, so for
+-- up to an hour the person's token still passes the "own row" UPDATE policies
+-- on profiles and teams, which would let them put their name and photo back on
+-- the "Former member" row. Service-role and auth-admin writes carry no
+-- auth.uid() and are unaffected.
+CREATE OR REPLACE FUNCTION public.reject_writes_from_deleted_accounts()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_caller UUID := auth.uid();
+BEGIN
+  IF v_caller IS NOT NULL AND NOT EXISTS (SELECT 1 FROM auth.users u WHERE u.id = v_caller) THEN
+    RAISE EXCEPTION 'This account has been deleted' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.reject_writes_from_deleted_accounts() FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER reject_writes_from_deleted_accounts
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.reject_writes_from_deleted_accounts();
+
+CREATE TRIGGER reject_writes_from_deleted_accounts
+  BEFORE UPDATE ON public.teams
+  FOR EACH ROW EXECUTE FUNCTION public.reject_writes_from_deleted_accounts();

@@ -86,6 +86,7 @@ export default function DeleteAccountModal({ onClose }: Props): React.ReactEleme
                 Cancel
               </button>
               <form action="/auth/signout" method="post">
+                <input type="hidden" name="next" value="/settings" />
                 <button type="submit" className="btn btn-primary">
                   Sign in again
                 </button>

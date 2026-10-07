@@ -468,8 +468,13 @@ and merge-accounts behave the same way:
 
 - A live draft (`drafting`/`counterpicking`) blocks deletion
   (`account_deletion_blockers()`).
-- Owned seasons pass to the longest-standing other member; a season nobody else
-  joined is deleted. Owned series follow their newest season's owner.
+- Owned seasons pass to the longest-standing other member (active first, then
+  `left`; never `kicked`), who gets a `league_ownership_transferred` notification
+  unless the season is completed; a season with nobody to take it is deleted.
+  Owned series follow their newest season's owner.
+- `reject_writes_from_deleted_accounts` (BEFORE UPDATE on `profiles`/`teams`)
+  stops the deleted person's still-valid access token from undoing the
+  anonymizing in the hour before it expires.
 - Setup seasons drop the person. Active and completed seasons keep the team
   and roster: the participant becomes `status = 'left'` (so an active season's
   `league_standings()` and its eventual `final_standings` no longer rank the

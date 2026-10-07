@@ -64,6 +64,18 @@ Deno.test({
         await service.from('leagues').delete().eq('id', league.id)
       })
 
+      await t.step('uploads a profile photo, as a real account would have', async () => {
+        // A 1x1 PNG. Storage objects record their uploader as owner, so this is
+        // what proves deleteUser is not blocked by the photos it leaves behind.
+        const png = Uint8Array.from(atob(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+        ), (c) => c.charCodeAt(0))
+        const { error } = await client.storage
+          .from('avatars')
+          .upload(`${userId}/avatar`, png, { contentType: 'image/png', upsert: true })
+        assertEquals(error, null)
+      })
+
       await t.step('deletes the account and its profile', async () => {
         const result = await invokeFunction<{ deleted: boolean }>(client, 'delete-account', { confirmation: 'DELETE' })
         assertEquals(result.error, null)
@@ -73,6 +85,9 @@ Deno.test({
         assertEquals(data.user, null)
         const { data: profile } = await service.from('profiles').select('id').eq('user_id', userId).maybeSingle()
         assertEquals(profile, null)
+
+        const { data: photos } = await service.storage.from('avatars').list(userId)
+        assertEquals(photos ?? [], [])
       })
     } finally {
       await service.auth.admin.deleteUser(userId).catch(() => undefined)

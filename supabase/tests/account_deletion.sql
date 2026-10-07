@@ -22,7 +22,8 @@ INSERT INTO leagues(id, name, owner_id, status, season_end) VALUES
   ('8c000000-0000-4000-8000-000000000011', 'Owned active', '8c000000-0000-4000-8000-000000000001', 'active', current_date + 30),
   ('8c000000-0000-4000-8000-000000000012', 'Owned alone', '8c000000-0000-4000-8000-000000000001', 'setup', current_date + 30),
   ('8c000000-0000-4000-8000-000000000013', 'Joined setup', '8c000000-0000-4000-8000-000000000002', 'setup', current_date + 30),
-  ('8c000000-0000-4000-8000-000000000015', 'Live draft', '8c000000-0000-4000-8000-000000000004', 'drafting', current_date + 30);
+  ('8c000000-0000-4000-8000-000000000015', 'Live draft', '8c000000-0000-4000-8000-000000000004', 'drafting', current_date + 30),
+  ('8c000000-0000-4000-8000-000000000016', 'Owned, rest removed', '8c000000-0000-4000-8000-000000000001', 'active', current_date + 30);
 INSERT INTO leagues(id, name, owner_id, status, season_end, completed_at, final_standings) VALUES
   ('8c000000-0000-4000-8000-000000000014', 'Finished', '8c000000-0000-4000-8000-000000000001', 'completed', current_date - 1, now(),
    '[{"user_id": "8c000000-0000-4000-8000-000000000001", "display_name": "Leaving Person", "team_name": "Leavers", "rank": 1},
@@ -38,7 +39,9 @@ INSERT INTO league_participants(id, league_id, user_id, role, status, joined_at)
   ('8c000000-0000-4000-8000-000000000027', '8c000000-0000-4000-8000-000000000014', '8c000000-0000-4000-8000-000000000002', 'member', 'active', now()),
   ('8c000000-0000-4000-8000-000000000028', '8c000000-0000-4000-8000-000000000014', '8c000000-0000-4000-8000-000000000001', 'owner', 'active', now()),
   ('8c000000-0000-4000-8000-000000000029', '8c000000-0000-4000-8000-000000000015', '8c000000-0000-4000-8000-000000000004', 'owner', 'active', now()),
-  ('8c000000-0000-4000-8000-000000000030', '8c000000-0000-4000-8000-000000000015', '8c000000-0000-4000-8000-000000000005', 'member', 'active', now());
+  ('8c000000-0000-4000-8000-000000000030', '8c000000-0000-4000-8000-000000000015', '8c000000-0000-4000-8000-000000000005', 'member', 'active', now()),
+  ('8c000000-0000-4000-8000-000000000039', '8c000000-0000-4000-8000-000000000016', '8c000000-0000-4000-8000-000000000001', 'owner', 'active', now() - interval '3 days'),
+  ('8c000000-0000-4000-8000-000000000040', '8c000000-0000-4000-8000-000000000016', '8c000000-0000-4000-8000-000000000003', 'member', 'kicked', now() - interval '2 days');
 
 INSERT INTO teams(id, participant_id, name, avatar_url) VALUES
   ('8c000000-0000-4000-8000-000000000031', '8c000000-0000-4000-8000-000000000021', 'Leavers', 'https://cdn.discordapp.com/avatars/1/t.png'),
@@ -105,6 +108,12 @@ SELECT ok(NOT EXISTS (SELECT 1 FROM leagues WHERE id = '8c000000-0000-4000-8000-
 SELECT is((SELECT owner_id FROM leagues WHERE id = '8c000000-0000-4000-8000-000000000014'), '8c000000-0000-4000-8000-000000000002'::UUID,
   'a completed season passes to another member too');
 SELECT ok(NOT EXISTS (SELECT 1 FROM league_series WHERE owner_id = '8c000000-0000-4000-8000-000000000001'), 'no series is left owned by the deleted account');
+SELECT ok(NOT EXISTS (SELECT 1 FROM leagues WHERE id = '8c000000-0000-4000-8000-000000000016'),
+  'a season whose other members were all removed is deleted, not handed to someone who cannot open it');
+SELECT results_eq(
+  $$SELECT league_id FROM notifications WHERE user_id = '8c000000-0000-4000-8000-000000000002' AND type = 'league_ownership_transferred'$$,
+  $$VALUES ('8c000000-0000-4000-8000-000000000011'::UUID)$$,
+  'the new owner is told about the season still running, not the finished one');
 
 -- Setup seasons lose the person; active ones keep the team as a former member's.
 SELECT ok(NOT EXISTS (SELECT 1 FROM league_participants WHERE id = '8c000000-0000-4000-8000-000000000026'), 'a setup season drops the participant');
@@ -146,7 +155,7 @@ SELECT lives_ok($$INSERT INTO notifications(user_id, league_id, type, title, bod
   ('8c000000-0000-4000-8000-000000000001', '8c000000-0000-4000-8000-000000000011', 'season_started', 't', 'b'),
   ('8c000000-0000-4000-8000-000000000002', '8c000000-0000-4000-8000-000000000011', 'season_started', 't', 'b')$$,
   'a batch naming a former member still inserts');
-SELECT is((SELECT array_agg(user_id) FROM notifications WHERE league_id = '8c000000-0000-4000-8000-000000000011'),
+SELECT is((SELECT array_agg(user_id) FROM notifications WHERE league_id = '8c000000-0000-4000-8000-000000000011' AND type = 'season_started'),
   ARRAY['8c000000-0000-4000-8000-000000000002']::UUID[], 'only the remaining member is notified');
 
 -- merge-accounts deletes a duplicate that shares the original's email (auth.users
@@ -158,6 +167,24 @@ SELECT ok(EXISTS (SELECT 1 FROM notification_log WHERE id = '8c000000-0000-4000-
 -- Someone who never played leaves nothing behind.
 SELECT lives_ok($$DELETE FROM auth.users WHERE id = '8c000000-0000-4000-8000-000000000008'$$, 'an account with no leagues is deleted');
 SELECT ok(NOT EXISTS (SELECT 1 FROM profiles WHERE user_id = '8c000000-0000-4000-8000-000000000008'), 'its profile is deleted');
+
+-- The deleted person's leftover access token cannot undo the anonymizing.
+SELECT set_config('request.jwt.claim.sub', '8c000000-0000-4000-8000-000000000001', true);
+SET LOCAL ROLE authenticated;
+SELECT throws_ok($$UPDATE profiles SET display_name = 'Leaving Person' WHERE user_id = '8c000000-0000-4000-8000-000000000001'$$,
+  '42501', 'This account has been deleted', 'a deleted account cannot rename its former-member profile');
+DO $$ BEGIN
+  UPDATE teams SET name = 'Back again' WHERE id = '8c000000-0000-4000-8000-000000000031';
+EXCEPTION WHEN insufficient_privilege THEN NULL;
+END $$;
+RESET ROLE;
+SELECT is((SELECT name FROM teams WHERE id = '8c000000-0000-4000-8000-000000000031'), 'Leavers', 'nor rename its team');
+SELECT set_config('request.jwt.claim.sub', '8c000000-0000-4000-8000-000000000002', true);
+SET LOCAL ROLE authenticated;
+SELECT lives_ok($$UPDATE profiles SET display_name = 'Stays A' WHERE user_id = '8c000000-0000-4000-8000-000000000002'$$,
+  'a live account still edits its own profile');
+RESET ROLE;
+SELECT is((SELECT display_name FROM profiles WHERE user_id = '8c000000-0000-4000-8000-000000000002'), 'Stays A', 'and the edit lands');
 
 -- The owner FKs no longer cascade.
 SELECT is((SELECT confdeltype::TEXT FROM pg_constraint WHERE conname = 'leagues_owner_id_fkey'), 'r', 'leagues.owner_id restricts deletes');
