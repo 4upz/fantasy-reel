@@ -192,3 +192,23 @@ export async function unlinkIdentity(identityId: string): Promise<UpdateProfileR
   revalidateProfilePaths()
   return { success: true }
 }
+
+export async function updateSeasonRecapEmails(enabled: boolean): Promise<UpdateProfileResult> {
+  const authResult = await getAuthenticatedUser()
+  if ('error' in authResult) {
+    return { success: false, error: authResult.error }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase
+    .from('email_preferences')
+    .upsert({ user_id: authResult.userId, season_recap_emails: enabled }, { onConflict: 'user_id' })
+
+  if (error) {
+    console.error('Email preference update error:', error)
+    return { success: false, error: 'Failed to save your email preference' }
+  }
+
+  revalidatePath('/settings')
+  return { success: true }
+}

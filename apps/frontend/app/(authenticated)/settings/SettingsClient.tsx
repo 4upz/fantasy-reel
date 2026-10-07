@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { User, Mail, Shield, Sun } from 'lucide-react'
+import { User, Mail, Shield, Sun, Trash2 } from 'lucide-react'
 import ThemeSelector from '@/components/theme/ThemeSelector'
 import type { Profile } from '@/types'
 import type { UserIdentity } from '@supabase/supabase-js'
@@ -10,6 +10,8 @@ import { updateProfile, changePassword } from './actions'
 import AvatarUpload from './components/AvatarUpload'
 import ConnectedAccounts from './components/ConnectedAccounts'
 import ChangePasswordModal from './components/ChangePasswordModal'
+import DeleteAccountModal from './components/DeleteAccountModal'
+import EmailPreferences from './components/EmailPreferences'
 
 interface Props {
   userId: string
@@ -17,6 +19,7 @@ interface Props {
   email: string
   identities: UserIdentity[]
   hasPassword: boolean
+  seasonRecapEmails: boolean
 }
 
 const MAX_DISPLAY_NAME_LENGTH = 100
@@ -27,10 +30,12 @@ export default function SettingsClient({
   email,
   identities,
   hasPassword,
+  seasonRecapEmails,
 }: Props): React.ReactElement {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.display_name ?? '')
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
 
   const charCount = displayName.length
   const isOverLimit = charCount > MAX_DISPLAY_NAME_LENGTH
@@ -202,6 +207,8 @@ export default function SettingsClient({
         </p>
       </section>
 
+      <EmailPreferences seasonRecapEmails={seasonRecapEmails} />
+
       {/* Connected accounts Section */}
       <ConnectedAccounts email={email} identities={identities} hasPassword={hasPassword} />
 
@@ -245,6 +252,39 @@ export default function SettingsClient({
           )}
         </div>
       </section>
+
+      {/* Delete account Section */}
+      <section className="card p-6" aria-labelledby="delete-account-section-heading">
+        <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
+          <div className="p-2 rounded-lg bg-error-bg">
+            <Trash2 className="w-5 h-5 text-crimson" aria-hidden="true" />
+          </div>
+          <div>
+            <h2 id="delete-account-section-heading" className="type-section text-foreground">
+              Delete account
+            </h2>
+            <p className="type-body-sm text-foreground-secondary">
+              Permanently remove your account and personal data
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
+          <p className="type-meta text-foreground-secondary">
+            Leagues you run pass to another member. This can&apos;t be undone.
+          </p>
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            className="type-control btn btn-danger shrink-0"
+            data-testid="delete-account-button"
+          >
+            Delete account
+          </button>
+        </div>
+      </section>
+
+      {showDeleteModal && <DeleteAccountModal onClose={() => setShowDeleteModal(false)} />}
 
       {/* Change password Modal */}
       {showPasswordModal && (

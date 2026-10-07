@@ -29,11 +29,12 @@ interface JoinResponse {
   }
 }
 
-// Regex for valid join code format (6 chars, uppercase alphanumeric excluding ambiguous)
-const JOIN_CODE_REGEX = /^[A-HJ-KM-NP-Z2-9]{6}$/i
+// Valid join code format: uppercase alphanumeric excluding ambiguous characters.
+// New codes are 8 characters; leagues may still hold 6-character codes from before.
+const JOIN_CODE_REGEX = /^(?:[A-HJ-KM-NP-Z2-9]{6}|[A-HJ-KM-NP-Z2-9]{8})$/i
 
 const INVALID_CODE_MESSAGE =
-  'Invalid code format. Codes are 6 characters, letters and numbers, without I, L, O, 0 or 1.'
+  'Invalid code format. Codes are 6 or 8 characters, letters and numbers, without I, L, O, 0 or 1.'
 
 export default function JoinLeagueClient({ token, code, userDisplayName }: Props) {
   const router = useRouter()
@@ -120,7 +121,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             </div>
             <h1 className="type-page text-foreground">Join a league</h1>
             <p id="join-code-hint" className="text-foreground-secondary mt-2">
-              Enter the 6-character code shared by your league commissioner
+              Enter the code shared by your league commissioner
             </p>
             {userDisplayName && (
               <p className="type-body-sm text-foreground-secondary mt-1">Joining as {userDisplayName}</p>

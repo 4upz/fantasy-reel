@@ -3,17 +3,16 @@
 import { useState, useCallback, useRef, useEffect, useId } from 'react'
 import { toast } from 'sonner'
 import { Link2, Copy, Check, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
-import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
-import type { League, GenerateJoinLinkResponse } from '@/types'
+import { LoadingSpinner } from '@/app/components/LoadingSpinner'
+import { useLeagueJoinLink } from '@/hooks/useLeagueJoinLink'
 import { APP_URL } from '@/utils/appUrl'
 
 interface Props {
-  league: League
-  onUpdate: (league: League) => void
+  leagueId: string
 }
 
-export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactElement {
+export default function JoinLinkCard({ leagueId }: Props): React.ReactElement {
   const [copied, setCopied] = useState(false)
   const [showFullUrl, setShowFullUrl] = useState(false)
   const regenerateNoteId = useId()
@@ -27,31 +26,16 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
     }
   }, [])
 
-  const joinCode = league.join_code
+  const { joinCode, loadError, generate } = useLeagueJoinLink(leagueId)
   const hasJoinLink = !!joinCode
 
   // Build the join URL
   const joinUrl = hasJoinLink ? `${APP_URL}/join?code=${joinCode}` : ''
 
   const generateAction = useCallback(async () => {
-    const { data, error } = await callEdgeFunction<GenerateJoinLinkResponse>(
-      'generate-join-link',
-      { body: { league_id: league.id } }
-    )
-
-    if (error) {
-      throw new Error(error)
-    }
-
-    if (data) {
-      onUpdate({
-        ...league,
-        join_code: data.join_code,
-        join_token: data.join_token,
-      })
-      toast.success(hasJoinLink ? 'Join link regenerated' : 'Join link generated')
-    }
-  }, [league, onUpdate, hasJoinLink])
+    await generate()
+    toast.success(hasJoinLink ? 'Join link regenerated' : 'Join link generated')
+  }, [generate, hasJoinLink])
 
   const { execute: generateLink, isLoading: isGenerating, error: generateError } = useAsyncAction(generateAction)
 
@@ -77,7 +61,11 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
         <h3 className="type-panel text-foreground">Share join link</h3>
       </div>
 
-      {hasJoinLink ? (
+      {loadError ? (
+        <p className="type-body-sm text-error" role="alert">{loadError}</p>
+      ) : joinCode === undefined ? (
+        <LoadingSpinner />
+      ) : hasJoinLink ? (
         <div className="space-y-3">
           {/* Join Code Display. The code itself is part of the button's name,
               so a screen-reader user can read it out to a friend. */}

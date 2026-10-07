@@ -55,9 +55,6 @@ export interface League {
   double_points_over_90: boolean
   // Draft order customization
   custom_draft_order: boolean
-  // Shareable join link
-  join_code: string | null
-  join_token: string | null
   // Season identity. A league row is one season of a series; `league_series`
   // carries the identity that survives across them.
   series_id: string
@@ -620,6 +617,7 @@ export type NotificationType =
   | 'trade_vetoed'
   | 'season_completed'
   | 'season_started'
+  | 'league_ownership_transferred'
 
 export interface Notification {
   id: string

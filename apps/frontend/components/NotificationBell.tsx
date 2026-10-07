@@ -6,6 +6,7 @@ import {
   Bell,
   Check,
   Clapperboard,
+  Crown,
   DollarSign,
   Gift,
   TrendingDown,
@@ -31,6 +32,8 @@ function getNotificationIcon(type: NotificationType) {
       return <Trophy className="w-4 h-4 text-gold" />
     case 'season_started':
       return <Clapperboard className="w-4 h-4 text-gold" />
+    case 'league_ownership_transferred':
+      return <Crown className="w-4 h-4 text-gold" />
     default:
       return <Bell className="w-4 h-4 text-foreground-muted" />
   }
@@ -211,6 +214,8 @@ function NotificationItem({ notification, onClick }: NotificationItemProps) {
     // The row carries the NEW season's league id, so this lands on the season
     // that just opened rather than the one that ended.
     href = `/league/${leagueId}/dashboard`
+  } else if (notification.type === 'league_ownership_transferred' && leagueId) {
+    href = `/league/${leagueId}/settings`
   }
 
   return (

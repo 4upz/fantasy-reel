@@ -3,23 +3,21 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Link2, Copy, RefreshCw, Check, AlertTriangle } from 'lucide-react'
-import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
-import type { League, GenerateJoinLinkResponse } from '@/types'
+import { useLeagueJoinLink } from '@/hooks/useLeagueJoinLink'
+import { LoadingSpinner } from '@/app/components/LoadingSpinner'
 import { APP_URL } from '@/utils/appUrl'
 import { ButtonSpinner } from '../../components/Icons'
 import { SectionHeader, LockedMessage } from './shared'
 
 interface Props {
-  league: League
+  leagueId: string
   isLocked: boolean
-  onUpdate: (league: League) => void
 }
 
 export default function JoinLinkSection({
-  league,
+  leagueId,
   isLocked,
-  onUpdate,
 }: Props): React.ReactElement {
   const [copiedCode, setCopiedCode] = useState(false)
   const [copiedUrl, setCopiedUrl] = useState(false)
@@ -54,34 +52,18 @@ export default function JoinLinkSection({
     }
   }, [])
 
-  const joinCode = league.join_code
+  const { joinCode, loadError, generate } = useLeagueJoinLink(leagueId)
   const hasJoinLink = !!joinCode
 
   // Build the join URL
   const joinUrl = hasJoinLink ? `${APP_URL}/join?code=${joinCode}` : ''
 
   const generateAction = useCallback(async () => {
-    const { data, error } = await callEdgeFunction<GenerateJoinLinkResponse>(
-      'generate-join-link',
-      { body: { league_id: league.id } }
-    )
-
-    if (error) {
-      throw new Error(error)
-    }
-
-    if (data) {
-      // Update the league with the new join_code
-      onUpdate({
-        ...league,
-        join_code: data.join_code,
-        join_token: data.join_token,
-      })
-      toast.success(hasJoinLink ? 'Join link regenerated' : 'Join link generated')
-      setShowRegenerateConfirm(false)
-      setFocusTarget(hasJoinLink ? 'regenerate' : 'code')
-    }
-  }, [league, onUpdate, hasJoinLink])
+    await generate()
+    toast.success(hasJoinLink ? 'Join link regenerated' : 'Join link generated')
+    setShowRegenerateConfirm(false)
+    setFocusTarget(hasJoinLink ? 'regenerate' : 'code')
+  }, [generate, hasJoinLink])
 
   const { execute: generateLink, isLoading: isGenerating } = useAsyncAction(generateAction)
 
@@ -123,6 +105,10 @@ export default function JoinLinkSection({
 
       {isLocked ? (
         <LockedMessage message="Join links are disabled once the draft has started. New members cannot join after drafting begins." />
+      ) : loadError ? (
+        <p className="type-body-sm text-error" role="alert">{loadError}</p>
+      ) : joinCode === undefined ? (
+        <LoadingSpinner />
       ) : (
         <div className="space-y-6">
           {hasJoinLink ? (

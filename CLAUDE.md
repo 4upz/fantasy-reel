@@ -208,7 +208,9 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 - **TMDb cache telemetry:** every cache decision emits a `tmdb_cache.requests` Sentry counter metric (attributes `cache_status`, `cache_namespace` — bounded enums only, never raw keys) via `recordCacheOutcome` (`_shared/monitoring.ts`), and stale-serving threshold crossings raise one grouped Sentry error event for frequency alerting. No-ops without the `SENTRY_DSN` secret. Client-side latency comes free from the existing browser tracing (`http.client` spans on every `callEdgeFunction`).
 - **Edge Function calls from the frontend:** always go through `callEdgeFunction` (`utils/supabase/functions.ts`) — never raw `fetch` to `/functions/v1/*`. It sends a client `x-request-id`, records duration/status Sentry breadcrumbs, and captures unexpected failures.
 - **Product events:** `trackEvent(name, props)` from `utils/analytics.ts` (wraps Vercel Analytics). Fire only on success paths, ids-only props (no names/emails). Canonical event names are listed in that file's doc comment — reuse them, don't invent variants.
-- **Rate limits:** per-user throttles go through `consumeRateLimit` / `rateLimitResponse` (`_shared/rate-limit.ts`, backed by the service-role-only `consume_rate_limit` RPC). Consume after validation, right before the costly step; it fails open if the counter can't be read. Invitation emails use it via `consumeInvitationEmailAllowance` (`_shared/invitations.ts`). Per-function user throttles use `throttleUser(name, userId)` with limits in `USER_RATE_LIMITS` (TMDb lookups, user search, trades, bids); the service role (Discord bot) is exempt, and `authenticateCaller` gives the user id on the TMDb endpoints. Integration tests reset counters with `resetInviteRateLimits()` / `resetUserRateLimits()`.
+- **Rate limits:** per-user throttles go through `consumeRateLimit` / `rateLimitResponse` (`_shared/rate-limit.ts`, backed by the service-role-only `consume_rate_limit` RPC). Consume after validation, right before the costly step; it fails open if the counter can't be read. Invitation emails use it via `consumeInvitationEmailAllowance` (`_shared/invitations.ts`), and `join-league` limits join-code attempts per user. Per-function user throttles use `throttleUser(name, userId)` with limits in `USER_RATE_LIMITS` (TMDb lookups, user search, trades, bids); the service role (Discord bot) is exempt, and `authenticateCaller` gives the user id on the TMDb endpoints. Integration tests reset counters with `resetInviteRateLimits()` / `resetUserRateLimits()` / `resetJoinCodeRateLimits()`.
+- **Data retention:** `purge_expired_data()` (service-role SQL, run daily by the `purge-expired-data` cron) is the one place retention windows live; `job_runs` and the TMDb cache keep their own purges in `sync-release-dates`. A new table holding personal data or growing without bound gets a window there, plus a matching sentence in the privacy policy. Never purge rows something still reads: open invitations, undelivered outbox rows, or Discord dedupe rows of a season that can still post.
+- **Optional email:** a non-essential email (today only the season recap) must go only to users `seasonRecapTokens()` (`_shared/email-preferences.ts`) returns, carry `listUnsubscribeHeaders()` and a footer unsubscribe link. Transactional emails (invites, bids, trades) don't.
 - **Health:** `/api/health` probes Supabase reachability (200/503) for external uptime monitors — keep it dependency-light and unauthenticated.
 
 ---
@@ -460,6 +462,38 @@ apps/frontend/app/
 ### Key Relationships
 
 `auth.users` → `profiles` (1:1) → `league_participants` (1:N) → `teams` (1:1 per league) → `draft_picks`/`pickup_bids`/`trades`/`team_scores`. Movies have reviews (1:N). Leagues have bidding config (1:1).
+
+### Account deletion
+
+Users delete their own account from Settings through the `delete-account` Edge
+Function (typed confirmation + a sign-in within 15 minutes, read from the JWT
+`amr` claim). The database work is the `on_auth_user_deleted` BEFORE DELETE
+trigger on `auth.users` (`handle_auth_user_deletion()`), so dashboard deletes
+and merge-accounts behave the same way:
+
+- A live draft (`drafting`/`counterpicking`) blocks deletion
+  (`account_deletion_blockers()`).
+- Owned seasons pass to the longest-standing other member (active first, then
+  `left`; never `kicked`), who gets a `league_ownership_transferred` notification
+  unless the season is completed; a season with nobody to take it is deleted.
+  Owned series follow their newest season's owner.
+- `reject_writes_from_deleted_accounts` (BEFORE UPDATE on `profiles`/`teams`)
+  stops the deleted person's still-valid access token from undoing the
+  anonymizing in the hour before it expires.
+- Setup seasons drop the person. Active and completed seasons keep the team
+  and roster: the participant becomes `status = 'left'` (so an active season's
+  `league_standings()` and its eventual `final_standings` no longer rank the
+  team, like anyone who leaves mid-season), pending bids and open trade offers
+  are cancelled, and the profile row stays as an anonymous "Former member".
+  **`profiles.user_id` and `league_participants.user_id` may therefore point at
+  a user that no longer exists** — neither references `auth.users` any more.
+  Notifications to such ids are dropped by a trigger rather than failing the
+  insert; email lookups already tolerate a missing auth user.
+- `final_standings` names them "Former member", and `notification_log` rows and
+  invitations addressed to their email are deleted (skipped when another
+  account shares the email, which is merge-accounts' duplicate).
+- `leagues.owner_id` / `league_series.owner_id` are `ON DELETE RESTRICT`: never
+  make them cascade again.
 
 ### Series and Seasons
 

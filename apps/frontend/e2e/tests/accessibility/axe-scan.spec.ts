@@ -89,6 +89,7 @@ test.describe('Accessibility: public pages', () => {
     '/how-to-play',
     '/privacy',
     '/terms',
+    '/unsubscribe',
     '/auth/auth-code-error',
     '/error',
     '/does-not-exist',
@@ -145,6 +146,7 @@ test.describe('Accessibility: account pages', () => {
     await page.goto('/settings')
     await settle(page)
     await auditDialog(page, testInfo, page.getByRole('button', { name: /change password/i }).first(), 'change password dialog')
+    await auditDialog(page, testInfo, page.getByTestId('delete-account-button'), 'delete account dialog')
   })
 
   test('admin dashboard', async ({ authedPage: page, testUser }, testInfo) => {

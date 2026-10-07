@@ -371,6 +371,9 @@ verify_jwt = false
 [functions.decline-invitation]
 verify_jwt = false
 
+[functions.delete-account]
+verify_jwt = false
+
 [functions.draft-pick]
 verify_jwt = false
 
@@ -500,6 +503,12 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.complete-seasons]
+verify_jwt = false
+
+[functions.purge-expired-data]
+verify_jwt = false
+
+[functions.email-unsubscribe]
 verify_jwt = false
 
 [functions.process-draft-notifications]
