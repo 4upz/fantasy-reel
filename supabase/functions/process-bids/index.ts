@@ -21,7 +21,7 @@
  */
 // Trigger deploy
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, bidLock, internalErrorResponse } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, bidLock, internalErrorResponse, isAuthorizedCronRequest } from '../_shared/utils.ts'
 import { sendEmail } from '../_shared/email.ts'
 import { getBidWonEmailHtml, getBidWonEmailText } from '../_shared/email-templates/bid-won.ts'
 import { getBidLostEmailHtml, getBidLostEmailText } from '../_shared/email-templates/bid-lost.ts'
@@ -2249,25 +2249,7 @@ Deno.serve(async (req) => {
   let runClient: JobRunsClient | undefined
 
   try {
-    // Authenticate requests using either the X-Cron-Secret header or the Service Role key
-    const cronSecret = Deno.env.get('CRON_SECRET')
-    const providedSecret = req.headers.get('X-Cron-Secret')
-    const authHeader = req.headers.get('Authorization')
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    let isAuthenticated = false
-
-    // 1. Check if X-Cron-Secret matches CRON_SECRET (if configured)
-    if (cronSecret && providedSecret === cronSecret) {
-      isAuthenticated = true
-    }
-
-    // 2. Check if Authorization Bearer matches SUPABASE_SERVICE_ROLE_KEY
-    if (serviceRoleKey && authHeader === `Bearer ${serviceRoleKey}`) {
-      isAuthenticated = true
-    }
-
-    if (!isAuthenticated) {
+    if (!isAuthorizedCronRequest(req)) {
       return errorResponse('Forbidden', 403)
     }
 

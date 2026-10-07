@@ -914,12 +914,16 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
             <label htmlFor={messageId} className="type-label text-foreground-secondary">Message (optional)</label>
             <textarea
               id={messageId}
+              aria-describedby="counter-message-visibility"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               maxLength={1500}
               className="input mt-1 w-full h-20 resize-none"
               placeholder="Add a note to your counter-offer..."
             />
+            <p id="counter-message-visibility" className="type-meta text-foreground-secondary mt-1">
+              Everyone in the league can see this message.
+            </p>
           </div>
 
           {error && (

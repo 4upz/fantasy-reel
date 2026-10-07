@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse, hasReleased, utcDate } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, internalErrorResponse, hasReleased, utcDate, isAuthorizedCronRequest } from '../_shared/utils.ts'
 import { fetchMDBListRatings, MDBLIST_NOT_FOUND } from '../_shared/scoring.ts'
 import type { MovieRecord } from '../_shared/scoring.ts'
 import { captureScoreContext, sendScoreNotifications } from '../_shared/score-notifications.ts'
@@ -217,21 +217,14 @@ Deno.serve(async (req) => {
   let runClient: JobRunsClient | undefined
 
   try {
-    // Verify caller is authorized (cron secret OR service role key)
-    const cronSecret = Deno.env.get('CRON_SECRET')
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
-
-    const isAuthorizedByCron = cronSecret && req.headers.get('X-Cron-Secret') === cronSecret
-    const isAuthorizedByServiceRole =
-      serviceRoleKey && req.headers.get('Authorization') === `Bearer ${serviceRoleKey}`
-
-    if (!isAuthorizedByCron && !isAuthorizedByServiceRole) {
+    if (!isAuthorizedCronRequest(req)) {
       return errorResponse('Forbidden', 403)
     }
 
     run = startJobRun('update-scores')
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
     if (!supabaseUrl || !serviceRoleKey) {
       log.error('Missing required env: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY')
       return errorResponse('Score update service not configured', 503)

@@ -3,6 +3,7 @@ import http from 'node:http'
 import { config } from './config.js'
 import { getCommand, registerCommand } from './commands/index.js'
 import { ALL_COMMANDS } from './commands/all.js'
+import { autocompleteDebouncer, autocompleteLimiter, commandLimiter } from './utils/cooldown.js'
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] })
 
@@ -16,6 +17,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isAutocomplete()) {
     const command = getCommand(interaction.commandName)
     if (!command?.autocomplete) return
+
+    // Only the user's latest keystroke gets a search; older ones get no choices.
+    const key = `${interaction.user.id}:${interaction.commandName}`
+    if (!(await autocompleteDebouncer.settle(key)) || autocompleteLimiter.consume(key) > 0) {
+      await interaction.respond([]).catch(() => {})
+      return
+    }
 
     try {
       await command.autocomplete(interaction)
@@ -31,6 +39,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
   const command = getCommand(interaction.commandName)
   if (!command) {
     console.warn(`Unknown command: ${interaction.commandName}`)
+    return
+  }
+
+  const waitMs = commandLimiter.consume(interaction.user.id)
+  if (waitMs > 0) {
+    const seconds = Math.ceil(waitMs / 1000)
+    await interaction
+      .reply({ content: `You're using commands too quickly. Try again in ${seconds}s.`, ephemeral: true })
+      .catch(console.error)
     return
   }
 
