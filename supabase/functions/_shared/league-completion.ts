@@ -28,6 +28,7 @@ import {
 } from './discord.ts'
 import { formatPoints } from './score-notifications.ts'
 import { sendEmail } from './email.ts'
+import { buildUnsubscribeLinks, listUnsubscribeHeaders, seasonRecapTokens } from './email-preferences.ts'
 import { logNotificationDelivery, statusFromEmailResult } from './notification-log.ts'
 import {
   championLine,
@@ -340,9 +341,21 @@ async function sendFinalStandingsEmails(
 
   const leagueUrl = buildLeagueUrl(league.id)
 
+  // Only people who haven't opted out, each with their own unsubscribe link.
+  // Throws (caught by notifySeasonCompleted) if preferences can't be read, so
+  // an unreadable opt-out never turns into an unwanted email.
+  const unsubscribeTokens = await seasonRecapTokens(
+    serviceClient,
+    standings.map((row) => row.user_id)
+  )
+
   for (const row of standings) {
     const recipient = recipients.get(row.user_id)
     if (!recipient?.email) continue
+
+    const unsubscribeToken = unsubscribeTokens.get(row.user_id)
+    if (!unsubscribeToken) continue
+    const unsubscribeLinks = buildUnsubscribeLinks(unsubscribeToken)
 
     const emailData = {
       recipientName: recipient.name,
@@ -356,6 +369,7 @@ async function sendFinalStandingsEmails(
         points: s.total_points,
         isRecipient: s.team_id === row.team_id,
       })),
+      unsubscribeUrl: unsubscribeLinks.pageUrl,
     }
 
     const metadata = {
@@ -370,6 +384,7 @@ async function sendFinalStandingsEmails(
         subject: `${league.name}: ${league.season_year} final standings`,
         html: getSeasonFinalStandingsEmailHtml(emailData),
         text: getSeasonFinalStandingsEmailText(emailData),
+        headers: listUnsubscribeHeaders(unsubscribeLinks),
       })
 
       await logNotificationDelivery(serviceClient, {

@@ -138,7 +138,8 @@ export function isInvitationExpired(expiresAt: string): boolean {
  */
 export function isAuthorizedCronRequest(req: Request): boolean {
   const cronSecret = Deno.env.get('CRON_SECRET')
-  if (cronSecret && req.headers.get('X-Cron-Secret') === cronSecret) return true
+  const presented = req.headers.get('X-Cron-Secret')
+  if (cronSecret && presented && secretsMatch(presented, cronSecret)) return true
 
   return isServiceRoleRequest(req)
 }

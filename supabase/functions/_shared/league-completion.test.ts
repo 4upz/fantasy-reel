@@ -96,6 +96,71 @@ Deno.test('completeLeague', async (t) => {
     }
   })
 
+  await t.step('emails only opted-in players, each with a one-click unsubscribe', async () => {
+    const { db, result } = setup()
+    const tokenA = 'e0000000-0000-4000-8000-00000000000a'
+    let preferencesFor: unknown
+    const client = createMockDbClient(db, {
+      rpc: {
+        complete_league_season: result,
+        log_notification_delivery: null,
+        ensure_email_preferences: (args?: Record<string, unknown>) => {
+          preferencesFor = args?.p_user_ids
+          return [
+            { user_id: USER_A, season_recap_emails: true, unsubscribe_token: tokenA },
+            { user_id: USER_B, season_recap_emails: false, unsubscribe_token: 'e0000000-0000-4000-8000-00000000000b' },
+          ]
+        },
+      },
+      users: { [USER_A]: { email: 'ada@example.test' }, [USER_B]: { email: 'bo@example.test' } },
+    })
+    Deno.env.set('RESEND_API_KEY', 'test-key')
+    Deno.env.set('SUPABASE_URL', 'https://api.example.test')
+    Deno.env.set('SITE_URL', 'https://www.example.test')
+    const fetchStub = stubFetch((url) =>
+      url.includes('resend.com') ? Response.json({ id: 'msg-1' }) : undefined
+    )
+    try {
+      await completeLeague(client, LEAGUE_ID, { trigger: 'owner' })
+      assertEquals(preferencesFor, [USER_A, USER_B])
+      const emails = fetchStub.calls.filter((c) => c.url.includes('resend.com'))
+      assertEquals(emails.length, 1)
+      assertEquals(emails[0].body.to, ['ada@example.test'])
+      assertEquals(emails[0].body.headers, {
+        'List-Unsubscribe': `<https://api.example.test/functions/v1/email-unsubscribe?token=${tokenA}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      })
+      assertStringIncludes(emails[0].body.html as string, `https://www.example.test/unsubscribe?token=${tokenA}`)
+    } finally {
+      fetchStub.restore()
+      Deno.env.delete('RESEND_API_KEY')
+      Deno.env.delete('SITE_URL')
+    }
+  })
+
+  await t.step('sends no season email when preferences cannot be read', async () => {
+    const { db, result } = setup()
+    const client = createMockDbClient(db, {
+      rpc: { complete_league_season: result, log_notification_delivery: null },
+      users: { [USER_A]: { email: 'ada@example.test' } },
+    })
+    const rpc = client.rpc.bind(client)
+    client.rpc = (name: string, args?: Record<string, unknown>) =>
+      name === 'ensure_email_preferences'
+        ? Promise.resolve({ data: null, error: { message: 'preferences unavailable' } })
+        : rpc(name, args)
+    Deno.env.set('RESEND_API_KEY', 'test-key')
+    const fetchStub = stubFetch()
+    try {
+      await completeLeague(client, LEAGUE_ID, { trigger: 'owner' })
+      assertEquals(fetchStub.calls.filter((c) => c.url.includes('resend.com')).length, 0)
+      assertEquals(db.notifications.length, 2)
+    } finally {
+      fetchStub.restore()
+      Deno.env.delete('RESEND_API_KEY')
+    }
+  })
+
   await t.step('forwards the cron trigger for the locked deadline recheck', async () => {
     const { client } = setup()
     let request: unknown
