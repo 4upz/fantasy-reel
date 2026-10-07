@@ -53,7 +53,8 @@ between them was silent. 8 routes had no `<main>`, 4 had zero or two `<h1>`s,
 and only 4 public pages had a skip link.
 
 **Keyboard and dialogs:**
-- 12 dialogs and menus failed a keyboard check.
+- 12 of the 19 dialogs and menus failed a keyboard check, and 3 more were
+  unreachable because an earlier dialog in the same flow failed.
   - Change password and Invite were not exposed as dialogs at all.
   - Six opened without moving focus inside: accept trade, cancel bid, edit
     team, end season, and both mobile sheets.
@@ -95,7 +96,7 @@ patterns:
 | axe-core scans clean | 0 of 92 (282 violations, 8 rules; 26 more could not run) | **122 of 122** (61 pages, dialogs, menus and sheets × 2 themes; 0 violations) |
 | Routes with their own `<title>` | 9 of 28 | **28 of 28** (league tabs also name the league) |
 | Routes with one `<main>` + skip link | 4 of 28 | **28 of 28** |
-| Dialogs and menus passing every keyboard check | 12 of 19 failing (2 not exposed as dialogs) | **All 19 exercised pass** (focus in, Tab contained, Escape closes, focus returns) |
+| Dialogs and menus passing every keyboard check | 4 of 19 (12 failed, 3 unreachable) | **19 of 19** (focus in, Tab contained, Escape closes, focus returns) |
 | Modal dialogs on native `<dialog>` | 3 of 26 | **26 of 26** |
 | Screen-reader flow tests | 0 of 3 | **3 of 3** |
 | jsx-a11y strict lint errors | 32 in 17 files | **0** (now enforced by `next lint` / `next build`) |
