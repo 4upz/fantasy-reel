@@ -384,11 +384,18 @@ async function trackFailure(supabase: SupabaseClient, channelId: string): Promis
 // ============================================================================
 
 /**
- * Build a URL to a league page. Uses SITE_URL in Supabase Edge Functions runtime.
+ * Build a URL to a page of the site. Uses SITE_URL in Supabase Edge Functions runtime.
+ */
+export function buildSiteUrl(path: string): string {
+  const baseUrl = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
+  return `${baseUrl}${path}`
+}
+
+/**
+ * Build a URL to a league page.
  */
 export function buildLeagueUrl(leagueId: string, path = ''): string {
-  const baseUrl = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
-  return `${baseUrl}/league/${leagueId}${path}`
+  return buildSiteUrl(`/league/${leagueId}${path}`)
 }
 
 export async function getLeagueName(
