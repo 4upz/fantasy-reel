@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useId } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/types'
+import { useModalDialog } from '@/hooks/useModalDialog'
 import NotificationBell from '@/components/NotificationBell'
 import ProfileMenu from './ProfileMenu'
 import BrandLogo from '../BrandLogo'
@@ -41,6 +42,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   const pathname = usePathname()
   const [isExpanded, setIsExpanded] = useState(false)
   const [isMobileOpen, setIsMobileOpen] = useState(false)
+  const sidebarId = useId()
 
   const displayName = profile?.display_name || user.user_metadata?.display_name || user.email || 'User'
 
@@ -62,25 +64,6 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   const toggleExpanded = useCallback(() => {
     setIsExpanded(prev => !prev)
   }, [])
-
-  // Lock body scroll when mobile drawer is open
-  useEffect(() => {
-    document.body.style.overflow = isMobileOpen ? 'hidden' : ''
-    return () => { document.body.style.overflow = '' }
-  }, [isMobileOpen])
-
-  // Handle escape key
-  useEffect(() => {
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        setIsMobileOpen(false)
-      }
-    }
-    if (isMobileOpen) {
-      document.addEventListener('keydown', handleEscape)
-      return () => document.removeEventListener('keydown', handleEscape)
-    }
-  }, [isMobileOpen])
 
   const closeMobile = useCallback(() => setIsMobileOpen(false), [])
 
@@ -106,7 +89,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
           title={item.label}
         >
           <span className="sidenav-icon">{item.icon}</span>
-          {showLabel && <span className="sidenav-label">{item.label}</span>}
+          <span className={showLabel ? 'sidenav-label' : 'sr-only'}>{item.label}</span>
         </span>
       )
     }
@@ -117,11 +100,13 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         href={item.href}
         onClick={closeMobile}
         className={`sidenav-item ${active ? 'sidenav-item-active' : ''}`}
+        aria-current={active ? 'page' : undefined}
         title={item.label}
       >
         {active && <span className="sidenav-active-indicator" />}
         <span className="sidenav-icon">{item.icon}</span>
-        {showLabel && <span className="sidenav-label">{item.label}</span>}
+        {/* Collapsed, the icon carries the meaning; screen readers still get the name. */}
+        <span className={showLabel ? 'sidenav-label' : 'sr-only'}>{item.label}</span>
         {item.badge && item.badge > 0 && (
           <span className="sidenav-badge">{item.badge}</span>
         )}
@@ -138,6 +123,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
           onClick={closeMobile}
           className="sidenav-brand"
           title="Fantasy Reel"
+          aria-label="Fantasy Reel dashboard"
         >
           <BrandLogo
             compact
@@ -146,7 +132,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
           />
         </Link>
 
-        <nav className="sidenav-section">
+        <nav className="sidenav-section" aria-label="Main">
           {showLabels && <span className="sidenav-section-label">Navigate</span>}
           <div className="sidenav-items">
             {globalItems.map(item => renderNavItem(item, showLabels))}
@@ -163,13 +149,15 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className={`sidenav sidenav-desktop ${isExpanded ? 'sidenav-expanded' : ''}`}>
+      <aside id={sidebarId} className={`sidenav sidenav-desktop ${isExpanded ? 'sidenav-expanded' : ''}`}>
         {renderSidebarContent(isExpanded)}
 
         <button
           onClick={toggleExpanded}
           className="sidenav-toggle"
           aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+          aria-expanded={isExpanded}
+          aria-controls={sidebarId}
           title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
           data-testid="sidebar-toggle"
         >
@@ -181,6 +169,24 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         </button>
       </aside>
 
+      {/* Mobile Header Bar */}
+      <header className="sidenav-mobile-header">
+        <button
+          onClick={() => setIsMobileOpen(true)}
+          className="sidenav-mobile-trigger"
+          aria-label="Open navigation menu"
+          aria-haspopup="dialog"
+          aria-expanded={isMobileOpen}
+        >
+          <Menu className="w-5 h-5" />
+        </button>
+
+        <Link href="/dashboard" className="sidenav-mobile-brand" aria-label="Fantasy Reel dashboard">
+          <BrandLogo compact className="h-auto w-36 max-w-full" />
+        </Link>
+
+      </header>
+
       {/*
         The account cluster: notifications + the account menu, pinned to the
         top-right corner at every breakpoint. Rendered exactly once so the
@@ -190,50 +196,46 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         capsule, costing no page a header row; below lg it sits inside the
         mobile header bar, which already provides the surface. The wrapper
         ignores pointer events so content underneath stays clickable.
+
+        It follows the mobile header in the DOM so Tab order matches the bar's
+        left-to-right order (menu, logo, bell, account), and it is a named
+        region so screen-reader users can jump to it like the other landmarks.
       */}
-      <div className="profile-cluster">
+      <section className="profile-cluster" aria-label="Notifications and account">
         <NotificationBell />
         <span className="profile-cluster-divider" aria-hidden="true" />
         <ProfileMenu displayName={displayName} email={user.email} avatarUrl={profile?.avatar_url} />
-      </div>
-
-      {/* Mobile Header Bar */}
-      <header className="sidenav-mobile-header">
-        <button
-          onClick={() => setIsMobileOpen(true)}
-          className="sidenav-mobile-trigger"
-          aria-label="Open navigation menu"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-
-        <Link href="/dashboard" className="sidenav-mobile-brand">
-          <BrandLogo compact className="h-auto w-36 max-w-full" />
-        </Link>
-
-      </header>
+      </section>
 
       {/* Mobile Drawer */}
       {isMobileOpen && (
-        <div className="sidenav-mobile-overlay" onClick={closeMobile}>
-          <div
-            className="sidenav-mobile-drawer"
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label="Navigation menu"
+        <MobileDrawer onClose={closeMobile}>
+          <button
+            onClick={closeMobile}
+            className="sidenav-mobile-close"
+            aria-label="Close navigation"
           >
-            <button
-              onClick={closeMobile}
-              className="sidenav-mobile-close"
-              aria-label="Close navigation"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            {renderSidebarContent(true, true)}
-          </div>
-        </div>
+            <X className="w-5 h-5" />
+          </button>
+          {renderSidebarContent(true, true)}
+        </MobileDrawer>
       )}
     </>
+  )
+}
+
+/** The mobile navigation drawer: a native modal dialog anchored to the left edge. */
+function MobileDrawer({ onClose, children }: { onClose: () => void; children: React.ReactNode }): React.ReactElement {
+  const { dialogRef } = useModalDialog(onClose, false, true)
+
+  return (
+    <dialog
+      ref={dialogRef}
+      aria-label="Navigation menu"
+      aria-modal="true"
+      className="sidenav-mobile-drawer"
+    >
+      {children}
+    </dialog>
   )
 }

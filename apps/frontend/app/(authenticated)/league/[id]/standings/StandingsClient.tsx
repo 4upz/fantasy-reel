@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState, useSyncExternalStore } from 'react'
 import type {
   ParticipantWithTeamScore,
   DraftHolding,
@@ -12,8 +12,9 @@ import type {
 } from '@/types'
 import type { ReigningChampions } from '@/utils/seasonQueries'
 import { championPoints, type Champion } from '@/utils/seasons'
-import TeamStandingCard from './TeamStandingCard'
+import TeamStandingCard, { standingDisplayName } from './TeamStandingCard'
 import { formatFantasyPoints } from '@/utils/scoring'
+import { announce } from '@/utils/announce'
 import { getMovieStatus } from '@/utils/league'
 import TeamDetailRail from './TeamDetailRail'
 import ChampionBanner from '../components/ChampionBanner'
@@ -110,6 +111,27 @@ function buildRankedTeams(
   })
 }
 
+const DESKTOP_QUERY = '(min-width: 1024px)'
+
+function subscribeToDesktop(onChange: () => void): () => void {
+  const query = window.matchMedia(DESKTOP_QUERY)
+  query.addEventListener('change', onChange)
+  return () => query.removeEventListener('change', onChange)
+}
+
+/**
+ * Whether the lg layout is showing, where a row feeds the detail rail rather
+ * than expanding in place. The two need different ARIA, so CSS alone can't
+ * switch them. The server renders the mobile shape.
+ */
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(
+    subscribeToDesktop,
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => false,
+  )
+}
+
 /** Teams normally have a row in `teams`; fall back to the participant if not. */
 function teamKey(rankedTeam: RankedTeamFull): string {
   return rankedTeam.participant.teams?.id ?? rankedTeam.participant.id
@@ -142,6 +164,10 @@ export default function StandingsClient({
   const [view, setView] = useState<'current' | 'projected'>('current')
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
+  const isDesktop = useIsDesktop()
+  const headingId = useId()
+  const railId = useId()
+  const projectedDescriptionId = useId()
 
   const rankedTeams = useMemo(
     () => buildRankedTeams(standings, participants, draftPicks, pickups, counterpicks),
@@ -175,6 +201,18 @@ export default function StandingsClient({
   )
   const projected = useProjectedStandings(projectionInputs, doublePointsOver90)
   const showProjected = projected != null && view === 'projected'
+
+  // The swap replaces the list below the toggle; focus stays on the pressed
+  // button, so say what changed.
+  const changeView = (next: 'current' | 'projected') => {
+    if (next === view) return
+    setView(next)
+    announce(
+      next === 'projected'
+        ? 'Showing projected standings, Beta. Rank and champions still come from real points only.'
+        : 'Showing current standings'
+    )
+  }
   const ownerNameByTeamId = useMemo(
     () =>
       new Map(
@@ -237,9 +275,10 @@ export default function StandingsClient({
 
       {/* Summary strip. A finished season labels its own numbers - they are a
           record now, not a running count. */}
+      <h2 id={headingId} className="sr-only">Standings</h2>
       {isCompleted && (
         <p className="flex-none type-meta text-foreground-secondary">
-          Final · {seasonYear} season
+          Final <span aria-hidden="true">·</span><span className="sr-only">,</span> {seasonYear} season
         </p>
       )}
       <div className="grid flex-none grid-cols-3 gap-2">
@@ -253,12 +292,12 @@ export default function StandingsClient({
       {summaryStats.moviesScored === 0 && !isCompleted && (
         <div className="alert alert-info flex-none">
           <div className="flex items-start gap-3">
-            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
               <p className="font-medium">No points counted yet</p>
-              <p className="type-body-sm mt-1 opacity-80">
+              <p className="type-body-sm mt-1">
                 Scores update nightly, and a movie&apos;s points count once it releases. Check back after movies in your draft have been released!
               </p>
             </div>
@@ -268,16 +307,20 @@ export default function StandingsClient({
 
       {projected && (
         <div className="flex flex-none justify-end">
+          {/* Two toggle buttons, one pressed. The pressed one is marked by a gold
+              underline as well as its fill, so it never relies on colour alone. */}
           <div className="inline-flex gap-1 rounded-lg border border-border bg-surface p-1" role="group" aria-label="Standings view">
             {(['current', 'projected'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
-                onClick={() => setView(option)}
+                onClick={() => changeView(option)}
                 aria-pressed={view === option}
                 data-testid={`standings-view-${option}`}
                 className={`type-control inline-flex h-10 items-center gap-2 rounded-md px-3.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold ${
-                  view === option ? 'bg-elevated text-foreground' : 'text-foreground-secondary hover:text-foreground'
+                  view === option
+                    ? 'bg-elevated text-foreground shadow-[inset_0_-2px_0_var(--color-gold)]'
+                    : 'text-foreground-secondary hover:text-foreground'
                 }`}
               >
                 {option === 'current' ? 'Current' : 'Projected'}
@@ -291,48 +334,65 @@ export default function StandingsClient({
       {showProjected && (
         <ProjectedStandingsTable
           standings={projected}
+          descriptionId={projectedDescriptionId}
           ownerNameByTeamId={ownerNameByTeamId}
           currentUserTeamId={currentUserTeamId}
         />
       )}
 
       {/* Leaderboard */}
-      {!showProjected && standings.map((row, index) => {
-        const rankedTeam = rankedByTeamId.get(row.team_id)
-        if (!rankedTeam) {
-          return (
-            <div key={row.team_id} className="card flex items-center gap-3 p-4" data-testid={`team-row-${row.team_id}`}>
-              <span className="type-number text-gold">{row.is_tied ? 'T' : '#'}{row.rank}</span>
-              <span className="type-row-title min-w-0 flex-1 break-words text-foreground">{row.team_name}</span>
-              <span className="type-number text-gold">{formatFantasyPoints(row.total_points)}</span>
-            </div>
-          )
-        }
-        const teamId = teamKey(rankedTeam)
-        return (
-          <TeamStandingCard
-            key={rankedTeam.participant.id}
-            rankedTeam={rankedTeam}
-            startingBudget={showBudget ? startingBudget : null}
-            isCurrentUser={rankedTeam.participant.user_id === currentUserId}
-            reigningChampionSeason={crownedSeason(rankedTeam)}
-            isExpanded={expandedTeamId === teamId}
-            isSelected={railTeam != null && teamKey(railTeam) === teamId}
-            onActivate={() => {
-              // One tap serves both shapes: the accordion below lg, the rail above it.
-              setExpandedTeamId((current) => (current === teamId ? null : teamId))
-              setSelectedTeamId(teamId)
-            }}
-            animationDelay={index * 100}
-          />
-        )
-      })}
+      {!showProjected && standings.length > 0 && (
+        <ol role="list" aria-labelledby={headingId} className="flex flex-none flex-col gap-3">
+          {standings.map((row, index) => {
+            const rankedTeam = rankedByTeamId.get(row.team_id)
+            if (!rankedTeam) {
+              return (
+                <li key={row.team_id} className="card flex items-center gap-3 p-4" data-testid={`team-row-${row.team_id}`}>
+                  <span className="type-number text-gold">
+                    <span aria-hidden="true">{row.is_tied ? 'T' : '#'}{row.rank}</span>
+                    <span className="sr-only">{row.is_tied ? `Tied for rank ${row.rank}` : `Rank ${row.rank}`}</span>
+                  </span>
+                  <span className="type-row-title min-w-0 flex-1 break-words text-foreground">{row.team_name}</span>
+                  <span className="type-number text-gold">
+                    {formatFantasyPoints(row.total_points)}<span className="sr-only"> points</span>
+                  </span>
+                </li>
+              )
+            }
+            const teamId = teamKey(rankedTeam)
+            const isSelected = railTeam != null && teamKey(railTeam) === teamId
+            return (
+              <TeamStandingCard
+                key={rankedTeam.participant.id}
+                rankedTeam={rankedTeam}
+                startingBudget={showBudget ? startingBudget : null}
+                isCurrentUser={rankedTeam.participant.user_id === currentUserId}
+                reigningChampionSeason={crownedSeason(rankedTeam)}
+                isExpanded={expandedTeamId === teamId}
+                isSelected={isSelected}
+                isDesktop={isDesktop}
+                railId={railId}
+                onActivate={() => {
+                  // One tap serves both shapes: the accordion below lg, the rail above it.
+                  setExpandedTeamId((current) => (current === teamId ? null : teamId))
+                  setSelectedTeamId(teamId)
+                  // The rail sits after the whole list, so say that it changed.
+                  if (isDesktop && !isSelected) {
+                    announce(`Showing ${standingDisplayName(rankedTeam)} in the team details panel`)
+                  }
+                }}
+                animationDelay={index * 100}
+              />
+            )
+          })}
+        </ol>
+      )}
 
       {/* Empty State */}
       {standings.length === 0 && (
         <div className="card flex-none p-12 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-elevated flex items-center justify-center">
-            <svg className="w-8 h-8 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-8 h-8 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
@@ -342,7 +402,9 @@ export default function StandingsClient({
       )}
       </div>
 
-      {railTeam && <TeamDetailRail rankedTeam={railTeam} startingBudget={showBudget ? startingBudget : null} />}
+      {railTeam && (
+        <TeamDetailRail id={railId} rankedTeam={railTeam} startingBudget={showBudget ? startingBudget : null} />
+      )}
     </div>
   )
 }

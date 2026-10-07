@@ -1,6 +1,6 @@
 'use client'
 
-import { useId } from 'react'
+import { Fragment, useId } from 'react'
 import { X } from 'lucide-react'
 import { useModalDialog } from '@/hooks/useModalDialog'
 import BetaBadge from '@/app/components/projections/BetaBadge'
@@ -27,7 +27,8 @@ interface Props {
 /** @design-system League */
 export default function TeamProjectionSheet({ team, standings, onClose }: Props) {
   const titleId = useId()
-  const { dialogRef, requestClose } = useModalDialog(onClose)
+  // A read-only view, so a tap on the dimmed area may close it too.
+  const { dialogRef, requestClose } = useModalDialog(onClose, false, true)
   const earnedLegs = team.legs.filter((leg) => leg.basis === 'earned')
   const pendingLegs = team.legs
     .filter((leg) => leg.basis !== 'earned')
@@ -41,9 +42,6 @@ export default function TeamProjectionSheet({ team, standings, onClose }: Props)
       aria-labelledby={titleId}
       aria-modal="true"
       data-testid="team-projection-sheet"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) requestClose()
-      }}
       className="fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none border-0 bg-transparent p-0 text-foreground backdrop:bg-overlay backdrop:backdrop-blur-sm open:flex open:items-end sm:p-4 sm:open:items-center sm:open:justify-center"
     >
       <div className="relative flex max-h-[90dvh] w-full flex-col overflow-hidden rounded-t-2xl border-t border-border bg-surface shadow-heavy animate-slide-up motion-reduce:animate-none sm:max-w-lg sm:rounded-xl sm:border">
@@ -57,8 +55,14 @@ export default function TeamProjectionSheet({ team, standings, onClose }: Props)
               <span>
                 Projected{' '}
                 <span className="type-numeric font-bold text-gold">
-                  {team.isTied ? 'T-' : ''}
-                  {ordinal(team.projectedRank)}
+                  <span aria-hidden="true">
+                    {team.isTied ? 'T-' : ''}
+                    {ordinal(team.projectedRank)}
+                  </span>
+                  <span className="sr-only">
+                    {team.isTied ? 'tied for ' : ''}
+                    {ordinal(team.projectedRank)}
+                  </span>
                 </span>{' '}
                 of {standings.length}
               </span>
@@ -76,19 +80,32 @@ export default function TeamProjectionSheet({ team, standings, onClose }: Props)
         </div>
 
         <div className="min-h-0 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
-          <section aria-label="Earned so far" className="flex items-start justify-between gap-4">
+          <section className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h3 className="type-label text-foreground">Earned so far</h3>
               <p className="type-meta mt-1 break-words text-foreground-secondary">
                 {earnedLegs.length > 0
-                  ? earnedLegs.map((leg) => `${leg.title} ${formatSignedPoints(leg.points)}`).join(' · ')
+                  ? earnedLegs.map((leg, legIndex) => (
+                      <Fragment key={`${leg.counterpick ? 'cp' : 'h'}-${leg.tmdb_id}`}>
+                        {legIndex > 0 && (
+                          <>
+                            <span aria-hidden="true"> · </span>
+                            <span className="sr-only">, </span>
+                          </>
+                        )}
+                        {leg.title} {formatSignedPoints(leg.points)}
+                      </Fragment>
+                    ))
                   : 'Nothing has counted yet.'}
               </p>
             </div>
-            <span className="type-number flex-none text-foreground">{formatFantasyPoints(team.earned)}</span>
+            <span className="type-number flex-none text-foreground">
+              {formatFantasyPoints(team.earned)}
+              <span className="sr-only"> points earned</span>
+            </span>
           </section>
 
-          <section aria-label="Still to release" className="mt-5 border-t border-border pt-4">
+          <section className="mt-5 border-t border-border pt-4">
             <h3 className="type-label text-foreground">Still to release</h3>
             {pendingLegs.length === 0 ? (
               <p className="type-body-sm mt-2 text-foreground-secondary">Every movie has counted.</p>
@@ -104,7 +121,9 @@ export default function TeamProjectionSheet({ team, standings, onClose }: Props)
           <div className="mt-4 flex items-baseline justify-between gap-4 border-t border-border-hover pt-4">
             <span className="type-row-title text-foreground">Projected total</span>
             <span className="type-number-lg text-gold" data-testid="team-projection-total">
-              ≈ {formatFantasyPoints(team.projected)}
+              <span aria-hidden="true">≈ </span>
+              <span className="sr-only">about </span>
+              {formatFantasyPoints(team.projected)}
             </span>
           </div>
 
@@ -113,7 +132,7 @@ export default function TeamProjectionSheet({ team, standings, onClose }: Props)
             {nextClosest && (
               <>
                 {' '}
-                Next closest: {nextClosest.team_name} at ≈ {formatFantasyPoints(nextClosest.projected)}.
+                Next closest: {nextClosest.team_name} at about {formatFantasyPoints(nextClosest.projected)}.
               </>
             )}{' '}
             Rank and champions still come from real points only. {PROJECTION_DISCLAIMER}
@@ -130,7 +149,7 @@ function PendingLegRow({ leg }: { leg: ProjectedLeg }) {
       <div className="min-w-0 flex-1">
         <p className="type-row-title break-words text-foreground">{leg.title}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-          {leg.counterpick && <span className="type-meta text-crimson">Counterpick</span>}
+          {leg.counterpick && <span className="type-meta text-crimson-text">Counterpick</span>}
           {leg.release_date && (
             <span className="type-meta text-foreground-secondary">{formatReleaseDateShort(leg.release_date)}</span>
           )}
@@ -144,7 +163,16 @@ function PendingLegRow({ leg }: { leg: ProjectedLeg }) {
       <span
         className={`type-number flex-none ${leg.basis === 'none' ? 'text-foreground-secondary' : pointsTone(leg.points, { positive: 'text-gold' })}`}
       >
-        {leg.basis === 'none' ? '—' : `≈ ${formatSignedPoints(leg.points)}`}
+        {leg.basis === 'none' ? (
+          <span aria-hidden="true">—</span>
+        ) : (
+          <>
+            <span aria-hidden="true">≈ </span>
+            <span className="sr-only">about </span>
+            {formatSignedPoints(leg.points)}
+            <span className="sr-only"> points</span>
+          </>
+        )}
       </span>
     </li>
   )

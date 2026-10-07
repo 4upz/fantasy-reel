@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Trophy, ShoppingCart, Target } from 'lucide-react'
 import { toast } from 'sonner'
 import { callEdgeFunction } from '@/utils/supabase/functions'
@@ -61,6 +61,9 @@ export default function RosterClient({
   const [holdings, setHoldings] = useState(initialHoldings)
   const [dropCount, setDropCount] = useState(initialDropCount)
   const [selected, setSelected] = useState<Holding | null>(null)
+  const sectionHeadings = useRef<Record<Holding['source'], HTMLHeadingElement | null>>({ draft: null, pickup: null })
+  /** Set by a successful drop, and acted on once its dialog has closed. */
+  const [droppedHolding, setDroppedHolding] = useState<Holding | null>(null)
 
   const dropsRemaining = league.drop_limit - dropCount
   const contested = useMemo(() => new Set(contestedMovieIds), [contestedMovieIds])
@@ -96,11 +99,22 @@ export default function RosterClient({
     // toast alone would vanish behind the panel the player is still looking at.
     if (error) throw new Error(error)
 
-    toast.success(`Dropped ${holding.movie.title}`)
     setHoldings((prev) => prev.filter((row) => row.holding_id !== holding.id))
     setDropCount((prev) => prev + 1)
     setSelected(null)
+    setDroppedHolding(holding)
   }, [])
+
+  // The dropped card was the dialog's opener, so focus has nowhere to return
+  // to. Once the dialog is gone, land on the section the movie left, and only
+  // then raise the toast: one shown while the dialog was open would be hidden
+  // from screen readers along with the rest of the page.
+  useEffect(() => {
+    if (!droppedHolding || selected) return
+    sectionHeadings.current[droppedHolding.source]?.focus()
+    toast.success(`Dropped ${droppedHolding.movie.title}`)
+    setDroppedHolding(null)
+  }, [droppedHolding, selected])
 
   const { execute: confirmDrop, isLoading: isDropping, error: dropError, reset } =
     useAsyncAction(dropMovie)
@@ -138,7 +152,8 @@ export default function RosterClient({
       />
 
       <RosterSection
-        icon={<Trophy className="w-5 h-5 text-gold" />}
+        headingRef={(node) => { sectionHeadings.current.draft = node }}
+        icon={<Trophy className="w-5 h-5 text-gold" aria-hidden="true" />}
         title="Draft Picks"
         holdings={draftHoldings}
         emptyText="No draft picks yet."
@@ -148,7 +163,8 @@ export default function RosterClient({
       />
 
       <RosterSection
-        icon={<ShoppingCart className="w-5 h-5 text-gold" />}
+        headingRef={(node) => { sectionHeadings.current.pickup = node }}
+        icon={<ShoppingCart className="w-5 h-5 text-gold" aria-hidden="true" />}
         title="Pickups"
         holdings={pickupHoldings}
         emptyText="No pickups yet. Win bids to add movies!"
@@ -160,30 +176,31 @@ export default function RosterClient({
       {/* Counterpicks Section */}
       <div>
         <h2 className="type-section text-foreground flex items-center gap-2 mb-4">
-          <Target className="w-5 h-5 text-crimson" />
+          <Target className="w-5 h-5 text-crimson-text" aria-hidden="true" />
           Counterpicks ({counterpicks.length})
         </h2>
 
         {counterpicks.length === 0 ? (
           <p className="text-foreground-secondary">No counterpicks claimed yet.</p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <ul role="list" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {counterpicks.map((cp) => (
-              <div key={cp.id} className="card overflow-hidden">
+              <li key={cp.id} className="card overflow-hidden">
                 <div className="relative aspect-[2/3] bg-elevated">
                   <RosterPoster movie={cp.movies} />
-                  <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-white flex items-center gap-1">
+                  {/* Every card in this section is a counterpick, as its heading says. */}
+                  <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-crimson/80 backdrop-blur-sm rounded text-white flex items-center gap-1" aria-hidden="true">
                     <Target className="w-3 h-3" />
                     Counterpick
                   </div>
                 </div>
 
                 <div className="p-3">
-                  <h3 className="type-label text-foreground truncate">
+                  <h3 className="type-label text-foreground break-words">
                     {cp.movies.title}
                   </h3>
                   <p className="type-meta text-foreground-secondary">
-                    vs. {cp.target_team.name} ({cp.phase})
+                    vs. {cp.target_team.name}, claimed {cp.phase === 'draft' ? 'in the draft' : 'in bidding'}
                   </p>
                   {cp.fantasy_points !== null && (
                     <p className="type-number mt-1">
@@ -195,9 +212,9 @@ export default function RosterClient({
                     <HoldingProjection projection={projections.get(cp.movies.tmdb_id)!} counterpick className="mt-1.5" />
                   )}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
 
@@ -228,6 +245,7 @@ export default function RosterClient({
 }
 
 function RosterSection({
+  headingRef,
   icon,
   title,
   holdings,
@@ -236,6 +254,8 @@ function RosterSection({
   projections,
   onSelect,
 }: {
+  /** Focus lands here after a drop removes a card from this section. */
+  headingRef: React.Ref<HTMLHeadingElement>
   icon: React.ReactNode
   title: string
   holdings: Holding[]
@@ -246,7 +266,11 @@ function RosterSection({
 }) {
   return (
     <div>
-      <h2 className="type-section text-foreground flex items-center gap-2 mb-4">
+      <h2
+        ref={headingRef}
+        tabIndex={-1}
+        className="type-section text-foreground flex items-center gap-2 mb-4 focus:outline-none"
+      >
         {icon}
         {title} ({holdings.length})
       </h2>
@@ -254,18 +278,19 @@ function RosterSection({
       {holdings.length === 0 ? (
         <p className="text-foreground-secondary">{emptyText}</p>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <ul role="list" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {holdings.map((holding) => (
-            <RosterMovieCard
-              key={holding.id}
-              movie={holding.movie}
-              label={holding.label}
-              isLocked={blockerFor(holding) !== null}
-              projection={<RosterCardProjection movie={holding.movie} projections={projections} />}
-              onSelect={() => onSelect(holding)}
-            />
+            <li key={holding.id} className="grid">
+              <RosterMovieCard
+                movie={holding.movie}
+                label={holding.label}
+                isLocked={blockerFor(holding) !== null}
+                projection={<RosterCardProjection movie={holding.movie} projections={projections} />}
+                onSelect={() => onSelect(holding)}
+              />
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   )

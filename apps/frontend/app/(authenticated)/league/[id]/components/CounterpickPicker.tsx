@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect, useMemo, useCallback, useId, useRef } from 'react'
 import MoviePoster from '@/app/components/MoviePoster'
 import { formatReleaseDateFull } from '@/utils/date'
 import { isPreReleaseScore, isScoreLocked, pointsTone } from '@/utils/scoring'
@@ -47,9 +46,16 @@ export default function CounterpickPicker({
 }: Props) {
   const [options, setOptions] = useState<CounterpickOption[]>([])
   const [loading, setLoading] = useState(true)
+  // Once the cards are on screen they stay there through refetches (every
+  // counterpick and turn change), so a focused card is never torn down.
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedOption, setSelectedOption] = useState<CounterpickOption | null>(null)
   const [retry, setRetry] = useState(0)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const selectionRef = useRef<HTMLDivElement>(null)
+  const turnNoteId = useId()
 
   // Fetch counterpick options when component mounts or when turn changes
   useEffect(() => {
@@ -68,6 +74,7 @@ export default function CounterpickPicker({
         if (cancelled) return
         if (fetchError) throw fetchError
         setOptions(data || [])
+        setHasLoaded(true)
       } catch {
         if (cancelled) return
         setError('Failed to load counterpick options')
@@ -111,51 +118,58 @@ export default function CounterpickPicker({
 
   const isLocked = (option: CounterpickOption) => lockScored && isScoreLocked(option.fantasy_points)
 
-  const handleSelectOption = (option: CounterpickOption) => {
-    if (!isMyTurn || isPicking || isLocked(option)) return
-    resetPickError()
-    setSelectedOption(option)
-  }
-
   const selectedAvailable = options.some(option => option.movie_id === selectedOption?.movie_id)
   const confirmAction = useCallback(async () => {
     if (!selectedOption || !isMyTurn || isPicking) return
     if (!selectedAvailable) throw new Error('This movie is no longer available. Choose another counterpick.')
     await onPick(selectedOption.movie_id, selectedOption)
     setSelectedOption(null)
-  }, [selectedOption, isMyTurn, isPicking, selectedAvailable, onPick])
+    // The confirmation bar holding focus is gone. In the draft the picker
+    // stays, so land on its heading; a bid moves on to its own next step.
+    if (draftRound) headingRef.current?.focus()
+  }, [selectedOption, isMyTurn, isPicking, selectedAvailable, onPick, draftRound])
   const { execute: confirmPick, isLoading: confirming, error: pickError, reset: resetPickError } = useAsyncAction(confirmAction)
+
+  const handleSelectOption = (option: CounterpickOption) => {
+    if (!isMyTurn || isPicking || confirming || isLocked(option)) return
+    resetPickError()
+    setSelectedOption(option)
+  }
+
+  // The confirmation is the second step: take the user to it, or a screen
+  // reader would never learn it appeared.
+  const selectedId = selectedOption?.movie_id
+  useEffect(() => {
+    if (selectedId) selectionRef.current?.focus({ preventScroll: true })
+  }, [selectedId])
 
   const handleCancelSelection = () => {
     if (isPicking || confirming) return
+    const cancelledId = selectedOption?.movie_id
     setSelectedOption(null)
     resetPickError()
+    if (cancelledId) {
+      gridRef.current?.querySelector<HTMLElement>(`[data-counterpick-option="${cancelledId}"]`)?.focus()
+    }
   }
-  const renderConfirmation = (content: ReactNode) => draftRound ? createPortal(content, document.body) : content
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="text-center py-12">
+  let body: React.ReactNode
+  if (!hasLoaded && loading) {
+    body = (
+      <div className="text-center py-12" role="status">
         <SpinnerIcon className="w-8 h-8 text-gold mx-auto animate-spin" />
         <p className="text-foreground-secondary mt-3">Loading opponent movies...</p>
       </div>
     )
-  }
-
-  // Error state
-  if (error) {
-    return (
+  } else if (error) {
+    body = (
       <div className="alert alert-error" role="alert">
         {error}
         <button className="btn btn-secondary ml-3" onClick={() => setRetry(value => value + 1)}>Retry options</button>
       </div>
     )
-  }
-
-  // Empty state
-  if (options.length === 0) {
-    return (
+  } else if (options.length === 0) {
+    body = (
       <div className="text-center py-12 bg-elevated rounded-xl border border-border">
         <div className="flex justify-center mb-3">
           <Target className="w-10 h-10 text-foreground-muted" />
@@ -168,139 +182,155 @@ export default function CounterpickPicker({
         {draftRound && <p className="type-body-sm text-foreground-secondary mt-2">The league owner can end the remaining counterpicks and activate the league.</p>}
       </div>
     )
+  } else {
+    body = (
+      <>
+        {/* Instructions */}
+        <div className="bg-elevated rounded-xl border border-border p-4">
+          <div className="flex items-start gap-3">
+            <Target className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="type-body-sm text-foreground-secondary">
+                Bet against an opponent&apos;s movie. If it scores below 60, you earn points equal to their loss. If it scores above 60, you lose points equal to their gain.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Grouped movie cards */}
+        <div className="space-y-6" ref={gridRef} aria-busy={loading}>
+          {groupedOptions.map((group) => (
+            <div key={group.teamId} className="space-y-3">
+              {/* Team header */}
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 bg-gold/20 rounded-full flex items-center justify-center" aria-hidden="true">
+                  <span className="type-meta text-gold">
+                    {group.teamName.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <h4 className="type-label text-foreground-secondary">
+                  {group.teamName}
+                </h4>
+                <span className="type-meta text-foreground-secondary">
+                  ({group.movies.length} {group.movies.length === 1 ? 'movie' : 'movies'})
+                </span>
+              </div>
+
+              {/* Movie cards grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                {group.movies.map((option) => (
+                  <CounterpickMovieCard
+                    key={option.movie_id}
+                    option={option}
+                    isSelected={selectedOption?.movie_id === option.movie_id}
+                    isSelectable={isMyTurn && !isPicking && !confirming}
+                    isLocked={isLocked(option)}
+                    describedBy={isMyTurn ? undefined : turnNoteId}
+                    projection={projections.get(option.movie_id) ?? null}
+                    onSelect={handleSelectOption}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Selection confirmation, right after the cards in reading order. */}
+        {selectedOption && (
+          <div className={`fixed ${draftRound ? 'bottom-[calc(76px+env(safe-area-inset-bottom))] lg:bottom-0' : 'bottom-0'} left-0 right-0 p-4 bg-surface/95 backdrop-blur-md border-t border-border shadow-heavy z-40 animate-slide-up motion-reduce:animate-none`} role="region" aria-label="Confirm selected counterpick">
+            <div className="max-w-4xl mx-auto">
+              {(pickError || !isMyTurn || !selectedAvailable) && <p className="text-error type-body-sm mb-3" role="alert">{pickError || (!isMyTurn ? 'It is no longer your turn.' : 'This movie is no longer available.')}</p>}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* Selected movie preview */}
+                <div ref={selectionRef} tabIndex={-1} className="flex items-center gap-3 flex-1 min-w-0 rounded-lg">
+                  <div className="relative w-12 h-16 rounded-lg overflow-hidden border border-border bg-elevated">
+                    <MoviePoster
+                      src={selectedOption.poster_url}
+                      alt=""
+                      sizes="48px"
+                      posterSize="w154"
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="type-row-title text-foreground truncate">
+                      <span className="sr-only">Selected for counterpick: </span>
+                      {selectedOption.movie_title}
+                    </p>
+                    <p className="type-body-sm text-foreground-secondary">
+                      Owned by {selectedOption.owner_team_name}
+                    </p>
+                    {selectedOption.release_date && (
+                      <p className="type-meta text-foreground-secondary">
+                        {formatReleaseDateFull(selectedOption.release_date)}
+                      </p>
+                    )}
+                    {selectedProjection && selectedOption.fantasy_points === null && (
+                      <CounterpickProjection projection={selectedProjection} className="mt-1" />
+                    )}
+                    <p className="sr-only">Confirm or cancel this counterpick.</p>
+                  </div>
+                </div>
+
+                {/* Counterpick indicator */}
+                <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-crimson/10 border border-crimson/30 rounded-lg" aria-hidden="true">
+                  <Target className="w-4 h-4 text-crimson-text" />
+                  <span className="type-label text-crimson-text">Counterpick</span>
+                </div>
+
+                {/* Actions */}
+                <div className="flex w-full sm:w-auto gap-2">
+                  <button
+                    onClick={handleCancelSelection}
+                    disabled={isPicking || confirming}
+                    className="btn btn-ghost px-4"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => { void confirmPick().catch(() => {}) }}
+                    disabled={isPicking || confirming || !isMyTurn || !selectedAvailable}
+                    className="btn btn-primary px-6"
+                  >
+                    {isPicking || confirming ? (
+                      <span className="flex items-center gap-2">
+                        <SpinnerIcon className="w-4 h-4" />
+                        Picking...
+                      </span>
+                    ) : (
+                      'Confirm Counterpick'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )
   }
 
   return (
     <div className={`space-y-6 ${selectedOption && isMyTurn ? 'pb-32 sm:pb-24' : ''}`}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="type-panel text-foreground">
-          {isMyTurn ? 'Select movie to counterpick' : 'Opponent movies'}
-        </h3>
-        {isMyTurn && (
-          <span className="badge bg-success-bg text-success border border-success">
-            Your turn
-          </span>
+      {/* Header: present in every state, so focus has somewhere to land */}
+      <div>
+        <div className="flex items-center justify-between">
+          <h3 ref={headingRef} tabIndex={-1} className="type-panel text-foreground">
+            {isMyTurn ? 'Select movie to counterpick' : 'Opponent movies'}
+          </h3>
+          {isMyTurn && (
+            <span className="badge bg-success-bg text-success border border-success">
+              Your turn
+            </span>
+          )}
+        </div>
+        {!isMyTurn && (
+          <p id={turnNoteId} className="type-body-sm text-foreground-secondary mt-1">
+            Counterpicks unlock on your turn.
+          </p>
         )}
       </div>
 
-      {/* Instructions */}
-      <div className="bg-elevated rounded-xl border border-border p-4">
-        <div className="flex items-start gap-3">
-          <Target className="w-5 h-5 text-gold flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="type-body-sm text-foreground-secondary">
-              Bet against an opponent&apos;s movie. If it scores below 60, you earn points equal to their loss. If it scores above 60, you lose points equal to their gain.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Grouped movie cards */}
-      <div className="space-y-6">
-        {groupedOptions.map((group) => (
-          <div key={group.teamId} className="space-y-3">
-            {/* Team header */}
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-gold/20 rounded-full flex items-center justify-center">
-                <span className="type-meta text-gold">
-                  {group.teamName.charAt(0).toUpperCase()}
-                </span>
-              </div>
-              <h4 className="type-label text-foreground-secondary">
-                {group.teamName}
-              </h4>
-              <span className="type-meta text-foreground-secondary">
-                ({group.movies.length} {group.movies.length === 1 ? 'movie' : 'movies'})
-              </span>
-            </div>
-
-            {/* Movie cards grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              {group.movies.map((option) => (
-                <CounterpickMovieCard
-                  key={option.movie_id}
-                  option={option}
-                  isSelected={selectedOption?.movie_id === option.movie_id}
-                  isSelectable={isMyTurn && !isPicking && !confirming}
-                  isLocked={isLocked(option)}
-                  projection={projections.get(option.movie_id) ?? null}
-                  onSelect={handleSelectOption}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Selection Confirmation Overlay */}
-      {selectedOption && renderConfirmation(
-        <div className={`fixed ${draftRound ? 'bottom-[calc(76px+env(safe-area-inset-bottom))] lg:bottom-0' : 'bottom-0'} left-0 right-0 p-4 bg-surface/95 backdrop-blur-md border-t border-border shadow-heavy z-40 animate-slide-up motion-reduce:animate-none`} role="region" aria-label="Confirm selected counterpick">
-          <div className="max-w-4xl mx-auto">
-            {(pickError || !isMyTurn || !selectedAvailable) && <p className="text-error type-body-sm mb-3" role="alert">{pickError || (!isMyTurn ? 'It is no longer your turn.' : 'This movie is no longer available.')}</p>}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Selected movie preview */}
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="relative w-12 h-16 rounded-lg overflow-hidden border border-border bg-elevated">
-                  <MoviePoster
-                    src={selectedOption.poster_url}
-                    alt={selectedOption.movie_title}
-                    sizes="48px"
-                    posterSize="w154"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <p className="type-row-title text-foreground truncate">
-                    {selectedOption.movie_title}
-                  </p>
-                  <p className="type-body-sm text-foreground-secondary">
-                    Owned by {selectedOption.owner_team_name}
-                  </p>
-                  {selectedOption.release_date && (
-                    <p className="type-meta text-foreground-secondary">
-                      {formatReleaseDateFull(selectedOption.release_date)}
-                    </p>
-                  )}
-                  {selectedProjection && selectedOption.fantasy_points === null && (
-                    <CounterpickProjection projection={selectedProjection} className="mt-1" />
-                  )}
-                </div>
-              </div>
-
-              {/* Counterpick indicator */}
-              <div className="hidden sm:flex items-center gap-2 px-3 py-2 bg-crimson/10 border border-crimson/30 rounded-lg">
-                <Target className="w-4 h-4 text-crimson" />
-                <span className="type-label text-crimson">Counterpick</span>
-              </div>
-
-              {/* Actions */}
-              <div className="flex w-full sm:w-auto gap-2">
-                <button
-                  onClick={handleCancelSelection}
-                  disabled={isPicking || confirming}
-                  className="btn btn-ghost px-4"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => { void confirmPick().catch(() => {}) }}
-                  disabled={isPicking || confirming || !isMyTurn || !selectedAvailable}
-                  className="btn btn-primary px-6"
-                >
-                  {isPicking || confirming ? (
-                    <span className="flex items-center gap-2">
-                      <SpinnerIcon className="w-4 h-4" />
-                      Picking...
-                    </span>
-                  ) : (
-                    'Confirm Counterpick'
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {body}
     </div>
   )
 }
@@ -311,6 +341,8 @@ interface CounterpickMovieCardProps {
   isSelectable: boolean
   /** Already scored, so it can't be counterpicked by bid. */
   isLocked: boolean
+  /** Why the card can't be chosen right now, when that is the turn. */
+  describedBy?: string
   /** The target's projected score (Beta), or null when there is none to show. */
   projection: MovieProjection | null
   onSelect: (option: CounterpickOption) => void
@@ -321,20 +353,41 @@ function CounterpickMovieCard({
   isSelected,
   isSelectable: canSelect,
   isLocked,
+  describedBy,
   projection,
   onSelect,
 }: CounterpickMovieCardProps) {
+  const titleId = useId()
+  const pointsId = useId()
+  const lockId = useId()
+  const dateId = useId()
+  const projectionId = useId()
   const points = option.fantasy_points
+  const showProjection = projection !== null && points === null
   // Options are mostly unreleased, so a score here is usually a pre-release one.
   const isPreRelease = isPreReleaseScore(points, option.release_date)
   // `canSelect` is the turn. A locked movie is never selectable, and says why
   // itself rather than with the turn tooltip.
   const isSelectable = canSelect && !isLocked
+  const description = [
+    points !== null && pointsId,
+    isLocked && lockId,
+    option.release_date && dateId,
+    showProjection && projectionId,
+    !isLocked && describedBy,
+  ].filter(Boolean).join(' ')
 
   return (
+    // aria-disabled rather than disabled: an unavailable card stays focusable,
+    // so a turn change never knocks focus out of the grid.
     <button
+      type="button"
       onClick={() => onSelect(option)}
-      disabled={!isSelectable}
+      aria-disabled={!isSelectable || undefined}
+      aria-pressed={isSelected}
+      aria-labelledby={titleId}
+      aria-describedby={description || undefined}
+      data-counterpick-option={option.movie_id}
       title={isLocked
         ? "Already scored, so it can't be counterpicked"
         : !canSelect ? "Wait for your turn to make a counterpick" : undefined}
@@ -350,14 +403,14 @@ function CounterpickMovieCard({
       <div className="aspect-[2/3] relative bg-elevated">
         <MoviePoster
           src={option.poster_url}
-          alt={option.movie_title}
+          alt=""
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           posterSize="w500"
         />
 
         {/* Hover overlay */}
         {isSelectable && (
-          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4">
+          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-4" aria-hidden="true">
             <div className="flex items-center gap-1.5 px-3 py-1.5 bg-crimson rounded-full">
               <Target className="w-3.5 h-3.5 text-white" />
               <span className="type-meta text-white">Counterpick</span>
@@ -367,7 +420,7 @@ function CounterpickMovieCard({
 
         {/* Where the hover prompt would be: the card is too narrow to explain more */}
         {isLocked && (
-          <div className="absolute inset-x-0 bottom-0 flex justify-center pb-3">
+          <div id={lockId} className="absolute inset-x-0 bottom-0 flex justify-center pb-3">
             <ScoreLockLabel className="type-meta px-2.5 py-1 rounded-full bg-background/85 backdrop-blur-sm" />
           </div>
         )}
@@ -381,25 +434,26 @@ function CounterpickMovieCard({
 
         {/* Score badge if available */}
         {points !== null && (
-          <div className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-background/80 backdrop-blur-sm rounded">
-            <span className={`type-numeric ${pointsTone(points, { preRelease: isPreRelease })}`}>
+          <div id={pointsId} className="type-meta absolute top-2 left-2 px-2 py-0.5 bg-background/80 backdrop-blur-sm rounded">
+            <span aria-hidden="true" className={`type-numeric ${pointsTone(points, { preRelease: isPreRelease })}`}>
               {`${points >= 0 ? '+' : ''}${points} pts${isPreRelease ? ' at release' : ''}`}
             </span>
+            <span className="sr-only">{`${points} points${isPreRelease ? ' at release' : ''}`}</span>
           </div>
         )}
       </div>
 
       {/* Movie info */}
       <div className="p-3 bg-surface border-t border-border">
-        <p className="type-label text-foreground truncate">{option.movie_title}</p>
+        <p id={titleId} className="type-label text-foreground truncate">{option.movie_title}</p>
         {option.release_date && (
-          <p className="type-meta text-foreground-secondary mt-0.5">
+          <p id={dateId} className="type-meta text-foreground-secondary mt-0.5">
             {formatReleaseDateFull(option.release_date)}
           </p>
         )}
-        {/* The card is the select button, so the chip only reads here. */}
-        {projection && points === null && (
-          <CounterpickProjection projection={projection} interactive={false} className="mt-1.5" />
+        {/* The card is the select button, so the chip only reads here (linked by aria-describedby). */}
+        {showProjection && (
+          <CounterpickProjection id={projectionId} projection={projection} interactive={false} className="mt-1.5" />
         )}
       </div>
     </button>

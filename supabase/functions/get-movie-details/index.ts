@@ -1,4 +1,5 @@
-import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateUserOrServiceRole } from '../_shared/utils.ts'
+import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, authenticateCaller } from '../_shared/utils.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { TMDbApiError, tmdbErrorResponse } from '../_shared/tmdb.ts'
 import { getMovieDetails, MovieDetailsUnavailableError } from '../_shared/movie-details.ts'
@@ -15,9 +16,9 @@ Deno.serve(async (req) => {
 
   try {
     // Any signed-in user, or the service role (the Discord bot) -- see
-    // authenticateUserOrServiceRole for why that is the whole check here.
-    const authError = await authenticateUserOrServiceRole(req)
-    if (authError) return authError
+    // authenticateCaller for why that is the whole check here.
+    const caller = await authenticateCaller(req)
+    if (caller instanceof Response) return caller
 
     let params: GetMovieDetailsRequest
     try {
@@ -31,6 +32,9 @@ Deno.serve(async (req) => {
     if (!Number.isSafeInteger(tmdb_id) || tmdb_id <= 0 || tmdb_id > 2_147_483_647) {
       return errorResponse('Valid tmdb_id is required', 400)
     }
+
+    const throttled = await throttleUser('movie_details', caller.userId, log)
+    if (throttled) return throttled
 
     const payload = await getMovieDetails(tmdb_id, log)
 

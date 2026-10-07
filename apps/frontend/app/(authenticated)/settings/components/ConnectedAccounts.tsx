@@ -31,7 +31,7 @@ const PROVIDER_CONFIG: Record<OAuthProvider, ProviderConfig> = {
       'Connected',
     icon: <DiscordIcon className="w-5 h-5 text-[#5865F2]" />,
     iconBgClass: 'bg-[#5865F2]/10',
-    connectButtonClass: 'text-[#5865F2] hover:bg-[#5865F2]/10',
+    connectButtonClass: 'text-foreground-secondary hover:bg-[#5865F2]/10',
   },
   google: {
     name: 'Google',
@@ -106,13 +106,13 @@ export default function ConnectedAccounts({
   }
 
   return (
-    <section className="card p-6">
+    <section className="card p-6" aria-labelledby="connected-accounts-heading">
       <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
         <div className="p-2 rounded-lg bg-surface-hover">
           <Link2 className="w-5 h-5 text-foreground-secondary" />
         </div>
         <div>
-          <h2 className="type-section text-foreground">
+          <h2 id="connected-accounts-heading" className="type-section text-foreground">
             Connected accounts
           </h2>
           <p className="type-body-sm text-foreground-secondary">Manage your sign-in methods</p>
@@ -155,7 +155,7 @@ export default function ConnectedAccounts({
           return (
             <div key={provider} className="flex items-center justify-between p-3 rounded-lg bg-surface">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full ${config.iconBgClass} flex items-center justify-center`}>
+                <div aria-hidden="true" className={`w-10 h-10 rounded-full ${config.iconBgClass} flex items-center justify-center`}>
                   {config.icon}
                 </div>
                 <div>
@@ -168,6 +168,7 @@ export default function ConnectedAccounts({
 
               {isConnected ? (
                 <button
+                  type="button"
                   onClick={() => handleUnlink(provider)}
                   disabled={isUnlinking}
                   data-testid={`disconnect-${provider}-button`}
@@ -175,18 +176,19 @@ export default function ConnectedAccounts({
                 >
                   {isUnlinking ? (
                     <>
-                      <span className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin mr-1.5" />
-                      Disconnecting...
+                      <span aria-hidden="true" className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin mr-1.5" />
+                      Disconnecting<span className="sr-only"> {config.name}</span>...
                     </>
                   ) : (
                     <>
                       <X className="w-4 h-4 mr-1" />
-                      Disconnect
+                      Disconnect<span className="sr-only"> {config.name}</span>
                     </>
                   )}
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={() => handleLink(provider)}
                   disabled={isLinking}
                   data-testid={`connect-${provider}-button`}
@@ -194,11 +196,13 @@ export default function ConnectedAccounts({
                 >
                   {isLinking ? (
                     <>
-                      <span className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin mr-1.5" />
-                      Connecting...
+                      <span aria-hidden="true" className="w-3 h-3 border-2 border-current/30 border-t-current rounded-full animate-spin mr-1.5" />
+                      Connecting<span className="sr-only"> {config.name}</span>...
                     </>
                   ) : (
-                    'Connect'
+                    <>
+                      Connect<span className="sr-only"> {config.name}</span>
+                    </>
                   )}
                 </button>
               )}

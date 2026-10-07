@@ -22,10 +22,23 @@ interface Props {
   onSelect?: (movie: HoldingMovie) => void
 }
 
+/** How the movie was acquired, in words: the poster badge is a bare "2.5" or "$14". */
+function describeBadge(badge: MovieBadge): string {
+  switch (badge.type) {
+    case 'draft': return `Drafted round ${badge.round}, pick ${badge.pick}.`
+    case 'pickup': return `Picked up for $${badge.amount}.`
+    case 'counterpick': return 'Counterpick'
+  }
+}
+
 /**
  * A roster row inside an expanded standings team. The badge on the poster is the
  * only thing that says how the movie was acquired, so the row itself carries no
  * section heading - the three of them read as one list.
+ *
+ * As a button its content is its name, so everything the row shows - how it
+ * was acquired, release date, Tomatometer and points - is in there, with the
+ * poster badges spelled out in screen-reader text after the title.
  */
 /** @design-system League */
 export default function MovieScoreCard({
@@ -59,7 +72,6 @@ export default function MovieScoreCard({
               e.stopPropagation()
               onSelect(movie)
             },
-            'aria-label': `View ${movie.title}`,
             'data-clickable': 'true',
           }
         : {})}
@@ -75,26 +87,26 @@ export default function MovieScoreCard({
         <div className="relative h-full w-full overflow-hidden rounded-lg bg-elevated">
           <MoviePoster
             src={movie.poster_url}
-            alt={movie.title}
+            alt=""
             sizes="44px"
             posterSize="w154"
             className="rounded-lg transition-opacity duration-300 motion-reduce:transition-none"
           />
         </div>
 
-        {/* Acquisition badge */}
+        {/* Acquisition badge (spoken by describeBadge below) */}
         {badge.type === 'draft' && (
-          <div className="type-numeric type-meta absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-border bg-surface px-[5px] text-foreground-secondary">
+          <div className="type-numeric type-meta absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-border bg-surface px-[5px] text-foreground-secondary" aria-hidden="true">
             {badge.round}.{badge.pick}
           </div>
         )}
         {badge.type === 'pickup' && (
-          <div className="type-numeric type-meta absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-gold/40 bg-gold/20 px-[5px] text-gold">
+          <div className="type-numeric type-meta absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-gold/40 bg-gold/20 px-[5px] text-gold" aria-hidden="true">
             ${badge.amount}
           </div>
         )}
         {badge.type === 'counterpick' && (
-          <div className="absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-crimson/40 bg-crimson/20 px-[5px] text-crimson">
+          <div className="absolute -top-[7px] -left-[7px] flex h-[22px] min-w-[22px] items-center justify-center rounded-full border border-crimson/40 bg-crimson/20 px-[5px] text-crimson-text" aria-hidden="true">
             <Target className="h-3 w-3" />
           </div>
         )}
@@ -104,6 +116,7 @@ export default function MovieScoreCard({
           <div
             className="absolute -top-[7px] -right-[7px] flex h-[22px] w-[22px] items-center justify-center rounded-full border border-crimson bg-crimson/90 text-foreground"
             title="Counterpicked by opponent"
+            aria-hidden="true"
           >
             <Target className="h-3 w-3" />
           </div>
@@ -112,15 +125,19 @@ export default function MovieScoreCard({
 
       {/* Title, date, Tomatometer */}
       <div className="flex min-w-0 flex-1 flex-col gap-[5px]">
-        <div
-          className="type-row-title truncate text-foreground transition-colors group-hover:text-gold"
-          title={movie.title}
-        >
+        <div className="type-row-title break-words text-foreground transition-colors group-hover:text-gold">
+          {onSelect && <span className="sr-only">View </span>}
           {movie.title}
         </div>
-        <div className="type-meta truncate text-foreground-secondary">
+        <div className="type-meta break-words text-foreground-secondary">
+          <span className="sr-only">
+            {describeBadge(badge)}{badge.type === 'counterpick' ? ` against ${badge.targetTeam}.` : ''}
+            {isCounterpicked ? ' Counterpicked by an opponent.' : ''}{' '}
+          </span>
           {releaseDate}
-          {badge.type === 'counterpick' && ` · vs. ${badge.targetTeam}`}
+          {badge.type === 'counterpick' && (
+            <span aria-hidden="true">{` · vs. ${badge.targetTeam}`}</span>
+          )}
         </div>
         {/* The laurels are too wide for this column, so the pill shimmers instead */}
         <TomatometerScore score={movie.combined_score} size="md" showAccolade={false} className="self-start" />
@@ -132,9 +149,13 @@ export default function MovieScoreCard({
         title={isPreRelease ? describePreReleaseScore(movie.release_date) : undefined}
       >
         <div className={`type-number ${pointsTone(displayPoints, { preRelease: isPreRelease, positive: 'text-gold' })}`}>
-          {formatFantasyPoints(displayPoints)}
+          {/* "--" reads as "dash dash"; the label below already says why. */}
+          <span aria-hidden={displayPoints == null || undefined}>{formatFantasyPoints(displayPoints)}</span>
         </div>
-        <div className="type-meta text-foreground-secondary">{pointsLabel}</div>
+        <div className="type-meta text-foreground-secondary">
+          {pointsLabel}
+          {isPreRelease && <span className="sr-only">: {describePreReleaseScore(movie.release_date)}</span>}
+        </div>
       </div>
     </Row>
   )

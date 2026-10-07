@@ -16,7 +16,8 @@
   --scroll-enter: 1;
   --scroll-exit: 0;
   --scroll-distance: 96px;
-  opacity: calc(.22 + .78 * var(--scroll-enter) - .55 * var(--scroll-exit));
+  /* Floored near full opacity: text still being read must keep its contrast. */
+  opacity: calc(.9 + .1 * var(--scroll-enter) - .1 * var(--scroll-exit));
   transform: translate3d(0, calc((1 - var(--scroll-enter)) * var(--scroll-distance) - var(--scroll-exit) * 32px), 0) scale(calc(.94 + .06 * var(--scroll-enter) - .03 * var(--scroll-exit)));
   transform-origin: 50% 0;
 }
@@ -24,8 +25,6 @@
 .page :global(.btn) { min-height: 44px; transition-property: color, background-color, border-color, box-shadow; }
 .page :is(a, button, summary):focus-visible { outline: 2px solid var(--color-gold); outline-offset: 4px; }
 .page :is(button, summary) { touch-action: manipulation; }
-.skipLink { position: absolute; left: 16px; top: -80px; z-index: 10; padding: 12px 20px; border-radius: 8px; background: var(--color-gold); color: var(--color-foreground-inverse); }
-.skipLink:focus { top: 12px; }
 .hero { position: relative; display: flex; align-items: center; justify-content: center; min-height: calc(100svh - var(--hero-header-height, 4.75rem)); padding: 36px 24px 88px; }
 .scrollCue { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; display: inline-flex; flex-direction: column; align-items: center; gap: 4px; min-height: 44px; padding: 8px 16px; border-radius: 8px; color: var(--color-foreground-secondary); transform: translateX(-50%); }
 .scrollCue:hover { color: var(--color-gold); }
@@ -113,7 +112,7 @@
 .faq details { border-bottom: 1px solid var(--color-border); }
 .faq summary { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 72px; cursor: pointer; list-style: none; }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::after { content: '+'; color: var(--color-gold); font-size: 24px; font-weight: 400; transition: transform .2s; }
+.faq summary::after { content: '+'; content: '+' / ''; color: var(--color-gold); font-size: 24px; font-weight: 400; transition: transform .2s; }
 .faq details[open] summary::after { transform: rotate(45deg); }
 .faq details p { margin: 0 32px 24px 0; color: var(--color-foreground-secondary); }
 .guideLink { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin-top: 20px; color: var(--color-gold); }

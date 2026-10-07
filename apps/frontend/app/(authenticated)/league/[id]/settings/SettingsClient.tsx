@@ -61,9 +61,10 @@ export default function SettingsClient({
     <div className="animate-fade-in">
       {/* Header */}
       <header className="mb-8">
-        <h1 className="type-page text-foreground">
+        {/* An h2: the league layout's name is this page's h1. */}
+        <h2 className="type-page text-foreground">
           League settings
-        </h1>
+        </h2>
         <p className="text-foreground-secondary mt-2">
           Manage settings for <span className="text-foreground font-medium">{league.name}</span>
         </p>
@@ -77,9 +78,8 @@ export default function SettingsClient({
         />
 
         <JoinLinkSection
-          league={league}
+          leagueId={league.id}
           isLocked={!isSetup}
-          onUpdate={handleLeagueUpdate}
         />
 
         <DraftConfigSection

@@ -5,6 +5,8 @@ interface Props {
   total: number
   size?: 'sm' | 'md' | 'lg'
   showLabel?: boolean
+  /** What is being counted, for screen readers: "Draft progress: 12 of 30 picks". */
+  label?: string
 }
 
 const SIZES = {
@@ -19,6 +21,7 @@ export default function DraftProgressRing({
   total,
   size = 'md',
   showLabel = true,
+  label = 'Draft progress',
 }: Props) {
   const { ring, stroke, text } = SIZES[size]
   const radius = (ring - stroke) / 2
@@ -30,10 +33,15 @@ export default function DraftProgressRing({
   const isComplete = current >= total
 
   return (
-    <div className="flex flex-col items-center gap-2" data-testid="draft-progress">
-      <div className="relative" style={{ width: ring, height: ring }}>
+    <div
+      className="flex flex-col items-center gap-2"
+      role="img"
+      aria-label={`${label}: ${current} of ${total} picks`}
+      data-testid="draft-progress"
+    >
+      <div className="relative" style={{ width: ring, height: ring }} aria-hidden="true">
         {/* Background Ring */}
-        <svg className="transform -rotate-90" width={ring} height={ring}>
+        <svg className="transform -rotate-90" width={ring} height={ring} focusable="false">
           <circle
             cx={ring / 2}
             cy={ring / 2}
@@ -76,7 +84,7 @@ export default function DraftProgressRing({
       </div>
 
       {showLabel && (
-        <div className="text-center">
+        <div className="text-center" aria-hidden="true">
           <p className={`${text} text-foreground-secondary`}>
             <span className="type-numeric text-foreground">{current}</span>
             <span className="mx-1">/</span>

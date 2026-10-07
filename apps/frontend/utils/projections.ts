@@ -62,6 +62,23 @@ export function projectionChipLabel(state: ProjectionChipState): string {
   }
 }
 
+/**
+ * The chip's words as a screen reader should say them: "Proj." and an en dash
+ * are read literally ("proj", "dash"), so spell the reading out.
+ */
+export function projectionChipSpokenLabel(state: ProjectionChipState): string {
+  switch (state.kind) {
+    case 'early':
+      return `Early Rotten Tomatoes score ${state.score}%, ${state.reviews} ${state.reviews === 1 ? 'review' : 'reviews'}`
+    case 'insufficient':
+      return 'Projected score: not enough history yet'
+    case 'range':
+      return `Projected ${state.low} to ${state.high}%`
+    case 'point':
+      return `Projected about ${state.value}%`
+  }
+}
+
 export type ProjectionTone = 'fresh' | 'rotten' | 'uncertain'
 
 /** Gold above break-even, crimson below, neutral when the number is a loose guess. */

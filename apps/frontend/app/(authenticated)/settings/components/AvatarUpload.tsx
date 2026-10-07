@@ -1,10 +1,17 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Camera, Trash2, Loader2 } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import Avatar from '@/app/components/Avatar'
+import {
+  AVATAR_INPUT_TYPES,
+  MAX_AVATAR_INPUT_BYTES,
+  prepareAvatarImage,
+  removeAvatarFiles,
+  uploadAvatar,
+} from '@/utils/avatarUpload'
 import { updateAvatarUrl } from '../actions'
 
 interface Props {
@@ -13,38 +20,35 @@ interface Props {
   displayName: string
 }
 
-const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB
-const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
-
-function extractPathFromUrl(url: string): string | null {
-  try {
-    const urlObj = new URL(url)
-    const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/public\/avatars\/(.+)/)
-    return pathMatch ? pathMatch[1] : null
-  } catch {
-    return null
-  }
-}
-
 export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: Props): React.ReactElement {
   const [avatarUrl, setAvatarUrl] = useState(currentAvatarUrl)
   const [isUploading, setIsUploading] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const uploadButtonRef = useRef<HTMLButtonElement>(null)
+  // Removing unmounts the focused Remove button; Upload takes focus once it
+  // is enabled again.
+  const [focusUploadAfterRemove, setFocusUploadAfterRemove] = useState(false)
+
+  useEffect(() => {
+    if (!focusUploadAfterRemove || isRemoving) return
+    uploadButtonRef.current?.focus()
+    setFocusUploadAfterRemove(false)
+  }, [focusUploadAfterRemove, isRemoving])
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     // Validate file type
-    if (!ALLOWED_TYPES.includes(file.type)) {
+    if (!AVATAR_INPUT_TYPES.includes(file.type)) {
       toast.error('Please select a PNG, JPEG, WebP, or GIF image')
       return
     }
 
     // Validate file size
-    if (file.size > MAX_FILE_SIZE) {
-      toast.error('Image must be less than 2MB')
+    if (file.size > MAX_AVATAR_INPUT_BYTES) {
+      toast.error('Image must be less than 10MB')
       return
     }
 
@@ -53,36 +57,22 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
     try {
       const supabase = createClient()
 
-      // Generate unique filename with timestamp to avoid CDN cache issues
-      const timestamp = Date.now()
-      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
-      const filePath = `${userId}/${timestamp}.${ext}`
-
-      // Upload to Supabase Storage
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, {
-          contentType: file.type,
-          upsert: false,
-        })
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError)
-        toast.error('Failed to upload image')
+      let image: Blob
+      try {
+        image = await prepareAvatarImage(file)
+      } catch (error) {
+        console.error('Avatar decode error:', error)
+        toast.error('Could not read that image')
         return
       }
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(filePath)
-
-      // Delete old avatar if exists
-      if (avatarUrl) {
-        const oldPath = extractPathFromUrl(avatarUrl)
-        if (oldPath) {
-          await supabase.storage.from('avatars').remove([oldPath])
-        }
+      let publicUrl: string
+      try {
+        publicUrl = await uploadAvatar(supabase, 'avatars', userId, image)
+      } catch (error) {
+        console.error('Upload error:', error)
+        toast.error('Failed to upload image')
+        return
       }
 
       // Update profile with new URL
@@ -91,6 +81,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
       if (result.success) {
         setAvatarUrl(publicUrl)
         toast.success('Profile photo updated')
+        await removeAvatarFiles(supabase, 'avatars', userId, { keepCurrent: true })
       } else {
         toast.error(result.error ?? 'Failed to update profile')
       }
@@ -114,17 +105,12 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
     try {
       const supabase = createClient()
 
-      // Delete from storage
-      const oldPath = extractPathFromUrl(avatarUrl)
-      if (oldPath) {
-        await supabase.storage.from('avatars').remove([oldPath])
-      }
-
-      // Update profile to remove avatar URL
       const result = await updateAvatarUrl(null)
 
       if (result.success) {
         setAvatarUrl(null)
+        setFocusUploadAfterRemove(true)
+        await removeAvatarFiles(supabase, 'avatars', userId, { keepCurrent: false })
         toast.success('Profile photo removed')
       } else {
         toast.error(result.error ?? 'Failed to remove profile photo')
@@ -150,13 +136,15 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
           className="transition-all duration-200 group-hover:border-gold-hover group-hover:shadow-glow-gold"
         />
 
-        {/* Upload overlay */}
+        {/* Upload overlay -- a mouse shortcut for "Upload photo" below, so it
+            stays out of the tab order instead of taking invisible focus */}
         {!isLoading && (
           <button
             type="button"
+            tabIndex={-1}
+            aria-hidden="true"
             onClick={() => fileInputRef.current?.click()}
             className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer"
-            aria-label="Change profile photo"
           >
             <Camera className="w-6 h-6 text-white" />
           </button>
@@ -164,7 +152,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
 
         {/* Loading overlay */}
         {isLoading && (
-          <div className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
+          <div aria-hidden="true" className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center">
             <Loader2 className="w-6 h-6 text-white animate-spin" />
           </div>
         )}
@@ -182,9 +170,11 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
         />
 
         <button
+          ref={uploadButtonRef}
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isLoading}
+          aria-describedby="avatar-upload-hint"
           className="type-control btn btn-secondary"
         >
           {isUploading ? (
@@ -205,7 +195,7 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
             type="button"
             onClick={handleRemove}
             disabled={isLoading}
-            className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-error-bg"
+            className="type-control btn btn-ghost text-crimson-text hover:text-crimson-text-hover hover:bg-error-bg"
           >
             {isRemoving ? (
               <>
@@ -215,14 +205,14 @@ export default function AvatarUpload({ userId, currentAvatarUrl, displayName }: 
             ) : (
               <>
                 <Trash2 className="w-4 h-4 mr-2" />
-                Remove
+                Remove photo
               </>
             )}
           </button>
         )}
 
-        <p className="type-meta text-foreground-secondary mt-1">
-          PNG, JPEG, WebP or GIF. Max 2MB.
+        <p id="avatar-upload-hint" className="type-meta text-foreground-secondary mt-1">
+          PNG, JPEG, WebP or GIF. Max 10MB.
         </p>
       </div>
     </div>

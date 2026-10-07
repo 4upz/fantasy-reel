@@ -25,12 +25,14 @@ interface Props {
   counterpick?: boolean
   /** `panel` beside the franchise history in a movie dialog; `compact` inside the chip's popover. */
   variant?: 'panel' | 'compact'
+  /** Id for the heading, so the popover or sheet hosting it is named by it. */
+  headingId?: string
   className?: string
 }
 
 const TONE_TEXT: Record<ProjectionTone, string> = {
   fresh: 'text-gold',
-  rotten: 'text-crimson',
+  rotten: 'text-crimson-text',
   uncertain: 'text-foreground',
 }
 
@@ -56,13 +58,33 @@ function headline(state: ProjectionChipState, projection: MovieProjection): stri
   }
 }
 
+/** The big number as a screen reader should say it ("~" and "–" read literally). */
+function spokenHeadline(state: ProjectionChipState, projection: MovieProjection): string {
+  switch (state.kind) {
+    case 'early':
+      return `${state.score}%`
+    case 'range':
+      return `${state.low} to ${state.high}%`
+    case 'point':
+      return `about ${state.value}%`
+    case 'insufficient':
+      return `about ${Math.round(projection.projected_rt)}%`
+  }
+}
+
 /**
  * Why a movie projects where it does: the genre baseline, each factor's push,
  * and what the projection means in odds and points. Never repeats franchise
  * history -- `FranchiseHistoryPanel` beside it already carries that.
  */
 /** @design-system Movies */
-export default function ProjectionBreakdown({ projection, counterpick = false, variant = 'panel', className = '' }: Props) {
+export default function ProjectionBreakdown({
+  projection,
+  counterpick = false,
+  variant = 'panel',
+  headingId,
+  className = '',
+}: Props) {
   const compact = variant === 'compact'
   const state = projectionChipState(projection)
   const pointEstimate = Math.round(projection.projected_rt)
@@ -70,12 +92,11 @@ export default function ProjectionBreakdown({ projection, counterpick = false, v
   if (state.kind === 'insufficient') {
     return (
       <section
-        aria-label="Projected Tomatometer"
         data-testid="projection-breakdown"
         className={`${compact ? '' : 'rounded-xl border border-dashed border-gold/40 bg-surface-hover p-4'} ${className}`}
       >
         <div className="flex items-center gap-2">
-          <h3 className="type-row-title text-foreground">Projected Tomatometer</h3>
+          <h3 id={headingId} className="type-row-title text-foreground">Projected Tomatometer</h3>
           <BetaBadge />
         </div>
         <p className="type-body-sm mt-2 text-foreground">Not enough history yet</p>
@@ -105,13 +126,12 @@ export default function ProjectionBreakdown({ projection, counterpick = false, v
 
   return (
     <section
-      aria-label="Projected Tomatometer"
       data-testid="projection-breakdown"
       className={`flex flex-col ${compact ? 'gap-4' : 'gap-5 rounded-xl border border-dashed border-gold/40 bg-surface-hover p-4 sm:p-5'} ${className}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="type-row-title text-foreground">
+          <h3 id={headingId} className="type-row-title text-foreground">
             {compact ? `Why ${state.kind === 'early' ? state.score : pointEstimate}%` : 'Projected Tomatometer'}
           </h3>
           <BetaBadge />
@@ -122,11 +142,15 @@ export default function ProjectionBreakdown({ projection, counterpick = false, v
       {!compact && (
         <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
           <span className={`type-number-lg ${TONE_TEXT[projectionTone(projection, state)]}`} data-testid="projection-headline">
-            {headline(state, projection)}
+            <span aria-hidden="true">{headline(state, projection)}</span>
+            <span className="sr-only">{spokenHeadline(state, projection)}</span>
           </span>
           <span className="type-body-sm text-foreground-secondary">
             {state.kind === 'early' ? (
-              <>Early reviews · {state.reviews} so far</>
+              <>
+                Early reviews <span aria-hidden="true">·</span>
+                <span className="sr-only">,</span> {state.reviews} so far
+              </>
             ) : (
               <>
                 Most likely <span className="type-numeric font-bold text-foreground">{pointEstimate}%</span>
@@ -168,13 +192,17 @@ export default function ProjectionBreakdown({ projection, counterpick = false, v
             fill={fills.get(factor.key)!}
             label={factor.label}
             value={formatSignedPoints(factor.delta)}
-            tone={factor.delta >= 0 ? 'text-gold' : 'text-crimson'}
+            tone={factor.delta >= 0 ? 'text-gold' : 'text-crimson-text'}
           />
         ))}
       </ul>
 
       <dl className={`grid grid-cols-2 gap-3 ${compact ? '' : 'sm:grid-cols-4'}`}>
-        <Stat label="80% range" value={`${Math.round(low80)}–${Math.round(high80)}%`} />
+        <Stat
+          label="80% range"
+          value={`${Math.round(low80)}–${Math.round(high80)}%`}
+          spoken={`${Math.round(low80)} to ${Math.round(high80)}%`}
+        />
         <Stat label="Chance rotten" value={formatChance(projection.p_rotten)} />
         <Stat label="Chance of 90%+" value={formatChance(projection.p_90)} />
         <Stat
@@ -212,12 +240,32 @@ function FactorRow({ fill, label, value, tone }: { fill: string; label: string; 
   )
 }
 
-function Stat({ label, value, tone = 'text-foreground', testId }: { label: string; value: string; tone?: string; testId?: string }) {
+function Stat({
+  label,
+  value,
+  spoken,
+  tone = 'text-foreground',
+  testId,
+}: {
+  label: string
+  value: string
+  /** How to say `value` when its symbols would be read literally. */
+  spoken?: string
+  tone?: string
+  testId?: string
+}) {
   return (
     <div className="min-w-0">
       <dt className="type-meta text-foreground-secondary">{label}</dt>
       <dd className={`type-number ${tone}`} data-testid={testId}>
-        {value}
+        {spoken ? (
+          <>
+            <span aria-hidden="true">{value}</span>
+            <span className="sr-only">{spoken}</span>
+          </>
+        ) : (
+          value
+        )}
       </dd>
     </div>
   )

@@ -5,7 +5,7 @@ import { Target } from 'lucide-react'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
-import type { DraftState } from '@/hooks/useDraftState'
+import { describeTurn, type DraftAnnouncer, type DraftState } from '@/hooks/useDraftState'
 import { trackEvent } from '@/utils/analytics'
 import { buildTeamInfoByUserId, buildTeamInfoByTeamId } from '@/utils/league'
 import CounterpickPicker from './CounterpickPicker'
@@ -17,6 +17,7 @@ import type {
   League,
   ParticipantWithProfile,
   Counterpick,
+  CounterpickOption,
   CounterpickWithDetails,
   CounterpickTurnInfo,
 } from '@/types'
@@ -27,6 +28,8 @@ interface Props {
   counterpicks: CounterpickWithDetails[]
   currentUserId: string
   onCounterpickMade: (confirmedLeague?: League) => Promise<DraftState | null>
+  /** Confirms the viewer's own counterpicks to screen readers. */
+  onAnnounce?: DraftAnnouncer
   updatesUnavailable?: boolean
 }
 
@@ -36,9 +39,14 @@ export default function CounterpickRound({
   counterpicks,
   currentUserId,
   onCounterpickMade,
+  onAnnounce,
   updatesUnavailable = false,
 }: Props) {
   const [currentTurn, setCurrentTurn] = useState<CounterpickTurnInfo | null>(null)
+  // How many counterpicks existed when `currentTurn` was read. A read in flight
+  // keeps the last turn on screen, but a turn read before the latest
+  // counterpick is no longer anyone's to take.
+  const [turnReadAt, setTurnReadAt] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
@@ -52,6 +60,7 @@ export default function CounterpickRound({
     let cancelled = false
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15_000)
+    const count = counterpicks.length
     async function fetchCurrentTurn() {
       setLoading(true)
       setFetchError(null)
@@ -62,6 +71,7 @@ export default function CounterpickRound({
         if (cancelled) return
         if (rpcError) throw rpcError
         setCurrentTurn(data?.[0] ?? null)
+        setTurnReadAt(count)
       } catch {
         if (cancelled) return
         setFetchError('Could not load the counterpick turn. Retry before making a pick.')
@@ -85,8 +95,10 @@ export default function CounterpickRound({
 
   const currentUserTeamId = currentUserParticipant?.teams?.id
 
-  // Check if it's the current user's turn
-  const isMyTurn = !updatesUnavailable && !loading && !fetchError && currentTurn?.user_id === currentUserId
+  // Check if it's the current user's turn. A refetch alone (a retry) does not
+  // take the turn away, so the picker below keeps its cards and focus.
+  const isMyTurn = !updatesUnavailable && !fetchError && turnReadAt === counterpicksMade &&
+    currentTurn?.user_id === currentUserId
 
   // Check if round is complete
   const isRoundComplete = league.status === 'counterpicking' && !currentTurn && !loading && !fetchError
@@ -103,7 +115,7 @@ export default function CounterpickRound({
   }
 
   const pendingPick = useRef<{ movieId: string; expectedPick: number; requestId: string; teamId: string } | null>(null)
-  const counterpickAction = useCallback(async (movieId: string): Promise<void> => {
+  const counterpickAction = useCallback(async (movieId: string, option?: CounterpickOption): Promise<void> => {
     if (!pendingPick.current || pendingPick.current.movieId !== movieId) {
       if (!currentTurn || !currentUserTeamId || updatesUnavailable) throw new Error('Refresh the counterpick turn before picking.')
       pendingPick.current = {
@@ -126,7 +138,13 @@ export default function CounterpickRound({
     if (!data && !confirmed) throw new Error('The counterpick could not be confirmed. Check the previous pick before choosing again.')
     pendingPick.current = null
     if (!data?.replayed) trackEvent('counterpick_made', { league_id: league.id })
-  }, [currentTurn, currentUserTeamId, totalParticipants, updatesUnavailable, league.id, onCounterpickMade])
+    // The last counterpick ends the round; the phase change says so itself.
+    const next = snapshot?.league.status === 'counterpicking' ? describeTurn(snapshot, currentUserId) : null
+    onAnnounce?.([
+      option ? `You counterpicked ${option.owner_team_name}'s ${option.movie_title}.` : 'Your counterpick is in.',
+      next?.message,
+    ].filter(Boolean).join(' '), 'polite', true)
+  }, [currentTurn, currentUserTeamId, totalParticipants, updatesUnavailable, league.id, onCounterpickMade, currentUserId, onAnnounce])
   const { execute: handleCounterpick, isLoading: picking, error } = useAsyncAction(counterpickAction)
 
   // Render different states based on league status
@@ -154,14 +172,15 @@ export default function CounterpickRound({
           : 'Counterpick round needs attention'}
         detail={currentTurn ? `Round ${currentTurn.round}, pick ${currentTurn.pick_number}` : 'Review the round status above.'}
         isMyTurn={isMyTurn} unavailable={updatesUnavailable || Boolean(fetchError)} />
-      {loading && <div className="card p-4 flex items-center gap-3" role="status">
+      {/* Only the first read is announced: later turns are spoken by the draft announcer. */}
+      {loading && <div className="card p-4 flex items-center gap-3" role={currentTurn ? undefined : 'status'}>
         <SpinnerIcon className="w-5 h-5 text-gold animate-spin" /> Updating counterpick turn…
       </div>}
       {fetchError && <div className="card p-6" role="alert">
         <p className="text-error mb-3">{fetchError}</p>
         <button className="btn btn-secondary" onClick={() => setRetry(value => value + 1)}>Retry turn information</button>
       </div>}
-      {isRoundComplete && <div className="card p-6">
+      {isRoundComplete && <div className="card p-6" role="status">
         <p className="type-card text-foreground">No remaining turn was returned.</p>
         <p className="type-body-sm text-foreground-secondary mt-2">The league is still counterpicking. Refresh its state or ask the owner to finish the round.</p>
         <button className="btn btn-secondary mt-3" onClick={() => { void onCounterpickMade(); setRetry(value => value + 1) }}>Refresh draft</button>
@@ -172,7 +191,7 @@ export default function CounterpickRound({
           {/* Left: Title and Status */}
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-4">
-              <h2 className="type-section text-foreground">Counterpick round</h2>
+              <h2 className="type-section text-foreground" tabIndex={-1} data-draft-heading>Counterpick round</h2>
             </div>
 
             {/* Current Turn Indicator */}
@@ -225,7 +244,7 @@ export default function CounterpickRound({
 
           {/* Right: Progress Ring */}
           <div className="flex-shrink-0 self-center sm:self-start">
-            <DraftProgressRing current={counterpicksMade} total={totalCounterpicks} size="lg" />
+            <DraftProgressRing current={counterpicksMade} total={totalCounterpicks} size="lg" label="Counterpick progress" />
           </div>
         </div>
 
@@ -296,55 +315,64 @@ function CounterpickHistory({ counterpicks, participants }: CounterpickHistoryPr
   })
 
   return (
-    <div className="space-y-2 max-h-80 overflow-y-auto">
-      {sortedPicks.map((pick, index) => (
-        <div
-          key={pick.id}
-          className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-            index === 0
-              ? 'bg-crimson/10 border-crimson/30 animate-fade-in'
-              : 'bg-elevated border-border'
-          }`}
-        >
-          {/* Target icon */}
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
-            index === 0 ? 'bg-crimson/20' : 'bg-surface'
-          }`}>
-            <Target className={`w-5 h-5 ${index === 0 ? 'text-crimson' : 'text-foreground-muted'}`} />
-          </div>
+    // A keyboard can only scroll this list if the scroller itself takes focus:
+    // nothing inside it is interactive.
+    <div className="max-h-80 overflow-y-auto" tabIndex={0} role="region" aria-label="Counterpick history, most recent first">
+      <ol className="space-y-2" role="list">
+        {sortedPicks.map((pick, index) => (
+          <li
+            key={pick.id}
+            className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
+              index === 0
+                ? 'bg-crimson/10 border-crimson/30 animate-fade-in'
+                : 'bg-elevated border-border'
+            }`}
+          >
+            {/* Target icon */}
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+              index === 0 ? 'bg-crimson/20' : 'bg-surface'
+            }`}>
+              <Target className={`w-5 h-5 ${index === 0 ? 'text-crimson-text' : 'text-foreground-muted'}`} />
+            </div>
 
-          {/* Pick Info */}
-          <div className="flex-1 min-w-0">
-            <p className="type-label text-foreground">
-              {teamInfoById.get(pick.counterpicker_team_id)?.teamName ?? 'Unknown'} counterpicked{' '}
-              <span className="text-foreground-secondary">
-                {teamInfoById.get(pick.target_team_id)?.teamName ?? 'Unknown'}
-              </span>
-            </p>
-            <p className="type-meta text-foreground-secondary">
-              {teamInfoById.get(pick.counterpicker_team_id)?.ownerName ?? ''}
-              {teamInfoById.get(pick.counterpicker_team_id)?.ownerName && ' → '}
-              {teamInfoById.get(pick.target_team_id)?.ownerName ?? ''}
-            </p>
-            {pick.movies && (
-              <p className="type-meta text-foreground-secondary truncate mt-0.5">
-                {pick.movies.title}
+            {/* Pick Info */}
+            <div className="flex-1 min-w-0">
+              <p className="type-label text-foreground">
+                {index === 0 && <span className="sr-only">Latest counterpick: </span>}
+                {teamInfoById.get(pick.counterpicker_team_id)?.teamName ?? 'Unknown'} counterpicked{' '}
+                <span className="text-foreground-secondary">
+                  {teamInfoById.get(pick.target_team_id)?.teamName ?? 'Unknown'}
+                </span>
               </p>
-            )}
-          </div>
+              <p className="type-meta text-foreground-secondary">
+                {teamInfoById.get(pick.counterpicker_team_id)?.ownerName ?? ''}
+                {teamInfoById.get(pick.counterpicker_team_id)?.ownerName && (
+                  <><span aria-hidden="true"> → </span><span className="sr-only"> against </span></>
+                )}
+                {teamInfoById.get(pick.target_team_id)?.ownerName ?? ''}
+              </p>
+              {pick.movies && (
+                <p className="type-meta text-foreground-secondary truncate mt-0.5">
+                  {pick.movies.title}
+                </p>
+              )}
+            </div>
 
-          {/* Pick order badge */}
-          <div className="flex-shrink-0">
-            <span
-              className={`type-meta inline-block px-2 py-1 rounded-lg ${
-                index === 0 ? 'bg-crimson text-white' : 'bg-surface text-foreground-secondary'
-              }`}
-            >
-              #{pick.pick_order}
-            </span>
-          </div>
-        </div>
-      ))}
+            {/* Pick order badge */}
+            <div className="flex-shrink-0">
+              <span
+                aria-hidden="true"
+                className={`type-meta inline-block px-2 py-1 rounded-lg ${
+                  index === 0 ? 'bg-crimson text-white' : 'bg-surface text-foreground-secondary'
+                }`}
+              >
+                #{pick.pick_order}
+              </span>
+              <span className="sr-only">Pick {pick.pick_order}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
     </div>
   )
 }
@@ -414,10 +442,10 @@ function CounterpickQueue({
 
   return (
     <div>
-      <p className="type-body-sm text-foreground-secondary mb-3">Upcoming picks</p>
-      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+      <h3 className="type-body-sm text-foreground-secondary mb-3">Upcoming picks</h3>
+      <ol className="flex gap-2 overflow-x-auto pb-2 scrollbar-none" role="list">
         {upcomingPicks.map((pick, index) => (
-          <div
+          <li
             key={`${pick.participant.id}-${pick.round}-${index}`}
             className={cn(
               'flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border transition-all',
@@ -428,6 +456,7 @@ function CounterpickQueue({
               'type-meta',
               index === 0 && pick.isCurrentUser ? 'text-success' : 'text-foreground-secondary'
             )}>
+              {index === 0 && <span className="sr-only">Picking now: </span>}
               {pick.isCurrentUser ? 'You' : pick.participant.teams?.name || 'Unknown'}
             </p>
             {!pick.isCurrentUser && pick.participant.profiles?.display_name && (
@@ -435,17 +464,21 @@ function CounterpickQueue({
                 {pick.participant.profiles.display_name}
               </p>
             )}
-            <p className="type-meta text-foreground-secondary">R{pick.round}</p>
-          </div>
+            <p className="type-meta text-foreground-secondary">
+              <span aria-hidden="true">R{pick.round}</span>
+              <span className="sr-only">Round {pick.round}</span>
+            </p>
+          </li>
         ))}
         {currentPickIndex + upcomingPicks.length < totalPicks && (
-          <div className="flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-surface border border-border flex items-center">
+          <li className="flex-shrink-0 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg bg-surface border border-border flex items-center">
             <p className="type-meta text-foreground-secondary">
-              +{totalPicks - currentPickIndex - upcomingPicks.length} more
+              <span aria-hidden="true">+{totalPicks - currentPickIndex - upcomingPicks.length} more</span>
+              <span className="sr-only">and {totalPicks - currentPickIndex - upcomingPicks.length} more picks</span>
             </p>
-          </div>
+          </li>
         )}
-      </div>
+      </ol>
     </div>
   )
 }

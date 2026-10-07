@@ -11,6 +11,7 @@ import type { BidLossReason, VoidReasonCode } from './bid-resolution.ts'
 import {
   buildEmbedAuthor,
   buildLeagueUrl,
+  clipText,
   DISCORD_COLORS,
   DISCORD_MAX_EMBED_FIELDS,
   DISCORD_MAX_FIELD_NAME,
@@ -68,10 +69,6 @@ const CANCELLED_BECAUSE: Record<VoidReasonCode, string> = {
   target_missing: 'the targeted holding no longer exists',
 }
 
-function clip(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
-}
-
 function describeBid(bid: BidResult, kind: BidResultsKind): string {
   const team = `**${bid.teamName}**`
   const { outcome } = bid
@@ -106,8 +103,8 @@ function movieField(movie: MovieResult, kind: BidResultsKind) {
   const suffix = movie.previouslyAwarded ? ' — previously awarded' : awarded ? '' : ' — not awarded'
 
   return {
-    name: `${clip(movie.title, DISCORD_MAX_FIELD_NAME - suffix.length)}${suffix}`,
-    value: clip(lines.join('\n'), DISCORD_MAX_FIELD_VALUE),
+    name: `${clipText(movie.title, DISCORD_MAX_FIELD_NAME - suffix.length)}${suffix}`,
+    value: clipText(lines.join('\n'), DISCORD_MAX_FIELD_VALUE),
     inline: awarded && lines.length === 1,
   }
 }

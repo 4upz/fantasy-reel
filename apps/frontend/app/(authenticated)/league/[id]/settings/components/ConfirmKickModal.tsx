@@ -1,6 +1,8 @@
 'use client'
 
+import { useId } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
+import Modal from '@/app/components/Modal'
 import type { ParticipantWithProfile } from '@/types'
 import { getParticipantDisplayName } from '@/utils/league'
 import { ButtonSpinner } from '../../components/Icons'
@@ -10,6 +12,8 @@ interface Props {
   onConfirm: () => Promise<void>
   onCancel: () => void
   loading: boolean
+  /** Why the last removal failed. Shown here: a toast would sit behind the dialog, unheard. */
+  error?: string | null
 }
 
 /** @design-system Modals */
@@ -18,19 +22,22 @@ export default function ConfirmKickModal({
   onConfirm,
   onCancel,
   loading,
+  error = null,
 }: Props): React.ReactElement {
   const displayName = getParticipantDisplayName(participant)
+  const titleId = useId()
+  const questionId = useId()
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4">
-      <div className="glass card p-6 w-full max-w-md animate-slide-up">
+    <Modal onClose={onCancel} preventClose={loading} labelledBy={titleId} describedBy={questionId}>
+      <div className="glass card p-6 w-full max-w-md animate-slide-up motion-reduce:animate-none">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-crimson/10">
-              <AlertTriangle className="w-5 h-5 text-crimson" />
+              <AlertTriangle className="w-5 h-5 text-crimson-text" />
             </div>
-            <h2 className="type-panel text-foreground">
+            <h2 id={titleId} className="type-panel text-foreground">
               Remove participant
             </h2>
           </div>
@@ -38,14 +45,15 @@ export default function ConfirmKickModal({
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="p-1 text-foreground-secondary hover:text-foreground transition-colors"
+            aria-label="Close remove participant dialog"
+            className="p-1 text-foreground-secondary hover:text-foreground transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="mb-6">
+        <div id={questionId} className="mb-6">
           <p className="text-foreground-secondary">
             Are you sure you want to remove{' '}
             <span className="text-foreground font-medium">{displayName}</span>{' '}
@@ -56,13 +64,21 @@ export default function ConfirmKickModal({
           </p>
         </div>
 
+        {error && (
+          <p role="alert" className="type-body-sm text-error mb-4">
+            {error}
+          </p>
+        )}
+
         {/* Actions */}
         <div className="flex gap-3 justify-end">
+          {/* Starts here: the safe answer to a destructive question. */}
           <button
             type="button"
             onClick={onCancel}
             disabled={loading}
             className="btn btn-ghost"
+            data-dialog-initial-focus
           >
             Cancel
           </button>
@@ -83,6 +99,6 @@ export default function ConfirmKickModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

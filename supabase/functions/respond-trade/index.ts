@@ -17,6 +17,7 @@ import {
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { hasLapsed } from '../_shared/trade-expiry.ts'
+import { tradeMessageError } from '../_shared/trade-limits.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('respond-trade')
@@ -51,6 +52,9 @@ Deno.serve(async (req) => {
     if (!response || !['accept', 'reject'].includes(response)) {
       return errorResponse('Response must be "accept" or "reject"', 400)
     }
+
+    const messageError = tradeMessageError(message)
+    if (messageError) return errorResponse(messageError, 400)
 
     // First fetch the trade to verify authorization (without locking)
     const tradeResult = await getTradeOffer(serviceClient, trade_offer_id)

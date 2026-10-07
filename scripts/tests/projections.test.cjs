@@ -96,6 +96,15 @@ test('too little history shows no number; early reviews win over everything', ()
   )
 })
 
+test('every chip state has a spoken reading with no abbreviation or dash', () => {
+  const read = (overrides) => projections.projectionChipSpokenLabel(projections.projectionChipState(projection(overrides)))
+  assert.equal(read({ range50: [68.4, 78.2] }), 'Projected 68 to 78%')
+  assert.equal(read({ range50: [60, 80.5], projected_rt: 73.6 }), 'Projected about 74%')
+  assert.equal(read({ insufficient_history: true }), 'Projected score: not enough history yet')
+  assert.equal(read({ early_rt: { score: 87.6, reviews: 24 } }), 'Early Rotten Tomatoes score 88%, 24 reviews')
+  assert.equal(read({ early_rt: { score: 50, reviews: 1 } }), 'Early Rotten Tomatoes score 50%, 1 review')
+})
+
 test('tone follows the 60% break-even', () => {
   assert.equal(projections.projectionTone(projection()), 'fresh')
   assert.equal(projections.projectionTone(projection({ projected_rt: 48, range50: [44, 52] })), 'rotten')

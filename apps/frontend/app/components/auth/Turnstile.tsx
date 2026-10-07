@@ -44,11 +44,16 @@ function loadTurnstileScript(): Promise<void> {
   return scriptPromise
 }
 
+/** Shown when a form is submitted before Turnstile has issued a token. */
+export const CAPTCHA_PENDING_MESSAGE = 'Complete the security check, then try again.'
+
 /**
  * Tracks the Turnstile token for one form. `ready` is true once the form may
- * submit: always when CAPTCHA is off, otherwise once a token exists. Call
- * `reset` after every submission, since Supabase consumes the token even when
- * the request fails.
+ * submit: always when CAPTCHA is off, otherwise once a token exists. Check it
+ * on submit and show CAPTCHA_PENDING_MESSAGE rather than disabling the submit
+ * button, which would leave screen-reader users with a dimmed button and no
+ * reason. Call `reset` after every submission, since Supabase consumes the
+ * token even when the request fails.
  */
 export function useCaptcha() {
   const [token, setToken] = useState<string | null>(null)

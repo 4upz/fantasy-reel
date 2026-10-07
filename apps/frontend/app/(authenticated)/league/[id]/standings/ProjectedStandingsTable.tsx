@@ -7,6 +7,8 @@ import TeamProjectionSheet from '../components/TeamProjectionSheet'
 
 interface Props {
   standings: ProjectedStanding[]
+  /** Id of the table's visible description, which also names the list. */
+  descriptionId?: string
   /** Owner names by team, for the line under each team name. */
   ownerNameByTeamId: ReadonlyMap<string, string | null>
   currentUserTeamId: string | null
@@ -14,25 +16,31 @@ interface Props {
 
 const RANK_TONE: Record<number, string> = { 1: 'text-gold', 2: 'text-silver', 3: 'text-bronze' }
 
-/** "▲1" up, "▼2" down, "–" level -- in words for a screen reader. */
+/**
+ * "▲1" up, "▼2" down, "–" level. The arrow, not the colour, carries the
+ * direction, and a screen reader hears it in words.
+ */
 function RankChange({ change }: { change: number }) {
   if (change > 0) {
     return (
-      <span className="type-meta font-bold text-success" aria-label={`up ${change}`}>
-        ▲{change}
+      <span className="type-meta font-bold text-success">
+        <span aria-hidden="true">▲{change}</span>
+        <span className="sr-only">, up {change} from the current standings</span>
       </span>
     )
   }
   if (change < 0) {
     return (
-      <span className="type-meta font-bold text-error" aria-label={`down ${-change}`}>
-        ▼{-change}
+      <span className="type-meta font-bold text-error">
+        <span aria-hidden="true">▼{-change}</span>
+        <span className="sr-only">, down {-change} from the current standings</span>
       </span>
     )
   }
   return (
-    <span className="type-meta text-foreground-secondary" aria-label="no change">
-      –
+    <span className="type-meta text-foreground-secondary">
+      <span aria-hidden="true">–</span>
+      <span className="sr-only">, same as the current standings</span>
     </span>
   )
 }
@@ -70,7 +78,7 @@ function ProjectionBar({ team, scale }: { team: ProjectedStanding; scale: number
  * of it -- rank and champions come from real points only.
  */
 /** @design-system League */
-export default function ProjectedStandingsTable({ standings, ownerNameByTeamId, currentUserTeamId }: Props) {
+export default function ProjectedStandingsTable({ standings, descriptionId, ownerNameByTeamId, currentUserTeamId }: Props) {
   const [openTeamId, setOpenTeamId] = useState<string | null>(null)
   const openTeam = standings.find((team) => team.team_id === openTeamId) ?? null
   const scale = Math.max(1, ...standings.map((team) => Math.max(team.earned, team.projected)))
@@ -81,7 +89,7 @@ export default function ProjectedStandingsTable({ standings, ownerNameByTeamId, 
 
   return (
     <div className="flex flex-col gap-3" data-testid="projected-standings">
-      <p className="type-body-sm text-foreground-secondary">
+      <p id={descriptionId} className="type-body-sm text-foreground-secondary">
         If every unreleased movie lands at its most likely score. {toRelease} {toRelease === 1 ? 'movie' : 'movies'} still
         to release. Tap a team to see how it adds up.
       </p>
@@ -108,18 +116,20 @@ export default function ProjectedStandingsTable({ standings, ownerNameByTeamId, 
           <span className="text-right">Left</span>
         </div>
 
-        <ol className="mt-1 flex flex-col gap-1">
+        {/* role="list": list-style none strips list semantics in Safari. */}
+        <ol role="list" aria-label="Projected standings, Beta" aria-describedby={descriptionId} className="mt-1 flex flex-col gap-1">
           {standings.map((team) => {
             const own = team.team_id === currentUserTeamId
             const owner = ownerNameByTeamId.get(team.team_id)
             const rankTone = RANK_TONE[team.projectedRank] ?? 'text-foreground-secondary'
             return (
               <li key={team.team_id}>
+                {/* No aria-label: the row's own text is its name, so the owner,
+                    toss-up, current points and movies left are all read. */}
                 <button
                   type="button"
                   onClick={() => setOpenTeamId(team.team_id)}
                   aria-haspopup="dialog"
-                  aria-label={`${team.team_name}: projected ${team.isTied ? 'tied ' : ''}${team.projectedRank}, about ${formatFantasyPoints(team.projected)} points. See how it adds up`}
                   data-testid={`projected-row-${team.team_id}`}
                   className={`grid w-full grid-cols-[2.75rem_minmax(0,1fr)_auto] items-center gap-x-3 rounded-lg border px-2 py-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold sm:grid-cols-[3.5rem_minmax(0,1.3fr)_minmax(0,1.6fr)_4.5rem_3.5rem_3.5rem] sm:gap-x-4 sm:px-3 ${
                     own ? 'border-gold/30 bg-gold/[0.08]' : 'border-transparent'
@@ -127,8 +137,13 @@ export default function ProjectedStandingsTable({ standings, ownerNameByTeamId, 
                 >
                   <span className="flex items-center gap-1.5">
                     <span className={`type-number ${rankTone}`}>
-                      {team.isTied ? 'T' : ''}
-                      {team.projectedRank}
+                      <span aria-hidden="true">
+                        {team.isTied ? 'T' : ''}
+                        {team.projectedRank}
+                      </span>
+                      <span className="sr-only">
+                        {team.isTied ? `Tied for projected rank ${team.projectedRank}` : `Projected rank ${team.projectedRank}`}
+                      </span>
                     </span>
                     <RankChange change={team.rankChange} />
                   </span>
@@ -140,7 +155,8 @@ export default function ProjectedStandingsTable({ standings, ownerNameByTeamId, 
                     </span>
                     {owner && <span className="type-meta block truncate text-foreground-secondary">{owner}</span>}
                     <span className="type-meta block text-foreground-secondary sm:hidden">
-                      Now {formatFantasyPoints(team.earned)} · {team.remaining} left
+                      Now {formatFantasyPoints(team.earned)} <span aria-hidden="true">·</span>
+                      <span className="sr-only">,</span> {team.remaining} left
                     </span>
                   </span>
 
@@ -148,14 +164,21 @@ export default function ProjectedStandingsTable({ standings, ownerNameByTeamId, 
                     <ProjectionBar team={team} scale={scale} />
                   </span>
 
+                  {/* The column headings are hidden from screen readers, so each
+                      number says what it is. */}
                   <span className="type-number text-right text-lg text-foreground underline decoration-foreground-muted decoration-dotted underline-offset-4">
+                    <span className="sr-only">, about </span>
                     {formatFantasyPoints(team.projected)}
+                    <span className="sr-only"> projected points</span>
                   </span>
                   <span className="type-numeric type-label hidden text-right text-foreground-secondary sm:block">
+                    <span className="sr-only">, now </span>
                     {formatFantasyPoints(team.earned)}
                   </span>
                   <span className="type-numeric type-label hidden text-right text-foreground-secondary sm:block">
+                    <span className="sr-only">, </span>
                     {team.remaining}
+                    <span className="sr-only"> left</span>
                   </span>
                 </button>
               </li>

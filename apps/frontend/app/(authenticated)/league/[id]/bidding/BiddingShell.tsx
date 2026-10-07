@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSelectedLayoutSegment } from 'next/navigation'
 import { Plus, Swords, Target } from 'lucide-react'
+import { toast } from 'sonner'
 import type { CounterpickBid, League, PickupBid, TeamWithOwner } from '@/types'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { announce } from '@/utils/announce'
 import { useBidding } from '../hooks/useBidding'
 import BidWeekTimeline from '../components/BidWeekTimeline'
 import { getBidPhase } from '../components/utils'
@@ -46,11 +48,19 @@ function SlotStat({ label, used, total, loading = false }: SlotStatProps): React
       <p className="type-meta text-foreground-secondary mb-1">{label}</p>
       <div className="flex items-baseline gap-1">
         {loading ? (
-          <span className="skeleton h-8 sm:h-9 w-6 rounded" role="status" aria-label={`Loading ${label.toLowerCase()}`} />
+          <span className="skeleton h-8 sm:h-9 w-6 rounded" role="status">
+            <span className="sr-only">Loading {label.toLowerCase()}…</span>
+          </span>
         ) : (
-          <span className="type-number-lg text-foreground">{used ?? '—'}</span>
+          <>
+            {/* "3 / 8" reads as "3 slash 8"; say what the numbers are. */}
+            <span className="type-number-lg text-foreground" aria-hidden="true">{used ?? '—'}</span>
+            <span className="sr-only">
+              {used === null ? `Unavailable, ${total} slots` : `${used} of ${total} slots used`}
+            </span>
+          </>
         )}
-        <span className="text-foreground-secondary text-base sm:text-lg type-numeric">/ {total}</span>
+        <span className="text-foreground-secondary text-base sm:text-lg type-numeric" aria-hidden="true">/ {total}</span>
       </div>
     </div>
   )
@@ -146,16 +156,27 @@ export default function BiddingShell({
   // waits for those bids before allowing submission without resetting a draft.
   const canSpend = budget !== null && !error
   const canPlaceCounterpickBid = canSpend && hasLoaded && hasCounterpicks && biddingCounterpickCount < biddingCounterpickSlots
-  const unavailableBidTitle = loading
-    ? 'Loading your bidding information'
-    : 'Your bidding information is unavailable. Try again.'
 
   // Past the cutoff the week belongs to counter bidding: only movies already
-  // being bid on can be raised or countered, and nothing can be withdrawn.
+  // being bid on can be raised or countered, and nothing can be withdrawn. The
+  // clock ticks so a page left open crosses the cutoff instead of offering new
+  // bids the server will refuse.
+  const [clock, setClock] = useState(() => Date.now())
+  useEffect(() => {
+    const interval = window.setInterval(() => setClock(Date.now()), 60_000)
+    return () => window.clearInterval(interval)
+  }, [])
   const { isCounterBidPhase } = useMemo(
-    () => getBidPhase(newBidCutoffAt, processingDeadline),
-    [newBidCutoffAt, processingDeadline]
+    () => getBidPhase(newBidCutoffAt, processingDeadline, new Date(clock)),
+    [newBidCutoffAt, processingDeadline, clock]
   )
+  const wasCounterBidPhase = useRef(isCounterBidPhase)
+  useEffect(() => {
+    if (isCounterBidPhase && !wasCounterBidPhase.current) {
+      announce('New bids are now closed. You can still raise or counter bids on movies already in play.')
+    }
+    wasCounterBidPhase.current = isCounterBidPhase
+  }, [isCounterBidPhase])
 
   // An 'outbid' row still counts as a live contest -- that team can counter back.
   const hasContestedBids = useMemo(
@@ -185,7 +206,48 @@ export default function BiddingShell({
     setIsCounterpickModalOpen(true)
   }, [canSpend, hasLoaded])
 
+  // A toast raised while a dialog is open is hidden from screen readers along
+  // with the rest of the page, so a bid's confirmation waits for it to close.
+  const closedDialogToast = useRef<string | null>(null)
+  const closeBidModal = useCallback((successMessage?: string) => {
+    closedDialogToast.current = successMessage ?? null
+    setIsBidModalOpen(false)
+    setCounterBidTarget(null)
+  }, [])
+  const closeCounterpickModal = useCallback((successMessage?: string) => {
+    closedDialogToast.current = successMessage ?? null
+    setIsCounterpickModalOpen(false)
+    setCounterCounterpickTarget(null)
+  }, [])
+  useEffect(() => {
+    if (isBidModalOpen || isCounterpickModalOpen || !closedDialogToast.current) return
+    toast.success(closedDialogToast.current)
+    closedDialogToast.current = null
+  }, [isBidModalOpen, isCounterpickModalOpen])
+
   const { execute: retryBidding, isLoading: isRetrying } = useAsyncAction(bidding.refetch)
+  // A successful retry removes the alert along with its focused button; hand
+  // focus to the bid button it just unblocked.
+  const placeBidButtonRef = useRef<HTMLButtonElement>(null)
+  const retryAndRefocus = useCallback(async () => {
+    if (refreshing) return
+    await retryBidding().catch(() => { /* The alert stays up to retry again. */ })
+    requestAnimationFrame(() => {
+      if (document.activeElement === document.body) placeBidButtonRef.current?.focus()
+    })
+  }, [refreshing, retryBidding])
+
+  // A disabled button can't be focused, so its reason would never be heard.
+  // These stay focusable with aria-disabled and point at text saying why.
+  const loadingReasonId = useId()
+  const bidReasonId = useId()
+  const unavailableAlertId = useId()
+  const bidCtaReason = canSpend ? getBidCtaTitle(isCounterBidPhase, hasContestedBids) : undefined
+  const unavailableReasonId = loading ? loadingReasonId : unavailableAlertId
+  const placeBidReasonId = canOpenBidModal ? undefined : canSpend ? bidReasonId : unavailableReasonId
+  const counterpickReasonId = canPlaceCounterpickBid
+    ? undefined
+    : canSpend && !hasLoaded ? loadingReasonId : unavailableReasonId
 
   const contextValue = useMemo(
     () => ({
@@ -229,11 +291,16 @@ export default function BiddingShell({
       <div className="space-y-6" data-testid="bidding-panel">
         {/* Header: budget and slots, then the two ways to spend them */}
         <div className="card p-4 sm:p-5">
+          <h2 className="sr-only">Bidding</h2>
           <div className="grid grid-cols-3 gap-3 sm:flex sm:items-center sm:gap-6">
             <div>
-              <p className="type-meta text-foreground-secondary mb-1">Budget</p>
+              <p className="type-meta text-foreground-secondary mb-1">
+                Budget<span className="sr-only"> remaining</span>
+              </p>
               {loading && !budget && !error ? (
-                <div className="skeleton h-8 sm:h-9 w-20 rounded" role="status" aria-label="Loading budget" data-testid="bidding-budget-loading" />
+                <div className="skeleton h-8 sm:h-9 w-20 rounded" role="status" data-testid="bidding-budget-loading">
+                  <span className="sr-only">Loading budget…</span>
+                </div>
               ) : (
                 <p className="type-number-lg bid-amount-display" data-testid="bidding-budget">
                   {budget ? `$${budget.remaining_budget}` : '—'}
@@ -267,37 +334,57 @@ export default function BiddingShell({
 
           <div className="flex flex-col sm:flex-row gap-3 mt-4">
             <button
+              ref={placeBidButtonRef}
+              type="button"
               onClick={() => openPlaceBid()}
-              disabled={!canOpenBidModal}
-              title={!canSpend ? unavailableBidTitle : getBidCtaTitle(isCounterBidPhase, hasContestedBids)}
-              className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto"
+              aria-disabled={!canOpenBidModal}
+              aria-describedby={placeBidReasonId}
+              aria-haspopup="dialog"
+              className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-gold aria-disabled:hover:shadow-none"
               data-testid="place-bid-button"
             >
-              {isCounterBidPhase ? <Swords className="w-5 h-5 mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
+              {isCounterBidPhase ? <Swords className="w-5 h-5 mr-2" aria-hidden="true" /> : <Plus className="w-5 h-5 mr-2" aria-hidden="true" />}
               {isCounterBidPhase ? 'Counter a Bid' : 'Place Bid'}
             </button>
 
             {hasCounterpicks && (!hasLoaded || biddingCounterpickCount < biddingCounterpickSlots) && (
               <button
+                type="button"
                 onClick={() => openCounterpickBid()}
-                disabled={!canPlaceCounterpickBid}
-                className="btn btn-secondary px-6 py-3 text-base w-full sm:w-auto border-crimson text-crimson hover:bg-crimson/10"
+                aria-disabled={!canPlaceCounterpickBid}
+                aria-describedby={counterpickReasonId}
+                aria-haspopup="dialog"
+                className="btn btn-secondary px-6 py-3 text-base w-full sm:w-auto border-crimson text-crimson-text hover:bg-crimson/10 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent"
                 data-testid="place-counterpick-bid-button"
               >
-                <Target className="w-5 h-5 mr-2" />
+                <Target className="w-5 h-5 mr-2" aria-hidden="true" />
                 Place counterpick bid
               </button>
             )}
           </div>
 
+          {bidCtaReason && (
+            <p id={bidReasonId} className="type-meta text-foreground-secondary mt-3">
+              {bidCtaReason}
+            </p>
+          )}
+          {(loading || !hasLoaded) && (
+            <p id={loadingReasonId} className="sr-only">Loading your bidding information…</p>
+          )}
+
           {(error || (hasLoaded && !budget)) && (
             <div className="alert alert-warning mt-4 flex flex-wrap items-center gap-3" role="alert">
-              <p className="type-body-sm flex-1">
+              <p id={unavailableAlertId} className="type-body-sm flex-1">
                 {error
                   ? 'Could not load the latest bidding information. Try again before placing a bid.'
                   : 'Your team budget is not available yet. Bidding will be available once it is ready.'}
               </p>
-              <button type="button" className="btn btn-secondary px-4 py-2" onClick={retryBidding} disabled={refreshing || isRetrying}>
+              <button
+                type="button"
+                className="btn btn-secondary px-4 py-2 aria-disabled:cursor-wait aria-disabled:opacity-50"
+                onClick={retryAndRefocus}
+                aria-disabled={refreshing || isRetrying}
+              >
                 {refreshing || isRetrying ? 'Loading…' : 'Try again'}
               </button>
             </div>
@@ -335,10 +422,7 @@ export default function BiddingShell({
         <PlaceBidModal
           seasonYear={league.season_year}
           isOpen={isBidModalOpen}
-          onClose={() => {
-            setIsBidModalOpen(false)
-            setCounterBidTarget(null)
-          }}
+          onClose={closeBidModal}
           teamId={teamId}
           budget={budget}
           existingBids={bids}
@@ -358,10 +442,7 @@ export default function BiddingShell({
       {isCounterpickModalOpen && (
         <PlaceCounterpickBidModal
           isOpen={isCounterpickModalOpen}
-          onClose={() => {
-            setIsCounterpickModalOpen(false)
-            setCounterCounterpickTarget(null)
-          }}
+          onClose={closeCounterpickModal}
           leagueId={league.id}
           teamId={teamId}
           budget={budget}

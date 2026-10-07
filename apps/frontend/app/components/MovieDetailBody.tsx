@@ -24,8 +24,20 @@ interface MovieDetailBodyProps {
    * than the point; off on discover, where browsing the cast IS the point.
    */
   collapsibleCast?: boolean
+  /** Id for the title heading, so a hosting dialog can be labelled by it. */
+  titleId?: string
   /** League-only context below the headline facts, such as the projected score. */
   insights?: React.ReactNode
+}
+
+/** "2 hours 15 minutes" -- the visible "2h 15m" is read letter by letter. */
+function spokenRuntime(minutes: number): string {
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  const parts: string[] = []
+  if (hours) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`)
+  if (mins) parts.push(`${mins} ${mins === 1 ? 'minute' : 'minutes'}`)
+  return parts.join(' ')
 }
 
 /**
@@ -42,6 +54,7 @@ export default function MovieDetailBody({
   loading,
   actions,
   collapsibleCast = false,
+  titleId,
   insights,
 }: MovieDetailBodyProps) {
   const displayData = details || movie
@@ -71,7 +84,7 @@ export default function MovieDetailBody({
               <div className="relative w-full aspect-[2/3] bg-elevated">
                 <MoviePoster
                   src={displayData.poster_url}
-                  alt={displayData.title}
+                  alt=""
                   sizes="(min-width: 640px) 192px, 160px"
                   posterSize="w500"
                   priority
@@ -82,7 +95,7 @@ export default function MovieDetailBody({
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <h2 className="type-page text-foreground">
+            <h2 id={titleId} className="type-page text-foreground">
               {displayData.title}
               {releaseYear && (
                 <span className="type-body text-foreground-secondary ml-2">({releaseYear})</span>
@@ -98,7 +111,8 @@ export default function MovieDetailBody({
                 {details?.runtime != null && details.runtime > 0 && (
                   <div className="flex items-center gap-1.5 text-foreground-secondary">
                     <Clock className="w-4 h-4" />
-                    <span>{formatRuntime(details.runtime)}</span>
+                    <span aria-hidden="true">{formatRuntime(details.runtime)}</span>
+                    <span className="sr-only">Runtime {spokenRuntime(details.runtime)}</span>
                   </div>
                 )}
 
@@ -147,8 +161,9 @@ export default function MovieDetailBody({
         {insights}
 
         {loading && (
-          <div className="mt-8 flex items-center justify-center py-8">
-            <div className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
+          <div role="status" className="mt-8 flex items-center justify-center py-8">
+            <span className="sr-only">Loading movie details…</span>
+            <div aria-hidden="true" className="w-8 h-8 border-2 border-gold border-t-transparent rounded-full animate-spin" />
           </div>
         )}
 
@@ -165,6 +180,7 @@ export default function MovieDetailBody({
               className="type-control inline-flex items-center gap-2 text-gold hover:text-gold-hover transition-colors"
             >
               View on IMDb
+              <span className="sr-only"> (opens in a new tab)</span>
               <ExternalLink className="w-4 h-4" />
             </a>
           </div>
@@ -212,17 +228,18 @@ function CastSection({ cast, collapsible }: { cast: CastMember[]; collapsible: b
       )}
 
       {open && (
-        <div
+        <ul
+          role="list"
           data-testid="cast-list"
           className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 ${collapsible ? 'mt-4' : ''}`}
         >
           {cast.map((actor) => (
-            <div key={actor.id} className="text-center">
+            <li key={actor.id} className="text-center">
               <div className="w-16 h-16 mx-auto rounded-full overflow-hidden bg-elevated border border-border relative">
                 {actor.profile_url ? (
                   <Image
                     src={actor.profile_url}
-                    alt={actor.name}
+                    alt=""
                     fill
                     sizes="64px"
                     className="object-cover"
@@ -234,10 +251,13 @@ function CastSection({ cast, collapsible }: { cast: CastMember[]; collapsible: b
                 )}
               </div>
               <p className="type-label mt-2 text-foreground truncate">{actor.name}</p>
-              <p className="type-meta text-foreground-secondary truncate">{actor.character}</p>
-            </div>
+              <p className="type-meta text-foreground-secondary truncate">
+                {actor.character && <span className="sr-only">as </span>}
+                {actor.character}
+              </p>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   )

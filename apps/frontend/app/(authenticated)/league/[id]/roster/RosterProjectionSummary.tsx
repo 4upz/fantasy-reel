@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Calculator } from 'lucide-react'
 import BetaBadge from '@/app/components/projections/BetaBadge'
 import { useLeagueProjectedStandings } from '@/hooks/useProjectedStandings'
@@ -25,28 +25,41 @@ interface Props {
 export default function RosterProjectionSummary({ leagueId, teamId, doublePointsOver90, active }: Props) {
   const standings = useLeagueProjectedStandings(leagueId, doublePointsOver90, active)
   const [open, setOpen] = useState(false)
+  const labelId = useId()
   const team = standings?.find((row) => row.team_id === teamId)
   if (!standings || !team) return null
 
   return (
     <section
-      aria-label="Projected finish"
+      aria-labelledby={labelId}
       className="card flex flex-wrap items-center justify-between gap-x-6 gap-y-3 p-4 animate-fade-in"
       data-testid="roster-projection"
     >
       <div className="min-w-0">
-        <p className="type-meta flex items-center gap-2 text-foreground-secondary">
+        <p id={labelId} className="type-meta flex items-center gap-2 text-foreground-secondary">
           Projected finish <BetaBadge />
         </p>
         <p className="mt-1 flex flex-wrap items-baseline gap-x-2.5">
           <span className="type-number-lg text-gold" data-testid="roster-projected-position">
-            {team.isTied ? 'T-' : ''}
-            {ordinal(team.projectedRank)}
+            <span aria-hidden="true">
+              {team.isTied ? 'T-' : ''}
+              {ordinal(team.projectedRank)}
+            </span>
+            <span className="sr-only">
+              {team.isTied ? 'Tied for ' : ''}
+              {ordinal(team.projectedRank)} of {standings.length},
+            </span>
           </span>
-          <span className="type-number text-foreground-secondary">≈ {formatFantasyPoints(team.projected)} pts</span>
+          <span className="type-number text-foreground-secondary">
+            <span aria-hidden="true">≈ </span>
+            <span className="sr-only">about </span>
+            {formatFantasyPoints(team.projected)} pts
+          </span>
         </p>
         <p className="type-meta mt-0.5 text-foreground-secondary">
-          of {standings.length} · {team.remaining} still to count · rank uses real points only
+          <span aria-hidden="true">of {standings.length} · </span>
+          {team.remaining} still to count <span aria-hidden="true">·</span>
+          <span className="sr-only">,</span> rank uses real points only
         </p>
       </div>
       <button

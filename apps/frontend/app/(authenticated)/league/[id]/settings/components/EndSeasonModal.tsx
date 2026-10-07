@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useId, useState } from 'react'
 import { X } from 'lucide-react'
+import Modal from '@/app/components/Modal'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { podiumChipClass } from '@/utils/league'
@@ -65,16 +66,10 @@ export default function EndSeasonModal({
   }, [leagueId, onCompleted])
 
   const { execute, isLoading, error } = useAsyncAction(endSeason)
-
-  // Escape closes, but never mid-request: the season is already being ended and
-  // the result still has to land somewhere.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) onClose()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, isLoading])
+  const titleId = useId()
+  const outcomeId = useId()
+  const standingsErrorId = useId()
+  const earlyId = useId()
 
   const topThree = standings.slice(0, 3)
   const leaders = standings.filter((row) => row.rank === 1)
@@ -88,21 +83,24 @@ export default function EndSeasonModal({
 
   const daysEarly = daysUntil(seasonEnd)
   const isConfirmed = confirmText.trim() === String(seasonYear)
+  const summaryId = standingsError ? standingsErrorId : outcomeId
 
   return (
-    <div
-      className="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="end-season-title"
+    // Escape closes it, but never mid-request: the season is already being
+    // ended and the result still has to land somewhere.
+    <Modal
+      onClose={onClose}
+      preventClose={isLoading}
+      labelledBy={titleId}
+      describedBy={daysEarly > 0 ? `${summaryId} ${earlyId}` : summaryId}
     >
-      <div className="glass card modal-panel max-h-[calc(100dvh-2rem)] overflow-y-auto w-full max-w-md animate-slide-up p-6">
+      <div className="glass card modal-panel max-h-[calc(100dvh-2rem)] overflow-y-auto w-full max-w-md animate-slide-up motion-reduce:animate-none p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="type-meta text-foreground-secondary">
               {seasonYear} season
             </p>
-            <h2 id="end-season-title" className="mt-1 type-panel text-foreground">
+            <h2 id={titleId} className="mt-1 type-panel text-foreground">
               End the season?
             </h2>
           </div>
@@ -110,60 +108,77 @@ export default function EndSeasonModal({
             type="button"
             onClick={onClose}
             disabled={isLoading}
-            aria-label="Close"
+            aria-label="Close end season dialog"
             className="cursor-pointer p-1 text-foreground-secondary transition-colors hover:text-foreground"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Who wins, as the standings stand right now. */}
-        <div className="mb-4 rounded-lg border border-border bg-elevated p-3">
-          {standingsError ? (
-            <p role="alert" className="type-body-sm text-error">{standingsError} Close this dialog and try again.</p>
-          ) : isLoadingStandings ? (
-            <div className="space-y-2">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="skeleton h-6 rounded" />
-              ))}
-            </div>
-          ) : (
-            <>
-              <ul className="space-y-1.5">
-                {topThree.map((row) => (
-                  <li key={row.team_id} className="flex items-center gap-2.5">
-                    <span
-                      className={`flex h-6 w-6 flex-none items-center justify-center rounded-md type-number ${podiumChipClass(row.rank)}`}
-                    >
-                      {row.is_tied ? 'T' : ''}
-                      {row.rank}
-                    </span>
-                    <span
-                      className={`min-w-0 flex-1 truncate text-sm ${row.rank === 1 ? 'font-semibold text-gold' : 'text-foreground-secondary'}`}
-                    >
-                      {row.team_name}
-                    </span>
-                    <span className="flex-none type-number text-foreground-secondary">
-                      {formatFantasyPoints(row.total_points)}
-                    </span>
-                  </li>
+        {/* Who wins, as the standings stand right now. A live region from the
+            start, so the result is read out when it replaces "Loading". A
+            failure replaces the region with an alert of its own rather than
+            nesting one inside it, which would read the error out twice. */}
+        {standingsError ? (
+          <p id={standingsErrorId} role="alert" className="mb-4 type-body-sm text-error">
+            {standingsError} Close this dialog and try again.
+          </p>
+        ) : (
+          <div
+            id={outcomeId}
+            className="mb-4 rounded-lg border border-border bg-elevated p-3"
+            role="status"
+            aria-busy={isLoadingStandings}
+          >
+            {isLoadingStandings ? (
+              <div className="space-y-2">
+                <span className="sr-only">Loading standings…</span>
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="skeleton h-6 rounded" aria-hidden="true" />
                 ))}
-              </ul>
-              <p className="mt-3 border-t border-border pt-2.5 text-sm text-foreground-secondary">
-                {titleLine}
-              </p>
-            </>
-          )}
-        </div>
+              </div>
+            ) : (
+              <>
+                <ul role="list" className="space-y-1.5">
+                  {topThree.map((row) => (
+                    <li key={row.team_id} className="flex items-center gap-2.5">
+                      <span
+                        className={`flex h-6 w-6 flex-none items-center justify-center rounded-md type-number ${podiumChipClass(row.rank)}`}
+                      >
+                        <span aria-hidden="true">
+                          {row.is_tied ? 'T' : ''}
+                          {row.rank}
+                        </span>
+                        <span className="sr-only">{row.is_tied ? 'Tied for ' : ''}rank {row.rank}:</span>
+                      </span>
+                      <span
+                        className={`min-w-0 flex-1 truncate text-sm ${row.rank === 1 ? 'font-semibold text-gold' : 'text-foreground-secondary'}`}
+                      >
+                        {row.team_name}
+                      </span>
+                      <span className="flex-none type-number text-foreground-secondary">
+                        {formatFantasyPoints(row.total_points)}
+                        <span className="sr-only"> points</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 border-t border-border pt-2.5 text-sm text-foreground-secondary">
+                  {titleLine}
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
-        <ul className="mb-4 space-y-1 text-sm text-foreground-secondary">
-          <li>• Scores stop updating.</li>
-          <li>• Bids, trades and drops close.</li>
-          <li>• Everyone gets the final standings.</li>
+        <ul role="list" className="mb-4 space-y-1 text-sm text-foreground-secondary">
+          <li><span aria-hidden="true">• </span>Scores stop updating.</li>
+          <li><span aria-hidden="true">• </span>Bids, trades and drops close.</li>
+          <li><span aria-hidden="true">• </span>Everyone gets the final standings.</li>
         </ul>
 
         {daysEarly > 0 && (
-          <div className="alert alert-warning mb-4">
+          <div id={earlyId} className="alert alert-warning mb-4">
             This season isn&apos;t scheduled to end until {formatSeasonDate(seasonEnd)} — you&apos;re
             freezing scores {daysEarly} {daysEarly === 1 ? 'day' : 'days'} early.
           </div>
@@ -187,6 +202,7 @@ export default function EndSeasonModal({
             className="input"
             autoComplete="off"
             disabled={isLoading}
+            data-dialog-initial-focus
           />
           {error && (
             <p role="alert" className="mt-2 text-sm text-error">
@@ -221,6 +237,6 @@ export default function EndSeasonModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

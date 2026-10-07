@@ -73,7 +73,7 @@ export default function MovieQuickPreview({
   }, [mutate, movie.tmdb_id])
   const { execute: retryDetails, isLoading: retrying } = useAsyncAction(retryAction)
   const busy = Boolean(picking) || submitting
-  const { dialogRef, requestClose } = useModalDialog(onClose, busy)
+  const { dialogRef, requestClose } = useModalDialog(onClose, busy, true)
   const visibleError = error || submitError
   const canRetryDetails = !loading && Boolean(detailsError || !details || details.tmdb_id !== movie.tmdb_id || detailsReleaseYear == null)
 
@@ -84,7 +84,6 @@ export default function MovieQuickPreview({
       aria-describedby={availabilityId}
       aria-modal="true"
       data-testid="movie-quick-preview"
-      onClick={event => { if (event.target === event.currentTarget) requestClose() }}
       className="fixed inset-0 m-0 h-dvh w-screen max-h-none max-w-none border-0 bg-transparent p-4 text-foreground backdrop:bg-background/90 backdrop:backdrop-blur-sm open:flex open:items-center open:justify-center"
     >
       <div className="relative flex max-h-[calc(100dvh-2rem)] w-full max-w-3xl flex-col animate-slide-up motion-reduce:animate-none">
@@ -126,7 +125,7 @@ export default function MovieQuickPreview({
                     <div className="relative w-full aspect-[2/3] bg-elevated">
                       <MoviePoster
                         src={displayData.poster_url}
-                        alt={displayData.title}
+                        alt=""
                         sizes="(min-width: 640px) 176px, 144px"
                         posterSize="w500"
                         priority
@@ -241,6 +240,7 @@ export default function MovieQuickPreview({
               {loading ? (
                 <div className="mt-6 flex items-center justify-center py-6">
                   <SpinnerIcon className="w-6 h-6 text-gold" />
+                  <span className="sr-only">Loading cast</span>
                 </div>
               ) : (
                 details?.cast &&
@@ -249,14 +249,14 @@ export default function MovieQuickPreview({
                     <h3 className="type-label text-foreground mb-3">
                       Top cast
                     </h3>
-                    <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2">
+                    <ul className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2" role="list">
                       {details.cast.slice(0, 6).map((actor) => (
-                        <div key={actor.id} className="flex-shrink-0 text-center w-16">
+                        <li key={actor.id} className="flex-shrink-0 text-center w-16">
                           <div className="w-14 h-14 mx-auto rounded-full overflow-hidden bg-elevated border border-border relative">
                             {actor.profile_url ? (
                               <Image
                                 src={actor.profile_url}
-                                alt={actor.name}
+                                alt=""
                                 fill
                                 sizes="56px"
                                 className="object-cover"
@@ -271,9 +271,9 @@ export default function MovieQuickPreview({
                             {actor.name}
                           </p>
                           <p className="type-meta text-foreground-secondary truncate">{actor.character}</p>
-                        </div>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   </div>
                 )
               )}
@@ -288,6 +288,7 @@ export default function MovieQuickPreview({
                     className="type-body-sm inline-flex items-center gap-1.5 text-gold hover:text-gold-hover transition-colors"
                   >
                     View on IMDb
+                    <span className="sr-only"> (opens in new tab)</span>
                     <ExternalLinkIcon className="w-4 h-4" />
                   </a>
                 </div>
@@ -296,9 +297,12 @@ export default function MovieQuickPreview({
           </div>
 
           <div className="shrink-0 border-t border-border bg-surface p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" data-testid="movie-preview-actions">
-            <p className="type-row-title mb-2 line-clamp-2 text-foreground" title={displayData.title}>{displayData.title}</p>
+            <p className="type-row-title mb-2 line-clamp-2 text-foreground" title={displayData.title} aria-hidden="true">{displayData.title}</p>
             {visibleError && <p className="alert alert-error type-body-sm mb-3" role="alert">{visibleError}</p>}
             <p id={availabilityId} className="type-body-sm mb-3 text-foreground-secondary" role="status" aria-live="polite">
+              {/* The draft page's announcer already reaches this open dialog and
+                  speaks a turn arriving mid-preview, so this line only reports
+                  submitting and availability. */}
               {busy ? 'Submitting your pick…' : disabledReason || 'Available to draft. Eligibility is checked when you submit.'}
             </p>
             {canRetryDetails && (
