@@ -6,7 +6,7 @@ import { Users } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import type { League } from '@/types'
 import { ButtonSpinner } from '../../components/Icons'
-import { SectionHeader, LockedMessage } from './shared'
+import { SectionHeader, LockedMessage, describedBy } from './shared'
 
 interface Props {
   league: League
@@ -29,13 +29,25 @@ export default function DraftConfigSection({
   isLocked,
   onUpdate,
 }: Props): React.ReactElement {
-  const [maxParticipants, setMaxParticipants] = useState(league.max_participants)
+  // Held as typed: snapping an emptied field straight back to the minimum turned
+  // typing "1" then "2" into "21" -- a change a screen-reader user never sees.
+  const [maxParticipantsInput, setMaxParticipantsInput] = useState(String(league.max_participants))
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const maxParticipants = Number(maxParticipantsInput)
   const hasChanges = maxParticipants !== league.max_participants
-  const isBelowCurrent = maxParticipants < participantCount
-  const isOutOfRange = maxParticipants < MIN_PARTICIPANTS || maxParticipants > MAX_PARTICIPANTS
+  const isOutOfRange =
+    maxParticipantsInput.trim() === '' ||
+    !Number.isInteger(maxParticipants) ||
+    maxParticipants < MIN_PARTICIPANTS ||
+    maxParticipants > MAX_PARTICIPANTS
+  const isBelowCurrent = !isOutOfRange && maxParticipants < participantCount
   const isSubmitDisabled = isSubmitting || !hasChanges || isBelowCurrent || isOutOfRange || isLocked
+  const fieldError = isOutOfRange
+    ? `Must be between ${MIN_PARTICIPANTS} and ${MAX_PARTICIPANTS}`
+    : isBelowCurrent
+      ? `Cannot set below current participant count (${participantCount})`
+      : null
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault()
@@ -87,24 +99,22 @@ export default function DraftConfigSection({
             <input
               type="number"
               id="max_participants"
-              value={maxParticipants}
-              onChange={(e) => setMaxParticipants(parseInt(e.target.value, 10) || MIN_PARTICIPANTS)}
+              value={maxParticipantsInput}
+              onChange={(e) => setMaxParticipantsInput(e.target.value)}
               min={MIN_PARTICIPANTS}
               max={MAX_PARTICIPANTS}
-              className={`type-input type-numeric input w-32 ${isBelowCurrent || isOutOfRange ? 'border-error focus:border-error' : ''}`}
+              required
+              aria-invalid={fieldError ? true : undefined}
+              aria-describedby={describedBy('max_participants_help', fieldError && 'max_participants_error')}
+              className={`type-input type-numeric input w-32 ${fieldError ? 'border-error focus:border-error' : ''}`}
             />
             <div className="mt-2 space-y-1">
-              <p className="type-meta text-foreground-secondary">
+              <p id="max_participants_help" className="type-meta text-foreground-secondary">
                 Current participants: {participantCount} / {league.max_participants}
               </p>
-              {isBelowCurrent && (
-                <p className="type-meta text-error">
-                  Cannot set below current participant count ({participantCount})
-                </p>
-              )}
-              {isOutOfRange && !isBelowCurrent && (
-                <p className="type-meta text-error">
-                  Must be between {MIN_PARTICIPANTS} and {MAX_PARTICIPANTS}
+              {fieldError && (
+                <p id="max_participants_error" role="alert" className="type-meta text-error">
+                  {fieldError}
                 </p>
               )}
             </div>

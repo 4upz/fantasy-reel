@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useId } from 'react'
 import { X } from 'lucide-react'
+import Modal from '@/app/components/Modal'
 import { ButtonSpinner } from './Icons'
 
 interface Props {
@@ -36,31 +37,20 @@ export default function ConfirmStartSeasonModal({
   onConfirm,
   onCancel,
 }: Props): React.ReactElement {
+  const titleId = useId()
+
   // Escape closes, but never mid-request: the next season is already being
   // created and the redirect still has to land.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) onCancel()
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onCancel, isLoading])
-
   return (
-    <div
-      className="fixed inset-0 modal-overlay z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="start-season-title"
-    >
-      <div className="glass card modal-panel max-h-[calc(100dvh-2rem)] overflow-y-auto w-full max-w-md animate-slide-up p-6">
+    <Modal onClose={onCancel} preventClose={isLoading} labelledBy={titleId}>
+      <div className="glass card modal-panel max-h-[calc(100dvh-2rem)] overflow-y-auto w-full max-w-md animate-slide-up motion-reduce:animate-none p-6">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="type-meta text-foreground-secondary">
               {seasonYear} season
             </p>
             <h2
-              id="start-season-title"
+              id={titleId}
               className="mt-1 type-panel text-foreground"
             >
               Start the {seasonYear} season?
@@ -70,7 +60,7 @@ export default function ConfirmStartSeasonModal({
             type="button"
             onClick={onCancel}
             disabled={isLoading}
-            aria-label="Close"
+            aria-label="Close start season dialog"
             className="cursor-pointer p-1 text-foreground-secondary transition-colors hover:text-foreground"
           >
             <X className="h-5 w-5" />
@@ -87,7 +77,7 @@ export default function ConfirmStartSeasonModal({
             <p className="mb-2 type-label text-foreground-secondary">
               Carrying over ({participantNames.length})
             </p>
-            <ul className="space-y-1 text-sm text-foreground-secondary">
+            <ul className="space-y-1 text-sm text-foreground-secondary" role="list">
               {participantNames.map((name, index) => (
                 <li key={`${index}-${name}`} className="break-words">
                   {name}
@@ -125,6 +115,6 @@ export default function ConfirmStartSeasonModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

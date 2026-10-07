@@ -47,12 +47,14 @@ export default function TMDbAttribution({
         <span className="type-meta text-foreground-secondary">
           Powered by
         </span>
+        {/* A duplicate of the text link below, kept out of the tab order and screen-reader output. */}
         <a
           href="https://www.themoviedb.org"
           target="_blank"
           rel="noopener noreferrer"
           className="transition-opacity hover:opacity-80"
-          aria-label="The Movie Database (TMDb)"
+          tabIndex={-1}
+          aria-hidden="true"
         >
           <TMDbLogo size="large" />
         </a>
@@ -62,9 +64,10 @@ export default function TMDbAttribution({
             href="https://www.themoviedb.org"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-info hover:text-gold transition-colors"
+            className="text-info underline underline-offset-2 hover:text-gold transition-colors"
           >
             TMDb
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>{' '}
           API but is not endorsed or certified by TMDb.
         </p>
@@ -74,12 +77,14 @@ export default function TMDbAttribution({
 
   return (
     <div className={`flex items-center gap-4 ${className}`}>
+      {/* A duplicate of the text link beside it, kept out of the tab order and screen-reader output. */}
       <a
         href="https://www.themoviedb.org"
         target="_blank"
         rel="noopener noreferrer"
         className="flex-shrink-0 transition-opacity hover:opacity-80"
-        aria-label="The Movie Database (TMDb)"
+        tabIndex={-1}
+        aria-hidden="true"
       >
         <TMDbLogo size="medium" />
       </a>
@@ -89,9 +94,10 @@ export default function TMDbAttribution({
           href="https://www.themoviedb.org"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-info hover:text-gold transition-colors"
+          className="text-info underline underline-offset-2 hover:text-gold transition-colors"
         >
           TMDb
+          <span className="sr-only"> (opens in a new tab)</span>
         </a>{' '}
         API but is not endorsed or certified by TMDb.
       </p>

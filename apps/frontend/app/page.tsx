@@ -15,7 +15,7 @@ import ScrollDepth from './components/landing/ScrollDepth'
 import styles from './components/landing/landing.module.css'
 
 export const metadata: Metadata = {
-  title: 'Fantasy Reel — Draft movies. Compete with friends.',
+  title: { absolute: 'Fantasy Reel — Draft movies. Compete with friends.' },
   description: 'Build a roster of upcoming movies, compete with friends, and earn fantasy points from critic scores.',
 }
 
@@ -23,7 +23,6 @@ export default function LandingPage(): React.ReactElement {
   return (
     <ScrollDepth className={styles.page}>
       <div className={styles.ambient} aria-hidden="true" />
-      <a href="#main-content" className={styles.skipLink}>Skip to content</a>
       <MarketingHeader transparent />
       <main id="main-content" tabIndex={-1}>
         <section className={styles.hero} aria-labelledby="hero-title" data-hero>

@@ -3,7 +3,7 @@ import Link from 'next/link'
 import LegalPage, { ExternalLink, SupportEmailLink, type LegalSection } from '@/app/components/legal/LegalPage'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | Fantasy Reel',
+  title: 'Terms of Service',
   description: 'The terms for using Fantasy Reel, the free fantasy movie league service.',
   alternates: { canonical: '/terms' },
 }

@@ -1,47 +1,85 @@
 'use client'
 
-import { useState } from 'react'
-import { signup } from './actions'
+import { useId, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { signup, type SignupField } from './actions'
 import Link from 'next/link'
-import { FormError } from '../../components/FormError'
+import { FormError, fieldErrorProps } from '../../components/FormError'
 import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
-import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
+import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
+import { MIN_PASSWORD_LENGTH } from '@/utils/password'
 import { toast } from 'sonner'
+import { useHydrated } from '@/hooks/useHydrated'
 
 export default function SignupPage() {
+  // Until React attaches onSubmit, a native submit would put the fields in the URL.
+  const hydrated = useHydrated()
   const [error, setError] = useState<string | null>(null)
+  const [errorField, setErrorField] = useState<SignupField | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [signupSuccess, setSignupSuccess] = useState(false)
   const [email, setEmail] = useState('')
   const captcha = useCaptcha()
+  const errorId = useId()
+  const passwordHintId = useId()
+  const submitRef = useRef<HTMLButtonElement>(null)
+  const emailRef = useRef<HTMLInputElement>(null)
+  const passwordRef = useRef<HTMLInputElement>(null)
+  const confirmPasswordRef = useRef<HTMLInputElement>(null)
+  const successHeadingRef = useRef<HTMLHeadingElement>(null)
+  const fieldRefs = { email: emailRef, password: passwordRef, confirmPassword: confirmPasswordRef }
 
-  async function handleSubmit(formData: FormData) {
+  // onSubmit rather than a form action: an action clears the fields when it
+  // resolves, so one mistake would make the user retype everything.
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!captcha.ready) {
+      setError(CAPTCHA_PENDING_MESSAGE)
+      setErrorField(null)
+      return
+    }
+
+    const formData = new FormData(event.currentTarget)
     setError(null)
+    setErrorField(null)
     setIsLoading(true)
 
     // Store email for the success message
-    const submittedEmail = formData.get('email') as string
-    setEmail(submittedEmail)
+    setEmail(formData.get('email') as string)
     formData.set(CAPTCHA_FIELD, captcha.token ?? '')
 
+    let result: Awaited<ReturnType<typeof signup>>
     try {
-      const result = await signup(formData)
+      result = await signup(formData)
+    } catch {
+      result = { success: false, error: 'An unexpected error occurred' }
+    }
+
+    // The disabled form dropped focus: re-enable it (or swap in the success
+    // view), then focus what the user needs next: the field an error is about
+    // (it reads the error as its description) or, for any other error, the
+    // button, since the error announces itself.
+    flushSync(() => {
+      setIsLoading(false)
       if (result.error) {
         setError(result.error)
-        toast.error(result.error)
+        setErrorField(result.field ?? null)
       } else if (result.success) {
         setSignupSuccess(true)
-        toast.success('Account created! Check your email to confirm.')
       }
-    } catch {
-      setError('An unexpected error occurred')
-    } finally {
-      setIsLoading(false)
-      captcha.reset()
+    })
+    captcha.reset()
+
+    if (result.error) {
+      if (result.field) fieldRefs[result.field].current?.focus()
+      else submitRef.current?.focus()
+    } else if (result.success) {
+      toast.success('Account created! Check your email to confirm.')
+      successHeadingRef.current?.focus()
     }
   }
 
@@ -55,7 +93,9 @@ export default function SignupPage() {
           </div>
 
           <div className="card p-8">
-            <h2 className="type-panel text-foreground">Check your email</h2>
+            <h1 ref={successHeadingRef} tabIndex={-1} className="type-panel text-foreground focus:outline-none">
+              Check your email
+            </h1>
             <div className="mt-6 space-y-4">
               <p className="text-foreground-secondary">
                 We sent a confirmation link to <strong className="text-foreground">{email}</strong>
@@ -104,30 +144,31 @@ export default function SignupPage() {
         </div>
 
         <div className="card p-8">
-          <form action={handleSubmit} className="space-y-6">
-            <FormError message={error} />
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <FormError message={error} id={errorId} announce={!errorField} />
 
             <div className="space-y-4">
               <div>
-                <label htmlFor="displayName" className="sr-only">
+                <label htmlFor="displayName" className="type-label block text-foreground-secondary mb-2">
                   Display name
                 </label>
                 <input
                   id="displayName"
                   name="displayName"
                   type="text"
+                  autoComplete="nickname"
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Display name"
                   data-testid="display-name-input"
                 />
               </div>
               <div>
-                <label htmlFor="email" className="sr-only">
+                <label htmlFor="email" className="type-label block text-foreground-secondary mb-2">
                   Email address
                 </label>
                 <input
+                  ref={emailRef}
                   id="email"
                   name="email"
                   type="email"
@@ -135,15 +176,16 @@ export default function SignupPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Email address"
                   data-testid="email-input"
+                  {...fieldErrorProps(errorField === 'email', errorId)}
                 />
               </div>
               <div>
-                <label htmlFor="password" className="sr-only">
+                <label htmlFor="password" className="type-label block text-foreground-secondary mb-2">
                   Password
                 </label>
                 <input
+                  ref={passwordRef}
                   id="password"
                   name="password"
                   type="password"
@@ -151,15 +193,19 @@ export default function SignupPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Password (min 6 characters)"
                   data-testid="password-input"
+                  {...fieldErrorProps(errorField === 'password', errorId, passwordHintId)}
                 />
+                <p id={passwordHintId} className="type-meta mt-1 text-foreground-secondary">
+                  Must be at least {MIN_PASSWORD_LENGTH} characters
+                </p>
               </div>
               <div>
-                <label htmlFor="confirmPassword" className="sr-only">
+                <label htmlFor="confirmPassword" className="type-label block text-foreground-secondary mb-2">
                   Confirm password
                 </label>
                 <input
+                  ref={confirmPasswordRef}
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
@@ -167,15 +213,21 @@ export default function SignupPage() {
                   required
                   disabled={isLoading}
                   className="input"
-                  placeholder="Confirm password"
+                  {...fieldErrorProps(errorField === 'confirmPassword', errorId)}
                 />
               </div>
             </div>
 
-<Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+            <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
 
             <div className="space-y-3">
-              <button type="submit" disabled={isLoading || !captcha.ready} className="btn btn-primary w-full py-3" data-testid="signup-button">
+              <button
+                ref={submitRef}
+                type="submit"
+                disabled={isLoading || !hydrated}
+                className="btn btn-primary w-full py-3"
+                data-testid="signup-button"
+              >
                 {isLoading ? 'Creating account...' : 'Sign up'}
               </button>
               <LegalNotice action="creating an account" />

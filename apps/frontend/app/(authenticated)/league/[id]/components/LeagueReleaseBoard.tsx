@@ -45,6 +45,13 @@ function monthLabel(iso: string, todayIso: string): string {
   return year === todayIso.slice(0, 4) ? name : `${name} ${year}`
 }
 
+/** "January 18", or "January 18, 2027" once the list runs past December. */
+function spokenDate(iso: string, todayIso: string): string {
+  const [year, month, day] = iso.split('-')
+  const date = `${MONTH_NAMES[Number(month) - 1]} ${Number(day)}`
+  return year === todayIso.slice(0, 4) ? date : `${date}, ${year}`
+}
+
 /**
  * Only the two dates that change what you do today get a word. Everything
  * further out is already answered by the day number and the month rule.
@@ -76,17 +83,21 @@ function ReleaseRow({
 }) {
   const imminence = imminenceLabel(release.release_date, todayIso)
   const isYours = release.is_current_user_team
+  const owner = release.owner_name && release.owner_name !== release.team_name ? ` (${release.owner_name})` : ''
 
   return (
     <button
       type="button"
       onClick={() => onSelect(release)}
       data-testid="league-release-row"
-      // Deliberately not "View {title}": MovieGrid already labels a button that
+      // Deliberately not "View {title}": MovieGrid already names a button that
       // way for the same movie when it is yours, and Playwright's getByRole
       // matches an accessible name by substring - so "View {title}" here would
       // make every such lookup ambiguous and fail on strict mode.
-      aria-label={`Details for ${release.title}, held by ${release.team_name}`}
+      //
+      // The label carries the date and the holder, which is what the board is
+      // for: the day column and month heading are not part of the button.
+      aria-label={`${release.title}, ${imminence ? `${imminence}, ` : ''}${spokenDate(release.release_date, todayIso)}, held by ${release.team_name}${owner}${isYours ? ', your team' : ''}`}
       className={`group flex w-full cursor-pointer items-center gap-3 border-l-2 py-2.5 pl-2.5 pr-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold ${
         isYours ? 'border-l-gold' : 'border-l-transparent'
       } ${withRule ? 'border-t border-t-border' : ''}`}
@@ -151,7 +162,7 @@ export default function LeagueReleaseBoard({ releases, todayIso }: Props) {
 
   return (
     <section className="mt-[18px] animate-fade-in" data-testid="league-release-board">
-      <SectionHeader title="Around the league" count={releases.length} />
+      <SectionHeader title="Around the league" count={releases.length} unit="upcoming releases" />
 
       <div className="mx-4 overflow-hidden rounded-[14px] border border-border bg-surface">
         <div className={expanded ? 'max-h-[60vh] overflow-y-auto' : ''}>

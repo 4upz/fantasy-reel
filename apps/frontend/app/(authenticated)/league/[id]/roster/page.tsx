@@ -1,9 +1,12 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect } from 'next/navigation'
 import { HOLDING_MOVIE_COLUMNS } from '@/utils/holdings'
 import RosterClient from './RosterClient'
 import type { RosterHolding } from './types'
+
+export const metadata: Metadata = { title: 'Roster' }
 
 interface RosterPageProps {
   params: Promise<{ id: string }>

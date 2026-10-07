@@ -62,6 +62,9 @@ export const DISCORD_MAX_EMBED_FIELDS = 25
 export const DISCORD_MAX_FIELD_NAME = 256
 export const DISCORD_MAX_FIELD_VALUE = 1024
 export const DISCORD_MAX_EMBED_CHARS = 6000
+const DISCORD_MAX_TITLE = 256
+const DISCORD_MAX_DESCRIPTION = 4096
+const DISCORD_MAX_FOOTER = 2048
 
 /** Color constants matching design system tokens in globals.css */
 export const DISCORD_COLORS = {
@@ -87,6 +90,56 @@ export const FANTASY_REEL_ICON = 'https://fantasy-reel.vercel.app/icon-128.png'
  * any other webhook error.
  */
 export const WEBHOOK_SEND_DELAY_MS = 450
+
+/**
+ * The only places sendToWebhook will POST. Discord webhook URLs come from the
+ * bot (discord.js `webhook.url`, https://discord.com/api/webhooks/<id>/<token>);
+ * older rows may use discordapp.com, and the canary/ptb hosts and versioned API
+ * paths are the same service. Anything else would let whoever wrote the row
+ * point our functions at an arbitrary address. Keep in sync with the
+ * discord_channels_webhook_url_host CHECK constraint.
+ */
+const DISCORD_WEBHOOK_URL = /^https:\/\/(?:(?:canary|ptb)\.)?discord(?:app)?\.com\/api(?:\/v\d+)?\/webhooks\//
+
+/**
+ * The integration tests capture webhook payloads with a mock server on the
+ * host machine. Those URLs are honoured only while the functions run against a
+ * local Supabase stack (SUPABASE_URL is kong inside the local edge runtime, or
+ * 127.0.0.1/localhost for a standalone function), never in production.
+ */
+const LOCAL_WEBHOOK_URL = /^http:\/\/(?:127\.0\.0\.1|localhost|host\.docker\.internal):\d+\//
+const LOCAL_SUPABASE_HOSTS = new Set(['kong', '127.0.0.1', 'localhost'])
+
+function isLocalSupabase(): boolean {
+  try {
+    return LOCAL_SUPABASE_HOSTS.has(new URL(Deno.env.get('SUPABASE_URL') ?? '').hostname)
+  } catch {
+    return false
+  }
+}
+
+export function isAllowedWebhookUrl(url: string): boolean {
+  if (DISCORD_WEBHOOK_URL.test(url)) return true
+  return LOCAL_WEBHOOK_URL.test(url) && isLocalSupabase()
+}
+
+/**
+ * Webhook URLs embed a token that lets anyone post to the channel, and Deno's
+ * fetch errors quote the request URL in their message and stack. Strip the
+ * id/token path before anything reaches the logs.
+ */
+export function redactWebhookTokens(text: string): string {
+  return text.replace(/\/webhooks\/[^\s)'"]+/g, '/webhooks/[redacted]')
+}
+
+function serializeWebhookError(error: unknown) {
+  const serialized = serializeError(error)
+  return {
+    ...serialized,
+    message: redactWebhookTokens(serialized.message),
+    ...(serialized.stack ? { stack: redactWebhookTokens(serialized.stack) } : {}),
+  }
+}
 
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -119,6 +172,32 @@ const CATEGORY_COLUMN: Partial<Record<NotificationCategory, keyof DiscordChannel
  * IMPORTANT: Must be awaited, not fire-and-forget. Supabase Edge Functions
  * may terminate after sending the response, aborting in-flight fetch() calls.
  */
+/** Shortens text to at most `max` characters, marking the cut with an ellipsis. */
+export function clipText(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
+}
+
+/**
+ * Clips an embed's text to Discord's per-part limits. Discord rejects the
+ * whole message when one part is too long, so a long trade message or veto
+ * reason would otherwise cost the entire post.
+ */
+export function fitEmbedToLimits(embed: DiscordEmbed): DiscordEmbed {
+  return {
+    ...embed,
+    ...(embed.title !== undefined && { title: clipText(embed.title, DISCORD_MAX_TITLE) }),
+    ...(embed.description !== undefined && { description: clipText(embed.description, DISCORD_MAX_DESCRIPTION) }),
+    ...(embed.footer && { footer: { ...embed.footer, text: clipText(embed.footer.text, DISCORD_MAX_FOOTER) } }),
+    ...(embed.fields && {
+      fields: embed.fields.map((field) => ({
+        ...field,
+        name: clipText(field.name, DISCORD_MAX_FIELD_NAME),
+        value: clipText(field.value, DISCORD_MAX_FIELD_VALUE),
+      })),
+    }),
+  }
+}
+
 export async function sendDiscordNotification(
   supabase: SupabaseClient,
   params: {
@@ -173,7 +252,7 @@ export async function sendDiscordNotification(
       if (results[i].status === 'rejected') {
         log.error('Discord webhook failed', {
           channel_id: eligibleChannels[i].id,
-          error: serializeError((results[i] as PromiseRejectedResult).reason),
+          error: serializeWebhookError((results[i] as PromiseRejectedResult).reason),
         })
       }
     }
@@ -210,7 +289,13 @@ export async function sendToWebhook(
   }
 
   if (finalContent) body.content = finalContent
-  if (embeds && embeds.length > 0) body.embeds = embeds
+  if (embeds && embeds.length > 0) body.embeds = embeds.map(fitEmbedToLimits)
+
+  if (!isAllowedWebhookUrl(channel.webhook_url)) {
+    log.error('Refusing to send to a non-Discord webhook URL', { channel_id: channel.id })
+    await trackFailure(supabase, channel.id)
+    return false
+  }
 
   try {
     const webhookUrl = new URL(channel.webhook_url)
@@ -247,7 +332,7 @@ export async function sendToWebhook(
       return false
     }
   } catch (error) {
-    log.error('Discord webhook network error', { channel_id: channel.id, error: serializeError(error) })
+    log.error('Discord webhook network error', { channel_id: channel.id, error: serializeWebhookError(error) })
     await trackFailure(supabase, channel.id)
     return false
   }
@@ -299,11 +384,18 @@ async function trackFailure(supabase: SupabaseClient, channelId: string): Promis
 // ============================================================================
 
 /**
- * Build a URL to a league page. Uses SITE_URL in Supabase Edge Functions runtime.
+ * Build a URL to a page of the site. Uses SITE_URL in Supabase Edge Functions runtime.
+ */
+export function buildSiteUrl(path: string): string {
+  const baseUrl = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
+  return `${baseUrl}${path}`
+}
+
+/**
+ * Build a URL to a league page.
  */
 export function buildLeagueUrl(leagueId: string, path = ''): string {
-  const baseUrl = Deno.env.get('SITE_URL') || Deno.env.get('APP_URL') || 'https://fantasy-reel.vercel.app'
-  return `${baseUrl}/league/${leagueId}${path}`
+  return buildSiteUrl(`/league/${leagueId}${path}`)
 }
 
 export async function getLeagueName(

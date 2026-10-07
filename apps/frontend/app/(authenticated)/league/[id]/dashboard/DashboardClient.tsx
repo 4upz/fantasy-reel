@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Heart } from 'lucide-react'
@@ -50,6 +50,7 @@ export default function DashboardClient({
   const router = useRouter()
   const [league, setLeague] = useState(initialLeague)
   const [showEditTeamModal, setShowEditTeamModal] = useState(false)
+  const teamHeadingId = useId()
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -125,6 +126,7 @@ export default function DashboardClient({
             seasonYear={league.season_year}
             teamName={userTeam.name}
             previousSeason={previousSeason}
+            focusAfterDismissId={teamHeadingId}
           />
         </div>
       )}
@@ -133,6 +135,7 @@ export default function DashboardClient({
         team={userTeam}
         totalTeams={totalTeams}
         leagueName={league.name}
+        headingId={teamHeadingId}
         onEditTeam={league.status === 'completed' ? undefined : () => setShowEditTeamModal(true)}
       />
       <MovieGrid movies={userTeam.movies} leagueStatus={league.status} />
@@ -140,12 +143,12 @@ export default function DashboardClient({
 
       {publicWishlistCount > 0 && (
         <div className="card mx-4 mt-[18px] flex items-center gap-3 p-4">
-          <Heart className="w-5 h-5 text-crimson flex-shrink-0" />
+          <Heart className="w-5 h-5 text-crimson-text flex-shrink-0" />
           <p className="type-body-sm flex-1 text-foreground-secondary">
             {publicWishlistCount} league-mate{publicWishlistCount !== 1 ? 's have' : ' has'} shared their wishlist{publicWishlistCount !== 1 ? 's' : ''}
           </p>
           <Link href="/wishlist" className="type-control text-gold hover:text-gold-hover transition-colors">
-            View
+            View<span className="sr-only"> shared wishlists</span>
           </Link>
         </div>
       )}

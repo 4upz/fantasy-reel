@@ -1,4 +1,16 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
+
+/**
+ * Constant-time check of the presented Authorization header, so the secret
+ * can't be narrowed down from response timing. Both sides are hashed first
+ * because timingSafeEqual requires equal-length inputs.
+ */
+function isCronAuthorized(authHeader: string | null, cronSecret: string): boolean {
+  if (!authHeader) return false
+  const digest = (value: string) => createHash('sha256').update(value).digest()
+  return timingSafeEqual(digest(authHeader), digest(`Bearer ${cronSecret}`))
+}
 
 /**
  * Shared handler for Vercel Cron routes: validates the `Authorization: Bearer
@@ -20,8 +32,7 @@ export async function proxyCronRequest(
     return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
   }
 
-  const authHeader = request.headers.get('authorization')
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (!isCronAuthorized(request.headers.get('authorization'), cronSecret)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

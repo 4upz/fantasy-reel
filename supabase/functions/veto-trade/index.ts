@@ -17,6 +17,7 @@ import {
 } from '../_shared/trade-validation.ts'
 import { assertLeagueWritable } from '../_shared/league-status.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
+import { tradeMessageError } from '../_shared/trade-limits.ts'
 import { createLogger } from '../_shared/logger.ts'
 
 const log = createLogger('veto-trade')
@@ -48,6 +49,9 @@ Deno.serve(async (req) => {
     if (!trade_offer_id || !isValidUUID(trade_offer_id)) {
       return errorResponse('Valid trade_offer_id is required', 400)
     }
+
+    const reasonError = tradeMessageError(reason, 'Reason')
+    if (reasonError) return errorResponse(reasonError, 400)
 
     // Get the trade offer with league info for owner check (without locking)
     const { data: tradeOffer, error: offerError } = await serviceClient

@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useCallback, useMemo } from 'react'
+import { useEffect, useCallback, useMemo, useRef } from 'react'
 import useSWR from 'swr'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { fetchTradeableMovies } from '@/utils/holdings'
+import { announce } from '@/utils/announce'
 import type { ResolvedExpiry } from '@/utils/tradeExpiry'
 import type {
   TradeActionResult,
@@ -91,6 +92,59 @@ const TRADING_SWR_OPTIONS = {
 const EMPTY_TRADES: TradeOfferWithTeams[] = []
 const EMPTY_MOVIES: TradeableMovie[] = []
 
+/**
+ * How long a trade this user just acted on stays out of the change
+ * announcements. Their own action is confirmed by the card that took it; the
+ * refetch it causes should not be read out a second time as news.
+ */
+const OWN_ACTION_QUIET_MS = 15_000
+
+/**
+ * One line describing what someone else just did to a trade this team is part
+ * of, or null when there is nothing to tell them. Sighted users see the card
+ * change; this is that change for a screen reader, without reading the card.
+ */
+function describeTradeChange(
+  before: TradeOfferWithTeams | undefined,
+  after: TradeOfferWithTeams,
+  teamId: string
+): string | null {
+  const isInitiator = after.initiator_team_id === teamId
+  const isRecipient = after.recipient_team_id === teamId
+  if (!isInitiator && !isRecipient) return null
+
+  const initiator = after.initiator_team?.name ?? 'Another team'
+  const recipient = after.recipient_team?.name ?? 'Another team'
+  const other = isInitiator ? recipient : initiator
+
+  if (!before) {
+    return isRecipient && after.status === 'proposed' ? `New trade offer from ${initiator}.` : null
+  }
+  // A counter to a counter keeps the status and swaps the sides.
+  const sidesSwapped = before.initiator_team_id !== after.initiator_team_id
+  if (before.status === after.status && !sidesSwapped) return null
+
+  switch (after.status) {
+    case 'countered':
+      return isRecipient ? `${initiator} sent you a counter-offer.` : null
+    case 'review':
+    case 'accepted':
+      return isInitiator ? `${recipient} accepted your trade offer.` : null
+    case 'rejected':
+      return isInitiator ? `${recipient} rejected your trade offer.` : null
+    case 'cancelled':
+      return isRecipient ? `${initiator} cancelled their trade offer.` : null
+    case 'vetoed':
+      return `The commissioner vetoed your trade with ${other}.`
+    case 'completed':
+      return `Your trade with ${other} went through.`
+    case 'expired':
+      return `Your trade with ${other} expired.`
+    default:
+      return null
+  }
+}
+
 export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTradingOptions): UseTradingReturn {
   const supabase = useMemo(() => createClient(), [])
 
@@ -145,6 +199,34 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
   const fetchBudget = useCallback(async () => {
     await mutateBudget()
   }, [mutateBudget])
+
+  // Trades this user just acted on, so their own action isn't announced twice.
+  const actedOnRef = useRef(new Map<string, number>())
+  const markActedOn = useCallback((tradeOfferId: string) => {
+    actedOnRef.current.set(tradeOfferId, Date.now())
+  }, [])
+
+  // Announce what other people did (a new offer, an answer, a veto) when the
+  // trades refetch -- realtime, focus or a manual retry alike. The first load of
+  // each account's view is the baseline, not news.
+  const viewKey = `${leagueId}:${teamId}:${userId}`
+  const previousTradesRef = useRef<{ key: string; trades: Map<string, TradeOfferWithTeams> } | null>(null)
+  const tradesData = tradesQuery.data
+  useEffect(() => {
+    if (!tradesData) return
+    const previous = previousTradesRef.current?.key === viewKey ? previousTradesRef.current.trades : null
+    previousTradesRef.current = { key: viewKey, trades: new Map(tradesData.map((t) => [t.id, t])) }
+    if (!previous) return
+
+    const now = Date.now()
+    const messages = tradesData.flatMap((trade) => {
+      const actedAt = actedOnRef.current.get(trade.id)
+      if (actedAt !== undefined && now - actedAt < OWN_ACTION_QUIET_MS) return []
+      const message = describeTradeChange(previous.get(trade.id), trade, teamId)
+      return message ? [message] : []
+    })
+    if (messages.length > 0) announce(messages.join(' '))
+  }, [tradesData, viewKey, teamId])
 
   // Real-time subscription for trades
   useEffect(() => {
@@ -223,6 +305,7 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       response: 'accept' | 'reject',
       message?: string
     ): Promise<TradeActionResult> => {
+      markActedOn(tradeOfferId)
       const { error: respondError, errorBody } = await callEdgeFunction('respond-trade', {
         body: {
           trade_offer_id: tradeOfferId,
@@ -252,7 +335,7 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       ])
       return { success: true }
     },
-    [fetchTrades, loadTradeableMovies, fetchBudget]
+    [fetchTrades, loadTradeableMovies, fetchBudget, markActedOn]
   )
 
   // Counter a trade
@@ -264,6 +347,7 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       message?: string,
       expiry?: ResolvedExpiry
     ): Promise<TradeActionResult> => {
+      markActedOn(tradeOfferId)
       const { error: counterError, errorBody } = await callEdgeFunction('counter-trade', {
         body: {
           trade_offer_id: tradeOfferId,
@@ -289,12 +373,13 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       await fetchTrades()
       return { success: true }
     },
-    [fetchTrades]
+    [fetchTrades, markActedOn]
   )
 
   // Cancel a trade
   const cancelTrade = useCallback(
     async (tradeOfferId: string): Promise<TradeActionResult> => {
+      markActedOn(tradeOfferId)
       const { error: cancelError } = await callEdgeFunction('cancel-trade', {
         body: { trade_offer_id: tradeOfferId },
       })
@@ -306,7 +391,7 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       await fetchTrades()
       return { success: true }
     },
-    [fetchTrades]
+    [fetchTrades, markActedOn]
   )
 
   // Veto a trade (commissioner only)
@@ -315,6 +400,7 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       tradeOfferId: string,
       reason?: string
     ): Promise<TradeActionResult> => {
+      markActedOn(tradeOfferId)
       const { error: vetoError } = await callEdgeFunction('veto-trade', {
         body: { trade_offer_id: tradeOfferId, reason },
       })
@@ -326,12 +412,13 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       await fetchTrades()
       return { success: true }
     },
-    [fetchTrades]
+    [fetchTrades, markActedOn]
   )
 
   // Approve a trade immediately (commissioner only)
   const approveTrade = useCallback(
     async (tradeOfferId: string): Promise<TradeActionResult> => {
+      markActedOn(tradeOfferId)
       const { error: approveError } = await callEdgeFunction('approve-trade', {
         body: { trade_offer_id: tradeOfferId },
       })
@@ -345,12 +432,13 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       await Promise.all([fetchTrades(), loadTradeableMovies(), fetchBudget()])
       return { success: true }
     },
-    [fetchTrades, loadTradeableMovies, fetchBudget]
+    [fetchTrades, loadTradeableMovies, fetchBudget, markActedOn]
   )
 
   // Extend an offer's clock (proposer only)
   const extendTrade = useCallback(
     async (tradeOfferId: string, expiresAt: string): Promise<TradeActionResult> => {
+      markActedOn(tradeOfferId)
       const { error: extendError } = await callEdgeFunction('extend-trade-offer', {
         body: { trade_offer_id: tradeOfferId, expires_at: expiresAt },
       })
@@ -367,7 +455,7 @@ export function useTrading({ leagueId, teamId, userId, rosterRequested }: UseTra
       await fetchTrades()
       return { success: true }
     },
-    [fetchTrades]
+    [fetchTrades, markActedOn]
   )
 
   // Computed values

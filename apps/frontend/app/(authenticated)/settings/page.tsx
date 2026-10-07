@@ -1,7 +1,10 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Profile } from '@/types'
 import SettingsClient from './SettingsClient'
+
+export const metadata: Metadata = { title: 'Account settings' }
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -14,10 +17,11 @@ export default async function SettingsPage() {
     redirect('/login')
   }
 
-  // Fetch profile and identities in parallel
-  const [profileResult, identitiesResult] = await Promise.all([
+  // Fetch profile, identities and email preferences in parallel
+  const [profileResult, identitiesResult, emailPreferencesResult] = await Promise.all([
     supabase.from('profiles').select('*').eq('user_id', user.id).single(),
     supabase.auth.getUserIdentities(),
+    supabase.from('email_preferences').select('season_recap_emails').eq('user_id', user.id).maybeSingle(),
   ])
 
   const profile = profileResult.data
@@ -25,6 +29,9 @@ export default async function SettingsPage() {
 
   // Check if user has email/password identity
   const hasPassword = identities.some((i) => i.provider === 'email')
+
+  // No row yet means the default: opted in.
+  const seasonRecapEmails = emailPreferencesResult.data?.season_recap_emails ?? true
 
   return (
     <div className="min-h-[calc(100vh-4rem)] px-4 py-8 sm:py-12">
@@ -46,6 +53,7 @@ export default async function SettingsPage() {
           email={user.email ?? ''}
           identities={identities}
           hasPassword={hasPassword}
+          seasonRecapEmails={seasonRecapEmails}
         />
       </div>
     </div>

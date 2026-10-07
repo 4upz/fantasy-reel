@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
@@ -16,6 +17,8 @@ import type {
   TeamHolding,
   TeamScore,
 } from '@/types'
+
+export const metadata: Metadata = { title: 'Overview' }
 
 interface PageProps {
   params: Promise<{ id: string }>

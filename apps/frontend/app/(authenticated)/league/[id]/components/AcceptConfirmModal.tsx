@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
-import MoviePoster from '@/app/components/MoviePoster'
-import { getReleaseYear } from '@/utils/date'
+import { useId } from 'react'
+import Modal from '@/app/components/Modal'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
-import type { TradeOfferWithTeams, TradeItems, TradeMovieItem } from '@/types'
+import type { TradeOfferWithTeams, TradeItems } from '@/types'
+import { TradeItemsList } from './TradeItemsSection'
 
 interface Props {
   trade: TradeOfferWithTeams
@@ -36,54 +36,41 @@ export default function AcceptConfirmModal({
 
   const { execute: handleConfirm, isLoading } = useAsyncAction(onConfirm)
 
-  // Handle escape key to close modal
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) {
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, isLoading])
+  const titleId = useId()
+  const summaryId = useId()
 
   return (
-    <div
-      className="modal-overlay p-[16px]"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="accept-confirm-title"
-    >
+    <Modal onClose={onClose} preventClose={isLoading} labelledBy={titleId} describedBy={summaryId}>
       <div className="modal-panel glass max-h-[calc(100dvh-32px)] overflow-y-auto overscroll-contain rounded-lg shadow-heavy max-w-lg w-full border border-border [overflow-wrap:anywhere]">
         {/* Header */}
         <div className="p-[min(1rem,16px)] border-b border-border">
-          <h2 id="accept-confirm-title" className="type-panel text-foreground">Confirm trade</h2>
+          <h2 id={titleId} className="type-panel text-foreground">Confirm trade</h2>
           <p className="type-body-sm text-foreground-secondary mt-1">
             Review the trade details before accepting.
           </p>
         </div>
 
-        {/* Trade summary */}
-        <div className="p-[min(1rem,16px)] space-y-4">
+        {/* Trade summary -- the dialog's description, so it is read on open. */}
+        <div id={summaryId} className="p-[min(1rem,16px)] space-y-4">
           {/* What you give */}
           <div className="p-[min(.75rem,12px)] rounded-lg bg-crimson/10 border border-crimson/30">
-            <p className="type-label text-foreground-secondary mb-3 flex items-center gap-2">
-              <svg className="w-4 h-4 text-crimson" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <h3 className="type-label text-foreground-secondary mb-3 flex items-center gap-2">
+              <svg className="w-4 h-4 text-crimson-text" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
               </svg>
               You send to {otherTeamName}
-            </p>
+            </h3>
             <TradeItemsList items={youGive} />
           </div>
 
           {/* What you receive */}
           <div className="p-[min(.75rem,12px)] rounded-lg bg-success/10 border border-success/30">
-            <p className="type-label text-foreground-secondary mb-3 flex items-center gap-2">
-              <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <h3 className="type-label text-foreground-secondary mb-3 flex items-center gap-2">
+              <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 13l-5 5m0 0l-5-5m5 5V6" />
               </svg>
               You receive from {otherTeamName}
-            </p>
+            </h3>
             <TradeItemsList items={youReceive} />
           </div>
 
@@ -98,6 +85,7 @@ export default function AcceptConfirmModal({
         {/* Footer */}
         <div className="p-[min(1rem,16px)] border-t border-border flex flex-wrap justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-ghost min-w-0 max-w-full"
             disabled={isLoading}
@@ -106,61 +94,16 @@ export default function AcceptConfirmModal({
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleConfirm}
             className="btn btn-primary min-w-0 max-w-full"
             disabled={isLoading}
-            aria-label={isLoading ? 'Accepting trade...' : 'Confirm accept trade'}
             aria-busy={isLoading}
           >
             {isLoading ? 'Accepting...' : 'Confirm accept'}
           </button>
         </div>
       </div>
-    </div>
-  )
-}
-
-function TradeItemsList({ items }: { items: TradeItems }) {
-  const hasMovies = items.movies.length > 0
-  const hasBudget = items.faab > 0
-
-  if (!hasMovies && !hasBudget) {
-    return <p className="type-body-sm text-foreground-secondary italic">Nothing</p>
-  }
-
-  return (
-    <div className="space-y-2">
-      {items.movies.map((movie: TradeMovieItem) => (
-        <div key={movie.source_id} className="flex items-center gap-2">
-          <div className="relative w-8 h-12 shrink-0 rounded overflow-hidden bg-surface-hover">
-            <MoviePoster
-              src={movie.poster_url}
-              alt={movie.title || 'Movie'}
-              sizes="32px"
-              posterSize="w92"
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="type-row-title text-foreground break-words">
-              {movie.title || 'Unknown Movie'}
-            </p>
-            {movie.release_date && (
-              <p className="type-meta text-foreground-secondary">
-                {getReleaseYear(movie.release_date)}
-              </p>
-            )}
-          </div>
-        </div>
-      ))}
-
-      {hasBudget && (
-        <div className="flex items-center gap-2">
-          <div className="w-[32px] h-[32px] shrink-0 bg-gold/20 rounded flex items-center justify-center">
-            <span className="type-row-title text-gold">$</span>
-          </div>
-          <p className="type-number text-gold">${items.faab} budget</p>
-        </div>
-      )}
-    </div>
+    </Modal>
   )
 }

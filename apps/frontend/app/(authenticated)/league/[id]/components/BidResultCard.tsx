@@ -62,11 +62,11 @@ export default function BidResultCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <h3 className="type-row-title text-foreground line-clamp-2">
+              <h3 className="type-row-title text-foreground break-words">
                 {result.title}
               </h3>
               {result.kind === 'counterpick' && result.targetTeamId && (
-                <p className="type-meta text-crimson mt-0.5 truncate">
+                <p className="type-meta text-crimson-text mt-0.5 break-words">
                   Counterpick on {teamName(teamsById, result.targetTeamId)}
                 </p>
               )}
@@ -76,7 +76,7 @@ export default function BidResultCard({
             <div className="flex-none text-right">
               {result.winner ? (
                 <p className="type-number-lg bid-amount-display">
-                  ${result.winner.amount}
+                  <span className="sr-only">Winning bid: </span>${result.winner.amount}
                 </p>
               ) : (
                 <p className="type-body-sm text-foreground-secondary">
@@ -96,11 +96,16 @@ export default function BidResultCard({
           </div>
 
           {result.winner && (
-            <p className="type-body-sm text-foreground-secondary mt-1 truncate">
+            <p className="type-body-sm text-foreground-secondary mt-1 break-words">
+              <span className="sr-only">Winner: </span>
               <span className={wonByMe ? 'text-gold' : undefined}>
                 {teamName(teamsById, result.winner.teamId)}
               </span>
-              {margin && <span className="text-foreground-secondary"> · {margin}</span>}
+              {margin && (
+                <span className="text-foreground-secondary">
+                  {' '}<span aria-hidden="true">·</span><span className="sr-only">,</span> {margin}
+                </span>
+              )}
             </p>
           )}
 
@@ -115,13 +120,15 @@ export default function BidResultCard({
               <p className="type-meta text-foreground-secondary mb-1.5">
                 {result.winner ? 'Also bid' : 'Bids'}
               </p>
-              <ul className="space-y-1">
+              <ul role="list" className="space-y-1">
                 {result.losers.map((loser) => {
                   const isMine = loser.teamId === currentTeamId
                   return (
                     <li key={loser.bidId} className="type-body-sm flex items-baseline justify-between gap-3">
-                      <span className={`truncate ${isMine ? 'text-gold' : 'text-foreground-secondary'}`}>
+                      <span className={`min-w-0 break-words ${isMine ? 'text-gold' : 'text-foreground-secondary'}`}>
                         {teamName(teamsById, loser.teamId)}
+                        {/* Gold alone marks your own bid. */}
+                        {isMine && <span className="sr-only"> (your bid)</span>}
                       </span>
                       <span className="flex-none type-numeric text-foreground-secondary">
                         ${loser.amount}

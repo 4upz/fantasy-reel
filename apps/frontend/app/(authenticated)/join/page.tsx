@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import JoinLeagueClient from './JoinLeagueClient'
+
+export const metadata: Metadata = { title: 'Join a league' }
 
 interface PageProps {
   searchParams: Promise<{ token?: string; code?: string }>

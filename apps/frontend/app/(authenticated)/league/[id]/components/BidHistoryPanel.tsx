@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { History } from 'lucide-react'
 import { useBidHistory } from '../hooks/useBidHistory'
 import { useBiddingContext } from '../bidding/BiddingContext'
@@ -14,16 +14,29 @@ export default function BidHistoryPanel(): React.ReactElement {
   const { league, teamId, teams } = useBiddingContext()
   const { rounds, loading, error } = useBidHistory({ leagueId: league.id })
   const [visibleRounds, setVisibleRounds] = useState(ROUNDS_PER_PAGE)
+  const roundIdPrefix = useId()
+  const panelRef = useRef<HTMLDivElement>(null)
+  /** Index of the first round "Show earlier rounds" just revealed. */
+  const revealedFrom = useRef<number | null>(null)
 
   const teamsById = useMemo(
     () => new Map(teams.map((team) => [team.id, team])),
     [teams]
   )
 
+  // The button can disappear with the last page, and either way the new
+  // rounds land below it. Take focus to the first one revealed.
+  useEffect(() => {
+    const index = revealedFrom.current
+    if (index === null) return
+    revealedFrom.current = null
+    panelRef.current?.querySelector<HTMLElement>(`[data-round-index="${index}"]`)?.focus()
+  }, [visibleRounds])
+
   if (loading) {
     return (
-      <div className="card p-8 text-center" data-testid="bid-history-panel">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold mx-auto" />
+      <div className="card p-8 text-center" data-testid="bid-history-panel" role="status">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gold mx-auto" aria-hidden="true" />
         <p className="mt-4 text-foreground-secondary">Loading results...</p>
       </div>
     )
@@ -31,7 +44,7 @@ export default function BidHistoryPanel(): React.ReactElement {
 
   if (error) {
     return (
-      <div className="alert alert-error" data-testid="bid-history-panel">
+      <div className="alert alert-error" data-testid="bid-history-panel" role="alert">
         <p>Couldn&apos;t load bid history: {error}</p>
       </div>
     )
@@ -57,32 +70,44 @@ export default function BidHistoryPanel(): React.ReactElement {
   const shown = rounds.slice(0, visibleRounds)
 
   return (
-    <div className="space-y-8 animate-fade-in" data-testid="bid-history-panel">
-      {shown.map((round) => (
-        <section key={round.date} aria-label={`Results from ${formatRoundDate(round.date)}`}>
-          <div className="flex items-center gap-3 mb-3">
-            <h2 className="type-label text-foreground-secondary whitespace-nowrap">
-              {formatRoundDate(round.date)}
-            </h2>
-            <div className="h-px flex-1 bg-border" aria-hidden="true" />
-          </div>
+    <div ref={panelRef} className="space-y-8 animate-fade-in" data-testid="bid-history-panel">
+      {shown.map((round, index) => {
+        const headingId = `${roundIdPrefix}-${index}`
+        return (
+          <section key={round.date} aria-labelledby={headingId}>
+            <div className="flex items-center gap-3 mb-3">
+              <h2
+                id={headingId}
+                tabIndex={-1}
+                data-round-index={index}
+                className="type-label text-foreground-secondary whitespace-nowrap focus:outline-none"
+              >
+                {formatRoundDate(round.date)}
+              </h2>
+              <div className="h-px flex-1 bg-border" aria-hidden="true" />
+            </div>
 
-          <div className="space-y-3">
-            {round.results.map((result) => (
-              <BidResultCard
-                key={result.id}
-                result={result}
-                teamsById={teamsById}
-                currentTeamId={teamId}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+            <div className="space-y-3">
+              {round.results.map((result) => (
+                <BidResultCard
+                  key={result.id}
+                  result={result}
+                  teamsById={teamsById}
+                  currentTeamId={teamId}
+                />
+              ))}
+            </div>
+          </section>
+        )
+      })}
 
       {rounds.length > visibleRounds && (
         <button
-          onClick={() => setVisibleRounds((count) => count + ROUNDS_PER_PAGE)}
+          type="button"
+          onClick={() => {
+            revealedFrom.current = visibleRounds
+            setVisibleRounds((count) => count + ROUNDS_PER_PAGE)
+          }}
           className="btn btn-ghost w-full py-3"
         >
           Show earlier rounds

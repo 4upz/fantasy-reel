@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import DashboardClient from '../../components/DashboardClient'
 import type { InvitationWithLeague } from '@/types'
+
+export const metadata: Metadata = { title: 'Dashboard' }
 
 export default async function DashboardPage() {
   const supabase = await createClient()

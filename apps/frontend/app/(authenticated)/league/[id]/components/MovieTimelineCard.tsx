@@ -90,7 +90,7 @@ export default function MovieTimelineCard({ movie, onClick }: Props) {
           ? hasFantasyPoints && isPositive
             ? 'text-gold'
             : hasFantasyPoints
-              ? 'text-crimson'
+              ? 'text-crimson-text'
               : 'text-foreground-secondary'
           : 'text-foreground-secondary'
       }`}>

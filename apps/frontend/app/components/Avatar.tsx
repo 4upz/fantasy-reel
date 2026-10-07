@@ -8,6 +8,11 @@ interface Props {
   name: string
   size?: 'sm' | 'md' | 'lg'
   className?: string
+  /**
+   * The name is already written next to the avatar, so hide it from screen
+   * readers instead of reading the name twice.
+   */
+  decorative?: boolean
 }
 
 const sizeClasses = {
@@ -23,7 +28,7 @@ const imageSizes = {
 } as const
 
 /** @design-system Foundation */
-export default function Avatar({ src, name, size = 'md', className = '' }: Props): React.ReactElement {
+export default function Avatar({ src, name, size = 'md', className = '', decorative = false }: Props): React.ReactElement {
   const initial = name.charAt(0).toUpperCase()
   const sizeClass = sizeClasses[size]
   const imageSize = imageSizes[size]
@@ -34,7 +39,7 @@ export default function Avatar({ src, name, size = 'md', className = '' }: Props
       <div className={`${sizeClass} relative rounded-full overflow-hidden border-2 border-gold ${className}`}>
         <Image
           src={safeSrc}
-          alt={name}
+          alt={decorative ? '' : name}
           width={imageSize}
           height={imageSize}
           className="object-cover"
@@ -46,9 +51,12 @@ export default function Avatar({ src, name, size = 'md', className = '' }: Props
 
   return (
     <div
+      role={decorative ? undefined : 'img'}
+      aria-label={decorative ? undefined : name}
+      aria-hidden={decorative || undefined}
       className={`${sizeClass} rounded-full bg-gold-muted border-2 border-gold flex items-center justify-center ${className}`}
     >
-      <span className="font-body font-semibold text-gold">{initial}</span>
+      <span aria-hidden="true" className="font-body font-semibold text-gold">{initial}</span>
     </div>
   )
 }

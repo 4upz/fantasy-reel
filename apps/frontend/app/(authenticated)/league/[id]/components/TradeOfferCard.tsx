@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useId, useMemo } from 'react'
 import Image from 'next/image'
 import { safeAvatarUrl } from '@/utils/avatar'
-import MoviePoster from '@/app/components/MoviePoster'
+import Modal from '@/app/components/Modal'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
 import type {
@@ -14,9 +14,7 @@ import type {
   TradeableMovie,
   TeamBudget,
 } from '@/types'
-import { formatRelativeDate, getReleaseYear } from '@/utils/date'
-import { isScoreLocked } from '@/utils/scoring'
-import ScoreLockLabel from '@/app/components/ScoreLockLabel'
+import { formatRelativeDate } from '@/utils/date'
 import AcceptConfirmModal from './AcceptConfirmModal'
 import OfferExpiryPicker, { Chip } from './OfferExpiryPicker'
 import { useOfferExpiry } from '../hooks/useOfferExpiry'
@@ -30,8 +28,8 @@ import {
   type ExpiryUrgency,
   type ResolvedExpiry,
 } from '@/utils/tradeExpiry'
-import CounterpickMark from './CounterpickMark'
 import TradeItemsSection from './TradeItemsSection'
+import { DialogCloseButton, TradeBudgetField, TradeMovieChecklist } from './TradeComposerFields'
 import TradeComposerLoading, { type TradeComposerState } from './TradeComposerLoading'
 
 interface Props {
@@ -73,6 +71,11 @@ interface Props {
    * reply is not cancel-and-repropose.
    */
   onExtend: (tradeOfferId: string, expiresAt: string) => Promise<TradeActionResult>
+  /**
+   * An action on this card succeeded. The panel announces `message` and, when
+   * the action took the focused control away, puts focus back somewhere real.
+   */
+  onActionSettled: (tradeId: string, message: string) => void
 }
 
 const STATUS_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -139,6 +142,9 @@ function findDisplayName(
   return otherTeams.find((t) => t.id === teamId)?.display_name ?? null
 }
 
+/** Dims an action while another is in flight, without `disabled` dropping focus. */
+const BUSY_CLASS = 'aria-disabled:opacity-50 aria-disabled:cursor-not-allowed'
+
 /** @design-system League */
 export default function TradeOfferCard(props: Props) {
   const {
@@ -157,6 +163,7 @@ export default function TradeOfferCard(props: Props) {
     onVeto,
     onApprove,
     onExtend,
+    onActionSettled,
   } = props
 
   // formatRelativeDate is a pure formatter, so a countdown only moves when
@@ -175,6 +182,16 @@ export default function TradeOfferCard(props: Props) {
 
   // Optimistic UI state (FE#9)
   const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null)
+  // Once the real status arrives the guess has served its purpose. Without
+  // this a card that stays on screen (a commissioner who accepted their own
+  // trade, say) would keep its actions marked busy indefinitely.
+  const [statusSeen, setStatusSeen] = useState(trade.status)
+  if (trade.status !== statusSeen) {
+    setStatusSeen(trade.status)
+    setOptimisticStatus(null)
+  }
+
+  const headingId = useId()
 
   const isInitiator = trade.initiator_team_id === currentTeamId
   const isRecipient = trade.recipient_team_id === currentTeamId
@@ -228,6 +245,11 @@ export default function TradeOfferCard(props: Props) {
     return () => clearInterval(timer)
   }, [expiresAt, displayStatus])
 
+  const initiatorTeam = trade.initiator_team as { id: string; name: string; avatar_url: string | null }
+  const recipientTeam = trade.recipient_team as { id: string; name: string; avatar_url: string | null }
+  const initiatorName = initiatorTeam.name
+  const recipientName = recipientTeam.name
+
   const tradeAction = useCallback(
     async (action: TradeAction, message?: string) => {
       setPendingAction(action)
@@ -264,20 +286,44 @@ export default function TradeOfferCard(props: Props) {
         if (result.error) {
           setError(result.error)
         }
-      } else if (action === 'accept') {
+        return
+      }
+
+      if (action === 'accept') {
         trackEvent('trade_accepted', { league_id: trade.league_id })
       } else if (action === 'reject') {
         trackEvent('trade_rejected', { league_id: trade.league_id })
       }
-      // If successful, the real-time subscription will update the trade
+      // The real-time subscription updates the card itself; this says so out loud.
+      const settled: Record<TradeAction, string> = {
+        accept: `You accepted the trade with ${initiatorName}.`,
+        reject: `You rejected the trade offer from ${initiatorName}.`,
+        cancel: `You cancelled your trade offer to ${recipientName}.`,
+        veto: `You vetoed the trade between ${initiatorName} and ${recipientName}.`,
+        approve: `You approved the trade between ${initiatorName} and ${recipientName}. It has been processed.`,
+      }
+      onActionSettled(trade.id, settled[action])
     },
-    [trade.id, trade.league_id, onRespond, onCancel, onVeto, onApprove]
+    [trade.id, trade.league_id, initiatorName, recipientName, onRespond, onCancel, onVeto, onApprove, onActionSettled]
   )
 
   const { execute: handleAction, isLoading } = useAsyncAction(tradeAction)
 
-  const initiatorTeam = trade.initiator_team as { id: string; name: string; avatar_url: string | null }
-  const recipientTeam = trade.recipient_team as { id: string; name: string; avatar_url: string | null }
+  const handleExtended = useCallback(
+    (newExpiresAt: string) => {
+      setShowExtendModal(false)
+      onActionSettled(trade.id, `Offer extended. It now expires ${formatExpiryAbsolute(newExpiresAt)}.`)
+    },
+    [trade.id, onActionSettled]
+  )
+
+  // While an action is in flight the buttons stay mounted and focusable (so
+  // focus is not dropped) but do nothing; useAsyncAction guards the requests,
+  // this guards the buttons that only open a dialog.
+  const isBusy = isLoading || optimisticStatus !== null
+  const unlessBusy = (open: () => void) => () => {
+    if (!isBusy) open()
+  }
 
   // Get display names for both teams
   const initiatorDisplayName = findDisplayName(initiatorTeam.id, currentTeam, otherTeams)
@@ -286,7 +332,9 @@ export default function TradeOfferCard(props: Props) {
   return (
     <article
       className="card p-4"
-      aria-label={`Trade offer from ${initiatorTeam.name} to ${recipientTeam.name}`}
+      aria-label={`Trade offer from ${initiatorName} to ${recipientName}`}
+      tabIndex={-1}
+      data-trade-id={trade.id}
       data-testid={`trade-card-${trade.id}`}
     >
       {/* Header */}
@@ -297,12 +345,12 @@ export default function TradeOfferCard(props: Props) {
             <TeamAvatar team={recipientTeam} />
           </div>
           <div>
-            <p className="font-medium text-foreground">
-              {initiatorTeam.name} <span aria-label="to">→</span> {recipientTeam.name}
-            </p>
+            <h3 id={headingId} className="font-medium text-foreground">
+              {initiatorName} <ArrowTo /> {recipientName}
+            </h3>
             {initiatorDisplayName && recipientDisplayName && (
               <p className="type-meta text-foreground-secondary">
-                {initiatorDisplayName} <span aria-label="to">→</span> {recipientDisplayName}
+                {initiatorDisplayName} <ArrowTo /> {recipientDisplayName}
               </p>
             )}
             <p className="type-body-sm text-foreground-secondary">
@@ -312,11 +360,8 @@ export default function TradeOfferCard(props: Props) {
         </div>
 
         <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <span
-            className={`type-meta px-2 py-1 rounded ${statusStyle.bg} ${statusStyle.text}`}
-            role="status"
-            aria-live="polite"
-          >
+          {/* Not a live region: outcomes are announced once, by the panel. */}
+          <span className={`type-meta px-2 py-1 rounded ${statusStyle.bg} ${statusStyle.text}`}>
             {optimisticStatus ? `${statusStyle.label}...` : statusStyle.label}
           </span>
 
@@ -336,6 +381,7 @@ export default function TradeOfferCard(props: Props) {
               <time dateTime={trade.expires_at} title={formatExpiryAbsolute(trade.expires_at)}>
                 {formatRelativeDate(trade.expires_at)}
               </time>
+              <span className="sr-only"> ({formatExpiryAbsolute(trade.expires_at)})</span>
             </span>
           )}
 
@@ -357,13 +403,13 @@ export default function TradeOfferCard(props: Props) {
       {/* Trade items */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <TradeItemsSection
-          title={`${initiatorTeam.name} sends`}
+          title={`${initiatorName} sends`}
           items={trade.initiator_items as TradeItems}
           isYours={isInitiator}
           contestedSourceIds={isContested ? contestedSourceIds : EMPTY_CONTESTED}
         />
         <TradeItemsSection
-          title={`${recipientTeam.name} sends`}
+          title={`${recipientName} sends`}
           items={trade.recipient_items as TradeItems}
           isYours={isRecipient}
           contestedSourceIds={isContested ? contestedSourceIds : EMPTY_CONTESTED}
@@ -374,7 +420,7 @@ export default function TradeOfferCard(props: Props) {
       {trade.initiator_message && (
         <div className="mb-4 p-3 bg-surface-hover rounded-lg">
           <p className="type-body-sm text-foreground-secondary">
-            <span className="font-medium">{initiatorTeam.name}:</span> {trade.initiator_message}
+            <span className="font-medium">{initiatorName}:</span> {trade.initiator_message}
           </p>
         </div>
       )}
@@ -382,7 +428,7 @@ export default function TradeOfferCard(props: Props) {
       {trade.response_message && (
         <div className="mb-4 p-3 bg-surface-hover rounded-lg">
           <p className="type-body-sm text-foreground-secondary">
-            <span className="font-medium">{recipientTeam.name}:</span> {trade.response_message}
+            <span className="font-medium">{recipientName}:</span> {trade.response_message}
           </p>
         </div>
       )}
@@ -425,43 +471,46 @@ export default function TradeOfferCard(props: Props) {
 
       {/* Error */}
       {error && (
-        <div className="mb-4 alert alert-error">
+        <div className="mb-4 alert alert-error" role="alert">
           <p>{error}</p>
         </div>
       )}
 
-      {/* Actions */}
-      {(canRespond || canCancel || canExtend || canVeto || canApprove) && !optimisticStatus && (
+      {/* Actions -- kept mounted while one is in flight, so focus stays put. */}
+      {(canRespond || canCancel || canExtend || canVeto || canApprove) && (
         <div className="flex flex-wrap gap-2 pt-4 border-t border-border" role="group" aria-label="Trade actions">
           {canRespond && (
             <>
               <button
-                onClick={() => setShowAcceptModal(true)}
-                disabled={isLoading}
-                className="btn btn-primary"
-                aria-label="Accept trade offer"
+                type="button"
+                onClick={unlessBusy(() => setShowAcceptModal(true))}
+                aria-disabled={isBusy || undefined}
+                className={`btn btn-primary ${BUSY_CLASS}`}
+                aria-describedby={headingId}
                 aria-busy={pendingAction === 'accept'}
                 data-testid={`accept-trade-${trade.id}`}
               >
                 {pendingAction === 'accept' ? 'Accepting...' : 'Accept'}
               </button>
               <button
-                onClick={() => {
+                type="button"
+                onClick={unlessBusy(() => {
                   composerState.onOpen()
                   setShowCounterModal(true)
-                }}
-                disabled={isLoading}
-                className="btn btn-secondary"
-                aria-label="Counter trade offer"
+                })}
+                aria-disabled={isBusy || undefined}
+                className={`btn btn-secondary ${BUSY_CLASS}`}
+                aria-describedby={headingId}
                 data-testid={`counter-trade-${trade.id}`}
               >
                 Counter
               </button>
               <button
+                type="button"
                 onClick={() => handleAction('reject')}
-                disabled={isLoading}
-                className="btn btn-ghost"
-                aria-label="Reject trade offer"
+                aria-disabled={isBusy || undefined}
+                className={`btn btn-ghost ${BUSY_CLASS}`}
+                aria-describedby={headingId}
                 aria-busy={pendingAction === 'reject'}
                 data-testid={`reject-trade-${trade.id}`}
               >
@@ -472,10 +521,11 @@ export default function TradeOfferCard(props: Props) {
 
           {canExtend && (
             <button
-              onClick={() => setShowExtendModal(true)}
-              disabled={isLoading}
-              className="btn btn-secondary"
-              aria-label="Give the other team more time to answer"
+              type="button"
+              onClick={unlessBusy(() => setShowExtendModal(true))}
+              aria-disabled={isBusy || undefined}
+              className={`btn btn-secondary ${BUSY_CLASS}`}
+              aria-describedby={headingId}
               data-testid={`extend-trade-${trade.id}`}
             >
               Extend
@@ -484,10 +534,11 @@ export default function TradeOfferCard(props: Props) {
 
           {canCancel && (
             <button
+              type="button"
               onClick={() => handleAction('cancel')}
-              disabled={isLoading}
-              className="btn btn-ghost text-crimson"
-              aria-label="Cancel trade offer"
+              aria-disabled={isBusy || undefined}
+              className={`btn btn-ghost text-crimson-text ${BUSY_CLASS}`}
+              aria-describedby={headingId}
               aria-busy={pendingAction === 'cancel'}
               data-testid={`cancel-trade-${trade.id}`}
             >
@@ -497,10 +548,11 @@ export default function TradeOfferCard(props: Props) {
 
           {canApprove && (
             <button
-              onClick={() => setShowApproveModal(true)}
-              disabled={isLoading}
-              className="btn btn-primary"
-              aria-label="Approve trade and process it now"
+              type="button"
+              onClick={unlessBusy(() => setShowApproveModal(true))}
+              aria-disabled={isBusy || undefined}
+              className={`btn btn-primary ${BUSY_CLASS}`}
+              aria-describedby={headingId}
               aria-busy={pendingAction === 'approve'}
               data-testid={`approve-trade-${trade.id}`}
             >
@@ -510,13 +562,15 @@ export default function TradeOfferCard(props: Props) {
 
           {canVeto && (
             <button
-              onClick={() => setShowVetoModal(true)}
-              disabled={isLoading}
-              className="btn btn-danger"
-              aria-label="Veto trade"
+              type="button"
+              onClick={unlessBusy(() => setShowVetoModal(true))}
+              aria-disabled={isBusy || undefined}
+              className={`btn btn-danger ${BUSY_CLASS}`}
+              aria-describedby={headingId}
+              aria-busy={pendingAction === 'veto'}
               data-testid={`veto-trade-${trade.id}`}
             >
-              Veto trade
+              {pendingAction === 'veto' ? 'Vetoing...' : 'Veto trade'}
             </button>
           )}
         </div>
@@ -537,6 +591,7 @@ export default function TradeOfferCard(props: Props) {
             const result = await onCounter(trade.id, counterOfferedItems, counterRequestedItems, message, expiry)
             if (result.success) {
               setShowCounterModal(false)
+              onActionSettled(trade.id, `Counter-offer sent to ${initiatorName}.`)
             } else if (result.error) {
               setError(result.error)
             }
@@ -577,6 +632,7 @@ export default function TradeOfferCard(props: Props) {
           expiryBounds={expiryBounds}
           onClose={() => setShowExtendModal(false)}
           onExtend={onExtend}
+          onExtended={handleExtended}
         />
       )}
 
@@ -593,6 +649,16 @@ export default function TradeOfferCard(props: Props) {
         />
       )}
     </article>
+  )
+}
+
+/** "→" reads as "right arrow"; say "to" instead. */
+function ArrowTo() {
+  return (
+    <>
+      <span aria-hidden="true">→</span>
+      <span className="sr-only">to</span>
+    </>
   )
 }
 
@@ -672,17 +738,27 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
   /** Items the server rejected on the last counter attempt. */
   const [invalidSourceIds, setInvalidSourceIds] = useState<ReadonlySet<string>>(EMPTY_CONTESTED)
 
-  // Get the other team's movies from the original trade items
-  const otherTeamMovies: TradeableMovie[] = existingInitiatorItems.movies.map((m) => ({
-    movie_id: m.movie_id,
-    source: m.source,
-    source_id: m.source_id,
-    title: m.title || 'Unknown',
-    poster_url: m.poster_url || null,
-    release_date: m.release_date || null,
-    combined_score: null,
-    fantasy_points: null,
-  }))
+  const titleId = useId()
+  const giveHeadingId = useId()
+  const receiveHeadingId = useId()
+  const messageId = useId()
+
+  // Get the other team's movies from the original trade items. Memoized so the
+  // expiry preview below only re-resolves when the selection changes.
+  const otherTeamMovies = useMemo<TradeableMovie[]>(
+    () =>
+      existingInitiatorItems.movies.map((m) => ({
+        movie_id: m.movie_id,
+        source: m.source,
+        source_id: m.source_id,
+        title: m.title || 'Unknown',
+        poster_url: m.poster_url || null,
+        release_date: m.release_date || null,
+        combined_score: null,
+        fantasy_points: null,
+      })),
+    [existingInitiatorItems.movies]
+  )
 
   const initiatorTeam = trade.initiator_team as { id: string; name: string }
   const recipientTeam = trade.recipient_team as { id: string; name: string }
@@ -772,91 +848,58 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 
   const { execute: handleSubmit, isLoading } = useAsyncAction(submitCounterAction)
 
-  // Handle escape key to close modal
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && !isLoading) {
-      onClose()
-    }
-  }
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="counter-trade-title"
-      onKeyDown={handleKeyDown}
-    >
-      <div
-        className="absolute inset-0 bg-overlay-soft backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
+    <Modal onClose={onClose} preventClose={isLoading} labelledBy={titleId} closeOnBackdrop>
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h2 id="counter-trade-title" className="type-panel text-foreground">
+          <h2 id={titleId} tabIndex={-1} data-dialog-initial-focus className="type-panel text-foreground">
             Counter trade with {initiatorTeam.name}
           </h2>
-          <button
-            onClick={onClose}
-            className="text-foreground-secondary hover:text-foreground transition-colors"
-            aria-label="Close counter trade modal"
-          >
-            ✕
-          </button>
+          <DialogCloseButton label="Close counter offer" onClick={onClose} />
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-6">
           {/* Your side - what you offer */}
           <div>
-            <h3 id="counter-offer-section" className="type-label text-foreground mb-3">You give ({recipientTeam.name})</h3>
-            <MovieSelector
+            <h3 id={giveHeadingId} className="type-label text-foreground mb-3">You give ({recipientTeam.name})</h3>
+            <TradeMovieChecklist
               movies={tradeableMovies}
               selectedIds={offeredMovies}
               onToggle={toggleOfferedMovie}
+              labelledBy={giveHeadingId}
               invalidIds={invalidSourceIds}
+              showScores={false}
+              emptyState={<NoMoviesToTrade />}
             />
-            <div className="mt-3">
-              <label htmlFor="counter-offered-budget" className="type-label text-foreground-secondary">
-                {budget ? `Budget (max $${budget.remaining_budget})` : 'Budget unavailable'}
-              </label>
-              <input
-                id="counter-offered-budget"
-                type="number"
-                min={0}
-                max={budget?.remaining_budget}
-                value={offeredBudget}
-                disabled={!budget}
-                onChange={(e) => setOfferedBudget(Math.max(0, parseInt(e.target.value) || 0))}
-                className="type-input type-numeric input mt-1 w-24"
-              />
-            </div>
+            <TradeBudgetField
+              side="you give"
+              available={budget ? budget.remaining_budget : null}
+              value={offeredBudget}
+              onChange={setOfferedBudget}
+            />
           </div>
 
           {/* Their side - what you request */}
           <div>
-            <h3 id="counter-request-section" className="type-label text-foreground mb-3">You receive ({initiatorTeam.name})</h3>
-            <MovieSelector
+            <h3 id={receiveHeadingId} className="type-label text-foreground mb-3">You receive ({initiatorTeam.name})</h3>
+            <TradeMovieChecklist
               movies={otherTeamMovies}
               selectedIds={requestedMovies}
               onToggle={toggleRequestedMovie}
+              labelledBy={receiveHeadingId}
               invalidIds={invalidSourceIds}
+              showScores={false}
+              emptyState={<NoMoviesToTrade />}
             />
-            <div className="mt-3">
-              <label htmlFor="counter-requested-budget" className="type-label text-foreground-secondary">Budget</label>
-              <input
-                id="counter-requested-budget"
-                type="number"
-                min={0}
-                max={100}
-                value={requestedBudget}
-                onChange={(e) => setRequestedBudget(Math.max(0, parseInt(e.target.value) || 0))}
-                className="type-input type-numeric input mt-1 w-24"
-              />
-            </div>
+            <TradeBudgetField
+              side={`you request from ${initiatorTeam.name}`}
+              available={undefined}
+              fallbackMax={100}
+              value={requestedBudget}
+              onChange={setRequestedBudget}
+            />
           </div>
 
-          {/* Message */}
           <OfferExpiryPicker
             releaseAnchor={expiry.releaseAnchor}
             value={expiry.choice}
@@ -866,15 +909,21 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
             bounds={expiryBounds}
           />
 
+          {/* Message */}
           <div>
-            <label htmlFor="counter-message" className="type-label text-foreground-secondary">Message (optional)</label>
+            <label htmlFor={messageId} className="type-label text-foreground-secondary">Message (optional)</label>
             <textarea
-              id="counter-message"
+              id={messageId}
+              aria-describedby="counter-message-visibility"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              maxLength={1500}
               className="input mt-1 w-full h-20 resize-none"
               placeholder="Add a note to your counter-offer..."
             />
+            <p id="counter-message-visibility" className="type-meta text-foreground-secondary mt-1">
+              Everyone in the league can see this message.
+            </p>
           </div>
 
           {error && (
@@ -886,6 +935,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
 
         <div className="p-4 border-t border-border flex justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-ghost"
             aria-label="Cancel counter offer"
@@ -893,6 +943,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={!hasItems || !expiry.resolution.ok || isLoading}
             className="btn btn-primary"
@@ -903,134 +954,31 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
-// =============================================================================
-// Movie Selector (shared helper with accessibility)
-// =============================================================================
-
-function MovieSelector({
-  movies,
-  selectedIds,
-  onToggle,
-  invalidIds = EMPTY_CONTESTED,
-}: {
-  movies: TradeableMovie[]
-  selectedIds: Set<string>
-  onToggle: (sourceId: string) => void
-  /** Items the server rejected on the last submit. */
-  invalidIds?: ReadonlySet<string>
-}) {
-  // Empty state with helpful message (FE#7)
-  if (movies.length === 0) {
-    return (
-      <div className="card p-4 text-center">
-        <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-hover flex items-center justify-center">
-          <svg
-            className="w-5 h-5 text-foreground-muted"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
-            />
-          </svg>
-        </div>
-        <p className="type-body-sm text-foreground-secondary">No movies available to trade</p>
-      </div>
-    )
-  }
-
+function NoMoviesToTrade() {
   return (
-    <div
-      role="listbox"
-      aria-label="Select movies"
-      aria-multiselectable="true"
-      className="space-y-2 max-h-48 overflow-y-auto"
-    >
-      {movies.map((movie) => {
-        const isSelected = selectedIds.has(movie.source_id)
-        const isInvalid = invalidIds.has(movie.source_id)
-        // A scored movie is locked against trades: it can be taken out of a
-        // counter, never added. The other team's side carries no score (it is
-        // the offer's snapshot), so the server is the check there.
-        const isLocked = isScoreLocked(movie.fantasy_points)
-        const isDisabled = isLocked && !isSelected
-        return (
-          <div
-            key={movie.source_id}
-            role="option"
-            aria-selected={isSelected}
-            aria-disabled={isDisabled || undefined}
-            onClick={isDisabled ? undefined : () => onToggle(movie.source_id)}
-            tabIndex={isDisabled ? -1 : 0}
-            onKeyDown={isDisabled ? undefined : (e) => {
-              if (e.key === ' ' || e.key === 'Enter') {
-                e.preventDefault()
-                onToggle(movie.source_id)
-              }
-            }}
-            className={`w-full p-2 rounded-lg flex items-center gap-3 text-left transition-colors ${
-              isInvalid
-                ? 'bg-crimson/15 border border-crimson'
-                : isSelected
-                  ? 'bg-gold/20 border border-gold'
-                  : isDisabled
-                    ? 'bg-surface-hover border border-transparent opacity-60'
-                    : 'bg-surface-hover hover:bg-elevated border border-transparent'
-            } ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'} focus:outline-none focus:ring-2 focus:ring-gold focus:ring-offset-2 focus:ring-offset-surface`}
-          >
-            <div className="relative w-8 h-12 shrink-0 rounded bg-surface-hover">
-              <MoviePoster
-                src={movie.poster_url}
-                alt=""
-                sizes="32px"
-                posterSize="w92"
-                className="rounded"
-              />
-              {movie.source === 'counterpick' && <CounterpickMark />}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="type-row-title text-foreground break-words">{movie.title}</p>
-              <div className="type-meta flex items-center gap-2 text-foreground-secondary">
-                {isInvalid && <span className="font-medium text-crimson">Can&apos;t be traded</span>}
-                {isLocked && !isInvalid && <ScoreLockLabel>can&apos;t be traded</ScoreLockLabel>}
-                {movie.source === 'counterpick' && (
-                  <span className="text-crimson">
-                    {movie.counterpick_target_team_name
-                      ? `vs. ${movie.counterpick_target_team_name}`
-                      : 'Counterpick'}
-                  </span>
-                )}
-                {movie.release_date && <span>{getReleaseYear(movie.release_date)}</span>}
-              </div>
-            </div>
-            <div
-              className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
-                isSelected ? 'border-gold bg-gold' : 'border-border'
-              }`}
-              aria-hidden="true"
-            >
-              {isSelected && (
-                <svg className="w-3 h-3 text-foreground-inverse" fill="currentColor" viewBox="0 0 20 20">
-                  <path
-                    fillRule="evenodd"
-                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              )}
-            </div>
-          </div>
-        )
-      })}
+    <div className="card p-4 text-center">
+      <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-surface-hover flex items-center justify-center">
+        <svg
+          className="w-5 h-5 text-foreground-muted"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"
+          />
+        </svg>
+      </div>
+      <p className="type-body-sm text-foreground-secondary">No movies available to trade</p>
     </div>
   )
 }
@@ -1053,6 +1001,8 @@ interface ExtendOfferModalProps {
    * last hour when this modal is most likely to be open.
    */
   onExtend: (tradeOfferId: string, newExpiresAt: string) => Promise<TradeActionResult>
+  /** The extension went through; closes the modal and says when it now expires. */
+  onExtended: (newExpiresAt: string) => void
 }
 
 /**
@@ -1071,6 +1021,7 @@ function ExtendOfferModal({
   expiryBounds,
   onClose,
   onExtend,
+  onExtended,
 }: ExtendOfferModalProps) {
   // Fixed for as long as the modal is open. Recomputing on the card's countdown
   // tick would drop options out from under the pointer as the ceiling closes in.
@@ -1084,6 +1035,11 @@ function ExtendOfferModal({
   const [hours, setHours] = useState(() => presets[0]?.hours ?? 0)
   const [error, setError] = useState<string | null>(null)
 
+  const titleId = useId()
+  const introId = useId()
+  const anchorWarningId = useId()
+  const presetName = useId()
+
   const recipientTeam = trade.recipient_team as { name: string }
   // One expression, used for both the preview and the request: computing the
   // target twice let the instant shown and the instant sent drift apart.
@@ -1091,7 +1047,8 @@ function ExtendOfferModal({
 
   const extendAction = useCallback(async () => {
     setError(null)
-    const result = await onExtend(trade.id, newExpiresAt.toISOString())
+    const iso = newExpiresAt.toISOString()
+    const result = await onExtend(trade.id, iso)
 
     if (!result.success) {
       setError(result.error || 'Failed to extend the offer')
@@ -1099,41 +1056,26 @@ function ExtendOfferModal({
     }
 
     trackEvent('trade_offer_extended', { league_id: trade.league_id })
-    onClose()
-  }, [newExpiresAt, onExtend, onClose, trade.id, trade.league_id])
+    onExtended(iso)
+  }, [newExpiresAt, onExtend, onExtended, trade.id, trade.league_id])
 
   const { execute: handleExtend, isLoading } = useAsyncAction(extendAction)
 
-  // On document rather than the dialog: a keydown handler on the panel only
-  // fires once focus is already inside it, so Escape does nothing until the user
-  // tabs in. Same approach as AcceptConfirmModal.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isLoading) {
-        onClose()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [onClose, isLoading])
+  const showAnchorWarning = !atCeiling && trade.expiry_anchor === 'movie_release'
 
   return (
-    // .modal-overlay / .modal-panel rather than a hand-rolled backdrop: the
-    // tokens carry the app's dimming and blur, and a lighter unanimated copy
-    // reads as a different kind of dialog. The two sibling modals in this file
-    // predate those classes; this one should not become a third divergence.
-    <div
-      className="modal-overlay p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="extend-offer-title"
+    <Modal
+      onClose={onClose}
+      preventClose={isLoading}
+      labelledBy={titleId}
+      describedBy={showAnchorWarning ? `${introId} ${anchorWarningId}` : introId}
     >
       <div className="modal-panel bg-surface rounded-lg shadow-heavy max-w-md w-full border border-border">
         <div className="p-4 border-b border-border">
-          <h2 id="extend-offer-title" className="type-panel text-foreground">
+          <h2 id={titleId} className="type-panel text-foreground">
             Extend offer
           </h2>
-          <p className="type-body-sm text-foreground-secondary mt-1">
+          <p id={introId} className="type-body-sm text-foreground-secondary mt-1">
             Give {recipientTeam.name} more time to answer. An offer can only be extended, never
             shortened.
           </p>
@@ -1156,28 +1098,30 @@ function ExtendOfferModal({
             </div>
           ) : (
             <>
-              <div>
-                <span className="type-body-sm text-foreground-secondary">Extend by</span>
+              <fieldset>
+                <legend className="type-body-sm text-foreground-secondary">Extend by</legend>
                 <div className="mt-1 flex flex-wrap gap-2">
                   {presets.map((preset) => (
                     <Chip
                       key={preset.hours}
-                      selected={hours === preset.hours}
+                      name={presetName}
+                      checked={hours === preset.hours}
                       // Locked while the request is in flight, like the confirm
                       // button. useAsyncAction's ref guard already blocks a
                       // second submit, but changing the selection mid-request
                       // leaves the preview describing a time that was not sent.
                       disabled={isLoading}
-                      onClick={() => setHours(preset.hours)}
+                      onSelect={() => setHours(preset.hours)}
                     >
                       {preset.label}
                     </Chip>
                   ))}
                 </div>
-              </div>
+              </fieldset>
 
-              {/* A chip alone never says when. Same rule as the proposal picker. */}
-              <p className="type-body-sm text-foreground-secondary">
+              {/* A chip alone never says when. Same rule as the proposal picker.
+                  Polite live text, so arrowing through the chips says it too. */}
+              <p className="type-body-sm text-foreground-secondary" aria-live="polite">
                 New expiry:{' '}
                 <time dateTime={newExpiresAt.toISOString()} className="text-foreground-secondary">
                   {formatExpiryAbsolute(newExpiresAt.toISOString())}
@@ -1192,8 +1136,8 @@ function ExtendOfferModal({
             bare "+24h" button: the offer stops following the movie, and finding
             that out afterwards would read as the app rewriting the deal.
           */}
-          {!atCeiling && trade.expiry_anchor === 'movie_release' && (
-            <div className="alert alert-warning" role="alert">
+          {showAnchorWarning && (
+            <div id={anchorWarningId} className="alert alert-warning">
               <p className="type-body-sm">
                 This offer runs until {trade.anchor_movie_title ?? 'its movie'} releases. Extending
                 it past that replaces the release anchor with a fixed time, so it will stop
@@ -1211,6 +1155,7 @@ function ExtendOfferModal({
 
         <div className="p-4 border-t border-border flex justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-ghost"
             disabled={isLoading}
@@ -1219,10 +1164,10 @@ function ExtendOfferModal({
             Cancel
           </button>
           <button
+            type="button"
             onClick={() => handleExtend()}
             className="btn btn-primary"
             disabled={isLoading || atCeiling}
-            aria-label="Confirm extending the offer"
             aria-busy={isLoading}
             data-testid={`confirm-extend-trade-${trade.id}`}
           >
@@ -1230,7 +1175,7 @@ function ExtendOfferModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -1255,31 +1200,26 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
 
   const { execute: handleApprove, isLoading } = useAsyncAction(onApprove)
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && !isLoading) {
-      onClose()
-    }
-  }
+  const titleId = useId()
+  const questionId = useId()
+  const effectId = useId()
+  const contestedId = useId()
+  const warningId = useId()
+  const isContested = Boolean(trade.contested_source_ids && trade.contested_source_ids.length > 0)
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="approve-modal-title"
-      onKeyDown={handleKeyDown}
+    <Modal
+      onClose={onClose}
+      preventClose={isLoading}
+      labelledBy={titleId}
+      describedBy={[questionId, effectId, isContested ? contestedId : null, warningId].filter(Boolean).join(' ')}
     >
-      <div
-        className="absolute inset-0 bg-overlay-soft backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-md w-full">
         <div className="p-4 border-b border-border">
-          <h2 id="approve-modal-title" className="type-panel text-foreground">
+          <h2 id={titleId} className="type-panel text-foreground">
             Approve trade
           </h2>
-          <p className="type-body-sm text-foreground-secondary mt-1">
+          <p id={questionId} className="type-body-sm text-foreground-secondary mt-1">
             Process the trade between {initiatorTeam.name} and {recipientTeam.name} now, without
             waiting for the review period to end?
           </p>
@@ -1287,14 +1227,14 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
 
         <div className="p-4 space-y-3">
           <div className="p-3 rounded-lg bg-surface-hover">
-            <p className="type-body-sm text-foreground-secondary">
+            <p id={effectId} className="type-body-sm text-foreground-secondary">
               Movies and budget change hands immediately, and both teams are notified that you
               approved the trade.
             </p>
           </div>
 
-          {trade.contested_source_ids && trade.contested_source_ids.length > 0 && (
-            <div className="alert alert-warning" role="alert">
+          {isContested && (
+            <div id={contestedId} className="alert alert-warning">
               <p className="type-body-sm">
                 A movie in this trade is also in another open offer. Approving settles it here and
                 expires the competing offer.
@@ -1302,7 +1242,7 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
             </div>
           )}
 
-          <div className="bg-warning-bg p-3 rounded-lg" role="alert">
+          <div id={warningId} className="bg-warning-bg p-3 rounded-lg">
             <p className="type-body-sm text-warning">
               This action cannot be undone — the trade can no longer be vetoed once processed.
             </p>
@@ -1311,6 +1251,7 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
 
         <div className="p-4 border-t border-border flex justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-ghost"
             disabled={isLoading}
@@ -1319,10 +1260,10 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
             Cancel
           </button>
           <button
+            type="button"
             onClick={() => handleApprove()}
             className="btn btn-primary"
             disabled={isLoading}
-            aria-label="Confirm approve trade"
             aria-busy={isLoading}
             data-testid={`confirm-approve-trade-${trade.id}`}
           >
@@ -1330,7 +1271,7 @@ function ApproveModal({ trade, onClose, onApprove }: ApproveModalProps) {
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -1350,6 +1291,11 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
   const initiatorTeam = trade.initiator_team as { name: string }
   const recipientTeam = trade.recipient_team as { name: string }
 
+  const titleId = useId()
+  const questionId = useId()
+  const warningId = useId()
+  const reasonId = useId()
+
   const vetoAction = useCallback(
     async (reasonText: string) => {
       await onVeto(reasonText || undefined)
@@ -1363,47 +1309,35 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
     execute(reason.trim())
   }
 
-  // Handle escape key to close modal
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape' && !isLoading) {
-      onClose()
-    }
-  }
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="veto-modal-title"
-      onKeyDown={handleKeyDown}
+    <Modal
+      onClose={onClose}
+      preventClose={isLoading}
+      labelledBy={titleId}
+      describedBy={`${questionId} ${warningId}`}
     >
-      <div
-        className="absolute inset-0 bg-overlay-soft backdrop-blur-sm"
-        onClick={onClose}
-        aria-hidden="true"
-      />
       <div className="relative bg-surface rounded-lg shadow-heavy max-w-md w-full">
         <div className="p-4 border-b border-border">
-          <h2 id="veto-modal-title" className="type-panel text-foreground">Veto trade</h2>
-          <p className="type-body-sm text-foreground-secondary mt-1">
+          <h2 id={titleId} className="type-panel text-foreground">Veto trade</h2>
+          <p id={questionId} className="type-body-sm text-foreground-secondary mt-1">
             Are you sure you want to veto the trade between {initiatorTeam.name} and {recipientTeam.name}?
           </p>
         </div>
 
         <div className="p-4 space-y-4">
           <div>
-            <label htmlFor="veto-reason" className="type-label text-foreground-secondary">Reason (optional)</label>
+            <label htmlFor={reasonId} className="type-label text-foreground-secondary">Reason (optional)</label>
             <textarea
-              id="veto-reason"
+              id={reasonId}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
+              maxLength={1500}
               className="input mt-1 w-full h-24 resize-none"
               placeholder="Explain why you're vetoing this trade..."
             />
           </div>
 
-          <div className="bg-error-bg p-3 rounded-lg" role="alert">
+          <div id={warningId} className="bg-error-bg p-3 rounded-lg">
             <p className="type-body-sm text-error">
               This action cannot be undone. The trade will be cancelled and both teams will be notified.
             </p>
@@ -1412,6 +1346,7 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
 
         <div className="p-4 border-t border-border flex justify-end gap-2">
           <button
+            type="button"
             onClick={onClose}
             className="btn btn-ghost"
             disabled={isLoading}
@@ -1420,16 +1355,16 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleVeto}
             className="btn btn-danger"
             disabled={isLoading}
-            aria-label="Confirm veto trade"
             aria-busy={isLoading}
           >
             {isLoading ? 'Vetoing...' : 'Veto trade'}
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

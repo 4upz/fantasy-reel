@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import Link from 'next/link'
 import { ChevronDown, Trophy } from 'lucide-react'
 import type { League } from '@/types'
@@ -33,6 +33,12 @@ function championsOf(season: League): string[] {
 /** @design-system League */
 export default function SeriesListItem({ seasons }: Props): React.ReactElement | null {
   const [isExpanded, setIsExpanded] = useState(false)
+  const id = useId()
+  const titleId = `${id}-title`
+  const statusId = `${id}-status`
+  const yearId = `${id}-year`
+  const metaId = `${id}-meta`
+  const pastListId = `${id}-past`
 
   const current = currentSeasonOf(seasons)
   if (!current) return null
@@ -43,21 +49,28 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
     <div className="card card-interactive">
       {/* The link wraps only the top block: the expander below is a real button,
           and nesting one inside a link breaks keyboard navigation. */}
-      <Link href={`/league/${current.id}`} className="group block p-4">
+      {/* Named by league, status and year; the details line is its description,
+          so the link is not one long run-on name. */}
+      <Link
+        href={`/league/${current.id}`}
+        className="group block p-4"
+        aria-labelledby={`${titleId} ${statusId} ${yearId}`}
+        aria-describedby={metaId}
+      >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="mb-1 flex flex-wrap items-center gap-2.5">
-              <h3 className="min-w-0 basis-full break-words type-card sm:basis-auto sm:flex-1 text-foreground transition-colors group-hover:text-gold">
+              <h2 id={titleId} className="min-w-0 basis-full break-words type-card sm:basis-auto sm:flex-1 text-foreground transition-colors group-hover:text-gold">
                 {current.name}
-              </h3>
-              <span className={`badge shrink-0 ${STATUS_BADGE_CLASS[current.status]}`}>
+              </h2>
+              <span id={statusId} className={`badge shrink-0 ${STATUS_BADGE_CLASS[current.status]}`}>
                 {getStatusLabel(current.status)}
               </span>
               {/* A status token and a year are two facts, so they stay two
                   elements rather than merging into one badge. */}
-              <span className={`${SEASON_PILL_CLASS} shrink-0`}>{current.season_year}</span>
+              <span id={yearId} className={`${SEASON_PILL_CLASS} shrink-0`}>{current.season_year}</span>
             </div>
-            <p className="text-sm text-foreground-secondary">
+            <p id={metaId} className="text-sm text-foreground-secondary">
               {current.invite_only ? 'Private' : 'Open'} · {current.max_participants} max participants ·
               Created{' '}
               {new Date(current.created_at).toLocaleDateString('en-US', {
@@ -67,7 +80,7 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
             </p>
           </div>
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-hover opacity-0 transition-opacity group-hover:opacity-100">
-            <svg className="h-4 w-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="h-4 w-4 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -80,6 +93,8 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
             type="button"
             onClick={() => setIsExpanded((open) => !open)}
             aria-expanded={isExpanded}
+            aria-controls={pastListId}
+            aria-describedby={titleId}
             className="flex w-full cursor-pointer items-center gap-2 px-4 py-2.5 text-left transition-colors hover:bg-surface-hover"
           >
             <ChevronDown
@@ -94,7 +109,7 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
           </button>
 
           {isExpanded && (
-            <ul className="animate-fade-in px-4 pb-3">
+            <ul id={pastListId} role="list" className="animate-fade-in px-4 pb-3">
               {past.map((season) => {
                 const champions = championsOf(season)
                 return (
@@ -104,12 +119,24 @@ export default function SeriesListItem({ seasons }: Props): React.ReactElement |
                       className="flex items-center gap-2.5 rounded-lg px-2 py-2 transition-colors hover:bg-surface-hover"
                     >
                       <span className={`badge shrink-0 ${STATUS_BADGE_CLASS[season.status]}`}>
-                        {season.season_year} · {getStatusLabel(season.status)}
+                        {/* One inline run inside the flex badge, or the spaces
+                            around the dot collapse at the flex item edges. */}
+                        <span>
+                          {season.season_year}
+                          <span aria-hidden="true"> · </span>
+                          <span className="sr-only">, </span>
+                          {getStatusLabel(season.status)}
+                        </span>
                       </span>
                       {champions.length > 0 && (
                         <span className="flex min-w-0 items-center gap-1 rounded-full bg-gold-muted px-2 py-px type-meta text-gold">
                           <Trophy className="h-3 w-3 flex-none" aria-hidden="true" />
-                          <span className="truncate">{champions.join(' · ')}</span>
+                          {/* The trophy is the only visible "champion" cue. */}
+                          <span className="sr-only">
+                            {champions.length > 1 ? 'Co-champions: ' : 'Champion: '}
+                            {champions.join(', ')}
+                          </span>
+                          <span className="truncate" aria-hidden="true">{champions.join(' · ')}</span>
                         </span>
                       )}
                     </Link>

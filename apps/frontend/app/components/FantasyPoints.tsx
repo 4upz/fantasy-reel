@@ -14,9 +14,13 @@ interface Props {
  */
 export default function FantasyPoints({ points, releaseDate, className = '' }: Props) {
   const preRelease = isPreReleaseScore(points, releaseDate)
+  const rounded = Math.round(points)
+  // "pts" is read letter by letter by some screen readers; say the word.
+  const spoken = `${rounded} ${Math.abs(rounded) === 1 ? 'point' : 'points'}${preRelease ? ' at release' : ''}`
   return (
     <span className={`type-numeric ${pointsTone(points, { preRelease })} ${className}`}>
-      {formatPointsText(points, preRelease)}
+      <span aria-hidden="true">{formatPointsText(points, preRelease)}</span>
+      <span className="sr-only">{spoken}</span>
     </span>
   )
 }

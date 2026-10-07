@@ -22,12 +22,12 @@ test.describe('Critical Path: Authentication @critical @smoke', () => {
 
     // Verify successful authentication
     await page.waitForURL('/dashboard')
-    await expect(page.getByText(/your leagues/i)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { name: 'Your leagues', level: 1 })).toBeVisible({ timeout: 10000 })
   })
 
   test('user can logout successfully', async ({ authenticatedPage }) => {
     await authenticatedPage.goto('/dashboard')
-    await expect(authenticatedPage.getByText(/your leagues/i)).toBeVisible()
+    await expect(authenticatedPage.getByRole('heading', { name: 'Your leagues', level: 1 })).toBeVisible()
 
     // Logout via direct POST to signout endpoint (sidebar is collapsed by default)
     await authenticatedPage.request.post('/auth/signout')

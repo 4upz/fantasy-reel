@@ -45,7 +45,7 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
   return (
     <div
       className={`card bid-card-interactive p-4 ${typeClass} ${
-        isOutbid ? 'border-warning bg-warning-bg/20 outbid-pulse' : ''
+        isOutbid ? 'border-warning bg-warning-bg/20 outbid-pulse motion-reduce:animate-none' : ''
       }`}
       data-testid={`counterpick-bid-card-${bid.movie_id}`}
     >
@@ -54,7 +54,7 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
         <div className="relative w-16 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-elevated shadow-soft">
           <MoviePoster
             src={posterUrl}
-            alt={movieTitle}
+            alt=""
             sizes="64px"
             posterSize="w185"
           />
@@ -62,13 +62,13 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
 
         {/* Bid Info */}
         <div className="flex-1 min-w-0">
-          <h4 className="type-row-title text-foreground truncate">
+          <h4 className="type-row-title text-foreground break-words">
             {movieTitle}
           </h4>
 
           <p className="type-body-sm text-foreground-secondary mt-0.5 flex items-center gap-1">
-            <Target className="w-3.5 h-3.5 text-crimson" />
-            vs {bid.target_team?.name || 'Unknown Team'}
+            <Target className="w-3.5 h-3.5 text-crimson-text" aria-hidden="true" />
+            <span className="sr-only">Counterpick </span>vs {bid.target_team?.name || 'Unknown Team'}
           </p>
 
           <BidAmountAndDeadline
@@ -81,7 +81,7 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
 
           {isOutbid && (
             <div className="type-label flex items-center gap-1.5 mt-2 text-warning">
-              <AlertTriangle className="w-4 h-4" />
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" />
               <span>You&apos;ve been outbid!</span>
             </div>
           )}
@@ -98,8 +98,10 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
           <div className="flex flex-col items-end gap-2">
             {showRecoverButton && (
               <button
+                type="button"
                 onClick={onCounter}
                 className="type-control btn btn-danger px-4"
+                aria-label={`Counter bid on ${movieTitle}`}
               >
                 Counter bid
               </button>
@@ -107,9 +109,11 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
 
             {showRaiseButton && (
               <button
+                type="button"
                 onClick={onCounter}
-                className="type-control btn btn-secondary px-4 border-crimson text-crimson hover:bg-crimson/10"
+                className="type-control btn btn-secondary px-4 border-crimson text-crimson-text hover:bg-crimson/10"
                 data-testid={isOwner ? `raise-counterpick-bid-${bid.movie_id}` : `counter-counterpick-bid-${bid.movie_id}`}
+                aria-label={`${isOwner ? 'Raise bid' : 'Counter bid'} on ${movieTitle}`}
               >
                 {isOwner ? 'Raise bid' : 'Counter bid'}
               </button>
@@ -117,11 +121,13 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
 
             {showCancelButton && (
               <button
+                type="button"
                 onClick={onCancel}
                 data-testid={`cancel-counterpick-bid-${bid.movie_id}`}
-                className="type-control btn btn-ghost text-crimson hover:text-crimson-hover hover:bg-crimson/10"
+                className="type-control btn btn-ghost text-crimson-text hover:text-crimson-text-hover hover:bg-crimson/10"
+                aria-label={`Cancel counterpick bid on ${movieTitle}`}
               >
-                <Trash2 className="w-4 h-4 mr-1.5" />
+                <Trash2 className="w-4 h-4 mr-1.5" aria-hidden="true" />
                 Cancel
               </button>
             )}
@@ -133,6 +139,7 @@ export default function CounterpickBidCard({ bid, isOwner, onCancel, cancelLocke
               >
                 <Lock className="w-3.5 h-3.5" aria-hidden="true" />
                 Locked in
+                <span className="sr-only">: bids can&apos;t be cancelled after the new-bid cutoff</span>
               </p>
             )}
           </div>

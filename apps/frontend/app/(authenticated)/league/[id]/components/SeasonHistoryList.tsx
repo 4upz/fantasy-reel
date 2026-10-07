@@ -40,7 +40,7 @@ function ordinal(rank: number): string {
 /** @design-system League */
 export default function SeasonHistoryList({ rows }: Props): React.ReactElement {
   return (
-    <ol className="space-y-2.5" data-testid="season-history-list">
+    <ol className="space-y-2.5" role="list" data-testid="season-history-list">
       {rows.map((row) => (
         <li key={row.leagueId}>
           <Link
@@ -63,10 +63,12 @@ export default function SeasonHistoryList({ rows }: Props): React.ReactElement {
                         aria-hidden="true"
                       />
                       <span className="min-w-0 flex-1 truncate type-card text-gold">
+                        <span className="sr-only">{row.champions.length > 1 ? 'Co-champions: ' : 'Champion: '}</span>
                         {row.champions.join(' · ')}
                       </span>
                       <span className="flex-none type-number text-foreground-secondary">
                         {formatFantasyPoints(row.championPoints)}
+                        {row.championPoints != null && <span className="sr-only"> points</span>}
                       </span>
                     </>
                   ) : (
@@ -89,7 +91,7 @@ export default function SeasonHistoryList({ rows }: Props): React.ReactElement {
                 )}
 
                 <p className="mt-1.5 text-xs text-foreground-secondary transition-colors group-hover:text-gold">
-                  View season →
+                  View season <span aria-hidden="true">→</span>
                 </p>
               </div>
             </div>
