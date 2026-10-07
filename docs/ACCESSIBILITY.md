@@ -30,7 +30,9 @@ A11Y_REPORT_DIR=/tmp/a11y npx playwright test e2e/tests/accessibility --project=
 Measured with the same suite and lint rules as "Current status", run against
 the unmodified `origin/main` build. A first audit of the earlier 25362e7 drove
 the work; it was re-measured here once account deletion, email preferences and
-unsubscribe had merged, and those are included.
+unsubscribe had merged, and those are included. #137, merged after this
+measurement, only adds a message-visibility note to the two trade dialogs. This
+branch includes it, and those dialogs pass every check.
 
 **axe-core: 0 of 92 scans clean** (282 violation instances, 8 rules). Another 26
 of the suite's 118 scans could not run at all: the dialogs they open were not
