@@ -67,7 +67,7 @@ export default function StandingsSidebar({ leagueId, standings }: Props) {
 
                 {/* Points */}
                 <div className="text-right">
-                  <span className={`type-number ${isPositive ? 'text-foreground' : 'text-crimson'}`}>
+                  <span className={`type-number ${isPositive ? 'text-foreground' : 'text-crimson-text'}`}>
                     {formatFantasyPoints(entry.total_points)}
                   </span>
                   <span className="type-meta text-foreground-secondary ml-1">pts</span>

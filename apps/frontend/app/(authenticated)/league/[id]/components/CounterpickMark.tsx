@@ -15,7 +15,7 @@ import { Target } from 'lucide-react'
 export default function CounterpickMark({ label = 'Counterpick' }: { label?: string }) {
   return (
     <div
-      className="absolute -top-[7px] -left-[7px] flex h-[22px] w-[22px] items-center justify-center rounded-full border border-crimson/40 bg-crimson/20 text-crimson"
+      className="absolute -top-[7px] -left-[7px] flex h-[22px] w-[22px] items-center justify-center rounded-full border border-crimson/40 bg-crimson/20 text-crimson-text"
       title={label}
     >
       <Target className="h-3 w-3" aria-hidden="true" />

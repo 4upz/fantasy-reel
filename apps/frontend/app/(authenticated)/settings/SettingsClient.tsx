@@ -34,7 +34,6 @@ export default function SettingsClient({
 
   const charCount = displayName.length
   const isOverLimit = charCount > MAX_DISPLAY_NAME_LENGTH
-  const isSubmitDisabled = isSubmitting || isOverLimit || !displayName.trim()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault()
@@ -87,13 +86,13 @@ export default function SettingsClient({
       </section>
 
       {/* Profile Section */}
-      <section className="card p-6">
+      <section className="card p-6" aria-labelledby="profile-heading">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
           <div className="p-2 rounded-lg bg-gold-muted">
             <User className="w-5 h-5 text-gold" />
           </div>
           <div>
-            <h2 className="type-section text-foreground">
+            <h2 id="profile-heading" className="type-section text-foreground">
               Profile
             </h2>
             <p className="type-body-sm text-foreground-secondary">
@@ -103,10 +102,10 @@ export default function SettingsClient({
         </div>
 
         {/* Avatar Upload */}
-        <div className="mb-8">
-          <label className="type-label block text-foreground-secondary mb-3">
+        <div className="mb-8" role="group" aria-labelledby="profile-photo-heading">
+          <h3 id="profile-photo-heading" className="type-label block text-foreground-secondary mb-3">
             Profile photo
-          </label>
+          </h3>
           <AvatarUpload
             userId={userId}
             currentAvatarUrl={profile?.avatar_url ?? null}
@@ -132,27 +131,40 @@ export default function SettingsClient({
               placeholder="Enter your display name"
               className={`input ${isOverLimit ? 'border-error focus:border-error focus:shadow-[0_0_0_3px_var(--color-error-bg)]' : ''}`}
               maxLength={110}
+              required
+              aria-invalid={isOverLimit || undefined}
+              aria-describedby={`display_name-help display_name-count${isOverLimit ? ' display_name-error' : ''}`}
             />
             <div className="flex justify-between mt-2">
-              <p className="type-meta text-foreground-secondary">
+              <p id="display_name-help" className="type-meta text-foreground-secondary">
                 This is how other players will see you
               </p>
               <span
+                id="display_name-count"
                 className={`type-meta ${isOverLimit ? 'text-error' : 'text-foreground-secondary'}`}
               >
-                {charCount}/{MAX_DISPLAY_NAME_LENGTH}
+                {charCount}
+                <span className="sr-only"> of </span>
+                <span aria-hidden="true">/</span>
+                {MAX_DISPLAY_NAME_LENGTH}
+                <span className="sr-only"> characters</span>
               </span>
             </div>
+            {isOverLimit && (
+              <p id="display_name-error" role="alert" className="type-meta text-error mt-1">
+                Display names can be at most {MAX_DISPLAY_NAME_LENGTH} characters.
+              </p>
+            )}
           </div>
 
           <button
             type="submit"
-            disabled={isSubmitDisabled}
+            disabled={isSubmitting}
             className="btn btn-primary"
           >
             {isSubmitting ? (
               <>
-                <span className="w-4 h-4 border-2 border-foreground-inverse/30 border-t-foreground-inverse rounded-full animate-spin mr-2" />
+                <span aria-hidden="true" className="w-4 h-4 border-2 border-foreground-inverse/30 border-t-foreground-inverse rounded-full animate-spin mr-2" />
                 Saving...
               </>
             ) : (
@@ -163,44 +175,44 @@ export default function SettingsClient({
       </section>
 
       {/* Account Section */}
-      <section className="card p-6">
+      <section className="card p-6" aria-labelledby="account-heading">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
           <div className="p-2 rounded-lg bg-surface-hover">
             <Mail className="w-5 h-5 text-foreground-secondary" />
           </div>
           <div>
-            <h2 className="type-section text-foreground">
+            <h2 id="account-heading" className="type-section text-foreground">
               Account
             </h2>
             <p className="type-body-sm text-foreground-secondary">Your account details</p>
           </div>
         </div>
 
-        <div>
-          <label className="type-label block text-foreground-secondary mb-2">
+        <dl>
+          <dt className="type-label block text-foreground-secondary mb-2">
             Email address
-          </label>
-          <div className="flex items-center gap-3 px-3 py-2.5 bg-elevated rounded-lg border border-border">
+          </dt>
+          <dd className="flex items-center gap-3 px-3 py-2.5 bg-elevated rounded-lg border border-border">
             <Mail className="w-4 h-4 text-foreground-muted" />
-            <span className="text-foreground">{email}</span>
-          </div>
-          <p className="type-meta mt-2 text-foreground-secondary">
-            Contact support to change your email address
-          </p>
-        </div>
+            <span className="text-foreground break-all">{email}</span>
+          </dd>
+        </dl>
+        <p className="type-meta mt-2 text-foreground-secondary">
+          Contact support to change your email address
+        </p>
       </section>
 
       {/* Connected accounts Section */}
       <ConnectedAccounts email={email} identities={identities} hasPassword={hasPassword} />
 
       {/* Security Section */}
-      <section className="card p-6">
+      <section className="card p-6" aria-labelledby="security-heading">
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-border">
           <div className="p-2 rounded-lg bg-surface-hover">
             <Shield className="w-5 h-5 text-foreground-secondary" />
           </div>
           <div>
-            <h2 className="type-section text-foreground">
+            <h2 id="security-heading" className="type-section text-foreground">
               Security
             </h2>
             <p className="type-body-sm text-foreground-secondary">
@@ -220,6 +232,7 @@ export default function SettingsClient({
           </div>
           {hasPassword ? (
             <button
+              type="button"
               onClick={() => setShowPasswordModal(true)}
               className="type-control btn btn-ghost"
             >

@@ -11,6 +11,8 @@ interface Props {
   teamName: string | null
   /** The season that just ended, for the "final standings" link. */
   previousSeason: { id: string; seasonYear: number } | null
+  /** Where focus goes once the card dismisses itself, taking its button along. */
+  focusAfterDismissId?: string
 }
 
 const STORAGE_PREFIX = 'fr:season-welcome-dismissed:'
@@ -32,6 +34,7 @@ export default function SeasonWelcomeCard({
   seasonYear,
   teamName,
   previousSeason,
+  focusAfterDismissId,
 }: Props): React.ReactElement | null {
   // Starts hidden and is revealed after the storage read, so the server render
   // and the first client render agree.
@@ -52,6 +55,7 @@ export default function SeasonWelcomeCard({
     } catch {
       /* a browser that refuses storage just gets the card again next visit */
     }
+    if (focusAfterDismissId) document.getElementById(focusAfterDismissId)?.focus()
   }
 
   if (!isVisible) return null
@@ -75,7 +79,7 @@ export default function SeasonWelcomeCard({
             href={`/league/${previousSeason.id}/standings`}
             className="mt-2 inline-block text-sm text-gold transition-colors hover:text-gold-hover"
           >
-            See the {previousSeason.seasonYear} final standings →
+            See the {previousSeason.seasonYear} final standings <span aria-hidden="true">→</span>
           </Link>
         )}
       </div>
@@ -83,7 +87,7 @@ export default function SeasonWelcomeCard({
       <button
         type="button"
         onClick={dismiss}
-        aria-label="Dismiss"
+        aria-label="Dismiss season welcome"
         className="flex-none cursor-pointer p-1 text-foreground-secondary transition-colors hover:text-foreground"
       >
         <X className="h-4 w-4" />

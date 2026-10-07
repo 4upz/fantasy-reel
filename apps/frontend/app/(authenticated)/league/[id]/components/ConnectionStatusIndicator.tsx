@@ -40,17 +40,22 @@ interface Props {
 /** @design-system Feedback */
 export default function ConnectionStatusIndicator({ status }: Props): React.ReactElement {
   const config = STATUS_CONFIG[status]
+  // The pill's own text stays the short label; the subject and the fallback's
+  // explanation are for screen readers, which never see the `title` tooltip.
+  const explanation = status === 'polling' || status === 'error' ? `. ${config.title}` : ''
 
   return (
-    <div
-      className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface border border-border"
-      title={config.title}
-      role="status"
-      aria-live="polite"
-      data-testid="draft-connection-status"
-    >
-      <span className={`w-2 h-2 rounded-full ${config.dot}`} />
-      <span className={`type-meta ${config.textColor}`}>{config.text}</span>
+    <div role="status" aria-live="polite">
+      <span className="sr-only">Draft updates: </span>
+      <div
+        className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-surface border border-border"
+        title={config.title}
+        data-testid="draft-connection-status"
+      >
+        <span className={`w-2 h-2 rounded-full ${config.dot}`} />
+        <span className={`type-meta ${config.textColor}`}>{config.text}</span>
+      </div>
+      {explanation && <span className="sr-only">{explanation}</span>}
     </div>
   )
 }

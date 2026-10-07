@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { X, AlertTriangle } from 'lucide-react'
+import Modal from '@/app/components/Modal'
 import { ButtonSpinner } from '../../components/Icons'
 
 interface Props {
@@ -9,6 +10,8 @@ interface Props {
   onConfirm: () => Promise<void>
   onCancel: () => void
   loading: boolean
+  /** Why the last delete failed. Shown here: a toast would sit behind the dialog, unheard. */
+  error?: string | null
 }
 
 /** @design-system Modals */
@@ -17,22 +20,26 @@ export default function ConfirmDeleteModal({
   onConfirm,
   onCancel,
   loading,
+  error = null,
 }: Props): React.ReactElement {
   const [confirmText, setConfirmText] = useState('')
+  const titleId = useId()
+  const warningId = useId()
+  const hintId = useId()
 
   const isConfirmed = confirmText === leagueName
   const isDisabled = loading || !isConfirmed
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4">
-      <div className="glass card p-6 w-full max-w-md animate-slide-up">
+    <Modal onClose={onCancel} preventClose={loading} labelledBy={titleId} describedBy={warningId}>
+      <div className="glass card p-6 w-full max-w-md animate-slide-up motion-reduce:animate-none">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-crimson/10">
-              <AlertTriangle className="w-5 h-5 text-crimson" />
+              <AlertTriangle className="w-5 h-5 text-crimson-text" />
             </div>
-            <h2 className="type-panel text-foreground">
+            <h2 id={titleId} className="type-panel text-foreground">
               Delete league
             </h2>
           </div>
@@ -40,22 +47,23 @@ export default function ConfirmDeleteModal({
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="p-1 text-foreground-secondary hover:text-foreground transition-colors"
+            aria-label="Close delete league dialog"
+            className="p-1 text-foreground-secondary hover:text-foreground transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="mb-6">
+        <div id={warningId} className="mb-6">
           <p className="text-foreground-secondary">
-            This action <span className="text-crimson font-medium">cannot be undone</span>.
+            This action <span className="text-crimson-text font-medium">cannot be undone</span>.
             This will permanently delete the league and all associated data including:
           </p>
-          <ul className="type-body-sm mt-3 space-y-1 text-foreground-secondary">
-            <li>• All participants and teams</li>
-            <li>• All draft picks</li>
-            <li>• All invitations</li>
+          <ul role="list" className="type-body-sm mt-3 space-y-1 text-foreground-secondary">
+            <li><span aria-hidden="true">• </span>All participants and teams</li>
+            <li><span aria-hidden="true">• </span>All draft picks</li>
+            <li><span aria-hidden="true">• </span>All invitations</li>
           </ul>
         </div>
 
@@ -76,7 +84,18 @@ export default function ConfirmDeleteModal({
             className="input"
             autoComplete="off"
             disabled={loading}
+            aria-describedby={hintId}
+            data-dialog-initial-focus
           />
+          {/* Why Delete stays disabled while the text is close but not exact. */}
+          <p id={hintId} className="sr-only">
+            Must match the league name exactly, including capital letters.
+          </p>
+          {error && (
+            <p role="alert" className="type-body-sm text-error mt-2">
+              {error}
+            </p>
+          )}
         </div>
 
         {/* Actions */}
@@ -106,6 +125,6 @@ export default function ConfirmDeleteModal({
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
-import { Shuffle, GripVertical, Crown } from 'lucide-react'
+import { Shuffle, GripVertical, Crown, ChevronUp, ChevronDown } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -10,7 +10,10 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  type Announcements,
   type DragEndEvent,
+  type ScreenReaderInstructions,
+  type UniqueIdentifier,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -23,6 +26,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { getParticipantDisplayName } from '@/utils/league'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { announce } from '@/utils/announce'
 import type { League, ParticipantWithProfile } from '@/types'
 import { SectionHeader, LockedMessage } from './shared'
 import { ButtonSpinner } from '../../components/Icons'
@@ -34,13 +38,28 @@ interface Props {
   onReorder: (participants: ParticipantWithProfile[]) => void
 }
 
+type MoveDirection = 'up' | 'down'
+
 interface SortableItemProps {
   participant: ParticipantWithProfile
   position: number
+  count: number
   isLocked: boolean
+  onMove: (participantId: string, direction: MoveDirection) => void
 }
 
-function SortableItem({ participant, position, isLocked }: SortableItemProps): React.ReactElement {
+const UNSAVED_HINT = 'Not saved yet: use Save Order to keep it.'
+
+/** dnd-kit's spoken instructions for the drag handle, in this list's terms. */
+const SCREEN_READER_INSTRUCTIONS: ScreenReaderInstructions = {
+  draggable:
+    'To move this player, press Space, use the up and down arrow keys, then press Space again to drop or Escape to cancel. The Move up and Move down buttons do the same one step at a time.',
+}
+
+const MOVE_BUTTON_CLASS =
+  'p-1.5 rounded-md text-foreground-secondary hover:text-foreground hover:bg-surface-hover transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent'
+
+function SortableItem({ participant, position, count, isLocked, onMove }: SortableItemProps): React.ReactElement {
   const {
     attributes,
     listeners,
@@ -56,6 +75,7 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
   }
 
   const isOwner = participant.role === 'owner'
+  const name = getParticipantDisplayName(participant)
 
   return (
     <div
@@ -73,23 +93,29 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
         <button
           type="button"
           className="cursor-grab active:cursor-grabbing text-foreground-secondary hover:text-foreground-secondary touch-none"
-          aria-label={`Drag to reorder ${getParticipantDisplayName(participant)}`}
           {...attributes}
           {...listeners}
+          aria-label={`Reorder ${name}, pick ${position} of ${count}`}
         >
           <GripVertical className="w-5 h-5" />
         </button>
       )}
       <div className="w-8 h-8 rounded-full bg-gold/15 flex items-center justify-center flex-shrink-0">
-        <span className="type-row-title text-gold">{position}</span>
+        <span className="type-row-title text-gold">
+          <span className="sr-only">Pick </span>
+          {position}
+        </span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="type-label text-foreground truncate">
-            {getParticipantDisplayName(participant)}
+            {name}
           </span>
           {isOwner && (
-            <Crown className="w-3.5 h-3.5 text-gold flex-shrink-0" title="League Owner" />
+            <>
+              <Crown className="w-3.5 h-3.5 text-gold flex-shrink-0" aria-hidden="true" />
+              <span className="sr-only">(league owner)</span>
+            </>
           )}
         </div>
         {participant.teams && (
@@ -98,6 +124,33 @@ function SortableItem({ participant, position, isLocked }: SortableItemProps): R
           </span>
         )}
       </div>
+      {/* Drag isn't usable everywhere -- not with a phone screen reader, and
+          not where browse mode takes the arrow keys -- so each row can also be
+          moved one step at a time with plain buttons. */}
+      {!isLocked && (
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={() => onMove(participant.id, 'up')}
+            disabled={position === 1}
+            aria-label={`Move ${name} up`}
+            className={MOVE_BUTTON_CLASS}
+            data-move={`${participant.id}:up`}
+          >
+            <ChevronUp className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onMove(participant.id, 'down')}
+            disabled={position === count}
+            aria-label={`Move ${name} down`}
+            className={MOVE_BUTTON_CLASS}
+            data-move={`${participant.id}:down`}
+          >
+            <ChevronDown className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -112,6 +165,9 @@ export default function DraftOrderSection({
     [...participants].sort((a, b) => a.draft_order - b.draft_order)
   )
   const [hasChanges, setHasChanges] = useState(false)
+  /** The move button to refocus once a one-step move has re-rendered the list. */
+  const [pendingFocus, setPendingFocus] = useState<{ id: string; direction: MoveDirection } | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -131,6 +187,55 @@ export default function DraftOrderSection({
       setHasChanges(true)
     }
   }, [])
+
+  const handleMove = useCallback((participantId: string, direction: MoveDirection) => {
+    const oldIndex = localOrder.findIndex((item) => item.id === participantId)
+    const newIndex = direction === 'up' ? oldIndex - 1 : oldIndex + 1
+    if (oldIndex === -1 || newIndex < 0 || newIndex >= localOrder.length) return
+
+    setLocalOrder(arrayMove(localOrder, oldIndex, newIndex))
+    setHasChanges(true)
+    setPendingFocus({ id: participantId, direction })
+    announce(
+      `${getParticipantDisplayName(localOrder[oldIndex])} moved to pick ${newIndex + 1} of ${localOrder.length}. ${UNSAVED_HINT}`
+    )
+  }, [localOrder])
+
+  // React may move the row's DOM node, which drops its focus. Put it back on
+  // the same button -- or, at the top or bottom where that button is now
+  // disabled, on its partner -- so a run of moves can continue.
+  useEffect(() => {
+    if (!pendingFocus) return
+    const opposite: MoveDirection = pendingFocus.direction === 'up' ? 'down' : 'up'
+    const find = (direction: MoveDirection) =>
+      listRef.current?.querySelector<HTMLButtonElement>(`[data-move="${pendingFocus.id}:${direction}"]`)
+    const same = find(pendingFocus.direction)
+    ;(same && !same.disabled ? same : find(opposite))?.focus()
+    setPendingFocus(null)
+  }, [pendingFocus])
+
+  // dnd-kit's defaults speak the sortable ids -- participant UUIDs. Say the
+  // player and the pick number instead.
+  const announcements = useMemo<Announcements>(() => {
+    const nameOf = (id: UniqueIdentifier) => {
+      const participant = localOrder.find((item) => item.id === id)
+      return participant ? getParticipantDisplayName(participant) : 'Player'
+    }
+    const pickOf = (id: UniqueIdentifier) => localOrder.findIndex((item) => item.id === id) + 1
+    const count = localOrder.length
+    return {
+      onDragStart: ({ active }) =>
+        `Picked up ${nameOf(active.id)}, pick ${pickOf(active.id)} of ${count}.`,
+      onDragOver: ({ active, over }) =>
+        over ? `${nameOf(active.id)} is over pick ${pickOf(over.id)} of ${count}.` : undefined,
+      onDragEnd: ({ active, over }) =>
+        over && over.id !== active.id
+          ? `${nameOf(active.id)} moved to pick ${pickOf(over.id)} of ${count}. ${UNSAVED_HINT}`
+          : `${nameOf(active.id)} stays at pick ${pickOf(active.id)} of ${count}.`,
+      onDragCancel: ({ active }) =>
+        `Reordering cancelled. ${nameOf(active.id)} stays at pick ${pickOf(active.id)} of ${count}.`,
+    }
+  }, [localOrder])
 
   const randomizeAction = useCallback(async () => {
     const { data, error } = await callEdgeFunction<{
@@ -233,7 +338,6 @@ export default function DraftOrderSection({
                 disabled={isSaving}
                 className="btn btn-primary animate-fade-in"
                 data-testid="save-order-button"
-                aria-label="Save draft order changes"
               >
                 {isSaving ? (
                   <>
@@ -257,18 +361,21 @@ export default function DraftOrderSection({
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
+            accessibility={{ announcements, screenReaderInstructions: SCREEN_READER_INSTRUCTIONS }}
           >
             <SortableContext
               items={localOrder.map((p) => p.id)}
               strategy={verticalListSortingStrategy}
             >
-              <div className="space-y-2" role="list">
+              <div ref={listRef} className="space-y-2" role="list" aria-label="Draft order">
                 {localOrder.map((participant, index) => (
                   <SortableItem
                     key={participant.id}
                     participant={participant}
                     position={index + 1}
+                    count={localOrder.length}
                     isLocked={isLocked}
+                    onMove={handleMove}
                   />
                 ))}
               </div>

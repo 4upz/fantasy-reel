@@ -51,7 +51,7 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
             target="_blank"
             rel="noopener noreferrer"
             className={`btn btn-ghost hidden min-h-11 min-w-11 px-2 md:inline-flex ${styles.menuButton}`}
-            aria-label="Fantasy Reel on GitHub"
+            aria-label="Fantasy Reel on GitHub (opens in a new tab)"
             title="Fantasy Reel on GitHub"
             data-testid="marketing-github-link"
           >
@@ -89,6 +89,7 @@ export default function MarketingHeader({ currentPage, transparent = false }: Ma
           >
             <GitHubIcon className="h-4 w-4" />
             GitHub
+            <span className="sr-only"> (opens in a new tab)</span>
           </a>
         </nav>
         <div className="mt-3 border-t border-border pt-3">

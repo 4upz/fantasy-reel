@@ -11,6 +11,7 @@ import {
   TrendingDown,
   ChevronRight,
 } from 'lucide-react'
+import { Fragment } from 'react'
 import Link from 'next/link'
 import DiscordIcon from './icons/DiscordIcon'
 import DiscordBotGuide from './DiscordBotGuide'
@@ -40,6 +41,21 @@ function Section({
   )
 }
 
+/** "A → B → C", read as "A, then B, then C" rather than "A right arrow B". */
+function Sequence({ steps }: { steps: string[] }) {
+  return steps.map((step, index) => (
+    <Fragment key={step}>
+      {index > 0 && (
+        <>
+          <span aria-hidden="true"> → </span>
+          <span className="sr-only">, then </span>
+        </>
+      )}
+      {step}
+    </Fragment>
+  ))
+}
+
 function ScoreExample({
   title,
   avgScore,
@@ -57,7 +73,7 @@ function ScoreExample({
     <div className={`card p-4 border-l-4 ${isPositive ? 'border-l-success' : 'border-l-crimson'}`}>
       <div className="flex items-center justify-between gap-3 mb-2">
         <span className="font-semibold text-foreground">{title}</span>
-        <span className={`type-number whitespace-nowrap text-right ${isPositive ? 'text-success' : 'text-crimson'}`}>
+        <span className={`type-number whitespace-nowrap text-right ${isPositive ? 'text-success' : 'text-crimson-text'}`}>
           {total}
         </span>
       </div>
@@ -87,10 +103,10 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
         </div>
 
         {/* Quick Navigation */}
-        <nav className="card p-6 mb-12">
-          <h3 className="type-row-title text-foreground-secondary mb-4">
+        <nav className="card p-6 mb-12" aria-labelledby="how-to-play-jump-to">
+          <h2 id="how-to-play-jump-to" className="type-row-title text-foreground-secondary mb-4">
             Jump to section
-          </h3>
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
               { href: '#overview', label: 'Overview', icon: <Film className="w-4 h-4" /> },
@@ -126,7 +142,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               fantasy points based on their scores.
             </p>
             <div className="card p-6 bg-surface-hover">
-              <h4 className="type-label text-foreground mb-3">The basic flow</h4>
+              <h3 className="type-label text-foreground mb-3">The basic flow</h3>
               <ol className="space-y-3">
                 <li className="flex items-start gap-3">
                   <span className="type-number flex items-center justify-center w-6 h-6 rounded-full bg-gold text-foreground-inverse flex-shrink-0">
@@ -171,7 +187,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
 
             <div className="grid md:grid-cols-2 gap-4">
               <div className="card p-5">
-                <h4 className="type-label text-foreground mb-2">Creating a league</h4>
+                <h3 className="type-label text-foreground mb-2">Creating a league</h3>
                 <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
@@ -193,7 +209,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               </div>
 
               <div className="card p-5">
-                <h4 className="type-label text-foreground mb-2">Joining a league</h4>
+                <h3 className="type-label text-foreground mb-2">Joining a league</h3>
                 <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
@@ -217,7 +233,8 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
 
             <div className="alert alert-info">
               <p>
-                <strong>League Status:</strong> Leagues progress through stages: Setup → Drafting → Active → Completed.
+                <strong>League Status:</strong> Leagues progress through stages:{' '}
+                <Sequence steps={['Setup', 'Drafting', 'Active', 'Completed']} />.
                 Different features are available at each stage.
               </p>
             </div>
@@ -231,14 +248,20 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             </p>
 
             <div className="card p-5 mb-4">
-              <h4 className="type-label text-foreground mb-3">Snake draft format</h4>
+              <h3 className="type-label text-foreground mb-3">Snake draft format</h3>
               <p className="type-body-sm mb-3">
                 Most leagues use a &quot;snake&quot; draft, where the pick order reverses each round:
               </p>
               <div className="type-body-sm bg-elevated rounded-lg p-4">
-                <div className="text-foreground-secondary mb-1">Round 1: Team A → Team B → Team C → Team D</div>
-                <div className="text-foreground-secondary mb-1">Round 2: Team D → Team C → Team B → Team A</div>
-                <div className="text-foreground-secondary">Round 3: Team A → Team B → Team C → Team D</div>
+                <div className="text-foreground-secondary mb-1">
+                  Round 1: <Sequence steps={['Team A', 'Team B', 'Team C', 'Team D']} />
+                </div>
+                <div className="text-foreground-secondary mb-1">
+                  Round 2: <Sequence steps={['Team D', 'Team C', 'Team B', 'Team A']} />
+                </div>
+                <div className="text-foreground-secondary">
+                  Round 3: <Sequence steps={['Team A', 'Team B', 'Team C', 'Team D']} />
+                </div>
               </div>
               <p className="type-body-sm text-foreground-secondary mt-3">
                 This ensures fairness - the team that picks last in round 1 picks first in round 2.
@@ -246,7 +269,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             </div>
 
             <div className="card p-5">
-              <h4 className="type-label text-foreground mb-3">Draft strategy tips</h4>
+              <h3 className="type-label text-foreground mb-3">Draft strategy tips</h3>
               <ul className="type-body-sm space-y-2">
                 <li className="flex items-start gap-2">
                   <Star className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
@@ -279,7 +302,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             </div>
 
             <div className="card p-5 border-gold/30">
-              <h4 className="type-label text-foreground mb-3">Counterpick rounds (optional)</h4>
+              <h3 className="type-label text-foreground mb-3">Counterpick rounds (optional)</h3>
               <p className="type-body-sm">
                 Some leagues enable counterpick rounds after the main draft. A counterpick is a bet against an
                 opponent&apos;s movie: you score its points in reverse, so if it flops you gain what it loses -
@@ -297,7 +320,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             </p>
 
             <div className="card p-6 mb-6">
-              <h4 className="type-label text-foreground mb-4">How points are calculated</h4>
+              <h3 className="type-label text-foreground mb-4">How points are calculated</h3>
 
               <div className="space-y-4">
                 <div className="flex items-start gap-3">
@@ -338,7 +361,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               </div>
             </div>
 
-            <h4 className="type-label text-foreground mb-4">Example scores</h4>
+            <h3 className="type-label text-foreground mb-4">Example scores</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <ScoreExample
                 title="The 90% Club"
@@ -403,7 +426,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             </p>
 
             <div className="card p-5 mb-4">
-              <h4 className="type-label text-foreground mb-3">Fantasy Budget bidding</h4>
+              <h3 className="type-label text-foreground mb-3">Fantasy Budget bidding</h3>
               <p className="type-body-sm mb-3">
                 Your <strong>Fantasy Budget</strong> is your currency for pickups.
                 Each league sets a budget amount (e.g., $100) that you can use throughout the season.
@@ -429,7 +452,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
             </div>
 
             <div className="card p-5">
-              <h4 className="type-label text-foreground mb-3">Dropping movies</h4>
+              <h3 className="type-label text-foreground mb-3">Dropping movies</h3>
               <p className="type-body-sm">
                 You can drop movies from your roster to make room for pickups. Dropped movies
                 become available for other teams to claim. Consider dropping movies that:
@@ -460,7 +483,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
 
             <div className="grid md:grid-cols-2 gap-4 mb-4">
               <div className="card p-5">
-                <h4 className="type-label text-foreground mb-3">Proposing a trade</h4>
+                <h3 className="type-label text-foreground mb-3">Proposing a trade</h3>
                 <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
@@ -478,7 +501,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               </div>
 
               <div className="card p-5">
-                <h4 className="type-label text-foreground mb-3">Responding to trades</h4>
+                <h3 className="type-label text-foreground mb-3">Responding to trades</h3>
                 <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
@@ -518,9 +541,9 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
 
           {/* CTA */}
           <div className="card p-8 text-center border-gold/30 bg-gradient-to-br from-surface to-gold-muted/10">
-            <h3 className="type-panel text-foreground mb-3">
+            <h2 className="type-panel text-foreground mb-3">
               Ready to play?
-            </h3>
+            </h2>
             <p className="text-foreground-secondary mb-6 max-w-md mx-auto">
               Create a league and invite your friends, or join an existing league to start drafting movies!
             </p>

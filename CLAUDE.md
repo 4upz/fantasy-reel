@@ -244,14 +244,16 @@ For illustration and graphic work, follow the canonical [illustration guide](doc
 | `elevated` | `#2a2a2a` | Raised elements, inputs |
 | `gold` | `#c9a227` | Primary accent, CTAs, links |
 | `gold-hover` | `#d4b23a` | Gold hover state |
-| `crimson` | `#a8505c` | Danger actions (muted burgundy) |
-| `crimson-hover` | `#b85c68` | Crimson hover state |
+| `crimson` | `#a8505c` | Danger fills (muted burgundy) behind white text |
+| `crimson-hover` | `#96444f` | Crimson fill hover state |
+| `crimson-text` | `#e07a86` | Crimson as text (danger labels, negative points); light theme `#9b3948` |
+| `crimson-text-hover` | `#e5838e` | Crimson text hover state |
 | `foreground` | `#e8e8e8` | Primary text |
 | `foreground-secondary` | `#b8b0a4` | Secondary text (warm gray) |
-| `foreground-muted` | `#8a8078` | De-emphasized text where contrast permits; use secondary for meaningful small text on cards/inputs |
+| `foreground-muted` | `#9a9087` | De-emphasized text (4.5:1 on every surface); use secondary for meaningful small text on cards/inputs |
 | `border` | `#2e2e2e` | Default borders |
 | `border-hover` | `#404040` | Hover borders |
-| `error` | `#d65c5c` | Error states (muted red) |
+| `error` | `#e57373` | Error states (muted red) |
 
 **Status Colors:**
 - `status-setup` / `status-setup-bg` - Blue for setup phase
@@ -339,6 +341,7 @@ For illustration and graphic work, follow the canonical [illustration guide](doc
 5. **Animations for state changes** - Use `animate-fade-in` for appearing content
 6. **"Your turn" glow** - Use `animate-glow-pulse` with `bg-success-bg border-success`
 7. **Protect async actions from double-clicks** - Use `useAsyncAction` hook for API calls
+8. **Keep it accessible** - The app is at zero axe/jsx-a11y violations; CI fails on new ones. Follow [docs/ACCESSIBILITY.md](docs/ACCESSIBILITY.md): page `metadata.title`, one `<h1>` and `<main id="main-content">` per page, modals via `app/components/Modal.tsx` (never a `fixed inset-0` div), transient news via `announce()` (`utils/announce.ts`), no `aria-label` that hides visible content, nothing conveyed by color alone, and `text-crimson-text` (not `text-crimson`) for crimson text.
 
 ### Double-Click Protection: `useAsyncAction` Hook
 

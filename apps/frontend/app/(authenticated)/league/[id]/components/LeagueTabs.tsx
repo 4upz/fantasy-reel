@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useLeagueNavigation, type LeagueNavigateEvent } from './LeagueNavigation'
 import { useLayoutEffect, useRef, useState } from 'react'
-import { getVisibleTabs, isTabActive } from './leagueNav'
+import { getVisibleTabs, isTabActive, outbidBadgeLabel } from './leagueNav'
 import type { League } from '@/types'
 
 interface Props {
@@ -92,7 +92,7 @@ export default function LeagueTabs({
                 <span aria-hidden="true" className="type-meta rounded-full bg-crimson px-1.5 py-0.5 text-foreground">
                   {tab.badge}
                 </span>
-                <span className="sr-only">{tab.badge} notifications</span>
+                <span className="sr-only">{outbidBadgeLabel(tab.badge)}</span>
               </>
             )}
           </Link>

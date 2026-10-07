@@ -17,7 +17,7 @@ test.describe('User Login', () => {
     await page.waitForURL('/dashboard')
 
     // Should show dashboard content (user is authenticated)
-    await expect(page.getByText(/your leagues/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Your leagues', level: 1 })).toBeVisible()
   })
 
   test('invalid credentials show error message', async ({ page }) => {
@@ -96,13 +96,13 @@ test.describe('Authenticated Session', () => {
     await authenticatedPage.goto('/dashboard')
 
     // Should show dashboard content
-    await expect(authenticatedPage.getByText(/your leagues/i)).toBeVisible()
+    await expect(authenticatedPage.getByRole('heading', { name: 'Your leagues', level: 1 })).toBeVisible()
   })
 
   test('logout redirects to login page', async ({ authenticatedPage }) => {
     // Start on dashboard to verify we're authenticated
     await authenticatedPage.goto('/dashboard')
-    await expect(authenticatedPage.getByText(/your leagues/i)).toBeVisible()
+    await expect(authenticatedPage.getByRole('heading', { name: 'Your leagues', level: 1 })).toBeVisible()
 
     // POST to signout endpoint to clear session
     await authenticatedPage.request.post('/auth/signout')

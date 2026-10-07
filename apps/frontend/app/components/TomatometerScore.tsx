@@ -39,7 +39,7 @@ const BREAK_EVEN = 60
 const SCORE_STYLES = {
   club: 'bg-gold/15 border-gold/40 text-gold',
   fresh: 'bg-gold/10 border-gold/25 text-gold',
-  rotten: 'bg-crimson/15 border-crimson/40 text-crimson',
+  rotten: 'bg-crimson/15 border-crimson/40 text-crimson-text',
   pending: 'bg-elevated border-border text-foreground-secondary',
 } as const
 
@@ -171,6 +171,7 @@ export default function TomatometerScore({
         className={`inline-flex items-center rounded-lg border font-semibold ${SCORE_STYLES.pending} ${sizing.pill} ${className}`}
       >
         <TomatoMark fill={null} className={sizing.mark} />
+        <span className="sr-only">Tomatometer </span>
         Pending
       </span>
     )
@@ -183,12 +184,14 @@ export default function TomatometerScore({
   // the 90% Club still reads as an award rather than just another gold pill.
   const shineOnPill = isAccolade && !showAccolade
 
+  // A generic span can't carry an aria-label, so screen readers get the score
+  // and its tier as text; the visual pill and laurels (whose Fresh/Rotten
+  // meaning is colour) are hidden from them.
   return (
-    <span
-      className={`inline-flex flex-wrap items-center ${sizing.gap} ${className}`}
-      aria-label={`Tomatometer ${rounded} percent, ${tier.label}`}
-    >
+    <span className={`inline-flex flex-wrap items-center ${sizing.gap} ${className}`}>
+      <span className="sr-only">Tomatometer {rounded}%, {tier.label}</span>
       <span
+        aria-hidden="true"
         className={`type-numeric inline-flex items-center rounded-lg border font-bold ${SCORE_STYLES[tier.key]} ${sizing.pill} ${
           shineOnPill ? 'accolade-shine' : ''
         }`}
@@ -199,6 +202,7 @@ export default function TomatometerScore({
 
       {isAccolade && showAccolade && (
         <span
+          aria-hidden="true"
           className={`type-meta accolade-shine inline-flex items-center gap-1 whitespace-nowrap rounded-md border ${ACCOLADE_STYLE} ${sizing.badge}`}
         >
           <LaurelSprig className={sizing.laurel} />

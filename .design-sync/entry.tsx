@@ -72,7 +72,14 @@ export { default as StandingsSidebar } from "../apps/frontend/app/(authenticated
 export { default as TeamBudgetSummary } from "../apps/frontend/app/(authenticated)/league/[id]/standings/TeamBudget"
 export { default as TeamHeader } from "../apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader"
 export { default as TeamStandingSummary } from "../apps/frontend/app/(authenticated)/league/[id]/standings/TeamStandingSummary"
-export { default as TradeItemsSection } from "../apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection"
+export {
+  TradeBudgetField,
+  TradeMovieChecklist,
+} from "../apps/frontend/app/(authenticated)/league/[id]/components/TradeComposerFields"
+export {
+  default as TradeItemsSection,
+  TradeItemsList,
+} from "../apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection"
 export { default as TradeOfferCard } from "../apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard"
 export { default as TrophyCase } from "../apps/frontend/app/components/TrophyCase"
 
@@ -83,18 +90,21 @@ export { default as ConfirmDeleteModal } from "../apps/frontend/app/(authenticat
 export { default as ConfirmKickModal } from "../apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmKickModal"
 export { default as ConfirmStartSeasonModal } from "../apps/frontend/app/(authenticated)/league/[id]/components/ConfirmStartSeasonModal"
 export { default as EndSeasonModal } from "../apps/frontend/app/(authenticated)/league/[id]/settings/components/EndSeasonModal"
+export { default as Modal } from "../apps/frontend/app/components/Modal"
 export { default as PlaceBidModal } from "../apps/frontend/app/(authenticated)/league/[id]/components/PlaceBidModal"
 export { default as PlaceCounterpickBidModal } from "../apps/frontend/app/(authenticated)/league/[id]/components/PlaceCounterpickBidModal"
 
 // ── Identity & brand ────────────────────────────────────────────────────
 export { default as BrandLogo } from "../apps/frontend/app/components/BrandLogo"
 export { default as DiscordIcon } from "../apps/frontend/app/components/icons/DiscordIcon"
+export { default as GitHubIcon } from "../apps/frontend/app/components/icons/GitHubIcon"
 export { default as GoogleIcon } from "../apps/frontend/app/components/icons/GoogleIcon"
 export { default as NavLogo } from "../apps/frontend/app/components/navigation/NavLogo"
 export {
   default as UserSearchResultItem,
   SelectedUserChip,
 } from "../apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult"
+export { default as SocialLinks } from "../apps/frontend/app/components/SocialLinks"
 
 // ── Landing ─────────────────────────────────────────────────────────────
 export { default as MarketingHeader } from "../apps/frontend/app/components/landing/MarketingHeader"
@@ -102,5 +112,6 @@ export { default as MarketingHeader } from "../apps/frontend/app/components/land
 // ── Settings primitives ─────────────────────────────────────────────────
 export {
   LockedMessage,
+  NumberField,
   SectionHeader,
 } from "../apps/frontend/app/(authenticated)/league/[id]/settings/components/shared"

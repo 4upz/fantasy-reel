@@ -101,26 +101,28 @@ test.describe('Propose Trade @trading', () => {
     await waitForModalOpen(authedPage)
 
     // Step 1: Select trade partner (Owner Team)
-    const ownerTeamButton = authedPage.getByRole('option', { name: /Owner Team/i })
+    const proposal = authedPage.getByRole('dialog')
+    const ownerTeamButton = proposal.getByRole('button', { name: /Owner Team/i })
     await expect(ownerTeamButton).toBeVisible({ timeout: 5000 })
     await ownerTeamButton.click()
 
     // Step 2: Should now show item selection with "You give" and "You receive"
-    await expect(authedPage.getByText(/You give/i)).toBeVisible({ timeout: 5000 })
-    await expect(authedPage.getByText(/You receive/i)).toBeVisible({ timeout: 5000 })
+    await expect(proposal.getByRole('heading', { name: /You give/i })).toBeVisible({ timeout: 5000 })
+    await expect(proposal.getByRole('heading', { name: /You receive/i })).toBeVisible({ timeout: 5000 })
 
     // Select a movie to offer (testUser's movie: "Trade Movie Beta")
-    const offerMovie = authedPage.getByRole('option', { name: /Trade Movie Beta/i })
+    const offerMovie = proposal.getByRole('checkbox', { name: /Trade Movie Beta/i })
     await expect(offerMovie).toBeVisible({ timeout: 10000 })
-    await offerMovie.click()
+    await offerMovie.check()
 
     // Select a movie to request (Owner's movie: "Trade Movie Alpha")
-    const requestMovie = authedPage.getByRole('option', { name: /Trade Movie Alpha/i })
+    const requestMovie = proposal.getByRole('checkbox', { name: /Trade Movie Alpha/i })
     await expect(requestMovie).toBeVisible({ timeout: 10000 })
-    await requestMovie.click()
+    await requestMovie.check()
 
-    // Click "Propose Trade" submit button (in modal footer, aria-label distinguishes from panel button)
-    const submitButton = authedPage.getByRole('button', { name: /Submit trade proposal/i })
+    // Click the "Propose trade" submit button in the dialog's footer (the panel's
+    // button of the same name is behind the modal, so scope to the dialog)
+    const submitButton = proposal.getByRole('button', { name: 'Propose trade', exact: true })
     await expect(submitButton).toBeEnabled()
     await submitButton.click()
 
@@ -194,7 +196,7 @@ test.describe('Respond to Trade @trading', () => {
 
     // Verify trade status changes to rejected
     await expect(
-      authedPage.getByText(/rejected/i)
+      authedPage.getByText(/rejected/i).first()
     ).toBeVisible({ timeout: 10000 })
   })
 })
@@ -223,10 +225,7 @@ test.describe('Cancel Trade @trading', () => {
 })
 
 test.describe('Veto Trade @trading', () => {
-  test.fixme('league owner sees veto option for trades in review', async ({
-    authedPage,
-    tradingLeagueWithTrade,
-  }) => {
+  test.fixme('league owner sees veto option for trades in review', async () => {
     // This test requires:
     // 1. Accept trade as testUser (recipient) -> trade goes to 'review' status
     // 2. Login as leagueOwner (proposer) -> should see veto button

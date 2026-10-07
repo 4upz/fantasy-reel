@@ -1,9 +1,12 @@
+import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
 import { getCachedActiveParticipant, getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import DraftClient from './DraftClient'
 import { fetchReigningChampions } from '@/utils/seasonQueries'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, CounterpickWithDetails } from '@/types'
+
+export const metadata: Metadata = { title: 'Draft' }
 
 // Force dynamic rendering to ensure fresh data on every request
 export const dynamic = 'force-dynamic'

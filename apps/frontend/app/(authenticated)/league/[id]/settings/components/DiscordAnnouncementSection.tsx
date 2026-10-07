@@ -6,7 +6,7 @@ import { Megaphone } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { ButtonSpinner } from '../../components/Icons'
-import { SectionHeader } from './shared'
+import { SectionHeader, describedBy } from './shared'
 
 interface Props {
   leagueId: string
@@ -33,12 +33,14 @@ export default function DiscordAnnouncementSection({ leagueId }: Props): React.R
   const { execute, isLoading, error } = useAsyncAction(postAnnouncement)
 
   const charCount = message.length
-  const isOverLimit = charCount > MAX_MESSAGE_LENGTH
+  const charsOver = charCount - MAX_MESSAGE_LENGTH
+  const isOverLimit = charsOver > 0
   const isSubmitDisabled = isLoading || isOverLimit || !message.trim()
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault()
-    const result = await execute(leagueId, message.trim())
+    // A failure is already in `error`, shown and announced below the field.
+    const result = await execute(leagueId, message.trim()).catch(() => undefined)
     if (!result) return
 
     if (result.channels_notified > 0) {
@@ -75,18 +77,34 @@ export default function DiscordAnnouncementSection({ leagueId }: Props): React.R
             rows={4}
             className={`input resize-none ${isOverLimit ? 'border-error focus:border-error focus:shadow-[0_0_0_3px_var(--color-error-bg)]' : ''}`}
             maxLength={MAX_MESSAGE_LENGTH + 100}
+            aria-invalid={isOverLimit || undefined}
+            aria-describedby={describedBy(
+              'announcement_message_help',
+              'announcement_message_count',
+              isOverLimit && 'announcement_message_error'
+            )}
           />
           <div className="flex justify-between mt-2">
-            <p className="type-meta text-foreground-secondary">
+            <p id="announcement_message_help" className="type-meta text-foreground-secondary">
               Sent as an embed to every linked channel, regardless of their notification settings
             </p>
-            <span className={`type-numeric type-meta ${isOverLimit ? 'text-error' : 'text-foreground-secondary'}`}>
-              {charCount}/{MAX_MESSAGE_LENGTH}
+            <span
+              id="announcement_message_count"
+              className={`type-numeric type-meta ${isOverLimit ? 'text-error' : 'text-foreground-secondary'}`}
+            >
+              <span aria-hidden="true">{charCount}/{MAX_MESSAGE_LENGTH}</span>
+              <span className="sr-only">{charCount} of {MAX_MESSAGE_LENGTH} characters</span>
             </span>
           </div>
+          {/* The red border and counter, in words. */}
+          {isOverLimit && (
+            <p id="announcement_message_error" role="alert" className="type-meta text-error mt-1">
+              The message is {charsOver} {charsOver === 1 ? 'character' : 'characters'} too long.
+            </p>
+          )}
         </div>
 
-        {error && <p className="type-body-sm text-error mb-4">{error}</p>}
+        {error && <p role="alert" className="type-body-sm text-error mb-4">{error}</p>}
 
         <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary">
           {isLoading ? (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useId } from 'react'
 import { toast } from 'sonner'
 import { Link2, Copy, Check, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
@@ -16,6 +16,7 @@ interface Props {
 export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactElement {
   const [copied, setCopied] = useState(false)
   const [showFullUrl, setShowFullUrl] = useState(false)
+  const regenerateNoteId = useId()
 
   const copiedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -52,7 +53,7 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
     }
   }, [league, onUpdate, hasJoinLink])
 
-  const { execute: generateLink, isLoading: isGenerating } = useAsyncAction(generateAction)
+  const { execute: generateLink, isLoading: isGenerating, error: generateError } = useAsyncAction(generateAction)
 
   async function copyToClipboard(): Promise<void> {
     const textToCopy = showFullUrl ? joinUrl : joinCode!
@@ -70,7 +71,7 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
   return (
     <div className="card p-4" data-testid="join-link-card">
       <div className="flex items-center gap-2 mb-3">
-        <div className="p-1.5 rounded-md bg-gold/10">
+        <div className="p-1.5 rounded-md bg-gold/10" aria-hidden="true">
           <Link2 className="w-4 h-4 text-gold" />
         </div>
         <h3 className="type-panel text-foreground">Share join link</h3>
@@ -78,21 +79,15 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
 
       {hasJoinLink ? (
         <div className="space-y-3">
-          {/* Join Code Display */}
-          <div
+          {/* Join Code Display. The code itself is part of the button's name,
+              so a screen-reader user can read it out to a friend. */}
+          <button
+            type="button"
             onClick={copyToClipboard}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                copyToClipboard()
-              }
-            }}
-            role="button"
-            tabIndex={0}
-            aria-label={showFullUrl ? 'Copy join link to clipboard' : 'Copy join code to clipboard'}
-            className="bg-elevated border border-border rounded-lg px-3 py-2.5 cursor-pointer hover:border-gold/50 transition-colors group focus:outline-none focus:ring-2 focus:ring-gold/50 focus:border-gold/50"
+            className="block w-full text-left bg-elevated border border-border rounded-lg px-3 py-2.5 cursor-pointer hover:border-gold/50 transition-colors group focus:outline-none focus-visible:ring-2 focus-visible:ring-gold focus:border-gold/50"
           >
-            <div className="flex items-center justify-between">
+            <span className="flex items-center justify-between">
+              <span className="sr-only">{showFullUrl ? 'Copy join link: ' : 'Copy join code: '}</span>
               {showFullUrl ? (
                 <span className="type-body-sm text-foreground-secondary truncate pr-2 flex-1" data-testid="join-link-url">
                   {joinUrl}
@@ -102,15 +97,15 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
                   {joinCode}
                 </span>
               )}
-              <div className="flex items-center gap-1" data-testid="copy-join-link-button">
+              <span className="flex items-center gap-1" data-testid="copy-join-link-button" aria-hidden="true">
                 {copied ? (
                   <Check className="w-4 h-4 text-success" />
                 ) : (
                   <Copy className="w-4 h-4 text-foreground-muted group-hover:text-gold transition-colors" />
                 )}
-              </div>
-            </div>
-          </div>
+              </span>
+            </span>
+          </button>
 
           {/* Toggle and Regenerate */}
           <div className="flex items-center justify-between">
@@ -133,19 +128,21 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
             </button>
             <button
               type="button"
-              onClick={() => generateLink()}
+              onClick={() => { void generateLink().catch(() => {}) }}
               disabled={isGenerating}
-              className="type-meta text-foreground-secondary hover:text-foreground-secondary flex items-center gap-1 transition-colors disabled:opacity-50"
+              aria-describedby={regenerateNoteId}
+              className="type-meta cursor-pointer text-foreground-secondary hover:text-foreground flex items-center gap-1 transition-colors disabled:opacity-50"
               data-testid="regenerate-join-link-button"
             >
               <RefreshCw className={`w-3 h-3 ${isGenerating ? 'animate-spin' : ''}`} />
-              {isGenerating ? 'Regenerating...' : 'Regenerate'}
+              {isGenerating ? 'Regenerating...' : <>Regenerate<span className="sr-only"> join link</span></>}
             </button>
           </div>
 
           <p className="type-meta text-foreground-secondary">
             Anyone with this link can join your league
           </p>
+          <p id={regenerateNoteId} className="sr-only">Regenerating replaces the link and code. The old ones stop working.</p>
         </div>
       ) : (
         <div className="text-center py-2">
@@ -154,7 +151,7 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
           </p>
           <button
             type="button"
-            onClick={() => generateLink()}
+            onClick={() => { void generateLink().catch(() => {}) }}
             disabled={isGenerating}
             className="type-control btn btn-secondary py-2 px-4"
             data-testid="generate-join-link-button"
@@ -172,6 +169,10 @@ export default function JoinLinkCard({ league, onUpdate }: Props): React.ReactEl
             )}
           </button>
         </div>
+      )}
+
+      {generateError && (
+        <p className="type-body-sm text-error mt-3" role="alert">{generateError}</p>
       )}
     </div>
   )

@@ -20,38 +20,43 @@
   --color-gold-hover: #d4b23a;
   --color-gold-muted: oklch(0.55 0.12 85 / 0.15);
   --color-crimson: #a8505c;
-  --color-crimson-hover: #b85c68;
+  --color-crimson-hover: #96444f;
+  /* Crimson as a fill keeps white text legible; as text on these dark surfaces
+     it needs a lighter shade to reach 4.5:1, so text gets its own tokens. */
+  --color-crimson-text: #e07a86;
+  --color-crimson-text-hover: #e5838e;
   --color-silver: #a8a8a8;
   --color-bronze: #cd7f32;
 
   /* Text */
   --color-foreground: #e8e8e8;
   --color-foreground-secondary: #b8b0a4;
-  --color-foreground-muted: #8a8078;
+  --color-foreground-muted: #9a9087;
   --color-foreground-inverse: #0f0f0f;
 
   /* Borders */
   --color-border: #2e2e2e;
   --color-border-hover: #404040;
 
-  /* Status */
-  --color-status-setup: #3b82f6;
+  /* Status. Every text-capable color above and below reaches 4.5:1 on
+     background, surface, surface-hover and elevated in both themes. */
+  --color-status-setup: #5b96f7;
   --color-status-setup-bg: oklch(0.55 0.2 260 / 0.15);
   --color-status-drafting: #eab308;
   --color-status-drafting-bg: oklch(0.75 0.15 85 / 0.15);
   --color-status-active: #22c55e;
   --color-status-active-bg: oklch(0.65 0.2 145 / 0.15);
-  --color-status-completed: #64748b;
+  --color-status-completed: #8b97a8;
   --color-status-completed-bg: oklch(0.5 0.02 260 / 0.15);
 
   /* Feedback */
   --color-success: #22c55e;
   --color-success-bg: oklch(0.65 0.2 145 / 0.15);
-  --color-error: #d65c5c;
+  --color-error: #e57373;
   --color-error-bg: oklch(0.5 0.15 5 / 0.15);
   --color-warning: #f59e0b;
   --color-warning-bg: oklch(0.7 0.15 70 / 0.15);
-  --color-info: #3b82f6;
+  --color-info: #5b96f7;
   --color-info-bg: oklch(0.55 0.2 260 / 0.15);
   /* Categorical chart series, in this order. Gold is stepped off the accent so
      the two lines carry equal weight; validated for color-vision deficiency. */
@@ -101,6 +106,8 @@
   --color-gold-muted: rgba(113, 87, 12, 0.1);
   --color-crimson: #9b3948;
   --color-crimson-hover: #832c3a;
+  --color-crimson-text: #9b3948;
+  --color-crimson-text-hover: #832c3a;
   --color-silver: #626262;
   --color-bronze: #8a511d;
   --color-foreground: #242424;
@@ -195,10 +202,47 @@
     outline: 2px solid var(--color-gold);
     outline-offset: 2px;
   }
+
+  /* The skip link moves focus to <main>; the region itself needs no ring. */
+  #main-content:focus {
+    outline: none;
+  }
+
+  /* Honor the OS "reduce motion" setting everywhere, including the looping
+     glow, shimmer and sweep animations. Durations collapse rather than being
+     removed so animationend/transitionend handlers still fire. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after,
+    ::backdrop {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 /* === COMPONENTS LAYER === */
 @layer components {
+  /* First focusable element on every page (rendered by the root layout). */
+  .skip-link {
+    position: fixed;
+    top: -80px;
+    left: 16px;
+    z-index: 100;
+    padding: 12px 20px;
+    border-radius: 8px;
+    background: var(--color-gold);
+    color: var(--color-foreground-inverse);
+    font-weight: 600;
+  }
+
+  .skip-link:focus {
+    top: 12px;
+  }
+
   /* Both approved SVGs render on the server; CSS selects the matching artwork
      before hydration, including when a saved preference overrides the system. */
   .brand-logo-light,
@@ -264,7 +308,7 @@
     color: var(--color-foreground-inverse);
   }
 
-  .btn-primary:hover:not(:disabled) {
+  .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) {
     background-color: var(--color-gold-hover);
     box-shadow: var(--shadow-glow-gold);
   }
@@ -275,7 +319,7 @@
     color: var(--color-gold);
   }
 
-  .btn-secondary:hover:not(:disabled) {
+  .btn-secondary:hover:not(:disabled):not([aria-disabled="true"]) {
     background-color: var(--color-gold-muted);
   }
 
@@ -284,7 +328,7 @@
     color: #ffffff;
   }
 
-  .btn-danger:hover:not(:disabled) {
+  .btn-danger:hover:not(:disabled):not([aria-disabled="true"]) {
     background-color: var(--color-crimson-hover);
     box-shadow: var(--shadow-glow-crimson);
   }
@@ -294,12 +338,15 @@
     color: var(--color-foreground-secondary);
   }
 
-  .btn-ghost:hover:not(:disabled) {
+  .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) {
     background-color: var(--color-surface-hover);
     color: var(--color-foreground);
   }
 
-  .btn:disabled {
+  /* aria-disabled keeps a button focusable (so a screen reader can reach it
+     and hear why it is unavailable) while looking the same as :disabled. */
+  .btn:disabled,
+  .btn[aria-disabled="true"] {
     opacity: 0.5;
     cursor: not-allowed;
   }
@@ -322,9 +369,11 @@
     color: var(--color-foreground-secondary);
   }
 
+  /* A solid 2px gold edge (border + 1px ring) so focus is visible at low
+     vision; the muted halo alone was too faint. */
   .input:focus {
     border-color: var(--color-gold);
-    box-shadow: 0 0 0 3px var(--color-gold-muted);
+    box-shadow: 0 0 0 1px var(--color-gold), 0 0 0 4px var(--color-gold-muted);
     outline: none;
   }
 
@@ -456,6 +505,50 @@
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     animation: overlay-fade-in 0.2s ease-out;
+  }
+
+  /*
+   * Native modal dialog (app/components/Modal.tsx, hooks/useModalDialog.ts).
+   * The <dialog> fills the viewport so a click on the dimmed area lands on it
+   * and can close it; the panel inside is centered. ::backdrop is the dim.
+   */
+  .modal-dialog {
+    position: fixed;
+    inset: 0;
+    margin: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    padding: 1rem;
+    border: 0;
+    background: transparent;
+    color: var(--color-foreground);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* margin:auto centers the panel and, unlike align-items:center, still lets
+     a panel taller than the viewport scroll to its top. */
+  .modal-dialog[open] {
+    display: flex;
+  }
+
+  .modal-dialog[open] > :not([data-live-announcer]) {
+    margin: auto;
+  }
+
+  .modal-dialog::backdrop {
+    background: var(--color-overlay);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    animation: overlay-fade-in 0.2s ease-out;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .modal-dialog::backdrop {
+      animation: none;
+    }
   }
 
   /* Modal panel animation */
@@ -910,7 +1003,7 @@
   }
 
   .profile-menu-item-danger:hover {
-    color: var(--color-crimson);
+    color: var(--color-crimson-text);
   }
 
   .profile-menu-signout {
@@ -973,35 +1066,31 @@
   }
 
   /* Mobile Drawer Overlay */
-  .sidenav-mobile-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    background: var(--color-overlay-soft);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    animation: overlay-fade-in 0.2s ease-out;
-  }
-
-  @media (min-width: 1024px) {
-    .sidenav-mobile-overlay {
-      display: none;
-    }
-  }
-
   /* Mobile Drawer Panel */
+  /* A native <dialog>: reset the UA box, then anchor it to the left edge. */
   .sidenav-mobile-drawer {
     position: fixed;
-    top: 0;
-    left: 0;
+    inset: 0 auto 0 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
     width: 280px;
     max-width: 85vw;
-    height: 100vh;
+    height: 100dvh;
+    max-height: none;
+    color: var(--color-foreground);
     background: var(--color-surface);
     border-right: 1px solid var(--color-border);
     box-shadow: var(--shadow-heavy);
     animation: slide-in-left 0.25s ease-out;
     overflow-y: auto;
+  }
+
+  .sidenav-mobile-drawer::backdrop {
+    background: var(--color-overlay-soft);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    animation: overlay-fade-in 0.2s ease-out;
   }
 
   .sidenav-mobile-close {
@@ -1403,7 +1492,7 @@
   }
 
   .tomatometer-value.bad {
-    color: var(--color-crimson);
+    color: var(--color-crimson-text);
   }
 
   .tomatometer-label {
@@ -1429,7 +1518,7 @@
   }
 
   .scoring-points.negative {
-    color: var(--color-crimson);
+    color: var(--color-crimson-text);
   }
 
   .scoring-quote {

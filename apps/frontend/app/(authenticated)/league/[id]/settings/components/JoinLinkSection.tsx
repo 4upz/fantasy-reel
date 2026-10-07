@@ -27,6 +27,24 @@ export default function JoinLinkSection({
 
   const copiedCodeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const copiedUrlTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const regenerateButtonRef = useRef<HTMLButtonElement>(null)
+  const confirmHeadingRef = useRef<HTMLParagraphElement>(null)
+  const copyCodeButtonRef = useRef<HTMLButtonElement>(null)
+  // Where focus goes next. The inline confirmation swaps places with the button
+  // that opened it, and generating swaps the empty state for the new code, so
+  // focus would otherwise drop to the page.
+  const [focusTarget, setFocusTarget] = useState<'confirm' | 'regenerate' | 'code' | null>(null)
+
+  useEffect(() => {
+    if (!focusTarget) return
+    const target = {
+      confirm: confirmHeadingRef,
+      regenerate: regenerateButtonRef,
+      code: copyCodeButtonRef,
+    }[focusTarget]
+    target.current?.focus()
+    setFocusTarget(null)
+  }, [focusTarget])
 
   // Cleanup timeouts on unmount
   useEffect(() => {
@@ -61,6 +79,7 @@ export default function JoinLinkSection({
       })
       toast.success(hasJoinLink ? 'Join link regenerated' : 'Join link generated')
       setShowRegenerateConfirm(false)
+      setFocusTarget(hasJoinLink ? 'regenerate' : 'code')
     }
   }, [league, onUpdate, hasJoinLink])
 
@@ -87,6 +106,7 @@ export default function JoinLinkSection({
   function handleGenerateClick(): void {
     if (hasJoinLink) {
       setShowRegenerateConfirm(true)
+      setFocusTarget('confirm')
     } else {
       generateLink()
     }
@@ -109,20 +129,26 @@ export default function JoinLinkSection({
             <>
               {/* Join Code Display */}
               <div>
-                <label className="type-label block text-foreground-secondary mb-3">
+                <p id="join_code_label" className="type-label block text-foreground-secondary mb-3">
                   Join code
-                </label>
+                </p>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 relative">
-                    <div className="bg-elevated border border-border rounded-lg px-4 py-3 font-mono text-2xl font-bold tracking-[0.3em] text-gold text-center select-all">
+                    <div
+                      role="group"
+                      aria-labelledby="join_code_label"
+                      className="bg-elevated border border-border rounded-lg px-4 py-3 font-mono text-2xl font-bold tracking-[0.3em] text-gold text-center select-all"
+                    >
                       {joinCode}
                     </div>
                   </div>
                   <button
+                    ref={copyCodeButtonRef}
                     type="button"
                     onClick={() => copyToClipboard(joinCode!, 'code')}
                     className="btn btn-secondary h-[52px] px-4"
                     title="Copy code"
+                    aria-label="Copy join code"
                   >
                     {copiedCode ? (
                       <Check className="w-5 h-5 text-success" />
@@ -138,12 +164,13 @@ export default function JoinLinkSection({
 
               {/* Full URL Display */}
               <div>
-                <label className="type-label block text-foreground-secondary mb-3">
+                <label htmlFor="join_url" className="type-label block text-foreground-secondary mb-3">
                   Full link
                 </label>
                 <div className="flex items-center gap-3">
                   <div className="flex-1 relative">
                     <input
+                      id="join_url"
                       type="text"
                       readOnly
                       value={joinUrl}
@@ -156,6 +183,7 @@ export default function JoinLinkSection({
                     onClick={() => copyToClipboard(joinUrl, 'url')}
                     className="btn btn-secondary h-[42px] px-4"
                     title="Copy link"
+                    aria-label="Copy join link"
                   >
                     {copiedUrl ? (
                       <Check className="w-5 h-5 text-success" />
@@ -172,14 +200,24 @@ export default function JoinLinkSection({
               {/* Regenerate Section */}
               <div className="pt-4 border-t border-border">
                 {showRegenerateConfirm ? (
-                  <div className="bg-warning-bg/50 border border-warning/30 rounded-lg p-4">
+                  <div
+                    className="bg-warning-bg/50 border border-warning/30 rounded-lg p-4"
+                    role="group"
+                    aria-labelledby="regenerate_confirm_title"
+                    aria-describedby="regenerate_confirm_help"
+                  >
                     <div className="flex items-start gap-3">
                       <AlertTriangle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
                       <div className="flex-1">
-                        <p className="type-label text-foreground mb-1">
+                        <p
+                          id="regenerate_confirm_title"
+                          ref={confirmHeadingRef}
+                          tabIndex={-1}
+                          className="type-label text-foreground mb-1"
+                        >
                           Regenerate join link?
                         </p>
-                        <p className="type-meta text-foreground-secondary mb-3">
+                        <p id="regenerate_confirm_help" className="type-meta text-foreground-secondary mb-3">
                           The current code will stop working immediately. Anyone who already has the old link won&apos;t be able to use it.
                         </p>
                         <div className="flex gap-2">
@@ -200,7 +238,10 @@ export default function JoinLinkSection({
                           </button>
                           <button
                             type="button"
-                            onClick={() => setShowRegenerateConfirm(false)}
+                            onClick={() => {
+                              setShowRegenerateConfirm(false)
+                              setFocusTarget('regenerate')
+                            }}
                             disabled={isGenerating}
                             className="type-control btn btn-ghost py-1.5 px-3"
                           >
@@ -212,6 +253,7 @@ export default function JoinLinkSection({
                   </div>
                 ) : (
                   <button
+                    ref={regenerateButtonRef}
                     type="button"
                     onClick={handleGenerateClick}
                     disabled={isGenerating}
@@ -229,9 +271,9 @@ export default function JoinLinkSection({
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gold/10 mb-4">
                 <Link2 className="w-8 h-8 text-gold" />
               </div>
-              <h3 className="type-panel text-foreground mb-2">
+              <h4 className="type-panel text-foreground mb-2">
                 No join link yet
-              </h3>
+              </h4>
               <p className="type-body-sm text-foreground-secondary mb-6 max-w-md mx-auto">
                 Generate a shareable link that anyone can use to join your league.
                 Unlike email invites, this link can be shared anywhere and used by multiple people.

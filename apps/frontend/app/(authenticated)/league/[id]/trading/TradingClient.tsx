@@ -1,6 +1,6 @@
 'use client'
 
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import type { League, Team, TeamWithOwner, TradeItems } from '@/types'
 import { useTrading } from '../hooks/useTrading'
 import TradingPanel from '../components/TradingPanel'
@@ -8,6 +8,7 @@ import TradeComposerLoading, { type TradeComposerState } from '../components/Tra
 import { trackEvent } from '@/utils/analytics'
 import { resolveExpiryBounds, type ResolvedExpiry } from '@/utils/tradeExpiry'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
+import { announce } from '@/utils/announce'
 
 // Start the dialog chunk alongside its data; Suspense keeps preparation cancellable.
 const loadProposeTradeModal = () => import('../components/ProposeTradeModal')
@@ -25,6 +26,12 @@ interface Props {
 export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner, userId }: Props) {
   const [showProposeModal, setShowProposeModal] = useState(false)
   const [rosterRequested, setRosterRequested] = useState(false)
+  // Said after the proposal dialog has closed: anything announced while it is
+  // still open would be spoken into a region that is about to be removed.
+  const [proposedNotice, setProposedNotice] = useState<{ message: string } | null>(null)
+  useEffect(() => {
+    if (proposedNotice) announce(proposedNotice.message)
+  }, [proposedNotice])
 
   // Derived once for the whole page: both the propose modal and every card's
   // counter/extend modal need the same rules, and a fresh object per consumer
@@ -146,6 +153,8 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
                   expiry: expiry?.expiry_anchor ?? 'none',
                 })
                 closeProposeModal()
+                const recipient = otherTeams.find((t) => t.id === recipientTeamId)?.name
+                setProposedNotice({ message: recipient ? `Trade proposed to ${recipient}.` : 'Trade proposed.' })
               }
               return result
             }}

@@ -26,20 +26,24 @@ export default function CounterpickPriorityList({
 }: CounterpickPriorityListProps): React.ReactElement | null {
   const remainingSlots = Math.max(0, slots - used)
 
+  // Whether each bid fits is said in words, like the pickup list's funding
+  // note: the cut line alone is colour and position.
   const items = useMemo<PriorityListItem[]>(
-    () => bids.map((bid) => ({
+    () => bids.map((bid, index) => ({
       id: bid.id,
       title: bid.movies?.title || 'Unknown movie',
       meta: (
         <>
-          <Target className="w-3 h-3 text-crimson shrink-0" />
-          <span className="truncate">vs {bid.target_team?.name || 'Unknown team'}</span>
-          <span className="text-foreground-secondary">·</span>
-          <span className="type-numeric text-foreground-secondary">${bid.amount}</span>
+          <Target className="w-3 h-3 text-crimson-text shrink-0" aria-hidden="true" />
+          <span className="min-w-0 break-words">vs {bid.target_team?.name || 'Unknown team'}</span>
+          <span className="text-foreground-secondary" aria-hidden="true">·</span>
+          <span className="type-numeric text-foreground-secondary"><span className="sr-only">Bid: </span>${bid.amount}</span>
+          <span className="text-foreground-secondary" aria-hidden="true">·</span>
+          <span>{index < remainingSlots ? 'Uses open slot' : 'No slot currently'}</span>
         </>
       ),
     })),
-    [bids]
+    [bids, remainingSlots]
   )
 
   /**

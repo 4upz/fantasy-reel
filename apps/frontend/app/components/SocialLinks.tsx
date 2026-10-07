@@ -33,7 +33,7 @@ export default function SocialLinks({ className = '' }: Props): React.ReactEleme
             target="_blank"
             rel="noopener noreferrer"
             className="social-link"
-            aria-label={label}
+            aria-label={`${label} (opens in a new tab)`}
             title={label}
             data-testid={testId}
           >
