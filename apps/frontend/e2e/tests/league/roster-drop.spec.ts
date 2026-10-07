@@ -112,7 +112,7 @@ test.describe('Roster Drop Flow @roster', () => {
     await authedPage.goto(`/league/${rosterLeague.id}/roster`)
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
-    await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 0/2 used')
+    await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 0 of 2 used')
 
     await openMovie(authedPage, rosterLeague.droppableMovieTitle)
     await authedPage.getByTestId('drop-movie-button').click()
@@ -138,7 +138,7 @@ test.describe('Roster Drop Flow @roster', () => {
     await expect(
       authedPage.getByRole('heading', { name: rosterLeague.droppableMovieTitle })
     ).toHaveCount(0)
-    await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 1/2 used')
+    await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 1 of 2 used')
 
     // The drop is persisted, not just hidden client side.
     const client = getAdminClient()
@@ -178,7 +178,7 @@ test.describe('Roster Drop Flow @roster', () => {
 
     await authedPage.getByTestId('league-modal-close').click()
     await expect(modal).toHaveCount(0)
-    await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 0/2 used')
+    await expect(authedPage.getByTestId('drops-summary')).toHaveText('Drops: 0 of 2 used')
 
     const client = getAdminClient()
     const { data: drops } = await client
@@ -249,7 +249,7 @@ test.describe('Roster Drop Flow @roster', () => {
     await authedPage.goto(`/league/${rosterLeague.id}/roster`)
     await expect(authedPage.getByTestId('roster-team-name')).toBeVisible({ timeout: 10000 })
 
-    await expect(authedPage.getByTestId('drops-summary')).toHaveText('No drops left (2/2 used)')
+    await expect(authedPage.getByTestId('drops-summary')).toHaveText('No drops left (2 of 2 used)')
     // With no drops left every held movie is locked, badge included.
     await expect(authedPage.getByTestId('roster-lock-badge')).toHaveCount(HELD_MOVIE_COUNT)
 

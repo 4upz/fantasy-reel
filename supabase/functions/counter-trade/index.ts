@@ -21,7 +21,9 @@ import {
 } from '../_shared/trade-validation.ts'
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor, getLeagueName, discordTimestamp } from '../_shared/discord.ts'
 import { resolveOfferExpiry, deriveExpiryBounds, hasLapsed, type ExpiryRequest } from '../_shared/trade-expiry.ts'
+import { tradeMessageError } from '../_shared/trade-limits.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 
 const log = createLogger('counter-trade')
 
@@ -59,6 +61,9 @@ Deno.serve(async (req) => {
       expiry_anchor,
       expiry_anchor_movie_id,
     }: CounterTradeRequest = await req.json()
+
+    const messageError = tradeMessageError(message)
+    if (messageError) return errorResponse(messageError, 400)
 
     // First fetch the trade to verify authorization (without locking)
     const tradeResult = await getTradeOffer(serviceClient, trade_offer_id)
@@ -131,6 +136,9 @@ Deno.serve(async (req) => {
     if (!expiry.valid) {
       return errorResponse(expiry.error, 400)
     }
+
+    const throttled = await throttleUser('trade_counter', user.id, log, serviceClient)
+    if (throttled) return throttled
 
     // Use the atomic database function with row-level locking
     const { data: rpcResult, error: rpcError } = await serviceClient.rpc('counter_trade', {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import TrophyCase, { type Title } from './TrophyCase'
@@ -18,6 +18,8 @@ export default function DashboardSidebar({
   const router = useRouter()
   const [inviteCode, setInviteCode] = useState('')
   const [isJoining, setIsJoining] = useState(false)
+  const inviteCodeId = useId()
+  const joinHeadingId = useId()
 
   function handleJoinSubmit(e: React.FormEvent): void {
     e.preventDefault()
@@ -28,13 +30,13 @@ export default function DashboardSidebar({
   }
 
   return (
-    <div className="space-y-4">
+    <section aria-label="Quick actions" className="space-y-4">
       <TrophyCase titles={titles} />
 
       {/* Browse movies */}
       <Link href="/movies" className="sidebar-action-card flex items-center gap-3 cursor-pointer group">
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gold-muted shrink-0">
-          <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
           </svg>
         </div>
@@ -44,19 +46,20 @@ export default function DashboardSidebar({
           </span>
           <p className="type-body-sm text-foreground-secondary truncate">Discover upcoming releases</p>
         </div>
-        <svg className="w-5 h-5 text-foreground-muted group-hover:text-gold transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-5 h-5 text-foreground-muted group-hover:text-gold transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </Link>
 
       {/* Create league */}
       <button
+        type="button"
         onClick={onCreateClick}
         className="sidebar-action-card flex items-center gap-3 w-full text-left group"
         data-testid="create-league-button"
       >
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gold-muted shrink-0">
-          <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
         </div>
@@ -66,26 +69,28 @@ export default function DashboardSidebar({
           </span>
           <p className="type-body-sm text-foreground-secondary truncate">Start a new fantasy league</p>
         </div>
-        <svg className="w-5 h-5 text-foreground-muted group-hover:text-gold transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-5 h-5 text-foreground-muted group-hover:text-gold transition-colors shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
 
       {/* Join league */}
-      <div className="sidebar-action-card">
+      <div className="sidebar-action-card" role="group" aria-labelledby={joinHeadingId}>
         <div className="flex items-center gap-3 mb-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gold-muted shrink-0">
-            <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
             </svg>
           </div>
           <div className="flex-1 min-w-0">
-            <span className="type-control text-foreground">Join a league</span>
+            <h2 id={joinHeadingId} className="type-control text-foreground">Join a league</h2>
             <p className="type-body-sm text-foreground-secondary truncate">Enter invite code</p>
           </div>
         </div>
         <form onSubmit={handleJoinSubmit} className="flex gap-2">
+          <label htmlFor={inviteCodeId} className="sr-only">Invite code</label>
           <input
+            id={inviteCodeId}
             type="text"
             value={inviteCode}
             onChange={(e) => setInviteCode(e.target.value)}
@@ -97,11 +102,11 @@ export default function DashboardSidebar({
             disabled={!inviteCode.trim() || isJoining}
             className="type-control btn btn-primary px-3"
           >
-            {isJoining ? '...' : 'Join'}
+            {isJoining ? 'Joining…' : 'Join'}
           </button>
         </form>
       </div>
 
-    </div>
+    </section>
   )
 }

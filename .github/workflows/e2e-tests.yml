@@ -146,6 +146,13 @@ jobs:
               exit 0
             fi
             echo "playwright install failed or hung (attempt ${attempt}); retrying..."
+            # `timeout` stops npx, not the apt-get it spawned. A hung apt-get
+            # keeps holding the dpkg lock and every retry then fails at once
+            # ("Could not get lock /var/lib/dpkg/lock-frontend"), so stop it
+            # and let dpkg finish any half-done configuration first.
+            sudo pkill -9 -x apt-get || true
+            sudo pkill -9 -x dpkg || true
+            sudo dpkg --configure -a || true
             sleep 10
           done
           echo "playwright install failed after 3 attempts"

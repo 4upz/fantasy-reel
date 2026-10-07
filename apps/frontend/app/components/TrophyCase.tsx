@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Trophy } from 'lucide-react'
 import { SEASON_YEAR_CLASS } from '@/utils/seasons'
@@ -27,8 +28,15 @@ interface Props {
  */
 /** @design-system League */
 export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactElement {
-  const visible = titles.slice(0, limit)
+  const [showAll, setShowAll] = useState(false)
+  const visible = showAll ? titles : titles.slice(0, limit)
   const hidden = titles.length - visible.length
+  // "+N more" disappears once pressed; focus moves to the first title it revealed.
+  const firstRevealedRef = useRef<HTMLAnchorElement>(null)
+
+  useEffect(() => {
+    if (showAll) firstRevealedRef.current?.focus()
+  }, [showAll])
 
   return (
     <div className="sidebar-action-card" data-testid="trophy-case">
@@ -37,7 +45,7 @@ export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactEle
           <Trophy className="h-5 w-5 text-gold" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <span className="type-card text-foreground">Trophy case</span>
+          <h2 className="type-card text-foreground">Trophy case</h2>
           {titles.length > 0 ? (
             <p className="type-body-sm text-gold">
               {titles.length} {titles.length === 1 ? 'championship' : 'championships'}
@@ -53,10 +61,11 @@ export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactEle
         // that titles are a thing you can win.
         <p className="text-sm text-foreground-secondary">Win a season to hang the first one.</p>
       ) : (
-        <ul className="space-y-1">
-          {visible.map((title) => (
+        <ul role="list" className="space-y-1">
+          {visible.map((title, index) => (
             <li key={title.leagueId}>
               <Link
+                ref={index === limit ? firstRevealedRef : undefined}
                 href={`/league/${title.leagueId}/standings`}
                 className="group flex items-baseline gap-2.5 rounded-md px-1 py-1 transition-colors hover:bg-surface-hover"
               >
@@ -70,7 +79,15 @@ export default function TrophyCase({ titles, limit = 5 }: Props): React.ReactEle
             </li>
           ))}
           {hidden > 0 && (
-            <li className="px-1 pt-1 text-xs text-foreground-secondary">+{hidden} more</li>
+            <li className="px-1 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className="inline-flex min-h-6 cursor-pointer items-center rounded text-xs text-foreground-secondary transition-colors hover:text-gold"
+              >
+                +{hidden} more
+              </button>
+            </li>
           )}
         </ul>
       )}

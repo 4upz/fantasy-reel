@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { formatDate } from '@/utils/date'
 import { count, utcDate } from './format'
 import type { WeeklyGrowth } from './types'
@@ -9,11 +9,16 @@ const HEIGHT = 260
 const MARGIN = { top: 12, right: 44, bottom: 28, left: 40 }
 const MIN_LABEL_GAP = 56
 const MIN_END_LABEL_GAP = 14
+/** Page Up / Page Down step, in weeks. */
+const PAGE_STEP = 4
 
-/** Each series sets currentColor; marks and keys pick it up with stroke/fill/bg-current. */
+/**
+ * Each series sets currentColor; marks and keys pick it up with stroke/fill/bg-current.
+ * Leagues are also dashed, so the two lines differ by more than colour.
+ */
 const SERIES = [
-  { key: 'users', label: 'Users', color: 'text-series-1' },
-  { key: 'leagues', label: 'Leagues', color: 'text-series-2' },
+  { key: 'users', label: 'Users', color: 'text-series-1', dash: undefined, swatch: 'border-solid' },
+  { key: 'leagues', label: 'Leagues', color: 'text-series-2', dash: '6 4', swatch: 'border-dashed' },
 ] as const
 
 /** 0, then even steps of 1/2/5 x 10^n up to at least `max`. */
@@ -26,11 +31,31 @@ function yTicks(max: number): number[] {
   return ticks
 }
 
-/** Two series with a shared count axis: running totals of users and leagues, by week. */
+function SeriesSwatch({ series, className = 'w-4' }: { series: (typeof SERIES)[number]; className?: string }) {
+  return <span className={`h-0 border-t-2 ${series.swatch} ${series.color} ${className}`} aria-hidden="true" />
+}
+
+function weekText(point: WeeklyGrowth): string {
+  return `Week of ${formatDate(point.week)}: ${SERIES.map((s) => `${count(point[s.key])} ${s.label.toLowerCase()}`).join(', ')}`
+}
+
+/**
+ * Two series with a shared count axis: running totals of users and leagues, by week.
+ *
+ * The plot is a slider over the weeks: arrow keys (and Home/End, Page Up/Down)
+ * move between them and screen readers announce the week's totals as its
+ * value. The same data sits in a table below the chart for anyone who would
+ * rather read it all at once.
+ */
 export default function GrowthLineChart({ points }: { points: WeeklyGrowth[] }) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const summaryId = useId()
   const [width, setWidth] = useState(0)
-  const [active, setActive] = useState<number | null>(null)
+  // The keyboard position is the slider's value; hovering only moves the
+  // crosshair, so pointer movement never makes a screen reader speak.
+  const [keyIndex, setKeyIndex] = useState<number | null>(null)
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [focused, setFocused] = useState(false)
 
   useEffect(() => {
     const el = containerRef.current
@@ -44,15 +69,17 @@ export default function GrowthLineChart({ points }: { points: WeeklyGrowth[] }) 
     return <p className="type-body-sm py-10 text-center text-foreground-secondary">Not enough history for a trend yet.</p>
   }
 
-  const last = points[points.length - 1]
+  const lastIndex = points.length - 1
+  const last = points[lastIndex]
   const first = points[0]
   const ticks = yTicks(Math.max(last.users, last.leagues))
   const yMax = ticks[ticks.length - 1]
   const plotW = Math.max(width - MARGIN.left - MARGIN.right, 0)
   const plotH = HEIGHT - MARGIN.top - MARGIN.bottom
-  const x = (i: number) => MARGIN.left + (i / (points.length - 1)) * plotW
-  const select = (i: number) => setActive(Math.min(Math.max(i, 0), points.length - 1))
+  const x = (i: number) => MARGIN.left + (i / lastIndex) * plotW
+  const clamp = (i: number) => Math.min(Math.max(i, 0), lastIndex)
   const y = (v: number) => MARGIN.top + plotH - (v / yMax) * plotH
+  const sliderIndex = keyIndex ?? lastIndex
 
   // A label at the first week of each month, skipping any that would crowd the previous one.
   const monthLabels: { i: number; text: string }[] = []
@@ -77,48 +104,57 @@ export default function GrowthLineChart({ points }: { points: WeeklyGrowth[] }) 
   const pointAt = (clientX: number) => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect || plotW === 0) return
-    select(Math.round(((clientX - rect.left - MARGIN.left) / plotW) * (points.length - 1)))
+    setHoverIndex(clamp(Math.round(((clientX - rect.left - MARGIN.left) / plotW) * lastIndex)))
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    const current = active ?? points.length - 1
     const next =
-      e.key === 'ArrowLeft' ? current - 1
-      : e.key === 'ArrowRight' ? current + 1
+      e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? sliderIndex - 1
+      : e.key === 'ArrowRight' || e.key === 'ArrowUp' ? sliderIndex + 1
+      : e.key === 'PageDown' ? sliderIndex - PAGE_STEP
+      : e.key === 'PageUp' ? sliderIndex + PAGE_STEP
       : e.key === 'Home' ? 0
-      : e.key === 'End' ? points.length - 1
+      : e.key === 'End' ? lastIndex
       : null
     if (next === null) return
     e.preventDefault()
-    select(next)
+    setHoverIndex(null)
+    setKeyIndex(clamp(next))
   }
 
+  const active = hoverIndex ?? (focused ? sliderIndex : null)
   const hovered = active === null ? null : points[active]
   const summary =
     `Running totals by week since ${formatDate(first.week)}: users grew from ${count(first.users)} to ${count(last.users)}, ` +
-    `leagues from ${count(first.leagues)} to ${count(last.leagues)}. Use the arrow keys to read each week.`
+    `leagues from ${count(first.leagues)} to ${count(last.leagues)}.`
 
   return (
     <div>
-      <ul className="mb-3 flex gap-4" aria-label="Legend">
+      <ul role="list" className="mb-3 flex gap-4" aria-label="Legend">
         {SERIES.map((s) => (
           <li key={s.key} className="type-meta flex items-center gap-2 text-foreground-secondary">
-            <span className={`h-0.5 w-4 rounded-full bg-current ${s.color}`} aria-hidden="true" />
+            <SeriesSwatch series={s} />
             {s.label}
           </li>
         ))}
       </ul>
+      <p id={summaryId} className="sr-only">{summary}</p>
       <div
         ref={containerRef}
         className="relative rounded-md outline-none focus-visible:ring-2 focus-visible:ring-gold"
         style={{ height: HEIGHT }}
         tabIndex={0}
-        role="img"
-        aria-label={summary}
+        role="slider"
+        aria-label="Weekly totals"
+        aria-describedby={summaryId}
+        aria-valuemin={0}
+        aria-valuemax={lastIndex}
+        aria-valuenow={sliderIndex}
+        aria-valuetext={weekText(points[sliderIndex])}
         onPointerMove={(e) => pointAt(e.clientX)}
-        onPointerLeave={() => setActive(null)}
-        onFocus={() => setActive(points.length - 1)}
-        onBlur={() => setActive(null)}
+        onPointerLeave={() => setHoverIndex(null)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         onKeyDown={onKeyDown}
       >
         {width > 0 && (
@@ -143,14 +179,15 @@ export default function GrowthLineChart({ points }: { points: WeeklyGrowth[] }) 
                 className={`stroke-current ${s.color}`}
                 fill="none"
                 strokeWidth={2}
+                strokeDasharray={s.dash}
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
             ))}
             {SERIES.map((s, n) => (
               <g key={s.key}>
-                <circle cx={x(points.length - 1)} cy={y(last[s.key])} r={4} className={`fill-current stroke-surface ${s.color}`} strokeWidth={2} />
-                <text x={x(points.length - 1) + 10} y={endY[n]} dy="0.32em" className="type-number fill-foreground">
+                <circle cx={x(lastIndex)} cy={y(last[s.key])} r={4} className={`fill-current stroke-surface ${s.color}`} strokeWidth={2} />
+                <text x={x(lastIndex) + 10} y={endY[n]} dy="0.32em" className="type-number fill-foreground">
                   {count(last[s.key])}
                 </text>
               </g>
@@ -178,7 +215,7 @@ export default function GrowthLineChart({ points }: { points: WeeklyGrowth[] }) 
             <p className="type-meta text-foreground-secondary">Week of {formatDate(hovered.week)}</p>
             {SERIES.map((s) => (
               <p key={s.key} className="mt-1 flex items-center gap-2">
-                <span className={`h-0.5 w-3 rounded-full bg-current ${s.color}`} aria-hidden="true" />
+                <SeriesSwatch series={s} className="w-3" />
                 <span className="type-number text-foreground">{count(hovered[s.key])}</span>
                 <span className="type-meta text-foreground-secondary">{s.label}</span>
               </p>
@@ -186,10 +223,31 @@ export default function GrowthLineChart({ points }: { points: WeeklyGrowth[] }) 
           </div>
         )}
       </div>
-      <p className="sr-only" aria-live="polite">
-        {hovered &&
-          `Week of ${formatDate(hovered.week)}: ${SERIES.map((s) => `${count(hovered[s.key])} ${s.label.toLowerCase()}`).join(', ')}`}
-      </p>
+
+      <details className="mt-4">
+        <summary className="type-control cursor-pointer text-gold hover:text-gold-hover">Weekly data table</summary>
+        <table className="mt-3 w-full">
+          <caption className="sr-only">Running totals of users and leagues at the end of each week</caption>
+          <thead>
+            <tr className="type-meta text-left text-foreground-secondary">
+              <th scope="col" className="pb-2 pr-4 font-medium">Week of</th>
+              {SERIES.map((s) => (
+                <th key={s.key} scope="col" className="pb-2 pr-4 text-right font-medium last:pr-0">{s.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {points.map((p) => (
+              <tr key={p.week} className="border-t border-border">
+                <th scope="row" className="type-body-sm py-2 pr-4 text-left font-normal text-foreground">{formatDate(p.week)}</th>
+                {SERIES.map((s) => (
+                  <td key={s.key} className="type-number py-2 pr-4 text-right text-foreground last:pr-0">{count(p[s.key])}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </div>
   )
 }

@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { safeRedirectPath } from '@/utils/redirect'
 import { CAPTCHA_FAILED_MESSAGE, isCaptchaError, readCaptchaToken } from '@/utils/captcha'
 
 export async function resendConfirmationEmail(
@@ -69,5 +70,5 @@ export async function login(formData: FormData): Promise<{ success: boolean; err
   }
 
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect(safeRedirectPath(formData.get('next')?.toString(), '/dashboard'))
 }

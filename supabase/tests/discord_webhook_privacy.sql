@@ -14,7 +14,7 @@ INSERT INTO league_participants(id, league_id, user_id, role) VALUES
   ('85111111-1111-4111-8111-000000000004', '85111111-1111-4111-8111-000000000003', '85111111-1111-4111-8111-000000000001', 'owner'),
   ('85111111-1111-4111-8111-000000000005', '85111111-1111-4111-8111-000000000003', '85111111-1111-4111-8111-000000000002', 'member');
 INSERT INTO discord_channels(id, league_id, guild_id, channel_id, webhook_id, webhook_url) VALUES
-  ('85111111-1111-4111-8111-000000000006', '85111111-1111-4111-8111-000000000003', 'privacy-guild', 'privacy-channel', 'privacy-webhook', 'https://example.invalid/secret');
+  ('85111111-1111-4111-8111-000000000006', '85111111-1111-4111-8111-000000000003', 'privacy-guild', 'privacy-channel', 'privacy-webhook', 'https://discord.com/api/webhooks/6/secret');
 
 SELECT set_config('request.jwt.claim.sub', '85111111-1111-4111-8111-000000000002', true);
 SET LOCAL ROLE authenticated;
@@ -36,7 +36,7 @@ SELECT throws_ok($$SELECT webhook_url FROM discord_channels$$, '42501', NULL, 'a
 
 RESET ROLE;
 SET LOCAL ROLE service_role;
-SELECT is((SELECT webhook_url FROM discord_channels WHERE id = '85111111-1111-4111-8111-000000000006'), 'https://example.invalid/secret', 'service role reads webhook_url');
+SELECT is((SELECT webhook_url FROM discord_channels WHERE id = '85111111-1111-4111-8111-000000000006'), 'https://discord.com/api/webhooks/6/secret', 'service role reads webhook_url');
 
 SELECT * FROM finish();
 ROLLBACK;

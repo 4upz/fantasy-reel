@@ -3,8 +3,21 @@ import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, i
 import { sendDiscordNotification, DISCORD_COLORS, buildLeagueUrl, buildEmbedAuthor } from '../_shared/discord.ts'
 import { createLogger } from '../_shared/logger.ts'
 import { assertLeagueWritable } from '../_shared/league-status.ts'
+import { consumeRateLimit, describeRetryAfter, rateLimitResponse } from '../_shared/rate-limit.ts'
 
 const log = createLogger('join-league')
+
+/**
+ * Join-code attempts per user. Generous for typos and retries, far too few to
+ * guess codes. Counted on every attempt, so a valid code costs one too.
+ */
+const JOIN_CODE_ATTEMPTS = { max: 10, windowSeconds: 60 * 60 }
+
+/**
+ * One answer for an unknown code and for a league past setup, so the response
+ * doesn't reveal which codes exist.
+ */
+const INVALID_JOIN_CODE = 'Invalid or expired join code'
 
 interface JoinLeagueRequest {
   league_id?: string
@@ -110,23 +123,37 @@ Deno.serve(async (req) => {
         return errorResponse('Invalid join code format', 400)
       }
 
+      const attempt = await consumeRateLimit(serviceClient, {
+        bucket: 'join_code:user',
+        subject: user.id,
+        ...JOIN_CODE_ATTEMPTS,
+      }, log)
+      if (!attempt.allowed) {
+        return rateLimitResponse(
+          `Too many join code attempts. Try again in ${describeRetryAfter(attempt.retryAfterSeconds)}.`,
+          attempt.retryAfterSeconds
+        )
+      }
+
       // Look up league by join code
-      const { data: league, error: lookupError } = await serviceClient
-        .from('leagues')
-        .select('id, status, join_code')
+      const { data: link, error: lookupError } = await serviceClient
+        .from('league_join_links')
+        .select('league_id')
         .eq('join_code', join_code.toUpperCase())
-        .single()
+        .maybeSingle()
+      if (lookupError) throw lookupError
 
-      if (lookupError || !league) {
-        return errorResponse('Invalid join code', 404)
+      const { data: linkedLeague, error: linkedLeagueError } = link
+        ? await serviceClient.from('leagues').select('status').eq('id', link.league_id).maybeSingle()
+        : { data: null, error: null }
+      if (linkedLeagueError) throw linkedLeagueError
+
+      // Codes are only good during setup
+      if (!link || linkedLeague?.status !== 'setup') {
+        return errorResponse(INVALID_JOIN_CODE, 404)
       }
 
-      // Verify league is still in setup status
-      if (league.status !== 'setup') {
-        return errorResponse('This join link has expired - the draft has already started', 400)
-      }
-
-      targetLeagueId = league.id
+      targetLeagueId = link.league_id
     } else {
       // Direct join flow - validate league_id
       if (!isValidUUID(league_id!)) {

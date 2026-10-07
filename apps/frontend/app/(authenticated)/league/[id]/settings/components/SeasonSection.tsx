@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { CalendarDays } from 'lucide-react'
@@ -13,7 +13,7 @@ import { trackEvent } from '@/utils/analytics'
 import type { League, StandingRow } from '@/types'
 import { ButtonSpinner } from '../../components/Icons'
 import StartNextSeasonButton from '../../components/StartNextSeasonButton'
-import { SectionHeader } from './shared'
+import { SectionHeader, describedBy } from './shared'
 import EndSeasonModal from './EndSeasonModal'
 import type { CompleteLeagueResponse } from './EndSeasonModal'
 
@@ -67,6 +67,10 @@ export default function SeasonSection({
   const [isEnding, setIsEnding] = useState(false)
   const [standingsError, setStandingsError] = useState<string | null>(null)
   const [standings, setStandings] = useState<StandingRow[] | null>(null)
+  /** Set when the season was just ended from here; consumed once the page shows it. */
+  const [endedMessage, setEndedMessage] = useState<string | null>(null)
+  const yearButtonsRef = useRef<(HTMLButtonElement | null)[]>([])
+  const nextSeasonRef = useRef<HTMLDivElement>(null)
 
   const isSetup = league.status === 'setup'
   const isActive = league.status === 'active'
@@ -117,6 +121,30 @@ export default function SeasonSection({
   const { execute: save, isLoading: isSubmitting } = useAsyncAction(saveSeason)
   const isSubmitDisabled = isCompleted || isSubmitting || !hasChanges || !seasonEnd
 
+  // Ending the season replaces the "End season" button that opened the dialog,
+  // so once the completed state renders, focus goes to what replaced it. The
+  // toast is raised here too, after the dialog has closed, so the toaster's
+  // live region is no longer inert when it speaks; it is the only announcement
+  // of the result.
+  useEffect(() => {
+    if (!endedMessage || !isCompleted) return
+    toast.success(endedMessage)
+    nextSeasonRef.current?.querySelector<HTMLElement>('a, button')?.focus()
+    setEndedMessage(null)
+  }, [endedMessage, isCompleted])
+
+  // A radio group's keyboard model: one Tab stop, arrows move and select.
+  function handleYearKeyDown(event: React.KeyboardEvent, index: number): void {
+    const last = yearOptions.length - 1
+    const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown'
+    const back = event.key === 'ArrowLeft' || event.key === 'ArrowUp'
+    if (!forward && !back) return
+    event.preventDefault()
+    const next = forward ? (index === last ? 0 : index + 1) : (index === 0 ? last : index - 1)
+    setSeasonYear(yearOptions[next])
+    yearButtonsRef.current[next]?.focus()
+  }
+
   function handleSubmit(e: React.FormEvent<HTMLFormElement>): void {
     e.preventDefault()
     void save().catch((error: Error) => toast.error(error.message))
@@ -150,15 +178,18 @@ export default function SeasonSection({
                     aria-labelledby="season_year_label"
                     aria-describedby="season_year_help"
                   >
-                    {yearOptions.map((year) => {
+                    {yearOptions.map((year, index) => {
                       const selected = seasonYear === year
                       return (
                         <button
                           key={year}
+                          ref={(node) => { yearButtonsRef.current[index] = node }}
                           type="button"
                           role="radio"
                           aria-checked={selected}
+                          tabIndex={selected ? 0 : -1}
                           onClick={() => setSeasonYear(year)}
+                          onKeyDown={(event) => handleYearKeyDown(event, index)}
                           className={`btn px-4 py-1.5 type-control ${
                             selected
                               ? 'btn-secondary'
@@ -204,7 +235,9 @@ export default function SeasonSection({
                 min={`${seasonYear}-01-01`}
                 onChange={(e) => setSeasonEnd(e.target.value)}
                 className="input w-48"
-                aria-describedby="season_end_help"
+                required
+                aria-invalid={!seasonEnd || undefined}
+                aria-describedby={describedBy('season_end_help', !seasonEnd && 'season_end_error')}
               />
               <p id="season_end_help" className="mt-1.5 text-xs text-foreground-secondary">
                 {isCompleted
@@ -214,6 +247,12 @@ export default function SeasonSection({
                   ? ` Trades close ${formatSeasonDate(league.trade_deadline)}.`
                   : ' Trades run until then unless you set a deadline.')}
               </p>
+              {/* Clearing the date otherwise just greys out Save without a word. */}
+              {!seasonEnd && !isCompleted && (
+                <p id="season_end_error" role="alert" className="mt-1 text-xs text-error">
+                  Choose the date the season ends.
+                </p>
+              )}
             </div>
 
             <button type="submit" disabled={isSubmitDisabled} className="btn btn-primary">
@@ -230,7 +269,7 @@ export default function SeasonSection({
         </form>
 
         {(isActive || isCompleted) && (
-          <div className="mt-6 border-t border-border pt-5">
+          <div ref={nextSeasonRef} className="mt-6 border-t border-border pt-5">
             <div className="flex flex-col gap-3 rounded-lg border border-border bg-elevated p-4 sm:flex-row sm:items-center sm:justify-between">
               {isActive ? (
                 <>
@@ -286,7 +325,7 @@ export default function SeasonSection({
             setIsEnding(false)
             onUpdate(result.league)
             trackEvent('season_completed', { league_id: result.league.id })
-            toast.success(seasonEndedMessage(result))
+            setEndedMessage(seasonEndedMessage(result))
             // The page renders the completed state - champion banner, closed
             // write paths - from server data, so it has to come back.
             router.refresh()

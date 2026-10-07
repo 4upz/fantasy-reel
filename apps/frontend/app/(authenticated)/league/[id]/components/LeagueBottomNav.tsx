@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import Link from 'next/link'
+import { useModalDialog } from '@/hooks/useModalDialog'
 import { useLeagueNavigation, type LeagueNavigateEvent } from './LeagueNavigation'
 import {
   ArrowLeftRight,
@@ -15,7 +16,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react'
-import { getVisibleTabs, isTabActive, splitTabsForBottomBar, type LeagueTab } from './leagueNav'
+import { getVisibleTabs, isTabActive, outbidBadgeLabel, splitTabsForBottomBar, type LeagueTab } from './leagueNav'
 import type { League } from '@/types'
 
 interface Props {
@@ -55,6 +56,7 @@ export default function LeagueBottomNav({
 }: Props): React.ReactElement | null {
   const { pathname, pendingHref, navigate } = useLeagueNavigation()
   const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const sheetId = useId()
 
   const tabs = getVisibleTabs(league, isOwner, outbidCount, seasonCount)
   const { barTabs, moreTabs } = splitTabsForBottomBar(tabs)
@@ -62,13 +64,15 @@ export default function LeagueBottomNav({
   // Route changes come from taps inside the sheet, so it has to close itself.
   useEffect(() => setIsSheetOpen(false), [pathname])
 
+  // The sheet is a modal: left open while the window widens past the bar, it
+  // would keep the desktop page inert behind it.
   useEffect(() => {
     if (!isSheetOpen) return
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') setIsSheetOpen(false)
-    }
-    document.addEventListener('keydown', handleEscape)
-    return () => document.removeEventListener('keydown', handleEscape)
+    const desktop = window.matchMedia('(min-width: 1024px)')
+    const close = () => { if (desktop.matches) setIsSheetOpen(false) }
+    close()
+    desktop.addEventListener('change', close)
+    return () => desktop.removeEventListener('change', close)
   }, [isSheetOpen])
 
   if (barTabs.length === 0) return null
@@ -79,24 +83,6 @@ export default function LeagueBottomNav({
 
   return (
     <>
-      {isSheetOpen && (
-        <div className="lg:hidden">
-          <div className="modal-overlay z-40" onClick={() => setIsSheetOpen(false)} aria-hidden="true" />
-          <div
-            className="animate-slide-up fixed inset-x-0 bottom-0 z-50 rounded-t-2xl border-t border-border bg-surface pb-[calc(16px+env(safe-area-inset-bottom))]"
-            role="dialog"
-            aria-label="More league pages"
-          >
-            <div className="mx-auto mt-2.5 h-1 w-9 rounded-full bg-border-hover" />
-            <div className="flex flex-col p-2">
-              {moreTabs.map((tab) => (
-                <SheetLink key={tab.name} tab={tab} isActive={isTabActive(pathname, tab.href)} onNavigate={() => setIsSheetOpen(false)} />
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-[12px] lg:hidden"
         aria-label="League navigation"
@@ -129,7 +115,7 @@ export default function LeagueBottomNav({
                       >
                         {tab.badge}
                       </span>
-                      <span className="sr-only">{tab.badge} notifications</span>
+                      <span className="sr-only">{outbidBadgeLabel(tab.badge)}</span>
                     </>
                   )}
                 </span>
@@ -142,8 +128,10 @@ export default function LeagueBottomNav({
             <button
               type="button"
               onClick={() => setIsSheetOpen((open) => !open)}
+              aria-haspopup="dialog"
               aria-expanded={isSheetOpen}
-              className={`flex flex-col items-center gap-1 ${
+              aria-controls={isSheetOpen ? sheetId : undefined}
+              className={`flex cursor-pointer flex-col items-center gap-1 ${
                 isMoreActive || isSheetOpen ? 'text-gold' : 'text-foreground-secondary'
               }`}
             >
@@ -153,29 +141,68 @@ export default function LeagueBottomNav({
           )}
         </div>
       </nav>
+
+      {isSheetOpen && (
+        <MoreSheet id={sheetId} onClose={() => setIsSheetOpen(false)}>
+          {moreTabs.map((tab) => (
+            <SheetLink key={tab.name} tab={tab} isActive={isTabActive(pathname, tab.href)} onNavigate={() => setIsSheetOpen(false)} />
+          ))}
+        </MoreSheet>
+      )}
     </>
+  )
+}
+
+/**
+ * The "More" sheet: a native modal dialog pinned to the bottom edge. showModal()
+ * moves focus to its first link, keeps Tab inside, makes the page behind inert,
+ * and on close (Escape, the dimmed area, a link) returns focus to "More".
+ */
+function MoreSheet({ id, onClose, children }: { id: string; onClose: () => void; children: React.ReactNode }) {
+  const { dialogRef } = useModalDialog(onClose, false, true)
+
+  return (
+    <dialog
+      ref={dialogRef}
+      id={id}
+      aria-label="More league pages"
+      aria-modal="true"
+      className="animate-slide-up motion-reduce:animate-none fixed inset-x-0 top-auto bottom-0 m-0 w-full max-w-none max-h-[85dvh] overflow-y-auto rounded-t-2xl border-0 border-t border-border bg-surface p-0 text-foreground backdrop:bg-overlay backdrop:backdrop-blur-sm"
+    >
+      <div className="pb-[calc(16px+env(safe-area-inset-bottom))]">
+        <div className="mx-auto mt-2.5 h-1 w-9 rounded-full bg-border-hover" aria-hidden="true" />
+        <ul className="flex flex-col p-2" role="list">
+          {children}
+        </ul>
+      </div>
+    </dialog>
   )
 }
 
 function SheetLink({ tab, isActive, onNavigate }: { tab: LeagueTab; isActive: boolean; onNavigate: () => void }) {
   const { navigate } = useLeagueNavigation()
   return (
-    <Link
-      href={tab.href}
-      onNavigate={(event: LeagueNavigateEvent) => {
-        onNavigate()
-        navigate(tab.href, event)
-      }}
-      aria-current={isActive ? 'page' : undefined}
-      className={`flex items-center gap-3 rounded-xl px-3 py-3 type-control transition-colors hover:bg-surface-hover ${
-        isActive ? 'text-gold' : 'text-foreground'
-      }`}
-    >
-      <TabIcon name={tab.name} className="h-5 w-5" />
-      {tab.name}
-      {tab.badge && (
-        <span className="type-meta ml-auto rounded-full bg-crimson px-1.5 py-0.5 text-foreground">{tab.badge}</span>
-      )}
-    </Link>
+    <li>
+      <Link
+        href={tab.href}
+        onNavigate={(event: LeagueNavigateEvent) => {
+          onNavigate()
+          navigate(tab.href, event)
+        }}
+        aria-current={isActive ? 'page' : undefined}
+        className={`flex items-center gap-3 rounded-xl px-3 py-3 type-control transition-colors hover:bg-surface-hover ${
+          isActive ? 'text-gold' : 'text-foreground'
+        }`}
+      >
+        <TabIcon name={tab.name} className="h-5 w-5" />
+        {tab.name}
+        {tab.badge && (
+          <>
+            <span aria-hidden="true" className="type-meta ml-auto rounded-full bg-crimson px-1.5 py-0.5 text-foreground">{tab.badge}</span>
+            <span className="sr-only">{outbidBadgeLabel(tab.badge)}</span>
+          </>
+        )}
+      </Link>
+    </li>
   )
 }

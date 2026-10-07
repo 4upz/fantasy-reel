@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { announce } from '@/utils/announce'
 import type {
   Team,
   TeamWithOwner,
@@ -57,6 +58,12 @@ interface Props {
 
 type TabType = 'pending' | 'my-trades' | 'all' | 'history'
 
+/** A card action that finished: what to say, and which card to return focus to. */
+interface SettledAction {
+  tradeId: string
+  message: string
+}
+
 export default function TradingPanel({
   team,
   currentTeam,
@@ -82,6 +89,27 @@ export default function TradingPanel({
   onExtendTrade,
 }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('pending')
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [settled, setSettled] = useState<SettledAction | null>(null)
+
+  const handleActionSettled = useCallback((tradeId: string, message: string) => {
+    setSettled({ tradeId, message })
+  }, [])
+
+  // After a card action: say what happened, once, and -- when the action took
+  // the focused button away (or the whole card left this tab) -- put focus on
+  // the card if it is still here, else on the list, never on <body>. Runs after
+  // the commit that closed any confirm dialog, so the message is not spoken
+  // into a dialog that is about to disappear.
+  useEffect(() => {
+    if (!settled) return
+    announce(settled.message)
+    const active = document.activeElement
+    if (active && active !== document.body) return
+    const card = panelRef.current?.querySelector<HTMLElement>(`[data-trade-id="${settled.tradeId}"]`)
+    ;(card ?? panelRef.current)?.focus()
+  }, [settled])
 
   // Filter trades based on active tab
   const getFilteredTrades = () => {
@@ -121,6 +149,21 @@ export default function TradingPanel({
     { id: 'history', label: 'History' },
   ]
 
+  // The tab pattern's keyboard model: one Tab stop, arrows move and select.
+  function handleTabKeyDown(event: React.KeyboardEvent, index: number): void {
+    const last = tabs.length - 1
+    const nextIndex =
+      event.key === 'ArrowRight' ? (index === last ? 0 : index + 1)
+        : event.key === 'ArrowLeft' ? (index === 0 ? last : index - 1)
+          : event.key === 'Home' ? 0
+            : event.key === 'End' ? last
+              : null
+    if (nextIndex === null) return
+    event.preventDefault()
+    setActiveTab(tabs[nextIndex].id)
+    tabRefs.current[nextIndex]?.focus()
+  }
+
   return (
     <div className="space-y-4" role="region" aria-label="Trading block" data-testid="trading-panel">
       {/* Header */}
@@ -134,15 +177,16 @@ export default function TradingPanel({
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Not a live region: new offers are announced as they arrive (useTrading). */}
             {!isLoading && actionNeededCount > 0 && (
-              <span className="type-label text-crimson" role="status" aria-live="polite">
-                {actionNeededCount} trade{actionNeededCount !== 1 ? 's' : ''} need your response
+              <span className="type-label text-crimson-text">
+                {actionNeededCount} {actionNeededCount === 1 ? 'trade needs' : 'trades need'} your response
               </span>
             )}
             <button
+              type="button"
               onClick={onProposeTrade}
               className="btn btn-primary"
-              aria-label="Propose a new trade"
               data-testid="propose-trade-button"
             >
               Propose trade
@@ -154,9 +198,11 @@ export default function TradingPanel({
         <div className="mt-4 pt-4 border-t border-border">
           <p className="type-body-sm text-foreground-secondary">
             Available budget: {budget ? (
-              <span className="type-number text-gold" aria-label={`${budget.remaining_budget} dollars`}>${budget.remaining_budget}</span>
+              <span className="type-number text-gold">${budget.remaining_budget}</span>
             ) : isBudgetLoading && !budgetError ? (
-              <span className="inline-block h-5 w-14 skeleton rounded align-middle" role="status" aria-label="Loading budget" />
+              <span className="inline-block h-5 w-14 skeleton rounded align-middle" role="status" aria-label="Loading budget">
+                <span className="sr-only">Loading budget</span>
+              </span>
             ) : (
               <span>Unavailable</span>
             )}
@@ -167,48 +213,57 @@ export default function TradingPanel({
       {/* Tabs */}
       <div className="card">
         <div className="border-b border-border">
-          <nav
+          <div
             className="flex gap-1 px-4 overflow-x-auto"
             role="tablist"
             aria-label="Trade categories"
           >
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                role="tab"
-                aria-selected={activeTab === tab.id}
-                aria-controls={`trade-panel-${tab.id}`}
-                id={`trade-tab-${tab.id}`}
-                className={`type-control px-4 py-3 border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 ${
-                  activeTab === tab.id
-                    ? 'text-gold border-gold'
-                    : 'text-foreground-secondary hover:text-foreground border-transparent'
-                }`}
-              >
-                {tab.label}
-                {tab.count !== undefined && isLoading ? (
-                  <span className="h-5 w-5 skeleton rounded-full" role="status" aria-label="Loading trade count" />
-                ) : tab.count !== undefined && tab.count > 0 && (
-                  <span
-                    className="type-meta type-numeric bg-surface-hover text-foreground-secondary px-1.5 py-0.5 rounded-full"
-                    aria-label={`${tab.count} ${tab.label.toLowerCase()}`}
-                  >
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </nav>
+            {tabs.map((tab, index) => {
+              const isSelected = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  ref={(node) => { tabRefs.current[index] = node }}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  onKeyDown={(event) => handleTabKeyDown(event, index)}
+                  role="tab"
+                  aria-selected={isSelected}
+                  // Only the selected tab's panel is rendered.
+                  aria-controls={isSelected ? `trade-panel-${tab.id}` : undefined}
+                  tabIndex={isSelected ? 0 : -1}
+                  id={`trade-tab-${tab.id}`}
+                  className={`type-control px-4 py-3 border-b-2 transition-colors whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                    isSelected
+                      ? 'text-gold border-gold'
+                      : 'text-foreground-secondary hover:text-foreground border-transparent'
+                  }`}
+                >
+                  {tab.label}
+                  {tab.count !== undefined && isLoading ? (
+                    <span className="h-5 w-5 skeleton rounded-full" aria-hidden="true" />
+                  ) : tab.count !== undefined && tab.count > 0 && (
+                    <span className="type-meta type-numeric bg-surface-hover text-foreground-secondary px-1.5 py-0.5 rounded-full">
+                      {tab.count}
+                      <span className="sr-only"> trades</span>
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Trade list */}
         <div
+          ref={panelRef}
           className="p-4"
           role="tabpanel"
           id={`trade-panel-${activeTab}`}
           aria-labelledby={`trade-tab-${activeTab}`}
           aria-busy={isLoading && !hasTradesError}
+          // A focus target for when an action removes the card that had focus.
+          tabIndex={-1}
         >
           {isLoading && hasTradesError ? null : isLoading ? (
             <div className="space-y-4" role="status" aria-label="Loading trades" data-testid="trading-loading">
@@ -236,28 +291,33 @@ export default function TradingPanel({
               </p>
             </div>
           ) : (
-            <div className="space-y-4" aria-live="polite">
+            // Deliberately not a live region: it would read whole cards on every
+            // tab switch, realtime refetch and countdown tick. Changes are
+            // announced one line at a time instead (useTrading, onActionSettled).
+            <ul role="list" className="space-y-4">
               {filteredTrades.map((trade) => (
-                <TradeOfferCard
-                  key={trade.id}
-                  trade={trade}
-                  currentTeamId={team.id}
-                  currentTeam={currentTeam}
-                  isOwner={isOwner}
-                  otherTeams={otherTeams}
-                  tradeableMovies={tradeableMovies}
-                  budget={budget}
-                  composerState={composerState}
-                  expiryBounds={expiryBounds}
-                  onRespond={onRespondTrade}
-                  onCounter={onCounterTrade}
-                  onCancel={onCancelTrade}
-                  onVeto={onVetoTrade}
-                  onApprove={onApproveTrade}
-                  onExtend={onExtendTrade}
-                />
+                <li key={trade.id}>
+                  <TradeOfferCard
+                    trade={trade}
+                    currentTeamId={team.id}
+                    currentTeam={currentTeam}
+                    isOwner={isOwner}
+                    otherTeams={otherTeams}
+                    tradeableMovies={tradeableMovies}
+                    budget={budget}
+                    composerState={composerState}
+                    expiryBounds={expiryBounds}
+                    onRespond={onRespondTrade}
+                    onCounter={onCounterTrade}
+                    onCancel={onCancelTrade}
+                    onVeto={onVetoTrade}
+                    onApprove={onApproveTrade}
+                    onExtend={onExtendTrade}
+                    onActionSettled={handleActionSettled}
+                  />
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
       </div>

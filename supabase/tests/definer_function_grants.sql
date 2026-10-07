@@ -13,7 +13,6 @@ CREATE TEMP TABLE internal_fns(fn) AS VALUES
   ('recalculate_team_score_with_counterpicks(uuid)'),
   ('queue_movies_for_scoring()'),
   ('queue_movie_for_scoring(uuid)'),
-  ('process_score_queue()'),
   ('delete_score_queue_message(bigint)'),
   ('get_trade_offer_for_update(uuid)'),
   ('get_team_budget_for_update(uuid)'),

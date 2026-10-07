@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import MovieSearchClient from './MovieSearchClient'
 
 export const metadata: Metadata = {
-  title: 'Browse movies | Fantasy Reel',
+  title: 'Browse movies',
   description: 'Search and discover movies for your fantasy leagues',
 }
 

@@ -220,14 +220,26 @@ export default function SpotlightPreview({ title, width, height, details, childr
             className={styles.previewControl}
             aria-pressed={active === index}
             aria-controls={id}
+            aria-describedby={layout === 'beside' ? `${id}-description-${index}` : undefined}
             onClick={() => selectDetail(index)}
           >
             <span className="type-control">{detail.label}</span>
-            {layout === 'beside' && <span className={`type-body-sm ${styles.controlDescription}`}>{detail.description}</span>}
+            {/* The label alone names the control; the description is announced as its description. */}
+            {layout === 'beside' && (
+              <span id={`${id}-description-${index}`} aria-hidden="true" className={`type-body-sm ${styles.controlDescription}`}>
+                {detail.description}
+              </span>
+            )}
           </button>
         ))}
       </div>
-      <p className={`type-body-sm ${styles.caption}`} aria-live="polite" aria-atomic="true">{selected.description}</p>
+      {/* Beside, every control already describes itself, so the caption would only repeat it.
+          Stacked, it is the only description, so it announces the newly selected one. */}
+      {layout === 'beside' ? (
+        <p className={`type-body-sm ${styles.caption}`} aria-hidden="true">{selected.description}</p>
+      ) : (
+        <p className={`type-body-sm ${styles.caption}`} aria-live="polite" aria-atomic="true">{selected.description}</p>
+      )}
     </div>
   )
 

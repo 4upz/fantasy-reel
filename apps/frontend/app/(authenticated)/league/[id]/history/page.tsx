@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { fetchSeriesSeasonRecords, fetchStandings } from '@/utils/seasonQueries'
@@ -6,6 +7,8 @@ import SeasonHistoryList, {
   type SeasonHistoryRow,
 } from '../components/SeasonHistoryList'
 import type { League } from '@/types'
+
+export const metadata: Metadata = { title: 'Season history' }
 
 interface PageProps {
   params: Promise<{ id: string }>
@@ -79,10 +82,11 @@ export default async function SeasonHistoryPage({ params }: PageProps) {
 
   return (
     <div className="animate-fade-in">
+      {/* The league switcher above is the page's h1. */}
       <header className="mb-6">
-        <h1 className="type-page text-foreground">
+        <h2 className="type-page text-foreground">
           {typedLeague.name}
-        </h1>
+        </h2>
         <p className="mt-1 text-sm text-foreground-secondary">
           {seasons.length} {seasons.length === 1 ? 'season' : 'seasons'}
         </p>

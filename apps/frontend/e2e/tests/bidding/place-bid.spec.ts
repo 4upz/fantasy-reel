@@ -40,7 +40,7 @@ test.describe('Bidding Panel @bidding', () => {
     })
 
     // Verify budget display is visible
-    await expect(authedPage.getByText(/budget/i)).toBeVisible()
+    await expect(authedPage.getByTestId('bidding-budget')).toBeVisible()
 
     // Verify place bid button is visible
     await expect(authedPage.getByTestId('place-bid-button')).toBeVisible()

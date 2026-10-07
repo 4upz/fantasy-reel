@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
 import GoogleIcon from '../icons/GoogleIcon'
 
@@ -10,6 +12,7 @@ interface Props {
 
 export default function GoogleLoginButton({ redirectTo }: Props): React.ReactElement {
   const [isLoading, setIsLoading] = useState(false)
+  const buttonRef = useRef<HTMLButtonElement>(null)
 
   const handleGoogleLogin = async () => {
     setIsLoading(true)
@@ -25,13 +28,17 @@ export default function GoogleLoginButton({ redirectTo }: Props): React.ReactEle
 
     if (error) {
       console.error('Google login error:', error)
-      setIsLoading(false)
+      toast.error("Couldn't connect to Google. Please try again.")
+      // Disabling the button dropped focus; give it back once it is enabled again.
+      flushSync(() => setIsLoading(false))
+      buttonRef.current?.focus()
     }
     // If successful, user will be redirected to Google
   }
 
   return (
     <button
+      ref={buttonRef}
       type="button"
       onClick={handleGoogleLogin}
       disabled={isLoading}

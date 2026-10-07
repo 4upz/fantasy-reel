@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { Gavel, Swords } from 'lucide-react'
-import { getBidPhase, formatDeadlineShort, formatTimeRemaining } from './utils'
+import { getBidPhase, formatDeadlineShort } from './utils'
+import { TimeRemaining } from './BidAmountAndDeadline'
 
 interface BidWeekTimelineProps {
   /** From get_new_bid_cutoff(); null when the league has the cutoff disabled. */
@@ -34,6 +35,11 @@ interface BidWeekTimelineProps {
  * `isCounterBidPhase` is left to render normally elsewhere: it compares two
  * absolute timestamps, so server and client agree except in the sub-second
  * window where the cutoff passes between them.
+ *
+ * After mount the clock ticks once a minute, so a page left open moves the
+ * fill, the countdown and the phase with it. The labels are plain text, not a
+ * live region: BiddingShell announces the phase change once, and a countdown
+ * that spoke every minute would drown everything else out.
  * @design-system League
  */
 export default function BidWeekTimeline({
@@ -44,6 +50,8 @@ export default function BidWeekTimeline({
 
   useEffect(() => {
     setNow(new Date())
+    const interval = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(interval)
   }, [])
 
   if (!cutoffAt || !processingDeadline) return null
@@ -67,10 +75,6 @@ export default function BidWeekTimeline({
   const cutoffPct = `${cutoffFraction * 100}%`
   const elapsedPct = `${elapsedFraction * 100}%`
 
-  const summary = isCounterBidPhase
-    ? `Counter-bid phase. New bids closed ${formatDeadlineShort(cutoffAt)}. Bids process ${formatDeadlineShort(processingDeadline)}.`
-    : `Open bidding. New bids close ${formatDeadlineShort(cutoffAt)}, in ${formatTimeRemaining(cutoffAt)}.`
-
   return (
     <div className="mt-4 pt-4 border-t border-border" data-testid="bid-week-timeline">
       <div className="flex items-baseline justify-between gap-3 mb-2.5">
@@ -81,16 +85,15 @@ export default function BidWeekTimeline({
         >
           {isCounterBidPhase
             ? 'Counter bids only'
-            : `New bids close in ${formatTimeRemaining(cutoffAt)}`}
+            : <>New bids close in <TimeRemaining deadline={cutoffAt} /></>}
         </p>
       </div>
 
-      {/* The bar is decorative -- the labels below carry the same information
-          for anyone not reading it visually. */}
+      {/* The bar is decorative -- the labels around it carry the same
+          information for anyone not reading it visually. */}
       <div
         className="relative h-1.5 rounded-full bg-elevated overflow-hidden"
-        role="img"
-        aria-label={summary}
+        aria-hidden="true"
       >
         {/* The counter-bid stretch, tinted so the two regimes are distinct even
             before the fill reaches the notch. */}

@@ -21,7 +21,7 @@ function UserAvatar({ avatarUrl, displayName, size = 'md' }: UserAvatarProps): R
       <div className={`${sizeClasses} relative rounded-full overflow-hidden border border-border`}>
         <Image
           src={safeUrl}
-          alt={displayName}
+          alt=""
           width={imageSize}
           height={imageSize}
           className="object-cover"
@@ -32,7 +32,7 @@ function UserAvatar({ avatarUrl, displayName, size = 'md' }: UserAvatarProps): R
   }
 
   return (
-    <div className={`${sizeClasses} rounded-full bg-elevated border border-border flex items-center justify-center font-medium text-foreground`}>
+    <div className={`${sizeClasses} rounded-full bg-elevated border border-border flex items-center justify-center font-medium text-foreground`} aria-hidden="true">
       {initial}
     </div>
   )
@@ -50,7 +50,7 @@ export default function UserSearchResultItem({ user, onSelect, isHighlighted }: 
     <button
       type="button"
       onClick={() => onSelect(user)}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors ${
+      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left cursor-pointer transition-colors ${
         isHighlighted ? 'bg-surface-hover' : 'hover:bg-surface-hover'
       }`}
     >
@@ -83,10 +83,10 @@ export function SelectedUserChip({ user, onRemove }: SelectedUserChipProps): Rea
       <button
         type="button"
         onClick={onRemove}
-        className="ml-1 p-0.5 rounded hover:bg-surface-hover text-foreground-secondary hover:text-foreground transition-colors"
-        aria-label="Remove selected user"
+        className="ml-1 flex min-h-6 min-w-6 cursor-pointer items-center justify-center rounded hover:bg-surface-hover text-foreground-secondary hover:text-foreground transition-colors"
+        aria-label={`Remove ${user.display_name}`}
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>

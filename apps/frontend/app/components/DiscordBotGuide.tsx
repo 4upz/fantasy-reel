@@ -55,7 +55,7 @@ export default function DiscordBotGuide({ leagueLink }: Props): React.ReactEleme
         </Step>
         <Step number={2} title="Connect your Discord account">
           Connect Discord in{' '}
-          <Link href="/settings" className="text-gold hover:text-gold-hover underline-offset-4 hover:underline">
+          <Link href="/settings" className="text-gold underline underline-offset-4 hover:text-gold-hover">
             Settings
           </Link>{' '}
           so the bot knows which manager you are.

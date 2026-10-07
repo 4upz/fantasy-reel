@@ -26,6 +26,7 @@ import { sendDiscordNotification, buildNewBidEmbed, buildCounterBidEmbed, Discor
 import { assertLeagueWritable } from '../_shared/league-status.ts'
 import { computeBidWindow, newBidClosedMessage } from '../_shared/bid-window.ts'
 import { createLogger } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { logNotificationDelivery, statusFromEmailResult } from '../_shared/notification-log.ts'
 
 const log = createLogger('place-counterpick-bid')
@@ -244,6 +245,9 @@ Deno.serve(async (req) => {
     if (highestBid && highestBid.amount >= amount) {
       return errorResponse(`There is already a bid of $${highestBid.amount}. You must bid higher.`, 400)
     }
+
+    const throttled = await throttleUser('counterpick_bid', user.id, log, serviceClient)
+    if (throttled) return throttled
 
     let newBid
 

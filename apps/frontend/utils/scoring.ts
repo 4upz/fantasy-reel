@@ -47,7 +47,7 @@ export function pointsTone(
   { preRelease = false, positive = 'text-success' }: { preRelease?: boolean; positive?: string } = {}
 ): string {
   if (points == null || preRelease) return 'text-foreground-secondary'
-  return points >= 0 ? positive : 'text-crimson'
+  return points >= 0 ? positive : 'text-crimson-text'
 }
 
 /**

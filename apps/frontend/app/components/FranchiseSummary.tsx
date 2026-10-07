@@ -43,13 +43,13 @@ export default function FranchiseSummary({ history, defaultOpen = false, classNa
           aria-controls={listId}
           className="type-control inline-flex items-center gap-1 -my-1 -mr-2 px-2 py-1 rounded-md text-gold hover:text-gold-hover hover:bg-gold-muted transition-colors"
         >
-          {open ? 'Hide history' : 'Franchise history'}
+          Franchise history
           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
       </div>
 
       {open && (
-        <ul id={listId} className="mt-2.5 pt-2.5 border-t border-border space-y-1.5 animate-fade-in">
+        <ul id={listId} role="list" className="mt-2.5 pt-2.5 border-t border-border space-y-1.5 animate-fade-in">
           {history.films.map((film) => (
             <li key={film.tmdb_id} className="flex items-center gap-2">
               <div className="relative w-5 h-[30px] shrink-0 rounded-[3px] overflow-hidden bg-elevated border border-border">

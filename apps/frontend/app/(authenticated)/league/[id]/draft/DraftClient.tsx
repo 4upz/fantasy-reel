@@ -1,10 +1,11 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { Target } from 'lucide-react'
-import { useDraftState } from '@/hooks/useDraftState'
+import { describeDraftChange, useDraftState, type DraftAnnouncer, type DraftState } from '@/hooks/useDraftState'
+import { announce } from '@/utils/announce'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
@@ -20,8 +21,39 @@ import { SpinnerIcon } from '../components/Icons'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const InviteModal = dynamic(() => import('../components/InviteModal'), {
-  loading: () => <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4"><div className="animate-pulse h-64 w-full max-w-md bg-surface rounded-lg" /></div>,
+  loading: () => (
+    <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50 p-4" role="status">
+      <span className="sr-only">Loading invite form</span>
+      <div className="animate-pulse h-64 w-full max-w-md bg-surface rounded-lg" aria-hidden="true" />
+    </div>
+  ),
 })
+
+/**
+ * Messages that land together - a confirmed pick, the phase it ended, whose
+ * turn is next - are read as one, so a later one never cuts off an earlier one.
+ * The short wait also lets a closing dialog go first: a message spoken into a
+ * dialog that is about to close would be lost with it.
+ */
+const ANNOUNCE_GATHER_MS = 250
+
+function useGatheredAnnouncer(): DraftAnnouncer {
+  const queue = useRef<{ parts: string[]; assertive: boolean; timer: number | null }>({ parts: [], assertive: false, timer: null })
+  useEffect(() => () => {
+    if (queue.current.timer !== null) window.clearTimeout(queue.current.timer)
+  }, [])
+  return useCallback((message, politeness = 'polite', lead = false) => {
+    const pending = queue.current
+    if (lead) pending.parts.unshift(message)
+    else pending.parts.push(message)
+    pending.assertive ||= politeness === 'assertive'
+    if (pending.timer !== null) return
+    pending.timer = window.setTimeout(() => {
+      announce(pending.parts.join(' '), pending.assertive ? 'assertive' : 'polite')
+      queue.current = { parts: [], assertive: false, timer: null }
+    }, ANNOUNCE_GATHER_MS)
+  }, [])
+}
 
 interface Props {
   league: League
@@ -43,18 +75,39 @@ export default function DraftClient({
   isOwner,
   reigningChampions = null,
 }: Props): React.ReactElement {
+  const speak = useGatheredAnnouncer()
+  // Live news for screen readers at every width: picks by others, counterpicks,
+  // phase changes and - assertively - the viewer's own turn.
+  const announceChange = useCallback((previous: DraftState, latest: DraftState) => {
+    const update = describeDraftChange(previous, latest, currentUserId)
+    if (update) speak(update.message, update.assertive ? 'assertive' : 'polite')
+  }, [currentUserId, speak])
   const { league, participants, draftPicks, counterpicks, refresh, getSnapshot, acceptLeague, syncError, realtimeStatus } = useDraftState({
     league: initialLeague,
     participants: initialParticipants,
     draftPicks: initialDraftPicks,
     counterpicks: initialCounterpicks,
-  })
+  }, { onConfirmedChange: announceChange })
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [showSkipConfirm, setShowSkipConfirm] = useState(false)
   const [pickHistoryExpanded, setPickHistoryExpanded] = useState(false)
   const router = useRouter()
   const phase = `${league.id}:${league.status}`
   const previousPhase = useRef(phase)
+  const boardRef = useRef<HTMLDivElement>(null)
+  const skipTriggerRef = useRef<HTMLButtonElement>(null)
+  const skipConfirmTextRef = useRef<HTMLParagraphElement>(null)
+  const skipConfirmId = useId()
+  const startDraftHelpId = useId()
+  const lastFocused = useRef<Element | null>(null)
+
+  useEffect(() => {
+    const onFocusIn = (event: FocusEvent): void => {
+      if (event.target instanceof Element) lastFocused.current = event.target
+    }
+    document.addEventListener('focusin', onFocusIn)
+    return () => document.removeEventListener('focusin', onFocusIn)
+  }, [])
 
   useEffect(() => {
     if (previousPhase.current === phase) return
@@ -62,7 +115,26 @@ export default function DraftClient({
     // The shared header and navigation are server-rendered. Refresh them when
     // a confirmed phase changes, without restarting the draft on every pick.
     router.refresh()
+    // A new phase swaps the board and the owner controls. When that removed
+    // the control the viewer was on, land on the new board's heading rather
+    // than the top of the document. Anyone else keeps their reading position;
+    // the announcer tells them the phase changed.
+    const focused = lastFocused.current
+    const focusLost = !document.activeElement || document.activeElement === document.body
+    if (focused && !focused.isConnected && focusLost) {
+      lastFocused.current = null
+      boardRef.current?.querySelector<HTMLElement>('[data-draft-heading]')?.focus({ preventScroll: true })
+    }
   }, [phase, router])
+
+  useEffect(() => {
+    if (showSkipConfirm) skipConfirmTextRef.current?.focus()
+  }, [showSkipConfirm])
+
+  function cancelSkipConfirm(): void {
+    setShowSkipConfirm(false)
+    skipTriggerRef.current?.focus()
+  }
 
   const teamInfoById = useMemo(() => buildTeamInfoByTeamId(participants), [participants])
   const handlePickMade = useCallback(async (confirmedLeague?: League) => {
@@ -129,19 +201,25 @@ export default function DraftClient({
     <>
       {/* Owner Controls for Setup */}
       {isOwner && league.status === 'setup' && (
-        <div className="mb-6 flex items-center gap-3">
+        <div className="mb-6 flex flex-wrap items-center gap-3">
           <button onClick={() => setShowInviteModal(true)} className="btn btn-secondary">
             Invite players
           </button>
           <button
             onClick={() => { void startDraft().catch(() => {}) }}
             disabled={startingDraft || participants.length < 2 || Boolean(syncError)}
+            aria-describedby={participants.length < 2 ? startDraftHelpId : undefined}
             className="btn btn-primary"
             data-testid="start-draft-button"
           >
             {startingDraft ? 'Starting...' : 'Start Draft'}
           </button>
-          {error && <span className="type-body-sm text-error">{error}</span>}
+          {participants.length < 2 && (
+            <span id={startDraftHelpId} className="type-body-sm text-foreground-secondary">
+              The draft needs at least 2 players.
+            </span>
+          )}
+          {error && <span className="type-body-sm text-error" role="alert">{error}</span>}
         </div>
       )}
 
@@ -152,7 +230,7 @@ export default function DraftClient({
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-crimson/20 rounded-full flex items-center justify-center">
-                  <Target className="w-5 h-5 text-crimson" />
+                  <Target className="w-5 h-5 text-crimson-text" />
                 </div>
                 <div>
                   <p className="font-semibold text-foreground">{canEndCounterpicks ? 'Finish counterpicks' : 'Draft complete!'}</p>
@@ -179,22 +257,23 @@ export default function DraftClient({
                     </>
                   )}
                 </button>}
-                {!showSkipConfirm && (
-                  <button
-                    onClick={() => setShowSkipConfirm(true)}
-                    disabled={startingCounterpick || skipping}
-                    className="type-control text-foreground-secondary hover:text-foreground-secondary transition-colors"
-                  >
-                    {canEndCounterpicks ? 'End remaining counterpicks' : 'Skip & activate league'}
-                  </button>
-                )}
+                <button
+                  ref={skipTriggerRef}
+                  onClick={() => (showSkipConfirm ? cancelSkipConfirm() : setShowSkipConfirm(true))}
+                  disabled={startingCounterpick || skipping}
+                  aria-expanded={showSkipConfirm}
+                  aria-controls={showSkipConfirm ? skipConfirmId : undefined}
+                  className="type-control cursor-pointer text-foreground-secondary hover:text-foreground transition-colors"
+                >
+                  {canEndCounterpicks ? 'End remaining counterpicks' : 'Skip & activate league'}
+                </button>
               </div>
             </div>
 
             {/* Inline skip confirmation */}
             {showSkipConfirm && (
-              <div className="mt-3 p-3 bg-elevated rounded-lg border border-border animate-fade-in">
-                <p className="type-body-sm text-foreground-secondary mb-3">
+              <div id={skipConfirmId} className="mt-3 p-3 bg-elevated rounded-lg border border-border animate-fade-in">
+                <p ref={skipConfirmTextRef} tabIndex={-1} className="type-body-sm text-foreground-secondary mb-3">
                   {canEndCounterpicks ? 'End the remaining counterpicks and activate the league? Existing counterpicks will be kept. This cannot be undone.' : "Skip the counterpick round? Teams won't be able to claim draft-phase counterpicks."}
                 </p>
                 <div className="flex items-center gap-2">
@@ -213,7 +292,7 @@ export default function DraftClient({
                     )}
                   </button>
                   <button
-                    onClick={() => setShowSkipConfirm(false)}
+                    onClick={cancelSkipConfirm}
                     disabled={skipping}
                     className="type-control btn btn-ghost py-1.5 px-4"
                   >
@@ -223,7 +302,7 @@ export default function DraftClient({
               </div>
             )}
 
-            {(error || skipError) && <p className="type-body-sm mt-3 text-error">{error || skipError}</p>}
+            {(error || skipError) && <p className="type-body-sm mt-3 text-error" role="alert">{error || skipError}</p>}
           </div>
         </div>
       )}
@@ -245,7 +324,7 @@ export default function DraftClient({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="order-1 lg:col-span-2">
+        <div className="order-1 lg:col-span-2" ref={boardRef}>
           <DraftBoard
             league={league}
             participants={participants}
@@ -254,6 +333,7 @@ export default function DraftClient({
             currentUserId={currentUserId}
             onPickMade={handlePickMade}
             onCounterpickMade={handleCounterpickMade}
+            onAnnounce={speak}
             updatesUnavailable={Boolean(syncError)}
           />
         </div>
@@ -267,9 +347,9 @@ export default function DraftClient({
 
           {league.status === 'drafting' && draftPicks.length > 0 && (
             <div className="card p-4 lg:p-6" data-testid="draft-history">
-              <h3 className="type-panel text-foreground mb-4">
+              <h2 className="type-panel text-foreground mb-4">
                 Pick history
-              </h3>
+              </h2>
               <div className="hidden lg:block">
                 <PickHistory draftPicks={draftPicks} teamInfoById={teamInfoById} />
               </div>
@@ -296,10 +376,7 @@ export default function DraftClient({
 
           {isOwner && league.status === 'setup' && (
             <>
-              <JoinLinkCard
-                league={league}
-                onUpdate={() => { void refresh() }}
-              />
+              <JoinLinkCard leagueId={league.id} />
               <InvitationsList
                 leagueId={league.id}
                 isOwner={isOwner}

@@ -42,7 +42,8 @@ export default function HeroMovieLineup() {
           </button>
         ))}
       </div>
-      <figcaption className={`type-meta ${styles.caption}`} aria-live="polite" aria-atomic="true">
+      {/* Not live: each poster's name and pressed state already say which movie is selected. */}
+      <figcaption className={`type-meta ${styles.caption}`}>
         <a href={selectedMovie.source} target="_blank" rel="noopener noreferrer">
           {selectedMovie.title}
           <span className="sr-only"> — Rotten Tomatoes score for this 2026 example (opens in a new tab)</span>
