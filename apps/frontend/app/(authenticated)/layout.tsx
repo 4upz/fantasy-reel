@@ -26,7 +26,7 @@ export default async function AuthenticatedLayout({ children }: Props) {
       <SideNav user={user} profile={profile} />
       {/* Mobile: top padding for header. Desktop: left padding for sidebar (uses CSS custom property) */}
       <AuthenticatedProviders>
-        <main className="flex-1 pt-14 lg:pt-0 lg:pl-[var(--sidenav-width,68px)] transition-[padding] duration-250 ease-out">
+        <main id="main-content" tabIndex={-1} className="flex-1 pt-14 lg:pt-0 lg:pl-[var(--sidenav-width,68px)] transition-[padding] duration-250 ease-out">
           {children}
         </main>
         {/* TMDb requires the attribution notice wherever their data is shown,

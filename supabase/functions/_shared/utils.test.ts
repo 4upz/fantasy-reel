@@ -14,7 +14,7 @@ import {
   isValidJoinCode,
   isServiceRoleRequest,
   authenticateRequest,
-  authenticateUserOrServiceRole,
+  authenticateCaller,
   isUpcomingMovie,
   bidLock,
   hasReleased,
@@ -270,9 +270,9 @@ Deno.test('handleCorsPreflightRequest', async (t) => {
 // ============================================================================
 
 Deno.test('generateJoinCode', async (t) => {
-  await t.step('generates a 6-character code by default', () => {
+  await t.step('generates an 8-character code by default', () => {
     const code = generateJoinCode()
-    assertEquals(code.length, 6)
+    assertEquals(code.length, 8)
   })
 
   await t.step('generates codes of custom length', () => {
@@ -311,12 +311,20 @@ Deno.test('generateJoinCode', async (t) => {
     }
   })
 
+  await t.step('uses every character of the alphabet', () => {
+    const seen = new Set<string>()
+    for (let i = 0; i < 200; i++) {
+      for (const char of generateJoinCode()) seen.add(char)
+    }
+    assertEquals(seen.size, 31)
+  })
+
   await t.step('generates unique codes (statistically)', () => {
     const codes = new Set<string>()
     for (let i = 0; i < 100; i++) {
       codes.add(generateJoinCode())
     }
-    // With 29^6 possible codes, 100 codes should all be unique
+    // With 31^8 possible codes, 100 codes should all be unique
     assertEquals(codes.size, 100, 'Expected 100 unique codes')
   })
 })
@@ -331,6 +339,11 @@ Deno.test('isValidJoinCode', async (t) => {
     for (const code of validCodes) {
       assertEquals(isValidJoinCode(code), true, `Expected "${code}" to be valid`)
     }
+  })
+
+  await t.step('returns true for valid 8-character codes', () => {
+    assertEquals(isValidJoinCode('ABC234XY'), true)
+    assertEquals(isValidJoinCode('abc234xy'), true)
   })
 
   await t.step('returns true for lowercase codes (case-insensitive)', () => {
@@ -349,6 +362,7 @@ Deno.test('isValidJoinCode', async (t) => {
   await t.step('returns false for wrong length codes', () => {
     assertEquals(isValidJoinCode('ABC23'), false)   // 5 chars
     assertEquals(isValidJoinCode('ABC2345'), false) // 7 chars
+    assertEquals(isValidJoinCode('ABC23456X'), false) // 9 chars
     assertEquals(isValidJoinCode('AB'), false)      // 2 chars
     assertEquals(isValidJoinCode(''), false)        // empty
   })
@@ -369,7 +383,7 @@ Deno.test('isValidJoinCode', async (t) => {
 })
 
 // ============================================================================
-// isServiceRoleRequest / authenticateUserOrServiceRole Tests
+// isServiceRoleRequest / authenticateCaller Tests
 //
 // Stubbed Auth HTTP responses exercise the real SDK's error classification.
 // Real JWT validation also lives in tests/movie-endpoints-auth.test.ts.
@@ -433,24 +447,24 @@ Deno.test('isServiceRoleRequest', async (t) => {
   })
 })
 
-Deno.test('authenticateUserOrServiceRole', async (t) => {
+Deno.test('authenticateCaller', async (t) => {
   await t.step('lets a service role caller through', async () => {
     await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, async () => {
-      const result = await authenticateUserOrServiceRole(
+      const result = await authenticateCaller(
         requestWithAuthorization(`Bearer ${TEST_SERVICE_ROLE_KEY}`)
       )
-      assertEquals(result, null)
+      assertEquals(result, { userId: null })
     })
   })
 
   await t.step('returns the standard 401 when no Authorization header is sent', async () => {
     await withServiceRoleKey(TEST_SERVICE_ROLE_KEY, async () => {
-      const result = await authenticateUserOrServiceRole(requestWithAuthorization())
+      const result = await authenticateCaller(requestWithAuthorization())
 
-      assertExists(result)
-      assertEquals(result!.status, 401)
-      assertEquals(await result!.json(), { error: 'Unauthorized' })
-      assertHasCorsHeaders(result!)
+      if (!(result instanceof Response)) throw new Error('Expected an error response')
+      assertEquals(result.status, 401)
+      assertEquals(await result.json(), { error: 'Unauthorized' })
+      assertHasCorsHeaders(result)
     })
   })
 })
@@ -512,8 +526,8 @@ Deno.test({
           try {
             const req = requestWithAuthorization('Bearer test-user-token')
             handleCorsPreflightRequest(req)
-            const result = await authenticateUserOrServiceRole(req)
-            assertExists(result)
+            const result = await authenticateCaller(req)
+            if (!(result instanceof Response)) throw new Error('Expected an error response')
             assertEquals(result.status, 503)
             assertHasCorsHeaders(result)
             const requestId = result.headers.get('X-Request-Id')

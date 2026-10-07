@@ -211,6 +211,8 @@ export interface SendEmailParams {
   subject: string
   html: string
   text: string
+  /** Extra headers, e.g. List-Unsubscribe. Values are sanitized like the subject. */
+  headers?: Record<string, string>
 }
 
 /**
@@ -249,6 +251,13 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         subject: sanitizedSubject,
         html: params.html,
         text: params.text,
+        ...(params.headers
+          ? {
+              headers: Object.fromEntries(
+                Object.entries(params.headers).map(([name, value]) => [name, sanitizeEmailHeader(value)])
+              ),
+            }
+          : {}),
       }),
     }, 10_000)
 

@@ -4,6 +4,7 @@ import { captureException } from '@/utils/sentry'
 import { Toaster } from 'sonner'
 import { SWRConfig } from 'swr'
 import { ThemeProvider, useTheme } from '@/components/theme/ThemeProvider'
+import { RouteFocusReset } from './components/RouteFocusReset'
 
 function ThemeToaster() {
   const { resolvedTheme } = useTheme()
@@ -33,6 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       >
         {children}
         <ThemeToaster />
+        <RouteFocusReset />
       </SWRConfig>
     </ThemeProvider>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import type { ParticipantWithProfile } from '@/types'
 import ChampionCrown from './ChampionCrown'
@@ -19,22 +19,29 @@ export default function ParticipantsList({
   reigningChampions = null,
 }: Props): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false)
+  const panelId = useId()
 
   return (
     <div className="card p-6">
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        aria-expanded={isExpanded}
-        className="flex w-full items-center justify-between text-left"
-      >
-        <h2 className="type-section text-foreground">
+      <h2 className="type-section text-foreground">
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          aria-expanded={isExpanded}
+          aria-controls={panelId}
+          className="flex w-full cursor-pointer items-center justify-between text-left"
+        >
           Participants ({participants.length})
-        </h2>
-        <ChevronDown
-          className={`h-5 w-5 text-foreground-muted transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
-        />
-      </button>
+          <ChevronDown
+            className={`h-5 w-5 text-foreground-muted transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+      </h2>
+      {/* inert while collapsed: the height animation keeps the rows in the
+          DOM, and they must not be read or focused behind a closed toggle. */}
       <div
+        id={panelId}
+        inert={!isExpanded}
         className={`overflow-hidden transition-all duration-300 ease-in-out ${
           isExpanded ? 'max-h-[1000px] opacity-100 mt-4' : 'max-h-0 opacity-0'
         }`}
@@ -42,9 +49,9 @@ export default function ParticipantsList({
         {participants.length === 0 ? (
           <p className="text-foreground-secondary">No participants yet</p>
         ) : (
-          <div className="space-y-3">
+          <ul className="space-y-3" role="list">
             {participants.map((participant) => (
-              <div
+              <li
                 key={participant.id}
                 className="flex items-center p-3 bg-elevated rounded-lg border border-border"
               >
@@ -60,8 +67,9 @@ export default function ParticipantsList({
                   )}
                   <p className="type-body-sm text-foreground-secondary">
                     Draft Order: {participant.draft_order}
+                    {/* The role badge below already says so. */}
                     {participant.user_id === ownerId && (
-                      <span className="ml-2 text-gold font-medium">(Owner)</span>
+                      <span className="ml-2 text-gold font-medium" aria-hidden="true">(Owner)</span>
                     )}
                   </p>
                 </div>
@@ -72,9 +80,9 @@ export default function ParticipantsList({
                 >
                   {participant.role}
                 </span>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>

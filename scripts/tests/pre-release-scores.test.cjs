@@ -50,7 +50,7 @@ test('pre-release points read as not counted yet', () => {
 
 test('only counted points take the colours that mean counted', () => {
   assert.equal(pointsTone(24), 'text-success')
-  assert.equal(pointsTone(-16, { positive: 'text-gold' }), 'text-crimson')
+  assert.equal(pointsTone(-16, { positive: 'text-gold' }), 'text-crimson-text')
   assert.equal(pointsTone(24, { positive: 'text-gold' }), 'text-gold')
   assert.equal(pointsTone(24, { preRelease: true }), 'text-foreground-secondary')
   assert.equal(pointsTone(null), 'text-foreground-secondary')

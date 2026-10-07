@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Film, Lock, Megaphone, TrendingDown, X } from 'lucide-react'
+import Modal from '@/app/components/Modal'
 import MovieDetailBody from '@/app/components/MovieDetailBody'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
 import FantasyPoints from '@/app/components/FantasyPoints'
@@ -70,7 +71,11 @@ export default function LeagueMovieModal({
   onClose,
 }: LeagueMovieModalProps) {
   const [view, setView] = useState<View>('details')
-  const closeRef = useRef<HTMLButtonElement>(null)
+  const confirmHeadingRef = useRef<HTMLHeadingElement>(null)
+  const dropButtonRef = useRef<HTMLButtonElement>(null)
+  const viewChanged = useRef(false)
+  const titleId = useId()
+  const confirmTitleId = useId()
 
   const isDropping = drop?.isDropping ?? false
 
@@ -78,59 +83,45 @@ export default function LeagueMovieModal({
   // title, poster and release date, so the panel still reads fine.
   const { details, isLoading: loading } = useMovieDetails(movie.tmdb_id)
 
-  // Escape backs out one step at a time, so a mis-tap on Drop is recoverable
-  // without losing the movie you were reading about.
+  const showView = useCallback((next: View) => {
+    viewChanged.current = true
+    setView(next)
+  }, [])
+
+  // Escape (and the dimmed backdrop) backs out one step at a time, so a mis-tap
+  // on Drop is recoverable without losing the movie you were reading about.
   const handleEscape = useCallback(() => {
-    if (isDropping) return
-    if (view === 'confirm') setView('details')
+    if (view === 'confirm') showView('details')
     else onClose()
-  }, [isDropping, view, onClose])
+  }, [view, onClose, showView])
 
+  // The swap removes the button that was just pressed, so put focus on the new
+  // step: the question being asked, or back on Drop after "Keep movie".
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleEscape()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [handleEscape])
-
-  useEffect(() => {
-    const previous = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.body.style.overflow = previous
-    }
-  }, [])
-
-  useEffect(() => {
-    closeRef.current?.focus()
-  }, [])
+    if (!viewChanged.current) return
+    viewChanged.current = false
+    if (view === 'confirm') confirmHeadingRef.current?.focus()
+    else dropButtonRef.current?.focus()
+  }, [view])
 
   const hasContext = Boolean(contextHeading || contextLabel || drop)
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${movie.title} details`}
+    <Modal
+      onClose={handleEscape}
+      preventClose={isDropping}
+      closeOnBackdrop
+      labelledBy={view === 'confirm' && drop ? confirmTitleId : titleId}
       data-testid="league-movie-modal"
       data-view={view}
     >
-      <div
-        className="fixed inset-0 bg-overlay backdrop-blur-sm animate-fade-in"
-        onClick={isDropping ? undefined : onClose}
-        aria-hidden="true"
-      />
-
-      <div className="relative z-10 mx-4 my-8 w-full max-w-4xl animate-slide-up sm:my-12">
+      <div className="relative w-full max-w-4xl animate-slide-up motion-reduce:animate-none">
         <div className="card relative overflow-hidden bg-surface">
           <button
-            ref={closeRef}
             type="button"
             onClick={onClose}
             disabled={isDropping}
-            aria-label="Close"
+            aria-label="Close movie details"
             data-testid="league-modal-close"
             className="absolute right-4 top-4 z-10 rounded-full border border-border bg-background/50 p-2 text-foreground-secondary backdrop-blur-sm transition-all hover:border-border-hover hover:text-foreground"
           >
@@ -146,6 +137,7 @@ export default function LeagueMovieModal({
                 details={details}
                 loading={loading}
                 collapsibleCast
+                titleId={titleId}
                 actions={
                   hasContext ? (
                     <LeagueActionPanel
@@ -153,7 +145,8 @@ export default function LeagueMovieModal({
                       contextHeading={contextHeading}
                       contextLabel={contextLabel}
                       drop={drop}
-                      onDropClick={() => setView('confirm')}
+                      dropButtonRef={dropButtonRef}
+                      onDropClick={() => showView('confirm')}
                     />
                   ) : undefined
                 }
@@ -163,14 +156,16 @@ export default function LeagueMovieModal({
                 <DropConfirmView
                   movie={movie}
                   drop={drop}
-                  onBack={() => setView('details')}
+                  titleId={confirmTitleId}
+                  headingRef={confirmHeadingRef}
+                  onBack={() => showView('details')}
                 />
               )
             )}
           </div>
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -184,12 +179,14 @@ function LeagueActionPanel({
   contextHeading,
   contextLabel,
   drop,
+  dropButtonRef,
   onDropClick,
 }: {
   movie: LeagueMovieRef
   contextHeading?: string
   contextLabel?: string
   drop?: DropCapability
+  dropButtonRef: React.Ref<HTMLButtonElement>
   onDropClick: () => void
 }) {
   const points = movie.fantasy_points
@@ -216,6 +213,7 @@ function LeagueActionPanel({
 
         {drop && !drop.blocker && (
           <button
+            ref={dropButtonRef}
             type="button"
             onClick={onDropClick}
             data-testid="drop-movie-button"
@@ -278,10 +276,14 @@ function BlockerNotice({
 function DropConfirmView({
   movie,
   drop,
+  titleId,
+  headingRef,
   onBack,
 }: {
   movie: LeagueMovieRef
   drop: DropCapability
+  titleId: string
+  headingRef: React.Ref<HTMLHeadingElement>
   onBack: () => void
 }) {
   const { league, dropCount, slotsFilled, isDropping, error, onConfirm } = drop
@@ -292,13 +294,13 @@ function DropConfirmView({
     <div className="mx-auto max-w-lg p-6 sm:p-8">
       <div className="flex items-start gap-3">
         <span
-          className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-crimson/15 text-crimson"
+          className="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-crimson/15 text-crimson-text"
           aria-hidden="true"
         >
           <TrendingDown className="h-4 w-4" />
         </span>
         <div>
-          <h2 className="type-panel text-foreground">Drop {movie.title}?</h2>
+          <h2 id={titleId} ref={headingRef} tabIndex={-1} className="type-panel text-foreground">Drop {movie.title}?</h2>
           <p className="type-body-sm mt-0.5 text-foreground-secondary">
             Dropping is permanent. Read what it costs before you confirm.
           </p>
@@ -315,7 +317,7 @@ function DropConfirmView({
         </div>
         <DropAllowanceMeter used={dropCount} pending={1} limit={league.drop_limit} />
         <p
-          className={`type-meta mt-2 ${dropsRemainingAfter === 0 ? 'text-crimson' : 'text-foreground-secondary'}`}
+          className={`type-meta mt-2 ${dropsRemainingAfter === 0 ? 'text-crimson-text' : 'text-foreground-secondary'}`}
           data-testid="drops-after-line"
         >
           {dropsRemainingAfter === 0
@@ -326,10 +328,10 @@ function DropConfirmView({
 
       <div className="mt-5">
         <p className="type-label mb-2 text-foreground">What happens</p>
-        <ul className="space-y-2">
+        <ul className="space-y-2" role="list">
           <Consequence icon={Film}>
-            {movie.title} leaves your roster now, freeing a slot &mdash; you will be at{' '}
-            {slotsFilled - 1}/{league.total_slots} filled.
+            {movie.title} leaves your roster now, freeing a slot &mdash; you will have{' '}
+            {slotsFilled - 1} of {league.total_slots} slots filled.
           </Consequence>
           <Consequence icon={TrendingDown}>
             {points != null

@@ -25,6 +25,8 @@ export interface SeasonFinalStandingsEmailData {
   /** Every team tied at rank 1. More than one means co-champions. */
   championNames: string[]
   standings: SeasonFinalStandingsRow[]
+  /** Page that turns these emails off for the recipient. */
+  unsubscribeUrl: string
 }
 
 /** "A", "A and B", "A, B and C" -- co-champions are named, not counted. */
@@ -126,8 +128,12 @@ export function getSeasonFinalStandingsEmailHtml(data: SeasonFinalStandingsEmail
           <!-- Footer -->
           <tr>
             <td style="padding: 24px 32px; border-top: 1px solid #2e2e2e; text-align: center;">
-              <p style="margin: 0; color: #8a8078; font-size: 12px;">
+              <p style="margin: 0 0 8px; color: #8a8078; font-size: 12px;">
                 Fantasy Reel - Movie Fantasy League
+              </p>
+              <p style="margin: 0; color: #8a8078; font-size: 12px;">
+                You get this email when a season you played in ends.
+                <a href="${escapeHtml(data.unsubscribeUrl)}" style="color: #b8b0a4; text-decoration: underline;">Unsubscribe from season recaps</a>
               </p>
             </td>
           </tr>
@@ -165,5 +171,7 @@ View final standings: ${data.leagueUrl}/standings
 
 ---
 Fantasy Reel - Movie Fantasy League
+You get this email when a season you played in ends.
+Unsubscribe from season recaps: ${data.unsubscribeUrl}
   `.trim()
 }

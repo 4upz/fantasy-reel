@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import WishlistClient from './WishlistClient'
 
 export const metadata = {
-  title: 'Wishlist | Fantasy Reel',
+  title: 'Wishlist',
 }
 
 export default async function WishlistPage() {

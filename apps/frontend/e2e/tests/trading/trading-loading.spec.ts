@@ -107,8 +107,8 @@ test.describe('Trading loading @trading', () => {
     await page.getByTestId('propose-trade-button').click()
     const proposal = page.getByRole('dialog', { name: 'Select Trade Partner', exact: true })
     await expect(proposal).toBeVisible()
-    await proposal.getByRole('option', { name: /Owner Team/ }).click()
-    await expect(page.getByRole('dialog').getByRole('option', { name: /Trade Offer Movie Beta/ })).toBeVisible()
+    await proposal.getByRole('button', { name: /Owner Team/ }).click()
+    await expect(page.getByRole('dialog').getByRole('checkbox', { name: /Trade Offer Movie Beta/ })).toBeVisible()
   })
 
   test('a failed roster stays in the preparation dialog and retries without removing offers', async ({
@@ -152,8 +152,8 @@ test.describe('Trading loading @trading', () => {
     await expect(page.getByRole('dialog', { name: 'Select Trade Partner', exact: true })).toBeVisible()
     await expect(preparing).not.toBeVisible()
     expect(rosterRequests).toBeGreaterThanOrEqual(2)
-    await page.getByRole('option', { name: /Owner Team/ }).click()
-    await expect(page.getByRole('dialog').getByRole('option', { name: /Trade Offer Movie Beta/ })).toBeVisible()
+    await page.getByRole('dialog').getByRole('button', { name: /Owner Team/ }).click()
+    await expect(page.getByRole('dialog').getByRole('checkbox', { name: /Trade Offer Movie Beta/ })).toBeVisible()
   })
 
   test('countering an offer waits for the budget even after its roster has loaded', async ({
@@ -181,7 +181,7 @@ test.describe('Trading loading @trading', () => {
     const counter = page.getByRole('dialog', { name: /Counter trade with Owner Team/ })
     await expect(counter).toBeVisible()
     await expect(preparing).not.toBeVisible()
-    await expect(counter.getByRole('option', { name: /Trade Offer Movie Beta/ })).toBeVisible()
+    await expect(counter.getByRole('checkbox', { name: /Trade Offer Movie Beta/ })).toBeVisible()
   })
 
   test('a loaded absent budget stays unavailable and allows composing a movie trade', async ({
@@ -198,13 +198,13 @@ test.describe('Trading loading @trading', () => {
     await expect(panel.getByRole('status', { name: 'Loading budget' })).not.toBeVisible()
     await page.getByTestId('propose-trade-button').click()
     await page.getByRole('dialog', { name: 'Select Trade Partner', exact: true })
-      .getByRole('option', { name: /Owner Team/ }).click()
+      .getByRole('button', { name: /Owner Team/ }).click()
 
     const proposal = page.getByRole('dialog')
-    await expect(proposal.getByRole('option', { name: /Trade Movie Beta/ })).toBeVisible()
-    await proposal.getByRole('option', { name: /Trade Movie Beta/ }).click()
-    await proposal.getByRole('option', { name: /Trade Movie Alpha/ }).click()
-    await expect(proposal.getByRole('button', { name: 'Submit trade proposal', exact: true })).toBeEnabled()
+    await expect(proposal.getByRole('checkbox', { name: /Trade Movie Beta/ })).toBeVisible()
+    await proposal.getByRole('checkbox', { name: /Trade Movie Beta/ }).check()
+    await proposal.getByRole('checkbox', { name: /Trade Movie Alpha/ }).check()
+    await expect(proposal.getByRole('button', { name: 'Propose trade', exact: true })).toBeEnabled()
     await expect(page.getByRole('dialog', { name: 'Preparing trade', exact: true })).not.toBeVisible()
   })
 
@@ -242,7 +242,7 @@ test.describe('Trading loading @trading', () => {
       .toContainText('Unavailable')
     await page.getByTestId(`counter-trade-${league.tradeOfferId}`).click()
     const counter = page.getByRole('dialog', { name: /Counter trade with Owner Team/ })
-    const amount = counter.getByRole('spinbutton', { name: 'Budget unavailable', exact: true })
+    const amount = counter.getByRole('spinbutton', { name: 'Budget you give, unavailable', exact: true })
     await expect(amount).toBeDisabled()
     await expect(amount).toHaveValue('0')
 

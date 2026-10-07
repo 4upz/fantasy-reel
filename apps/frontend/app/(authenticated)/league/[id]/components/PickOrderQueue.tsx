@@ -100,15 +100,15 @@ export default function PickOrderQueue({
 
   return (
     <div className="space-y-2" data-testid="pick-order-queue">
-      <h4 className="type-label text-foreground-secondary">
+      <h3 className="type-label text-foreground-secondary">
         Upcoming picks
-      </h4>
+      </h3>
       {nextUserPickIndex >= 0 && <p className="type-body-sm text-foreground-secondary" data-testid="picks-until-your-turn">
         {nextUserPickIndex === 0 ? 'Your turn now' : `Your turn is in ${nextUserPickIndex} pick${nextUserPickIndex === 1 ? '' : 's'}`}
       </p>}
-      <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none">
+      <ol className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none" role="list">
         {queue.map((item, index) => (
-          <div
+          <li
             key={`${item.round}-${item.pickNumber}`}
             data-preview-focus={index === nextUserPickIndex ? 'queue' : undefined}
             className={cn(
@@ -116,8 +116,9 @@ export default function PickOrderQueue({
               getQueueItemStyles(item.isCurrentPick, item.isCurrentUser)
             )}
           >
-            {/* Position indicator */}
+            {/* Position indicator: the list itself carries the order */}
             <div
+              aria-hidden="true"
               className={cn(
                 'type-meta w-6 h-6 rounded-full flex items-center justify-center',
                 getPositionBadgeStyles(item.isCurrentPick, item.isCurrentUser)
@@ -134,6 +135,7 @@ export default function PickOrderQueue({
                   item.isCurrentPick ? 'text-foreground' : 'text-foreground-secondary'
                 )}
               >
+                {item.isCurrentPick && <span className="sr-only">Picking now: </span>}
                 {item.participant.teams?.name || 'Unknown'}
               </p>
               {item.participant.profiles?.display_name && (
@@ -142,7 +144,8 @@ export default function PickOrderQueue({
                 </p>
               )}
               <p className="type-meta text-foreground-secondary">
-                R{item.round} P{item.pickNumber}
+                <span aria-hidden="true">R{item.round} P{item.pickNumber}</span>
+                <span className="sr-only">Round {item.round}, pick {item.pickNumber}</span>
               </p>
             </div>
 
@@ -157,18 +160,19 @@ export default function PickOrderQueue({
                 className={cn('w-4 h-4', item.isCurrentUser ? 'text-success' : 'text-gold')}
               />
             )}
-          </div>
+          </li>
         ))}
 
         {/* More picks indicator */}
         {currentPickIndex + 5 < totalPicks && (
-          <div className="flex-shrink-0 flex items-center px-3">
+          <li className="flex-shrink-0 flex items-center px-3">
             <span className="type-meta text-foreground-secondary">
-              +{totalPicks - currentPickIndex - 5} more
+              <span aria-hidden="true">+{totalPicks - currentPickIndex - 5} more</span>
+              <span className="sr-only">and {totalPicks - currentPickIndex - 5} more picks</span>
             </span>
-          </div>
+          </li>
         )}
-      </div>
+      </ol>
     </div>
   )
 }

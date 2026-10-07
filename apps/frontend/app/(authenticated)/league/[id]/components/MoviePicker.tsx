@@ -185,7 +185,7 @@ export default function MoviePicker({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-elevated rounded-xl overflow-x-auto">
+      <div className="flex gap-1 p-1 bg-elevated rounded-xl overflow-x-auto" role="group" aria-label="Movie lists">
         {TAB_CONFIG.map((tab) => (
           <button
             key={tab.id}
@@ -207,6 +207,7 @@ export default function MoviePicker({
                 }`}
               >
                 {wishlistedIds.size}
+                <span className="sr-only"> movies</span>
               </span>
             )}
           </button>
@@ -217,7 +218,9 @@ export default function MoviePicker({
       <DraftFilters
         value={filters}
         onFiltersChange={handleFiltersChange}
-        countLabel={`${availableCount} available ${activeTab === 'wishlist' ? 'in wishlist' : 'loaded'}`}
+        countLabel={loading || loadingMore
+          ? `Loading ${activeTab === 'wishlist' ? 'wishlist' : 'movies'}…`
+          : `${availableCount} available ${activeTab === 'wishlist' ? 'in wishlist' : 'loaded'}`}
         loading={loading || loadingMore}
         disabledReason={disabledReason}
       />
@@ -228,7 +231,7 @@ export default function MoviePicker({
 
       {/* Error State */}
       {error && (
-        <div className="alert alert-error">
+        <div className="alert alert-error" role="alert">
           <p>{error}</p>
           <button type="button" onClick={retry} className="btn btn-secondary mt-3" data-testid="retry-movies-button">
             Retry loading {activeTab === 'wishlist' ? 'wishlist' : 'movies'}

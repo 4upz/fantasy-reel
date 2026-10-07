@@ -1,6 +1,13 @@
 import { assertEquals, assertMatch } from '@std/assert'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { consumeRateLimit, describeRetryAfter, hashSubject, rateLimitResponse } from './rate-limit.ts'
+import {
+  consumeRateLimit,
+  describeRetryAfter,
+  hashSubject,
+  rateLimitResponse,
+  throttleUser,
+  USER_RATE_LIMITS,
+} from './rate-limit.ts'
 import { consumeInvitationEmailAllowance, INVITE_LIMITS, maxPendingInvitations } from './invitations.ts'
 
 /** In-memory stand-in for the consume_rate_limit RPC. */
@@ -95,4 +102,47 @@ Deno.test('invitation emails are capped per owner per day', async () => {
 Deno.test('a full 20-team league can be invited well within the limits', () => {
   assertEquals(maxPendingInvitations(20), 40)
   assertEquals(INVITE_LIMITS.emailsPerOwnerPerDay > 19 * 2, true)
+})
+
+Deno.test('throttleUser allows a user up to the limit, then answers 429', async () => {
+  const { client, calls } = fakeLimiter()
+  const { max } = USER_RATE_LIMITS.trade_propose
+  for (let i = 0; i < max; i++) {
+    assertEquals(await throttleUser('trade_propose', owner, undefined, client), null)
+  }
+  const refused = await throttleUser('trade_propose', owner, undefined, client)
+  assertEquals(refused?.status, 429)
+  assertEquals(refused?.headers.get('Retry-After'), '7200')
+  assertMatch((await refused!.json()).error, /doing that too often\. Please try again in about 2 hours/)
+  assertEquals(calls[0], {
+    fn: 'consume_rate_limit',
+    p_bucket: 'user:trade_propose',
+    p_subject: owner,
+    p_max: max,
+    p_window_seconds: USER_RATE_LIMITS.trade_propose.windowSeconds,
+  })
+  // Each function has its own allowance, and so does each user
+  assertEquals(await throttleUser('trade_counter', owner, undefined, client), null)
+  assertEquals(await throttleUser('trade_propose', league, undefined, client), null)
+})
+
+Deno.test('throttleUser does not limit the service role', async () => {
+  const { client, calls } = fakeLimiter()
+  assertEquals(await throttleUser('movie_search', null, undefined, client), null)
+  assertEquals(calls.length, 0)
+})
+
+Deno.test('throttleUser fails open when the counter cannot be read', async () => {
+  const { client } = fakeLimiter({ error: true })
+  assertEquals(await throttleUser('pickup_bid', owner, undefined, client), null)
+})
+
+Deno.test('per-user limits leave room for heavy normal use', () => {
+  // About one movie lookup a second, sustained for five minutes
+  for (const name of ['movie_search', 'movie_browse', 'movie_details'] as const) {
+    assertEquals(USER_RATE_LIMITS[name].max / USER_RATE_LIMITS[name].windowSeconds >= 1, true)
+  }
+  // More trades and bids in an hour than a deadline day needs
+  assertEquals(USER_RATE_LIMITS.trade_propose.max >= 30, true)
+  assertEquals(USER_RATE_LIMITS.pickup_bid.max >= 60, true)
 })

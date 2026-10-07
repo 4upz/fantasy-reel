@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, isValidUUID, authenticateRequest, isAuthError, internalErrorResponse } from '../_shared/utils.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { throttleUser } from '../_shared/rate-limit.ts'
 import { escapeLikePattern, maskEmail } from '../_shared/user-search.ts'
 
 const log = createLogger('search-users')
@@ -74,6 +75,9 @@ Deno.serve(async (req) => {
     if (league.status !== 'setup') {
       return errorResponse('Cannot send invitations - draft has already started', 400)
     }
+
+    const throttled = await throttleUser('user_search', user.id, log)
+    if (throttled) return throttled
 
     const supabaseAdmin = createAdminClient()
 

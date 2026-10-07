@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import LinkAccountClient from './LinkAccountClient'
+
+export const metadata: Metadata = { title: 'Link your account' }
 
 interface LinkAccountContext {
   duplicateUserId: string
@@ -32,13 +35,13 @@ export default async function LinkAccountPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 py-12">
+    <main id="main-content" tabIndex={-1} className="min-h-screen flex items-center justify-center px-4 py-12">
       <LinkAccountClient
         email={context.email}
         oauthProvider={context.oauthProvider}
         oauthUsername={context.oauthUsername}
         duplicateUserId={context.duplicateUserId}
       />
-    </div>
+    </main>
   )
 }

@@ -28,10 +28,11 @@ export function RosterHeader({
   return (
     <div className="flex items-center justify-between">
       <div>
-        <h1 className="type-page text-foreground" data-testid="roster-team-name">
+        {/* The league name is the page's h1; this roster sits under it. */}
+        <h2 className="type-page text-foreground" data-testid="roster-team-name">
           {teamName}&apos;s Roster
-        </h1>
-        <p className="text-foreground-secondary">{slotsFilled}/{totalSlots} slots filled</p>
+        </h2>
+        <p className="text-foreground-secondary">{slotsFilled} of {totalSlots} slots filled</p>
       </div>
       <div className="text-right" data-preview-focus="budget">
         <p className="type-body-sm text-foreground-secondary">Budget remaining</p>
@@ -44,18 +45,19 @@ export function RosterHeader({
           ) : `$${remainingBudget}`}
         </p>
         <p
-          className={`type-body-sm ${dropsRemaining > 0 ? 'text-foreground-secondary' : 'text-crimson'}`}
+          className={`type-body-sm ${dropsRemaining > 0 ? 'text-foreground-secondary' : 'text-crimson-text'}`}
           data-testid="drops-summary"
         >
           {dropsRemaining > 0
-            ? `Drops: ${dropCount}/${dropLimit} used`
-            : `No drops left (${dropCount}/${dropLimit} used)`}
+            ? `Drops: ${dropCount} of ${dropLimit} used`
+            : `No drops left (${dropCount} of ${dropLimit} used)`}
         </p>
       </div>
     </div>
   )
 }
 
+/** Decorative: every card that shows a poster prints the title beside it. */
 /** @design-system League */
 export function RosterPoster({
   movie,
@@ -69,7 +71,7 @@ export function RosterPoster({
   return (
     <MoviePoster
       src={src ?? movie.poster_url}
-      alt={movie.title}
+      alt=""
       sizes={sizes}
       posterSize="w342"
     />
@@ -95,16 +97,24 @@ export function RosterMovieCard({
   posterSizes?: string
   reviewFocus?: boolean
 }) {
+  // As a button, this content is the button's name, so it carries everything
+  // a sighted player reads off the card: title, how it was acquired, points
+  // and score, and whether it is locked.
   const details = (
     <>
-      <h3 className="type-row-title truncate text-foreground">{movie.title}</h3>
+      <h3 className="type-row-title break-words text-foreground">
+        {onSelect && <span className="sr-only">View </span>}
+        {movie.title}
+        {isLocked && <span className="sr-only"> (locked)</span>}
+      </h3>
       <p className="type-meta text-foreground-secondary">{label}</p>
       {movie.fantasy_points !== null ? (
         <p className="type-number mt-1 flex flex-wrap items-baseline gap-x-1.5">
           <FantasyPoints points={movie.fantasy_points} releaseDate={movie.release_date} />
           {movie.combined_score !== null && (
             <span className="type-numeric type-meta text-foreground-secondary">
-              {formatCriticScore(movie.combined_score)}
+              <span aria-hidden="true">{formatCriticScore(movie.combined_score)}</span>
+              <span className="sr-only">Rotten Tomatoes {Math.round(movie.combined_score)}%</span>
             </span>
           )}
         </p>
@@ -121,6 +131,7 @@ export function RosterMovieCard({
         {isLocked && (
           <span
             data-testid="roster-lock-badge"
+            aria-hidden="true"
             className="type-meta absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground-secondary backdrop-blur-sm"
           >
             <Lock className="h-3 w-3" aria-hidden="true" />
@@ -150,7 +161,6 @@ export function RosterMovieCard({
       onClick={onSelect}
       data-testid="roster-movie-card"
       data-locked={isLocked ? 'true' : 'false'}
-      aria-label={`View ${movie.title}${isLocked ? ' (locked)' : ''}`}
       className="card card-interactive flex cursor-pointer flex-col overflow-hidden text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold"
     >
       {content}

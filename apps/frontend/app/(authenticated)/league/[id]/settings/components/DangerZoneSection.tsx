@@ -25,9 +25,11 @@ export default function DangerZoneSection({
 }: Props): React.ReactElement {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function handleConfirmDelete(): Promise<void> {
     setIsDeleting(true)
+    setDeleteError(null)
 
     const { data, error } = await callEdgeFunction<DeleteResponse>('update-league', {
       body: {
@@ -39,7 +41,8 @@ export default function DangerZoneSection({
     setIsDeleting(false)
 
     if (error) {
-      toast.error(error)
+      // In the dialog, not a toast: the open dialog leaves a toast unseen and unheard.
+      setDeleteError(error)
       return
     }
 
@@ -55,12 +58,12 @@ export default function DangerZoneSection({
         {/* Custom header for danger zone with crimson styling */}
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-crimson/20">
           <div className="p-2 rounded-lg bg-crimson/10">
-            <AlertTriangle className="w-5 h-5 text-crimson" />
+            <AlertTriangle className="w-5 h-5 text-crimson-text" />
           </div>
           <div>
-            <h2 className="type-section text-foreground">
+            <h3 className="type-section text-foreground">
               Danger zone
-            </h2>
+            </h3>
             <p className="type-body-sm text-foreground-secondary">
               Irreversible actions
             </p>
@@ -79,8 +82,12 @@ export default function DangerZoneSection({
             </div>
             <button
               type="button"
-              onClick={() => setShowDeleteModal(true)}
+              onClick={() => {
+                setDeleteError(null)
+                setShowDeleteModal(true)
+              }}
               className="btn bg-crimson hover:bg-crimson-hover text-white"
+              aria-label="Delete league"
             >
               <Trash2 className="w-4 h-4 mr-2" />
               Delete
@@ -95,6 +102,7 @@ export default function DangerZoneSection({
           onConfirm={handleConfirmDelete}
           onCancel={() => setShowDeleteModal(false)}
           loading={isDeleting}
+          error={deleteError}
         />
       )}
     </>

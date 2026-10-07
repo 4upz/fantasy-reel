@@ -83,7 +83,11 @@ export default function FranchiseHistoryPanel({
           </p>
           <h3 className="type-row-title text-foreground">
             {history.collection_name}
-            <span className="font-normal text-foreground-secondary"> · {ordinal(history.entry_number)} film</span>
+            <span className="font-normal text-foreground-secondary">
+              <span aria-hidden="true"> · </span>
+              <span className="sr-only">, </span>
+              {ordinal(history.entry_number)} film
+            </span>
           </h3>
         </div>
         <div className="flex items-center gap-2">
@@ -142,9 +146,11 @@ export default function FranchiseHistoryPanel({
           />
         </svg>
 
-        <div className="mt-1.5 flex items-start gap-3" style={{ minWidth: chartMinWidth }}>
+        {/* The chart above is hidden from screen readers; this list, in
+            release order, is the film-by-film text version of it. */}
+        <ol role="list" className="mt-1.5 flex items-start gap-3" style={{ minWidth: chartMinWidth }}>
           {films.map((film) => (
-            <div key={film.tmdb_id} className="flex-1 min-w-0 flex flex-col items-center gap-1 text-center">
+            <li key={film.tmdb_id} className="flex-1 min-w-0 flex flex-col items-center gap-1 text-center">
               <TomatometerScore score={film.rt_score} size="sm" showAccolade={false} />
               <span className="type-meta max-w-full break-words text-foreground">
                 {film.title}
@@ -152,18 +158,25 @@ export default function FranchiseHistoryPanel({
               {film.release_date && (
                 <span className="type-meta text-foreground-secondary">{getReleaseYear(film.release_date)}</span>
               )}
-            </div>
+            </li>
           ))}
-          <div className="flex-1 min-w-0 flex flex-col items-center gap-1 text-center">
+          <li className="flex-1 min-w-0 flex flex-col items-center gap-1 text-center">
             <TomatometerScore score={null} size="sm" showAccolade={false} />
             <span className="type-meta max-w-full break-words text-gold">
               {movieTitle}
             </span>
             <span className="type-meta text-foreground-secondary">
-              {movieReleaseDate ? `${getReleaseYear(movieReleaseDate)} · this pick` : 'this pick'}
+              {movieReleaseDate && (
+                <>
+                  {getReleaseYear(movieReleaseDate)}
+                  <span aria-hidden="true"> · </span>
+                  <span className="sr-only">, </span>
+                </>
+              )}
+              this pick
             </span>
-          </div>
-        </div>
+          </li>
+        </ol>
       </div>
 
       <p className="type-meta mt-3 pt-3 border-t border-border flex items-center gap-2 text-foreground-secondary">

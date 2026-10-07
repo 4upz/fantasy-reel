@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useCallback, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Settings, LogOut } from 'lucide-react'
 import Avatar from '../Avatar'
 import ThemeSelector from '@/components/theme/ThemeSelector'
+import { usePopoverDismiss } from '@/hooks/usePopoverDismiss'
 
 interface Props {
   displayName: string
@@ -16,42 +17,27 @@ interface Props {
  * The single home for account actions. Deliberately not part of SideNav's item
  * list: navigation moves you around the app, this menu acts on your account.
  * Rendered in the top-right cluster on desktop and in the mobile header.
+ *
+ * A disclosure, not an ARIA menu: the panel mixes links, theme radios and a
+ * form, so it keeps native Tab order instead of menu arrow-key semantics.
  */
 export default function ProfileMenu({ displayName, email, avatarUrl }: Props): React.ReactElement {
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelId = useId()
+  const close = useCallback(() => setIsOpen(false), [])
 
-  useEffect(() => {
-    if (!isOpen) return
-
-    function handlePointerDown(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    function handleEscape(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        setIsOpen(false)
-      }
-    }
-
-    document.addEventListener('mousedown', handlePointerDown)
-    document.addEventListener('keydown', handleEscape)
-
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [isOpen])
+  usePopoverDismiss(isOpen, close, menuRef, triggerRef)
 
   return (
     <div className="profile-menu" ref={menuRef}>
       <button
+        ref={triggerRef}
         onClick={() => setIsOpen(open => !open)}
         className="profile-menu-trigger"
         aria-expanded={isOpen}
-        aria-haspopup="true"
+        aria-controls={panelId}
         aria-label="Account menu"
         data-testid="user-menu-button"
       >
@@ -59,9 +45,10 @@ export default function ProfileMenu({ displayName, email, avatarUrl }: Props): R
       </button>
 
       {isOpen && (
-        <div className="profile-menu-panel animate-fade-in">
+        <div id={panelId} className="profile-menu-panel animate-fade-in">
           <div className="profile-menu-identity">
-            <Avatar src={avatarUrl} name={displayName} size="sm" />
+            {/* The name is right beside it, so the picture adds nothing to read. */}
+            <Avatar src={avatarUrl} name={displayName} size="sm" decorative />
             <div className="profile-menu-identity-text">
               <span className="profile-menu-name">{displayName}</span>
               {email && <span className="profile-menu-email">{email}</span>}
@@ -70,7 +57,7 @@ export default function ProfileMenu({ displayName, email, avatarUrl }: Props): R
 
           <Link
             href="/settings"
-            onClick={() => setIsOpen(false)}
+            onClick={close}
             className="profile-menu-item"
           >
             <Settings className="w-4 h-4" />

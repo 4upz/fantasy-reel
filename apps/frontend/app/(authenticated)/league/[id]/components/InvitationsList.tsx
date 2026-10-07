@@ -1,12 +1,14 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { formatDate, isExpired } from '@/utils/date'
 import type { LeagueInvitation } from '@/types'
 import { ErrorAlert } from '@/app/components/FormError'
 import { LoadingSpinner } from '@/app/components/LoadingSpinner'
+import { usePopoverDismiss } from '@/hooks/usePopoverDismiss'
 
 interface Props {
   leagueId: string
@@ -21,11 +23,14 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
 
   const [invitations, setInvitations] = useState<LeagueInvitation[]>([])
   const [loading, setLoading] = useState(true)
+  // Realtime refetches keep the rows on screen; only the first load shows a
+  // spinner, so a focused row is never swapped out from under the user.
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
-  const [copiedId, setCopiedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isExpanded, setIsExpanded] = useState(false)
+  const panelId = useId()
 
   const fetchInvitations = useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -44,6 +49,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
     }
 
     setLoading(false)
+    setHasLoaded(true)
   }, [supabase, leagueId])
 
   // Initial fetch
@@ -81,8 +87,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
 
     try {
       await navigator.clipboard.writeText(inviteUrl)
-      setCopiedId(invitation.id)
-      setTimeout(() => setCopiedId(null), 2000)
+      toast.success('Invite link copied')
     } catch (err) {
       console.error('Failed to copy:', err)
       setError('Failed to copy link')
@@ -124,10 +129,9 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
 
       try {
         await navigator.clipboard.writeText(data.invite_url)
-        setCopiedId(invitationId)
-        setTimeout(() => setCopiedId(null), 2000)
+        toast.success('Invitation renewed. New invite link copied')
       } catch {
-        // Ignore clipboard errors
+        toast.success('Invitation renewed')
       }
     }
 
@@ -145,6 +149,7 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
     if (cancelError) {
       setError(cancelError)
     } else {
+      toast.success('Invitation cancelled')
       setInvitations((prev) =>
         prev.map((inv) =>
           inv.id === invitationId
@@ -166,47 +171,57 @@ export default function InvitationsList({ leagueId, isOwner, leagueStatus }: Pro
 
   return (
     <div className="card mt-6">
-      <button
-        className="w-full px-4 py-4 sm:px-6 flex justify-between items-center hover:bg-surface-hover transition-colors rounded-t-lg"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-3">
-          <h3 className="type-panel text-foreground">Invitations</h3>
-          <span className="type-body-sm text-foreground-secondary">
-            ({invitations.length} total
-            {pendingCount > 0 && `, ${pendingCount} pending`}
-            {expiredCount > 0 && `, ${expiredCount} expired`})
+      <h3 className="type-panel text-foreground">
+        <button
+          className="w-full px-4 py-4 sm:px-6 flex justify-between items-center text-left cursor-pointer hover:bg-surface-hover transition-colors rounded-t-lg"
+          onClick={() => setIsExpanded(!isExpanded)}
+          aria-expanded={isExpanded}
+          aria-controls={isExpanded ? panelId : undefined}
+        >
+          <span className="flex items-center gap-3">
+            <span>Invitations</span>
+            <span className="type-body-sm text-foreground-secondary">
+              ({invitations.length} total
+              {pendingCount > 0 && `, ${pendingCount} pending`}
+              {expiredCount > 0 && `, ${expiredCount} expired`})
+            </span>
           </span>
-        </div>
-        <ChevronIcon isExpanded={isExpanded} />
-      </button>
+          <ChevronIcon isExpanded={isExpanded} />
+        </button>
+      </h3>
 
       {isExpanded && (
-        <div className="border-t border-border px-4 py-4 sm:px-6">
-          {loading ? (
-            <LoadingSpinner message="Loading invitations..." />
-          ) : invitations.length === 0 ? (
-            <p className="type-body-sm text-foreground-secondary text-center py-4">
-              No invitations sent yet. Use the &quot;Invite Players&quot; button to invite people to your league.
-            </p>
+        <div id={panelId} className="border-t border-border px-4 py-4 sm:px-6">
+          {loading && !hasLoaded ? (
+            <div role="status">
+              <LoadingSpinner message="Loading invitations..." />
+            </div>
           ) : (
             <>
+              {/* Before the empty check: a failed load is not "no invitations". */}
               {error && <ErrorAlert message={error} />}
 
-              <div className="space-y-3">
-                {invitations.map((invitation) => (
-                  <InvitationRow
-                    key={invitation.id}
-                    invitation={invitation}
-                    onCopy={handleCopy}
-                    onResend={handleResend}
-                    onCancel={handleCancel}
-                    isResending={resendingId === invitation.id}
-                    isCancelling={cancellingId === invitation.id}
-                    isCopied={copiedId === invitation.id}
-                  />
-                ))}
-              </div>
+              {invitations.length === 0 ? (
+                !error && (
+                  <p className="type-body-sm text-foreground-secondary text-center py-4">
+                    No invitations sent yet. Use the &quot;Invite Players&quot; button to invite people to your league.
+                  </p>
+                )
+              ) : (
+                <ul className="space-y-3" role="list">
+                  {invitations.map((invitation) => (
+                    <InvitationRow
+                      key={invitation.id}
+                      invitation={invitation}
+                      onCopy={handleCopy}
+                      onResend={handleResend}
+                      onCancel={handleCancel}
+                      isResending={resendingId === invitation.id}
+                      isCancelling={cancellingId === invitation.id}
+                    />
+                  ))}
+                </ul>
+              )}
             </>
           )}
         </div>
@@ -237,12 +252,14 @@ interface InvitationRowProps {
   onCancel: (id: string) => void
   isResending: boolean
   isCancelling: boolean
-  isCopied: boolean
 }
 
-function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, isCancelling, isCopied }: InvitationRowProps): React.ReactElement {
+function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, isCancelling }: InvitationRowProps): React.ReactElement {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
+  const inviteeName = invitation.email ?? invitation.invitee_display_name ?? 'Invited user'
   const status = getEffectiveStatus(invitation)
   const statusConfig = STATUS_CONFIG[status]
   const canCopy = status === 'pending'
@@ -250,35 +267,34 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
   const canResend = status === 'expired'
   const hasActions = canCopy || canCancel || canResend
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    if (menuOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [menuOpen])
+  // A plain disclosure: closes on a click or Tab outside it, and on Escape,
+  // which returns focus to the button that opened it.
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
+  usePopoverDismiss(menuOpen, closeMenu, menuRef, menuButtonRef)
+
+  // Choosing an action closes the menu, removing the focused item with it.
+  function runAction(action: () => void): void {
+    setMenuOpen(false)
+    menuButtonRef.current?.focus()
+    action()
+  }
 
   return (
-    <div className={`group relative flex items-center justify-between p-3 rounded-lg border border-border ${statusConfig.bg} transition-all duration-150 hover:border-border-hover`}>
+    <li className={`group relative flex items-center justify-between p-3 rounded-lg border border-border ${statusConfig.bg} transition-all duration-150 hover:border-border-hover`}>
       {/* Left side: Email and metadata */}
       <div className="flex-1 min-w-0 pr-4">
         <div className="flex items-center gap-2.5">
           <span className="font-medium text-foreground truncate">
-            {invitation.email ?? invitation.invitee_display_name ?? 'Invited user'}
+            {inviteeName}
           </span>
           <span className="type-meta inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-foreground-secondary bg-surface border border-border shrink-0">
-            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} />
+            <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`} aria-hidden="true" />
             {statusConfig.label}
           </span>
         </div>
         <p className="type-meta mt-0.5 text-foreground-secondary">
           Sent {formatDate(invitation.sent_at)}
-          {invitation.responded_at && <span> · Responded {formatDate(invitation.responded_at)}</span>}
+          {invitation.responded_at && <span><span aria-hidden="true"> · </span><span className="sr-only">, </span>Responded {formatDate(invitation.responded_at)}</span>}
         </p>
       </div>
 
@@ -286,53 +302,39 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
       {hasActions && (
         <div className="relative" ref={menuRef}>
           <button
+            ref={menuButtonRef}
             onClick={() => setMenuOpen(!menuOpen)}
-            className="p-1.5 rounded-md text-foreground-secondary hover:text-foreground hover:bg-surface transition-colors"
-            aria-label="Actions"
+            className="p-1.5 rounded-md cursor-pointer text-foreground-secondary hover:text-foreground hover:bg-surface transition-colors"
+            aria-label={`Actions for ${inviteeName}`}
+            aria-expanded={menuOpen}
+            aria-controls={menuOpen ? menuId : undefined}
           >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true" focusable="false">
               <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
             </svg>
           </button>
 
           {/* Dropdown menu */}
           {menuOpen && (
-            <div className="absolute right-0 mt-1 w-44 bg-surface rounded-lg shadow-heavy border border-border py-1 z-20 animate-fade-in">
+            <div id={menuId} className="absolute right-0 mt-1 w-44 bg-surface rounded-lg shadow-heavy border border-border py-1 z-20 animate-fade-in">
               {canCopy && (
                 <button
-                  onClick={() => {
-                    onCopy(invitation)
-                    setMenuOpen(false)
-                  }}
-                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 text-foreground hover:bg-surface-hover transition-colors"
+                  onClick={() => runAction(() => onCopy(invitation))}
+                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 cursor-pointer text-foreground hover:bg-surface-hover transition-colors"
                 >
-                  {isCopied ? (
-                    <>
-                      <svg className="w-4 h-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                      <span className="text-success">Copied!</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-4 h-4 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                      </svg>
-                      Copy invite link
-                    </>
-                  )}
+                  <svg className="w-4 h-4 text-foreground-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true" focusable="false">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                  </svg>
+                  Copy invite link
                 </button>
               )}
               {canCancel && (
                 <button
-                  onClick={() => {
-                    onCancel(invitation.id)
-                    setMenuOpen(false)
-                  }}
+                  onClick={() => runAction(() => onCancel(invitation.id))}
                   disabled={isCancelling}
-                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 text-crimson hover:bg-error-bg disabled:opacity-50 transition-colors"
+                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 cursor-pointer text-crimson-text hover:bg-error-bg disabled:opacity-50 transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true" focusable="false">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                   </svg>
                   {isCancelling ? 'Cancelling...' : 'Cancel invitation'}
@@ -340,14 +342,11 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
               )}
               {canResend && (
                 <button
-                  onClick={() => {
-                    onResend(invitation.id)
-                    setMenuOpen(false)
-                  }}
+                  onClick={() => runAction(() => onResend(invitation.id))}
                   disabled={isResending}
-                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 text-gold hover:bg-gold-muted disabled:opacity-50 transition-colors"
+                  className="type-control w-full flex items-center gap-2.5 px-3 py-2 cursor-pointer text-gold hover:bg-gold-muted disabled:opacity-50 transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true" focusable="false">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                   </svg>
                   {isResending ? 'Resending...' : 'Resend invitation'}
@@ -357,15 +356,16 @@ function InvitationRow({ invitation, onCopy, onResend, onCancel, isResending, is
           )}
         </div>
       )}
-    </div>
+    </li>
   )
 }
 
 function ChevronIcon({ isExpanded }: { isExpanded: boolean }): React.ReactElement {
   return (
-    <span className="text-foreground-secondary hover:text-foreground transition-colors">
+    <span className="text-foreground-secondary hover:text-foreground transition-colors" aria-hidden="true">
       <svg
         className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+        focusable="false"
         fill="none"
         viewBox="0 0 24 24"
         stroke="currentColor"

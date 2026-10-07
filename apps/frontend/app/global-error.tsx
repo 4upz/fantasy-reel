@@ -64,6 +64,7 @@ export default function GlobalError({
     <html lang="en" suppressHydrationWarning>
       <head>
         <ThemeScript />
+        <title>Something went wrong | Fantasy Reel</title>
         <style>{recoveryStyles}</style>
       </head>
       <body
@@ -83,7 +84,7 @@ export default function GlobalError({
           padding: '1rem',
         }}
       >
-        <div
+        <main
           style={{
             width: '100%',
             maxWidth: '28rem',
@@ -152,7 +153,7 @@ export default function GlobalError({
               Back to home
             </a>
           </div>
-        </div>
+        </main>
       </body>
     </html>
   )
