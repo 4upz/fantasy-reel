@@ -59,7 +59,7 @@ export default function BidPriorityList({
         title: bid.movie_data?.title || 'Unknown movie',
         meta: (
           <>
-            <span className="type-numeric text-foreground-secondary">${bid.amount}</span>
+            <span className="type-numeric text-foreground-secondary"><span className="sr-only">Bid: </span>${bid.amount}</span>
             <span aria-hidden="true">·</span>
             {funding[index] === 'drop' && (
               <Scissors className="w-3 h-3 text-warning shrink-0" aria-hidden="true" />

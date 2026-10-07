@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { Clapperboard, Search } from 'lucide-react'
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll'
@@ -16,7 +16,7 @@ import MovieGridSkeleton from './components/MovieGridSkeleton'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const MovieDetailModal = dynamic(() => import('./components/MovieDetailModal'), {
-  loading: () => <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"><div className="fixed inset-0 bg-overlay" /><div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-pulse h-[600px] bg-surface rounded-lg" /></div>,
+  loading: () => <div aria-hidden="true" className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"><div className="fixed inset-0 bg-overlay" /><div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-pulse h-[600px] bg-surface rounded-lg" /></div>,
 })
 
 export default function MovieSearchClient(): React.ReactElement {
@@ -68,9 +68,45 @@ export default function MovieSearchClient(): React.ReactElement {
 
   const isScrolled = useScrollPosition({ threshold: 200 })
 
+  // Typing in the floating bar scrolls back to the top. It stays shown while it
+  // holds focus, so the field being typed in never vanishes (or goes inert).
+  const floatingRef = useRef<HTMLDivElement>(null)
+  const [floatingFocused, setFloatingFocused] = useState(false)
+  const floatingVisible = isScrolled || floatingFocused
+
+  useEffect(() => {
+    const bar = floatingRef.current
+    if (!bar) return
+    const handleFocusIn = () => setFloatingFocused(true)
+    const handleFocusOut = (e: FocusEvent) => {
+      if (!bar.contains(e.relatedTarget as Node | null)) setFloatingFocused(false)
+    }
+    bar.addEventListener('focusin', handleFocusIn)
+    bar.addEventListener('focusout', handleFocusOut)
+    return () => {
+      bar.removeEventListener('focusin', handleFocusIn)
+      bar.removeEventListener('focusout', handleFocusOut)
+    }
+  }, [])
+
+  // One persistent polite region reports what the results area is doing.
+  let statusMessage = ''
+  if (loading) statusMessage = 'Searching…'
+  else if (loadingMore) statusMessage = 'Loading more movies…'
+  else if (showEmptyState) statusMessage = `No movies found for “${debouncedQuery}”`
+  else if (hasResults && !error) {
+    statusMessage = `${totalResults.toLocaleString()} ${totalResults === 1 ? 'movie' : 'movies'} found, showing ${results.length}`
+  }
+
   return (
     <div className="min-h-screen">
-      <div className={`search-bar-floating ${isScrolled ? 'visible' : ''}`}>
+      {/* Off-screen until the hero bar scrolls away; inert keeps the hidden
+          copy out of the tab order and the accessibility tree. */}
+      <div
+        ref={floatingRef}
+        className={`search-bar-floating ${floatingVisible ? 'visible' : ''}`}
+        inert={!floatingVisible}
+      >
         <div className="max-w-3xl mx-auto px-4">
           <MovieSearchBar
             value={inputValue}
@@ -113,7 +149,13 @@ export default function MovieSearchClient(): React.ReactElement {
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-0.5 bg-gradient-to-r from-transparent via-gold to-transparent" />
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Outside the aria-busy container, which would hold its updates back. */}
+      <p role="status" className="sr-only">{statusMessage}</p>
+
+      <div
+        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+        aria-busy={loading}
+      >
         {(hasResults || debouncedQuery) && (
           <div className="mb-8 animate-fade-in">
             <MovieFilters
@@ -125,7 +167,7 @@ export default function MovieSearchClient(): React.ReactElement {
         )}
 
         {error && (
-          <div className="alert alert-error mb-6 animate-fade-in">
+          <div role="alert" className="alert alert-error mb-6 animate-fade-in">
             <span className="font-medium">Error:</span> {error}
           </div>
         )}
@@ -133,7 +175,7 @@ export default function MovieSearchClient(): React.ReactElement {
         {showInitialState && (
           <div className="text-center py-20 animate-fade-in">
             <div className="flex justify-center mb-4">
-              <Clapperboard className="w-16 h-16 text-foreground-muted" />
+              <Clapperboard aria-hidden="true" className="w-16 h-16 text-foreground-muted" />
             </div>
             <p className="type-lead text-foreground-secondary">
               Start typing to search for movies
@@ -144,7 +186,7 @@ export default function MovieSearchClient(): React.ReactElement {
         {showEmptyState && (
           <div className="text-center py-20 animate-fade-in">
             <div className="flex justify-center mb-4">
-              <Search className="w-16 h-16 text-foreground-muted" />
+              <Search aria-hidden="true" className="w-16 h-16 text-foreground-muted" />
             </div>
             <p className="type-lead text-foreground-secondary">
               No movies found for &ldquo;{debouncedQuery}&rdquo;
@@ -157,6 +199,7 @@ export default function MovieSearchClient(): React.ReactElement {
 
         {!loading && hasResults && (
           <>
+            <h2 className="sr-only">Search results</h2>
             <MovieGrid movies={results} onMovieClick={setSelectedMovie} />
 
             {loadingMore && (

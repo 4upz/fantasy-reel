@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowLeftRight } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
@@ -12,7 +12,7 @@ import {
 } from '@/utils/tradeExpiry'
 import { formatSeasonDate } from '@/utils/seasons'
 import { ButtonSpinner } from '../../components/Icons'
-import { SectionHeader } from './shared'
+import { SectionHeader, LockedMessage, NumberField } from './shared'
 
 interface Props {
   league: League
@@ -71,6 +71,8 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
   const [minHours, setMinHours] = useState(toInput(league.trade_offer_expiry_min_hours))
   const [maxDays, setMaxDays] = useState(toInput(league.trade_offer_expiry_max_days))
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const deadlineInputRef = useRef<HTMLInputElement>(null)
+  const isCompleted = league.status === 'completed'
 
   const hasChanges =
     tradesEnabled !== league.trades_enabled ||
@@ -148,8 +150,15 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
         description="Deadline, commissioner review, and how long offers stand"
       />
 
+      {/* Says why every control below is disabled, instead of leaving it to be guessed. */}
+      {isCompleted && (
+        <div className="mb-6">
+          <LockedMessage message="This season is complete, so its trade settings are final." />
+        </div>
+      )}
+
       <form onSubmit={handleSubmit}>
-        <fieldset disabled={league.status === 'completed'}>
+        <fieldset disabled={isCompleted}>
           <div className="space-y-6">
             {/* Trading on/off */}
             <div className="flex items-start gap-3">
@@ -159,6 +168,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                   id="trades_enabled"
                   checked={tradesEnabled}
                   onChange={(e) => setTradesEnabled(e.target.checked)}
+                  aria-describedby="trades_enabled_help"
                   className="w-4 h-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-0 focus:ring-2 cursor-pointer"
                 />
               </div>
@@ -169,7 +179,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                 >
                   Allow trading
                 </label>
-                <p className="type-meta text-foreground-secondary mt-1">
+                <p id="trades_enabled_help" className="type-meta text-foreground-secondary mt-1">
                   {tradesEnabled
                     ? 'Teams can propose trades to each other while the league is active.'
                     : 'Trading is off — new offers are refused, and offers already open cannot be accepted.'}
@@ -187,6 +197,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               </label>
               <div className="flex items-center gap-2">
                 <input
+                  ref={deadlineInputRef}
                   type="date"
                   id="trade_deadline"
                   value={tradeDeadline}
@@ -198,8 +209,13 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                 {tradeDeadline && (
                   <button
                     type="button"
-                    onClick={() => setTradeDeadline('')}
+                    onClick={() => {
+                      setTradeDeadline('')
+                      // This button disappears once the deadline is empty.
+                      deadlineInputRef.current?.focus()
+                    }}
                     className="type-control btn btn-ghost px-3 py-1"
+                    aria-label="Clear trade deadline"
                   >
                     Clear
                   </button>
@@ -221,6 +237,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                     id="trade_review_enabled"
                     checked={reviewEnabled}
                     onChange={(e) => setReviewEnabled(e.target.checked)}
+                    aria-describedby="trade_review_enabled_help"
                     className="w-4 h-4 rounded border-border bg-elevated text-gold focus:ring-gold focus:ring-offset-0 focus:ring-2 cursor-pointer"
                   />
                 </div>
@@ -231,7 +248,7 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
                   >
                     Commissioner review
                   </label>
-                  <p className="type-meta text-foreground-secondary mt-1">
+                  <p id="trade_review_enabled_help" className="type-meta text-foreground-secondary mt-1">
                     {reviewEnabled
                       ? 'An accepted trade waits before it executes, so you can veto or approve it early.'
                       : 'An accepted trade executes on the next processing run with no review.'}
@@ -240,138 +257,81 @@ export default function TradeConfigSection({ league, onUpdate }: Props): React.R
               </div>
 
               {reviewEnabled && (
-                <div>
-                  <label
-                    htmlFor="trade_veto_hours"
-                    className="type-label block text-foreground-secondary mb-2"
-                  >
-                    Review window
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      id="trade_veto_hours"
-                      value={vetoHours}
-                      onChange={(e) => setVetoHours(parseInt(e.target.value, 10) || MIN_VETO_HOURS)}
-                      min={MIN_VETO_HOURS}
-                      max={MAX_VETO_HOURS}
-                      className={`type-input type-numeric input w-24 ${vetoOutOfRange ? 'border-error focus:border-error' : ''}`}
-                    />
-                    <span className="type-body-sm text-foreground-secondary">hours</span>
-                  </div>
-                  <p className="type-meta text-foreground-secondary mt-1.5">
-                    {vetoHours === 0
-                      ? 'No waiting — an accepted trade executes on the next run (0 turns the window off).'
-                      : `How long you have to veto after both teams agree (${MIN_VETO_HOURS}-${MAX_VETO_HOURS}h).`}
-                  </p>
-                  {vetoOutOfRange && (
-                    <p className="type-meta text-error mt-1">
-                      Must be between {MIN_VETO_HOURS} and {MAX_VETO_HOURS} hours
-                    </p>
-                  )}
-                </div>
+                <NumberField
+                  id="trade_veto_hours"
+                  label="Review window"
+                  unit="hours"
+                  value={vetoHours}
+                  onChange={(raw) => setVetoHours(parseInt(raw, 10) || MIN_VETO_HOURS)}
+                  min={MIN_VETO_HOURS}
+                  max={MAX_VETO_HOURS}
+                  help={vetoHours === 0
+                    ? 'No waiting — an accepted trade executes on the next run (0 turns the window off).'
+                    : `How long you have to veto after both teams agree (${MIN_VETO_HOURS}-${MAX_VETO_HOURS}h).`}
+                  error={vetoOutOfRange ? `Must be between ${MIN_VETO_HOURS} and ${MAX_VETO_HOURS} hours` : null}
+                />
               )}
             </div>
 
             {/* Offer windows. A different clock from both of the above: how long
                 an UNANSWERED offer stands before it lapses. */}
-            <div className="pt-2 border-t border-border">
-              <h3 className="type-label text-foreground mt-4">Offer windows</h3>
-              <p className="type-meta text-foreground-secondary mt-1">
+            <div
+              className="pt-2 border-t border-border"
+              role="group"
+              aria-labelledby="offer_windows_heading"
+              aria-describedby="offer_windows_help"
+            >
+              <h4 id="offer_windows_heading" className="type-label text-foreground mt-4">Offer windows</h4>
+              <p id="offer_windows_help" className="type-meta text-foreground-secondary mt-1">
                 How long an offer can stand before it expires unanswered. Leave a field blank to use
                 the app default.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
-                <div>
-                  <label
-                    htmlFor="expiry_default_hours"
-                    className="type-label block text-foreground-secondary mb-2"
-                  >
-                    Default
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      id="expiry_default_hours"
-                      value={defaultHours}
-                      onChange={(e) => setDefaultHours(e.target.value)}
-                      placeholder={String(DEFAULT_EXPIRY_HOURS)}
-                      min={MIN_DEFAULT_HOURS}
-                      max={MAX_DEFAULT_HOURS}
-                      className={`type-input type-numeric input w-24 ${defaultOutOfRange ? 'border-error focus:border-error' : ''}`}
-                    />
-                    <span className="type-body-sm text-foreground-secondary">hours</span>
-                  </div>
-                  <p className="type-meta text-foreground-secondary mt-1.5">
-                    Preselected in the picker ({MIN_DEFAULT_HOURS}-{MAX_DEFAULT_HOURS}h)
-                  </p>
-                  {defaultOutOfRange && (
-                    <p className="type-meta text-error mt-1">
-                      Must be a whole number between {MIN_DEFAULT_HOURS} and {MAX_DEFAULT_HOURS}
-                    </p>
-                  )}
-                </div>
+                <NumberField
+                  id="expiry_default_hours"
+                  label={<>Default<span className="sr-only"> offer window</span></>}
+                  unit="hours"
+                  value={defaultHours}
+                  onChange={setDefaultHours}
+                  placeholder={String(DEFAULT_EXPIRY_HOURS)}
+                  min={MIN_DEFAULT_HOURS}
+                  max={MAX_DEFAULT_HOURS}
+                  help={`Preselected in the picker (${MIN_DEFAULT_HOURS}-${MAX_DEFAULT_HOURS}h)`}
+                  error={defaultOutOfRange
+                    ? `Must be a whole number between ${MIN_DEFAULT_HOURS} and ${MAX_DEFAULT_HOURS}`
+                    : null}
+                />
 
-                <div>
-                  <label
-                    htmlFor="expiry_min_hours"
-                    className="type-label block text-foreground-secondary mb-2"
-                  >
-                    Minimum
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      id="expiry_min_hours"
-                      value={minHours}
-                      onChange={(e) => setMinHours(e.target.value)}
-                      placeholder={String(APP_DEFAULT_MIN_HOURS)}
-                      min={MIN_MIN_HOURS}
-                      max={MAX_MIN_HOURS}
-                      className={`type-input type-numeric input w-24 ${minOutOfRange ? 'border-error focus:border-error' : ''}`}
-                    />
-                    <span className="type-body-sm text-foreground-secondary">hours</span>
-                  </div>
-                  <p className="type-meta text-foreground-secondary mt-1.5">
-                    Shortest window allowed ({MIN_MIN_HOURS}-{MAX_MIN_HOURS}h)
-                  </p>
-                  {minOutOfRange && (
-                    <p className="type-meta text-error mt-1">
-                      Must be a whole number between {MIN_MIN_HOURS} and {MAX_MIN_HOURS}
-                    </p>
-                  )}
-                </div>
+                <NumberField
+                  id="expiry_min_hours"
+                  label={<>Minimum<span className="sr-only"> offer window</span></>}
+                  unit="hours"
+                  value={minHours}
+                  onChange={setMinHours}
+                  placeholder={String(APP_DEFAULT_MIN_HOURS)}
+                  min={MIN_MIN_HOURS}
+                  max={MAX_MIN_HOURS}
+                  help={`Shortest window allowed (${MIN_MIN_HOURS}-${MAX_MIN_HOURS}h)`}
+                  error={minOutOfRange
+                    ? `Must be a whole number between ${MIN_MIN_HOURS} and ${MAX_MIN_HOURS}`
+                    : null}
+                />
 
-                <div>
-                  <label
-                    htmlFor="expiry_max_days"
-                    className="type-label block text-foreground-secondary mb-2"
-                  >
-                    Maximum
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      id="expiry_max_days"
-                      value={maxDays}
-                      onChange={(e) => setMaxDays(e.target.value)}
-                      placeholder={String(MAX_EXPIRY_DAYS)}
-                      min={MIN_MAX_DAYS}
-                      max={MAX_MAX_DAYS}
-                      className={`type-input type-numeric input w-24 ${maxOutOfRange ? 'border-error focus:border-error' : ''}`}
-                    />
-                    <span className="type-body-sm text-foreground-secondary">days</span>
-                  </div>
-                  <p className="type-meta text-foreground-secondary mt-1.5">
-                    Longest window allowed ({MIN_MAX_DAYS}-{MAX_MAX_DAYS}d)
-                  </p>
-                  {maxOutOfRange && (
-                    <p className="type-meta text-error mt-1">
-                      Must be a whole number between {MIN_MAX_DAYS} and {MAX_MAX_DAYS}
-                    </p>
-                  )}
-                </div>
+                <NumberField
+                  id="expiry_max_days"
+                  label={<>Maximum<span className="sr-only"> offer window</span></>}
+                  unit="days"
+                  value={maxDays}
+                  onChange={setMaxDays}
+                  placeholder={String(MAX_EXPIRY_DAYS)}
+                  min={MIN_MAX_DAYS}
+                  max={MAX_MAX_DAYS}
+                  help={`Longest window allowed (${MIN_MAX_DAYS}-${MAX_MAX_DAYS}d)`}
+                  error={maxOutOfRange
+                    ? `Must be a whole number between ${MIN_MAX_DAYS} and ${MAX_MAX_DAYS}`
+                    : null}
+                />
               </div>
 
               {/* Narrowing one field alone is the mistake this catches, and the

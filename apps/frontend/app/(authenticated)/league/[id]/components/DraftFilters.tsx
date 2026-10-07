@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useRef, useEffect, useId } from 'react'
+import { useState, useRef, useId, useCallback } from 'react'
 import { TMDB_GENRES } from '@/types'
 import { SearchIcon, ChevronDownIcon, CloseIcon, CheckIcon, SpinnerIcon } from './Icons'
 import { cn } from './utils'
+import { usePopoverDismiss } from '@/hooks/usePopoverDismiss'
 
 interface Props {
   value: DraftFilters
@@ -33,17 +34,12 @@ export default function DraftFilters({ value, onFiltersChange, countLabel, loadi
   const genreListId = useId()
   const [showGenreDropdown, setShowGenreDropdown] = useState(false)
   const genreDropdownRef = useRef<HTMLDivElement>(null)
+  const genreButtonRef = useRef<HTMLButtonElement>(null)
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (genreDropdownRef.current && !genreDropdownRef.current.contains(event.target as Node)) {
-        setShowGenreDropdown(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
+  // Close on a click or a Tab that leaves the dropdown, and on Escape, which
+  // also hands focus back to the button that opened it.
+  const closeGenreDropdown = useCallback(() => setShowGenreDropdown(false), [])
+  usePopoverDismiss(showGenreDropdown, closeGenreDropdown, genreDropdownRef, genreButtonRef)
 
   function toggleGenre(genreId: number): void {
     onFiltersChange({ ...value, genres: selectedGenres.includes(genreId)
@@ -105,17 +101,14 @@ export default function DraftFilters({ value, onFiltersChange, countLabel, loadi
         </select>
 
         {/* Genre Multi-Select */}
-        <div className="relative" ref={genreDropdownRef} onKeyDown={event => {
-          if (event.key === 'Escape') {
-            setShowGenreDropdown(false)
-            genreDropdownRef.current?.querySelector('button')?.focus()
-          }
-        }}>
+        <div className="relative" ref={genreDropdownRef}>
           <button
+            ref={genreButtonRef}
             onClick={() => setShowGenreDropdown(!showGenreDropdown)}
             disabled={Boolean(disabledReason)}
             aria-expanded={showGenreDropdown && !disabledReason}
-            aria-controls={genreListId}
+            aria-controls={showGenreDropdown && !disabledReason ? genreListId : undefined}
+            aria-label={`Genre filter: ${genreButtonLabel}`}
             aria-describedby={disabledReason ? descriptionId : undefined}
             className={cn(
               'type-control flex items-center gap-2 bg-elevated border rounded-lg px-4 py-2 transition-all hover:border-border-hover disabled:opacity-50 disabled:cursor-not-allowed',
@@ -132,7 +125,7 @@ export default function DraftFilters({ value, onFiltersChange, countLabel, loadi
                 {selectedGenres.length > 0 && (
                   <button
                     onClick={() => onFiltersChange({ ...value, genres: [] })}
-                    className="type-control w-full px-3 py-2 text-left text-crimson hover:bg-elevated rounded-lg transition-colors mb-1"
+                    className="type-control w-full px-3 py-2 text-left text-crimson-text hover:bg-elevated rounded-lg transition-colors mb-1"
                   >
                     Clear selection
                   </button>
@@ -170,7 +163,7 @@ export default function DraftFilters({ value, onFiltersChange, countLabel, loadi
         {hasActiveFilters && (
           <button
             onClick={clearFilters}
-            className="type-control flex items-center gap-1.5 text-foreground-secondary hover:text-crimson transition-colors"
+            className="type-control flex items-center gap-1.5 text-foreground-secondary hover:text-crimson-text transition-colors"
           >
             <CloseIcon className="w-4 h-4" />
             Clear filters

@@ -43,7 +43,6 @@ const EFFECTIVE_DATE_FORMAT = new Intl.DateTimeFormat('en-US', { dateStyle: 'lon
 export default function LegalPage({ title, effectiveDate, intro, sections }: Props): React.ReactElement {
   return (
     <div className={`min-h-screen bg-background ${landingStyles.page}`}>
-      <a href="#main-content" className={landingStyles.skipLink}>Skip to content</a>
       <MarketingHeader />
       <main id="main-content" tabIndex={-1}>
         <div className={`mx-auto max-w-6xl px-4 sm:px-6 ${styles.layout}`}>

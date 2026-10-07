@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useCallback, useId } from 'react'
-import { GripVertical, ListOrdered, Scissors } from 'lucide-react'
+import { ChevronDown, GripVertical, ListOrdered, Scissors } from 'lucide-react'
 import {
   DndContext,
   closestCenter,
@@ -48,6 +48,7 @@ function SortablePriorityItem({
   position,
   count,
   willFit,
+  belowCutText,
   disabled,
   onMove,
 }: {
@@ -55,6 +56,8 @@ function SortablePriorityItem({
   position: number
   count: number
   willFit: boolean
+  /** Spoken for items past the cut line, which is otherwise only colour and position. */
+  belowCutText: string
   disabled: boolean
   onMove: (position: number) => void
 }): React.ReactElement {
@@ -67,6 +70,7 @@ function SortablePriorityItem({
     transition,
     isDragging,
   } = useSortable({ id: item.id, disabled })
+  const fitNote = willFit ? '' : `, ${belowCutText}`
 
   return (
     <li
@@ -79,19 +83,32 @@ function SortablePriorityItem({
           : willFit ? 'border-border bg-elevated' : 'border-border/60 bg-surface'
       }`}
     >
-      <select
-        value={position}
-        disabled={disabled}
-        onChange={(event) => onMove(Number(event.target.value))}
-        aria-label={`Priority for ${item.title}`}
-        className={`type-number h-11 w-11 shrink-0 appearance-none rounded-lg bg-transparent text-center cursor-pointer hover:bg-surface-hover disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${willFit ? 'text-gold' : 'text-foreground-secondary'}`}
-      >
-        {Array.from({ length: count }, (_, index) => (
-          <option key={index + 1} value={index + 1}>{index + 1}</option>
-        ))}
-      </select>
+      {/* The chevron says this number is a menu; without it the native arrow
+          is gone and it reads as a plain label. */}
+      <span className="relative shrink-0">
+        <select
+          value={position}
+          disabled={disabled}
+          onChange={(event) => onMove(Number(event.target.value))}
+          aria-label={`Priority for ${item.title}${fitNote}`}
+          className={`type-number h-11 w-11 appearance-none rounded-lg bg-transparent text-center cursor-pointer hover:bg-surface-hover disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold ${willFit ? 'text-gold' : 'text-foreground-secondary'}`}
+        >
+          {Array.from({ length: count }, (_, index) => (
+            <option key={index + 1} value={index + 1}>{index + 1}</option>
+          ))}
+        </select>
+        {!disabled && (
+          <ChevronDown
+            className="pointer-events-none absolute bottom-1 right-0.5 h-3 w-3 text-foreground-secondary"
+            aria-hidden="true"
+          />
+        )}
+      </span>
       <div className="flex-1 min-w-0">
-        <p className="type-row-title text-foreground break-words">{item.title}</p>
+        <p className="type-row-title text-foreground break-words">
+          {item.title}
+          {!willFit && <span className="sr-only">{fitNote}</span>}
+        </p>
         {item.meta && (
           <p className="type-meta text-foreground-secondary mt-0.5 flex flex-wrap items-center gap-1">
             {item.meta}
@@ -104,7 +121,7 @@ function SortablePriorityItem({
         {...attributes}
         {...listeners}
         disabled={disabled}
-        aria-label={`Reorder ${item.title}, priority ${position}`}
+        aria-label={`Reorder ${item.title}, priority ${position}${fitNote}`}
         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-foreground-secondary cursor-grab active:cursor-grabbing touch-none hover:text-gold hover:bg-surface-hover disabled:cursor-wait disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
       >
         <GripVertical className="w-5 h-5" aria-hidden="true" />
@@ -127,6 +144,7 @@ export default function PriorityList({
   onReorder,
 }: PriorityListProps): React.ReactElement | null {
   const contextId = useId()
+  const descriptionId = useId()
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -147,8 +165,17 @@ export default function PriorityList({
 
   const fits = computeFits(items)
   const cutIndex = fits.indexOf(false)
+  const belowCutText = `below the cut: ${cutLabel.toLowerCase()}`
   const describeItem = (id: string | number) => items.find((item) => item.id === id)?.title || 'Bid'
   const describePosition = (id: string | number) => items.findIndex((item) => item.id === id) + 1
+  // Where a move would leave the item relative to the cut line, so the
+  // announcement says when a drag crosses it rather than only its position.
+  const describeFit = (activeId: string | number, overId: string | number) => {
+    const from = items.findIndex((item) => item.id === activeId)
+    const to = items.findIndex((item) => item.id === overId)
+    if (from < 0 || to < 0) return ''
+    return computeFits(arrayMove(items, from, to))[to] ? ', fits' : `, ${belowCutText}`
+  }
 
   return (
     <div className="space-y-3" data-testid={testId}>
@@ -157,7 +184,7 @@ export default function PriorityList({
           <ListOrdered className="w-4 h-4 text-gold" aria-hidden="true" />
           <h3 className="type-row-title text-foreground">{heading}</h3>
         </div>
-        <p className="type-body-sm text-foreground-secondary">{description}</p>
+        <p id={descriptionId} className="type-body-sm text-foreground-secondary">{description}</p>
       </div>
 
       <DndContext
@@ -170,19 +197,19 @@ export default function PriorityList({
             draggable: 'Press Space to pick up a bid. Use the arrow keys to change its priority, then press Space to drop. Press Escape to cancel.',
           },
           announcements: {
-            onDragStart: ({ active }: DragStartEvent) => `Picked up ${describeItem(active.id)}, priority ${describePosition(active.id)} of ${items.length}.`,
+            onDragStart: ({ active }: DragStartEvent) => `Picked up ${describeItem(active.id)}, priority ${describePosition(active.id)} of ${items.length}${describeFit(active.id, active.id)}.`,
             onDragOver: ({ active, over }: DragOverEvent) => over
-              ? `${describeItem(active.id)}, priority ${describePosition(over.id)} of ${items.length}.`
+              ? `${describeItem(active.id)}, priority ${describePosition(over.id)} of ${items.length}${describeFit(active.id, over.id)}.`
               : undefined,
             onDragEnd: ({ active, over }: DragEndEvent) => over
-              ? `${describeItem(active.id)} dropped at priority ${describePosition(over.id)}.`
+              ? `${describeItem(active.id)} dropped at priority ${describePosition(over.id)}${describeFit(active.id, over.id)}.`
               : 'Reorder cancelled.',
             onDragCancel: () => 'Reorder cancelled.',
           },
         }}
       >
         <SortableContext items={items} strategy={verticalListSortingStrategy}>
-          <ol className="space-y-2" aria-label={heading}>
+          <ol role="list" className="space-y-2" aria-label={heading} aria-describedby={descriptionId}>
             {items.map((item, index) => (
               <Fragment key={item.id}>
                 {index === cutIndex && (
@@ -197,6 +224,7 @@ export default function PriorityList({
                   position={index + 1}
                   count={items.length}
                   willFit={fits[index]}
+                  belowCutText={belowCutText}
                   disabled={disabled || items.length < 2}
                   onMove={(position) => moveItem(index, position - 1)}
                 />

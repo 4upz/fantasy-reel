@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import DateTimeField from '@/app/components/DateTimeField'
+import { announce } from '@/utils/announce'
 import {
   anchorFor,
   expiryPresetsFor,
@@ -26,40 +27,57 @@ interface Props {
   bounds: ExpiryBounds
 }
 
+/** An unselected chip, shared by the radio chips and the release chip's caret. */
+const CHIP_IDLE =
+  'bg-elevated border border-border text-foreground-secondary hover:border-border-hover hover:text-foreground'
+
+/** The ring a chip shows while its visually hidden radio has keyboard focus. */
+const CHIP_FOCUS =
+  'has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-gold'
+
 /**
- * A selectable expiry chip. Exported because the extend modal renders the same
- * row of choices -- two copies of this className pair drift the moment a token
- * changes in one of them.
+ * A selectable expiry chip: a native radio styled as a button, so a row of
+ * chips is one radio group -- one Tab stop, arrow keys to choose, and the
+ * choice announced as selected. Exported because the extend modal renders the
+ * same row of choices -- two copies of this className pair drift the moment a
+ * token changes in one of them.
  */
 /** @design-system League */
 export function Chip({
-  selected,
+  name,
+  checked,
   disabled,
   title,
-  onClick,
+  onSelect,
+  className = '',
   children,
 }: {
-  selected: boolean
+  /** Shared by every chip in one group. */
+  name: string
+  checked: boolean
   disabled?: boolean
   title?: string
-  onClick: () => void
+  onSelect: () => void
+  className?: string
   children: React.ReactNode
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
+    <label
       title={title}
-      aria-pressed={selected}
-      className={`type-control btn px-3 py-1 ${
-        selected
-          ? 'btn-secondary'
-          : 'bg-elevated border border-border text-foreground-secondary hover:border-border-hover hover:text-foreground'
-      }`}
+      className={`type-control btn px-3 py-1 ${checked ? 'btn-secondary' : CHIP_IDLE} ${CHIP_FOCUS} ${
+        disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+      } ${className}`}
     >
+      <input
+        type="radio"
+        name={name}
+        className="sr-only"
+        checked={checked}
+        disabled={disabled}
+        onChange={onSelect}
+      />
       {children}
-    </button>
+    </label>
   )
 }
 
@@ -69,14 +87,18 @@ export function Chip({
  *
  * The caret only exists when there is a second candidate -- a control that
  * opens an empty list is worse than no control. The menu shows each release
- * date because that is the whole basis for choosing between them.
+ * date because that is the whole basis for choosing between them. It is a
+ * plain disclosure of buttons rather than an ARIA listbox: Tab moves through
+ * it, and Escape or tabbing away closes it.
  */
 function ReleaseChip({
+  name,
   anchor,
   selected,
   chosen,
   onSelect,
 }: {
+  name: string
   anchor: ReleaseAnchor
   selected: boolean
   chosen: AnchorCandidate | undefined
@@ -85,6 +107,8 @@ function ReleaseChip({
   const [open, setOpen] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const caretRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLUListElement>(null)
+  const menuId = useId()
 
   const label = chosen ? `When ${chosen.title} releases` : 'When it releases'
   const hasChoice = anchor.available && anchor.candidates.length > 1
@@ -92,52 +116,63 @@ function ReleaseChip({
   useEffect(() => {
     if (!open) return
 
-    const onPointerDown = (event: MouseEvent) => {
+    // Open on the movie already chosen, so the menu starts where the choice is.
+    const menu = menuRef.current
+    const current =
+      menu?.querySelector<HTMLButtonElement>('[aria-current="true"]') ??
+      menu?.querySelector<HTMLButtonElement>('button')
+    current?.focus()
+
+    // A click or Tab that lands outside closes the menu rather than leaving it hanging.
+    const onOutside = (event: Event) => {
       if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
-      // Escape belongs to the menu first; without stopping it here the modal
-      // behind would close too.
+      // Escape belongs to the menu first. preventDefault stops the dialog
+      // behind from treating it as its own cancel.
+      event.preventDefault()
       event.stopPropagation()
       setOpen(false)
       caretRef.current?.focus()
     }
 
-    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('mousedown', onOutside)
+    document.addEventListener('focusin', onOutside)
     document.addEventListener('keydown', onKeyDown, true)
     return () => {
-      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('mousedown', onOutside)
+      document.removeEventListener('focusin', onOutside)
       document.removeEventListener('keydown', onKeyDown, true)
     }
   }, [open])
 
-  const segment = selected
-    ? 'btn-secondary'
-    : 'bg-elevated border border-border text-foreground-secondary hover:border-border-hover hover:text-foreground'
+  const segment = selected ? 'btn-secondary' : CHIP_IDLE
 
   return (
     <div ref={wrapperRef} className="relative inline-flex">
-      <button
-        type="button"
-        onClick={() => onSelect(chosen?.movieId ?? null)}
+      <Chip
+        name={name}
+        checked={selected}
+        onSelect={() => onSelect(chosen?.movieId ?? null)}
         disabled={!anchor.available}
         title={anchor.reason}
-        aria-pressed={selected}
-        className={`type-control btn px-3 py-1 ${segment} ${
-          hasChoice ? 'rounded-r-none border-r-0' : ''
-        }`}
+        className={hasChoice ? 'rounded-r-none border-r-0' : ''}
       >
         {label}
-      </button>
+        {/* Otherwise the reason is only a hover tooltip on a control that can't take focus. */}
+        {!anchor.available && anchor.reason && (
+          <span className="sr-only"> (unavailable: {anchor.reason})</span>
+        )}
+      </Chip>
 
       {hasChoice && (
         <button
           ref={caretRef}
           type="button"
           onClick={() => setOpen((wasOpen) => !wasOpen)}
-          aria-haspopup="listbox"
           aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
           aria-label="Choose which release to wait for"
           className={`type-control btn px-2 py-1 rounded-l-none border-l border-l-border ${segment}`}
         >
@@ -146,36 +181,38 @@ function ReleaseChip({
       )}
 
       {open && (
-        <div
-          role="listbox"
+        <ul
+          ref={menuRef}
+          role="list"
+          id={menuId}
           aria-label="Movies this offer can wait for"
           className="absolute top-full left-0 z-10 mt-1 min-w-64 card p-1 shadow-heavy animate-fade-in"
         >
           {anchor.candidates.map((candidate) => {
             const isChosen = candidate.movieId === chosen?.movieId
             return (
-              <button
-                key={candidate.movieId}
-                type="button"
-                role="option"
-                aria-selected={isChosen}
-                onClick={() => {
-                  onSelect(candidate.movieId)
-                  setOpen(false)
-                  caretRef.current?.focus()
-                }}
-                className={`type-control w-full flex items-baseline justify-between gap-4 px-3 py-2 rounded text-left transition-colors ${
-                  isChosen ? 'bg-surface-hover text-gold' : 'text-foreground hover:bg-surface-hover'
-                }`}
-              >
-                <span>{candidate.title}</span>
-                <span className="type-meta text-foreground-secondary shrink-0">
-                  {formatReleaseDate(candidate.releaseDate)}
-                </span>
-              </button>
+              <li key={candidate.movieId}>
+                <button
+                  type="button"
+                  aria-current={isChosen ? 'true' : undefined}
+                  onClick={() => {
+                    onSelect(candidate.movieId)
+                    setOpen(false)
+                    caretRef.current?.focus()
+                  }}
+                  className={`type-control w-full flex items-baseline justify-between gap-4 px-3 py-2 rounded text-left transition-colors cursor-pointer ${
+                    isChosen ? 'bg-surface-hover text-gold' : 'text-foreground hover:bg-surface-hover'
+                  }`}
+                >
+                  <span>{candidate.title}</span>
+                  <span className="type-meta text-foreground-secondary shrink-0">
+                    {formatReleaseDate(candidate.releaseDate)}
+                  </span>
+                </button>
+              </li>
             )
           })}
-        </div>
+        </ul>
       )}
     </div>
   )
@@ -215,23 +252,41 @@ export default function OfferExpiryPicker({
 
   const resolvedAt = resolution.ok ? resolution.expiry.expires_at : null
   const error = resolution.ok ? null : resolution.error
+  const name = useId()
+
+  // A radio says which chip is selected but never when the offer lapses, so
+  // the resolved instant is spoken once per choice. Not a live region: a
+  // preset re-resolves against the clock on every render, and a region would
+  // read the time out again each minute while the user types elsewhere.
+  const spokenChoice = useRef(value)
+  useEffect(() => {
+    const previous = spokenChoice.current
+    if (previous === value) return
+    spokenChoice.current = value
+    // Edits inside the custom field are voiced by the field itself.
+    if (value.kind === 'custom' && previous.kind === 'custom') return
+    if (resolvedAt) announce(`Expires ${formatExpiryAbsolute(resolvedAt)}`)
+    else if (value.kind === 'none') announce('This offer will stand until answered.')
+  }, [value, resolvedAt])
 
   return (
-    <div>
-      <span className="type-body-sm text-foreground-secondary">Offer expires</span>
+    <fieldset>
+      <legend className="type-body-sm text-foreground-secondary">Offer expires</legend>
 
       <div className="mt-1 flex flex-wrap gap-2">
         {presets.map((preset) => (
           <Chip
             key={preset.hours}
-            selected={value.kind === 'preset' && value.hours === preset.hours}
-            onClick={() => onChange({ kind: 'preset', hours: preset.hours })}
+            name={name}
+            checked={value.kind === 'preset' && value.hours === preset.hours}
+            onSelect={() => onChange({ kind: 'preset', hours: preset.hours })}
           >
             {preset.label}
           </Chip>
         ))}
 
         <ReleaseChip
+          name={name}
           anchor={releaseAnchor}
           selected={value.kind === 'release'}
           chosen={chosenAnchor}
@@ -239,8 +294,9 @@ export default function OfferExpiryPicker({
         />
 
         <Chip
-          selected={value.kind === 'custom'}
-          onClick={() =>
+          name={name}
+          checked={value.kind === 'custom'}
+          onSelect={() =>
             onChange({
               kind: 'custom',
               // Seeded at the league's own default rather than a flat 24h: the
@@ -253,7 +309,7 @@ export default function OfferExpiryPicker({
           Custom…
         </Chip>
 
-        <Chip selected={value.kind === 'none'} onClick={() => onChange({ kind: 'none' })}>
+        <Chip name={name} checked={value.kind === 'none'} onSelect={() => onChange({ kind: 'none' })}>
           No expiry
         </Chip>
       </div>
@@ -281,19 +337,22 @@ export default function OfferExpiryPicker({
         <p className="type-body-sm mt-2 text-foreground-secondary">This offer will stand until answered.</p>
       )}
 
-      {fellBack && (
-        <p role="status" className="type-body-sm mt-2 text-warning">
-          {value.kind === 'release'
-            ? `That movie left the trade — now waiting on ${chosenAnchor?.title ?? 'the soonest release'}.`
-            : `${releaseAnchor.reason ?? 'That release no longer applies'} — switched to ${bounds.defaultHours} hours.`}
-        </p>
-      )}
+      {/* Always mounted, so the notice is announced when it appears. */}
+      <div role="status">
+        {fellBack && (
+          <p className="type-body-sm mt-2 text-warning">
+            {value.kind === 'release'
+              ? `That movie left the trade — now waiting on ${chosenAnchor?.title ?? 'the soonest release'}.`
+              : `${releaseAnchor.reason ?? 'That release no longer applies'} — switched to ${bounds.defaultHours} hours.`}
+          </p>
+        )}
+      </div>
 
       {error && value.kind !== 'custom' && (
         <p role="alert" className="type-body-sm mt-2 text-error">
           {error}
         </p>
       )}
-    </div>
+    </fieldset>
   )
 }

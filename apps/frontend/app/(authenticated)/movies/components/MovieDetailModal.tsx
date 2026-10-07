@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useId } from 'react'
 import { X } from 'lucide-react'
+import Modal from '@/app/components/Modal'
 import MovieDetailBody from '@/app/components/MovieDetailBody'
 import type { TMDbSearchResult, TMDbMovieDetails } from '@/types'
 
@@ -14,46 +15,25 @@ interface Props {
 
 /** @design-system Movies */
 export default function MovieDetailModal({ movie, details, loading, onClose }: Props) {
-  useEffect(() => {
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        onClose()
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    document.body.style.overflow = 'hidden'
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
-    }
-  }, [onClose])
+  const titleId = useId()
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-overlay backdrop-blur-sm animate-fade-in"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-
-      {/* Modal content */}
-      <div className="relative z-10 w-full max-w-4xl mx-4 my-8 sm:my-12 animate-slide-up">
+    <Modal onClose={onClose} labelledBy={titleId} closeOnBackdrop>
+      <div className="relative w-full max-w-4xl animate-slide-up motion-reduce:animate-none">
         <div className="card bg-surface overflow-hidden">
-          {/* Close button */}
           <button
+            type="button"
             onClick={onClose}
+            data-dialog-initial-focus
             className="absolute top-4 right-4 p-2 rounded-full bg-background/50 backdrop-blur-sm border border-border text-foreground-secondary hover:text-foreground hover:border-border-hover transition-all z-10"
-            aria-label="Close modal"
+            aria-label="Close movie details"
           >
             <X className="w-5 h-5" />
           </button>
 
-          <MovieDetailBody movie={movie} details={details} loading={loading} />
+          <MovieDetailBody movie={movie} details={details} loading={loading} titleId={titleId} />
         </div>
       </div>
-    </div>
+    </Modal>
   )
 }

@@ -1,16 +1,19 @@
+import type { Metadata } from 'next'
 import BrandLogo from '../components/BrandLogo'
+
+export const metadata: Metadata = { title: 'Sign-in error' }
 
 export default function ErrorPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <main id="main-content" tabIndex={-1} className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md space-y-8 text-center">
         <div>
           <div className="flex justify-center mb-4">
             <BrandLogo markOnly className="h-auto w-16" />
           </div>
-          <h2 className="type-section text-foreground">
+          <h1 className="type-section text-foreground">
             Something went wrong
-          </h2>
+          </h1>
           <p className="mt-2 text-foreground-secondary">
             An error occurred during authentication. Please try again.
           </p>
@@ -24,6 +27,6 @@ export default function ErrorPage() {
           </a>
         </div>
       </div>
-    </div>
+    </main>
   )
 }

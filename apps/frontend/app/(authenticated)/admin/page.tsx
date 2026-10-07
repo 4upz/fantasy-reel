@@ -20,7 +20,7 @@ const getGrowthStats = cache(async (): Promise<AdminGrowthStats | null> => {
 
 export async function generateMetadata(): Promise<Metadata> {
   if (!(await getGrowthStats())) return {}
-  return { title: 'Growth | Fantasy Reel', robots: { index: false, follow: false } }
+  return { title: 'Growth', robots: { index: false, follow: false } }
 }
 
 export default async function AdminPage() {

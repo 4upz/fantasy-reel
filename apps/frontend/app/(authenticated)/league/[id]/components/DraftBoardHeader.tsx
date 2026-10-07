@@ -37,7 +37,7 @@ export default function DraftBoardHeader({
         : 'flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6'}>
         <div className="flex-1">
           <div className="flex items-center gap-3 mb-4">
-            <h2 className="type-section text-foreground">Draft board</h2>
+            <h2 className="type-section text-foreground" tabIndex={-1} data-draft-heading>Draft board</h2>
           </div>
           {turn && (
             <div

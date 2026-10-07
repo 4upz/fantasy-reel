@@ -147,7 +147,10 @@
     "TeamBudgetSummary": "apps/frontend/app/(authenticated)/league/[id]/standings/TeamBudget.tsx",
     "TeamHeader": "apps/frontend/app/(authenticated)/league/[id]/components/TeamHeader.tsx",
     "TeamStandingSummary": "apps/frontend/app/(authenticated)/league/[id]/standings/TeamStandingSummary.tsx",
+    "TradeBudgetField": "apps/frontend/app/(authenticated)/league/[id]/components/TradeComposerFields.tsx",
+    "TradeItemsList": "apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection.tsx",
     "TradeItemsSection": "apps/frontend/app/(authenticated)/league/[id]/components/TradeItemsSection.tsx",
+    "TradeMovieChecklist": "apps/frontend/app/(authenticated)/league/[id]/components/TradeComposerFields.tsx",
     "TradeOfferCard": "apps/frontend/app/(authenticated)/league/[id]/components/TradeOfferCard.tsx",
     "TrophyCase": "apps/frontend/app/components/TrophyCase.tsx",
 
@@ -157,19 +160,23 @@
     "ConfirmKickModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/ConfirmKickModal.tsx",
     "ConfirmStartSeasonModal": "apps/frontend/app/(authenticated)/league/[id]/components/ConfirmStartSeasonModal.tsx",
     "EndSeasonModal": "apps/frontend/app/(authenticated)/league/[id]/settings/components/EndSeasonModal.tsx",
+    "Modal": "apps/frontend/app/components/Modal.tsx",
     "PlaceBidModal": "apps/frontend/app/(authenticated)/league/[id]/components/PlaceBidModal.tsx",
     "PlaceCounterpickBidModal": "apps/frontend/app/(authenticated)/league/[id]/components/PlaceCounterpickBidModal.tsx",
 
     "BrandLogo": "apps/frontend/app/components/BrandLogo.tsx",
     "DiscordIcon": "apps/frontend/app/components/icons/DiscordIcon.tsx",
+    "GitHubIcon": "apps/frontend/app/components/icons/GitHubIcon.tsx",
     "GoogleIcon": "apps/frontend/app/components/icons/GoogleIcon.tsx",
     "NavLogo": "apps/frontend/app/components/navigation/NavLogo.tsx",
     "SelectedUserChip": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
+    "SocialLinks": "apps/frontend/app/components/SocialLinks.tsx",
     "UserSearchResultItem": "apps/frontend/app/(authenticated)/league/[id]/components/UserSearchResult.tsx",
 
     "MarketingHeader": "apps/frontend/app/components/landing/MarketingHeader.tsx",
 
     "LockedMessage": "apps/frontend/app/(authenticated)/league/[id]/settings/components/shared.tsx",
+    "NumberField": "apps/frontend/app/(authenticated)/league/[id]/settings/components/shared.tsx",
     "SectionHeader": "apps/frontend/app/(authenticated)/league/[id]/settings/components/shared.tsx"
   }
 }

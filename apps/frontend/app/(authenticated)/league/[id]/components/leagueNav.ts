@@ -119,3 +119,8 @@ export function splitTabsForBottomBar(tabs: LeagueTab[]): { barTabs: LeagueTab[]
 
   return { barTabs, moreTabs }
 }
+
+/** Spoken text for a tab's badge; the only badge is Bidding's count of the user's outbid bids. */
+export function outbidBadgeLabel(count: number): string {
+  return `${count} outbid ${count === 1 ? 'bid' : 'bids'}`
+}

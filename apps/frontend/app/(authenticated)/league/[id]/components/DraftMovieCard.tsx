@@ -1,5 +1,6 @@
 'use client'
 
+import { useId } from 'react'
 import MoviePoster from '@/app/components/MoviePoster'
 import type { FranchiseHistory, TMDbSearchResult } from '@/types'
 import { WishlistToggle } from '@/components/WishlistToggle'
@@ -29,6 +30,16 @@ export default function DraftMovieCard({
   const releaseYear = getReleaseYear(movie.release_date)
   const seriesLabel = franchise ? `${seriesName(franchise)} series` : null
   const seriesAverage = franchise?.average_rt ?? null
+  const badgeId = useId()
+  const dateId = useId()
+  const seriesId = useId()
+  // The overlay button is the card's one tab stop, so it carries what a
+  // sighted user reads off the card: date, popularity and the series record.
+  const describedBy = [
+    dateId,
+    popularityBadge && badgeId,
+    seriesLabel && seriesId,
+  ].filter(Boolean).join(' ')
 
   const cardClasses = cn(
     'group relative rounded-xl overflow-hidden transition-[transform,box-shadow,opacity] duration-300 focus-within:ring-2 focus-within:ring-gold',
@@ -42,6 +53,7 @@ export default function DraftMovieCard({
         type="button"
         onClick={() => onPreview(movie)}
         aria-label={`Preview ${movie.title}${isDrafted ? ' (drafted)' : ''}`}
+        aria-describedby={describedBy}
         className="absolute inset-0 z-10 rounded-xl cursor-pointer focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold"
         data-testid={`preview-movie-${movie.tmdb_id}`}
       />
@@ -49,7 +61,7 @@ export default function DraftMovieCard({
       <div className="relative aspect-[2/3] bg-elevated">
         <MoviePoster
           src={movie.poster_url}
-          alt={movie.title}
+          alt=""
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
           posterSize="w500"
           className="transition-opacity duration-300 motion-reduce:transition-none"
@@ -63,6 +75,7 @@ export default function DraftMovieCard({
           {/* Popularity Badge */}
           {popularityBadge && (
             <span
+              id={badgeId}
               className={cn(
                 'type-meta px-2 py-0.5 rounded-full shadow-md',
                 popularityBadge.variant === 'solid'
@@ -83,7 +96,7 @@ export default function DraftMovieCard({
         {/* Release Date Badge */}
         <div className="absolute bottom-12 right-2">
           <div className="px-2 py-1 bg-background/80 backdrop-blur-sm rounded-lg">
-            <span className="type-meta text-foreground-secondary">
+            <span id={dateId} className="type-meta text-foreground-secondary">
               {formatReleaseDateShort(movie.release_date)}
             </span>
           </div>
@@ -101,32 +114,37 @@ export default function DraftMovieCard({
 
       {/* Info Section */}
       <div className="p-3 bg-surface border-t border-border">
-        <h3
+        <h4
           className="type-row-title text-foreground truncate"
           title={movie.title}
         >
           {movie.title}
-        </h3>
+        </h4>
         {/* One line, words only: the card has no room for a chart, and the
             average is the one number that matters at a glance. The preview
             carries the film-by-film record. */}
         {(releaseYear || seriesLabel) && (
           <p className="type-meta text-foreground-secondary mt-1 truncate" data-testid="franchise-line">
             {releaseYear}
-            {releaseYear && seriesLabel && ' · '}
-            {seriesLabel}
-            {seriesAverage != null && (
-              <>
-                {' · avg '}
-                <span
-                  className={cn(
-                    'font-semibold',
-                    seriesAverage >= BREAK_EVEN ? 'text-gold' : 'text-crimson'
-                  )}
-                >
-                  {seriesAverage}%
-                </span>
-              </>
+            {releaseYear && seriesLabel && <span aria-hidden="true">{' · '}</span>}
+            {seriesLabel && (
+              <span id={seriesId}>
+                {seriesLabel}
+                {seriesAverage != null && (
+                  <>
+                    <span aria-hidden="true">{' · avg '}</span>
+                    <span className="sr-only">{', Rotten Tomatoes average '}</span>
+                    <span
+                      className={cn(
+                        'font-semibold',
+                        seriesAverage >= BREAK_EVEN ? 'text-gold' : 'text-crimson-text'
+                      )}
+                    >
+                      {seriesAverage}%
+                    </span>
+                  </>
+                )}
+              </span>
             )}
           </p>
         )}

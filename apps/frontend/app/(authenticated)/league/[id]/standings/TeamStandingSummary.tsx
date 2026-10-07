@@ -62,14 +62,16 @@ export default function TeamStandingSummary({
             inline ? 'h-[38px] w-[38px] rounded-[11px]' : 'h-[34px] w-[34px] rounded-[10px] lg:h-[38px] lg:w-[38px] lg:rounded-[11px]'
           } ${PODIUM_CHIP[rank] ?? 'border border-border bg-elevated text-foreground-secondary'}`}
         >
-          {isTied ? 'T' : '#'}{rank}
+          {/* "T2" reads as "T 2"; say the tie. */}
+          <span aria-hidden="true">{isTied ? 'T' : '#'}{rank}</span>
+          <span className="sr-only">{isTied ? `Tied for rank ${rank}` : `Rank ${rank}`}</span>
         </div>
 
         <div className={`relative flex-none overflow-hidden rounded-full border-[1.5px] border-gold bg-gold-muted ${inline ? 'h-[38px] w-[38px]' : 'h-[34px] w-[34px] lg:h-[38px] lg:w-[38px]'}`}>
           {safeUrl ? (
-            <Image src={safeUrl} alt={displayName} fill sizes="38px" className="object-cover" unoptimized />
+            <Image src={safeUrl} alt="" fill sizes="38px" className="object-cover" unoptimized />
           ) : (
-            <div className="type-meta flex h-full w-full items-center justify-center text-gold">{initials}</div>
+            <div className="type-meta flex h-full w-full items-center justify-center text-gold" aria-hidden="true">{initials}</div>
           )}
         </div>
 
@@ -95,7 +97,7 @@ export default function TeamStandingSummary({
         )}
 
         <div data-preview-focus={scoreFocus} className={`flex-none text-right ${inline ? 'min-w-[86px]' : 'lg:min-w-[86px]'}`}>
-          <div className={`type-number-lg ${totalPoints >= 0 ? 'text-gold' : 'text-crimson'}`}>{formatFantasyPoints(totalPoints)}</div>
+          <div className={`type-number-lg ${totalPoints >= 0 ? 'text-gold' : 'text-crimson-text'}`}>{formatFantasyPoints(totalPoints)}</div>
           <div className="type-meta mt-0.5 text-foreground-secondary">Points</div>
         </div>
       </div>
@@ -103,11 +105,17 @@ export default function TeamStandingSummary({
       {!inline && (
         <div className="flex items-center gap-2 border-t border-border pt-[9px] lg:hidden">
           <span className="type-meta text-foreground-secondary">{movieCount} movies</span>
-          <span className="h-[3px] w-[3px] flex-none rounded-full bg-border-hover" />
-          <span className="type-meta truncate text-foreground-secondary">{moviesScored} scored · {moviesPending} pending</span>
+          <span className="h-[3px] w-[3px] flex-none rounded-full bg-border-hover" aria-hidden="true" />
+          <span className="type-meta truncate text-foreground-secondary">
+            {moviesScored} scored <span aria-hidden="true">·</span><span className="sr-only">,</span> {moviesPending} pending
+          </span>
           <span className="flex-1" />
-          {budgetLeft !== null && <span className={`type-meta type-numeric flex-none ${budgetTone(budgetLeft)}`}>{formatBudget(budgetLeft)}</span>}
-          <ChevronDown className={`h-4 w-4 flex-none text-foreground-muted transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+          {budgetLeft !== null && (
+            <span className={`type-meta type-numeric flex-none ${budgetTone(budgetLeft)}`}>
+              <span className="sr-only">Budget left: </span>{formatBudget(budgetLeft)}
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 flex-none text-foreground-muted transition-transform duration-300 motion-reduce:transition-none ${isExpanded ? 'rotate-180' : ''}`} aria-hidden="true" />
         </div>
       )}
     </>

@@ -20,6 +20,9 @@ interface Props {
  * whole target rather than only the few pixels under the pointer, and
  * `cursor-pointer` is not redundant: Tailwind v4's preflight leaves a button on
  * the browser's default arrow, so without it nothing here reads as clickable.
+ *
+ * No aria-label: the visible title, date and points are the button's name, so a
+ * screen reader hears them too. The hidden "View" keeps "View {title}" lookups.
  */
 function MovieButton({
   movie,
@@ -37,9 +40,9 @@ function MovieButton({
       type="button"
       onClick={() => onSelect(movie)}
       data-testid="overview-movie-button"
-      aria-label={`View ${movie.title}`}
       className={`group cursor-pointer text-left transition-[color,background-color,border-color,box-shadow] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold motion-reduce:transition-none ${className}`}
     >
+      <span className="sr-only">View </span>
       {children}
     </button>
   )
@@ -58,7 +61,7 @@ function Poster({
     <div className={`relative flex flex-none items-center justify-center overflow-hidden bg-elevated ${className}`}>
       <MoviePoster
         src={movie.poster_url}
-        alt={movie.title}
+        alt=""
         sizes={sizes}
         posterSize="w342"
         className="transition-transform duration-300 ease-out motion-safe:group-hover:scale-[1.06] motion-safe:group-focus-visible:scale-[1.06]"
@@ -123,11 +126,14 @@ function NextUpHero({
 }
 
 /** Shared with the league release board so the overview's sections match. */
-export function SectionHeader({ title, count }: { title: string; count: number }) {
+export function SectionHeader({ title, count, unit = 'movies' }: { title: string; count: number; unit?: string }) {
   return (
     <div className="flex items-baseline gap-2 px-4 pb-2">
       <h3 className="type-section text-foreground">{title}</h3>
-      <span className="type-meta type-numeric text-foreground-secondary">{count}</span>
+      <span className="type-meta type-numeric text-foreground-secondary">
+        {count}
+        <span className="sr-only"> {unit}</span>
+      </span>
     </div>
   )
 }
@@ -209,10 +215,20 @@ function ScoredList({
                   ? 'text-foreground-secondary'
                   : movie.fantasy_points >= 0
                     ? 'text-gold'
-                    : 'text-crimson'
+                    : 'text-crimson-text'
               }`}
             >
-              {formatFantasyPoints(movie.fantasy_points)}
+              {movie.fantasy_points == null ? (
+                <>
+                  <span aria-hidden="true">{formatFantasyPoints(null)}</span>
+                  <span className="sr-only">No points yet</span>
+                </>
+              ) : (
+                <>
+                  {formatFantasyPoints(movie.fantasy_points)}
+                  <span className="sr-only"> points</span>
+                </>
+              )}
             </div>
           </MovieButton>
         ))}

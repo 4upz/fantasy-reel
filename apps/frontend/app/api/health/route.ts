@@ -8,6 +8,23 @@ export const runtime = 'nodejs'
 
 type CheckResult = 'ok' | 'error'
 
+// The route is public, so a flood of hits must not become a flood of Supabase
+// calls. One probe answers every request for this long, per instance, and the
+// CDN may serve the same answer for that long too. A few seconds is still far
+// finer than any uptime monitor's interval.
+const CACHE_SECONDS = 10
+
+let cached: { result: Promise<CheckResult>; expiresAt: number } | null = null
+
+function cachedCheckSupabase(): Promise<CheckResult> {
+  const now = Date.now()
+  if (!cached || cached.expiresAt <= now) {
+    // Caching the promise, not the result, makes concurrent hits share one probe.
+    cached = { result: checkSupabase(), expiresAt: now + CACHE_SECONDS * 1000 }
+  }
+  return cached.result
+}
+
 async function checkSupabase(): Promise<CheckResult> {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -30,11 +47,14 @@ async function checkSupabase(): Promise<CheckResult> {
 }
 
 export async function GET(): Promise<Response> {
-  const supabase = await checkSupabase()
+  const supabase = await cachedCheckSupabase()
   const status: 'ok' | 'degraded' = supabase === 'ok' ? 'ok' : 'degraded'
 
   return Response.json(
     { status, checks: { supabase } },
-    { status: status === 'ok' ? 200 : 503 }
+    {
+      status: status === 'ok' ? 200 : 503,
+      headers: { 'Cache-Control': `public, s-maxage=${CACHE_SECONDS}` },
+    }
   )
 }

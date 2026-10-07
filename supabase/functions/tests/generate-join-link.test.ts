@@ -114,9 +114,15 @@ Deno.test({
     assertExists(data.join_url)
     assertEquals(data.league_id, testLeagueId)
 
-    // Verify join_code format (6 chars, uppercase alphanumeric excluding ambiguous)
-    assertEquals(data.join_code.length, 6)
-    assertEquals(/^[A-HJ-KM-NP-Z2-9]{6}$/.test(data.join_code), true)
+    // Verify join_code format (8 chars, uppercase alphanumeric excluding ambiguous)
+    assertEquals(data.join_code.length, 8)
+    assertEquals(/^[A-HJ-KM-NP-Z2-9]{8}$/.test(data.join_code), true)
+
+    // Owner-only: the owner reads it from league_join_links, and it is not on leagues
+    const { data: link } = await client.from('league_join_links').select('join_code').eq('league_id', testLeagueId).single()
+    assertEquals(link?.join_code, data.join_code)
+    const { data: league } = await client.from('leagues').select('join_code').eq('id', testLeagueId).single()
+    assertEquals(league?.join_code, null)
 
     // Verify join_url contains the code
     assertEquals(data.join_url.includes(data.join_code), true)
@@ -140,7 +146,7 @@ Deno.test({
     assertExists(data2.join_token)
 
     // Codes should be different (statistically almost certain)
-    // Note: There's a tiny chance they could be the same, but with 30^6 possibilities it's negligible
+    // Note: There's a tiny chance they could be the same, but with 31^8 possibilities it's negligible
     assertEquals(data1.join_code !== data2.join_code || data1.join_token !== data2.join_token, true)
   })
 

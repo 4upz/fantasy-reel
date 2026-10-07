@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createClient } from '@/utils/supabase/client'
 import LeagueManager from './LeagueManager'
 import PendingInvitations from './PendingInvitations'
@@ -18,6 +18,8 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
   const [loadError, setLoadError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   const [userId, setUserId] = useState<string | null>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const focusHeading = useCallback(() => headingRef.current?.focus(), [])
 
   const supabase = useMemo(() => createClient(), [])
 
@@ -86,7 +88,7 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
       {/* Hero Section */}
       <div className="mb-8 text-center lg:text-left">
-        <h1 className="type-page text-foreground">
+        <h1 ref={headingRef} tabIndex={-1} className="type-page text-foreground focus:outline-none">
           Your leagues
         </h1>
         <p className="text-foreground-secondary mt-2 max-w-xl lg:max-w-none">
@@ -97,7 +99,7 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
       {/* Pending Invitations Banner - Full width at top */}
       {pendingInvitations.length > 0 && (
         <div className="mb-6">
-          <PendingInvitations initialInvitations={pendingInvitations} />
+          <PendingInvitations initialInvitations={pendingInvitations} onAllHandled={focusHeading} />
         </div>
       )}
 
@@ -108,7 +110,17 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
           {loadError ? (
             <div className="alert alert-error" role="alert">
               <p>{loadError}</p>
-              <button type="button" className="btn btn-secondary mt-3" onClick={() => setRetry((value) => value + 1)}>Try again</button>
+              <button
+                type="button"
+                className="btn btn-secondary mt-3"
+                onClick={() => {
+                  // The alert and its button are replaced by the loading list.
+                  focusHeading()
+                  setRetry((value) => value + 1)
+                }}
+              >
+                Try again
+              </button>
             </div>
           ) : (
             <LeagueManager
