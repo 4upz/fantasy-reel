@@ -33,6 +33,21 @@ function LinkNotice(): React.ReactElement | null {
   return null
 }
 
+/** Where to land after signing in, e.g. back in Settings after "Sign in again". */
+function readNextPath(): string | null {
+  return new URLSearchParams(window.location.search).get('next')
+}
+
+function OAuthButtons(): React.ReactElement {
+  const next = useSearchParams().get('next') ?? undefined
+  return (
+    <>
+      <GoogleLoginButton redirectTo={next} />
+      <DiscordLoginButton redirectTo={next} />
+    </>
+  )
+}
+
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -51,6 +66,7 @@ export default function LoginPage() {
     const email = formData.get('email') as string
     setLastEmail(email)
     formData.set(CAPTCHA_FIELD, captcha.token ?? '')
+    formData.set('next', readNextPath() ?? '')
 
     try {
       const result = await login(formData)
@@ -183,8 +199,9 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-3">
-              <GoogleLoginButton />
-              <DiscordLoginButton />
+              <Suspense fallback={<><GoogleLoginButton /><DiscordLoginButton /></>}>
+                <OAuthButtons />
+              </Suspense>
               {/* Either button creates an account on first use. */}
               <LegalNotice action="continuing with Google or Discord" />
             </div>

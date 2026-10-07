@@ -873,6 +873,7 @@ function CounterTradeModal(counterProps: CounterTradeModalProps) {
               aria-describedby="counter-message-visibility"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              maxLength={1500}
               className="input mt-1 w-full h-20 resize-none"
               placeholder="Add a note to your counter-offer..."
             />
@@ -1402,6 +1403,7 @@ function VetoModal({ trade, onClose, onVeto }: VetoModalProps) {
               id="veto-reason"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
+              maxLength={1500}
               className="input mt-1 w-full h-24 resize-none"
               placeholder="Explain why you're vetoing this trade..."
             />

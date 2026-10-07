@@ -441,6 +441,7 @@ export default function ProposeTradeModal({
                   aria-describedby="trade-message-visibility"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
+                  maxLength={1500}
                   className="input mt-1 w-full h-20 resize-none"
                   placeholder="Add a note to your trade proposal..."
                 />
