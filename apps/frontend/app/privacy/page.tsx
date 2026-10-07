@@ -126,9 +126,17 @@ const SECTIONS: LegalSection[] = [
           league or disconnecting a provider does not delete your account or historical results.
         </p>
         <p>
-          You can request deletion at <SupportEmailLink />. Subject to applicable exceptions, we will delete or
-          anonymize your information. Limited records may remain where legally necessary, and backups may persist
-          until they expire. Copies held independently by other users or services are outside our control.
+          You can delete your account in Settings, or request deletion at <SupportEmailLink />. Deleting your
+          account removes your sign-in details, email address, profile name and photo, uploaded team photos,
+          wishlist, notifications, invitations sent to your email or sent by you, and our records of emails sent
+          to you. Leagues you run pass to another member, who is told, or are deleted if no other member can take
+          them over. You are removed from
+          leagues that have not drafted yet. In seasons that have started, your team stays, shown as &ldquo;Former
+          member&rdquo;: its name, roster, scores, trades, and trade messages remain part of that league&apos;s
+          history. A season still in progress no longer ranks your team; a finished season keeps its result. Your pending bids and trade offers are cancelled. An
+          account in a draft that is underway can be deleted once the draft ends. Limited records may remain where
+          legally necessary, and backups and service logs may persist until they expire. Copies held
+          independently by other users or services are outside our control.
         </p>
       </>
     ),
@@ -139,7 +147,7 @@ const SECTIONS: LegalSection[] = [
     content: (
       <>
         <p>
-          You can edit your profile and wishlist-sharing preferences in the app. Depending on your location, you
+          You can edit your profile and wishlist-sharing preferences, or delete your account, in the app. Depending on your location, you
           may have rights to access, correct, delete, or receive a portable copy of your information; restrict or
           object to processing; withdraw consent; appeal a refusal; or complain to a data protection authority.
         </p>
@@ -207,7 +215,7 @@ export default function PrivacyPage(): React.ReactElement {
   return (
     <LegalPage
       title="Privacy policy"
-      effectiveDate="2026-10-03"
+      effectiveDate="2026-10-04"
       intro={
         <>
           <p>
