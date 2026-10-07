@@ -62,10 +62,11 @@ and only 4 public pages had a skip link.
   - Create league ignored Escape, and neither returned focus.
   - The notifications menu had no expanded state and ignored Escape.
 - 23 of the 26 modals, sheets and drawers were hand-built `div` overlays.
-- 0 of 3 screen-reader flows passed:
+- 0 of 4 screen-reader flows passed:
   - live draft announcements;
   - a failed sign-in that is announced and keeps what was typed;
-  - a busy dialog that survives repeated Escape.
+  - a busy dialog that survives repeated Escape;
+  - Tab reaching the skip link first after signing in.
 
 **jsx-a11y strict lint:** 32 errors in 17 files (10 unassociated labels,
 9 handlers on non-interactive elements, 7 click-without-key handlers, autofocus,
@@ -98,7 +99,7 @@ patterns:
 | Routes with one `<main>` + skip link | 4 of 28 | **28 of 28** |
 | Dialogs and menus passing every keyboard check | 4 of 19 (12 failed, 3 unreachable) | **19 of 19** (focus in, Tab contained, Escape closes, focus returns) |
 | Modal dialogs on native `<dialog>` | 3 of 26 | **26 of 26** |
-| Screen-reader flow tests | 0 of 3 | **3 of 3** |
+| Screen-reader flow tests | 0 of 4 | **4 of 4** |
 | jsx-a11y strict lint errors | 32 in 17 files | **0** (now enforced by `next lint` / `next build`) |
 | Manual audit findings | 501 (22 blockers, 189 major, 290 minor) | All blockers and majors fixed; minors fixed except the few declined below |
 
@@ -119,6 +120,9 @@ How the blocker patterns were resolved:
   rosters and bid lists are real lists.
 - **Forms:** every control is labelled, errors are linked and announced once,
   and focus goes to the field or button the user acts on next.
+- **Navigation:** every page is titled for the route announcer. When a
+  navigation removes the focused element (signing in), `RouteFocusReset`
+  restarts Tab at the top so the skip link comes first.
 - **Keyboard alternatives:** draft order and bid priorities can be reordered
   with buttons or selects, and drag announcements name items and the cut line.
 - **Low vision:** dark-theme tokens reach 4.5:1 on every surface, inline links

@@ -10,6 +10,20 @@ import { test, expect, openDraft, startDraft, searchDraft, pickMovie } from '../
 const politeRegion = (page: Page) => page.locator('[data-live-announcer="polite"]')
 const assertiveRegion = (page: Page) => page.locator('[data-live-announcer="assertive"]')
 
+test.describe('Navigation', () => {
+  test('after signing in, the first Tab reaches the skip link', async ({ page, testUser }) => {
+    await page.goto('/login')
+    await page.getByTestId('email-input').fill(testUser.email)
+    await page.getByTestId('password-input').fill(testUser.password)
+    await page.getByTestId('login-button').click()
+    await page.waitForURL('/dashboard')
+    await expect(page).toHaveTitle('Dashboard | Fantasy Reel')
+    // The focused Sign in button is gone; Tab must restart from the top of the page.
+    await page.keyboard.press('Tab')
+    await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused()
+  })
+})
+
 test.describe('Modal dialogs', () => {
   test('a dialog stays open through repeated Escape while its request is in flight', async ({ authedPage: page }) => {
     await page.goto('/settings')
