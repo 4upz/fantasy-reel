@@ -26,6 +26,8 @@ interface MovieDetailBodyProps {
   collapsibleCast?: boolean
   /** Id for the title heading, so a hosting dialog can be labelled by it. */
   titleId?: string
+  /** League-only context below the headline facts, such as the projected score. */
+  insights?: React.ReactNode
 }
 
 /** "2 hours 15 minutes" -- the visible "2h 15m" is read letter by letter. */
@@ -53,6 +55,7 @@ export default function MovieDetailBody({
   actions,
   collapsibleCast = false,
   titleId,
+  insights,
 }: MovieDetailBodyProps) {
   const displayData = details || movie
   const releaseYear = getReleaseYear(displayData.release_date)
@@ -154,6 +157,8 @@ export default function MovieDetailBody({
             )}
           </div>
         </div>
+
+        {insights}
 
         {loading && (
           <div role="status" className="mt-8 flex items-center justify-center py-8">
