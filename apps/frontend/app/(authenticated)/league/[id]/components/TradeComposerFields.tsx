@@ -8,6 +8,8 @@ import { getReleaseYear } from '@/utils/date'
 import { formatCriticScore, isScoreLocked } from '@/utils/scoring'
 import type { TradeableMovie } from '@/types'
 import CounterpickMark from './CounterpickMark'
+import { useMovieProjectionsByMovieId } from '@/hooks/useMovieProjections'
+import { HoldingProjection } from '@/app/components/projections/ProjectionChip'
 
 /** Stable empty set so a list with no rejected rows doesn't allocate one per render. */
 const EMPTY_IDS: ReadonlySet<string> = new Set<string>()
@@ -48,6 +50,7 @@ export function TradeMovieChecklist({
   showScores = true,
 }: TradeMovieChecklistProps) {
   const baseId = useId()
+  const projections = useMovieProjectionsByMovieId(showScores ? movies.map((movie) => movie.movie_id) : [])
 
   if (movies.length === 0) return <>{emptyState}</>
 
@@ -62,6 +65,8 @@ export function TradeMovieChecklist({
         const isDisabled = isLocked && !isSelected
         const titleId = `${baseId}-${movie.source_id}-title`
         const detailsId = `${baseId}-${movie.source_id}-details`
+        const projectionId = `${baseId}-${movie.source_id}-projection`
+        const projection = showScores && movie.fantasy_points === null ? projections.get(movie.movie_id) : null
 
         return (
           <label
@@ -120,6 +125,17 @@ export function TradeMovieChecklist({
                   <span>Pending</span>
                 ))}
               </div>
+              {/* The row is the checkbox's label, so the chip only reads; it is
+                  part of the checkbox's description. */}
+              {projection && (
+                <HoldingProjection
+                  id={projectionId}
+                  projection={projection}
+                  counterpick={movie.source === 'counterpick'}
+                  interactive={false}
+                  className="mt-1"
+                />
+              )}
             </div>
             <span className="relative w-5 h-5 shrink-0">
               <input
@@ -127,7 +143,7 @@ export function TradeMovieChecklist({
                 checked={isSelected}
                 aria-disabled={isDisabled || undefined}
                 aria-labelledby={titleId}
-                aria-describedby={detailsId}
+                aria-describedby={projection ? `${detailsId} ${projectionId}` : detailsId}
                 onChange={() => {
                   if (!isDisabled) onToggle(movie.source_id)
                 }}

@@ -264,3 +264,105 @@ test.describe('Accessibility: league pages', () => {
     await auditDialog(page, testInfo, page.getByTestId(`cancel-bid-${league.bidTmdbId}`), 'cancel bid dialog')
   })
 })
+
+/**
+ * Projected scores (Beta) are off in E2E: `projections_display` is disabled and
+ * nothing has been computed. Mock `get-movie-projections` on so the chips, the
+ * projected standings and their dialogs are scanned like everything else.
+ */
+async function mockProjectionsOn(page: Page) {
+  await page.route('**/functions/v1/get-movie-projections**', async (route) => {
+    const body = route.request().postDataJSON() as { tmdb_ids?: number[] } | null
+    const ids = body?.tmdb_ids ?? []
+    const projections = Object.fromEntries(
+      ids.map((tmdbId, index) => {
+        // Alternate a confident fresh range with a wide, rotten-leaning guess,
+        // so both the range and the "Low confidence" readings are on screen.
+        const wide = index % 2 === 1
+        const projected = wide ? 52 : 74
+        return [
+          String(tmdbId),
+          {
+            tmdb_id: tmdbId,
+            projected_rt: projected,
+            range50: wide ? [38, 66] : [70, 78],
+            range80: wide ? [25, 78] : [62, 84],
+            low_confidence: wide,
+            insufficient_history: false,
+            p_rotten: wide ? 0.6 : 0.15,
+            p_fresh: wide ? 0.4 : 0.85,
+            p_90: wide ? 0.02 : 0.06,
+            expected_points: projected - 60,
+            baseline_rt: 61,
+            contributions: [
+              { factor: 'director', label: 'Director', delta_rt: wide ? -6 : 8 },
+              { factor: 'cast', label: 'Cast', delta_rt: wide ? -3 : 5 },
+            ],
+            coverage: 0.8,
+            partial: false,
+            includes_early_reviews: false,
+            early_rt: null,
+            computed_at: new Date().toISOString(),
+          },
+        ]
+      })
+    )
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ enabled: true, model_version: 1, projections }),
+    })
+  })
+}
+
+test.describe('Accessibility: projected scores (Beta)', () => {
+  test('roster, projected standings and their dialogs', async ({ authedPage: page, rosterLeague: league }, testInfo) => {
+    await mockProjectionsOn(page)
+    await page.setViewportSize({ width: 1280, height: 900 })
+    const base = `/league/${league.id}`
+
+    await page.goto(`${base}/roster`)
+    await settle(page)
+    await expect(page.getByTestId('projection-chip').first()).toBeVisible({ timeout: 20000 })
+    await expect(page.getByTestId('how-it-adds-up')).toBeVisible({ timeout: 20000 })
+    await scanBothThemes(page, testInfo, 'league/roster with projections')
+    await auditDialog(page, testInfo, page.getByTestId('how-it-adds-up'), 'roster team projection sheet')
+
+    await page.goto(`${base}/standings`)
+    await settle(page)
+    const projectedToggle = page.getByTestId('standings-view-projected')
+    await expect(projectedToggle).toBeVisible({ timeout: 20000 })
+    await expect(projectedToggle).toHaveAttribute('aria-pressed', 'false')
+    await projectedToggle.focus()
+    await page.keyboard.press('Enter')
+    await expect(projectedToggle).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('projected-standings')).toBeVisible()
+    await expect.soft(projectedToggle, 'the toggle keeps focus through the view swap').toBeFocused()
+    await scanBothThemes(page, testInfo, 'league/standings projected view')
+
+    // The team sheet, then the chip's breakdown popover inside it. Both are
+    // located by test id: the popover and the phone sheet are dialogs too, so
+    // `getByRole('dialog').last()` would re-resolve to them once they open.
+    const row = page.getByTestId(`projected-row-${league.testUserTeamId}`)
+    const sheet = page.getByTestId('team-projection-sheet')
+    const sheetChip = sheet.getByTestId('projection-chip').first()
+    await openDialogFromKeyboard(page, row, 'projected standings team sheet')
+    await expect(sheetChip).toBeVisible()
+    await scanBothThemes(page, testInfo, 'projected standings team sheet')
+    await auditDisclosure(page, testInfo, sheetChip, 'projection breakdown popover')
+    await expect.soft(sheet, 'Escape on the popover leaves the team sheet open').toBeVisible()
+    await closeDialogWithEscape(page, sheet, row, 'projected standings team sheet')
+
+    // On a phone the breakdown is a bottom sheet: a modal dialog of its own.
+    await page.setViewportSize({ width: 390, height: 844 })
+    await openDialogFromKeyboard(page, row, 'projected team sheet (mobile)')
+    await expect(sheetChip).toBeVisible()
+    await openDialogFromKeyboard(page, sheetChip, 'projection breakdown sheet (mobile)')
+    const phoneSheet = page.getByTestId('projection-sheet')
+    await expect(phoneSheet).toBeVisible()
+    await scanBothThemes(page, testInfo, 'projection breakdown sheet (mobile)')
+    await closeDialogWithEscape(page, phoneSheet, sheetChip, 'projection breakdown sheet (mobile)')
+    await expect.soft(sheet, 'Escape on the breakdown sheet leaves the team sheet open').toBeVisible()
+    await closeDialogWithEscape(page, sheet, row, 'projected team sheet (mobile)')
+  })
+})

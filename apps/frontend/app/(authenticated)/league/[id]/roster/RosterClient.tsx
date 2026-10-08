@@ -10,8 +10,11 @@ import { findDropBlocker, type DropBlocker } from './dropRules'
 import LeagueMovieModal from '../components/LeagueMovieModal'
 import { RosterHeader, RosterMovieCard, RosterPoster } from './RosterPresentation'
 import { holdingMovie } from '@/utils/holdings'
+import { useMovieProjections } from '@/hooks/useMovieProjections'
+import { HoldingProjection } from '@/app/components/projections/ProjectionChip'
+import RosterProjectionSummary from './RosterProjectionSummary'
 import type { Holding, RosterHolding } from './types'
-import type { League, Movie, TeamBudget, Counterpick } from '@/types'
+import type { League, Movie, MovieProjection, TeamBudget, Counterpick } from '@/types'
 
 interface RosterCounterpick extends Counterpick {
   movies: Movie
@@ -124,6 +127,12 @@ export default function RosterClient({
 
   const totalMovies = holdings.length
 
+  // Projected scores (Beta): an empty map, and so no chips, unless the league has them on.
+  const projections = useMovieProjections([
+    ...holdings.map((row) => row.tmdb_id),
+    ...counterpicks.map((cp) => cp.movies.tmdb_id),
+  ])
+
   return (
     <div className="space-y-6 animate-fade-in">
       <RosterHeader
@@ -135,6 +144,13 @@ export default function RosterClient({
         dropLimit={league.drop_limit}
       />
 
+      <RosterProjectionSummary
+        leagueId={league.id}
+        teamId={team.id}
+        doublePointsOver90={league.double_points_over_90}
+        active={league.status === 'active'}
+      />
+
       <RosterSection
         headingRef={(node) => { sectionHeadings.current.draft = node }}
         icon={<Trophy className="w-5 h-5 text-gold" aria-hidden="true" />}
@@ -142,6 +158,7 @@ export default function RosterClient({
         holdings={draftHoldings}
         emptyText="No draft picks yet."
         blockerFor={blockerFor}
+        projections={projections}
         onSelect={setSelected}
       />
 
@@ -152,6 +169,7 @@ export default function RosterClient({
         holdings={pickupHoldings}
         emptyText="No pickups yet. Win bids to add movies!"
         blockerFor={blockerFor}
+        projections={projections}
         onSelect={setSelected}
       />
 
@@ -189,6 +207,9 @@ export default function RosterClient({
                       {/* The inverted score waits on the release of the movie it targets. */}
                       <FantasyPoints points={cp.fantasy_points} releaseDate={cp.movies.release_date} />
                     </p>
+                  )}
+                  {cp.fantasy_points === null && projections.get(cp.movies.tmdb_id) && (
+                    <HoldingProjection projection={projections.get(cp.movies.tmdb_id)!} counterpick className="mt-1.5" />
                   )}
                 </div>
               </li>
@@ -230,6 +251,7 @@ function RosterSection({
   holdings,
   emptyText,
   blockerFor,
+  projections,
   onSelect,
 }: {
   /** Focus lands here after a drop removes a card from this section. */
@@ -239,6 +261,7 @@ function RosterSection({
   holdings: Holding[]
   emptyText: string
   blockerFor: (holding: Holding) => DropBlocker | null
+  projections: ReadonlyMap<number, MovieProjection | null>
   onSelect: (holding: Holding) => void
 }) {
   return (
@@ -262,6 +285,7 @@ function RosterSection({
                 movie={holding.movie}
                 label={holding.label}
                 isLocked={blockerFor(holding) !== null}
+                projection={<RosterCardProjection movie={holding.movie} projections={projections} />}
                 onSelect={() => onSelect(holding)}
               />
             </li>
@@ -270,4 +294,16 @@ function RosterSection({
       )}
     </div>
   )
+}
+
+/** The card is itself the button that opens the movie, so its chip only reads; the dialog has the breakdown. */
+function RosterCardProjection({
+  movie,
+  projections,
+}: {
+  movie: Holding['movie']
+  projections: ReadonlyMap<number, MovieProjection | null>
+}) {
+  const projection = movie.fantasy_points === null ? projections.get(movie.tmdb_id) : null
+  return projection ? <HoldingProjection projection={projection} interactive={false} className="mt-1.5" /> : null
 }

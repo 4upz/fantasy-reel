@@ -8,6 +8,8 @@ import type { TeamBudget, CounterpickBid, CounterpickOption } from '@/types'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { formatReleaseDateFull } from './utils'
 import CounterpickPicker from './CounterpickPicker'
+import { useMovieProjectionsByMovieId } from '@/hooks/useMovieProjections'
+import { CounterpickProjection } from '@/app/components/projections/ProjectionChip'
 
 interface PlaceCounterpickBidModalProps {
   isOpen: boolean
@@ -105,6 +107,8 @@ export default function PlaceCounterpickBidModal({
   const submitErrorId = useId()
   const titleRef = useRef<HTMLHeadingElement>(null)
   const amountInputRef = useRef<HTMLInputElement>(null)
+  const selectedProjections = useMovieProjectionsByMovieId(selectedMovie ? [selectedMovie.movieId] : [])
+  const selectedProjection = selectedMovie ? selectedProjections.get(selectedMovie.movieId) ?? null : null
 
   // Find highest active bid for the selected movie
   const highestBid = useMemo(() => {
@@ -308,6 +312,7 @@ export default function PlaceCounterpickBidModal({
                         {formatReleaseDateFull(selectedMovie.releaseDate)}
                       </p>
                     )}
+                    {selectedProjection && <CounterpickProjection projection={selectedProjection} className="mt-2" />}
                     {highestBid !== null && (
                       <div className="mt-3 px-3 py-1.5 bg-warning-bg/30 border border-warning/20 rounded-lg inline-flex items-center gap-1.5">
                         <DollarSign className="w-4 h-4 text-warning" aria-hidden="true" />

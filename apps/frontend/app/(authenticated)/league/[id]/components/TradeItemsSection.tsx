@@ -1,7 +1,11 @@
+'use client'
+
 import MoviePoster from '@/app/components/MoviePoster'
 import { getReleaseYear } from '@/utils/date'
 import type { TradeItems, TradeMovieItem } from '@/types'
 import CounterpickMark from './CounterpickMark'
+import { useMovieProjectionsByMovieId } from '@/hooks/useMovieProjections'
+import { HoldingProjection } from '@/app/components/projections/ProjectionChip'
 
 /** Stable empty set for callers with no competing offers to flag. */
 const NO_CONTESTED: ReadonlySet<string> = new Set<string>()
@@ -22,6 +26,7 @@ export function TradeItemsList({
   contestedSourceIds?: ReadonlySet<string>
 }) {
   const hasItems = items.movies.length > 0 || items.faab > 0
+  const projections = useMovieProjectionsByMovieId(items.movies.map((movie) => movie.movie_id))
 
   if (!hasItems) {
     return <p className="type-body-sm text-foreground-secondary italic">Nothing</p>
@@ -60,6 +65,13 @@ export function TradeItemsList({
                 movie, which is the part that matters on a multi-movie offer. */}
             {contestedSourceIds.has(movie.source_id) && (
               <p className="type-meta text-warning">Also in another trade</p>
+            )}
+            {projections.get(movie.movie_id) && (
+              <HoldingProjection
+                projection={projections.get(movie.movie_id)!}
+                counterpick={movie.source === 'counterpick'}
+                className="mt-1"
+              />
             )}
           </div>
         </li>

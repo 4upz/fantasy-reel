@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { AlertTriangle, ArrowLeft, Film, Lock, Megaphone, TrendingDown, X } from 'lucide-react'
 import Modal from '@/app/components/Modal'
 import MovieDetailBody from '@/app/components/MovieDetailBody'
+import { MovieProjectionPanel } from '@/app/components/projections/ProjectionBreakdown'
 import { useMovieDetails } from '@/hooks/useMovieDetails'
 import FantasyPoints from '@/app/components/FantasyPoints'
 import { formatPointsText, isPreReleaseScore } from '@/utils/scoring'
@@ -138,6 +139,7 @@ export default function LeagueMovieModal({
                 loading={loading}
                 collapsibleCast
                 titleId={titleId}
+                insights={<MovieProjectionPanel tmdbId={movie.tmdb_id} className="mt-8 animate-fade-in motion-reduce:animate-none" />}
                 actions={
                   hasContext ? (
                     <LeagueActionPanel
