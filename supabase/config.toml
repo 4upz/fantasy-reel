@@ -505,6 +505,9 @@ verify_jwt = false
 [functions.complete-seasons]
 verify_jwt = false
 
+[functions.ingest-film-corpus]
+verify_jwt = false
+
 [functions.purge-expired-data]
 verify_jwt = false
 

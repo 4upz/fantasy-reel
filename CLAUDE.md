@@ -191,6 +191,17 @@ npm run build
 - When deploying Edge Functions, verify: function is deployed, config.toml has the entry, and all migrations are applied.
 - Environment variables: use NEXT_PUBLIC_SITE_URL for client-side, SITE_URL for server-side. Clarify with user before introducing new env vars like APP_URL.
 
+## Feature Flags
+
+Operator switches live in the `feature_flags` table (`key`, `enabled`, `config` JSONB, `description`). **Edit them in Supabase Studio → Table Editor → `feature_flags`** — toggle `enabled`, edit `config` inline. No deploy; Edge Functions memoize reads for 60 s (`getFlag` in `_shared/feature-flags.ts`). The table is **service-role only**: the frontend never reads flags, so anything user-visible must be gated inside an Edge Function. Pass a real `SupabaseClient` through `asFlagClient(client)` (same module) — it exists to sidestep a TS2589 error and is the only sanctioned cast. A missing row or read error is `disabled`. Series-scoped flags use `flagAllowsSeries(flag, seriesId)`: on only when `enabled` and `config.series_ids` is absent or lists the league's `leagues.series_id` (series, not league, so the gate survives season rollover; a malformed list fails closed). Current flags:
+
+| Key | Gates | Config |
+|---|---|---|
+| `projections_ingestion` | `ingest-film-corpus` spending MDBList quota (the `mdblist:projections` budget slice) — **off by default; enable in Studio after the first supervised run**, the cron is a no-op while off | `mdblist_daily_budget` (500), `per_run_cap` (300) |
+| `projections_display` | Projected scores (Beta), served only through `get-movie-projections` — off until the backtest ship gate passes | `series_ids` (allowlisted series; League of Culture at launch) |
+
+Every new flag gets a `description` row that tells the operator what turning it off does.
+
 ---
 
 ## Observability Conventions
@@ -212,6 +223,7 @@ Tier 1 of `docs/OBSERVABILITY-AUDIT.md` is implemented. Use these primitives —
 - **Data retention:** `purge_expired_data()` (service-role SQL, run daily by the `purge-expired-data` cron) is the one place retention windows live; `job_runs` and the TMDb cache keep their own purges in `sync-release-dates`. A new table holding personal data or growing without bound gets a window there, plus a matching sentence in the privacy policy. Never purge rows something still reads: open invitations, undelivered outbox rows, or Discord dedupe rows of a season that can still post.
 - **Optional email:** a non-essential email (today only the season recap) must go only to users `seasonRecapTokens()` (`_shared/email-preferences.ts`) returns, carry `listUnsubscribeHeaders()` and a footer unsubscribe link. Transactional emails (invites, bids, trades) don't.
 - **Health:** `/api/health` probes Supabase reachability (200/503) for external uptime monitors — keep it dependency-light and unauthenticated.
+- **MDBList budget:** any call to `api.mdblist.com` outside `update-scores` must first reserve through `reserve_external_api_calls` under a per-feature key of `external_api_budgets` — `reserveApiCalls(client, MDBLIST_PROJECTIONS_KEY, n, limit)` (`_shared/mdblist-budget.ts`) for projections; franchise history uses `mdblist:franchise-history`. User traffic must never spend projections quota. The free plan is 1,000/day: scoring (unreserved, first in line), 300 franchise history, the projections slice, and a reserve ingestion never touches.
 
 ---
 
@@ -808,6 +820,14 @@ Below 50, the slope halves every 10 points, so penalties approach an asymptote a
 - Discord score posts need a `SCORE_CHANGE_THRESHOLD` move. A movie is measured from its last *posted* score (`movies.announced_*`), never the previous run; see "Change threshold" in `supabase/SCORING.md`
 - See `supabase/SCORING.md` for full architecture details
 
+### Movie Projections (Beta) — plumbing
+
+A projected Tomatometer for unreleased movies, learned from the track record of the people, franchise and label behind each film. Nothing is user-visible yet: `projections_display` is off and every projections table is service-role only (see [Feature Flags](#feature-flags)). Historical design: `docs/superpowers/specs/2026-08-26-movie-projections-design.md`; the code and this section win where they differ.
+
+- **Corpus:** `film_corpus` / `film_people` / `film_credits` / `film_collections`, kept apart from `movies` because most rows are never in a league. Filled by `ingest-film-corpus` (Vercel Cron → `/api/cron/ingest-film-corpus`) in three stages per run: seed (TMDb discover + league movies) → TMDb metadata and predecessor expansion → MDBList ratings. Each stage has its own wall-clock slice (`IngestConfig.stageBudgetMs`) inside the cron proxy's 55 s abort; the ratings stage runs last and is the only one that spends quota. Progress is in `job_runs.metadata` (`remaining_metadata`, `remaining_ratings`, `mdblist_used_today`, `deadlines`).
+- **Quota:** ingestion reserves through `reserveApiCalls` under `mdblist:projections` before every MDBList call (see the MDBList budget convention above).
+- **Projections:** `projection_models` and `movie_projections` are created empty for the model to fill. `update-scores` calls `freezeProjection` (`_shared/projection-freeze.ts`) after each successful score so projected-vs-actual is never rewritten; a movie with no projection row is a no-op.
+
 ---
 
 ## 6. Draft System
@@ -1099,10 +1119,8 @@ Edge Functions use **Deno's native testing framework**. Tests are located alongs
 ```
 supabase/functions/
 ├── deno.json                    # Test config with imports
-├── _test_utils/
-│   ├── mocks.ts                 # Mock Supabase client & utilities
-│   └── fixtures.ts              # Test data fixtures (valid UUIDs!)
 ├── _shared/
+│   ├── _mock-client.ts          # createMockDbClient (in-memory client: filters, upsert, neq, not-is-null, deferred update().eq().in().is()), stubFetch
 │   ├── utils.ts
 │   ├── utils.test.ts            # Shared utility tests
 │   └── email.test.ts            # Email module tests
@@ -1132,23 +1150,12 @@ npm run test:functions:watch
 
 **1. Use the mock utilities:**
 ```typescript
-import { createMockSupabaseClient, createMockAuthRequest, mockEnvVars } from '../_test_utils/mocks.ts'
-import { mockUser, mockLeague } from '../_test_utils/fixtures.ts'
+import { createMockDbClient, stubFetch, type MockDb } from '../_shared/_mock-client.ts'
 
-// Configure mock responses
-const mockConfig = {
-  user: mockUser,
-  tables: {
-    leagues: {
-      select: { data: mockLeague, error: null },
-      insert: { data: mockLeague, error: null },
-    },
-  },
-  rpc: {
-    get_next_draft_pick: { data: [mockNextPickInfo], error: null },
-  },
-}
-const mockClient = createMockSupabaseClient(mockConfig)
+const db: MockDb = { movies: [{ id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', tmdb_id: 1, title: 'X' }] }
+const client = createMockDbClient(db, { unique: { movies: ['tmdb_id'] }, rpc: { calculate_movie_score: 12 } })
+const { calls, restore } = stubFetch((url) => url.includes('api.mdblist.com') ? new Response('{}', { status: 200 }) : undefined)
+try { /* call the handler with `client` */ } finally { restore() }
 ```
 
 **2. Test categories to cover:**

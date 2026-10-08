@@ -50,6 +50,10 @@
       "schedule": "0 9 * * *"
     },
     {
+      "path": "/api/cron/ingest-film-corpus",
+      "schedule": "0 10 * * *"
+    },
+    {
       "path": "/api/cron/purge-expired-data",
       "schedule": "30 4 * * *"
     }

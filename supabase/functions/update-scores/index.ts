@@ -6,6 +6,7 @@ import { captureScoreContext, sendScoreNotifications } from '../_shared/score-no
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { startJobRun, type JobRun, type JobRunsClient } from '../_shared/job-runs.ts'
 import { alertOps } from '../_shared/ops-alerts.ts'
+import { freezeProjection } from '../_shared/projection-freeze.ts'
 
 const log = createLogger('update-scores')
 
@@ -521,6 +522,10 @@ Deno.serve(async (req) => {
           } else {
             log.info('Calculated score', { movie_title: movie.title, fantasy_points: fantasyPts })
             results.scores_updated++
+
+            // Freeze the projection (if any) at the first real Tomatometer so
+            // projected-vs-actual is never rewritten. No row is fine.
+            await freezeProjection(serviceClient, movie.tmdb_id, ratings)
           }
         }
 
