@@ -163,6 +163,30 @@ test.describe('Shareable Join Links', () => {
     })
   })
 
+  test.describe('Join from the dashboard', () => {
+    test('user can join league by entering the code on the dashboard @critical', async ({
+      authenticatedPage: page,
+      testLeague,
+    }) => {
+      const { joinCode } = await generateJoinLink(testLeague.id)
+
+      await page.goto('/dashboard')
+      const joinCard = page.getByRole('group', { name: 'Join a league' })
+      await joinCard.getByRole('textbox').fill(joinCode)
+      await joinCard.getByRole('button', { name: 'Join', exact: true }).click()
+
+      // The join-code flow, not the email-invitation flow (?token=), which rejects codes
+      await page.waitForURL((url) => url.pathname === '/join')
+      expect(Object.fromEntries(new URL(page.url()).searchParams)).toEqual({ code: joinCode })
+
+      await page.getByTestId('team-name-input').fill('Dashboard Code Team')
+      await page.getByTestId('join-league-button').click()
+
+      await page.waitForURL(`/league/${testLeague.id}**`, { timeout: 15000 })
+      await expect(page.getByText('Dashboard Code Team')).toBeVisible()
+    })
+  })
+
   // Skip: Join link management UI (generate-join-link-button, join-code-display, etc.)
   // is not implemented on the settings page. The JoinLinkCard component exists but
   // renders on the league dashboard, not the settings page.
