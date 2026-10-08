@@ -19,7 +19,8 @@
  * `update(...)` accumulates filters and reports the affected rows through
  * `.select()`, so a compare-and-swap can be tested end to end -- including the
  * losing side, which sees no row back. `upsert(...)` merges on `onConflict`
- * (or `options.unique`) columns and honours `ignoreDuplicates`. `options.users` backs
+ * (or `options.unique`) columns and honours `ignoreDuplicates`; `delete()`
+ * takes `eq`/`in` filters. `options.users` backs
  * `auth.admin.getUserById` for the email lookups that cannot go through
  * PostgREST.
  */
@@ -72,6 +73,7 @@ function chain(rows: Row[]) {
     },
     order: () => chain(rows),
     limit: (n: number) => chain(rows.slice(0, n)),
+    range: (from: number, to: number) => chain(rows.slice(from, to + 1)),
     single: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
     maybeSingle: () => Promise.resolve({ data: rows[0] ?? null, error: null }),
   }
@@ -236,12 +238,34 @@ export function createMockDbClient(db: MockDb, options: MockClientOptions = {}) 
           const arr = Array.isArray(rowsToUpsert) ? rowsToUpsert : [rowsToUpsert]
           const keyCols = opts.onConflict?.split(',').map((c) => c.trim()) ?? options.unique?.[table]
           if (!keyCols) throw new Error(`mock upsert on ${table} needs onConflict or options.unique`)
+          // Like PostgREST, `.select()` returns only the rows the statement
+          // wrote: with ignoreDuplicates, an existing row is not one of them.
+          const written: Row[] = []
           for (const candidate of arr) {
             const existing = db[table].find((row) => keyCols.every((col) => row[col] === candidate[col]))
-            if (!existing) db[table].push({ ...candidate })
-            else if (!opts.ignoreDuplicates) Object.assign(existing, candidate)
+            if (!existing) {
+              const row = { ...candidate }
+              db[table].push(row)
+              written.push(row)
+            } else if (!opts.ignoreDuplicates) {
+              written.push(Object.assign(existing, candidate))
+            }
           }
-          return Promise.resolve({ data: arr, error: null })
+          const result = Promise.resolve({ data: written, error: null })
+          return Object.assign(result, { select: (_cols?: string) => result })
+        },
+        delete: () => {
+          const filters: UpdateFilter[] = []
+          const builder = {
+            eq: (col: string, val: unknown) => (filters.push(['eq', col, val]), builder),
+            in: (col: string, vals: unknown[]) => (filters.push(['in', col, vals]), builder),
+            then: (resolve: (value: { data: null; error: null }) => unknown, reject?: (reason: unknown) => unknown) => {
+              const doomed = new Set(filters.reduce(applyUpdateFilter, db[table]))
+              db[table] = db[table].filter((row) => !doomed.has(row))
+              return Promise.resolve({ data: null, error: null }).then(resolve, reject)
+            },
+          }
+          return builder
         },
         update: (patch: Row) => updateChain(db[table], patch, []),
       }

@@ -34,6 +34,8 @@ Deno.test('projections tables are service-role only', async (t) => {
       'film_people',
       'film_credits',
       'film_collections',
+      'film_corpus_seed_progress',
+      'film_feature_snapshots',
       'projection_models',
       'movie_projections',
     ]) {

@@ -1,9 +1,9 @@
 /**
  * Ingest Film Corpus Edge Function -- entrypoint.
  *
- * Daily cron (Vercel Cron -> /api/cron/ingest-film-corpus, 10:00 UTC, after
- * the 06:00 score sync and 08:00 release-date sync so scoring has first
- * claim on the day's MDBList quota). Handles CORS, cron auth, the
+ * Vercel Cron -> /api/cron/ingest-film-corpus three times a day (07:00,
+ * 12:00, 19:00 UTC), each after a score sync so scoring has first claim on
+ * MDBList quota; ingestion always leaves a 150-call safety reserve. Handles CORS, cron auth, the
  * projections_ingestion feature flag, and env wiring; business logic lives
  * in handler.ts (unit tests in ../_shared/ingest-film-corpus.test.ts).
  *
@@ -57,28 +57,24 @@ Deno.serve(async (req) => {
       return jsonResponse({ skipped: 'flag_disabled', job_status })
     }
 
-    const perRunCap = flagNumber(flag, 'per_run_cap', DEFAULT_INGEST_CONFIG.perRunCap)
     const result = await runIngestFilmCorpus(
       serviceClient,
       { tmdbToken, mdblistApiKey },
       {
         ...DEFAULT_INGEST_CONFIG,
-        perRunCap,
-        // TMDb is free but not instant, and the whole run shares one 55s cron
-        // window: the metadata stage is capped at the ratings cap, and its own
-        // wall-clock slice (config.stageBudgetMs.metadata) stops it there.
-        metadataPerRun: perRunCap,
+        perRunCap: flagNumber(flag, 'per_run_cap', DEFAULT_INGEST_CONFIG.perRunCap),
         dailyBudget: flagNumber(flag, 'mdblist_daily_budget', DEFAULT_INGEST_CONFIG.dailyBudget),
         today: utcDay(),
       }
     )
 
     const { errors, failed, ...metadata } = result
+    // A 429 or a rejected key is a degraded run even when nothing else
+    // failed: surface either in the ops channel.
+    const refused = result.mdblist_stopped === 'rate_limited' || result.mdblist_stopped === 'auth_failed'
     const job_status = await run.finish(serviceClient, {
-      processed: result.metadata_fetched + result.ratings_fetched + result.ratings_absent + failed,
-      // A 429 or a rejected key is a degraded run even when nothing else
-      // failed: surface either in the ops channel.
-      failed: failed + (result.mdblist_429 ? 1 : 0) + (result.mdblist_auth_failed ? 1 : 0),
+      processed: result.metadata_fetched + result.metadata_refreshed + result.mdblist_spent,
+      failed: failed + (refused ? 1 : 0),
       errors,
       metadata,
     })
