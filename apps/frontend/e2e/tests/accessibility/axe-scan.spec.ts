@@ -340,17 +340,29 @@ test.describe('Accessibility: projected scores (Beta)', () => {
     await expect.soft(projectedToggle, 'the toggle keeps focus through the view swap').toBeFocused()
     await scanBothThemes(page, testInfo, 'league/standings projected view')
 
-    // The team sheet, then the chip's breakdown popover inside it.
+    // The team sheet, then the chip's breakdown popover inside it. Both are
+    // located by test id: the popover and the phone sheet are dialogs too, so
+    // `getByRole('dialog').last()` would re-resolve to them once they open.
     const row = page.getByTestId(`projected-row-${league.testUserTeamId}`)
-    const sheet = await openDialogFromKeyboard(page, row, 'projected standings team sheet')
+    const sheet = page.getByTestId('team-projection-sheet')
+    const sheetChip = sheet.getByTestId('projection-chip').first()
+    await openDialogFromKeyboard(page, row, 'projected standings team sheet')
+    await expect(sheetChip).toBeVisible()
     await scanBothThemes(page, testInfo, 'projected standings team sheet')
-    await auditDisclosure(page, testInfo, sheet.getByTestId('projection-chip').first(), 'projection breakdown popover')
+    await auditDisclosure(page, testInfo, sheetChip, 'projection breakdown popover')
+    await expect.soft(sheet, 'Escape on the popover leaves the team sheet open').toBeVisible()
     await closeDialogWithEscape(page, sheet, row, 'projected standings team sheet')
 
     // On a phone the breakdown is a bottom sheet: a modal dialog of its own.
     await page.setViewportSize({ width: 390, height: 844 })
-    const phoneSheet = await openDialogFromKeyboard(page, row, 'projected team sheet (mobile)')
-    await auditDialog(page, testInfo, phoneSheet.getByTestId('projection-chip').first(), 'projection breakdown sheet (mobile)')
-    await closeDialogWithEscape(page, phoneSheet, row, 'projected team sheet (mobile)')
+    await openDialogFromKeyboard(page, row, 'projected team sheet (mobile)')
+    await expect(sheetChip).toBeVisible()
+    await openDialogFromKeyboard(page, sheetChip, 'projection breakdown sheet (mobile)')
+    const phoneSheet = page.getByTestId('projection-sheet')
+    await expect(phoneSheet).toBeVisible()
+    await scanBothThemes(page, testInfo, 'projection breakdown sheet (mobile)')
+    await closeDialogWithEscape(page, phoneSheet, sheetChip, 'projection breakdown sheet (mobile)')
+    await expect.soft(sheet, 'Escape on the breakdown sheet leaves the team sheet open').toBeVisible()
+    await closeDialogWithEscape(page, sheet, row, 'projected team sheet (mobile)')
   })
 })

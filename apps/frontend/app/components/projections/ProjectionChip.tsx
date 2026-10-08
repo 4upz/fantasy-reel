@@ -233,9 +233,12 @@ function ProjectionPopover({
     }
   }, [popoverOpen, close])
 
+  // Focus waits for the first placement: until then the popover is
+  // visibility:hidden, and a hidden element cannot take focus.
+  const placed = position !== null
   useEffect(() => {
-    if (mode === 'pinned') popoverRef.current?.focus({ preventScroll: true })
-  }, [mode])
+    if (mode === 'pinned' && placed) popoverRef.current?.focus({ preventScroll: true })
+  }, [mode, placed])
 
   useEffect(() => () => clearTimeout(timerRef.current), [])
 
