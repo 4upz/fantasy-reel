@@ -3,6 +3,7 @@
 import { useId, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { joinPathFromInput } from '@/utils/joinCode'
 import TrophyCase, { type Title } from './TrophyCase'
 
 interface Props {
@@ -16,17 +17,17 @@ export default function DashboardSidebar({
   titles = [],
 }: Props): React.ReactElement {
   const router = useRouter()
-  const [inviteCode, setInviteCode] = useState('')
+  const [joinCode, setJoinCode] = useState('')
   const [isJoining, setIsJoining] = useState(false)
-  const inviteCodeId = useId()
+  const joinCodeId = useId()
   const joinHeadingId = useId()
 
   function handleJoinSubmit(e: React.FormEvent): void {
     e.preventDefault()
-    if (!inviteCode.trim()) return
+    if (!joinCode.trim()) return
 
     setIsJoining(true)
-    router.push(`/join?token=${inviteCode.trim()}`)
+    router.push(joinPathFromInput(joinCode))
   }
 
   return (
@@ -84,22 +85,24 @@ export default function DashboardSidebar({
           </div>
           <div className="flex-1 min-w-0">
             <h2 id={joinHeadingId} className="type-control text-foreground">Join a league</h2>
-            <p className="type-body-sm text-foreground-secondary truncate">Enter invite code</p>
+            <p className="type-body-sm text-foreground-secondary truncate">Enter a join code</p>
           </div>
         </div>
         <form onSubmit={handleJoinSubmit} className="flex gap-2">
-          <label htmlFor={inviteCodeId} className="sr-only">Invite code</label>
+          <label htmlFor={joinCodeId} className="sr-only">Join code or link</label>
           <input
-            id={inviteCodeId}
+            id={joinCodeId}
             type="text"
-            value={inviteCode}
-            onChange={(e) => setInviteCode(e.target.value)}
-            placeholder="Paste invite code"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            placeholder="Code or link"
+            autoComplete="off"
+            spellCheck={false}
             className="input flex-1"
           />
           <button
             type="submit"
-            disabled={!inviteCode.trim() || isJoining}
+            disabled={!joinCode.trim() || isJoining}
             className="type-control btn btn-primary px-3"
           >
             {isJoining ? 'Joining…' : 'Join'}

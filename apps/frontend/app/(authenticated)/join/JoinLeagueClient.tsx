@@ -7,6 +7,7 @@ import { Clapperboard, Link2 } from 'lucide-react'
 import { callEdgeFunction } from '@/utils/supabase/functions'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { trackEvent } from '@/utils/analytics'
+import { normalizeJoinCode } from '@/utils/joinCode'
 
 interface Props {
   token?: string
@@ -39,7 +40,7 @@ const INVALID_CODE_MESSAGE =
 export default function JoinLeagueClient({ token, code, userDisplayName }: Props) {
   const router = useRouter()
   const [teamName, setTeamName] = useState('')
-  const [manualCode, setManualCode] = useState(code?.toUpperCase() || '')
+  const [manualCode, setManualCode] = useState(normalizeJoinCode(code ?? ''))
   const [joinError, setJoinError] = useState<string | null>(null)
   const codeInputRef = useRef<HTMLInputElement>(null)
 
@@ -57,7 +58,7 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
       if (hasToken) {
         body.invitation_token = token
       } else if (manualCode) {
-        body.join_code = manualCode.toUpperCase()
+        body.join_code = manualCode
       }
 
       const { data, error } = await callEdgeFunction<JoinResponse>('join-league', {
@@ -100,11 +101,8 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
     handleJoin()
   }
 
-  // Format the code input. Only separators are dropped: silently discarding a
-  // mistyped character (O for 0, say) would leave a screen-reader user with a
-  // code that doesn't match what they typed, so validation reports it instead.
   const handleCodeChange = (value: string) => {
-    setManualCode(value.toUpperCase().replace(/[\s-]/g, ''))
+    setManualCode(normalizeJoinCode(value))
     setJoinError(null)
   }
 
@@ -227,9 +225,9 @@ export default function JoinLeagueClient({ token, code, userDisplayName }: Props
             <p className="type-meta text-foreground-secondary mb-1">Joining with code</p>
             {/* Spelled out for screen readers, which read "ABC123" as a word and a number */}
             <div aria-hidden="true" className="font-mono text-xl font-bold tracking-[0.3em] text-gold">
-              {code?.toUpperCase()}
+              {manualCode}
             </div>
-            <span className="sr-only">{code?.toUpperCase().split('').join(' ')}</span>
+            <span className="sr-only">{manualCode.split('').join(' ')}</span>
           </div>
         )}
 
