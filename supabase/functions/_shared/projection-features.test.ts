@@ -54,11 +54,18 @@ const director = (tmdbId: number, person: number): CorpusCredit => ({ tmdb_id: t
 const cast = (tmdbId: number, person: number, billing: number): CorpusCredit => ({ tmdb_id: tmdbId, tmdb_person_id: person, role: 'cast', billing })
 const valueOf = (vector: number[], key: string) => vector[FEATURE_KEYS.indexOf(key)]
 
-Deno.test('effectiveUsDate - prefers the US wide date, then limited, then TMDb primary', () => {
+Deno.test('effectiveUsDate - prefers the US wide date, then limited, then digital, then TMDb primary', () => {
   assertEquals(effectiveUsDate(film(1, '2020-01-01', { us_wide_date: '2020-03-01', us_limited_date: '2020-02-01' })), '2020-03-01')
-  assertEquals(effectiveUsDate(film(1, '2020-01-01', { us_limited_date: '2020-02-01' })), '2020-02-01')
+  assertEquals(effectiveUsDate(film(1, '2020-01-01', { us_limited_date: '2020-02-01', us_digital_date: '2020-04-01' })), '2020-02-01')
+  assertEquals(effectiveUsDate(film(1, '2020-01-01', { us_digital_date: '2020-04-01' })), '2020-04-01')
   assertEquals(effectiveUsDate(film(1, '2020-01-01')), '2020-01-01')
   assertEquals(effectiveUsDate(film(1, null)), null)
+})
+
+Deno.test('effectiveUsDate - the stored effective_release_date wins when the row carries it', () => {
+  const stored = film(1, '2020-01-01', { us_wide_date: '2020-03-01', effective_release_date: '2020-05-01' })
+  assertEquals(effectiveUsDate(stored), '2020-05-01')
+  assertEquals(effectiveUsDate(film(1, '2020-01-01', { us_wide_date: '2020-03-01', effective_release_date: null })), '2020-03-01')
 })
 
 Deno.test('dayNumber - counts UTC days and ignores a time of day', () => {

@@ -54,6 +54,10 @@
       "schedule": "0 7,12,19 * * *"
     },
     {
+      "path": "/api/cron/fit-projection-model",
+      "schedule": "0 10 1 * *"
+    },
+    {
       "path": "/api/cron/purge-expired-data",
       "schedule": "30 4 * * *"
     }

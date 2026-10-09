@@ -16,6 +16,14 @@ export interface CorpusFilm {
   release_date: string | null
   us_wide_date: string | null
   us_limited_date: string | null
+  /** Earliest US digital (type 4) date: a streaming premiere's release date. */
+  us_digital_date?: string | null
+  /**
+   * film_corpus's generated column (wide, else limited, else digital, else
+   * `release_date`). Authoritative when present; rows built without it (old
+   * exports, fixtures) fall back to the same computation in `effectiveUsDate`.
+   */
+  effective_release_date?: string | null
   /** 2 limited, 3 wide, 4 digital. */
   us_release_type: number | null
   collection_id: number | null

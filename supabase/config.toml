@@ -508,6 +508,12 @@ verify_jwt = false
 [functions.ingest-film-corpus]
 verify_jwt = false
 
+[functions.fit-projection-model]
+verify_jwt = false
+
+[functions.get-movie-projections]
+verify_jwt = false
+
 [functions.purge-expired-data]
 verify_jwt = false
 
