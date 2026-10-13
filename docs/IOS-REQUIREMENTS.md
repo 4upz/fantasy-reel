@@ -2,7 +2,7 @@
 
 **Purpose:** implementation handoff for the product owner and an engineering agent building a native app with complete web feature parity.
 
-**Audit baseline:** October 4, 2026; repository `main` at `b576a5a` (the first draft cited `4d13657`, which is not on the remote; a completeness review re-checked the web app at `b576a5a` and added §14–§15). The product name in the repository is **Fantasy Reel**. This document describes source code and checked-in migrations, not a verified production deployment. No live database, provider configuration, or running UI was audited. Older plans and comments are supporting context; current executable code takes precedence when describing existing behavior. Conflicts are recorded in §10 rather than silently resolved.
+**Audit baseline:** October 4, 2026; repository `main` at `b576a5a` (the first draft cited `4d13657`, which is not on the remote; a completeness review re-checked the web app at `b576a5a` and added §14–§15). **Refreshed October 13, 2026 against `main` at `d264c7a`**; §16 lists what changed and which requirements it touched. The product name in the repository is **Fantasy Reel**. This document describes source code and checked-in migrations, not a verified production deployment. No live database, provider configuration, or running UI was audited. Older plans and comments are supporting context; current executable code takes precedence when describing existing behavior. Conflicts are recorded in §10 rather than silently resolved.
 
 **Deliverable scope:** requirements only. No iOS project, backend changes, or changes to the published legal pages are included in this document.
 
@@ -52,6 +52,7 @@ Start with an iPhone-first application. Minimum iOS version, iPad support, bundl
 | League owner / commissioner | Participant capabilities plus owner tools: invitations, configuration, draft order/start, counterpick-round control, removal before drafting, setup-season deletion, trade approval/veto, announcements, completion, and rollover. |
 | Application administrator | Restricted growth statistics through `admin_growth_stats()`, authorized by `app_admins`. This is separate from league ownership. |
 | Left/kicked participant or unrelated user | Access is determined by backend policies and endpoint checks. Never infer access from a cached league card or a guessed ID. Clear inaccessible data after refresh. |
+| Former member (deleted account) | After self-service deletion (L-02), the profile stays as an anonymous "Former member" and the participant becomes `status = 'left'` in active/completed seasons. `profiles.user_id` and `league_participants.user_id` may point at an auth user that no longer exists. Render the name as given; never assume a profile has a live account. |
 
 The participant type contains `owner`, `admin`, and `member`, but current commissioner endpoints generally check `leagues.owner_id`, not merely `role = admin`. Do not invent a co-commissioner permission model or role-management UI.
 
@@ -105,27 +106,28 @@ Each subsection identifies the supported behavior, its native translation, and a
 
 ### F-02 · Authentication and recovery — P + N
 
-- Email/password registration collects display name, email, password, and confirmation. Preserve password matching and the current six-character minimum, while honoring any stronger server policy. Show the email-confirmation state and resend action.
+- Email/password registration collects display name, email, password, and confirmation. Preserve password matching and the **8-character minimum** (server-enforced; older shorter passwords still sign in). Map Auth errors like the web (`utils/password.ts`): `weak_password` → "Password must be at least 8 characters", `weak_password` with reason `pwned` → breached-password message, `reauthentication_needed` → sign out and back in. Show the email-confirmation state and resend action.
+- Email links (signup confirmation, recovery) use PKCE and are bound to the client that requested them. Native flows must hold the code verifier in the app. A link opened on another device still confirms the email but does not sign in; show the web's two login notices ("Your email is confirmed. Sign in to continue." and the opened-elsewhere explanation) rather than an error. Reset links only work where they were requested.
 - Email/password sign-in, Google sign-in, Discord sign-in, sign-out, persistent sessions, expired-session recovery, and provider cancellation/errors are required.
 - Forgot-password requests, email links, reset-password entry, confirmation, and authenticated password change must work. Password change currently reauthenticates with the old password; OAuth-only users are directed through password recovery to establish one.
 - Preserve non-enumerating responses for reset/resend, rate-limit feedback, and CAPTCHA failure/retry. Do not report a security-check failure as “email sent.”
 - Google and Discord account linking/unlinking must preserve the same Supabase user and their league history. Do not allow disconnecting the only usable sign-in method.
-- Duplicate-account recovery currently offers password verification to link a new OAuth duplicate to the existing email account, or keeping the accounts separate. This is a restricted recovery flow, not general merging of two established accounts.
-- Existing merge protections include proof of both authenticated sessions, matching email, supported provider, a duplicate less than one hour old, and no league ownership or membership on the duplicate. The web's 10-minute HTTP-only linking cookie is orchestration that iOS cannot reuse directly.
+- **Duplicate-account recovery is no longer reached from sign-in** (changed after the first audit). Supabase now auto-links an OAuth identity with a verified matching email to the existing user, and a unique email index blocks duplicates. `/auth/link-account` and `merge-accounts` still exist but nothing routes to them, so iOS does not need the duplicate-recovery screen for parity. Apple's private relay email will not auto-link (L-01).
 
-**Native:** Keychain-backed session persistence; authentication through the system authentication session; secure callback processing; password AutoFill/content types; explicit loading/disabled states. Retain pending invitation/deep-link intent through login, signup, provider round-trips, and cold launches. Never put access tokens, passwords, or duplicate-session proof into navigation URLs or logs. Native callback, CAPTCHA, and duplicate-recovery gaps are N-02/N-03 and §10.
+**Native:** Keychain-backed session persistence; authentication through the system authentication session; secure callback processing; password AutoFill/content types; explicit loading/disabled states. Retain pending invitation/deep-link intent through login, signup, provider round-trips, and cold launches. Never put access tokens, passwords, or duplicate-session proof into navigation URLs or logs. Native callback and CAPTCHA gaps are N-02/N-03 and §10.
 
-**Accept:** the same existing account and league IDs appear on web and iOS after each supported sign-in method. Recovery works after the app is terminated, an expired callback is recoverable, a cancelled provider login leaves the prior session intact, and a duplicate-recovery attempt cannot claim another user's account. Sources: [authentication actions](<../apps/frontend/app/(public)>), [callback](../apps/frontend/app/auth/callback/route.ts), [linking](../apps/frontend/app/auth/link-account/actions.ts), [merge endpoint](../supabase/functions/merge-accounts/index.ts).
+**Accept:** the same existing account and league IDs appear on web and iOS after each supported sign-in method. Recovery works after the app is terminated, an expired callback is recoverable, a cancelled provider login leaves the prior session intact, a Google/Discord sign-in with an existing verified email lands in that account, and a confirmation link opened on another device confirms without signing that device in. Sources: [authentication actions](<../apps/frontend/app/(public)>), [callback](../apps/frontend/app/auth/callback/route.ts), [linking](../apps/frontend/app/auth/link-account/actions.ts), [merge endpoint](../supabase/functions/merge-accounts/index.ts).
 
 ### F-03 · Account profile and appearance — P
 
 - View account email; edit display name (trimmed, 1–100 characters); upload, replace, and remove a profile image. Email editing is currently support-assisted, not self-service.
 - Preserve initials/fallback avatars and provider-derived initial profile information.
-- Profile storage: public `avatars` bucket, path under the authenticated user ID, unique image filename, PNG/JPEG/WebP/GIF, maximum 2 MiB. URLs are publicly accessible; do not describe them as private uploads.
+- Profile storage: public `avatars` bucket, one fixed object per owner at `<userId>/avatar` (storage policies reject any other name), uploaded with upsert. Input is PNG/JPEG/WebP/GIF up to 10 MB; the client center-crops to a square of at most 512 px and re-encodes to WebP (JPEG fallback on `#1c1c1c`), which applies orientation, strips EXIF/GPS metadata, and keeps only a GIF's first frame. The bucket still caps stored files at 2 MiB. The saved URL is the public URL plus `?v=<timestamp>` to bust caches. URLs are publicly accessible; do not describe them as private uploads.
 - Appearance has **System**, **Light**, and **Dark**, defaults to System, and is saved on the device. Include both existing brand palettes; “Cinematic Dark” does not mean dark-only.
-- Include connected-account and password controls from F-02. Account deletion is additional launch work, L-02.
+- Include connected-account and password controls from F-02, and self-service account deletion (L-02).
+- **Email preferences:** an "Email" section with a "Season recaps" switch, read from and upserted to the user's own `email_preferences` row (`season_recap_emails`, a missing row means on). Description copy: "Final standings when a season you played in ends. Emails about your invitations, bids and trades always arrive." Transactional emails have no switch. The `/unsubscribe` page and `email-unsubscribe` function are web-only token flows.
 
-**Native:** grouped settings, PhotosPicker and a file-import option where needed to preserve accepted formats. Convert an unsupported HEIC selection to a supported upload format and verify final size; report upload failure without losing the prior image. Do not require broad photo-library access just to choose one image. Store theme preference locally, separately from secure credentials.
+**Native:** grouped settings, PhotosPicker and a file-import option where needed to preserve accepted formats. Re-encode every selection (including HEIC) the same way as the web, square ≤512 px WebP/JPEG with metadata stripped, rather than uploading originals; verify final size; report upload failure without losing the prior image. Do not require broad photo-library access just to choose one image. Store theme preference locally, separately from secure credentials.
 
 **Accept:** profile and image changes appear on the web after refresh; replacing/removing an image has a recoverable failure state; system theme changes update the app while open; long display names remain readable. Source: [account settings](<../apps/frontend/app/(authenticated)/settings>).
 
@@ -143,14 +145,17 @@ Each subsection identifies the supported behavior, its native translation, and a
 ### F-05 · Create, join, and invite — P
 
 - Create a league and the owner's participant/team, including league name, optional team name, invite-only choice, participant limit, and the roster/counterpick options exposed by the current creation form. Subsequent configuration uses F-15.
-- Join through an email invitation token or a six-character share code; allow optional team name. Direct `league_id` join is an API capability for open leagues, not evidence of an existing public matchmaking directory.
-- Six-character codes exclude ambiguous characters and are case-insensitive. Normalize input like the web. A shared code can admit someone to an invite-only league; it is different from an email-bound invitation.
+- Join through an email invitation token or a share code; allow optional team name. Direct `league_id` join is an API capability for open leagues, not evidence of an existing public matchmaking directory.
+- New codes are **8 characters** from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`; older 6-character codes still work. Normalize like `utils/joinCode.ts`: uppercase and strip spaces and dashes only, and reject anything else with "Invalid code format. Codes are 6 or 8 characters, letters and numbers, without I, L, O, 0 or 1." The join field also accepts a pasted join link (`?code=`) or invitation link (`?token=`). Prompt copy: "Enter the code shared by your league commissioner". A shared code can admit someone to an invite-only league; it is different from an email-bound invitation.
+- Codes live in the owner-only `league_join_links` table; `leagues.join_code`/`join_token` are always null now. The owner reads the current code from that table and generates or regenerates through `generate-join-link`. If the read fails, show an error; never regenerate automatically, which would kill a code already shared. Regenerate carries the hint "Regenerating replaces the link and code. The old ones stop working."
+- `join-league` by code answers an unknown code and a league past setup with the same 404 "Invalid or expired join code" (no separate draft-started message for codes), and allows 10 code attempts per user per hour, counted on every attempt (429, see N-04).
 - Owner: search existing users by display name, invite a selected user or email address, list invitation state, resend eligible invitations, cancel, generate/regenerate a share link, copy/share code and link. Existing-user search must not expose the person's full email through a username invitation.
-- Recipient: see pending invitations, join/accept, or decline. Show invalid, expired, cancelled, declined, wrong-account/email, full-league, already-member, and draft-started outcomes.
+- Recipient: see pending invitations, join/accept, or decline. Show invalid, expired, cancelled, declined, wrong-account/email, full-league, already-member, draft-started (invitations), and too-many-attempts (codes) outcomes.
+- Server limits to mirror in forms: league name ≤255 and team name ≤100 characters; at most 200 unfinished leagues per owner; at most 100 pending invitations per league. `create-league` is the only way to create a league (direct inserts are revoked).
 - Joining, inviting, and link generation are restricted to setup. Resending rotates the invitation token and expiry. Regenerating a code invalidates the old one. Membership is rechecked on the backend if draft start races a join.
 - Creation/join can return success with a `warning` when participant/team setup is incomplete. Re-read state and expose a recovery path; never blindly create a second league to retry a partial success.
 
-- `send-invite` and `resend-invitation` are rate-limited per owner (`consumeInvitationEmailAllowance`); a throttled request returns a rate-limit response. Show it as "try again later", not as a failed invitation or a generic error.
+- `send-invite` and `resend-invitation` are rate-limited (50 emails per owner per day, 3 per recipient per league per day). A throttled request returns a rate-limit response; show it as "try again later" (N-04), not as a failed invitation or a generic error.
 
 **Native:** ShareLink/system share sheet, paste-friendly code entry, confirmation identifying the signed-in account, and native invite forms. No Contacts permission is needed for manual email/name entry.
 
@@ -166,6 +171,8 @@ Each subsection identifies the supported behavior, its native translation, and a
 - Franchise research includes collection name, installment position, prior-film RT history, average and latest RT context, and a points projection based on series average and the league's scoring rule. Prior history is capped to the most recent eight earlier released films; standalone/first entries can have no history. Mark projections as hypothetical, never actual points.
 - Preserve wishlist actions from movie research and league previews. There is no implemented trailer player or streaming/watch-provider booking flow to port.
 - Discovery preserves upstream page identity even if eligibility filtering empties a page. `has_more`/pagination, not the number of visible cards, determines whether more results are available. Upstream total matches are not an eligible-movie count. Do not restore removed TMDb star/vote/minimum-rating controls as fantasy scoring.
+- Movie lookups are throttled per user (`search-movies`, `browse-movies`, `get-movie-details` 300 per 5 minutes each; `get-franchise-history` 120). A 429 is a "slow down" state (N-04), not an empty result.
+- In a league context, movie research also shows projected scores (Beta) where the server enables them (F-19). Never in the global Movies tab.
 
 **Native:** system search field, filter sheet, lazy poster grid/list, and a pushed detail screen or deliberate detail sheet. Cache/downsample posters; provide missing-image placeholders. Render franchise charts with an equivalent accessible text/list representation.
 
@@ -177,6 +184,7 @@ Each subsection identifies the supported behavior, its native translation, and a
 - Add/remove movies, display poster/title/date added, sort by date added or title, and retain wishlist state across research surfaces.
 - Optional league context labels a movie Available, Yours, or held by another team. Use all active `team_holdings`, including pickups, not draft picks alone.
 - Sharing is off by default. `profiles.wishlist_public = true` means visible to **active members of shared leagues**, not public on the internet. Allow selecting a league mate's shared wishlist, showing movie counts and overlaps with your own.
+- A wishlist holds at most 500 movies ("Your wishlist is full (500 movies). Remove some to add more."); titles ≤500 characters; `poster_url` must be a TMDb image URL or bare path. Write the TMDb path, not a re-hosted URL.
 - Keep optimistic heart feedback reversible on failure and suppress duplicate toggles while saving. Do not expose private results from prior users or prior sharing settings through disk caches.
 
 **Accept:** a private wishlist is unreadable by another league member; enabling sharing makes it visible only under the shared-league policy; switching leagues updates ownership badges; a failed remove restores the item. Sources: [wishlist provider](../apps/frontend/hooks/useWishlist.tsx), [wishlist screen](<../apps/frontend/app/(authenticated)/wishlist/WishlistClient.tsx>), [sharing policy](../supabase/migrations/20260217_fix_wishlist_participant_status.sql).
@@ -209,7 +217,7 @@ Each subsection identifies the supported behavior, its native translation, and a
 
 - Show selected league/season and phase, own team name/image, rank, counted points, available Fantasy Budget where applicable, own movie timeline, and league-wide upcoming releases with the holding team/player.
 - Preserve state-specific guidance: setup/draft entry, carried-over season welcome, completed-season champion banner, and links into roster, standings, and appropriate actions.
-- Edit own team name (trimmed, 1–100 characters), upload/replace/remove its avatar. `team-avatars` is a public bucket under the team ID, with the same 2 MiB/file-type constraints as profile images.
+- Edit own team name (trimmed, 1–100 characters), upload/replace/remove its avatar. `team-avatars` is a public bucket with one fixed object at `<teamId>/avatar`, processed exactly like profile images (F-03).
 - Reflect both drafted movies and auction pickups in the overview; do not omit pickups from release timelines or ownership displays.
 - Other overview states to carry over: a "Welcome to {league}" waiting card while setup is still in progress, a banner when league-mates have shared wishlists (links to the shared-wishlist view), and the "Around the league" upcoming-release board. The new-season welcome card is dismissed per league and remembered on the device.
 - Tapping a movie in the overview opens league movie detail, which also offers Drop with a confirmation that states drops remaining (F-11).
@@ -222,6 +230,7 @@ Each subsection identifies the supported behavior, its native translation, and a
 - Read active movie holdings from the flat `team_holdings` view. Use `holding_id` plus `source` to select the correct drop/trade asset; a TMDb ID or movie ID is not a holding ID.
 - Drops are active-season actions, require ownership and remaining drop allowance, and show explicit confirmation and the affected movie. Dropped rows leave active rosters but remain in history/base tables. Drops do not refund acquisition spending.
 - Explain blocked drops inline: inactive/completed season, release-date restriction, applicable awarded/pending counterpick restriction, or exhausted allowance. Do not let a disabled icon be the only explanation.
+- Where projections are enabled (F-19), unscored roster rows carry a projection chip and the roster shows a "Projected finish" card that opens a "How it adds up" sheet. The real rank always comes from real points.
 - Existing counterpicks survive a permitted drop and continue scoring; do not delete them along with the holding. The exact release-day and configurable counterpick behavior has documentation conflicts recorded in D-01/D-02.
 
 **Accept:** dropping a drafted movie and dropping a pickup both free pooled capacity, increment the drop count once, disappear from all active roster views, and retain the expected counterpick history. A rejected drop leaves the roster intact. Sources: [roster](<../apps/frontend/app/(authenticated)/league/[id]/roster/RosterClient.tsx>), [drop explanations](<../apps/frontend/app/(authenticated)/league/[id]/roster/dropRules.ts>), [drop endpoint](../supabase/functions/drop-movie/index.ts), [holdings types](../apps/frontend/utils/holdings.ts).
@@ -245,6 +254,8 @@ Each subsection identifies the supported behavior, its native translation, and a
 - The conditional-drop choice defaults to "Nothing — keep my whole roster" and lists droppable holdings.
 - **Fit forecast:** the bid sheet and the priority list show which bids would fit if they all won, using a "Roster runs out" cut line and marking whether each bid uses an open slot or its conditional drop (`bidFitForecast.ts` `forecastBidFits`, including remaining drop allowance and target eligibility). This is client-side logic that iOS must port to Swift. Keep it checked against the resolver with the same fixtures as `scripts/tests/bid-fit-forecast.test.cjs`, and label it a forecast; the server result is authoritative.
 
+- `place-bid` and `place-counterpick-bid` are throttled at 60 per user per hour each (429, N-04). Where projections are enabled (F-19), the bid sheet's search and selection show projection chips, and counterpick candidates show "≈ +N pts for you".
+
 **Native:** bid sheets with integer entry/steppers, prominent budget and timing, confirmation of any conditional drop, and accessible reorder controls. Preserve current in-league visibility; comments calling bids “blind/sealed” do not match all web/API behavior (D-03).
 
 **Accept:** run the same mixed pickup/counterpick contest with web and iOS bidders; exactly the same winners, spend, remaining slots, and loss reasons appear. Test cutoff boundaries, an extended contest, zero bids, over-capacity priorities, a reused drop target, and a scored movie. Sources: [bidding hook](<../apps/frontend/app/(authenticated)/league/[id]/hooks/useBidding.ts>), [bid window](../supabase/functions/_shared/bid-window.ts), [resolver](../supabase/functions/_shared/bid-resolution.ts), [place pickup](../supabase/functions/place-bid/index.ts), [place counterpick](../supabase/functions/place-counterpick-bid/index.ts), [history](<../apps/frontend/app/(authenticated)/league/[id]/hooks/useBidHistory.ts>).
@@ -263,6 +274,7 @@ Each subsection identifies the supported behavior, its native translation, and a
 - A team must not end a trade owning a movie and its counterpick. Judge this after both sides move: a movie/counterpick swap can be valid. Counterpick phase capacity and pooled movie roster capacity are separate constraints.
 - Display server validation messages and mark rows named in `invalid_source_ids`; preserve the draft composer for repair. Completed/rejected/cancelled/vetoed/expired states and expiry reasons must be understandable.
 
+- **Trade offers, assets and messages are visible to every league member by design.** The composer and counter message fields carry "Everyone in the league can see this message." Messages, response messages and veto reasons are at most 1500 characters. A team may have at most 25 open offers it proposed ("Your team already has 25 open trade offers. Cancel some before proposing more."). `propose-trade` and `counter-trade` are throttled at 30 per user per hour each (429, N-04). Where projections are enabled (F-19), composer and offer items show projection chips.
 - The offer-expiry picker offers no expiry, a fixed time (preset or custom), or "until a movie's release"; the review-confirmation step for acceptance lists exactly what each side gives and receives.
 
 **Native:** a full-screen or large-sheet composer with sequential team/asset selection and an unambiguous “You give / You receive” review. Avoid nested web-style modal stacks. Preserve unsent changes across child selectors and confirm discarding edits.
@@ -279,6 +291,7 @@ Each subsection identifies the supported behavior, its native translation, and a
 - Preserve server precision for calculations/comparisons and current display rounding. Do not sum rounded card values or use rounded points to decide ties. Swift negative-half rounding needs explicit parity tests against JavaScript display helpers.
 - Completed-season ranking and winners come from `final_standings` and `winner_team_ids`; fall back to the live standings RPC only for older records without a snapshot. Historical results retain removed participants and owner names. Live movie metadata can evolve; do not recalculate a historical champion locally.
 
+- Where projections are enabled (F-19), standings add a Current / Projected toggle. Projected is a separate view and never changes real ranks.
 - The standings screen also shows a summary strip (Movies, Scored, Pending), a champion banner on completed seasons, and a crown on last season's champions. Selecting a team opens its detail with every movie, which opens league movie detail.
 
 **Native:** readable ranked rows leading to team detail; an iPad detail column if supported. VoiceOver should read rank, tie, points, budget, and pending/pre-release state without relying on color. Sources: [standings](<../apps/frontend/app/(authenticated)/league/[id]/standings>), [score display/helpers](../apps/frontend/utils/scoring.ts), [season results](../apps/frontend/utils/seasons.ts), [scoring architecture](../supabase/SCORING.md).
@@ -306,6 +319,7 @@ Provide every existing settings section, its current value, validation, save pro
 | Season | Year is this or next UTC year, setup-only. Changing year alone resets end to December 31. End is a valid date today or later and must not precede an existing trade deadline; editable until completion. |
 | Joining | Generate/regenerate code and link during setup; show locked state afterward. |
 | Discord announcement | Owner enters 1–1500 characters and posts to linked channels; show actual channel-count/no-linked-channel result. |
+| Discord bot | Read-only guide (`DiscordBotGuide.tsx`): "Add to Discord" opens the bot's OAuth install URL built from the public Discord client ID (hidden when unset; add it to the app's public configuration), three setup steps (add the bot, needing Manage Server; connect Discord in Account; run `/set-league` with the league link, which has a copy button, then `/configure`) and sample commands from `utils/discordBot.ts`. The same guide appears in How to Play (`#discord`). |
 | Finish/delete | End an active season through F-16; delete only a setup season with explicit confirmation. These are separate operations. |
 
 Confirmation strength must match the web: deleting a setup season requires typing the league name, ending a season requires typing the season year, and removing a participant has its own confirmation. The Scoring section explains the double-points rule with a worked example, including the inverted counterpick result; keep that explanation.
@@ -331,10 +345,11 @@ The current schema includes `faab_budget` and defaults budgets to 100, but the c
 
 - Provide the existing notification inbox semantics: latest notifications, unread count, mark one read on opening, mark all loaded unread notifications read, title/body/time, and relevant destination. Current web fetches the latest 50 and does not implement a live subscription in `useNotifications`; do not claim an unlimited/realtime inbox already exists.
 - The web bell shows an unread badge capped at "9+" and refetches when opened.
-- Handle current event types: outbid, bid won/lost, newly available pickup, trade proposed/countered/accepted/rejected/cancelled/completed/vetoed, season completed/started. Decode future types without crashing and fall back to the league or inbox.
+- Handle current event types: outbid, bid won/lost, newly available pickup, trade proposed/countered/accepted/rejected/cancelled/completed/vetoed, season completed/started, and `league_ownership_transferred` ("You now run {league}", crown icon, routes to that league's settings; sent when an owner deletes their account).
+- Notifications are purged 90 days after being read, or 180 days if never read. Old links in the inbox can disappear; clients may update only `read_at`. Decode future types without crashing and fall back to the league or inbox.
 - Use notification payload IDs to route to a native bid, roster, trade, or season destination where available. Preserve compatibility with legacy `/league/{id}?tab=bidding` URLs. A notification can point at an asset or permission that has since changed.
 - Native mutations must continue triggering existing server email and Discord behavior. Delivery failure after a successful game mutation must not make the client resubmit that mutation.
-- Preserve commissioner announcements (F-15). Discord channel linking, notification toggles, and bot-administration roles are currently managed through Discord commands, not a web settings editor. Provide clear help/open-Discord access rather than pretending those are existing mobile REST endpoints.
+- Preserve commissioner announcements (F-15). Discord channel linking, notification toggles, and bot-administration roles are currently managed through Discord commands, not a web settings editor. Show the Discord bot guide (F-15) rather than pretending those are existing mobile REST endpoints.
 - Ecosystem capabilities to preserve: `/league`, `/league-options`, `/standings`, `/roster`, `/my-team`, `/movie`, `/top-available`, `/upcoming`, `/current-bids`, `/bid-results`, `/set-league`, `/remove-league`, `/configure`, `/set-bid-alert-role`, `/set-bot-admin-role`. These remain in the Discord bot; iOS parity does not require reimplementing its command dispatcher.
 - Server announcements include draft progress, bids/results/cutoff, trade activity/expiry reminders, scoring, release-day/weekly releases, season final results and rollover, according to configured channels and preferences. Do not promise every event goes to every channel.
 
@@ -350,11 +365,26 @@ The current schema includes `faab_budget` and defaults budgets to 100, but the c
 
 **Accept:** a permitted admin sees matching values and timestamps; an ordinary user cannot retrieve them. Sources: [admin route and UI](<../apps/frontend/app/(authenticated)/admin>), [authorized RPC](../supabase/migrations/20261004120000_admin_growth_stats.sql).
 
+### F-19 · Projected scores (Beta) — P, server-gated
+
+Added to the web on October 8–9, 2026. A projected Tomatometer for unreleased movies, learned from the track record of the genre, filmmakers, cast and franchise. It is **off for everyone today**: the server's `projections_display` flag is off until a backtest gate passes, and then on only for allowlisted series (League of Culture at launch). iOS needs the same surfaces so it is ready when the flag turns on, and must show nothing while it is off.
+
+- **Contract:** `get-movie-projections` with `POST { league_id, tmdb_ids }` (1–100 positive TMDb IDs; active members only, otherwise 403). It answers `{ enabled: false }` or `{ enabled: true, model_version, projections: { "<tmdb_id>": MovieProjection | null } }`. `MovieProjection` carries `projected_rt`, `range50`, `range80`, `low_confidence`, `insufficient_history`, `p_rotten`, `p_fresh`, `p_90`, `expected_points` (already under the league's double-points rule; a counterpick scores its negation), `baseline_rt`, `contributions` (`factor`, `label`, `delta_rt`), `coverage`, `partial`, `includes_early_reviews`, `early_rt`, `computed_at` (`types/index.ts`). Released-and-scored movies return null. No rate limit; batch IDs per screen.
+- **Gating is server-only.** Render nothing when `enabled` is false, an entry is null, or the request fails. Never cache "enabled" beyond the response or decide it on the client. Hidden for completed seasons and in the global Movies tab, which has no league.
+- **Chip** (`utils/projections.ts`, port exactly): early reviews win ("Early RT 88% (24 reviews)"); then "Not enough history yet" with no number; then a range "Proj. 68–79%" from rounded `range50`; or the point estimate "Proj. 74%" when the range is wider than 10 points, rounds to one value, or `low_confidence`. Tone: gold at 60 or above, crimson below, neutral for "not enough history" or a low-confidence point. Every surface carries a "Beta" badge. Spoken labels spell out the reading ("Projected 68 to 79%").
+- **Breakdown** (`components/projections/ProjectionBreakdown.tsx`): a bar from the genre baseline with a break-even marker at 60; up to 5 named factor contributions with the rest folded into "Other factors"; stats for the 80% range, chance rotten, chance of 90%+ (formatted "<1%"/">99%" at the ends) and expected points, or "As a counterpick" negated; partial and early-review notes; and the fixed disclaimer "Projections are a Beta estimate from genre, filmmakers, cast and franchise history. They never count toward your total." It sits beside franchise history in league movie detail and quick preview.
+- **Where chips appear:** draft picker cards and quick preview, place-bid search and selection, counterpick picker and bid ("≈ +N pts for you"), trade composer and offer items, roster rows.
+- **Roster:** a "Projected finish" card (projected rank such as "T-2nd", ≈ points, how many movies are still to count; the real rank uses real points only) opening a "How it adds up" sheet (`TeamProjectionSheet.tsx`).
+- **Standings:** a Current / Projected toggle (`standings/ProjectedStandingsTable.tsx`) with Proj. rank, Team, Proj. pts, Now, Left, ▲/▼ rank moves and a "Toss-up" tag. Port `utils/projectedStandings.ts` to Swift: competition ranks, and a toss-up when a neighbour is within 0.5σ, with σ derived from the 80% ranges. It is a view only and never feeds real standings or ties.
+- This is separate from F-06's franchise-history "points projection", which remains.
+
+**Accept:** with the flag off, no projection UI or empty space appears anywhere; with it on for one series, only that series' active seasons show chips, panels and the projected standings; null entries and request failures render as no projection; chip text, tone and projected ranks match the web for the same fixtures. Sources: [chip logic](../apps/frontend/utils/projections.ts), [projected standings](../apps/frontend/utils/projectedStandings.ts), [breakdown](../apps/frontend/app/components/projections/ProjectionBreakdown.tsx), [endpoint](../supabase/functions/get-movie-projections/index.ts).
+
 ## 4. Native client foundation
 
 ### N-01 · Application structure and configuration
 
-Recommended module boundaries: app/session and routing; shared design components; typed API/repositories; and feature areas matching F-01–F-18. Keep game calculations and eligibility adapters testable outside views. Start in a separate native directory such as `apps/ios/`; this is a proposed location, not an existing project.
+Recommended module boundaries: app/session and routing; shared design components; typed API/repositories; and feature areas matching F-01–F-19. Keep game calculations and eligibility adapters testable outside views. Start in a separate native directory such as `apps/ios/`; this is a proposed location, not an existing project.
 
 - Use separate development, staging/TestFlight, and production configurations. Bundle only the intended public Supabase URL/key and public configuration. Never ship the service-role key, movie-provider keys, cron secret, email credentials, or Discord webhook URLs.
 - Reuse the same Auth user IDs, season IDs, API contracts, and database. A second iOS-only database would break parity.
@@ -367,9 +397,9 @@ Use the official SDK's supported native OAuth flow with a system authentication 
 
 Define one typed router for cold/warm launches, pending unauthenticated destinations, notifications, and shared links. Support invitation code/token links, league/season destinations, settings, movies, wishlist, and help; recognize the existing notification query-tab format. Validate host, path, IDs, and redirect destinations; authorize the destination again after login. An expired invite, deleted season, or revoked membership needs a recoverable screen.
 
-Prefer Universal Links for shareable HTTPS links, with the site's `apple-app-site-association` file, associated-domain entitlement, and correct app/team identity. Plan web fallback and distinguish authentication callback routes from ordinary app navigation. Existing Next callback/confirm routes are web implementations, not native callbacks. Test real email-provider links on a physical device, including link-wrapping behavior. [Apple associated domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains).
+Prefer Universal Links for shareable HTTPS links, with the site's `apple-app-site-association` file, associated-domain entitlement, and correct app/team identity. Plan web fallback and distinguish authentication callback routes from ordinary app navigation. Exclude web-only token pages such as `/unsubscribe` from Universal Links. Existing Next callback/confirm routes are web implementations, not native callbacks. Test real email-provider links on a physical device, including link-wrapping behavior. [Apple associated domains](https://developer.apple.com/documentation/xcode/supporting-associated-domains).
 
-Reproduce profile initialization and duplicate-account recovery without depending on the web's linking cookie. Keep the original and new duplicate-session proofs separately and only as long as needed. Reuse `merge-accounts` with its server restrictions; do not weaken proof checks or silently merge by matching an email string. On sign-out/account switch, unsubscribe, cancel outstanding work, clear account-scoped caches and pending sensitive forms, and reset navigation.
+Reproduce profile initialization natively. Use PKCE for email confirmation and recovery so links bind to the app that requested them (F-02). Duplicate-account recovery is no longer part of sign-in (F-02); do not build it or silently merge by matching an email string. On sign-out/account switch, unsubscribe, cancel outstanding work, clear account-scoped caches and pending sensitive forms, and reset navigation.
 
 ### N-03 · CAPTCHA and authentication error handling
 
@@ -380,6 +410,8 @@ Cloudflare documents a WebView approach for mobile apps. Implement a small first
 ### N-04 · API transport, errors, and mutations
 
 Create the Swift equivalent of `callEdgeFunction`: attach the current session and a correlation `x-request-id`; bound token acquisition, network work, and decoding; parse non-2xx JSON; retain response `X-Request-Id`; and expose a useful error plus a support reference for unexpected failures. Preserve endpoint `warning`, conflict metadata, and `invalid_source_ids`, rather than flattening every result to success/failure.
+
+Handle throttling in one place. A limited Edge Function returns 429 `{ error, retry_after_seconds }` with a `Retry-After` header (`_shared/rate-limit.ts`), e.g. "You're doing that too often. Please try again in 12 minutes." Show the server's message, disable the action until the retry time where useful, and never auto-retry a mutation. Current per-user limits: movie search/browse/details 300 per 5 minutes each, franchise history and user search 120 per 5 minutes, trade propose/counter 30 per hour each, pickup/counterpick bids 60 per hour each, join-code attempts 10 per hour, plus the invitation-email limits in F-05. The limiter fails open, so absence of a 429 is not a guarantee.
 
 Use one in-flight action guard per submission, matching `useAsyncAction` on web. Retry safe reads with bounded backoff. Never automatically retry a mutation merely because the connection failed: reconcile first, and use an endpoint's explicit idempotency contract where available. Draft mutation `request_id` is a durable logical-attempt UUID; it is distinct from the per-request tracing header. Other mutations do not all have that contract. Disable double submission while retaining a clear cancellation/uncertain-result state.
 
@@ -408,11 +440,11 @@ Retain recoverable form input after a server refusal; refresh affected state and
 
 ### N-08 · Native design and accessibility
 
-Use the translation matrix in §5 and native components that respect safe areas, keyboard avoidance, focus, back navigation, Dynamic Type, VoiceOver, Reduce Motion, and Increase Contrast. Provide at least 44×44-point interactive targets, accessible labels/values for scores and icon buttons, and non-color status indicators. A draft update must not repeatedly interrupt a screen reader or steal focus. [Apple accessibility guidance](https://developer.apple.com/design/human-interface-guidelines/accessibility), [layout and touch targets](https://developer.apple.com/design/tips/).
+Use the translation matrix in §5 and native components that respect safe areas, keyboard avoidance, focus, back navigation, Dynamic Type, VoiceOver, Reduce Motion, and Increase Contrast. Provide at least 44×44-point interactive targets, accessible labels/values for scores and icon buttons, and non-color status indicators. A draft update must not repeatedly interrupt a screen reader or steal focus. The web now passes 122 of 122 axe scans (`docs/ACCESSIBILITY.md`); reuse its patterns: join codes spelled out character by character, projection chips with spoken labels, status changes announced, unread never shown by color alone, and errors shown inline rather than in transient toasts. [Apple accessibility guidance](https://developer.apple.com/design/human-interface-guidelines/accessibility), [layout and touch targets](https://developer.apple.com/design/tips/).
 
 ### N-09 · Images and upload lifecycle
 
-Use cancellable, size-appropriate image loading with memory/disk limits and placeholders. Do not repeatedly download full backdrops for thumbnail rows. Handle unsupported source photo formats, upload size/type validation, progress, replacement, and cleanup of obsolete/orphaned uploads. Preserve the two buckets and ownership paths in F-03/F-10. An upload succeeding before the database update fails must have a recovery strategy. Public image URLs must not contain credentials.
+Use cancellable, size-appropriate image loading with memory/disk limits and placeholders. Do not repeatedly download full backdrops for thumbnail rows. Re-encode avatars before upload (square ≤512 px WebP/JPEG, metadata stripped, F-03) and upload with upsert to the fixed `/avatar` object, so there are no orphaned files to clean up; handle size/type validation, progress and replacement. Preserve the two buckets and ownership paths in F-03/F-10. An upload succeeding before the database update fails must have a recovery strategy. Public image URLs must not contain credentials.
 
 ### N-10 · Diagnostics and product events
 
@@ -461,7 +493,9 @@ This is a map to the existing implementation, not a replacement API specificatio
 | Propose/counter | `propose-trade`: `league_id`, `recipient_team_id`, `offered_items`, `requested_items`, optional `message` and expiry fields. `counter-trade`: `trade_offer_id`, `counter_offered_items`, `counter_requested_items`, optional message/expiry. Item collections contain assets and `faab`; inspect the shared types rather than flattening them to movie IDs. |
 | Trade decisions | `respond-trade` with `trade_offer_id`, `response` (`accept`/`reject`), optional `message`; `cancel-trade` / `approve-trade` with `trade_offer_id`; `veto-trade` with `trade_offer_id`, optional `reason`; `extend-trade-offer` with `trade_offer_id`, `expires_at`. |
 | Announcements | `send-announcement` with `league_id`, `message`; report `channels_notified`. |
-| Account recovery | `merge-accounts` uses camelCase: `originalUserId`, `duplicateUserId`, `duplicateAccessToken`, `provider`. Preserve its proof and eligibility checks. |
+| Projections (Beta) | `get-movie-projections` with `league_id`, `tmdb_ids` (1–100); answers `{ enabled: false }` or projections keyed by TMDb ID (F-19). |
+| Account deletion | `delete-account` with `{ confirmation: "DELETE" }` → `200 { deleted: true }`; `400` without the word; `403 { code: "reauth_required" }` when the last sign-in is older than 15 minutes; `409 { code: "live_draft", leagues }` while a league the user is in is drafting or counterpicking, with the league names (L-02). |
+| Account recovery | `merge-accounts` (camelCase `originalUserId`, `duplicateUserId`, `duplicateAccessToken`, `provider`) still exists but sign-in no longer reaches it; not needed for parity. |
 
 Bid conditional-drop fields are `conditional_drop_draft_pick_id` and `conditional_drop_pickup_id`, mutually exclusive. Trade expiry fields are `expires_at`, `expiry_anchor`, and `expiry_anchor_movie_id`; omission, explicit null, fixed time, and movie-release anchoring have distinct meanings. Match the existing validators rather than inventing a universal payload normalizer.
 
@@ -474,10 +508,12 @@ Bid conditional-drop fields are `conditional_drop_draft_pick_id` and `conditiona
 | Competition reads | `movies`, `reviews`, `counterpicks`, `pickup_bids`, `counterpick_bids`, `team_budgets`, `team_scores`, `team_drops`; access remains constrained by RLS/endpoint rules. Use `get-trades` where the web uses it, not an assumed equivalent direct-table projection. |
 | Standings/lifecycle | `league_standings` plus persisted completed-season snapshots; `get_counterpick_options`, `get_next_counterpick_turn`, `get_team_drop_count`, `get_next_processing_deadline`, `get_new_bid_cutoff`. Inspect exact RPC signatures before creating Swift wrappers. |
 | Invitations | `get_league_invitations` preserves masked information; don't replace it with a service-role table read. Recipient queries must use their own identity. |
+| Join links | Owner-only read of `league_join_links` for the current code and link; `leagues.join_code`/`join_token` are always null. |
+| Email preferences | Own `email_preferences` row: read and upsert `season_recap_emails`; a missing row means opted in. The token column is not readable. |
 | Wishlist | Own `wishlisted_movies` upsert/delete and `profiles.wishlist_public` update; shared reads depend on active shared membership. |
-| Notifications | Own notification reads and `read_at` timestamp updates through RLS; latest-50 web behavior is documented in F-17. |
+| Notifications | Own notification reads and `read_at` timestamp updates through RLS (no other column is updatable); latest-50 web behavior is documented in F-17. |
 | Profile/team edits | Recreate validation and upload coordination currently in Next server actions, using user-authenticated SDK operations where existing RLS permits. If a shared endpoint is needed, add internal auth/validation rather than granting broader client privileges. |
-| Images | Public `avatars` and `team-avatars` buckets, ownership-scoped write paths, known type/size limits. |
+| Images | Public `avatars` and `team-avatars` buckets, one fixed `<ownerId>/avatar` object each, re-encoded client-side (F-03). |
 | Admin | `admin_growth_stats()`; server authorization via `app_admins`. |
 
 Recent migrations revoke direct authenticated bid mutations in favor of the function contracts. Internal commit/execution RPCs, service-role helper queries, cron handlers, and account-admin APIs are **not** automatically available to the phone. For example, the transactional draft commit RPCs remain behind authenticated Edge Functions.
@@ -493,6 +529,7 @@ Recent migrations revoke direct authenticated bid mutations in favor of the func
 | Scores | Daily at 06:00 and 18:00 | Scores are not a continuous critic-feed stream. |
 | Release-date sync | Daily at 08:00 | Dates and release-anchored trade windows can change. |
 | Season completion | Daily at 09:00 | `season_end` is inclusive; due active seasons may await the next successful job. |
+| Data purge | Daily | Read notifications go after 90 days, unread after 180; the inbox can lose old rows. |
 | Release-day / weekly-release announcements | Daily 13:00 / Monday 13:00 | Preserve existing backend side effects. |
 | Bid-cutoff announcements | Hourly | Respect server notification deduplication/timing. |
 
@@ -510,9 +547,13 @@ Add Apple provider configuration, native credential handling and nonce validatio
 
 ### L-02 · In-app account deletion
 
-The current support-email deletion instruction is not a complete native deletion flow. Apps supporting account creation must provide a way to initiate deletion in-app; implement confirmation, appropriate reauthentication, server-side execution/status, and clear outcomes. A support link alone does not satisfy the general requirement. [Apple account deletion guidance](https://developer.apple.com/support/offering-account-deletion-in-your-app/).
+**Implemented on the web since the first audit** (October 7, 2026); iOS ports it. Apple requires account deletion to start in-app. [Apple account deletion guidance](https://developer.apple.com/support/offering-account-deletion-in-your-app/).
 
-Define behavior for sole commissioners, active games, shared historical standings, sent invitations/trades/notifications, public image objects, provider tokens, and any legally retained records. Do not simply cascade-delete a user and assume league history remains correct. Offer a documented ownership-transfer or other supported resolution if needed; no transfer feature was found in the current web UI. `merge-accounts` is restricted duplicate recovery, not a general deletion endpoint. Test that another user's data and permissions survive deletion.
+- Settings has a "Delete account" section: "Leagues you run pass to another member. This can't be undone." The confirmation lists what happens: leagues you own pass to the longest-standing other member (who is notified, F-17); you're removed from seasons that haven't drafted; in active and finished seasons your team and roster stay, shown as "Former member"; pending bids and open trade offers are cancelled; a live draft must finish first. The person types DELETE; the destructive button stays disabled until they do.
+- Call `delete-account` (§6). On `reauth_required` (last sign-in older than 15 minutes, read from the token's `amr` claim; refreshing the token does not count) switch to a "Sign in again" state, sign in with any method, and return to the deletion screen. On `live_draft` name the blocking leagues. On success sign out locally, clear every account-scoped cache and Keychain item, and return to Welcome.
+- All data handling is server-side (the `on_auth_user_deleted` trigger), so dashboard deletes and the app behave the same. Uploaded photos are removed best effort. Clients must render "Former member" rows whose user no longer exists (§2).
+
+**Accept:** a fresh sign-in can delete; a stale one gets the re-sign-in path and then succeeds; a user in a drafting league is refused with its name; after deletion the other members still see the season, the new owner sees the transfer notification, and the deleted person's old session cannot write.
 
 ### L-03 · Privacy disclosures and SDK inventory
 
@@ -522,7 +563,7 @@ Update the published policy and effective date in the same change that adds nati
 
 ### L-04 · User-generated content and abuse handling
 
-Names, uploaded images, trade messages, and announcements warrant a review of guideline 1.2. It calls for safeguards including objectionable-content filtering, reporting with timely response, user blocking, and published contact information. [App Review guidelines, 1.2](https://developer.apple.com/app-store/review/guidelines/).
+Names, uploaded images, trade messages (visible to the whole league, F-13), and announcements warrant a review of guideline 1.2. It calls for safeguards including objectionable-content filtering, reporting with timely response, user blocking, and published contact information. [App Review guidelines, 1.2](https://developer.apple.com/app-store/review/guidelines/).
 
 No complete in-app report/block/moderation system was identified. Decide and implement controls appropriate to the actual sharing model, including who receives reports and how blocking interacts with shared leagues and existing offers. Email support and commissioner removal in setup are not evidence that all these controls already exist. Do not silently add public chat or wider profile visibility as part of this work.
 
@@ -551,12 +592,12 @@ These go beyond web parity but are in the iOS v1 scope by the owner's decision.
 
 | Package | Requirements | Deliverable / exit condition |
 | --- | --- | --- |
-| 0 — Contract and launch decisions | §10–11, L-01–L-04 | Record rule/visibility choices, target/platform settings, callback plan, Apple linking and deletion/moderation contracts. Verify local/deployed schema assumptions. Resolve decisions before their dependent feature ships. |
+| 0 — Contract and launch decisions | §10–11, L-01–L-04 | Record rule/visibility choices, target/platform settings, callback plan, Apple linking and moderation contracts. Verify local/deployed schema assumptions. Resolve decisions before their dependent feature ships. |
 | 1 — Native foundation | N-01–N-10, F-01–F-03 | Running app, design tokens/components, secure sessions, all current auth/recovery paths, routing, transport/errors, profile/theme; tests for DTOs, clocks, callbacks and logout isolation. |
 | 2 — Membership and research | F-04–F-07, F-10 | Same account sees leagues/seasons; create/join/invite; movie/franchise research, wishlist/privacy; team identity; cross-client persistence verified. |
 | 3 — Draft and score visibility | F-08–F-09, F-11, F-14 | Mixed web/iOS draft through activation, connection recovery, roster/standings/scoring parity. Implement server transaction contracts before polishing the board. |
 | 4 — In-season economy | F-12–F-13 | Bids/priorities/conditional drops and complete trade lifecycle, server outcomes and mixed-client race coverage. |
-| 5 — Full role/lifecycle parity | F-15–F-18, V-01 | Every commissioner setting, completion/history/rollover, inbox and communications, authorized admin charts. |
+| 5 — Full role/lifecycle parity | F-15–F-19, V-01 | Every commissioner setting, completion/history/rollover, inbox and communications, authorized admin charts. |
 | 6 — Distribution readiness | L-01–L-05, §12 | Apple login where applicable, deletion/moderation/privacy work, real-device and accessibility verification, TestFlight, review materials and release checklist. |
 | Optional track | O-01–O-04 | Explicitly approved additions; independent acceptance gates. |
 
@@ -570,14 +611,14 @@ The baseline behavior below is what an implementation agent should expect today.
 | --- | --- | --- |
 | D-01 — Release-day boundaries | `_shared/utils.ts` deliberately documents an inclusive release day: it rejects movie dates **before** today; `drop-movie` uses the same strict-before boundary. A film dated today can therefore be draft/bid/drop eligible under those date checks, while `hasReleased`/SQL scoring counts it today. Other checks, including scored-movie locks, still apply. Less precise wording elsewhere simply says “unreleased.” | Preserve and clearly explain the documented same-day behavior; test date-only UTC handling on both clients. Any proposal to tighten it requires shared rules/tests, not an iOS-only filter. A missing date is ineligible for movie discovery/placement but does not itself block the current drop path. |
 | D-02 — Awarded counterpick drop blocking | Current `drop-movie` and roster rules gate both awarded counterpicks and pending active/outbid counterpick bids on `counterpicks_block_drops`. Some repository guidance says an awarded counterpick always blocks drops. | Confirm intended rule. Preserve executable behavior for parity unless a shared fix is approved. Counterpicks survive a permitted drop in either design. |
-| D-03 — Bid and trade visibility | Web active-bid UI renders competing amounts; some comments/bot copy call bids sealed. `get-trades` authorizes active league membership and uses a service client to return league offers; direct trade-table RLS can be narrower. | Specify who can see amounts, messages, and offers, then align backend, web, iOS, bot/help, and privacy text. Do not advertise secrecy or participant-only offers based on comments. Native must not widen access beyond the chosen policy. |
+| D-03 — Bid visibility | Web active-bid UI renders competing amounts; some comments/bot copy call bids sealed. **Trades are settled:** offers, assets and messages are deliberately visible to every league member (October 7, 2026), and the composer says so. | Specify who can see bid amounts, then align backend, web, iOS, bot/help, and privacy text. Do not advertise sealed bids based on comments. |
 | D-04 — Counterpick slot limits | `create-league` permits bidding counterpick slots 0–3; `update-league` permits 0–5. | Retain endpoint-specific validation until a shared limit is chosen; ensure existing seasons above the creation limit still render. |
-| D-05 — Leave/ownership controls | Rollover confirmation says people can leave the new season, but no self-service leave handler/UI or ownership-transfer workflow was found. Owner can kick another participant during setup. | Correct the promise or implement a shared, authorized leave policy. Do not invent a working leave/transfer API in the native client. Deletion planning must address ownership. |
-| D-06 — Mobile auth orchestration | Profile initialization, duplicate detection/linking cookies, recovery redirects, and several edits live in Next routes/server actions. | Implement native orchestration or narrowly shared APIs; verify linking against existing accounts. Do not scrape HTML or call unstable server-action internals. |
+| D-05 — Leave/ownership controls | Rollover confirmation says people can leave the new season, but no self-service leave handler/UI exists. Ownership transfers automatically only when an owner deletes their account (L-02); there is no voluntary transfer. Owner can kick another participant during setup. | Correct the promise or implement a shared, authorized leave policy. Do not invent a working leave/transfer API in the native client. |
+| D-06 — Mobile auth orchestration | Profile initialization, recovery redirects, and several edits live in Next routes/server actions. (Duplicate detection was removed from sign-in; F-02.) | Implement native orchestration or narrowly shared APIs; verify linking against existing accounts. Do not scrape HTML or call unstable server-action internals. |
 | D-07 — Bounded feeds | Notification unread counts cover the latest 50 loaded rows. Bid history fetches at most 500 won/lost records per bid table, excluding cancellations. Trade UI initially loads 50; the API's total count needs review when filters are supplied. | Match current minimum behavior and label it honestly. If adding complete pagination/unread totals, specify and test shared query contracts rather than trusting a misleading total. |
 | D-09 — Member-visible league rules | League Settings is owner-only, and no read-only rules view exists for members. Roster shows capacity and drops remaining, but a member has nowhere to see the double-points rule, counterpick slots, bid response window, trade deadline, or review period, even though these decide their moves. | **Decided (October 4, 2026): League Rules ships in iOS v1.** A read-only screen for every member, built from the same `leagues` row (no backend change). Adding the same view to web is recommended so the clients don't diverge. Tracked as V-01. |
-| D-10 — Notification preferences | There are no user-level email preferences and no unsubscribe link; Discord preferences are per-channel and set only through the bot. | Required before O-01 push ships: decide per-user, per-event preferences and whether they also govern email. Do not add a preference screen that controls nothing. |
-| D-11 — Support-only account actions | Email change, data export, and (today) deletion are by email to support, per the privacy policy and settings copy. | Settings/About must link to support for each of these until self-service exists. L-02 replaces deletion only. |
+| D-10 — Notification preferences | Partly resolved: one user-level email switch now exists (Season recaps, F-03), with a `List-Unsubscribe` header and footer link on that email. Transactional emails have no switch. Discord preferences are per-channel and set only through the bot. | Required before O-01 push ships: decide per-user, per-event push preferences and whether they also govern email. Do not add a preference screen that controls nothing. |
+| D-11 — Support-only account actions | Email change and data export are by email to support. Deletion is now self-service (L-02). | Settings/About must link to support for email change and data export until self-service exists. |
 | D-08 — Production and external setup | Source audit cannot establish active migrations, configured CAPTCHA/providers/redirects, deployed function versions, cron health, real notification delivery, or Apple app identity. | Verify these in the intended environment during implementation and before TestFlight; do not mark production parity from repository inspection alone. |
 
 Useful conflict entry points: [eligibility helper](../supabase/functions/_shared/utils.ts), [drop handler](../supabase/functions/drop-movie/index.ts), [active bids](<../apps/frontend/app/(authenticated)/league/[id]/components/ActiveBidsPanel.tsx>), [trade reads](../supabase/functions/get-trades/index.ts), [rollover wording](<../apps/frontend/app/(authenticated)/league/[id]/components/ConfirmStartSeasonModal.tsx>).
@@ -589,7 +630,7 @@ Useful conflict entry points: [eligibility helper](../supabase/functions/_shared
 | Deployment target and devices | iPhone-first; choose a minimum iOS version from intended users and selected SDK support. Decide iPad separately. | Navigation/API availability, layout, test matrix and store assets. |
 | Apple identity and environments | Owner selects team, bundle ID, associated domain(s), staging strategy and distribution ownership. | Entitlements, OAuth callbacks, signing and release continuity. |
 | Auth providers and Apple linking | Preserve email, Google and Discord; assess/add Apple under L-01 with an explicit existing-account linking flow. | Avoid duplicate accounts and loss of historical identity. |
-| Deletion and moderation | Define shared backend policies before implementing L-02/L-04 screens. | Data integrity, operator responsibilities and launch readiness. |
+| Moderation | Define shared backend policies before implementing L-04 screens. (Deletion policy now exists on the backend, L-02.) | Data integrity, operator responsibilities and launch readiness. |
 | Rules and visibility | Resolve D-01–D-05 explicitly with shared tests. | Complete parity is impossible if clients intentionally interpret different rules. |
 | Native information architecture | Validate the four-root-tab proposal against actual league tasks. | Keeps navigation usable without copying web chrome. |
 | Full role scope | Include F-18 for literal parity; a deliberate admin omission must be labeled as a scope reduction. | Prevents hidden missing functionality at handoff. |
@@ -605,8 +646,8 @@ These decisions do not prevent starting native scaffolding, contract tests, and 
 
 | Test ID | Required scenario / result | Coverage |
 | --- | --- | --- |
-| T-01 | Email/provider sign-in, signup/confirmation, CAPTCHA error/retry, recovery after termination, link/unlink and duplicate recovery preserve the intended user and records; only-signin-method guard works. | F-02, N-02–N-03, L-01 |
-| T-02 | Invitation received while signed out survives onboarding; wrong-email/expired/revoked/full/started cases fail correctly; accepted membership appears on both clients. | F-04–F-05 |
+| T-01 | Email/provider sign-in, signup/confirmation (8-character minimum, breached password), CAPTCHA error/retry, recovery after termination, a link opened on another device, link/unlink and OAuth auto-linking preserve the intended user and records; only-signin-method guard works. | F-02, N-02–N-03, L-01 |
+| T-02 | Invitation received while signed out survives onboarding; wrong-email/expired/revoked/full/started cases fail correctly; 8-character and legacy 6-character codes and pasted links join; the 11th code attempt in an hour is throttled; accepted membership appears on both clients. | F-04–F-05 |
 | T-03 | Same series switches among setup, active and completed seasons without leaking IDs/caches; a later-season member cannot read an unauthorized older season. | F-04, F-16, N-05 |
 | T-04 | Missing posters/dates/scores and first/standalone franchises render correctly; empty filtered pages still advance; failed provider reads do not create invented eligible films. | F-06 |
 | T-05 | Private/shared wishlist RLS, overlaps and ownership including pickups; failed optimistic update rolls back; account switching clears private cache. | F-07 |
@@ -619,10 +660,11 @@ These decisions do not prevent starting native scaffolding, contract tests, and 
 | T-12 | Every F-15 setting saves at allowed phases and refuses direct unauthorized requests; owner/member/app-admin differences are enforced server-side. | F-15, F-18 |
 | T-13 | Complete with tied leaders and open offers/bids; freeze snapshots; race two rollover requests; correct new identities/settings/Discord mapping with empty holdings. | F-16 |
 | T-14 | Notification read state syncs after refresh, old links recover safely, native mutations retain configured email/Discord effects, delivery failure does not repeat gameplay. | F-17 |
-| T-15 | Upload each supported image type, convert HEIC, reject oversized files, replace/remove, recover from upload/database partial failure; name edits reflect cross-client. | F-03, F-10, N-09 |
+| T-15 | Upload each supported image type, convert HEIC, confirm the stored file is ≤512 px with no EXIF/GPS, reject oversized files, replace/remove, recover from upload/database partial failure; name edits reflect cross-client. | F-03, F-10, N-09 |
 | T-16 | Small/large iPhones, largest supported text sizes, VoiceOver, Reduce Motion, light/dark/system, keyboard, safe areas, and accessible reorder flows remain usable. Add iPad/orientation matrix if supported. | N-08, §5 |
 | T-17 | Airplane mode, flaky network, expired/revoked session, suspended app, process termination, malformed response and server 5xx show truthful states; no offline mutation replay or cross-account disclosure. | N-02, N-04–N-07 |
-| T-18 | Account deletion, abuse controls, Apple linking/relay case, production Universal Links, privacy configuration and review account operate on physical devices/TestFlight. | L-01–L-05 |
+| T-18 | Account deletion (fresh and stale sign-in, live-draft refusal, ownership transfer, Former member rows), abuse controls, Apple linking/relay case, production Universal Links, privacy configuration and review account operate on physical devices/TestFlight. | L-01–L-05 |
+| T-19 | Projections flag off shows nothing; on for one series shows chips, breakdown, projected finish and projected standings only there; null and failed responses show nothing; 429 handling for throttled endpoints shows the server message and never replays a mutation. | F-19, N-04 |
 
 ### Test layers and environment
 
@@ -635,7 +677,7 @@ Existing reference suites live in [frontend E2E](../apps/frontend/e2e), [Edge te
 
 For backend changes, run affected Deno/SQL integration coverage; run SQL tests before API/browser work when they share database locks. Use `npx supabase migration up` for pending migrations; never reset a shared database for test convenience. For web changes required by shared contracts, run appropriate frontend static/browser checks. The root generic `test` script is not evidence of a configured frontend unit suite. Typical scoped entry points include `npm run test:draft:state`, `npm run test:functions`, `npm run test:e2e`, and `npm run test:bot`; inspect their current scope/prerequisites rather than running them blindly. This documentation-only audit does not require app builds or those suites.
 
-**Parity release gate:** every F-01–F-18 requirement is implemented or explicitly documented as a scope reduction; relevant N/L requirements are complete; D decisions are resolved for shipped behavior; applicable T scenarios pass; web/iOS agree on identities, permissions and final results; legal/support/review materials are accurate; and no client relies on service credentials, uninterrupted background execution, or unverified production configuration. Record evidence and remaining limitations in the release checklist.
+**Parity release gate:** every F-01–F-19 requirement is implemented or explicitly documented as a scope reduction; relevant N/L requirements are complete; D decisions are resolved for shipped behavior; applicable T scenarios pass; web/iOS agree on identities, permissions and final results; legal/support/review materials are accurate; and no client relies on service credentials, uninterrupted background execution, or unverified production configuration. Record evidence and remaining limitations in the release checklist.
 
 ## 13. Source map and agent handoff
 
@@ -643,7 +685,7 @@ For backend changes, run affected Deno/SQL integration coverage; run SQL tests b
 | --- | --- |
 | `/`, `/how-to-play`, `/privacy`, `/terms`; authenticated `/help` | F-01, L-03, L-05 |
 | `/login`, `/signup`, `/forgot-password`, `/reset-password`; `/auth/*` | F-02, N-02–N-03, L-01–L-02 |
-| `/settings` | F-03, connected identities/passwords in F-02 |
+| `/settings` | F-03, connected identities/passwords in F-02, email preferences, account deletion (L-02) |
 | `/dashboard`, `/join` | F-04–F-05, invitations, trophies, season entry |
 | `/movies`, `/wishlist` | F-06–F-07 |
 | `/league/[id]` and `/league/[id]/dashboard` | F-10 and state-specific entry points |
@@ -654,6 +696,8 @@ For backend changes, run affected Deno/SQL integration coverage; run SQL tests b
 | `/league/[id]/settings`, `/history` | F-15–F-16 |
 | Shared NotificationBell, notification hook, bot commands | F-17 |
 | `/admin` | F-18 |
+| Projection chips, breakdown, projected finish and standings (`components/projections/`, `utils/projections.ts`, `utils/projectedStandings.ts`) | F-19 |
+| `DiscordBotGuide` in league settings and How to Play | F-15, F-17 |
 | Error boundaries, theme/async hooks, Supabase wrappers and shared utilities | N requirements and all feature error/recovery states |
 
 Additional canonical entry points: [agent agreement](../AGENTS.md), [detailed domain reference](../CLAUDE.md), [scoring](../supabase/SCORING.md), [Supabase setup](../supabase/README.md), [OAuth](OAUTH.md), [types](../apps/frontend/types/index.ts), [holdings contract](../apps/frontend/utils/holdings.ts), [backend holdings](../supabase/functions/_shared/roster-holdings.ts), [trade validation](../supabase/functions/_shared/trade-validation.ts), [bid resolution](../supabase/functions/_shared/bid-resolution.ts), [product event names](../apps/frontend/utils/analytics.ts), [observability audit](OBSERVABILITY-AUDIT.md).
@@ -674,36 +718,58 @@ Web-only surfaces that are intentionally not parity targets: the marketing landi
 
 ## 15. Screen inventory for native design
 
-This is the list a mockup pass should cover. It follows the four-tab proposal in §5 (Leagues, Movies, Wishlist, Account, plus a toolbar notification inbox); names are proposals, not decisions. Every screen also needs the loading, empty, error, forbidden/signed-out, and read-only states from N-07, in light and dark appearance.
+This is the list a mockup pass should cover (refreshed October 13, 2026). It follows the four-tab proposal in §5 (Leagues, Movies, Wishlist, Account, plus a toolbar notification inbox); names are proposals, not decisions. Every screen also needs the loading, empty, error, forbidden/signed-out, and read-only states from N-07, in light and dark appearance.
 
 | Area | Screen or sheet | States and content that must appear | Source |
 | --- | --- | --- | --- |
 | Signed out | Welcome / how to play | Game explanation, Sign up, Log in, legal and support links, movie-data attribution | F-01 |
-| Signed out | Sign up | Display name, email, password + confirm, Google/Discord/Apple buttons, legal notice under every create-account action, CAPTCHA, "check your email" + resend | F-02, L-01 |
-| Signed out | Log in | Email/password, providers, CAPTCHA, unconfirmed-email resend, callback error | F-02 |
+| Signed out | Sign up | Display name, email, password (at least 8 characters) + confirm, Google/Discord/Apple buttons, legal notice under every create-account action, CAPTCHA, "check your email" + resend | F-02, L-01 |
+| Signed out | Log in | Email/password, providers, CAPTCHA, unconfirmed-email resend, callback error, "email confirmed" and "link opened on another device" notices, return to a pending destination (e.g. account deletion) | F-02 |
 | Signed out | Forgot / reset password | Request sent (non-enumerating), invalid or expired link, new password + confirm | F-02 |
-| Signed out | Link duplicate account | Existing-password proof + CAPTCHA, or keep accounts separate | F-02, N-02 |
 | Leagues tab | League list | Series cards with current season, status badge, champion; past-season expander; pending invitations (accept/decline); trophy case; empty state with Create and Join | F-04, F-05 |
 | Leagues tab | Create league | Basic (name, team name, max players, private) and advanced (slots, draft slots, drops, counter window, bid cutoff, counterpick slots, block drops) | F-05 |
-| Leagues tab | Join league | Code or link entry, invitation token, optional team name, "Joining as {name}", every failure outcome | F-05 |
+| Leagues tab | Join league | 8-character code (legacy 6) or pasted link entry, too-many-attempts state, invitation token, optional team name, "Joining as {name}", every failure outcome | F-05 |
 | League | League header | League and season switchers, phase badge, sections reachable per the §2 matrix, outbid badge | F-04, §2 |
 | League | Overview | Team header + edit team (name, avatar), my movies, around-the-league releases, waiting/welcome cards, champion banner + Start next season (owner), shared-wishlist banner | F-10, F-16 |
-| League | League movie detail | Poster, metadata, RT score/points or Pending/"at release", ownership, franchise history, wishlist, Drop / Bid / Trade entry points with reasons when blocked | F-06, F-11 |
-| League · setup | Draft room (setup) | Participants, invitations list (resend/cancel/copy), invite sheet (user search or email), join code/link share, draft order, Start draft (owner) | F-05, F-08 |
+| League | League movie detail | Poster, metadata, RT score/points or Pending/"at release", ownership, franchise history, projected score (Beta) chip and breakdown where enabled, wishlist, Drop / Bid / Trade entry points with reasons when blocked | F-06, F-11 |
+| League · setup | Draft room (setup) | Participants, invitations list (resend/cancel/copy), invite sheet (user search or email), 8-character join code/link share with regenerate warning, draft order, Start draft (owner) | F-05, F-08 |
 | League · drafting | Draft room (live) | Turn banner, pick queue, progress, board/history, connection state, movie picker (All, Trending, Releasing Soon, Wishlist; search; genre and window filters), quick preview, Pick confirmation | F-08 |
 | League · counterpicking | Counterpick round | Reverse-snake turn, eligible opponent movies by team, remaining picks, owner Start/Skip/End controls with confirmation | F-09 |
-| League | Roster | Draft picks, pickups, counterpicks; capacity; drops remaining; drop confirmation; inline blocked-drop reasons | F-11 |
-| League · active | Standings | Ranked rows with ties, summary strip, own-team highlight, champion banner/crown, team detail | F-14 |
+| League | Roster | Draft picks, pickups, counterpicks; capacity; drops remaining; drop confirmation; inline blocked-drop reasons; projection chips, "Projected finish" card and "How it adds up" sheet where enabled | F-11, F-19 |
+| League · active | Standings | Ranked rows with ties, summary strip, own-team highlight, champion banner/crown, team detail; Current/Projected toggle and projected table where enabled | F-14, F-19 |
 | League · active | Bidding | Budget, week timeline, Action Required / My Active / Competing groups, History tab grouped by round | F-12 |
 | League · active | Place bid sheet | Search or wishlist source, post-cutoff contest list, amount stepper, conditional drop, fit forecast; counterpick variant | F-12 |
 | League · active | Bid priorities | Separate pickup and counterpick lists, reorder controls, "Roster runs out" cut line | F-12 |
 | League · active | Trading | Pending, My Trades, All Active, History; action-needed count; offer cards with contested markers, clocks, and actions (accept/reject/counter/cancel/extend; owner veto/approve) | F-13 |
-| League · active | Trade composer | Counterparty, give/receive assets (movies, pickups, counterpicks, budget), message, expiry picker, review step, server validation with invalid rows marked | F-13 |
+| League · active | Trade composer | Counterparty, give/receive assets (movies, pickups, counterpicks, budget), message with "Everyone in the league can see this message." (1500 max), expiry picker, review step, server validation with invalid rows marked | F-13 |
 | League | History | Every season with champions and runners-up, links to frozen standings | F-16 |
 | League | League rules | Read-only season configuration for every member | V-01 |
-| League · owner | Settings | Every section in the F-15 table, locked-state explanations, Discord announcement, end season (type year), start next season, delete (type name), remove participant | F-15, F-16 |
+| League · owner | Settings | Every section in the F-15 table, locked-state explanations, Discord announcement, Discord bot guide, end season (type year), start next season, delete (type name), remove participant | F-15, F-16 |
 | Movies tab | Search | Search field, year filter, results grid, detail | F-06 |
 | Wishlist tab | My wishlist / League wishlists | Sort, remove, league status labels, share toggle, league-mate picker with overlaps | F-07 |
-| Inbox | Notifications | Latest 50, unread badge, mark one/all read, routing to the right league screen, stale-destination fallback | F-17 |
-| Account tab | Settings | Profile photo, display name, email (read-only, support link), appearance, connected accounts, change password, help, legal, support for email change/data export, delete account | F-03, F-02, L-02, D-11 |
+| Inbox | Notifications | Latest 50, unread badge, mark one/all read, routing to the right league screen, stale-destination fallback, "You now run {league}" ownership row | F-17 |
+| Account tab | Settings | Profile photo, display name, email (read-only, support link), appearance, Email section (Season recaps switch), connected accounts, change password, help (with Discord bot section), legal, support for email change/data export, Delete account | F-03, F-02, L-02, D-11 |
+| Account tab | Delete account | Consequence list, type DELETE, disabled-until-typed destructive button; "Sign in again" state; live-draft refusal naming leagues | L-02 |
 | Account tab | Growth dashboard | App administrators only | F-18 |
+
+## 16. October 13, 2026 refresh
+
+The web app changed between `b576a5a` and `d264c7a` (October 4–9). Each merged change was checked against this document; these are the ones that affect the iOS app, and where the document now covers them:
+
+| Web change | Requirements updated |
+| --- | --- |
+| Self-service account deletion with automatic ownership transfer (#146) | L-02 rewritten as a port; §2 Former member; F-03, F-17, D-05, D-11, §6, §15, T-18 |
+| Season-recap email opt-out and notification purge (#145) | F-03 Email section; D-10 partly resolved; F-17, §6, N-02 |
+| 8-character passwords and secure password change (#138) | F-02, §15, T-01 |
+| Email links bound to the requesting browser via PKCE (#143) | F-02, N-02, §15 |
+| Duplicate-account check removed from sign-in (#136) | F-02, N-02, D-06, §6; duplicate-recovery screen removed from §15 |
+| Owner-only 8-character join codes, code attempt limit, link pasting (#142, #158) | F-05, §6, §15, T-02 |
+| Per-user rate limits on costly functions (#139) | N-04 (one 429 handler), F-05, F-06, F-12, F-13, T-19 |
+| Size and count limits; trade messages visible league-wide (#144, #137) | F-05, F-07, F-13, D-03 (trades settled), L-04 |
+| Avatar re-encoding, metadata stripping, one file per owner (#141) | F-03, F-10, N-09, §6, T-15 |
+| Projected scores (Beta), server-gated and off today (#151–#155, #157) | New F-19; F-06, F-11–F-14, §6, §13, §15, T-19 |
+| Discord bot install link and setup guide (#150) | F-15, F-17, §13, §15 |
+| Screen-reader accessibility pass (#156) | N-08 patterns |
+
+Checked with no iOS impact: Discord webhook host restrictions (#140), cron-secret and bot-throttle hardening (#137), the projections ingestion, model and fit jobs, the bid-results announcement split, and `search-users` now looking up only matched users' emails (#135, same response).
+
