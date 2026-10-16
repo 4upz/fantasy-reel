@@ -72,10 +72,12 @@ nonisolated struct FRTextSpec {
     let trackingEm: CGFloat
     /// Number roles: optical size 12, width 100, tabular + lining figures.
     let isNumeric: Bool
+    /// `.frFont(_:)` uppercases the text (overline).
+    let isUppercase: Bool
 
     init(
         _ family: FRFontFamily, _ weight: CGFloat, _ size: CGFloat, _ textStyle: UIFont.TextStyle,
-        tracking: CGFloat = 0, numeric: Bool = false
+        tracking: CGFloat = 0, numeric: Bool = false, uppercase: Bool = false
     ) {
         self.family = family
         self.weight = weight
@@ -83,6 +85,7 @@ nonisolated struct FRTextSpec {
         self.textStyle = textStyle
         self.trackingEm = tracking
         self.isNumeric = numeric
+        self.isUppercase = uppercase
     }
 }
 
@@ -106,6 +109,8 @@ nonisolated enum FRTextRole: Hashable, Sendable, CaseIterable {
     case input
     /// `.rt` movie/team title in a row: DM Sans 600, 16.
     case rowTitle
+    /// A plain row's label (menu and settings rows): DM Sans 500, 16.
+    case rowLabel
     /// Large button label (`.btn`): DM Sans 600, 17.
     case control
     /// Compact button and selected segment: DM Sans 600, 15.
@@ -118,6 +123,11 @@ nonisolated enum FRTextRole: Hashable, Sendable, CaseIterable {
     case caption
     /// `.badge` text: DM Sans 600, 12.
     case captionStrong
+    /// Small group label above a list ("YOUR LEAGUES"): DM Sans 600, 13,
+    /// tracking 0.05em. `.frFont(.overline)` uppercases the text itself
+    /// (`.textCase(.uppercase)`), so pass sentence-case strings; VoiceOver still
+    /// reads the original string.
+    case overline
     /// `.trail .v` / `.rank` points and ranks: Bricolage 700, 17, numeric.
     case number
     /// `.statv small` suffixes and small amounts: Bricolage 600, 15, numeric.
@@ -138,12 +148,14 @@ nonisolated enum FRTextRole: Hashable, Sendable, CaseIterable {
         case .bodySmall: FRTextSpec(.dmSans, 400, 14, .subheadline)
         case .input: FRTextSpec(.dmSans, 400, 17, .body)
         case .rowTitle: FRTextSpec(.dmSans, 600, 16, .body)
+        case .rowLabel: FRTextSpec(.dmSans, 500, 16, .body)
         case .control: FRTextSpec(.dmSans, 600, 17, .body)
         case .controlSmall: FRTextSpec(.dmSans, 600, 15, .subheadline)
         case .label: FRTextSpec(.dmSans, 500, 15, .subheadline)
         case .meta: FRTextSpec(.dmSans, 500, 13, .footnote)
         case .caption: FRTextSpec(.dmSans, 500, 12, .caption1)
         case .captionStrong: FRTextSpec(.dmSans, 600, 12, .caption1)
+        case .overline: FRTextSpec(.dmSans, 600, 13, .footnote, tracking: 0.05, uppercase: true)
         case .number: FRTextSpec(.bricolage, 700, 17, .body, numeric: true)
         case .numberSmall: FRTextSpec(.bricolage, 600, 15, .subheadline, numeric: true)
         case .numberLarge: FRTextSpec(.bricolage, 700, 24, .title2, numeric: true)
@@ -339,16 +351,24 @@ enum FRFonts {
 }
 
 /// Applies a text role: brand font scaled for the current Dynamic Type size
-/// (and Bold Text), plus the role's tracking.
+/// (and Bold Text), plus the role's tracking and, for `.overline`, uppercase.
 struct FRFontModifier: ViewModifier {
     let role: FRTextRole
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.legibilityWeight) private var legibilityWeight
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content
+        let styled = content
             .font(Font(uiFont as CTFont))
             .tracking(role.spec.trackingEm * uiFont.pointSize)
+        // Only set textCase for uppercase roles; `.textCase(nil)` on every role
+        // would cancel a container's own text case.
+        if role.spec.isUppercase {
+            styled.textCase(.uppercase)
+        } else {
+            styled
+        }
     }
 
     private var uiFont: UIFont {

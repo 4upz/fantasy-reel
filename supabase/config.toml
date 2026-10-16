@@ -121,8 +121,9 @@ enabled = true
 # in emails.
 site_url = "http://localhost:3000"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-# fantasyreel://auth/callback is the native iOS app's sign-in callback (apps/ios).
-additional_redirect_urls = ["fantasyreel://auth/callback"]
+# fantasyreel://auth/callback is the native iOS app's sign-in callback (apps/ios);
+# the ?flow=recovery variant is its password-reset callback.
+additional_redirect_urls = ["fantasyreel://auth/callback", "fantasyreel://auth/callback?flow=recovery"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # If disabled, the refresh token will never expire.

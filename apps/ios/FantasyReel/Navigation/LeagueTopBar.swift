@@ -1,16 +1,68 @@
 import FantasyReelCore
 import SwiftUI
 
+/// The optional "+" in the league top bar (V2Trades "Propose trade", V2Bids
+/// "Place bid"): the first trailing button, before the bell and `⋯`.
+struct LeagueTopBarAction {
+    let accessibilityLabel: String
+    let systemImage: String
+    let action: @MainActor () -> Void
+
+    init(accessibilityLabel: String, systemImage: String = "plus", action: @escaping @MainActor () -> Void) {
+        self.accessibilityLabel = accessibilityLabel
+        self.systemImage = systemImage
+        self.action = action
+    }
+}
+
 extension View {
     /// The glass top bar on every league tab's root screen (mockup v2): the
-    /// league pill on the left opens the menu sheet; on the right, the
-    /// notifications bell and the league `⋯` menu.
-    func leagueTopBar() -> some View {
-        modifier(LeagueTopBarModifier())
+    /// league pill on the left opens the menu sheet; on the right, an optional
+    /// primary action ("+"), the notifications bell and the league `⋯` menu
+    /// (V2Trades/V2Bids order: +, bell, ⋯).
+    ///
+    /// `LeagueTabStack` already applies `leagueTopBar()` to every tab root, so a
+    /// tab root that needs a "+" should not call this again; it adds
+    /// `.leagueTopBarPrimaryAction(_:)` instead.
+    func leagueTopBar(primaryAction: LeagueTopBarAction? = nil) -> some View {
+        modifier(LeagueTopBarModifier(primaryAction: primaryAction))
+    }
+
+    /// Adds the top bar's "+" from inside a tab root, e.g.
+    /// `.leagueTopBarPrimaryAction(.init(accessibilityLabel: "Place bid") { … })`.
+    ///
+    /// Order caveat: SwiftUI merges toolbar items from nested modifiers, placing
+    /// the items of the modifier closer to the content first within the same
+    /// placement. Apply this on the root screen's own view (inside the
+    /// `leagueTopBar()` that `LeagueTabStack` adds) so the "+" lands before the
+    /// bell and `⋯`. Applied outside `leagueTopBar()`, it would land after them.
+    func leagueTopBarPrimaryAction(_ action: LeagueTopBarAction) -> some View {
+        toolbar {
+            LeagueTopBarPrimaryItems(action: action)
+        }
+    }
+}
+
+/// The "+" button and the fixed spacer that separates it from the bell.
+private struct LeagueTopBarPrimaryItems: ToolbarContent {
+    let action: LeagueTopBarAction
+
+    var body: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                action.action()
+            } label: {
+                Image(systemName: action.systemImage)
+            }
+            .accessibilityLabel(action.accessibilityLabel)
+        }
+        ToolbarSpacer(.fixed, placement: .topBarTrailing)
     }
 }
 
 private struct LeagueTopBarModifier: ViewModifier {
+    let primaryAction: LeagueTopBarAction?
+
     @Environment(\.leagueSelection) private var selection
     @Environment(ShellRouter.self) private var router
 
@@ -28,10 +80,13 @@ private struct LeagueTopBarModifier: ViewModifier {
                     Button {
                         router.presentMenu()
                     } label: {
-                        LeaguePillLabel(name: selection?.season.name ?? "Leagues")
+                        GlassPillLabel(title: selection?.season.name ?? "Leagues")
                     }
                     .accessibilityLabel("Open menu: leagues, wishlist, account")
                     .accessibilityValue(selection?.season.name ?? "")
+                }
+                if let primaryAction {
+                    LeagueTopBarPrimaryItems(action: primaryAction)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     NotificationsButton()
@@ -44,23 +99,8 @@ private struct LeagueTopBarModifier: ViewModifier {
     }
 }
 
-/// The league pill's content: the league's initials and a chevron. The toolbar
-/// supplies the Liquid Glass capsule.
-struct LeaguePillLabel: View {
-    let name: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Avatar(name: name, size: .small)
-            Image(systemName: "chevron.down")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Color.frTextSecondary)
-                .accessibilityHidden(true)
-        }
-    }
-}
-
-/// The bell with an unread count ("9+" cap), opening Notifications in the menu sheet.
+/// The bell with an unread count ("9+" cap), opening Notifications in the menu
+/// sheet. The badge sits at top −2 / right −2 of the 44pt button (V2Home).
 struct NotificationsButton: View {
     @Environment(ShellRouter.self) private var router
     @Environment(InboxStore.self) private var inbox
@@ -70,12 +110,8 @@ struct NotificationsButton: View {
             router.presentMenu(.notifications)
         } label: {
             Image(systemName: "bell")
-                .overlay(alignment: .topTrailing) {
-                    if inbox.unreadCount > 0 {
-                        CountBadge(count: inbox.unreadCount)
-                            .offset(x: 10, y: -10)
-                    }
-                }
+                .frame(width: FRMetrics.minTapTarget, height: FRMetrics.minTapTarget)
+                .iconButtonBadge(inbox.unreadCount)
         }
         .accessibilityLabel(inbox.unreadCount > 0 ? "Notifications, \(inbox.unreadCount) unread" : "Notifications")
     }

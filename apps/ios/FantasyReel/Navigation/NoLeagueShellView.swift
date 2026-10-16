@@ -2,8 +2,8 @@ import FantasyReelCore
 import SwiftUI
 
 /// The signed-in home before the user belongs to any league (mockup "No leagues
-/// yet"): no tab bar, glass buttons at the top for the menu, search and
-/// notifications.
+/// yet", V2NoLeagues): no tab bar, glass buttons at the top for the menu (a
+/// 34pt avatar), search and notifications.
 struct NoLeagueShellView: View {
     @Environment(ShellRouter.self) private var router
     @Environment(\.currentProfile) private var profile
@@ -23,7 +23,7 @@ struct NoLeagueShellView: View {
                         Button {
                             router.presentMenu()
                         } label: {
-                            Avatar(name: displayName, imageURL: profile?.avatarURL, size: .medium)
+                            Avatar(name: displayName, imageURL: profile?.avatarURL, size: .custom(34))
                         }
                         .accessibilityLabel("Open menu: invitations, wishlist, account")
                     }

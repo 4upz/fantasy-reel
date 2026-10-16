@@ -21,8 +21,11 @@ struct LeagueShellView: View {
                 }
             }
             Tab(value: ShellTab.search, role: .search) {
-                NavigationStack {
+                NavigationStack(path: $router.searchPath) {
                     MovieSearchView()
+                        .navigationDestination(for: LeagueRoute.self) { route in
+                            LeagueDestinationView(route: route)
+                        }
                 }
             }
         }

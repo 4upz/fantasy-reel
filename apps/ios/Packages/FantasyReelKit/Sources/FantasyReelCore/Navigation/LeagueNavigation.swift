@@ -30,8 +30,8 @@ public enum LeagueTab: String, CaseIterable, Sendable, Hashable {
         switch self {
         case .home: "house"
         case .draft: "list.number"
-        case .roster: "film.stack"
-        case .bids: "tag"
+        case .roster: "film"
+        case .bids: "dollarsign.circle"
         case .trades: "arrow.left.arrow.right"
         case .standings: "trophy"
         }
@@ -76,13 +76,15 @@ public enum LeagueNavigation {
     ///   board still runs the counterpick round, so Draft stays a tab.
     /// - Active: Home, Roster, Bids, Trades, Standings. Draft becomes a record
     ///   (menu: Draft Results).
-    /// - Completed: Home, Roster, Standings. Gameplay is frozen.
+    /// - Completed: Home, Standings, Roster, Draft (V2SeasonComplete). Gameplay
+    ///   is frozen; the board is a read-only record, so Draft is a tab again
+    ///   and Draft Results leaves the `⋯` menu.
     /// - Unknown: Home and Roster only; an unknown phase enables nothing.
     public static func tabs(for status: LeagueStatus) -> [LeagueTab] {
         switch status {
         case .setup, .drafting, .counterpicking: [.home, .draft, .roster]
         case .active: [.home, .roster, .bids, .trades, .standings]
-        case .completed: [.home, .roster, .standings]
+        case .completed: [.home, .standings, .roster, .draft]
         case .unknown: [.home, .roster]
         }
     }
@@ -103,15 +105,16 @@ public enum LeagueNavigation {
     /// The `⋯` menu, in display order.
     ///
     /// - Rules: everyone, always (iOS v1 adds a read-only rules view, D-09).
-    /// - Draft Results: once the draft is a record (active, completed).
+    /// - Draft Results: during the active season. Once it's completed the
+    ///   Draft tab shows the board instead (V2SeasonComplete).
     /// - History: only once the series has a second season, as on the web.
     /// - Settings: the owner (`leagues.owner_id`), in every phase.
     /// - Share Invite: the owner during setup, when people can still join.
     public static func menuItems(status: LeagueStatus, isOwner: Bool, seasonCount: Int) -> [LeagueMenuItem] {
         var items: [LeagueMenuItem] = [.rules]
         switch status {
-        case .active, .completed: items.append(.draftResults)
-        case .setup, .drafting, .counterpicking, .unknown: break
+        case .active: items.append(.draftResults)
+        case .setup, .drafting, .counterpicking, .completed, .unknown: break
         }
         if seasonCount >= 2 { items.append(.history) }
         if isOwner { items.append(.settings) }

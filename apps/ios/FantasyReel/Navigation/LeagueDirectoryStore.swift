@@ -24,7 +24,7 @@ struct LeagueSelection: Equatable {
 
 extension EnvironmentValues {
     /// The selected season, or nil outside a league (no-league screen, menu sheet roots).
-    @Entry var leagueSelection: LeagueSelection?
+    @Entry var leagueSelection: LeagueSelection? = nil
 }
 
 /// Loads the leagues this account can see and remembers which season is selected.
@@ -48,6 +48,14 @@ final class LeagueDirectoryStore {
         self.repository = repository
         self.defaults = defaults
         self.selectedSeasonID = defaults.string(forKey: "fr.selectedSeason.\(userID.rawValue)").map(LeagueID.init(rawValue:))
+    }
+
+    /// True once the directory has loaded, with or without leagues.
+    var isReady: Bool {
+        switch state {
+        case .loaded, .empty: true
+        case .idle, .loading, .failed: false
+        }
     }
 
     var entries: [LeagueDirectoryEntry] {
@@ -81,7 +89,7 @@ final class LeagueDirectoryStore {
             reconcileSelection(with: entries)
         } catch {
             // Keep showing what we had if a background refresh fails.
-            if case .loaded = state { return }
+            if isReady { return }
             state = .failed(message: error.userMessage)
         }
     }

@@ -139,7 +139,7 @@ public struct AuthService: Sendable {
         do {
             try await auth.resetPasswordForEmail(
                 email,
-                redirectTo: provider.configuration.authCallbackURL,
+                redirectTo: provider.configuration.recoveryCallbackURL,
                 captchaToken: captchaToken
             )
         } catch {

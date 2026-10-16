@@ -4,7 +4,7 @@ import SwiftUI
 
 extension EnvironmentValues {
     /// The signed-in user's profile row, once loaded (display name, avatar).
-    @Entry var currentProfile: Profile?
+    @Entry var currentProfile: Profile? = nil
 }
 
 /// Everything that exists only while one account is signed in: the league
@@ -60,6 +60,8 @@ struct SignedInRootView: View {
                 await inboxLoaded
             }
             .onChange(of: session.pendingDeepLink) { routePendingLink() }
+            // A link that arrived before a failed load is replayed after Try Again.
+            .onChange(of: directory.isReady) { routePendingLink() }
             .onChange(of: directory.selectedSeasonID, initial: true) {
                 router.showSeason(directory.selectedSeasonID, defaultTab: directory.selection?.defaultTab ?? .home)
             }

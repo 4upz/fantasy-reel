@@ -85,12 +85,27 @@ struct Avatar: View {
         return ZStack {
             background
             Text(FRInitials.make(from: name))
-                .font(FRFonts.fixedFont(.dmSans, weight: 700, size: max(11, (side * 0.37).rounded())))
+                .font(FRFonts.fixedFont(.dmSans, weight: 700, size: Self.initialsFontSize(side: side)))
                 .foregroundStyle(ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
         }
         .frame(width: side, height: side)
+    }
+
+    /// Initials size per side, from the mockups' `.av` sizes (24→10, 28→12,
+    /// 32→12, 36→13, 44→16, 56→21, 64→24). Other sides scale at ~0.37 with a
+    /// floor of 10pt.
+    static func initialsFontSize(side: CGFloat) -> CGFloat {
+        switch side {
+        case ..<26: 10
+        case ..<34: 12
+        case ..<40: 13
+        case ..<50: 16
+        case ..<60: 21
+        case ..<68: 24
+        default: max(10, (side * 0.37).rounded())
+        }
     }
 
     private func avatarShape(side: CGFloat) -> AnyShape {

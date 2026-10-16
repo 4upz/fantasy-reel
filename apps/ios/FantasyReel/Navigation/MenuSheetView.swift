@@ -73,6 +73,8 @@ private struct MenuRootView: View {
                     directory.select(entry.entrySeason.id)
                     router.dismissSheet()
                 } label: {
+                    // A "Your pick" badge (V2Menu) goes in LeagueMenuRow once the
+                    // directory knows whose turn it is in a drafting season.
                     LeagueMenuRow(entry: entry, isCurrent: entry.seasons.contains { $0.id == directory.selectedSeasonID })
                 }
                 .buttonStyle(.plain)
@@ -86,7 +88,7 @@ private struct MenuRootView: View {
             Button {
                 router.present(.joinLeague(.manual))
             } label: {
-                MenuActionRow(title: "Join with Code", systemImage: "ticket")
+                MenuActionRow(title: "Join with Code", systemImage: "link")
             }
             .buttonStyle(.plain)
         }
@@ -97,7 +99,9 @@ private struct MenuRootView: View {
     private var links: some View {
         FRRowGroup {
             NavigationLink(value: MenuRoute.wishlist) {
-                MenuLinkRow(title: "Wishlist", systemImage: "heart")
+                // The wishlist count (V2Menu "12") goes here as a trailing
+                // value once a wishlist store is available to the menu.
+                MenuLinkRow(title: "Wishlist", systemImage: "bookmark")
             }
             NavigationLink(value: MenuRoute.notifications) {
                 MenuLinkRow(title: "Notifications", systemImage: "bell", count: inbox.unreadCount)
@@ -106,10 +110,10 @@ private struct MenuRootView: View {
                 MenuLinkRow(title: "Account", systemImage: "person.crop.circle")
             }
             NavigationLink(value: MenuRoute.howToPlay) {
-                MenuLinkRow(title: "How to Play", systemImage: "questionmark.circle")
+                MenuLinkRow(title: "How to Play", systemImage: "info.circle")
             }
             Link(destination: SupportLinks.email) {
-                MenuLinkRow(title: "Support", systemImage: "envelope", showsChevron: false)
+                MenuLinkRow(title: "Support", systemImage: "envelope", trailing: .external)
             }
         }
         .buttonStyle(.plain)
@@ -160,7 +164,7 @@ private struct MenuActionRow: View {
                 .frame(width: 36)
                 .accessibilityHidden(true)
             Text(title)
-                .frFont(.label)
+                .frFont(.rowLabel)
             Spacer()
         }
         .foregroundStyle(Color.frGold)
@@ -171,10 +175,17 @@ private struct MenuActionRow: View {
 }
 
 private struct MenuLinkRow: View {
+    enum Trailing {
+        /// Pushes inside the sheet.
+        case chevron
+        /// Leaves the app (mail, web): `arrow.up.right`.
+        case external
+    }
+
     let title: String
     let systemImage: String
     var count: Int = 0
-    var showsChevron = true
+    var trailing: Trailing = .chevron
 
     var body: some View {
         HStack(spacing: 12) {
@@ -183,19 +194,17 @@ private struct MenuLinkRow: View {
                 .frame(width: 36)
                 .accessibilityHidden(true)
             Text(title)
-                .frFont(.label)
+                .frFont(.rowLabel)
                 .foregroundStyle(Color.frText)
             Spacer()
             if count > 0 {
                 CountBadge(count: count)
                     .accessibilityLabel("\(count) unread")
             }
-            if showsChevron {
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.frTextMuted)
-                    .accessibilityHidden(true)
-            }
+            Image(systemName: trailing == .external ? "arrow.up.right" : "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.frTextMuted)
+                .accessibilityHidden(true)
         }
         .frame(minHeight: 48)
         .padding(.horizontal, 16)

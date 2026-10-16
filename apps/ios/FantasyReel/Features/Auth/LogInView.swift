@@ -28,16 +28,23 @@ struct LogInView: View {
                 }
 
                 VStack(spacing: 8) {
-                    providerButton(.google, title: "Continue with Google")
-                    providerButton(.discord, title: "Continue with Discord")
+                    VStack(spacing: 12) {
+                        providerButton(.google)
+                        providerButton(.discord)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("Continue with a provider")
                     Text(legalNotice)
                         .frFont(.caption)
                         .foregroundStyle(Color.frTextSecondary)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16)
                 }
 
-                FRRowGroup(separatorInset: 16) {
+                FROrDivider()
+
+                FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     FormFieldRow(label: "Email") {
                         TextField("you@example.com", text: $email)
                             .textContentType(.username)
@@ -118,11 +125,20 @@ struct LogInView: View {
         }
     }
 
-    private func providerButton(_ provider: AuthService.OAuthProvider, title: String) -> some View {
-        Button(title) {
+    private func providerButton(_ provider: AuthService.OAuthProvider) -> some View {
+        ProviderSignInButton(provider: provider.signInButtonProvider) {
             action.run { try await session.signIn(with: provider) }
         }
-        .buttonStyle(.frNeutral)
         .disabled(action.isRunning)
+    }
+}
+
+private extension AuthService.OAuthProvider {
+    var signInButtonProvider: ProviderSignInButton.Provider {
+        switch self {
+        case .apple: .apple
+        case .google: .google
+        case .discord: .discord
+        }
     }
 }

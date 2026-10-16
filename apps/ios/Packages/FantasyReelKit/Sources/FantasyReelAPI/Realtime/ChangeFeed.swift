@@ -23,9 +23,9 @@ public struct ChangeFeed: Sendable {
         public enum Filter: Sendable, Hashable {
             case equals(_ column: String, _ value: String)
 
-            var postgrestFilter: String {
+            var realtimeFilter: RealtimePostgresFilter {
                 switch self {
-                case .equals(let column, let value): return "\(column)=eq.\(value)"
+                case .equals(let column, let value): return .eq(column, value: value)
                 }
             }
         }
@@ -58,12 +58,12 @@ public struct ChangeFeed: Sendable {
                     AnyAction.self,
                     schema: "public",
                     table: watch.table,
-                    filter: watch.filter?.postgrestFilter
+                    filter: watch.filter?.realtimeFilter
                 )
             }
 
             let task = Task {
-                await channel.subscribe()
+                await Self.join(channel)
                 // Subscribe first, then read: anything that changed while the
                 // channel was joining is covered by this initial refresh.
                 continuation.yield()
@@ -79,7 +79,27 @@ public struct ChangeFeed: Sendable {
 
             continuation.onTermination = { _ in
                 task.cancel()
-                Task { await client.removeChannel(channel) }
+                // Wait for a join in progress to settle before removing, so a
+                // half-joined topic isn't left behind on the socket.
+                Task {
+                    _ = await task.value
+                    await client.removeChannel(channel)
+                }
+            }
+        }
+    }
+
+    /// Joins with backoff. After repeated failures it stops trying and the
+    /// stream stays quiet; the caller's foreground refresh still keeps the
+    /// screen current.
+    private static func join(_ channel: RealtimeChannelV2) async {
+        for attempt in 1...5 {
+            do {
+                try await channel.subscribeWithError()
+                return
+            } catch {
+                if Task.isCancelled || attempt == 5 { return }
+                try? await Task.sleep(for: .seconds(1 << attempt))
             }
         }
     }

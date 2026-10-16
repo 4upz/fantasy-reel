@@ -58,6 +58,8 @@ final class ShellRouter {
     var paths: [LeagueTab: [LeagueRoute]] = [:]
     /// Stack for the no-league screen, which has no tabs.
     var standalonePath: [LeagueRoute] = []
+    /// Stack for the league shell's search tab.
+    var searchPath: [LeagueRoute] = []
     var sheet: ShellSheet? {
         didSet { if sheet != oldValue { sheetHasUnsavedInput = false } }
     }
@@ -83,13 +85,17 @@ final class ShellRouter {
         selectedTab = .league(tab)
     }
 
-    /// Pushes onto the selected league tab's stack (or the no-league stack).
+    /// Pushes onto whichever stack is on screen: the selected league tab, the
+    /// search tab, or the no-league screen.
     func push(_ route: LeagueRoute) {
-        guard case .league(let tab) = selectedTab else {
+        guard activeSeasonID != nil else {
             standalonePath.append(route)
             return
         }
-        paths[tab, default: []].append(route)
+        switch selectedTab {
+        case .league(let tab): paths[tab, default: []].append(route)
+        case .search: searchPath.append(route)
+        }
     }
 
     /// Opens the menu sheet, optionally already showing one of its screens.
@@ -151,6 +157,7 @@ final class ShellRouter {
     private func resetTabs(defaultTab: LeagueTab) {
         paths = [:]
         standalonePath = []
+        searchPath = []
         selectedTab = .league(defaultTab)
     }
 

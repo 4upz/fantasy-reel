@@ -17,6 +17,14 @@ struct AppConfigurationTests {
         #expect(config.siteHosts == ["fantasyreel.com", "www.fantasyreel.com"])
     }
 
+    @Test func recoveryCallbackIsMarked() throws {
+        let config = try AppConfiguration.load(from: valid)
+        #expect(config.recoveryCallbackURL.absoluteString == "fantasyreel://auth/callback?flow=recovery")
+        let returned = try #require(URL(string: "fantasyreel://auth/callback?flow=recovery&code=abc"))
+        #expect(AppConfiguration.isRecoveryCallback(returned))
+        #expect(!AppConfiguration.isRecoveryCallback(config.authCallbackURL))
+    }
+
     @Test func rejectsUnsubstitutedBuildSetting() {
         var info = valid
         info["FRSupabaseAnonKey"] = "$(SUPABASE_ANON_KEY)"

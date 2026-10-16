@@ -4,6 +4,10 @@ import SwiftUI
 /// Log In, and legal/support links with movie-data attribution (F-01).
 struct WelcomeView: View {
     @Environment(AppEnvironment.self) private var environment
+    /// The scroll view's visible height, so the content can fill it and pin
+    /// the actions to the bottom (V2Welcome's flex spacer) yet still scroll at
+    /// large text sizes.
+    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
         ScrollView {
@@ -13,18 +17,21 @@ struct WelcomeView: View {
                     .scaledToFit()
                     .frame(height: 44)
                     .accessibilityLabel("Fantasy Reel")
-                    .padding(.top, 24)
+                    .padding(.top, 40)
 
                 Text("Draft upcoming movies. Beat your friends on the Tomatometer.")
                     .frFont(.pageTitle)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.frText)
                     .accessibilityAddTraits(.isHeader)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
 
                 Text("A season-long fantasy league for the films you can't wait to see.")
                     .frFont(.body)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.frTextSecondary)
+                    .padding(.horizontal, 16)
 
                 FRRowGroup {
                     StepRow(number: 1, title: "Draft movies before release", detail: "Snake draft this year's releases")
@@ -35,32 +42,68 @@ struct WelcomeView: View {
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("How it plays")
 
+                Spacer(minLength: 24)
+
                 VStack(spacing: 12) {
                     NavigationLink("Create Account", value: AuthRoute.signUp)
                         .buttonStyle(.frPrimary)
                     NavigationLink("Log In", value: AuthRoute.logIn)
                         .buttonStyle(.frSecondary)
                 }
-                .padding(.top, 24)
 
                 HStack(spacing: 8) {
                     Link("Privacy", destination: LegalLinks.privacy(site: environment.configuration.siteURL))
+                        .padding(.horizontal, 12)
                     Link("Terms", destination: LegalLinks.terms(site: environment.configuration.siteURL))
+                        .padding(.horizontal, 12)
                     Link("Support", destination: SupportLinks.email)
+                        .padding(.horizontal, 12)
                 }
                 .frFont(.meta)
                 .frame(minHeight: FRMetrics.minTapTarget)
+                .padding(.top, 4)
 
                 Text("Movie data from TMDb. This product uses the TMDb API but is not endorsed or certified by TMDb.")
                     .frFont(.caption)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.frTextSecondary)
+                    .padding(.horizontal, 16)
+                    .padding(.top, -8)
             }
             .padding(.horizontal, FRMetrics.pageMargin)
-            .padding(.bottom, 24)
+            .padding(.bottom, 8)
+            // idealHeight too: the scroll view proposes no height, and the ideal
+            // stands in for it so the Spacer can expand to fill the viewport.
+            .frame(minHeight: viewportHeight, idealHeight: viewportHeight, alignment: .top)
+        }
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom
+        } action: { _, height in
+            viewportHeight = max(0, height)
+        }
+        .background(alignment: .top) {
+            WelcomeGlow()
         }
         .background(Color.frBackground)
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+/// V2Welcome's warm glow: a gold-tint radial gradient centered 120pt from the
+/// top of the screen, fading out over 190pt.
+private struct WelcomeGlow: View {
+    var body: some View {
+        RadialGradient(
+            colors: [Color.frGoldTint, Color.frGoldTint.opacity(0)],
+            center: .center,
+            startRadius: 0,
+            endRadius: 190
+        )
+        .frame(width: 380, height: 380)
+        .offset(y: -70)
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -71,8 +114,10 @@ private struct StepRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // Fixed 16pt (V2Welcome `.ibadge.num`): the number sits in a fixed
+            // 32pt circle, so it doesn't scale with Dynamic Type.
             Text(String(number))
-                .frFont(.number)
+                .font(FRFonts.fixedFont(.bricolage, weight: 700, size: 16, numeric: true))
                 .foregroundStyle(Color.frGold)
                 .frame(width: 32, height: 32)
                 .background(Color.frGoldTint, in: Circle())
