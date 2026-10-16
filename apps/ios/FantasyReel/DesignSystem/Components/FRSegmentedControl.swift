@@ -109,16 +109,16 @@ extension FRSegmentedControl where SegmentLabel == Text {
 }
 
 #if DEBUG
-private enum StandingsView: String, CaseIterable, Hashable {
+private enum PreviewStandingsMode: String, CaseIterable, Hashable {
     case current = "Current"
     case projected = "Projected"
 }
 
 #Preview("Segmented · dark") {
-    @Previewable @State var view = StandingsView.current
+    @Previewable @State var view = PreviewStandingsMode.current
     @Previewable @State var appearance = "System"
     FRPreviewCanvas {
-        FRSegmentedControl("Standings view", selection: $view, options: StandingsView.allCases) { option in
+        FRSegmentedControl("Standings view", selection: $view, options: PreviewStandingsMode.allCases) { option in
             Text(option.rawValue)
             if option == .projected { BetaBadge() }
         }
@@ -130,9 +130,9 @@ private enum StandingsView: String, CaseIterable, Hashable {
 }
 
 #Preview("Segmented · light") {
-    @Previewable @State var view = StandingsView.current
+    @Previewable @State var view = PreviewStandingsMode.current
     FRPreviewCanvas {
-        FRSegmentedControl("Standings view", selection: $view, options: StandingsView.allCases, title: \.rawValue)
+        FRSegmentedControl("Standings view", selection: $view, options: PreviewStandingsMode.allCases, title: \.rawValue)
     }
     .preferredColorScheme(.light)
 }
