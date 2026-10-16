@@ -170,17 +170,16 @@ nonisolated enum FRPalette {
         highContrastDark: (UInt32, CGFloat)? = nil,
         highContrastLight: (UInt32, CGFloat)? = nil
     ) -> Color {
-        let darkColor = uiColor(dark, alpha: darkAlpha)
-        let lightColor = uiColor(light, alpha: lightAlpha)
-        let darkHC = highContrastDark.map { uiColor($0.0, alpha: $0.1) } ?? darkColor
-        let lightHC = highContrastLight.map { uiColor($0.0, alpha: $0.1) } ?? lightColor
+        // Capture only plain values: the provider may be @Sendable and called off-main.
+        let darkHC = highContrastDark ?? (dark, darkAlpha)
+        let lightHC = highContrastLight ?? (light, lightAlpha)
         let dynamic = UIColor { traits in
             let highContrast = traits.accessibilityContrast == .high
             // Cinematic Dark is the brand default, so an unspecified style resolves dark.
             if traits.userInterfaceStyle == .light {
-                return highContrast ? lightHC : lightColor
+                return highContrast ? FRPalette.uiColor(lightHC.0, alpha: lightHC.1) : FRPalette.uiColor(light, alpha: lightAlpha)
             }
-            return highContrast ? darkHC : darkColor
+            return highContrast ? FRPalette.uiColor(darkHC.0, alpha: darkHC.1) : FRPalette.uiColor(dark, alpha: darkAlpha)
         }
         return Color(uiColor: dynamic)
     }

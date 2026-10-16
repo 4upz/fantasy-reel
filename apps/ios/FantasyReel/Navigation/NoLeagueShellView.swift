@@ -23,7 +23,7 @@ struct NoLeagueShellView: View {
                         Button {
                             router.presentMenu()
                         } label: {
-                            Avatar(name: displayName, imageURL: profile?.avatarURL.flatMap(URL.init(string:)), size: .medium)
+                            Avatar(name: displayName, imageURL: profile?.avatarURL, size: .medium)
                         }
                         .accessibilityLabel("Open menu: invitations, wishlist, account")
                     }

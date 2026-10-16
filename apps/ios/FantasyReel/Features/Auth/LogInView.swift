@@ -20,7 +20,7 @@ struct LogInView: View {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
                 Text("Log In")
                     .frFont(.largeTitle)
-                    .foregroundStyle(Color.frTextPrimary)
+                    .foregroundStyle(Color.frText)
                     .accessibilityAddTraits(.isHeader)
 
                 if let notice = session.authLinkError {
@@ -71,7 +71,7 @@ struct LogInView: View {
                 Button(action: submit) {
                     Text("Log In")
                 }
-                .buttonStyle(.frPrimary(isLoading: action.isRunning))
+                .buttonStyle(.fr(.primary, isLoading: action.isRunning))
                 .disabled(!canSubmit || action.isRunning)
             }
             .padding(.horizontal, FRMetrics.pageMargin)
