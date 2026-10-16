@@ -80,6 +80,22 @@ to add a screen.
 
 - Every feature screen beyond sign-in and the shell (see the folder table in
   ARCHITECTURE.md for which thread owns which).
-- Sign in with Apple (L-01), CAPTCHA for production sign-in (N-03), Universal
+- Sign in with Apple (L-01): **approved for v1** (Arik, 2026-10-16), built by the
+  sign-in thread. App Review guideline 4.8 requires it beside Google and Discord.
+- CAPTCHA for production sign-in (N-03), Universal
   Links (needs the Apple team ID and an `apple-app-site-association` file on the
   website), push notifications (optional, O-01).
+
+## Release checklist (before the first TestFlight build)
+
+- **Privacy policy.** Add this approved sentence (Arik, 2026-10-16) to the
+  "Cookies, analytics, and session replay" section of
+  `apps/frontend/app/privacy/page.tsx`, after the cookies sentence, and update
+  its `effectiveDate`: *"In our iPhone app, your sign-in session is kept in the
+  iPhone's Keychain and your preferences in the app's storage on your device;
+  deleting the app removes the preferences."* If the app adds analytics, crash
+  reporting or push by then, the policy needs more than this sentence.
+- **Supabase redirect URLs.** Add `fantasyreel://auth/callback` and
+  `fantasyreel://auth/callback?flow=recovery` in the production dashboard under
+  Authentication → URL Configuration.
+- **Sign in with Apple** shipped, with the Apple provider enabled in Supabase.
