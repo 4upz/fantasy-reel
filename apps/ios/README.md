@@ -69,9 +69,12 @@ to add a screen.
 - **Bundle ID `com.fantasyreel.ios`** and URL scheme `fantasyreel` are
   placeholders until the Apple Developer account is set up (requirements §11).
   Change them in `Config/Base.xcconfig`.
-- Sign-in links come back to `fantasyreel://auth/callback`. Local Supabase allows
-  it (`supabase/config.toml`); the production Supabase dashboard needs the same
-  URL added under Authentication → URL Configuration before release.
+- Sign-in links come back to `fantasyreel://auth/callback`, and password-reset
+  links to `fantasyreel://auth/callback?flow=recovery`. Local Supabase allows both
+  (`supabase/config.toml`); the production Supabase dashboard needs the same two
+  URLs added under Authentication → URL Configuration before release.
+- **Not compiled yet.** This foundation was written without a Mac, so the first
+  ⌘B in Xcode is its first build. Expect a handful of small compile fixes.
 
 ## Not yet done (tracked for feature work)
 

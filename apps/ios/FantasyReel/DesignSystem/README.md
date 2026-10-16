@@ -13,7 +13,12 @@ in the PR, since this folder is shared).
 - Movie rows: 64pt minimum, 36×54 poster, one-line title, a fixed 64pt trailing
   points column. Rows grow with Dynamic Type; nothing clips.
 - **One filled primary action per card** (`.frPrimary`); the rest secondary.
-- A glass "+" in the top bar instead of floating create buttons.
+- A glass "+" in the top bar instead of floating create buttons. On a league
+  tab root, add it with `.leagueTopBarPrimaryAction(.init(accessibilityLabel:
+  "Place bid") { … })` on the root view itself: `LeagueTabStack` applies
+  `leagueTopBar()` outside it, and SwiftUI puts the inner modifier's toolbar
+  items first in a placement, giving "+", bell, `⋯`. Applied outside
+  `leagueTopBar()`, the "+" would land after `⋯`.
 - Points are whole numbers with a sign: "+28", "−4" (U+2212), "0"; "Pending"
   when unscored; muted with "at release" before release.
 - One sheet per multi-step task (pushes inside the sheet, never sheet on sheet).
@@ -24,7 +29,7 @@ in the PR, since this folder is shared).
 | --- | --- |
 | `.card`, tinted alert card | `FRCard(tone:)`, `.frCardBackground(_:)` |
 | `.hr` | `FRHairline` |
-| `.grp` | `FRRowGroup(separatorInset:)` (64 default, 108 standings, 16 settings/forms) |
+| `.grp` | `FRRowGroup(separatorInset:)` (64 default, 108 standings, 16 settings/forms). Bounded lists only (≤ ~30 rows); long or unbounded lists use `List` / `LazyVStack` |
 | `.mrow` (movie) | `MovieRow` (points, custom trailing, or none) |
 | `.mrow` (team, rank + avatar) | `ListRow(leading:trailing:)` |
 | row `Button`/`NavigationLink` highlight | `.buttonStyle(.frRow)` |
@@ -40,12 +45,17 @@ in the PR, since this folder is shared).
 | `.btn-p` / `.btn-s` / `.btn-d` / neutral | `.frPrimary` / `.frSecondary` / `.frDestructive` / `.frNeutral` |
 | `.cap44`, `.pill44`, `.btn-sm` | `.fr(kind, size: .large / .medium / .compact, isLoading:)` |
 | `.gbtn.glass` | `GlassIconButton` |
-| `.gpill.glass` | `GlassPill` |
+| `.gpill.glass` | `GlassPill`; its content alone is `GlassPillLabel` (used by the toolbar pill) |
+| `.gbtn .cnt` (bell badge) | `.iconButtonBadge(count)` on the 44pt frame |
+| `.gnav` league top bar | `.leagueTopBar(primaryAction:)` (Navigation); a tab root adds "+" with `.leagueTopBarPrimaryAction(_:)` |
 | adjacent glass controls | `GlassCluster` (`GlassEffectContainer`) |
 | `.cols` + `.statv` | `StatColumns([StatItem])` |
 | `.alert-i`, `.ai-*` | `InlineBanner(tone:title:message:)` |
+| alert card with `.ibadge` + button below (V2LogIn) | `InlineBanner(…, iconStyle: .badge, actionPlacement: .below)` |
+| `.pbtn` provider buttons | `ProviderSignInButton(provider:)` |
+| `.ordiv` | `FROrDivider()` |
 | `.gseg` | `FRSegmentedControl` |
-| `.fgrp .field` | `FormFieldRow` in `FRRowGroup(separatorInset: 16)` |
+| `.fgrp .field` | `FormFieldRow(label:labelWidth:)` (92pt label default) in `FRRowGroup(separatorInset: 16)` |
 | reconnecting pill, offline dot (V2DraftOffline) | `ConnectionStatusBanner`, `ConnectionStatusIndicator` |
 | load / empty / error states | `LoadState` + `LoadStateView`, `LoadingView`, `EmptyStateView`, `ErrorStateView` |
 
@@ -64,6 +74,10 @@ metadata. Both are variable fonts registered by `FRFonts.registerIfNeeded()`
 (call at launch; lookups also call it lazily). If registration fails, roles fall
 back to the system font. See `docs/brand/typography.md`.
 
+`.overline` (DM Sans 600, 13, 0.05em) uppercases its text in the modifier, so
+pass sentence case. `.rowLabel` (DM Sans 500, 16) is for plain menu/settings
+row labels; `.rowTitle` (600) stays for movie and team titles.
+
 ## Images (N-09)
 
 `RemoteImage` → `ImagePipeline.shared`: decoded images downsampled to display
@@ -71,6 +85,9 @@ size, an NSCache memory cache (48 MB), a 100 MB URLCache on disk, shared
 in-flight requests, cancellation via `.task(id:)`. Poster/avatar URLs are public,
 so the disk cache is not user-keyed. Never load a backdrop for a thumbnail;
 `PosterImage` picks the smallest TMDb rendition for the display.
+`RemoteImage` keeps no `UIImage` in view state: it reads the bitmap from the
+memory cache each render and reloads after an eviction, so off-screen rows
+don't pin images the cache has dropped.
 
 ## Accessibility (N-08)
 

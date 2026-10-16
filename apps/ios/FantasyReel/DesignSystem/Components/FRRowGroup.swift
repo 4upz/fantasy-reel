@@ -11,6 +11,12 @@ import SwiftUI
 ///
 /// For swipe actions (drop a movie, cancel a bid) use a `List` instead: swipe
 /// actions only exist on List rows.
+///
+/// Bounded lists only (up to ~30 rows: a roster, a league's standings, a menu,
+/// a form). The group is an eager `VStack` and resolves every row up front to
+/// draw separators, so it builds all rows even off screen. For unbounded or
+/// long lists (search results, notifications, history, bid logs) use a `List`
+/// or a `LazyVStack` styled like the group.
 struct FRRowGroup<Content: View>: View {
     private let separatorInset: CGFloat
     private let content: Content

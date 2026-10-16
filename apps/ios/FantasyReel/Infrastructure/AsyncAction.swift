@@ -63,6 +63,8 @@ final class AsyncAction {
             return false
         } catch {
             let apiError = APIError.wrap(error)
+            // The screen went away mid-call; nobody is left to show an error to.
+            if apiError.isCancellation { return false }
             lastError = apiError
             // For an uncertain result (timeout, dropped connection) the message
             // already says to check the latest state; the screen should refresh

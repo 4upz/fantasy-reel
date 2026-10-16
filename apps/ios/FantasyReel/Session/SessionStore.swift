@@ -127,6 +127,9 @@ final class SessionStore {
         do {
             let account = try await auth.completeSignIn(from: url)
             authLinkError = nil
+            if AppConfiguration.isRecoveryCallback(url) {
+                isRecoveringPassword = true
+            }
             setSignedIn(account)
         } catch {
             // A link requested on another device has no PKCE verifier here, but a

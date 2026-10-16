@@ -33,6 +33,24 @@ public struct AppConfiguration: Sendable, Equatable {
         return components.url ?? URL(string: "fantasyreel://auth/callback")!
     }
 
+    /// The callback for password-reset emails. PKCE sign-ins report only
+    /// `signedIn`, so the query marks the session as a recovery.
+    public var recoveryCallbackURL: URL {
+        var components = URLComponents(url: authCallbackURL, resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: Self.flowQueryName, value: Self.recoveryFlow)]
+        return components?.url ?? authCallbackURL
+    }
+
+    public static let flowQueryName = "flow"
+    public static let recoveryFlow = "recovery"
+
+    /// Whether an auth callback came from a password-reset email.
+    public static func isRecoveryCallback(_ url: URL) -> Bool {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .contains { $0.name == flowQueryName && $0.value == recoveryFlow } ?? false
+    }
+
     /// Hosts whose links the app treats as its own.
     public var siteHosts: Set<String> {
         guard let host = siteURL.host()?.lowercased() else { return [] }

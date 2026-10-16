@@ -7,7 +7,9 @@ import UIKit
 ///
 /// Shows `placeholder` while loading and `failure` when the URL is nil or the
 /// load fails. A cached image appears on the first frame (no placeholder flash);
-/// a freshly loaded one fades in unless Reduce Motion is on.
+/// a freshly loaded one fades in unless Reduce Motion is on. The view holds no
+/// bitmap of its own: it reads the image from the pipeline's memory cache on
+/// each render and reloads if the cache has evicted it.
 struct RemoteImage<Placeholder: View, Failure: View>: View {
     private let url: URL?
     private let pointSize: CGSize
@@ -35,14 +37,14 @@ struct RemoteImage<Placeholder: View, Failure: View>: View {
 
     var body: some View {
         let key = loadKey
-        let image = displayedImage(for: key)
+        let image = cachedImage(for: key)
         ZStack {
             if let image {
                 Image(uiImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
                     .transition(.opacity)
-            } else if case .failure(let failedKey) = phase, failedKey == key {
+            } else if phase == .failed(key) {
                 failure()
             } else {
                 placeholder()
@@ -51,7 +53,11 @@ struct RemoteImage<Placeholder: View, Failure: View>: View {
         .frame(width: pointSize.width, height: pointSize.height)
         .clipped()
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: image != nil)
-        .task(id: key) { await load(key) }
+        // Keyed on whether the image is in memory too: if the cache evicts it,
+        // the next render misses and the task reloads it.
+        .task(id: LoadRequest(key: key, isCached: image != nil)) {
+            await load(key)
+        }
     }
 
     // MARK: - Loading
@@ -61,10 +67,19 @@ struct RemoteImage<Placeholder: View, Failure: View>: View {
         let maxPixelSize: Int
     }
 
-    private enum Phase {
+    private struct LoadRequest: Hashable {
+        let key: LoadKey
+        let isCached: Bool
+    }
+
+    /// Only which load finished, never the image itself: the decoded image
+    /// lives in `ImagePipeline`'s memory cache and `body` reads it from there,
+    /// so a view never pins a bitmap the cache has evicted.
+    private enum Phase: Equatable {
         case empty
-        case success(LoadKey, UIImage)
-        case failure(LoadKey)
+        /// The count makes a reload after eviction a real state change.
+        case loaded(LoadKey, Int)
+        case failed(LoadKey)
     }
 
     private var loadKey: LoadKey {
@@ -72,30 +87,31 @@ struct RemoteImage<Placeholder: View, Failure: View>: View {
         return LoadKey(url: url, maxPixelSize: Int((longestSide * max(displayScale, 1)).rounded(.up)))
     }
 
-    private func displayedImage(for key: LoadKey) -> UIImage? {
-        if case .success(let loadedKey, let image) = phase, loadedKey == key {
-            return image
-        }
+    private func cachedImage(for key: LoadKey) -> UIImage? {
         guard let url = key.url else { return nil }
         return ImagePipeline.shared.cachedImage(for: url, maxPixelSize: key.maxPixelSize)?.image
     }
 
     private func load(_ key: LoadKey) async {
         guard let url = key.url else {
-            phase = .failure(key)
+            if phase != .failed(key) { phase = .failed(key) }
             return
         }
-        if let cached = ImagePipeline.shared.cachedImage(for: url, maxPixelSize: key.maxPixelSize) {
-            phase = .success(key, cached.image)
+        // A cache hit is already on screen; changing state here would only
+        // cost a second render.
+        if ImagePipeline.shared.cachedImage(for: url, maxPixelSize: key.maxPixelSize) != nil {
             return
         }
         do {
-            let decoded = try await ImagePipeline.shared.image(for: url, maxPixelSize: key.maxPixelSize)
+            _ = try await ImagePipeline.shared.image(for: url, maxPixelSize: key.maxPixelSize)
             guard !Task.isCancelled else { return }
-            phase = .success(key, decoded.image)
+            // Triggers the render that reads the now-cached image.
+            var count = 0
+            if case .loaded(_, let previous) = phase { count = previous &+ 1 }
+            phase = .loaded(key, count)
         } catch {
             guard !Task.isCancelled else { return }
-            phase = .failure(key)
+            phase = .failed(key)
         }
     }
 }

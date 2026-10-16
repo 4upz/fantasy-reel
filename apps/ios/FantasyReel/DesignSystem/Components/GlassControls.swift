@@ -39,13 +39,7 @@ struct GlassIconButton: View {
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .circle)
-        .overlay(alignment: .topTrailing) {
-            if let badge, badge > 0 {
-                CountBadge(count: badge, size: .small)
-                    .offset(x: 2, y: -2)
-                    .allowsHitTesting(false)
-            }
-        }
+        .iconButtonBadge(badge ?? 0)
         .accessibilityLabel(label)
         .accessibilityValue(spokenBadge)
     }
@@ -86,26 +80,56 @@ struct GlassPill: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Avatar(name: title, imageURL: imageURL, size: .custom(32))
-                if showsTitle {
-                    Text(title)
-                        .frFont(.controlSmall)
-                        .lineLimit(1)
-                }
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(Color.frText)
-            .padding(.leading, 6)
-            .padding(.trailing, 14)
-            .frame(minHeight: FRMetrics.minTapTarget)
-            .contentShape(Capsule())
+            GlassPillLabel(title: title, imageURL: imageURL, showsTitle: showsTitle)
+                .padding(.leading, 6)
+                .padding(.trailing, 14)
+                .frame(minHeight: FRMetrics.minTapTarget)
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityLabel(label)
+    }
+}
+
+/// The league pill's content (`.gpill`): the 32pt avatar, the optional name,
+/// and a 13pt semibold up/down chevron, all in `frText`. Shared by `GlassPill`
+/// and the toolbar pill in `leagueTopBar()`, where the toolbar supplies the
+/// Liquid Glass capsule and padding.
+struct GlassPillLabel: View {
+    let title: String
+    var imageURL: String? = nil
+    var showsTitle = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Avatar(name: title, imageURL: imageURL, size: .custom(32))
+            if showsTitle {
+                Text(title)
+                    .frFont(.controlSmall)
+                    .lineLimit(1)
+            }
+            Image(systemName: "chevron.up.chevron.down")
+                .font(.system(size: 13, weight: .semibold))
+                .accessibilityHidden(true)
+        }
+        .foregroundStyle(Color.frText)
+    }
+}
+
+extension View {
+    /// The `.cnt` badge on a 44pt icon button: `CountBadge(size: .small)` at
+    /// top −2 / right −2 (V2Home bell). Hidden when `count` is 0. Apply to the
+    /// 44pt frame, not the glyph. The badge is decorative; state the count in
+    /// the button's accessibility label or value.
+    func iconButtonBadge(_ count: Int) -> some View {
+        overlay(alignment: .topTrailing) {
+            if count > 0 {
+                CountBadge(count: count, size: .small)
+                    .offset(x: 2, y: -2)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 

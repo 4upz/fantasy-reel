@@ -70,6 +70,13 @@ public enum APIError: Error, Sendable, Equatable {
         }
     }
 
+    /// True when the caller gave up (its task was cancelled, e.g. the screen
+    /// closed). Not something to show the user.
+    public var isCancellation: Bool {
+        if case .network(let code, _) = self, code == .cancelled { return true }
+        return false
+    }
+
     /// True when the server may have completed the action even though we saw an
     /// error. Screens refresh before re-enabling a mutation in this case.
     public var isUncertainOutcome: Bool {

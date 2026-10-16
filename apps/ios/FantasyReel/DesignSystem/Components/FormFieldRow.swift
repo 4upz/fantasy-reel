@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// One row of a grouped form (`.fgrp .field`): a fixed 120pt label column and
-/// the control, at least 50pt tall. At accessibility text sizes the label
+/// One row of a grouped form (`.fgrp .field`): a fixed label column (92pt by
+/// default, as on V2LogIn; pass a wider `labelWidth` for long labels) and the
+/// control, at least 50pt tall. At accessibility text sizes the label
 /// stacks above the control instead of squeezing it.
 ///
 /// Put rows in `FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset)`.
@@ -22,12 +23,14 @@ import SwiftUI
 /// ```
 struct FormFieldRow<Content: View>: View {
     private let label: String
+    private let labelWidth: CGFloat
     private let content: Content
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    init(label: String, @ViewBuilder content: () -> Content) {
+    init(label: String, labelWidth: CGFloat = 92, @ViewBuilder content: () -> Content) {
         self.label = label
+        self.labelWidth = labelWidth
         self.content = content()
     }
 
@@ -40,7 +43,7 @@ struct FormFieldRow<Content: View>: View {
             Text(label)
                 .frFont(.input)
                 .foregroundStyle(Color.frText)
-                .frame(width: stacked ? nil : 120, alignment: .leading)
+                .frame(width: stacked ? nil : labelWidth, alignment: .leading)
             content
                 .frFont(.input)
                 .foregroundStyle(Color.frText)
@@ -59,10 +62,10 @@ struct FormFieldRow<Content: View>: View {
     @Previewable @State var code = ""
     FRPreviewCanvas {
         FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
-            FormFieldRow(label: "League name") {
+            FormFieldRow(label: "League name", labelWidth: 120) {
                 TextField("Required", text: $name)
             }
-            FormFieldRow(label: "Join code") {
+            FormFieldRow(label: "Join code", labelWidth: 120) {
                 TextField("ABC123", text: $code)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()

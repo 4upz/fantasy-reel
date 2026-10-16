@@ -79,19 +79,34 @@ public struct EdgeFunctionClient: Sendable {
     ) async throws(APIError) -> Response {
         let requestID = UUID().uuidString.lowercased()
         do {
-            return try await withThrowingTaskGroup(of: Response.self) { group in
-                group.addTask {
-                    try await perform(function, method: method, body: body, requestID: requestID)
+            // Race the call against the deadline with unstructured tasks: a task
+            // group would wait for the losing child, and a token refresh inside
+            // the SDK ignores cancellation, so the deadline could overrun.
+            let race = DeadlineRace<Response>()
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    race.install(continuation)
+                    race.track(Task {
+                        do {
+                            let response: Response = try await perform(
+                                function, method: method, body: body, requestID: requestID, timeout: timeout
+                            )
+                            race.finish(.success(response))
+                        } catch {
+                            race.finish(.failure(error))
+                        }
+                    })
+                    race.track(Task {
+                        do {
+                            try await Task.sleep(for: timeout)
+                        } catch {
+                            return
+                        }
+                        race.finish(.failure(APIError.timedOut(requestID: requestID)))
+                    })
                 }
-                group.addTask {
-                    try await Task.sleep(for: timeout)
-                    throw APIError.timedOut(requestID: requestID)
-                }
-                defer { group.cancelAll() }
-                guard let first = try await group.next() else {
-                    throw APIError.timedOut(requestID: requestID)
-                }
-                return first
+            } onCancel: {
+                race.finish(.failure(CancellationError()))
             }
         } catch let error as APIError {
             Self.log.error("\(function, privacy: .public) failed [request_id=\(requestID, privacy: .public)]: \(error.userMessage, privacy: .public)")
@@ -109,7 +124,8 @@ public struct EdgeFunctionClient: Sendable {
         _ function: String,
         method: String,
         body: Data?,
-        requestID: String
+        requestID: String,
+        timeout: Duration
     ) async throws -> Response {
         guard let token = await tokenProvider() else { throw APIError.notSignedIn }
         try Task.checkCancellation()
@@ -117,6 +133,7 @@ public struct EdgeFunctionClient: Sendable {
         var request = URLRequest(url: functionsURL.appending(path: function))
         request.httpMethod = method
         request.httpBody = body
+        request.timeoutInterval = Double(timeout.components.seconds) + 1
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue(anonKey, forHTTPHeaderField: "apikey")
         request.setValue(requestID, forHTTPHeaderField: "x-request-id")
@@ -188,4 +205,50 @@ public struct EdgeFunctionClient: Sendable {
 public struct EmptyResponse: Decodable, Sendable, Equatable {
     public init() {}
     public init(from decoder: any Decoder) throws {}
+}
+
+/// Resumes one continuation exactly once with whichever result arrives first
+/// (the response, the deadline, or the caller's cancellation), then cancels
+/// the racers still running.
+private final class DeadlineRace<T: Sendable>: Sendable {
+    private struct State {
+        var continuation: CheckedContinuation<T, any Error>?
+        var result: Result<T, any Error>?
+        var tasks: [Task<Void, Never>] = []
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    func install(_ continuation: CheckedContinuation<T, any Error>) {
+        let early: Result<T, any Error>? = state.withLock { state in
+            if let result = state.result { return result }
+            state.continuation = continuation
+            return nil
+        }
+        if let early { continuation.resume(with: early) }
+    }
+
+    func track(_ task: Task<Void, Never>) {
+        let alreadyFinished = state.withLock { state in
+            if state.result != nil { return true }
+            state.tasks.append(task)
+            return false
+        }
+        if alreadyFinished { task.cancel() }
+    }
+
+    func finish(_ result: Result<T, any Error>) {
+        let winner: (CheckedContinuation<T, any Error>?, [Task<Void, Never>])? = state.withLock { state in
+            guard state.result == nil else { return nil }
+            state.result = result
+            defer {
+                state.continuation = nil
+                state.tasks = []
+            }
+            return (state.continuation, state.tasks)
+        }
+        guard let winner else { return }
+        winner.1.forEach { $0.cancel() }
+        winner.0?.resume(with: result)
+    }
 }

@@ -7,7 +7,7 @@ struct LeagueNavigationTests {
         #expect(LeagueNavigation.tabs(for: .drafting) == [.home, .draft, .roster])
         #expect(LeagueNavigation.tabs(for: .counterpicking) == [.home, .draft, .roster])
         #expect(LeagueNavigation.tabs(for: .active) == [.home, .roster, .bids, .trades, .standings])
-        #expect(LeagueNavigation.tabs(for: .completed) == [.home, .roster, .standings])
+        #expect(LeagueNavigation.tabs(for: .completed) == [.home, .standings, .roster, .draft])
         #expect(LeagueNavigation.tabs(for: .unknown("paused")) == [.home, .roster])
     }
 
@@ -31,6 +31,8 @@ struct LeagueNavigationTests {
         #expect(LeagueNavigation.resolvedTab(.bids, for: .completed) == .home)
         #expect(LeagueNavigation.resolvedTab(.standings, for: .drafting) == .draft)
         #expect(LeagueNavigation.resolvedTab(nil, for: .setup) == .draft)
+        #expect(LeagueNavigation.resolvedTab(.draft, for: .completed) == .draft)
+        #expect(LeagueNavigation.resolvedTab(.draft, for: .active) == .home)
     }
 
     @Test func menuForMembers() {
@@ -38,7 +40,7 @@ struct LeagueNavigationTests {
         #expect(LeagueNavigation.menuItems(status: .drafting, isOwner: false, seasonCount: 1) == [.rules])
         #expect(LeagueNavigation.menuItems(status: .counterpicking, isOwner: false, seasonCount: 2) == [.rules, .history])
         #expect(LeagueNavigation.menuItems(status: .active, isOwner: false, seasonCount: 1) == [.rules, .draftResults])
-        #expect(LeagueNavigation.menuItems(status: .completed, isOwner: false, seasonCount: 3) == [.rules, .draftResults, .history])
+        #expect(LeagueNavigation.menuItems(status: .completed, isOwner: false, seasonCount: 3) == [.rules, .history])
         #expect(LeagueNavigation.menuItems(status: .unknown("x"), isOwner: false, seasonCount: 1) == [.rules])
     }
 
@@ -48,7 +50,7 @@ struct LeagueNavigationTests {
         #expect(LeagueNavigation.menuItems(status: .drafting, isOwner: true, seasonCount: 1) == [.rules, .settings])
         #expect(LeagueNavigation.menuItems(status: .counterpicking, isOwner: true, seasonCount: 1) == [.rules, .settings])
         #expect(LeagueNavigation.menuItems(status: .active, isOwner: true, seasonCount: 1) == [.rules, .draftResults, .settings])
-        #expect(LeagueNavigation.menuItems(status: .completed, isOwner: true, seasonCount: 2) == [.rules, .draftResults, .history, .settings])
+        #expect(LeagueNavigation.menuItems(status: .completed, isOwner: true, seasonCount: 2) == [.rules, .history, .settings])
         #expect(LeagueNavigation.menuItems(status: .unknown("x"), isOwner: true, seasonCount: 1) == [.rules, .settings])
     }
 
