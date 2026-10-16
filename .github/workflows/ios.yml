@@ -1,0 +1,88 @@
+name: iOS
+
+on:
+  pull_request:
+    paths:
+      - 'apps/ios/**'
+      - '.github/workflows/ios.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - '.github/workflows/ios.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build and test (iOS Simulator)
+    runs-on: macos-26
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE" ]; then XCODE=/Applications/Xcode.app; fi
+          echo "Using $XCODE"
+          sudo xcode-select -s "$XCODE/Contents/Developer"
+          xcodebuild -version
+
+      - name: Pick a simulator
+        id: sim
+        run: |
+          UDID=$(xcrun simctl list devices available --json \
+            | python3 -c 'import json,sys
+          d=json.load(sys.stdin)["devices"]
+          ios=[(k,v) for k,v in d.items() if "iOS-26" in k or "iOS-2" in k]
+          ios.sort(key=lambda kv: kv[0])
+          for k,v in reversed(ios):
+              for dev in v:
+                  if dev["name"].startswith("iPhone"):
+                      print(dev["udid"]); sys.exit()')
+          echo "Simulator: $UDID"
+          echo "udid=$UDID" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve packages
+        run: xcodebuild -resolvePackageDependencies -project FantasyReel.xcodeproj -scheme FantasyReel
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild test \
+            -project FantasyReel.xcodeproj \
+            -scheme FantasyReel \
+            -configuration Debug \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath build/FantasyReel.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build/xcodebuild.log
+
+      - name: Summarize errors
+        if: failure()
+        run: |
+          echo "### Compiler errors"
+          grep -E "error:" build/xcodebuild.log | sort -u | head -200 || true
+          echo "### Failed tests"
+          grep -E "✘|failed|Test .* recorded an issue" build/xcodebuild.log | head -100 || true
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-results
+          path: |
+            apps/ios/build/xcodebuild.log
+            apps/ios/build/FantasyReel.xcresult
+          if-no-files-found: ignore
