@@ -102,9 +102,9 @@ extension FRSegmentedControl where SegmentLabel == Text {
         track: Track = .surface,
         title: @escaping (Option) -> String
     ) {
-        self.init(accessibilityLabel, selection: selection, options: options, track: track) { option in
+        self.init(accessibilityLabel, selection: selection, options: options, track: track, label: { option in
             Text(title(option))
-        }
+        })
     }
 }
 
@@ -118,10 +118,12 @@ private enum PreviewStandingsMode: String, CaseIterable, Hashable {
     @Previewable @State var view = PreviewStandingsMode.current
     @Previewable @State var appearance = "System"
     FRPreviewCanvas {
-        FRSegmentedControl("Standings view", selection: $view, options: PreviewStandingsMode.allCases) { option in
-            Text(option.rawValue)
-            if option == .projected { BetaBadge() }
-        }
+        FRSegmentedControl("Standings view", selection: $view, options: PreviewStandingsMode.allCases, label: { option in
+            HStack(spacing: 6) {
+                Text(option.rawValue)
+                if option == .projected { BetaBadge() }
+            }
+        })
         FRSegmentedControl(
             "Appearance", selection: $appearance, options: ["System", "Light", "Dark"], track: .elevated,
             title: { $0 }
