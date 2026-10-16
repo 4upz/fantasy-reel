@@ -53,10 +53,13 @@ public struct AuthService: Sendable {
         self.provider = provider
     }
 
-    /// The session stored in the Keychain, refreshed if needed. Nil when signed out
-    /// or when the stored session can no longer be refreshed.
+    /// The session stored in the Keychain. Nil when signed out.
     public func restoreSession() async -> Account? {
-        guard let session = try? await auth.session else { return nil }
+        // Read the stored session without a network refresh, so launching
+        // offline (or with an expired access token) still opens signed in.
+        // The SDK refreshes the token on the first request and emits
+        // `signedOut` if the refresh token is no longer valid.
+        guard let session = auth.currentSession else { return nil }
         return Self.account(session.user)
     }
 
@@ -76,8 +79,7 @@ public struct AuthService: Sendable {
                     case .tokenRefreshed, .userUpdated, .mfaChallengeVerified:
                         if let user = session?.user { continuation.yield(.updated(Self.account(user))) }
                     case .initialSession:
-                        // Launch state is read through restoreSession(), which also
-                        // refreshes an expired token before trusting it.
+                        // Launch state is read through restoreSession().
                         break
                     @unknown default:
                         break

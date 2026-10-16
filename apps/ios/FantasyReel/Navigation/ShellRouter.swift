@@ -37,8 +37,10 @@ enum JoinInput: Hashable {
     case invitation(token: String)
 }
 
-/// The one sheet that can be up at a time. Presenting another replaces it;
-/// sheets never stack (design rule: one sheet per task).
+/// The one sheet that can be up at a time. Every sheet in the app goes through
+/// here (feature threads add a case and map it in `ShellSheetView`); views
+/// never attach their own `.sheet`. Sheets never stack (design rule: one sheet
+/// per task), and a sheet with unsaved input is never silently replaced.
 enum ShellSheet: Identifiable, Hashable {
     case menu
     case createLeague
@@ -56,8 +58,17 @@ final class ShellRouter {
     var paths: [LeagueTab: [LeagueRoute]] = [:]
     /// Stack for the no-league screen, which has no tabs.
     var standalonePath: [LeagueRoute] = []
-    var sheet: ShellSheet?
+    var sheet: ShellSheet? {
+        didSet { if sheet != oldValue { sheetHasUnsavedInput = false } }
+    }
     var menuPath: [MenuRoute] = []
+    /// Set by a sheet's form while it holds input the user hasn't saved. A new
+    /// sheet then waits for the user to confirm discarding it.
+    var sheetHasUnsavedInput = false
+    /// A sheet waiting on that confirmation (see `confirmReplacingSheet`).
+    var pendingSheet: ShellSheet?
+    /// The season the tab stacks currently belong to.
+    private(set) var activeSeasonID: LeagueID?
     /// Shown when a link points at a league this account can't open.
     var unavailableLinkMessage: String?
 
@@ -83,22 +94,61 @@ final class ShellRouter {
 
     /// Opens the menu sheet, optionally already showing one of its screens.
     func presentMenu(_ route: MenuRoute? = nil) {
-        menuPath = route.map { [$0] } ?? []
-        sheet = .menu
+        if sheet == .menu, !sheetHasUnsavedInput {
+            menuPath = route.map { [$0] } ?? []
+            return
+        }
+        present(.menu, menuPath: route.map { [$0] } ?? [])
     }
 
-    func present(_ sheet: ShellSheet) {
-        if sheet != .menu { menuPath = [] }
-        self.sheet = sheet
+    func present(_ newSheet: ShellSheet) {
+        present(newSheet, menuPath: [])
+    }
+
+    private func present(_ newSheet: ShellSheet, menuPath newMenuPath: [MenuRoute]) {
+        if sheet != nil, sheet != newSheet, sheetHasUnsavedInput {
+            pendingSheet = newSheet
+            pendingMenuPath = newMenuPath
+            return
+        }
+        menuPath = newMenuPath
+        sheet = newSheet
+    }
+
+    private var pendingMenuPath: [MenuRoute] = []
+
+    /// The user chose to discard the open sheet's input for `pendingSheet`.
+    func confirmReplacingSheet() {
+        guard let next = pendingSheet else { return }
+        pendingSheet = nil
+        sheetHasUnsavedInput = false
+        menuPath = pendingMenuPath
+        sheet = next
+    }
+
+    /// The user chose to keep editing; the waiting sheet is dropped.
+    func cancelReplacingSheet() {
+        pendingSheet = nil
     }
 
     func dismissSheet() {
         sheet = nil
     }
 
-    /// Called when the league (or its phase) changes: tab stacks from the old
-    /// season must not survive into the new one.
-    func resetForSeason(defaultTab: LeagueTab) {
+    /// Points the tab stacks at a season. A different season clears every
+    /// stack and lands on its default tab; the same season changes nothing.
+    func showSeason(_ id: LeagueID?, defaultTab: LeagueTab) {
+        guard id != activeSeasonID else { return }
+        activeSeasonID = id
+        resetTabs(defaultTab: defaultTab)
+    }
+
+    /// The season's phase changed (draft → active), which swaps the tab set.
+    func phaseDidChange(defaultTab: LeagueTab) {
+        resetTabs(defaultTab: defaultTab)
+    }
+
+    private func resetTabs(defaultTab: LeagueTab) {
         paths = [:]
         standalonePath = []
         selectedTab = .league(defaultTab)
@@ -117,12 +167,15 @@ final class ShellRouter {
                 unavailableLinkMessage = "That league isn't available on this account. You may need an invitation, or it may have been deleted."
                 return
             }
-            sheet = nil
+            if !sheetHasUnsavedInput { sheet = nil }
+            // Reset here, before routing, so the season-change observer
+            // doesn't wipe the section afterwards.
+            showSeason(id, defaultTab: directory.selection?.defaultTab ?? .home)
             if let section, let status = directory.selection?.season.status {
                 route(to: section, status: status)
             }
         case .movies:
-            sheet = nil
+            if !sheetHasUnsavedInput { sheet = nil }
             if directory.selection != nil {
                 selectedTab = .search
             } else {

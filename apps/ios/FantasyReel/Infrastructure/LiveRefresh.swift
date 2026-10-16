@@ -4,7 +4,9 @@ import SwiftUI
 /// revalidation (N-05). iOS suspends sockets in the background, so any screen
 /// fed by Realtime also refreshes when the app becomes active again.
 extension View {
-    /// Runs `action` each time the scene returns to the foreground (not on first appearance).
+    /// Runs `action` each time the app comes back from the background (not on
+    /// first appearance, and not for brief interruptions such as Control Center
+    /// or a Face ID prompt, which only make the scene inactive).
     func refreshOnForeground(_ action: @escaping @MainActor () async -> Void) -> some View {
         modifier(ForegroundRefreshModifier(action: action))
     }
@@ -20,11 +22,19 @@ extension View {
 private struct ForegroundRefreshModifier: ViewModifier {
     let action: @MainActor () async -> Void
     @Environment(\.scenePhase) private var scenePhase
+    @State private var wasBackgrounded = false
 
     func body(content: Content) -> some View {
-        content.onChange(of: scenePhase) { oldPhase, newPhase in
-            guard newPhase == .active, oldPhase != .active else { return }
-            Task { await action() }
+        content.onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .background:
+                wasBackgrounded = true
+            case .active where wasBackgrounded:
+                wasBackgrounded = false
+                Task { await action() }
+            default:
+                break
+            }
         }
     }
 }

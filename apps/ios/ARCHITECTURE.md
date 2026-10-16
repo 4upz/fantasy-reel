@@ -10,7 +10,11 @@ Where this file and those disagree, raise it rather than silently picking one.
 - **Xcode 26, Swift 6.2, iOS 26.0 minimum, iPhone only.** iOS 26 is what gives us
   Liquid Glass (`.glassEffect`, glass toolbars, the separated search tab) without
   hand-rolled blur. iPad is a later decision (O-03).
-- Swift 6 language mode everywhere (strict concurrency). UI types are `@MainActor`.
+- Swift 6 language mode everywhere (strict concurrency). The app target sets
+  `SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated` and
+  `SWIFT_APPROACHABLE_CONCURRENCY = NO` on purpose, to match the package: nothing
+  is main-actor by default, so mark every view model, store and UI helper
+  `@MainActor` explicitly. Don't change these per feature.
 - One third-party dependency: `supabase-swift` (2.x), pinned in
   `Packages/FantasyReelKit/Package.swift`. Add another only with a reason in the PR.
 
@@ -21,9 +25,10 @@ apps/ios/
 ├── FantasyReel.xcodeproj         One app target. Its source folder is a *synchronized*
 │                                 group: drop a .swift file into FantasyReel/ and it is
 │                                 compiled. Feature work never needs to edit the project.
-├── Config/                       xcconfigs (Supabase URL/key per build), Info.plist,
-│                                 entitlements. Local overrides go in Config/Local.xcconfig
-│                                 (gitignored).
+├── Config/                       xcconfigs (Supabase URL/key per build) and Info.plist.
+│                                 No entitlements yet (Universal Links and Sign in with
+│                                 Apple will add one). Local overrides go in
+│                                 Config/Local.xcconfig (gitignored).
 ├── FantasyReel/                  The app target: everything SwiftUI
 │   ├── App/                      @main, AppEnvironment (dependency container), RootView
 │   ├── Session/                  SessionStore (auth state + every auth action)
@@ -75,23 +80,43 @@ initializer so the shell keeps compiling.
 - **Signed in with a league:** `LeagueShellView` is a native `TabView`.
   - Before the season (setup, drafting, counterpicking): **Home, Draft, Roster**; opens on Draft.
   - Active: **Home, Roster, Bids, Trades, Standings**; opens on Home.
-  - Completed: **Home, Roster, Standings**.
+  - Completed: **Home, Standings, Roster, Draft** (mockup "Season complete").
   - A `Tab(role: .search)` gives the round search button beside the tab bar.
   - Rules live in `FantasyReelCore/Navigation/LeagueNavigation.swift` with tests.
 - **Top bar:** a glass league pill (leading) opens the **menu sheet** (other leagues,
   invitations, create/join, Wishlist, Notifications, Account, How to Play, Support).
   Trailing: notifications bell with unread badge, and a league `⋯` menu with Rules,
-  Draft results (active/completed), History (2+ seasons), Settings (owner), and Share
+  Draft results (active), History (2+ seasons), Settings (owner), and Share
   invite (owner, setup). `⋯` destinations push onto the current tab's stack.
 - **One sheet per task, never a sheet on a sheet.** The menu sheet has its own
   `NavigationStack`; the bell opens that same sheet already showing Notifications.
   A flow that needs several steps (bid, trade, pick) is one sheet with pushes inside.
+- **Every sheet goes through `ShellSheet`.** Never attach a local `.sheet` or
+  `.fullScreenCover`. Add a case carrying the sheet's input (`case placeBid(MovieID)`)
+  and map it in `ShellSheetView` (`SignedInRootView.swift`); present with
+  `router.present(_:)`. While a sheet's form holds unsaved input, set
+  `router.sheetHasUnsavedInput = true`; a link or the bell then asks before
+  replacing it. Confirmation dialogs and alerts are fine locally.
+- **Links only pre-fill.** Any app or website can open `fantasyreel://` links, so a
+  sheet opened from a link (join code, invitation) fills in its form and waits for
+  the user to tap the action. Nothing mutates on open.
+- **Screen state is per season.** `LeagueShellView` is rebuilt when the league
+  changes (`.id(season.id)`), so a tab root's `@State` model never outlives its
+  season. Read the league from `\.leagueSelection`; don't cache the ID elsewhere.
+- **"+" in the top bar:** a tab root that creates something adds the glass "+" with
+  the `leagueTopBar` primary-action API in `LeagueTopBar.swift`, not a floating button.
+- **Tab badges** (Bids: outbid count; Trades: offers waiting on you) are not wired
+  yet. The Bids and Trades threads add `.badge(_:)` to their `Tab` in
+  `LeagueShellView` from a small shell-level store; iOS draws both badges red.
 - Routing: `ShellRouter` (`Navigation/ShellRouter.swift`) owns the selected tab, one
   `NavigationPath`-like array per tab, and the active sheet. Use
   `router.push(_:)`, `router.select(_:)`, `router.presentMenu(_:)`. Destinations are
   the `LeagueRoute` and `MenuRoute` enums; add a case for a new screen.
 - Deep links (`DeepLink.parse`) arrive through `onOpenURL`; signed-out links are held
   by `SessionStore.pendingDeepLink` and replayed after sign-in.
+- **Password recovery:** `SessionStore.isRecoveringPassword` is set when a reset link
+  signs the user in, but nothing reads it yet. The Auth thread owns showing a
+  non-dismissible "Choose a new password" screen from `RootView` while it is true.
 
 ## Layout rules from the design review
 
@@ -128,8 +153,12 @@ buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
 ## UI state conventions
 
 - View models are `@Observable @MainActor final class`es owned by the screen
-  (`@State var model = ...`), dependencies passed in from `AppEnvironment`
-  (read with `@Environment(AppEnvironment.self)`).
+  (`@State var model = ...`). A view model takes the specific repositories it uses
+  (`init(holdings: any HoldingsRepository, ...)`), never the whole `AppEnvironment`;
+  the view reads `@Environment(AppEnvironment.self)` and passes them in.
+- **Repositories are protocols** with a live `Supabase…Repository` and an in-memory
+  fake (`FantasyReelAPI/Repositories/`). Add your feature's pair the same way, so
+  previews (`AppEnvironment.preview(...)`) and tests never touch the network.
 - Async loads expose `LoadState<Value>` and render with `LoadStateView`: loading,
   loaded, empty, failed(retry). Every screen has loading/empty/error states (N-07).
 - Buttons that call the server use `AsyncAction` (the `useAsyncAction` equivalent):

@@ -39,13 +39,18 @@ final class SessionStore {
         return nil
     }
 
-    /// Restores the stored session, then follows auth changes for the app's lifetime.
+    /// Follows auth changes for the app's lifetime and restores the stored
+    /// session. Listening starts first, so a sign-in link opened at cold launch
+    /// can't be overwritten by the restore result.
     func start() {
         guard listener == nil else { return }
         listener = Task { [weak self, auth] in
+            let changes = auth.changes()
             let restored = await auth.restoreSession()
-            self?.state = restored.map(State.signedIn) ?? .signedOut
-            for await change in auth.changes() {
+            if let self, case .restoring = self.state {
+                self.state = restored.map(State.signedIn) ?? .signedOut
+            }
+            for await change in changes {
                 guard let self else { return }
                 self.apply(change)
             }
