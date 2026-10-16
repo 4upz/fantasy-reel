@@ -29,26 +29,6 @@
       shouldUseLaunchSchemeArgsEnv = "YES"
       shouldAutocreateTestPlan = "YES">
       <Testables>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "FantasyReelCoreTests"
-               BuildableName = "FantasyReelCoreTests"
-               BlueprintName = "FantasyReelCoreTests"
-               ReferencedContainer = "container:Packages/FantasyReelKit">
-            </BuildableReference>
-         </TestableReference>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "FantasyReelAPITests"
-               BuildableName = "FantasyReelAPITests"
-               BlueprintName = "FantasyReelAPITests"
-               ReferencedContainer = "container:Packages/FantasyReelKit">
-            </BuildableReference>
-         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

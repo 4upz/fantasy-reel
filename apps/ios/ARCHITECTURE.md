@@ -178,6 +178,6 @@ gitignored and included last. Only the public anon key ever ships in the app.
 ## Testing
 
 - Pure logic goes in `FantasyReelCore` with Swift Testing (`@Test`) — run with
-  ⌘U in Xcode or `swift test` in `Packages/FantasyReelKit`.
+  ⌘U on the `FantasyReelKit-Package` scheme in Xcode; CI runs it on every push.
 - Port web fixtures where the web has them (scoring, rounding, bid-fit forecast).
 - SwiftUI previews use the sample data in `DesignSystem/Previews/SampleData.swift`.
