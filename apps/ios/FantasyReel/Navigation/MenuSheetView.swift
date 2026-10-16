@@ -55,7 +55,7 @@ private struct MenuRootView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 NavigationLink(value: MenuRoute.account) {
-                    Avatar(name: displayName, imageURL: profile?.avatarURL.flatMap(URL.init(string:)), size: .medium)
+                    Avatar(name: displayName, imageURL: profile?.avatarURL, size: .medium)
                 }
                 .accessibilityLabel("Account, \(displayName)")
             }
@@ -128,7 +128,7 @@ private struct LeagueMenuRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.name)
                     .frFont(.rowTitle)
-                    .foregroundStyle(Color.frTextPrimary)
+                    .foregroundStyle(Color.frText)
                     .lineLimit(1)
                 Text("\(String(entry.entrySeason.seasonYear)) Season · \(entry.entrySeason.status.displayName)")
                     .frFont(.meta)
@@ -184,7 +184,7 @@ private struct MenuLinkRow: View {
                 .accessibilityHidden(true)
             Text(title)
                 .frFont(.label)
-                .foregroundStyle(Color.frTextPrimary)
+                .foregroundStyle(Color.frText)
             Spacer()
             if count > 0 {
                 CountBadge(count: count)

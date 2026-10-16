@@ -18,7 +18,7 @@ struct WelcomeView: View {
                 Text("Draft upcoming movies. Beat your friends on the Tomatometer.")
                     .frFont(.pageTitle)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.frTextPrimary)
+                    .foregroundStyle(Color.frText)
                     .accessibilityAddTraits(.isHeader)
 
                 Text("A season-long fantasy league for the films you can't wait to see.")
@@ -80,7 +80,7 @@ private struct StepRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .frFont(.rowTitle)
-                    .foregroundStyle(Color.frTextPrimary)
+                    .foregroundStyle(Color.frText)
                 Text(detail)
                     .frFont(.meta)
                     .foregroundStyle(Color.frTextSecondary)

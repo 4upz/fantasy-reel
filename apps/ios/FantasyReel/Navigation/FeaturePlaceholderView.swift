@@ -18,9 +18,9 @@ struct FeaturePlaceholderView: View {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
                 if showsHeader {
                     ScreenHeader(
-                        title: title,
+                        title,
                         subtitle: selection.map { "\($0.season.name) · \(String($0.season.seasonYear)) Season" },
-                        badge: selection?.season.status
+                        status: selection?.season.status
                     )
                 }
                 EmptyStateView(
