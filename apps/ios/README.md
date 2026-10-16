@@ -29,8 +29,10 @@ You do **not** need a paid Apple Developer account to run in the Simulator.
 5. Tap **Log In** and use a seeded account, e.g. `alice@fantasyreel.test` /
    `testpass123!` (all four are listed in the repo's `CLAUDE.md`).
 
-Run the unit tests with **⌘U**. They live in the `FantasyReelKit` package and
-also run from Terminal with `swift test` inside `Packages/FantasyReelKit`.
+Run the unit tests by picking the **FantasyReelKit-Package** scheme in the
+toolbar (next to the simulator menu) and pressing **⌘U**. They live in the
+`FantasyReelKit` package. CI runs the same build and tests on every push that
+touches `apps/ios/` (`.github/workflows/ios.yml`).
 
 ## Running on your own iPhone
 
@@ -73,8 +75,6 @@ to add a screen.
   links to `fantasyreel://auth/callback?flow=recovery`. Local Supabase allows both
   (`supabase/config.toml`); the production Supabase dashboard needs the same two
   URLs added under Authentication → URL Configuration before release.
-- **Not compiled yet.** This foundation was written without a Mac, so the first
-  ⌘B in Xcode is its first build. Expect a handful of small compile fixes.
 
 ## Not yet done (tracked for feature work)
 
