@@ -56,18 +56,28 @@ jobs:
       - name: Resolve packages
         run: xcodebuild -resolvePackageDependencies -project FantasyReel.xcodeproj -scheme FantasyReel
 
-      - name: Build and test
+      - name: Build the app
         run: |
           set -o pipefail
           mkdir -p build
-          xcodebuild test \
+          xcodebuild build \
             -project FantasyReel.xcodeproj \
             -scheme FantasyReel \
             -configuration Debug \
             -destination "id=${{ steps.sim.outputs.udid }}" \
-            -resultBundlePath build/FantasyReel.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee build/xcodebuild.log
+
+      - name: Test FantasyReelKit
+        working-directory: apps/ios/Packages/FantasyReelKit
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme FantasyReelKit-Package \
+            -destination "id=${{ steps.sim.outputs.udid }}" \
+            -resultBundlePath ../../build/FantasyReelKit.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee -a ../../build/xcodebuild.log
 
       - name: Summarize errors
         if: failure()
@@ -84,5 +94,5 @@ jobs:
           name: ios-results
           path: |
             apps/ios/build/xcodebuild.log
-            apps/ios/build/FantasyReel.xcresult
+            apps/ios/build/FantasyReelKit.xcresult
           if-no-files-found: ignore
