@@ -1,0 +1,9 @@
+# Per-machine overrides (team ID, backend URL)
+Config/Local.xcconfig
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+DerivedData/
+.build/
+.swiftpm/

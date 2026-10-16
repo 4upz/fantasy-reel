@@ -1,0 +1,10 @@
+// Copy this file to Local.xcconfig (same folder). Local.xcconfig is gitignored
+// and included last, so anything here overrides Debug/Release.
+
+// Your Apple Developer team, so Xcode can sign builds for your iPhone.
+// DEVELOPMENT_TEAM = ABCDE12345
+
+// Run against a different backend, e.g. your Mac's LAN address for a physical
+// device, or a hosted Supabase project.
+// SUPABASE_URL = http:/$()/192.168.1.20:54321
+// SUPABASE_ANON_KEY = ...

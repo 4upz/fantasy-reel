@@ -1,0 +1,10 @@
+#include "Base.xcconfig"
+
+// Production values are public (the web app ships the same URL and anon key), but
+// they are set per machine until the release environment is decided (requirements
+// N-01, §11). Put them in Local.xcconfig; the app shows a configuration error
+// screen if these placeholders are still here at launch.
+SUPABASE_URL = https:/$()/YOUR-PROJECT.supabase.co
+SUPABASE_ANON_KEY = REPLACE_WITH_PRODUCTION_ANON_KEY
+
+#include? "Local.xcconfig"

@@ -1,0 +1,335 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		9D84DAB9B3DBF25159BDBF61 /* FantasyReelCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4EAB4C81CE1779F61D489E15 /* FantasyReelCore */; };
+		EF01E8E80FFBBFDCF088F59F /* FantasyReelAPI in Frameworks */ = {isa = PBXBuildFile; productRef = 45C77F1F658FE1B95A41DE21 /* FantasyReelAPI */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		479F95D0299E34D8846C86E4 /* FantasyReel.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FantasyReel.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		08F2D987A40FA6E403023394 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
+		2ADBB8B0897304FF014C4D44 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
+		02EE64152EA076AF96FC6B72 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
+		F6CCAC5927A9770D4ABE71F9 /* Local.example.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Local.example.xcconfig; sourceTree = "<group>"; };
+		7DF7FF59C64E5DD8D3C45BC4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A0E60EFB6118C7BA47EE6D6C /* Exceptions for "FantasyReel" folder in "FantasyReel" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				DesignSystem/README.md,
+			);
+			target = 21F67539A3A1D77D14772171 /* FantasyReel */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		FB526B3BAE7EB532C4E412BC /* FantasyReel */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A0E60EFB6118C7BA47EE6D6C /* Exceptions for "FantasyReel" folder in "FantasyReel" target */,
+			);
+			path = FantasyReel;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		41168835A26A8C7A33D43F27 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9D84DAB9B3DBF25159BDBF61 /* FantasyReelCore in Frameworks */,
+				EF01E8E80FFBBFDCF088F59F /* FantasyReelAPI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		033E1FF5C196C2BDC6A6F6DE = {
+			isa = PBXGroup;
+			children = (
+				FB526B3BAE7EB532C4E412BC /* FantasyReel */,
+				EC2E0A5F06E86851FF62BABB /* Config */,
+				6E3FE633E4610776EA696DF1 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		EC2E0A5F06E86851FF62BABB /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				08F2D987A40FA6E403023394 /* Base.xcconfig */,
+				2ADBB8B0897304FF014C4D44 /* Debug.xcconfig */,
+				02EE64152EA076AF96FC6B72 /* Release.xcconfig */,
+				F6CCAC5927A9770D4ABE71F9 /* Local.example.xcconfig */,
+				7DF7FF59C64E5DD8D3C45BC4 /* Info.plist */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		6E3FE633E4610776EA696DF1 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				479F95D0299E34D8846C86E4 /* FantasyReel.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		21F67539A3A1D77D14772171 /* FantasyReel */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 31ECDC914E1718BFFB003D9A /* Build configuration list for PBXNativeTarget "FantasyReel" */;
+			buildPhases = (
+				8B8DA8F97184C4F96E1E0918 /* Sources */,
+				41168835A26A8C7A33D43F27 /* Frameworks */,
+				2193CDB6EDB914508497A11B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				FB526B3BAE7EB532C4E412BC /* FantasyReel */,
+			);
+			name = FantasyReel;
+			packageProductDependencies = (
+				4EAB4C81CE1779F61D489E15 /* FantasyReelCore */,
+				45C77F1F658FE1B95A41DE21 /* FantasyReelAPI */,
+			);
+			productName = FantasyReel;
+			productReference = 479F95D0299E34D8846C86E4 /* FantasyReel.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		6BAA8197641CE0FE1F09F37A /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					21F67539A3A1D77D14772171 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+				};
+			};
+			buildConfigurationList = DEAA793C5E3D985F76F61C08 /* Build configuration list for PBXProject "FantasyReel" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 033E1FF5C196C2BDC6A6F6DE;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E365D82F882B0736CB1D00C1 /* XCLocalSwiftPackageReference "Packages/FantasyReelKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 6E3FE633E4610776EA696DF1 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				21F67539A3A1D77D14772171 /* FantasyReel */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2193CDB6EDB914508497A11B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8B8DA8F97184C4F96E1E0918 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		2C6EC6BDCB409FF786ECA77B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 2ADBB8B0897304FF014C4D44 /* Debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		57322BF20EC313D3FDBBC4E4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 02EE64152EA076AF96FC6B72 /* Release.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		F020CBEB3C1ED3ACDB06D086 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Fantasy Reel";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FR_BUNDLE_IDENTIFIER)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9AAB30AAE7836FAF0944767F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Config/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Fantasy Reel";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.entertainment";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(FR_BUNDLE_IDENTIFIER)";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		DEAA793C5E3D985F76F61C08 /* Build configuration list for PBXProject "FantasyReel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2C6EC6BDCB409FF786ECA77B /* Debug */,
+				57322BF20EC313D3FDBBC4E4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		31ECDC914E1718BFFB003D9A /* Build configuration list for PBXNativeTarget "FantasyReel" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F020CBEB3C1ED3ACDB06D086 /* Debug */,
+				9AAB30AAE7836FAF0944767F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		E365D82F882B0736CB1D00C1 /* XCLocalSwiftPackageReference "Packages/FantasyReelKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/FantasyReelKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4EAB4C81CE1779F61D489E15 /* FantasyReelCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E365D82F882B0736CB1D00C1 /* XCLocalSwiftPackageReference "Packages/FantasyReelKit" */;
+			productName = FantasyReelCore;
+		};
+		45C77F1F658FE1B95A41DE21 /* FantasyReelAPI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E365D82F882B0736CB1D00C1 /* XCLocalSwiftPackageReference "Packages/FantasyReelKit" */;
+			productName = FantasyReelAPI;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 6BAA8197641CE0FE1F09F37A /* Project object */;
+}
