@@ -52,24 +52,39 @@ struct SignedInRootView: View {
                 let profiles = environment.profiles
                 let userID = account.id
                 async let loadedProfile = profiles.fetchProfile(for: userID)
+                async let inboxLoaded: Void = inbox.refresh()
                 await directory.load()
-                await inbox.refresh()
-                profile = try? await loadedProfile
+                // Route a shared link as soon as we know which leagues are visible.
                 routePendingLink()
+                profile = try? await loadedProfile
+                await inboxLoaded
             }
             .onChange(of: session.pendingDeepLink) { routePendingLink() }
-            .onChange(of: directory.selectedSeasonID) {
-                router.resetForSeason(defaultTab: directory.selection?.defaultTab ?? .home)
+            .onChange(of: directory.selectedSeasonID, initial: true) {
+                router.showSeason(directory.selectedSeasonID, defaultTab: directory.selection?.defaultTab ?? .home)
             }
             .onChange(of: directory.selection?.season.status) { oldStatus, newStatus in
                 // A phase change swaps the tab set (draft → active). Land on the
                 // new phase's default tab rather than a tab that vanished.
                 guard oldStatus != nil, oldStatus != newStatus else { return }
-                router.resetForSeason(defaultTab: directory.selection?.defaultTab ?? .home)
+                router.phaseDidChange(defaultTab: directory.selection?.defaultTab ?? .home)
             }
+            .alert(
+                "Discard your changes?",
+                isPresented: Binding(
+                    get: { router.pendingSheet != nil },
+                    set: { if !$0 { router.cancelReplacingSheet() } }
+                ),
+                actions: {
+                    Button("Discard", role: .destructive) { router.confirmReplacingSheet() }
+                    Button("Keep Editing", role: .cancel) { router.cancelReplacingSheet() }
+                },
+                message: { Text("You have unsaved changes in the open form.") }
+            )
             .refreshOnForeground {
+                async let inboxRefreshed: Void = inbox.refresh()
                 await directory.refresh()
-                await inbox.refresh()
+                await inboxRefreshed
             }
     }
 
@@ -87,6 +102,9 @@ struct SignedInRootView: View {
         case .loaded:
             if let selection = directory.selection {
                 LeagueShellView(selection: selection)
+                    // Screen state is per season: switching leagues rebuilds
+                    // every tab instead of carrying view models across.
+                    .id(selection.season.id)
             } else {
                 NoLeagueShellView()
             }

@@ -18,20 +18,27 @@ final class AppEnvironment {
     let changeFeed: ChangeFeed
     let session: SessionStore
 
-    let leagues: LeagueRepository
-    let profiles: ProfileRepository
-    let notifications: NotificationRepository
+    let leagues: any LeagueRepository
+    let profiles: any ProfileRepository
+    let notifications: any NotificationRepository
 
-    init(configuration: AppConfiguration) {
+    /// Repositories default to the live Supabase ones; previews and tests pass
+    /// in-memory fakes (see `AppEnvironment.preview`).
+    init(
+        configuration: AppConfiguration,
+        leagues: (any LeagueRepository)? = nil,
+        profiles: (any ProfileRepository)? = nil,
+        notifications: (any NotificationRepository)? = nil
+    ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
         self.supabase = supabase
         self.edgeFunctions = EdgeFunctionClient(provider: supabase)
         self.changeFeed = ChangeFeed(provider: supabase)
         self.session = SessionStore(auth: AuthService(provider: supabase))
-        self.leagues = LeagueRepository(provider: supabase)
-        self.profiles = ProfileRepository(provider: supabase)
-        self.notifications = NotificationRepository(provider: supabase)
+        self.leagues = leagues ?? SupabaseLeagueRepository(provider: supabase)
+        self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
+        self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -39,3 +46,28 @@ final class AppEnvironment {
         DeepLink.parse(url, siteHosts: configuration.siteHosts, appScheme: configuration.urlScheme)
     }
 }
+
+#if DEBUG
+extension AppEnvironment {
+    /// A container for SwiftUI previews: in-memory repositories and a client
+    /// pointed at an address nothing listens on, so a preview never hits the
+    /// network. Pass seeded fakes to show data.
+    static func preview(
+        leagues: any LeagueRepository = InMemoryLeagueRepository(),
+        profiles: any ProfileRepository = InMemoryProfileRepository(),
+        notifications: any NotificationRepository = InMemoryNotificationRepository()
+    ) -> AppEnvironment {
+        AppEnvironment(
+            configuration: AppConfiguration(
+                supabaseURL: URL(string: "http://127.0.0.1:1")!,
+                supabaseAnonKey: "preview",
+                siteURL: URL(string: "https://fantasyreel.com")!,
+                urlScheme: "fantasyreel"
+            ),
+            leagues: leagues,
+            profiles: profiles,
+            notifications: notifications
+        )
+    }
+}
+#endif

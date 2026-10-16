@@ -39,11 +39,11 @@ final class LeagueDirectoryStore {
     private(set) var selectedSeasonID: LeagueID?
 
     let userID: UserID
-    private let repository: LeagueRepository
+    private let repository: any LeagueRepository
     private let defaults: UserDefaults
     private var selectionKey: String { "fr.selectedSeason.\(userID.rawValue)" }
 
-    init(userID: UserID, repository: LeagueRepository, defaults: UserDefaults = .standard) {
+    init(userID: UserID, repository: any LeagueRepository, defaults: UserDefaults = .standard) {
         self.userID = userID
         self.repository = repository
         self.defaults = defaults
@@ -75,7 +75,9 @@ final class LeagueDirectoryStore {
         do {
             let seasons = try await repository.fetchVisibleSeasons()
             let entries = LeagueDirectory.entries(from: seasons)
-            state = entries.isEmpty ? .empty : .loaded(entries)
+            let newState: LoadState<[LeagueDirectoryEntry]> = entries.isEmpty ? .empty : .loaded(entries)
+            // Skip identical writes so a no-op refresh doesn't re-render the shell.
+            if newState != state { state = newState }
             reconcileSelection(with: entries)
         } catch {
             // Keep showing what we had if a background refresh fails.

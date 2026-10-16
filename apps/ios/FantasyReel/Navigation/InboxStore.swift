@@ -17,9 +17,9 @@ final class InboxStore {
     private(set) var hasLoaded = false
 
     private let userID: UserID
-    private let repository: NotificationRepository
+    private let repository: any NotificationRepository
 
-    init(userID: UserID, repository: NotificationRepository) {
+    init(userID: UserID, repository: any NotificationRepository) {
         self.userID = userID
         self.repository = repository
     }
@@ -53,7 +53,7 @@ final class InboxStore {
               notifications[index].readAt == nil
         else { return }
         do {
-            try await repository.markRead([id])
+            try await repository.markRead([id], at: Date())
             await refresh()
         } catch {
             loadError = error.userMessage
@@ -64,7 +64,7 @@ final class InboxStore {
     func markAllRead() async {
         let unread = notifications.filter { $0.readAt == nil }.map(\.id)
         do {
-            try await repository.markRead(unread)
+            try await repository.markRead(unread, at: Date())
             await refresh()
         } catch {
             loadError = error.userMessage
