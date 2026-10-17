@@ -155,7 +155,7 @@ struct LogInView: View {
         signIn.run {
             do {
                 try await session.signIn(email: email, password: password, captchaToken: token)
-            } catch let error where error.serverCode == AuthMessages.Code.emailNotConfirmed {
+            } catch let error as APIError where error.serverCode == AuthMessages.Code.emailNotConfirmed {
                 unconfirmedEmail = email
                 throw error
             }
