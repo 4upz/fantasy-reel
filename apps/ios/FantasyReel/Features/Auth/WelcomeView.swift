@@ -24,6 +24,8 @@ struct WelcomeView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.frText)
                     .accessibilityAddTraits(.isHeader)
+                    // Never truncated when the screen is filled to its height.
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 8)
                     .padding(.top, 8)
 
