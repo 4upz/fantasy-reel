@@ -39,11 +39,15 @@ export default function TourPreferences(): React.ReactElement {
   const showAgain = useCallback(async (id?: TourId) => {
     try {
       await reset(id)
-      toast.success(id ? 'This tour will start next time you open its page' : 'All tours will start again on your next visit to each page')
+      if (enabled) {
+        toast.success(id ? 'This tour will start next time you open its page' : 'All tours will start again on your next visit to each page')
+      } else {
+        toast.success(id ? 'Tour reset. Choose “Show me around” on its page to see it.' : 'Tours reset. Choose “Show me around” on any page to see its tour.')
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Couldn’t reset your tours. Try again.')
     }
-  }, [reset])
+  }, [enabled, reset])
   const { execute: executeReset, isLoading: resetting } = useAsyncAction(showAgain)
 
   // With one tour, its own Show again button already does this.
@@ -59,7 +63,7 @@ export default function TourPreferences(): React.ReactElement {
           <h2 id="tour-preferences-heading" className="type-section text-foreground">
             Tours
           </h2>
-          <p className="type-body-sm text-foreground-secondary">Short guides that start the first time you open a page</p>
+          <p className="type-body-sm text-foreground-secondary">Short guides to each page</p>
         </div>
       </div>
 
@@ -80,7 +84,7 @@ export default function TourPreferences(): React.ReactElement {
           type="button"
           onClick={() => executeToggle(!enabled)}
           aria-disabled={toggling || undefined}
-          className={`relative w-10 h-6 shrink-0 cursor-pointer rounded-full transition-colors aria-disabled:cursor-wait aria-disabled:opacity-60 ${
+          className={`relative w-10 h-6 shrink-0 cursor-pointer rounded-full before:absolute before:-inset-2.5 transition-colors aria-disabled:cursor-wait aria-disabled:opacity-60 ${
             enabled ? 'bg-gold' : 'bg-elevated border border-border'
           }`}
           role="switch"
@@ -113,7 +117,7 @@ export default function TourPreferences(): React.ReactElement {
                   type="button"
                   onClick={() => executeReset(tour.id as TourId)}
                   aria-disabled={resetting || undefined}
-                  className="type-control shrink-0 text-gold transition-colors hover:text-gold-hover aria-disabled:cursor-wait aria-disabled:opacity-60"
+                  className="type-control inline-flex min-h-[44px] shrink-0 items-center text-gold sm:min-h-0 transition-colors hover:text-gold-hover aria-disabled:cursor-wait aria-disabled:opacity-60"
                 >
                   Show again<span className="sr-only">: {tour.title}</span>
                 </button>
