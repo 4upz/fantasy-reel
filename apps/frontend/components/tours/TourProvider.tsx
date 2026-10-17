@@ -157,8 +157,11 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
   const [registrationsVersion, bumpRegistrations] = useReducer((count: number) => count + 1, 0)
   const nextOrder = useRef(0)
   // One automatic tour per page visit, and never the same one twice in a tab
-  // (a save that failed must not bring it back on every navigation).
-  const autoStartedPath = useRef<string | null>(null)
+  // (a save that failed must not bring it back on every navigation). A visit
+  // is the path plus the tours it offered then: a page whose phase changes
+  // under the viewer (the draft tab going from setup to drafting) offers a
+  // new tour, and that counts as a new visit.
+  const lastAutoStart = useRef<{ pathname: string; tourIds: ReadonlySet<string> } | null>(null)
   const autoStartedIds = useRef(new Set<string>())
   const channel = useRef<BroadcastChannel | null>(null)
 
@@ -296,8 +299,11 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
   // Start the page's tour by itself when one applies and hasn't been seen.
   useEffect(() => {
     void registrationsVersion
-    if (!ready || !enabled || active || autoStartedPath.current === pathname || automationOptedOut()) return
-    const candidates = [...registrations.current.values()]
+    if (!ready || !enabled || active || automationOptedOut()) return
+    const offered = [...registrations.current.values()]
+    const last = lastAutoStart.current
+    if (last?.pathname === pathname && offered.every((registration) => last.tourIds.has(registration.id))) return
+    const candidates = offered
       .filter((registration) => !autoStartedIds.current.has(registration.id))
       .map((registration) => ({ tour: getTour(registration.id)!, ctx: registration.ctx, order: registration.order }))
     const outcomes = new Map(
@@ -310,7 +316,7 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
     const timer = window.setTimeout(() => {
       void launch(pick.tour.id as TourId, pick.ctx, true, () => cancelled).then((started) => {
         if (!started) return
-        autoStartedPath.current = pathname
+        lastAutoStart.current = { pathname, tourIds: new Set(offered.map((registration) => registration.id)) }
         autoStartedIds.current.add(pick.tour.id)
       })
     }, AUTO_START_DELAY_MS)
