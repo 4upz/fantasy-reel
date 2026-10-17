@@ -14,7 +14,7 @@ export const biddingTour = defineTour({
   steps: [
     {
       title: 'Pick up movies the draft missed',
-      body: 'Spend your Fantasy Budget on movies no team holds. Bids are settled once a week. The highest bid usually wins and pays its own amount. If that team can’t take the movie, the next-highest bid wins and pays its own amount.',
+      body: 'Spend your Fantasy Budget on movies no team holds. Bids are settled once a week. The highest bid usually wins, and every winner pays what they bid. If the top bidder can’t take the movie, the next-highest bid wins instead.',
     },
     {
       anchor: 'bidding-budget',
