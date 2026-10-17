@@ -66,9 +66,12 @@ struct LogInView: View {
                     Spacer()
                     NavigationLink("Forgot Password?", value: AuthRoute.resetPassword(email: trimmedEmail))
                         .frFont(.label)
+                        .padding(.horizontal, 12)
                         .frame(minHeight: FRMetrics.minTapTarget)
                 }
-                // Sits close under the fields, as in the mockup.
+                // Sits close under the fields, and its text lines up with the
+                // fields' 16pt text inset, as in the mockup.
+                .padding(.horizontal, 4)
                 .padding(.vertical, -8)
 
                 SecurityCheckView(check: securityCheck)
