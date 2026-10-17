@@ -59,9 +59,10 @@ public struct SupabaseAvatarStorage: AvatarStorage {
 
     /// The public URL plus `?v=<milliseconds>`, matching the web's cache buster.
     static func versioned(_ url: URL, at date: Date) -> String {
-        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url.absoluteString }
         let stamp = String(Int64((date.timeIntervalSince1970 * 1000).rounded()))
-        components?.queryItems = (components?.queryItems ?? []).filter { $0.name != "v" } + [URLQueryItem(name: "v", value: stamp)]
-        return components?.url?.absoluteString ?? url.absoluteString
+        let kept = (components.queryItems ?? []).filter { $0.name != "v" }
+        components.queryItems = kept + [URLQueryItem(name: "v", value: stamp)]
+        return components.url?.absoluteString ?? url.absoluteString
     }
 }
