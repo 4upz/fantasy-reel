@@ -28,28 +28,6 @@ struct LeagueLink<Label: View>: View {
     }
 }
 
-/// TMDb's required attribution, at the foot of every screen that shows movie
-/// data from TMDb (and only those).
-struct TMDbAttribution: View {
-    var body: some View {
-        VStack(spacing: 8) {
-            Image("TMDbLogo")
-                .resizable()
-                .aspectRatio(273.42 / 35.52, contentMode: .fit)
-                .frame(height: 12)
-                .accessibilityLabel("The Movie Database")
-            Text("This product uses the TMDb API but is not endorsed or certified by TMDb.")
-                .frFont(.caption)
-                .foregroundStyle(Color.frTextSecondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .accessibilityElement(children: .combine)
-    }
-}
-
 /// The bookmark that adds a movie to, or removes it from, the person's
 /// wishlist. Reads the shared `WishlistStore`, so every bookmark for the same
 /// movie flips together.
@@ -59,6 +37,8 @@ struct WishlistToggleButton: View {
         case icon
         /// A small glass circle over a poster (carousels).
         case overlay
+        /// A toolbar item: the bar draws the glass.
+        case toolbar
     }
 
     let candidate: WishlistCandidate
@@ -67,8 +47,17 @@ struct WishlistToggleButton: View {
     @Environment(WishlistStore.self) private var wishlist
 
     var body: some View {
+        // The toolbar keeps the system style so the bar's glass applies.
+        if style == .toolbar {
+            button
+        } else {
+            button.buttonStyle(.plain)
+        }
+    }
+
+    private var button: some View {
         let saved = wishlist.contains(candidate.tmdbID)
-        Button {
+        return Button {
             Task { await wishlist.toggle(candidate) }
         } label: {
             switch style {
@@ -78,6 +67,9 @@ struct WishlistToggleButton: View {
                     .foregroundStyle(saved ? Color.frGold : Color.frTextSecondary)
                     .frame(width: FRMetrics.minTapTarget, height: FRMetrics.minTapTarget)
                     .contentShape(Rectangle())
+            case .toolbar:
+                Label(saved ? "Saved" : "Save", systemImage: saved ? "bookmark.fill" : "bookmark")
+                    .foregroundStyle(saved ? Color.frGold : Color.frText)
             case .overlay:
                 Image(systemName: saved ? "bookmark.fill" : "bookmark")
                     .font(.footnote.weight(.semibold))
@@ -88,7 +80,6 @@ struct WishlistToggleButton: View {
                     .contentShape(Rectangle())
             }
         }
-        .buttonStyle(.plain)
         .disabled(wishlist.isSaving(candidate.tmdbID))
         .accessibilityLabel(saved ? "Remove \(candidate.title) from wishlist" : "Add \(candidate.title) to wishlist")
         .accessibilityAddTraits(saved ? .isSelected : [])

@@ -45,10 +45,8 @@ struct MovieResearchScreenshotView: View {
             stack { LeagueMovieDetailView(tmdbID: MovieResearchFixture.streetFighter) }
         case .wishlist:
             stack { WishlistView() }
-                .environment(\.routesThroughMenu, true)
         case .sharedWishlists:
             stack { WishlistView(initialMode: .league) }
-                .environment(\.routesThroughMenu, true)
         default:
             EmptyView()
         }

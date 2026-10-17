@@ -101,26 +101,25 @@ struct WishlistView: View {
     }
 
     private var movieRows: some View {
-        Section {
-            ForEach(Array(sort.sorted(wishlist.movies).enumerated()), id: \.element.id) { index, movie in
+        let movies = sort.sorted(wishlist.movies)
+        let holdings = selection.map { research.holdings(in: $0.season.id) }
+        return Section {
+            ForEach(movies) { movie in
                 let added = AddedDateText(movie.addedAt)
                 ResearchMovieRow(
                     title: movie.title,
                     posterURL: movie.posterURL,
                     detail: "Added \(added.compact)",
                     spokenDetail: "Added \(added.spoken)",
-                    status: selection.map { _ in research.holdings(in: selection?.season.id).status(of: movie.tmdbID) },
+                    status: holdings?.status(of: movie.tmdbID),
                     candidate: WishlistCandidate(movie),
                     showsBookmark: false
                 )
-                .groupedRow(isFirst: index == 0, isLast: index == wishlist.movies.count - 1)
+                .groupedRow(isFirst: movie.id == movies.first?.id, isLast: movie.id == movies.last?.id)
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button("Remove", systemImage: "trash", role: .destructive) {
                         Task { await wishlist.remove(movie.tmdbID) }
                     }
-                }
-                .accessibilityAction(named: "Remove from wishlist") {
-                    Task { await wishlist.remove(movie.tmdbID) }
                 }
             }
         } header: {

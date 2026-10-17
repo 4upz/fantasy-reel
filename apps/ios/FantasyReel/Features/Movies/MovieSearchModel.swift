@@ -66,11 +66,14 @@ final class MovieSearchModel {
         // Results for this exact filter are already on screen (a view
         // reappearing reruns its task).
         if lastFilter == filter, phase == .results || phase == .noResults { return }
+        let token = generation
         do {
             try await Task.sleep(for: Self.debounce)
         } catch {
             return
         }
+        // The Search key ran this filter while we waited.
+        guard token == generation else { return }
         await search(query)
     }
 
@@ -82,13 +85,14 @@ final class MovieSearchModel {
     }
 
     func loadMore() async {
-        guard hasMore, !isLoadingMore, phase == .results, let query = shownQuery else { return }
+        guard hasMore, !isLoadingMore, !isSearching, phase == .results,
+              let query = shownQuery, let shownFilter = lastFilter else { return }
         let token = generation
         isLoadingMore = true
         loadMoreError = nil
         defer { if token == generation { isLoadingMore = false } }
         do {
-            let found = try await fetch(query, from: page + 1, token: token)
+            let found = try await fetch(query, year: shownFilter.year, from: page + 1, token: token)
             guard token == generation else { return }
             append(found)
         } catch {
@@ -100,15 +104,20 @@ final class MovieSearchModel {
     // MARK: - Private
 
     private var lastFilter: Filter?
+    /// A new search is in flight; paging the old results would mix them in.
+    private var isSearching = false
 
     private func search(_ query: String) async {
         generation += 1
         let token = generation
         let filterAtStart = filter
+        isLoadingMore = false
+        isSearching = true
+        defer { if token == generation { isSearching = false } }
         if phase != .results { phase = .searching }
         loadMoreError = nil
         do {
-            let found = try await fetch(query, from: 1, token: token)
+            let found = try await fetch(query, year: filterAtStart.year, from: 1, token: token)
             guard token == generation else { return }
             results = []
             page = 0
@@ -135,12 +144,12 @@ final class MovieSearchModel {
     }
 
     /// Reads `start`, skipping ahead over pages that add nothing new.
-    private func fetch(_ query: String, from start: Int, token: Int) async throws(APIError) -> Fetched {
+    private func fetch(_ query: String, year: Int?, from start: Int, token: Int) async throws(APIError) -> Fetched {
         var number = start
         var skipped = 0
         while true {
             let request = MovieSearchRequest(
-                query: query, page: number, year: filter.year, upcomingOnly: upcomingOnly, seasonYear: seasonYear
+                query: query, page: number, year: year, upcomingOnly: upcomingOnly, seasonYear: seasonYear
             )
             let response = try await movies.search(request)
             let seen = start == 1 ? Set<TMDbID>() : Set(results.map(\.tmdbID))
@@ -171,5 +180,6 @@ final class MovieSearchModel {
         lastFilter = nil
         loadMoreError = nil
         isLoadingMore = false
+        isSearching = false
     }
 }

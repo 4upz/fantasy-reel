@@ -37,6 +37,11 @@ final class WishlistStore {
     private let repository: any WishlistRepository
     private var ids: Set<TMDbID> = []
     private var saving: Set<TMDbID> = []
+    /// Bumped whenever a change starts. A read that began before the latest
+    /// change can't tell whether it saw it, so its list and sharing are dropped.
+    private var changeEpoch = 0
+    /// A read was dropped; read again once nothing is saving.
+    private var needsReload = false
 
     init(userID: UserID, repository: any WishlistRepository) {
         self.userID = userID
@@ -50,16 +55,22 @@ final class WishlistStore {
     func isSaving(_ tmdbID: TMDbID) -> Bool { saving.contains(tmdbID) }
 
     /// Loads the wishlist and sharing setting. Safe to call again (pull to
-    /// refresh, Try Again); a toggle in flight keeps its optimistic state.
+    /// refresh, Try Again); a read that overlaps a change keeps what's on screen.
     func load() async {
         if case .idle = state { state = .loading }
         if case .failed = state { state = .loading }
+        let epoch = changeEpoch
         do {
             async let rows = repository.fetchWishlist(of: userID)
             async let shared = repository.fetchSharing(for: userID)
             let (loaded, sharing) = try await (rows, shared)
-            movies = merge(loaded)
-            isShared = sharing
+            if epoch == changeEpoch {
+                movies = loaded
+                isShared = sharing
+                needsReload = false
+            } else {
+                needsReload = true
+            }
             state = .loaded(())
         } catch {
             let apiError = APIError.wrap(error)
@@ -87,8 +98,9 @@ final class WishlistStore {
             return
         }
         guard let insert = candidate.row else { return }
+        changeEpoch += 1
         saving.insert(tmdbID)
-        defer { saving.remove(tmdbID) }
+        defer { finishChange(tmdbID) }
         clearFailure(for: tmdbID)
 
         let placeholder = WishlistedMovie(
@@ -108,8 +120,9 @@ final class WishlistStore {
 
     func remove(_ tmdbID: TMDbID, title: String? = nil) async {
         guard !saving.contains(tmdbID), let index = movies.firstIndex(where: { $0.tmdbID == tmdbID }) else { return }
+        changeEpoch += 1
         saving.insert(tmdbID)
-        defer { saving.remove(tmdbID) }
+        defer { finishChange(tmdbID) }
         clearFailure(for: tmdbID)
 
         let removed = movies.remove(at: index)
@@ -128,10 +141,14 @@ final class WishlistStore {
     /// moves back if the save fails.
     func setSharing(_ shared: Bool) async {
         guard !isSavingSharing, shared != isShared else { return }
+        changeEpoch += 1
         isSavingSharing = true
         sharingError = nil
         isShared = shared
-        defer { isSavingSharing = false }
+        defer {
+            isSavingSharing = false
+            finishChange(nil)
+        }
         do {
             try await repository.setSharing(shared, for: userID)
             Announcer.announce(shared ? "Wishlist shared with league-mates" : "Wishlist no longer shared")
@@ -147,14 +164,11 @@ final class WishlistStore {
 
     // MARK: - Private
 
-    /// A reload replaces the list, except for movies still saving: those keep
-    /// the state the person just chose until the server answers.
-    private func merge(_ loaded: [WishlistedMovie]) -> [WishlistedMovie] {
-        guard !saving.isEmpty else { return loaded }
-        var result = loaded.filter { !saving.contains($0.tmdbID) }
-        let pending = movies.filter { saving.contains($0.tmdbID) }
-        result.insert(contentsOf: pending, at: 0)
-        return result
+    private func finishChange(_ tmdbID: TMDbID?) {
+        if let tmdbID { saving.remove(tmdbID) }
+        guard needsReload, saving.isEmpty, !isSavingSharing else { return }
+        needsReload = false
+        Task { await load() }
     }
 
     private func report(_ tmdbID: TMDbID, _ message: String) {
