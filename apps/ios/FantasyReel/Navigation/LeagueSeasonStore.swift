@@ -78,7 +78,8 @@ final class LeagueSeasonStore {
             let loadedTeams = try await teams
             let myTeamID = loadedTeams.first { $0.userID == userID && $0.participantStatus == .active }?.id
                 ?? loadedTeams.first { $0.userID == userID }?.id
-            let dropCount = try await myTeamID.asyncMap { try await repository.fetchDropCount(for: $0) } ?? 0
+            var dropCount = 0
+            if let myTeamID { dropCount = try await repository.fetchDropCount(for: myTeamID) }
             var reigning: ReigningChampions?
             if let previous = previousChampionSeason, let winners = previous.winnerTeamIDs, !winners.isEmpty {
                 let owners = (try? await repository.fetchOwners(of: winners)) ?? [:]
@@ -208,14 +209,6 @@ final class LeagueSeasonStore {
         _ = try await repository.dropMovie(holding.holdingID, source: holding.source)
         Announcer.announce("Dropped \(holding.title)")
         await refresh()
-    }
-}
-
-extension Optional {
-    /// `map` for an async throwing transform.
-    func asyncMap<T>(_ transform: (Wrapped) async throws -> T) async rethrows -> T? {
-        guard let self else { return nil }
-        return try await transform(self)
     }
 }
 

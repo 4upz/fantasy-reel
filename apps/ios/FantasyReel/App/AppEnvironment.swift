@@ -24,6 +24,8 @@ final class AppEnvironment {
     let notifications: any NotificationRepository
     /// Teams, rosters, standings and drops (F-10, F-11, F-14).
     let teams: any TeamRepository
+    /// Pickup and counterpick bidding (F-12).
+    let bids: any BidRepository
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -33,7 +35,8 @@ final class AppEnvironment {
         leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
-        teams: (any TeamRepository)? = nil
+        teams: (any TeamRepository)? = nil,
+        bids: (any BidRepository)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
@@ -47,6 +50,7 @@ final class AppEnvironment {
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
         self.teams = teams ?? SupabaseTeamRepository(provider: supabase, functions: edgeFunctions)
+        self.bids = bids ?? SupabaseBidRepository(provider: supabase, functions: edgeFunctions)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -65,7 +69,8 @@ extension AppEnvironment {
         leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
         notifications: any NotificationRepository = InMemoryNotificationRepository(),
-        teams: any TeamRepository = InMemoryTeamRepository()
+        teams: any TeamRepository = InMemoryTeamRepository(),
+        bids: any BidRepository = InMemoryBidRepository()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -78,7 +83,8 @@ extension AppEnvironment {
             leagueLifecycle: leagueLifecycle,
             profiles: profiles,
             notifications: notifications,
-            teams: teams
+            teams: teams,
+            bids: bids
         )
     }
 }
