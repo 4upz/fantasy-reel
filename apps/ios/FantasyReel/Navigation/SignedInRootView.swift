@@ -132,8 +132,8 @@ struct SignedInRootView: View {
     }
 }
 
-/// Renders whichever single sheet is up.
-private struct ShellSheetView: View {
+/// Renders whichever single sheet is up. Also used by the screenshot scenes.
+struct ShellSheetView: View {
     let sheet: ShellSheet
 
     @Environment(AppEnvironment.self) private var environment

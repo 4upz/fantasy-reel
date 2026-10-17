@@ -524,7 +524,8 @@ enum GrowthFormat {
     }
 }
 
-private enum GrowthPreviewData {
+/// Sample stats for previews and the `growthDashboard` screenshot scene.
+enum GrowthPreviewData {
     static var stats: GrowthStats? {
         try? FRJSON.decode(GrowthStats.self, from: Data(json.utf8))
     }
