@@ -43,3 +43,13 @@ struct PendingInvitationsSection: View {
         EmptyView()
     }
 }
+
+/// The owner's invite tools for a setup season (F-05): the join code and link
+/// with Share and Regenerate, Invite by name or email, and the invitation list
+/// with Resend and Cancel. The draft room (setup) embeds this; it renders
+/// nothing for members or once the draft has started.
+struct LeagueInvitesSection: View {
+    var body: some View {
+        EmptyView()
+    }
+}

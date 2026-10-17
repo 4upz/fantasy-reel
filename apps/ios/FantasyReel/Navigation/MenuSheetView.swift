@@ -18,6 +18,7 @@ struct MenuSheetView: View {
                     case .wishlist: WishlistView()
                     case .account: AccountView()
                     case .howToPlay: HowToPlayView()
+                    case .growthDashboard: GrowthDashboardView()
                     }
                 }
         }

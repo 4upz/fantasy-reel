@@ -19,6 +19,7 @@ final class AppEnvironment {
     let session: SessionStore
 
     let leagues: any LeagueRepository
+    let leagueLifecycle: any LeagueLifecycleRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
 
@@ -27,16 +28,19 @@ final class AppEnvironment {
     init(
         configuration: AppConfiguration,
         leagues: (any LeagueRepository)? = nil,
+        leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
         notifications: (any NotificationRepository)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
         self.supabase = supabase
-        self.edgeFunctions = EdgeFunctionClient(provider: supabase)
+        let edgeFunctions = EdgeFunctionClient(provider: supabase)
+        self.edgeFunctions = edgeFunctions
         self.changeFeed = ChangeFeed(provider: supabase)
         self.session = SessionStore(auth: AuthService(provider: supabase))
         self.leagues = leagues ?? SupabaseLeagueRepository(provider: supabase)
+        self.leagueLifecycle = leagueLifecycle ?? EdgeLeagueLifecycleRepository(functions: edgeFunctions)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
     }
@@ -54,6 +58,7 @@ extension AppEnvironment {
     /// network. Pass seeded fakes to show data.
     static func preview(
         leagues: any LeagueRepository = InMemoryLeagueRepository(),
+        leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
         notifications: any NotificationRepository = InMemoryNotificationRepository()
     ) -> AppEnvironment {
@@ -65,6 +70,7 @@ extension AppEnvironment {
                 urlScheme: "fantasyreel"
             ),
             leagues: leagues,
+            leagueLifecycle: leagueLifecycle,
             profiles: profiles,
             notifications: notifications
         )

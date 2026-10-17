@@ -156,3 +156,74 @@ public struct Profile: Codable, Sendable, Hashable, Identifiable {
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt)
     }
 }
+
+/// One person in a season: their `league_participants` row with the team and
+/// profile embedded, as `league_participants.select('*, teams (*), profiles (*)')`
+/// returns it (the web's `ParticipantWithProfile`).
+///
+/// Both embeds are one-to-one (`teams.participant_id` is unique, and
+/// `profiles` joins through `league_participants_user_id_profiles_fkey`), so
+/// PostgREST sends objects, not arrays. Either can be null: a team insert can
+/// fail after a join (`warning`), and RLS can hide a profile.
+public struct LeagueMember: Codable, Sendable, Hashable, Identifiable {
+    public var participant: LeagueParticipant
+    public var team: Team?
+    public var profile: Profile?
+
+    public var id: ParticipantID { participant.id }
+    public var userID: UserID { participant.userID }
+
+    /// The person's name as the web shows it. A deleted account's profile
+    /// already reads "Former member"; a hidden profile falls back to that too.
+    public var displayName: String {
+        let name = profile?.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Former member" : name
+    }
+
+    /// The team's name, or the person's when the team row is missing.
+    public var teamName: String { team?.name ?? displayName }
+
+    public init(participant: LeagueParticipant, team: Team? = nil, profile: Profile? = nil) {
+        self.participant = participant
+        self.team = team
+        self.profile = profile
+    }
+
+    private enum EmbedKeys: String, CodingKey {
+        case teams
+        case profiles
+    }
+
+    public init(from decoder: any Decoder) throws {
+        participant = try LeagueParticipant(from: decoder)
+        let c = try decoder.container(keyedBy: EmbedKeys.self)
+        team = try c.decodeIfPresent(Team.self, forKey: .teams)
+        profile = try c.decodeIfPresent(Profile.self, forKey: .profiles)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        try participant.encode(to: encoder)
+        var c = encoder.container(keyedBy: EmbedKeys.self)
+        try c.encodeIfPresent(team, forKey: .teams)
+        try c.encodeIfPresent(profile, forKey: .profiles)
+    }
+}
+
+extension Array where Element == LeagueMember {
+    /// Draft order first (one-based), unordered members after, then by join time:
+    /// the order the web's settings and draft room list people in.
+    public func sortedByDraftOrder() -> [LeagueMember] {
+        sorted { lhs, rhs in
+            switch (lhs.participant.draftOrder, rhs.participant.draftOrder) {
+            case let (l?, r?) where l != r: return l < r
+            case (.some, nil): return true
+            case (nil, .some): return false
+            default:
+                let lhsJoined = lhs.participant.joinedAt ?? lhs.participant.createdAt ?? .distantPast
+                let rhsJoined = rhs.participant.joinedAt ?? rhs.participant.createdAt ?? .distantPast
+                if lhsJoined != rhsJoined { return lhsJoined < rhsJoined }
+                return lhs.id.rawValue < rhs.id.rawValue
+            }
+        }
+    }
+}
