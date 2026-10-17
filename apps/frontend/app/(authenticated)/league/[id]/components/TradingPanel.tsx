@@ -178,7 +178,6 @@ export default function TradingPanel({
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            <TourButton id="trading" />
             {/* Not a live region: new offers are announced as they arrive (useTrading). */}
             {!isLoading && actionNeededCount > 0 && (
               <span className="type-label text-crimson-text">
@@ -198,7 +197,7 @@ export default function TradingPanel({
         </div>
 
         {/* Budget display */}
-        <div className="mt-4 pt-4 border-t border-border">
+        <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-center justify-between gap-2">
           <p className="type-body-sm text-foreground-secondary">
             Available budget: {budget ? (
               <span className="type-number text-gold">${budget.remaining_budget}</span>
@@ -210,6 +209,7 @@ export default function TradingPanel({
               <span>Unavailable</span>
             )}
           </p>
+          <TourButton id="trading" />
         </div>
       </div>
 

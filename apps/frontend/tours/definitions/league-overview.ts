@@ -22,13 +22,13 @@ export const leagueOverviewTour = defineTour({
     {
       anchor: 'team-summary',
       title: 'Points count from release day',
-      body: 'A movie adds nothing until it opens. If critics score it early, you’ll see that score muted until release day. The team with the most points when the season ends wins.',
+      body: 'A movie adds nothing until it opens. If critics score it early, you’ll see it marked “at release” until then. The team with the most points when the season ends wins.',
     },
     {
       anchor: 'league-nav',
       title: 'Improve your team between releases',
       body: (ctx) => [
-        'Bid for movies no team holds; bids settle once a week.',
+        'Bid for unscored movies no team holds; bids settle weekly.',
         ctx.tradesOpen === true && 'Trade movies, counterpicks or Fantasy Budget with other teams.',
         ctx.dropLimit !== 0 && 'Drop a movie that’s lost its buzz, before it opens, to make room.',
       ].filter(Boolean).join(' '),

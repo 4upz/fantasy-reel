@@ -1,10 +1,10 @@
 import { defineTour, type TourContext } from '../types'
 
-const COMPETING_OFFERS = 'Several offers can name the same movie. Only the first to go through happens, and the rest expire.'
+const COMPETING_OFFERS = 'Several offers can name the same movie. The first to go through gets it, and the others expire.'
 
 /** What happens after a yes: straight through, or a review period of the league's `trade_veto_hours`. */
 function afterAccept(ctx: TourContext): string {
-  if (ctx.reviewEnabled !== true) return 'Once the other team accepts, the trade goes through shortly after.'
+  if (ctx.reviewEnabled !== true) return 'Once the other team accepts, the trade goes through shortly after, as long as it’s still valid.'
   const period = typeof ctx.reviewHours === 'number' ? `a ${ctx.reviewHours}-hour review period` : 'a review period'
   return ctx.isOwner === true
     ? `Nothing moves when the other team accepts. As commissioner, you get ${period} to approve it early or veto it. If you do neither, it goes through when the period ends.`
@@ -26,7 +26,7 @@ export const tradingTour = defineTour({
     {
       anchor: 'propose-trade',
       title: 'Make an offer',
-      body: 'Offer movies, counterpicks or Fantasy Budget for what another team holds. A movie that already has a score can’t be traded. You can set an offer to expire.',
+      body: 'Offer movies, counterpicks or Fantasy Budget for what another team holds. A movie with a score, or a counterpick on one, can’t be traded. You can set an offer to expire.',
     },
     {
       anchor: 'trade-respond',

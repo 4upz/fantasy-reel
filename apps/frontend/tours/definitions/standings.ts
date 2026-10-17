@@ -10,8 +10,8 @@ export const standingsTour = defineTour({
   steps: [
     {
       anchor: 'standings-summary',
-      title: 'Pending movies can still move the table',
-      body: 'Points so far come only from movies that have opened and have a score. Every pending movie can still change the order. Scores update every day.',
+      title: 'Pending movies can still change the standings',
+      body: 'Pending movies haven’t opened or haven’t been scored yet. Points so far come only from movies that have opened with a score, so every pending movie can still change the order as reviews come in.',
     },
     {
       anchor: 'standings-list',

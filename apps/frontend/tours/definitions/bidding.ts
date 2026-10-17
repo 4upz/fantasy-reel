@@ -16,22 +16,24 @@ export const biddingTour = defineTour({
     {
       anchor: 'bidding-budget',
       title: 'Pick up movies the draft missed',
-      body: 'Bid your Fantasy Budget on upcoming movies no team holds. Bids settle once a week: the highest bid wins and pays what it bid. Your budget has to last the whole season.',
+      body: 'Bid your Fantasy Budget on upcoming movies no team holds and critics haven’t scored. Bids settle weekly, and each winner pays what it bid. Your budget doesn’t reset each week, so pace yourself.',
     },
     {
       anchor: 'bid-week',
-      title: 'New bids close early',
-      body: 'Before the cutoff you can bid on any open movie and cancel bids. After it, until bids settle, you can only outbid bids already placed, and nothing can be cancelled. That way every late bid can be answered.',
+      title: 'Get new bids in during open bidding',
+      body: 'During open bidding you can bid on any available movie and cancel your bids. After it closes, until bids settle, you can only raise or counter bids on movies already in play, and no bid can be withdrawn.',
     },
     {
       anchor: 'place-bid',
       title: 'Bid, even with a full roster',
-      body: 'Choose a movie and an amount. If you have drops left, you can name a movie to drop only if the bid wins. A bid that still doesn’t fit when bids settle loses and costs nothing.',
+      body: 'Pick a movie and an amount. If you have drops left, you can also choose a movie of yours to drop if the bid wins. A bid that still doesn’t fit when bids settle loses and costs nothing.',
     },
     {
+      anchor: 'bid-priority',
+      centerIfMissing: true,
       title: 'After you bid',
-      body: [
-        'If you’re outbid, you get a set time to bid back. Your bid still stands, and it can win at its own price if the leader can’t take the movie.',
+      body: (ctx) => [
+        `If you’re outbid, you have ${typeof ctx.counterbidHours === 'number' ? `${ctx.counterbidHours} ${ctx.counterbidHours === 1 ? 'hour' : 'hours'}` : 'a set time'} to counter. Your bid still stands, and it can win at its own price if the leader has no room or budget left.`,
         'If you win more than you have room or budget for, your bid priority decides which ones you keep.',
       ],
     },
@@ -39,7 +41,7 @@ export const biddingTour = defineTour({
       anchor: 'place-counterpick-bid',
       when: (ctx) => ctx.counterpicksEnabled === true,
       title: 'Bet against a rival’s movie',
-      body: 'Win a counterpick and you score that movie’s points in reverse, so pick one you expect critics to pan. It’s paid from the same budget and doesn’t take a roster slot.',
+      body: 'Bid on another team’s movie to counterpick it. If you win, you score its points in reverse, so pick one you expect critics to pan. It’s paid from the same budget and doesn’t take a roster slot.',
     },
   ],
 })

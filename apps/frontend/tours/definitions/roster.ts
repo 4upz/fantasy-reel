@@ -13,24 +13,26 @@ export const rosterTour = defineTour({
   when: (ctx) => ctx.leagueStatus === 'active' && (ctx.dropLimit !== 0 || ctx.counterpicksEnabled === true),
   steps: [
     {
-      anchor: 'roster-summary',
+      anchor: 'roster-drops',
       when: (ctx) => ctx.dropLimit !== 0,
       title: 'Drops are limited',
-      body: 'Dropping a movie frees its slot for a pickup and puts it back up for bids. You get a set number of drops for the whole season. Used ones don’t come back, and a drop refunds nothing.',
+      body: 'Dropping a movie frees its slot for a pickup and, if critics haven’t scored it, puts it back up for bids. You get a set number of drops for the whole season. A drop is permanent and refunds nothing.',
     },
     {
       // Only cards that can be dropped carry this anchor, so the step drops out when none can.
       anchor: 'roster-movie',
       title: 'Drop before it opens',
-      body: 'Open a movie to drop it. A drop is permanent, and a movie can’t be dropped once it has opened.',
+      body: 'Open a movie to drop it. Do it before release day: once a movie opens, it can’t be dropped.',
     },
     {
+      anchor: 'roster-locked',
+      centerIfMissing: true,
       when: (ctx) => ctx.dropLimit !== 0,
       title: 'Locked movies',
       body: (ctx) =>
         ctx.counterpicksBlockDrops === true
-          ? 'A movie is locked once it opens, while another team holds a counterpick on it or is bidding for one, and once your drops run out. Open a locked movie to see why.'
-          : 'A movie is locked once it opens, and every movie is once your drops run out. Open a locked movie to see why.',
+          ? 'Besides opening, a movie locks while another team holds a counterpick on it or is bidding for one, and every movie locks once your drops run out. Open a locked movie to see why.'
+          : 'Besides opening, every movie locks once your drops run out. Open a locked movie to see why.',
     },
     {
       anchor: 'roster-counterpicks',

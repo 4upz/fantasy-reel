@@ -303,6 +303,7 @@ export default function ActiveBidsPanel(): React.ReactElement {
       type="button"
       className="btn btn-secondary min-h-11 px-4 py-2"
       data-testid="edit-bid-priority"
+      data-tour="bid-priority"
       aria-haspopup="dialog"
       onClick={() => setIsPriorityModalOpen(true)}
     >

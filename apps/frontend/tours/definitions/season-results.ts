@@ -13,13 +13,15 @@ export const seasonResultsTour = defineTour({
   steps: [
     {
       anchor: 'season-results',
-      title: 'The season is over',
-      body: 'These standings are final. Bids that hadn’t settled were cancelled without charge, and open trade offers expired. Teams tied for first share the title.',
+      title: 'See how the season finished',
+      body: 'This result is final. Bids that hadn’t settled were cancelled without charge, and open trade offers expired. Teams tied for first share the title.',
     },
     {
+      anchor: 'start-next-season',
+      centerIfMissing: true,
       when: (ctx) => ctx.isOwner === true && ctx.hasNextSeason !== true,
       title: 'Start the next season',
-      body: 'As commissioner, you can open a new season of this league from the results. Rosters start empty, and you set up a new draft.',
+      body: 'As commissioner, you start the next season from the results. Members and settings carry over, rosters start empty, and you set up a new draft.',
     },
   ],
 })

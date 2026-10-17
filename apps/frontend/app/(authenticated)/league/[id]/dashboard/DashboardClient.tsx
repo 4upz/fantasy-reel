@@ -155,9 +155,11 @@ export default function DashboardClient({
           onEditTeam={league.status === 'completed' ? undefined : () => setShowEditTeamModal(true)}
         />
       </div>
+      <div className="flex justify-end px-4">
+        <TourButton className="mt-2" />
+      </div>
       <MovieGrid movies={userTeam.movies} leagueStatus={league.status} />
       <LeagueReleaseBoard releases={leagueUpcoming} todayIso={todayIso} />
-      <TourButton className="mx-4 mt-[18px]" />
 
       {publicWishlistCount > 0 && (
         <div className="card mx-4 mt-[18px] flex items-center gap-3 p-4">

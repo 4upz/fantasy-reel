@@ -289,7 +289,7 @@ export default function BiddingShell({
 
   return (
     <BiddingProvider value={contextValue}>
-      <FeatureTour id="bidding" ctx={{ leagueStatus: league.status, counterpicksEnabled: hasCounterpicks }} />
+      <FeatureTour id="bidding" ctx={{ leagueStatus: league.status, counterpicksEnabled: hasCounterpicks, counterbidHours: league.counterbid_hours }} />
       <div className="space-y-6" data-testid="bidding-panel">
         {/* Header: budget and slots, then the two ways to spend them */}
         <div className="card p-4 sm:p-5">

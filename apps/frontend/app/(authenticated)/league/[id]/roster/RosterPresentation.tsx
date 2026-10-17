@@ -47,6 +47,7 @@ export function RosterHeader({
         <p
           className={`type-body-sm ${dropsRemaining > 0 ? 'text-foreground-secondary' : 'text-crimson-text'}`}
           data-testid="drops-summary"
+          data-tour="roster-drops"
         >
           {dropsRemaining > 0
             ? `Drops: ${dropCount} of ${dropLimit} used`
@@ -135,6 +136,7 @@ export function RosterMovieCard({
         {isLocked && (
           <span
             data-testid="roster-lock-badge"
+            data-tour="roster-locked"
             aria-hidden="true"
             className="type-meta absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground-secondary backdrop-blur-sm"
           >

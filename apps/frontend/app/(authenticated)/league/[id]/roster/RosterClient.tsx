@@ -145,17 +145,17 @@ export default function RosterClient({
           counterpicksEnabled: league.draft_counterpick_slots + league.bidding_counterpick_slots > 0,
         }}
       />
-      <div data-tour="roster-summary">
-        <RosterHeader
+      <RosterHeader
           teamName={team.name}
           slotsFilled={totalMovies}
           totalSlots={league.total_slots}
           remainingBudget={budget?.remaining_budget ?? null}
           dropCount={dropCount}
-          dropLimit={league.drop_limit}
-        />
+        dropLimit={league.drop_limit}
+      />
+      <div className="flex justify-end">
+        <TourButton />
       </div>
-      <TourButton />
 
       <RosterProjectionSummary
         leagueId={league.id}
@@ -187,8 +187,8 @@ export default function RosterClient({
       />
 
       {/* Counterpicks Section */}
-      <div>
-        <h2 data-tour="roster-counterpicks" className="type-section text-foreground flex items-center gap-2 mb-4">
+      <div data-tour="roster-counterpicks">
+        <h2 className="type-section text-foreground flex items-center gap-2 mb-4">
           <Target className="w-5 h-5 text-crimson-text" aria-hidden="true" />
           Counterpicks ({counterpicks.length})
         </h2>
