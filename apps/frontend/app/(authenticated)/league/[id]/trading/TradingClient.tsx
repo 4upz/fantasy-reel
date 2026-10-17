@@ -9,6 +9,8 @@ import { trackEvent } from '@/utils/analytics'
 import { resolveExpiryBounds, type ResolvedExpiry } from '@/utils/tradeExpiry'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { announce } from '@/utils/announce'
+import { FeatureTour } from '@/components/tours'
+import { tradesOpen } from '@/utils/league'
 
 // Start the dialog chunk alongside its data; Suspense keeps preparation cancellable.
 const loadProposeTradeModal = () => import('../components/ProposeTradeModal')
@@ -87,6 +89,16 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
 
   return (
     <>
+      <FeatureTour
+        id="trading"
+        ctx={{
+          leagueStatus: league.status,
+          tradesOpen: tradesOpen(league),
+          reviewEnabled: league.trade_review_enabled,
+          reviewHours: league.trade_veto_hours,
+          isOwner,
+        }}
+      />
       {(error || budgetError) && (
         <div className="alert alert-error mb-4" role="alert">
           <p>{error ?? budgetError}</p>

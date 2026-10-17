@@ -489,6 +489,7 @@ export default function TradeOfferCard(props: Props) {
                 aria-describedby={headingId}
                 aria-busy={pendingAction === 'accept'}
                 data-testid={`accept-trade-${trade.id}`}
+                data-tour="trade-respond"
               >
                 {pendingAction === 'accept' ? 'Accepting...' : 'Accept'}
               </button>

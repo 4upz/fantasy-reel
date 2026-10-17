@@ -13,6 +13,7 @@ import { holdingMovie } from '@/utils/holdings'
 import { useMovieProjections } from '@/hooks/useMovieProjections'
 import { HoldingProjection } from '@/app/components/projections/ProjectionChip'
 import RosterProjectionSummary from './RosterProjectionSummary'
+import { FeatureTour, TourButton } from '@/components/tours'
 import type { Holding, RosterHolding } from './types'
 import type { League, Movie, MovieProjection, TeamBudget, Counterpick } from '@/types'
 
@@ -135,14 +136,26 @@ export default function RosterClient({
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <RosterHeader
-        teamName={team.name}
-        slotsFilled={totalMovies}
-        totalSlots={league.total_slots}
-        remainingBudget={budget?.remaining_budget ?? null}
-        dropCount={dropCount}
-        dropLimit={league.drop_limit}
+      <FeatureTour
+        id="roster"
+        ctx={{
+          leagueStatus: league.status,
+          dropLimit: league.drop_limit,
+          counterpicksBlockDrops: league.counterpicks_block_drops,
+          counterpicksEnabled: league.draft_counterpick_slots + league.bidding_counterpick_slots > 0,
+        }}
       />
+      <div data-tour="roster-summary">
+        <RosterHeader
+          teamName={team.name}
+          slotsFilled={totalMovies}
+          totalSlots={league.total_slots}
+          remainingBudget={budget?.remaining_budget ?? null}
+          dropCount={dropCount}
+          dropLimit={league.drop_limit}
+        />
+      </div>
+      <TourButton />
 
       <RosterProjectionSummary
         leagueId={league.id}
@@ -175,7 +188,7 @@ export default function RosterClient({
 
       {/* Counterpicks Section */}
       <div>
-        <h2 className="type-section text-foreground flex items-center gap-2 mb-4">
+        <h2 data-tour="roster-counterpicks" className="type-section text-foreground flex items-center gap-2 mb-4">
           <Target className="w-5 h-5 text-crimson-text" aria-hidden="true" />
           Counterpicks ({counterpicks.length})
         </h2>
@@ -279,17 +292,24 @@ function RosterSection({
         <p className="text-foreground-secondary">{emptyText}</p>
       ) : (
         <ul role="list" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {holdings.map((holding) => (
-            <li key={holding.id} className="grid">
+          {holdings.map((holding) => {
+            const isLocked = blockerFor(holding) !== null
+            const card = (
               <RosterMovieCard
                 movie={holding.movie}
                 label={holding.label}
-                isLocked={blockerFor(holding) !== null}
+                isLocked={isLocked}
                 projection={<RosterCardProjection movie={holding.movie} projections={projections} />}
                 onSelect={() => onSelect(holding)}
               />
-            </li>
-          ))}
+            )
+            // The roster tour's drop step points at the first movie that can be dropped.
+            return (
+              <li key={holding.id} className="grid">
+                {isLocked ? card : <div className="grid" data-tour="roster-movie">{card}</div>}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>
