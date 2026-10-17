@@ -12,12 +12,44 @@ struct CounterpickRoundSection: View {
     @State private var confirmEnd = false
 
     var body: some View {
+        // Same spacing as the room's stack; one container for the dialogs.
+        VStack(spacing: FRMetrics.sectionSpacing) {
+            sections
+        }
+        .confirmationDialog(
+            "End the remaining counterpicks?",
+            isPresented: $confirmEnd,
+            titleVisibility: .visible
+        ) {
+            Button("End and Start Season", role: .destructive) { model.skipCounterpickRound() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("End the remaining counterpicks and activate the league? Existing counterpicks will be kept. This cannot be undone.")
+        }
+        .confirmationDialog(
+            pendingPick.map { "Counterpick \($0.title)?" } ?? "",
+            isPresented: Binding(get: { pendingPick != nil }, set: { if !$0 { pendingPick = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingPick
+        ) { option in
+            Button("Counterpick") {
+                Task { await model.submit(.counterpick(option.movieID), title: option.title) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { option in
+            Text("You'll score the inverse of \(option.ownerTeamName)'s points for it. It uses no roster slot.")
+        }
+    }
+
+    @ViewBuilder
+    private var sections: some View {
         DraftTurnCard(
             turn: snapshot.currentCounterpickTurn,
             totalPicks: snapshot.totalCounterpicks,
             upNext: snapshot.upcomingCounterpickTurns(limit: 3),
             userID: model.userID,
-            detail: "scores inverted"
+            detail: "scores inverted",
+            isPaused: model.connection == .offline
         ) {
             if let teamID = model.me?.team?.id {
                 let left = snapshot.counterpicksRemaining(for: teamID)
@@ -33,46 +65,42 @@ struct CounterpickRoundSection: View {
             madeCounterpicks
         }
         if model.ownerActions.contains(.endCounterpicks) {
-            VStack(spacing: 6) {
-                Button("End Counterpick Round…") { confirmEnd = true }
-                    .buttonStyle(.fr(.destructive, isLoading: model.phaseAction.isRunning))
-                Text("Commissioner only. Asks to confirm; counterpicks already made are kept.")
-                    .frFont(.label)
-                    .foregroundStyle(Color.frTextSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let message = model.phaseAction.errorMessage {
-                    Text(message)
-                        .frFont(.label)
-                        .foregroundStyle(Color.frError)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(.top, 8)
+            endControl
         }
         TMDbAttribution()
-            .confirmationDialog(
-                "End the remaining counterpicks?",
-                isPresented: $confirmEnd,
-                titleVisibility: .visible
-            ) {
-                Button("End and Start Season", role: .destructive) { model.skipCounterpickRound() }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("End the remaining counterpicks and activate the league? Existing counterpicks will be kept. This cannot be undone.")
-            }
-            .confirmationDialog(
-                pendingPick.map { "Counterpick \($0.title)?" } ?? "",
-                isPresented: Binding(get: { pendingPick != nil }, set: { if !$0 { pendingPick = nil } }),
-                titleVisibility: .visible,
-                presenting: pendingPick
-            ) { option in
-                Button("Counterpick") {
-                    Task { await model.submit(.counterpick(option.movieID), title: option.title) }
+    }
+
+    /// The commissioner's way out when nobody can pick: a quiet row, since
+    /// it's the exception, not the next step.
+    private var endControl: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            FRRowGroup {
+                Button { confirmEnd = true } label: {
+                    HStack {
+                        Text("End Counterpick Round")
+                            .frFont(.rowTitle)
+                            .foregroundStyle(Color.frCrimsonText)
+                        Spacer()
+                        if model.phaseAction.isRunning { ProgressView() }
+                    }
+                    .padding(.horizontal, FRMetrics.rowPadding)
+                    .frame(minHeight: FRMetrics.minTapTarget)
+                    .contentShape(Rectangle())
                 }
-                Button("Cancel", role: .cancel) {}
-            } message: { option in
-                Text("You'll score the inverse of \(option.ownerTeamName)'s points for it. It uses no roster slot.")
+                .buttonStyle(.frRow)
+                .disabled(model.phaseAction.isRunning)
             }
+            Text("Commissioner only. Counterpicks already made are kept.")
+                .frFont(.label)
+                .foregroundStyle(Color.frTextSecondary)
+            if let message = model.phaseAction.errorMessage {
+                Text(message)
+                    .frFont(.label)
+                    .foregroundStyle(Color.frError)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 8)
     }
 
     @ViewBuilder
@@ -114,11 +142,16 @@ struct CounterpickRoundSection: View {
             round.map { "Round \($0)" },
             option.fantasyPoints.map { "\(FantasyPoints.signed(-$0)) for you" },
         ].compactMap { $0 }.joined(separator: " · ")
+        let canPick = model.canSubmit && model.myTurn?.kind == .counterpick
         return MovieRow(title: option.title, meta: meta, posterURL: option.posterURL) {
             Button("Pick") { pendingPick = option }
                 .buttonStyle(.fr(.secondary, size: .compact))
-                .disabled(!model.canSubmit || model.myTurn?.kind != .counterpick)
+                .disabled(!canPick)
                 .accessibilityLabel("Counterpick \(option.title)")
+        }
+        // The row reads as one element; Pick stays reachable as its action.
+        .accessibilityAction(named: "Counterpick") {
+            if canPick { pendingPick = option }
         }
     }
 
@@ -153,24 +186,17 @@ struct CounterpickRoundSection: View {
     }
 }
 
-/// "A −16 movie scores +16 for you. Uses no roster slot."
+/// "A −16 movie scores +16 for you. Uses no roster slot." One `Text`, so it
+/// wraps as a sentence at any size.
 private struct CounterpickExplainer: View {
     var body: some View {
-        HStack(spacing: 10) {
-            PointsText(-16, role: .numberSmall)
-            Text("movie scores")
-                .frFont(.bodySmall)
-                .foregroundStyle(Color.frTextSecondary)
-            PointsText(16, role: .numberSmall)
-            Text("for you. Uses no roster slot.")
-                .frFont(.bodySmall)
-                .foregroundStyle(Color.frTextSecondary)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, FRMetrics.cardPadding)
-        .padding(.vertical, 12)
-        .frCardBackground()
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("A counterpick scores the inverse: a movie that scores minus 16 earns you plus 16. It uses no roster slot.")
+        let negative = Text(FantasyPoints.signed(-16)).foregroundStyle(Color.frCrimsonText)
+        let positive = Text(FantasyPoints.signed(16)).foregroundStyle(Color.frSuccess)
+        Text("\(negative) movie scores \(positive) for you. Uses no roster slot.")
+            .frFont(.label)
+            .foregroundStyle(Color.frTextSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("A counterpick scores the inverse: a movie that scores minus 16 earns you plus 16. It uses no roster slot.")
     }
 }

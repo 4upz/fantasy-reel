@@ -100,6 +100,14 @@ struct DraftTurnOrderTests {
         #expect(snapshot.upcomingDraftTurns(limit: 2).map(\.participant.userID) == ["u1", "u1"])
     }
 
+    @Test func boardKeepsSlotsOfAMemberWhoLeft() {
+        // Drafted with 3 teams; one left after the season started.
+        let full = (1...9).map { Draft.pick($0, teams: 3, team: 1, tmdb: $0) }
+        let snapshot = Draft.snapshot(status: .active, teams: 2, picks: full)
+        #expect(snapshot.boardTeamCount == 3)
+        #expect(snapshot.draftBoardRounds.flatMap(\.slots).compactMap(\.pick).count == 9)
+    }
+
     @Test func noTurnOutsideTheDraftOrOnAFullBoard() {
         #expect(Draft.snapshot(status: .setup).currentTurn == nil)
         let full = (1...9).map { Draft.pick($0, teams: 3, team: 1, tmdb: $0) }
@@ -162,7 +170,7 @@ struct DraftOwnerActionTests {
 
         let full = (1...9).map { Draft.pick($0, teams: 3, team: 1, tmdb: $0) }
         #expect(Draft.snapshot(status: .drafting, picks: full).ownerActions(isOwner: true) == [.startCounterpicks, .skipCounterpicks])
-        #expect(Draft.snapshot(status: .drafting, counterpickSlots: 0, picks: full).ownerActions(isOwner: true) == [.skipCounterpicks])
+        #expect(Draft.snapshot(status: .drafting, counterpickSlots: 0, picks: full).ownerActions(isOwner: true).isEmpty)
         #expect(Draft.snapshot(status: .counterpicking).ownerActions(isOwner: true) == [.endCounterpicks])
         #expect(Draft.snapshot(status: .active).ownerActions(isOwner: true) == [])
     }
@@ -245,14 +253,9 @@ struct DraftDecodingTests {
         #expect(option.fantasyPoints == nil)
     }
 
-    @Test func catalogPageHonoursHasMore() throws {
-        let page = try decodeJSON(CatalogPage.self, """
-        {"page":2,"total_pages":500,"total_results":10000,"has_more":false,
-         "results":[{"tmdb_id":1,"title":"A","release_date":"","poster_url":null,"genre_ids":[16,12]}]}
-        """)
-        #expect(!page.hasMore)
-        #expect(page.results.first?.releaseDate == nil)
-        #expect(page.results.first?.primaryGenre == "Animation")
+    @Test func primaryGenreSkipsUnknownIDs() {
+        #expect(MovieGenre.primaryName(of: [1, 16, 12]) == "Animation")
+        #expect(MovieGenre.primaryName(of: []) == nil)
     }
 }
 
@@ -262,6 +265,12 @@ struct DraftAnnouncementTests {
         let after = Draft.snapshot(status: .drafting, picks: [Draft.pick(1, teams: 3, team: 1, tmdb: 7)])
         #expect(after.changeAnnouncement(since: before, userID: "u2") == "Team 1 drafted Movie 7. It's your turn.")
         #expect(after.changeAnnouncement(since: after, userID: "u2") == nil)
+    }
+
+    @Test func leavesTheUsersOwnPickToTheSubmission() {
+        let before = Draft.snapshot(status: .drafting)
+        let after = Draft.snapshot(status: .drafting, picks: [Draft.pick(1, teams: 3, team: 1, tmdb: 7)])
+        #expect(after.changeAnnouncement(since: before, userID: "u1") == "Team 2 is on the clock.")
     }
 
     @Test func announcesPhaseChange() {

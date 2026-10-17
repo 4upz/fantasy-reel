@@ -1,3 +1,4 @@
+import FantasyReelAPI
 import FantasyReelCore
 import SwiftUI
 
@@ -24,8 +25,9 @@ struct DraftMoviePickerView: View {
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(ShellRouter.self) private var router
+    @Environment(WishlistStore.self) private var wishlist
     @State private var model: DraftMoviePickerModel?
-    @State private var pendingPick: CatalogMovie?
+    @State private var pendingPick: MovieSearchResult?
 
     var body: some View {
         Group {
@@ -51,8 +53,8 @@ struct DraftMoviePickerView: View {
         .task {
             guard model == nil else { return }
             model = DraftMoviePickerModel(
-                catalog: environment.draftCatalog,
-                userID: room.userID,
+                movies: environment.movies,
+                wishlist: wishlist,
                 seasonYear: room.snapshot?.league.seasonYear ?? room.selection.season.seasonYear
             )
         }
@@ -76,14 +78,14 @@ struct DraftMoviePickerView: View {
     }
 
     @ViewBuilder
-    private func content(_ model: DraftMoviePickerModel) -> some View {
-        @Bindable var model = model
+    private func content(_ picker: DraftMoviePickerModel) -> some View {
+        @Bindable var bindable = picker
         ScrollView {
             LazyVStack(spacing: FRMetrics.sectionSpacing) {
                 turnLine
                 DraftSubmissionNotice(model: room)
-                FRSegmentedControl("Movie lists", selection: $model.tab, options: CatalogTab.allCases, title: { $0.title })
-                results(model)
+                FRSegmentedControl("Movie lists", selection: $bindable.tab, options: CatalogTab.allCases, title: { $0.title })
+                results(picker, drafted: room.snapshot?.draftedTMDbIDs ?? [])
                 Text("Pick asks you to confirm. If the connection drops, it's retried safely and never doubled.")
                     .frFont(.label)
                     .foregroundStyle(Color.frTextSecondary)
@@ -93,17 +95,15 @@ struct DraftMoviePickerView: View {
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 24)
         }
-        .searchable(text: $model.query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search movies")
+        .searchable(text: $bindable.query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search movies")
         // One reload per settled change; typing waits 300 ms like the web.
-        .task(id: ReloadKey(model)) {
-            if !model.trimmedQuery.isEmpty {
-                do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+        .task(id: ReloadKey(picker)) { [picker] in
+            if !picker.trimmedQuery.isEmpty {
+                do { try await Task.sleep(for: MovieSearchModel.debounce) } catch { return }
             }
-            await model.reload(excluding: drafted)
+            await picker.reload(excluding: room.snapshot?.draftedTMDbIDs ?? [])
         }
     }
-
-    private var drafted: Set<TMDbID> { room.snapshot?.draftedTMDbIDs ?? [] }
 
     @ViewBuilder
     private var turnLine: some View {
@@ -119,7 +119,7 @@ struct DraftMoviePickerView: View {
     }
 
     @ViewBuilder
-    private func results(_ model: DraftMoviePickerModel) -> some View {
+    private func results(_ model: DraftMoviePickerModel, drafted: Set<TMDbID>) -> some View {
         switch model.phase {
         case .loading:
             LoadingView(label: "Loading movies…")
@@ -170,25 +170,29 @@ struct DraftMoviePickerView: View {
         }
     }
 
-    private func row(_ movie: CatalogMovie) -> some View {
+    /// The link and Pick are siblings, so a tap on Pick never pushes the
+    /// detail and VoiceOver reaches each one.
+    private func row(_ movie: MovieSearchResult) -> some View {
         let drafter = room.snapshot?.drafter(of: movie.tmdbID)
         let date = movie.releaseDate.map { DateOnly.display($0, style: .medium) }
         let draftedBy = drafter.map { "Drafted by \($0.userID == room.userID ? "you" : firstName($0))" }
-        let meta = [draftedBy, date, drafter == nil ? movie.primaryGenre : nil]
+        let meta = [draftedBy, date, drafter == nil ? MovieGenre.primaryName(of: movie.genreIDs) : nil]
             .compactMap { $0 }
             .joined(separator: " · ")
-        return NavigationLink(value: LeagueRoute.movie(movie.tmdbID)) {
-            MovieRow(title: movie.title, meta: meta, posterURL: movie.posterURL) {
-                if drafter == nil {
-                    Button("Pick") { pendingPick = movie }
-                        .buttonStyle(.fr(.secondary, size: .compact))
-                        .disabled(!room.canSubmit || room.myTurn?.kind != .draft)
-                        .accessibilityLabel("Pick \(movie.title)")
-                }
+        return HStack(spacing: 0) {
+            NavigationLink(value: LeagueRoute.movie(movie.tmdbID)) {
+                MovieRow(title: movie.title, meta: meta, posterURL: movie.posterURL) { EmptyView() }
+            }
+            .buttonStyle(.frRow)
+            .accessibilityHint("Shows movie details")
+            if drafter == nil {
+                Button("Pick") { pendingPick = movie }
+                    .buttonStyle(.fr(.secondary, size: .compact))
+                    .disabled(!room.canSubmit || room.myTurn?.kind != .draft)
+                    .accessibilityLabel("Pick \(movie.title)")
+                    .padding(.trailing, FRMetrics.rowPadding)
             }
         }
-        .buttonStyle(.frRow)
-        .accessibilityHint("Shows movie details")
     }
 
     private func firstName(_ member: LeagueMember) -> String {
@@ -205,7 +209,7 @@ struct DraftMoviePickerView: View {
         return "No eligible movies for these filters. Try a wider release window or fewer genres."
     }
 
-    private func confirmationMessage(_ movie: CatalogMovie) -> String {
+    private func confirmationMessage(_ movie: MovieSearchResult) -> String {
         guard let turn = room.myTurn else { return "" }
         let date = movie.releaseDate.map { " It releases \(DateOnly.display($0, style: .full))." } ?? ""
         return "This is your round \(turn.round) pick (pick \(turn.overallPick)).\(date)"
@@ -216,8 +220,8 @@ struct DraftMoviePickerView: View {
 private struct ReloadKey: Hashable {
     let tab: CatalogTab
     let query: String
-    let window: ReleaseWindow
-    let genres: Set<MovieGenre>
+    let window: MovieBrowseRequest.ReleaseWindow
+    let genres: Set<Int>
 
     @MainActor
     init(_ model: DraftMoviePickerModel) {
@@ -237,17 +241,17 @@ private struct DraftCatalogFilterMenu: View {
         Menu {
             if model.tab == .all {
                 Picker("Release window", selection: $model.window) {
-                    ForEach(ReleaseWindow.allCases) { window in
+                    ForEach(MovieBrowseRequest.ReleaseWindow.allCases, id: \.self) { window in
                         Text(window.title(seasonYear: seasonYear)).tag(window)
                     }
                 }
             }
             Section("Genres") {
-                ForEach(MovieGenre.allCases) { genre in
-                    Toggle(genre.title, isOn: Binding(
-                        get: { model.genres.contains(genre) },
+                ForEach(MovieGenre.tmdbMovieGenres) { genre in
+                    Toggle(genre.name, isOn: Binding(
+                        get: { model.genres.contains(genre.id) },
                         set: { isOn in
-                            if isOn { model.genres.insert(genre) } else { model.genres.remove(genre) }
+                            if isOn { model.genres.insert(genre.id) } else { model.genres.remove(genre.id) }
                         }
                     ))
                 }

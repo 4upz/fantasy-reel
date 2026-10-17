@@ -14,14 +14,15 @@ struct LiveDraftSection: View {
             turn: snapshot.currentDraftTurn,
             totalPicks: snapshot.totalDraftPicks,
             upNext: snapshot.upcomingDraftTurns(limit: 3),
-            userID: model.userID
+            userID: model.userID,
+            isPaused: model.connection == .offline
         ) {
             if snapshot.currentDraftTurn != nil {
                 Button(model.myTurn == nil ? "Browse Movies" : "Choose a Movie") {
                     router.present(.draftMoviePicker(DraftRoomHandle(model)))
                 }
                 .buttonStyle(.fr(model.myTurn == nil ? .secondary : .primary, isLoading: model.submissionStatus == .submitting))
-                .accessibilityHint(model.myTurn == nil ? "Research movies while you wait for your turn." : "")
+                .disabled(model.connection == .offline)
             }
         }
         DraftSubmissionNotice(model: model)
@@ -90,12 +91,15 @@ struct DraftBoardList: View {
         if rounds.isEmpty {
             EmptyStateView(title: "No picks yet", message: "Picks appear here as they're made.", systemImage: "list.number")
         }
-        ForEach(rounds) { round in
-            VStack(spacing: 8) {
-                SectionHeader("Round \(round.round)", detail: round.pickRange.map { "Picks \($0.lowerBound)–\($0.upperBound)" } ?? "")
-                FRRowGroup(separatorInset: 108) {
-                    ForEach(round.slots) { slot in
-                        slotRow(slot)
+        // A finished board is every round at once; build what's on screen.
+        LazyVStack(spacing: FRMetrics.sectionSpacing) {
+            ForEach(rounds) { round in
+                VStack(spacing: 8) {
+                    SectionHeader("Round \(round.round)", detail: round.pickRange.map { "Picks \($0.lowerBound)–\($0.upperBound)" } ?? "")
+                    FRRowGroup(separatorInset: 108) {
+                        ForEach(round.slots) { slot in
+                            slotRow(slot)
+                        }
                     }
                 }
             }
@@ -119,21 +123,24 @@ struct DraftBoardList: View {
             }
             .buttonStyle(.frRow)
         } else {
-            let isCurrent = snapshot.currentDraftTurn?.overallPick == slot.overallPick
+            let current = snapshot.currentDraftTurn?.overallPick
+            let isCurrent = current == slot.overallPick
             let member = slot.turn?.participant
             let isMine = member?.userID == userID
             BoardRow(label: slot.label) {
                 ListRow(
-                    title: isMine ? "Your pick" : member?.teamName ?? "Open pick",
+                    title: member?.teamName ?? "Open pick",
                     meta: [
-                        isMine ? member?.teamName : member?.displayName,
-                        isCurrent ? "on the clock" : nil,
+                        member?.displayName,
+                        isCurrent ? "on the clock" : (current.map { $0 + 1 } == slot.overallPick ? "up next" : nil),
                     ].compactMap { $0 }.joined(separator: " · ")
                 ) {
                     Avatar(name: member?.teamName ?? "?", imageURL: member?.team?.avatarURL, size: .custom(36), corners: .rounded, fill: isCurrent ? .brand : .neutral)
                 } trailing: {
-                    if isCurrent {
-                        FRBadge("Now", tone: .gold)
+                    if isMine {
+                        Text("Your pick")
+                            .frFont(.label)
+                            .foregroundStyle(Color.frGold)
                     }
                 }
             }
@@ -152,12 +159,14 @@ private struct BoardRow<Content: View>: View {
     let label: String
     @ViewBuilder let content: () -> Content
 
+    @ScaledMetric(relativeTo: .body) private var labelWidth: CGFloat = 44
+
     var body: some View {
         HStack(spacing: 0) {
             Text(label)
                 .frFont(.number)
                 .foregroundStyle(Color.frTextSecondary)
-                .frame(width: 44)
+                .frame(width: labelWidth)
                 .padding(.leading, 8)
                 .accessibilityLabel("Pick \(label)")
             content()

@@ -40,7 +40,13 @@ private struct DraftRoomView: View {
         .background(Color.frBackground)
         .task {
             guard model == nil else { return }
-            let model = DraftRoomModel(selection: selection, environment: environment)
+            let model = DraftRoomModel(
+                selection: selection,
+                leagues: environment.leagues,
+                lifecycle: environment.leagueLifecycle,
+                draft: environment.draft,
+                changeFeed: environment.changeFeed
+            )
             self.model = model
             await model.refresh()
         }
@@ -134,7 +140,7 @@ private struct DraftConnectionNotice: View {
         let status = model.snapshot?.league.status
         let isLive = status == .drafting || status == .counterpicking
         if isLive, model.connection == .offline || model.connection == .reconnecting {
-            ConnectionStatusBanner(status: model.connection, message: "Showing the last saved draft.")
+            ConnectionStatusBanner(status: model.connection, message: "Showing last saved draft.")
         } else if isLive, model.connection == .periodicUpdates {
             ConnectionStatusBanner(status: .periodicUpdates)
         }
@@ -161,14 +167,16 @@ struct DraftTurnCard<Action: View>: View {
     let userID: UserID
     /// "scores inverted" for the counterpick round.
     var detail: String?
+    /// Offline: picks wait until the connection is back (V2DraftOffline).
+    var isPaused = false
     @ViewBuilder let action: () -> Action
 
     var body: some View {
         let isMine = turn?.isMine(userID) ?? false
-        FRCard(tone: isMine ? .gold : nil) {
+        FRCard(tone: isMine ? .success : nil) {
             VStack(alignment: .leading, spacing: 14) {
                 if let turn {
-                    HStack(spacing: 12) {
+                    HStack(alignment: .top, spacing: 12) {
                         Avatar(name: turn.participant.teamName, imageURL: turn.participant.team?.avatarURL, size: .large, corners: .rounded)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(title(turn, isMine: isMine))
@@ -179,6 +187,9 @@ struct DraftTurnCard<Action: View>: View {
                                 .foregroundStyle(Color.frTextSecondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        if isPaused {
+                            FRBadge("Paused", tone: .warning, systemImage: "pause.fill")
+                        }
                     }
                     .accessibilityElement(children: .combine)
                     if !upNext.isEmpty {
@@ -198,7 +209,8 @@ struct DraftTurnCard<Action: View>: View {
         switch (turn.kind, isMine) {
         case (.draft, true): "You're on the clock"
         case (.counterpick, true): "Your counterpick"
-        case (_, false): "\(turn.participant.teamName) is on the clock"
+        case (.draft, false): "\(turn.participant.teamName) is on the clock"
+        case (.counterpick, false): "\(turn.participant.teamName) is counterpicking"
         }
     }
 
@@ -215,15 +227,21 @@ private struct UpNextRow: View {
     let turns: [DraftTurn]
     let userID: UserID
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(spacing: 10) {
+        // At accessibility sizes the names stack instead of truncating.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 10))
+        layout {
             Text("Up next")
                 .frFont(.label)
                 .foregroundStyle(Color.frTextSecondary)
             ForEach(turns, id: \.overallPick) { turn in
                 HStack(spacing: 6) {
                     Avatar(name: turn.participant.teamName, imageURL: turn.participant.team?.avatarURL, size: .small)
-                    Text(turn.isMine(userID) ? "You" : firstName(turn.participant))
+                    Text(name(turn))
                         .frFont(.label)
                         .foregroundStyle(Color.frText)
                         .lineLimit(1)
@@ -232,7 +250,11 @@ private struct UpNextRow: View {
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Up next: " + turns.map { $0.isMine(userID) ? "you" : $0.participant.teamName }.joined(separator: ", "))
+        .accessibilityLabel("Up next: " + turns.map(name).joined(separator: ", "))
+    }
+
+    private func name(_ turn: DraftTurn) -> String {
+        turn.isMine(userID) ? "You" : firstName(turn.participant)
     }
 
     private func firstName(_ member: LeagueMember) -> String {
@@ -279,14 +301,15 @@ private struct DraftRecordSection: View {
     let userID: UserID
 
     var body: some View {
-        InlineBanner(
-            tone: .neutral,
-            title: "Read-only",
-            message: snapshot.league.status == .completed
-                ? "Season complete. The draft is a record now."
-                : "The draft is over. This is the record of every pick.",
-            systemImage: "lock"
+        Label(
+            snapshot.league.status == .completed
+                ? "Read-only. Season complete; the draft is a record now."
+                : "Read-only. The draft is over; this is the record of every pick.",
+            systemImage: "lock.fill"
         )
+        .frFont(.meta)
+        .foregroundStyle(Color.frTextSecondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
         DraftBoardList(snapshot: snapshot, userID: userID)
         TMDbAttribution()
     }
@@ -323,7 +346,13 @@ struct DraftResultsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             guard model == nil, let selection else { return }
-            let model = DraftRoomModel(selection: selection, environment: environment, usesChangeFeed: false)
+            let model = DraftRoomModel(
+                selection: selection,
+                leagues: environment.leagues,
+                lifecycle: environment.leagueLifecycle,
+                draft: environment.draft,
+                changeFeed: nil
+            )
             self.model = model
             await model.refresh()
         }

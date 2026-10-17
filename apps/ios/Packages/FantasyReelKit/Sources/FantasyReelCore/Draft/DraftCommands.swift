@@ -157,11 +157,14 @@ extension DraftSnapshot {
             default: return nil
             }
         }
+        // The user's own picks are announced where they're made ("You drafted …").
+        let ownTeam = participant(for: userID)?.team?.id
         var parts: [String] = []
-        if let pick = newestPick, pick.id != previous.newestPick?.id {
+        if let pick = newestPick, pick.id != previous.newestPick?.id, pick.teamID != ownTeam {
             parts.append("\(teamName(pick.teamID)) drafted \(pick.movie?.title ?? "a movie").")
         }
-        if let counterpick = newestCounterpick, counterpick.id != previous.newestCounterpick?.id {
+        if let counterpick = newestCounterpick, counterpick.id != previous.newestCounterpick?.id,
+           counterpick.counterpickerTeamID != ownTeam {
             parts.append("\(teamName(counterpick.counterpickerTeamID)) counterpicked \(counterpick.movie?.title ?? "a movie").")
         }
         if let turn = currentTurn,
@@ -172,7 +175,7 @@ extension DraftSnapshot {
     }
 
     private var newestPick: DraftPickRecord? {
-        let count = teamCount
+        let count = boardTeamCount
         return picks.max { $0.overallPick(teamCount: count) < $1.overallPick(teamCount: count) }
     }
 

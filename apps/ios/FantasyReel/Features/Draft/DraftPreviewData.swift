@@ -111,10 +111,10 @@ enum DraftPreviewData {
     }
 
     /// The picker's catalog: what's still undrafted in the live room.
-    static var catalog: [CatalogMovie] {
+    static var catalog: [MovieSearchResult] {
         [5, 8, 4, 9, 10, 11].map { index in
             let movie = movie(index)
-            return CatalogMovie(tmdbID: movie.tmdbID, title: movie.title, releaseDate: movie.releaseDate, genreIDs: genres[index] ?? [])
+            return MovieSearchResult(tmdbID: movie.tmdbID, title: movie.title, releaseDate: movie.releaseDate, genreIDs: genres[index] ?? [])
         }
     }
 
@@ -186,8 +186,8 @@ enum DraftPreviewData {
     ) -> Room {
         let environment = AppEnvironment.preview(
             leagues: InMemoryLeagueRepository(seasons: [league], members: members),
-            draft: InMemoryDraftRepository(picks: picks, counterpicks: counterpicks, options: options),
-            draftCatalog: InMemoryDraftMovieCatalog(movies: catalog)
+            movies: InMemoryMovieRepository(catalog: catalog),
+            draft: InMemoryDraftRepository(picks: picks, counterpicks: counterpicks, options: options)
         )
         return Room(environment: environment, selection: LeagueSelection(userID: alice, season: league, seriesSeasons: [league]))
     }
@@ -204,6 +204,7 @@ struct DraftPreviewScreen: View {
     @State private var room: DraftPreviewData.Room
     @State private var router = ShellRouter()
     @State private var inbox: InboxStore
+    @State private var wishlist: WishlistStore
     @State private var model: DraftRoomModel?
     @State private var tab = 1
 
@@ -216,6 +217,7 @@ struct DraftPreviewScreen: View {
         }
         _room = State(initialValue: room)
         _inbox = State(initialValue: InboxStore(userID: DraftPreviewData.alice, repository: InMemoryNotificationRepository()))
+        _wishlist = State(initialValue: WishlistStore(userID: DraftPreviewData.alice, repository: room.environment.wishlists))
     }
 
     var body: some View {
@@ -243,9 +245,17 @@ struct DraftPreviewScreen: View {
         .environment(room.environment)
         .environment(router)
         .environment(inbox)
+        .environment(wishlist)
         .environment(\.leagueSelection, room.selection)
         .task {
-            let model = DraftRoomModel(selection: room.selection, environment: room.environment, usesChangeFeed: false)
+            let environment = room.environment
+            let model = DraftRoomModel(
+                selection: room.selection,
+                leagues: environment.leagues,
+                lifecycle: environment.leagueLifecycle,
+                draft: environment.draft,
+                changeFeed: nil
+            )
             await model.refresh()
             if variant == .offline { await simulateLostConnection(model) }
             self.model = model

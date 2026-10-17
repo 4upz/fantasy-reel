@@ -68,6 +68,7 @@ private struct DraftOrderSection: View {
     let isEditable: Bool
 
     @State private var dropTarget: ParticipantID?
+    @ScaledMetric(relativeTo: .body) private var positionWidth: CGFloat = 32
 
     var body: some View {
         let order = snapshot.orderedParticipants
@@ -116,7 +117,7 @@ private struct DraftOrderSection: View {
             Text("\(position)")
                 .frFont(.number)
                 .foregroundStyle(Color.frTextSecondary)
-                .frame(width: 32)
+                .frame(width: positionWidth)
                 .padding(.leading, 12)
             ListRow(
                 title: member.teamName,
@@ -134,7 +135,7 @@ private struct DraftOrderSection: View {
         }
         .background(dropTarget == member.id ? Color.frGoldTint : Color.clear)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Pick \(position): \(member.teamName), \(member.displayName)\(isMe ? ", you" : "")")
+        .accessibilityLabel("Position \(position): \(member.teamName), \(member.displayName)\(isMe ? ", you" : "")")
 
         if isEditable {
             row

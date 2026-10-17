@@ -26,7 +26,6 @@ final class AppEnvironment {
     let wishlists: any WishlistRepository
     let leagueMovies: any LeagueMovieRepository
     let draft: any DraftRepository
-    let draftCatalog: any DraftMovieCatalog
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -39,8 +38,7 @@ final class AppEnvironment {
         movies: (any MovieRepository)? = nil,
         wishlists: (any WishlistRepository)? = nil,
         leagueMovies: (any LeagueMovieRepository)? = nil,
-        draft: (any DraftRepository)? = nil,
-        draftCatalog: (any DraftMovieCatalog)? = nil
+        draft: (any DraftRepository)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
@@ -57,7 +55,6 @@ final class AppEnvironment {
         self.wishlists = wishlists ?? SupabaseWishlistRepository(provider: supabase)
         self.leagueMovies = leagueMovies ?? SupabaseLeagueMovieRepository(provider: supabase)
         self.draft = draft ?? SupabaseDraftRepository(provider: supabase, functions: edgeFunctions)
-        self.draftCatalog = draftCatalog ?? SupabaseDraftMovieCatalog(provider: supabase, functions: edgeFunctions)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -79,8 +76,7 @@ extension AppEnvironment {
         movies: any MovieRepository = InMemoryMovieRepository(),
         wishlists: any WishlistRepository = InMemoryWishlistRepository(),
         leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository(),
-        draft: any DraftRepository = InMemoryDraftRepository(),
-        draftCatalog: any DraftMovieCatalog = InMemoryDraftMovieCatalog()
+        draft: any DraftRepository = InMemoryDraftRepository()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -96,8 +92,7 @@ extension AppEnvironment {
             movies: movies,
             wishlists: wishlists,
             leagueMovies: leagueMovies,
-            draft: draft,
-            draftCatalog: draftCatalog
+            draft: draft
         )
     }
 }

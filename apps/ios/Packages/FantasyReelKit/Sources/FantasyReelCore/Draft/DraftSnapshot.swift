@@ -76,7 +76,7 @@ public struct DraftSnapshot: Sendable, Hashable {
     /// The board grouped by round, newest round first: made picks plus the open
     /// slots of the round in progress, so the current pick shows in context.
     public var draftBoardRounds: [DraftBoardRound] {
-        let count = teamCount
+        let count = boardTeamCount
         guard count > 0, draftRounds > 0 else { return [] }
         let byOverall = Dictionary(picks.map { ($0.overallPick(teamCount: count), $0) }, uniquingKeysWith: { first, _ in first })
         let currentRound = min(draftPicksMade / count + 1, draftRounds)
@@ -95,6 +95,12 @@ public struct DraftSnapshot: Sendable, Hashable {
             }
             return DraftBoardRound(round: round, slots: slots)
         }
+    }
+
+    /// Teams the board was drafted with. A member who left after the draft
+    /// isn't a participant any more, but their picks keep their slots.
+    public var boardTeamCount: Int {
+        max(teamCount, picks.lazy.filter { $0.round == 1 }.map(\.pickNumber).max() ?? 0)
     }
 
     /// TMDb ids already drafted, for the movie picker's "Drafted by" state.
@@ -116,7 +122,7 @@ public struct DraftSnapshot: Sendable, Hashable {
 
     /// Draft-round counterpicks only; season bids won later don't count.
     public var draftCounterpicks: [DraftCounterpick] {
-        counterpicks.filter { $0.phase != .bidding }
+        counterpicks.filter { $0.phase == .draft }
     }
 
     public var counterpicksMade: Int { draftCounterpicks.count }
@@ -187,8 +193,9 @@ public struct DraftSnapshot: Sendable, Hashable {
         case .setup:
             actions.insert(.startDraft)
             actions.insert(.editOrder)
-        case .drafting where isDraftBoardFull:
-            if counterpickRounds > 0 { actions.insert(.startCounterpicks) }
+        // With no counterpick slots the last pick starts the season itself.
+        case .drafting where isDraftBoardFull && counterpickRounds > 0:
+            actions.insert(.startCounterpicks)
             actions.insert(.skipCounterpicks)
         case .counterpicking:
             actions.insert(.endCounterpicks)

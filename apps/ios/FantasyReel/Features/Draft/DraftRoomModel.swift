@@ -45,23 +45,34 @@ final class DraftRoomModel {
     private let lifecycle: any LeagueLifecycleRepository
     private let draft: any DraftRepository
     private let changeFeed: ChangeFeed?
-    private var isRefreshing = false
+    /// The read in flight; callers await it rather than start a second one.
+    private var refreshTask: Task<Void, Never>?
     private var refreshAgain = false
     private var feedJoined = false
+    /// What the counterpick options were last read for; they change only
+    /// when a pick or counterpick lands or the phase moves.
+    private var optionsKey: OptionsKey?
 
     /// A read that takes longer than this shows as a failed refresh.
     static let refreshDeadline: Duration = .seconds(15)
 
-    init(selection: LeagueSelection, environment: AppEnvironment, usesChangeFeed: Bool = true) {
+    /// - Parameter changeFeed: nil in previews and screenshots, where reads
+    ///   are the only source.
+    init(
+        selection: LeagueSelection,
+        leagues: any LeagueRepository,
+        lifecycle: any LeagueLifecycleRepository,
+        draft: any DraftRepository,
+        changeFeed: ChangeFeed?
+    ) {
         self.selection = selection
         self.leagueID = selection.season.id
         self.userID = selection.userID
-        self.leagues = environment.leagues
-        self.lifecycle = environment.leagueLifecycle
-        self.draft = environment.draft
-        self.changeFeed = usesChangeFeed ? environment.changeFeed : nil
-        // Without a feed (previews, screenshots) reads are the only source.
-        self.connection = usesChangeFeed ? .reconnecting : .live
+        self.leagues = leagues
+        self.lifecycle = lifecycle
+        self.draft = draft
+        self.changeFeed = changeFeed
+        self.connection = changeFeed == nil ? .live : .reconnecting
     }
 
     var snapshot: DraftSnapshot? { state.value }
@@ -78,24 +89,37 @@ final class DraftRoomModel {
     /// Picks are refused while a submission is in flight or unresolved, or the
     /// room is showing data it couldn't refresh.
     var canSubmit: Bool {
-        myTurn != nil && submissionStatus != .submitting && connection != .offline
+        myTurn != nil && submissionStatus != .submitting && connection != .offline && refreshError == nil
+    }
+
+    /// The draft or counterpick round is running, so turns can change at any moment.
+    var isLive: Bool {
+        let status = snapshot?.league.status ?? selection.season.status
+        return status == .drafting || status == .counterpicking
     }
 
     // MARK: Refresh
 
-    /// Re-reads the room. A call while a read is running queues one more read
-    /// after it instead of starting a second one (the web's coalescing).
+    /// Re-reads the room and returns once fresh data is in. A call while a
+    /// read is running queues one more read after it instead of starting a
+    /// second one (the web's coalescing). The read belongs to the model, so
+    /// a caller going away doesn't cancel what others are waiting on.
     func refresh() async {
-        if isRefreshing {
+        if let refreshTask {
             refreshAgain = true
+            await refreshTask.value
             return
         }
-        isRefreshing = true
-        defer { isRefreshing = false }
-        repeat {
-            refreshAgain = false
-            await readOnce()
-        } while refreshAgain
+        let task = Task {
+            repeat {
+                refreshAgain = false
+                await readOnce()
+            } while refreshAgain
+            // Same main-actor step as the last check, so no request slips between.
+            refreshTask = nil
+        }
+        refreshTask = task
+        await task.value
     }
 
     private func readOnce() async {
@@ -117,8 +141,9 @@ final class DraftRoomModel {
                 return
             }
             let next = DraftSnapshot(league: league, participants: read.1, picks: read.2, counterpicks: read.3)
-            state = .loaded(next)
-            refreshError = nil
+            // Unchanged reads leave the view alone (the loop reads every few seconds).
+            if next != previous { state = .loaded(next) }
+            if refreshError != nil { refreshError = nil }
             if connection == .offline {
                 connection = feedJoined || changeFeed == nil ? .live : .periodicUpdates
             }
@@ -143,17 +168,28 @@ final class DraftRoomModel {
         }
     }
 
+    private struct OptionsKey: Equatable {
+        let status: LeagueStatus
+        let picks: Int
+        let counterpicks: Int
+    }
+
     private func refreshCounterpickOptions(in snapshot: DraftSnapshot) async {
         guard snapshot.league.status == .counterpicking,
               let teamID = snapshot.participant(for: userID)?.team?.id
         else {
-            counterpickOptions = .idle
+            optionsKey = nil
+            if counterpickOptions != .idle { counterpickOptions = .idle }
             return
         }
+        let key = OptionsKey(status: snapshot.league.status, picks: snapshot.draftPicksMade, counterpicks: snapshot.counterpicks.count)
+        if key == optionsKey, counterpickOptions.value != nil || counterpickOptions == .empty { return }
         if counterpickOptions.value == nil { counterpickOptions = .loading }
         do {
             let options = try await draft.fetchCounterpickOptions(leagueID, teamID: teamID)
-            counterpickOptions = options.isEmpty ? .empty : .loaded(options)
+            let next: LoadState<[CounterpickOption]> = options.isEmpty ? .empty : .loaded(options)
+            if next != counterpickOptions { counterpickOptions = next }
+            optionsKey = key
         } catch {
             if counterpickOptions.value == nil { counterpickOptions = .failed(message: error.userMessage) }
         }
@@ -170,6 +206,7 @@ final class DraftRoomModel {
             .init(table: "league_participants", filter: .equals("league_id", id)),
             .init(table: "leagues", filter: .equals("id", id)),
         ]
+        feedJoined = false
         connection = .reconnecting
         for await _ in changeFeed.signals(topic: "draft", watching: watches) {
             if !feedJoined {
@@ -186,6 +223,8 @@ final class DraftRoomModel {
 
     /// Reconciles on the web's cadence while the scene is active: every 5 s
     /// while the feed is live, every 10 s when polling is the only source.
+    /// Outside the draft and counterpick round nothing moves on a clock, so
+    /// setup polls only when the feed is down, and a finished draft not at all.
     func reconcileLoop() async {
         while !Task.isCancelled {
             let interval: Duration = connection == .live ? .seconds(5) : .seconds(10)
@@ -194,7 +233,10 @@ final class DraftRoomModel {
             } catch {
                 return
             }
-            await refresh()
+            let status = snapshot?.league.status
+            if isLive || (status == .setup && connection != .live) {
+                await refresh()
+            }
         }
     }
 
@@ -224,14 +266,38 @@ final class DraftRoomModel {
                 submissionStatus = .uncertain
                 return false
             }
-            if error.isUncertainOutcome {
-                submissionStatus = .uncertain
-            } else {
+            switch Self.disposition(of: error) {
+            case .refused:
+                // The server answered no; a new pick gets a new request id.
                 pendingAttempt = nil
+                submissionStatus = .failed(error.userMessage)
+            case .unknown:
+                // It may have saved (a timeout, a 5xx after the commit): keep the
+                // attempt so the read below can find it, and a retry reuses its id.
+                submissionStatus = .uncertain
+            case .notSent:
+                // Never reached the server; keep the id for a safe retry anyway.
                 submissionStatus = .failed(error.userMessage)
             }
             await refresh()
             return pendingAttempt == nil && submissionStatus == .idle
+        }
+    }
+
+    private enum Disposition { case refused, unknown, notSent }
+
+    private static func disposition(of error: APIError) -> Disposition {
+        switch error {
+        case .server(let server) where (400..<500).contains(server.status ?? 500):
+            .refused
+        case .rateLimited, .notSignedIn:
+            .refused
+        case _ where error.isUncertainOutcome:
+            .unknown
+        case .server:
+            .unknown
+        default:
+            .notSent
         }
     }
 
@@ -266,16 +332,14 @@ final class DraftRoomModel {
     // MARK: Owner
 
     func startDraft() {
-        phaseAction.run { [self] in
-            defer { Task { await self.refresh() } }
+        runThenRefresh(phaseAction) { [self] in
             try await draft.startDraft(leagueID)
             Announcer.announce("The draft has started.")
         }
     }
 
     func startCounterpickRound() {
-        phaseAction.run { [self] in
-            defer { Task { await self.refresh() } }
+        runThenRefresh(phaseAction) { [self] in
             try await draft.startCounterpickRound(leagueID)
         }
     }
@@ -283,15 +347,13 @@ final class DraftRoomModel {
     /// Skip the round from a full board, or end the remainder while counterpicking.
     func skipCounterpickRound() {
         let endRemaining = snapshot?.league.status == .counterpicking
-        phaseAction.run { [self] in
-            defer { Task { await self.refresh() } }
+        runThenRefresh(phaseAction) { [self] in
             try await draft.skipCounterpickRound(leagueID, endRemaining: endRemaining)
         }
     }
 
     func randomizeOrder() {
-        orderAction.run { [self] in
-            defer { Task { await self.refresh() } }
+        runThenRefresh(orderAction) { [self] in
             _ = try await lifecycle.update(leagueID, .randomizeDraftOrder)
             Announcer.announce("Draft order randomized.")
         }
@@ -311,10 +373,23 @@ final class DraftRoomModel {
         state = .loaded(snapshot)
         let ids = order.map(\.id)
         let name = order[to].teamName
-        orderAction.run { [self] in
-            defer { Task { await self.refresh() } }
+        runThenRefresh(orderAction) { [self] in
             _ = try await lifecycle.update(leagueID, .reorderDraft(ids))
-            Announcer.announce("\(name) moved to pick \(to + 1).")
+            Announcer.announce("\(name) moved to position \(to + 1).")
+        }
+    }
+
+    /// Runs `operation`, then re-reads before the action counts as finished,
+    /// so its button never re-enables against stale state.
+    private func runThenRefresh(_ action: AsyncAction, _ operation: @escaping @MainActor () async throws -> Void) {
+        action.run { [self] in
+            do {
+                try await operation()
+            } catch {
+                await refresh()
+                throw error
+            }
+            await refresh()
         }
     }
 }
