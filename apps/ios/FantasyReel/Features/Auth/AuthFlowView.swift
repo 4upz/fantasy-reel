@@ -54,6 +54,12 @@ struct HowToPlayView: View {
     }
 }
 
+/// Field prompts kept as plain `String`s: a string literal would be read as
+/// Markdown, which turns an email address into a blue link.
+enum AuthPlaceholders {
+    static let email = "you@example.com"
+}
+
 /// Public legal pages. The app links to the published web pages so the text
 /// stays a single legal source (F-01).
 enum LegalLinks {

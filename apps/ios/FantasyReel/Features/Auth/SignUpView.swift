@@ -70,7 +70,7 @@ struct SignUpView: View {
                     .onSubmit { focusedField = .email }
             }
             FormFieldRow(label: "Email", labelWidth: 108) {
-                TextField("you@example.com", text: $email)
+                TextField(AuthPlaceholders.email, text: $email)
                     .textContentType(.username)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
