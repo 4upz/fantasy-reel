@@ -294,7 +294,7 @@ struct TeamDetailView: View {
                 }
                 FRHairline()
                 StatColumns(stats(team))
-                if canProposeTrade(to: team) {
+                if store.canProposeTrade(to: team.id) {
                     Button("Propose Trade") { router.present(.proposeTrade(team.id)) }
                         .buttonStyle(.fr(.secondary, size: .medium, fullWidth: true))
                 }
@@ -324,13 +324,5 @@ struct TeamDetailView: View {
             ))
         }
         return items
-    }
-
-    private func canProposeTrade(to team: SeasonTeam) -> Bool {
-        guard let me = store.myTeam, me.id != team.id, me.participantStatus == .active else { return false }
-        let season = store.season
-        guard season.status == .active, season.tradesEnabled, team.participantStatus == .active else { return false }
-        if let deadline = season.tradeDeadline, deadline < DateOnly.today() { return false }
-        return true
     }
 }

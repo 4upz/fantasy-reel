@@ -107,107 +107,92 @@ private struct PickupMoviePicker: View {
     let counterPhase: Bool
     let onSelect: (BiddableMovie) -> Void
 
+    @Environment(AppEnvironment.self) private var environment
     @Environment(LeagueSeasonStore.self) private var season
-    @State private var query = ""
-    @State private var results: LoadState<[BiddableMovie]> = .idle
-    @State private var page = 1
-    @State private var hasMore = false
-    @State private var isLoadingMore = false
+    @State private var search: MovieSearchModel?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
                 if counterPhase {
                     contests
-                } else {
-                    search
+                } else if let search {
+                    results(search)
                 }
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 24)
         }
         .navigationTitle(counterPhase ? "Counter a Bid" : "Place a Bid")
-        .modifier(SearchableIf(enabled: !counterPhase, query: $query))
-        .task(id: query) {
-            guard !counterPhase else { return }
-            if !query.isEmpty { try? await Task.sleep(for: .milliseconds(300)) }
-            guard !Task.isCancelled else { return }
-            await load(reset: true)
+        .modifier(SearchableIf(model: counterPhase ? nil : search))
+        .onAppear {
+            guard search == nil, !counterPhase else { return }
+            search = MovieSearchModel(movies: environment.movies, upcomingOnly: true, seasonYear: season.season.seasonYear)
         }
     }
 
-    // Before the cutoff: search or the season's browse list.
+    // Before the cutoff: title search.
 
     @ViewBuilder
-    private var search: some View {
-        LoadStateView(
-            results,
-            loadingLabel: "Searching movies…",
-            retry: { Task { await load(reset: true) } },
-            content: { movies in
-                let scored = season.bids.snapshot?.scoredTMDbIDs ?? []
-                let biddable = movies.filter { !scored.contains($0.tmdbID) }.count
-                Text("\(biddable) available \(biddable == 1 ? "movie" : "movies") loaded")
-                    .frFont(.caption)
-                    .foregroundStyle(Color.frTextSecondary)
-                    .padding(.horizontal, 4)
+    private func results(_ search: MovieSearchModel) -> some View {
+        let owned = Set(season.snapshot?.holdings.map(\.tmdbID) ?? [])
+        let scored = season.bids.snapshot?.scoredTMDbIDs ?? []
+        let movies = search.results.filter { !owned.contains($0.tmdbID) && BidEligibility.isBiddable(releaseDate: $0.releaseDate) }
+        switch search.phase {
+        case .idle:
+            EmptyStateView(title: "Search for a movie", message: "Type a movie title to get started", systemImage: "magnifyingglass")
+        case .searching:
+            LoadingView(label: "Searching movies…")
+        case .failed(let message):
+            ErrorStateView(message: message) { Task { await search.submit() } }
+        case .noResults:
+            EmptyStateView(title: "No movies found", message: "Try a different search term", systemImage: "magnifyingglass")
+        case .results:
+            let biddable = movies.filter { !scored.contains($0.tmdbID) }.count
+            Text("\(biddable) available \(biddable == 1 ? "movie" : "movies") loaded")
+                .frFont(.caption)
+                .foregroundStyle(Color.frTextSecondary)
+                .padding(.horizontal, 4)
+            if !movies.isEmpty {
                 FRRowGroup {
                     ForEach(movies) { movie in
                         movieRow(movie, isScored: scored.contains(movie.tmdbID))
                     }
                 }
-                if hasMore {
-                    Button(isLoadingMore ? "Loading more movies…" : "Load more movies") {
-                        Task { await load(reset: false) }
-                    }
-                    .buttonStyle(.fr(.secondary, size: .medium, fullWidth: true))
-                    .disabled(isLoadingMore)
-                }
-                TMDbAttribution()
-            },
-            empty: {
-                EmptyStateView(
-                    title: query.isEmpty ? "Search for a movie" : "No movies found",
-                    message: query.isEmpty ? "Type a movie title to get started" : "Try a different search term",
-                    systemImage: "magnifyingglass"
-                )
             }
-        )
+            if search.hasMore {
+                Button(search.isLoadingMore ? "Loading more movies…" : "Load more movies") {
+                    Task { await search.loadMore() }
+                }
+                .buttonStyle(.fr(.secondary, size: .medium, fullWidth: true))
+                .disabled(search.isLoadingMore)
+            }
+            if let message = search.loadMoreError {
+                InlineBanner(tone: .error, title: message)
+            }
+            TMDbAttribution()
+        }
     }
 
-    private func movieRow(_ movie: BiddableMovie, isScored: Bool) -> some View {
-        let high = season.bids.highPickupBid(on: movie.tmdbID)
+    private func movieRow(_ result: MovieSearchResult, isScored: Bool) -> some View {
+        let high = season.bids.highPickupBid(on: result.tmdbID)
         let mine = high?.teamID == season.myTeam?.id
-        var meta = movie.releaseDate.map { String($0.year) } ?? "Release date TBA"
+        var meta = result.releaseDate.map { String($0.year) } ?? "Release date TBA"
         if isScored {
             meta += " · Already scored, can't be bid on"
         } else if let high {
             meta += mine ? " · Your bid \(SeasonFormat.budget(high.amount))" : " · High bid \(SeasonFormat.budget(high.amount))"
         }
-        return Button { onSelect(movie) } label: {
-            MovieRow(title: movie.title, meta: meta, posterURL: movie.posterURL, showsChevron: !isScored)
+        return Button {
+            onSelect(BiddableMovie(
+                tmdbID: result.tmdbID, title: result.title, overview: result.overview,
+                releaseDate: result.releaseDate, posterURL: result.posterURL
+            ))
+        } label: {
+            MovieRow(title: result.title, meta: meta, posterURL: result.posterURL, showsChevron: !isScored)
         }
         .buttonStyle(.frRow)
         .disabled(isScored)
-    }
-
-    private func load(reset: Bool) async {
-        let nextPage = reset ? 1 : page + 1
-        if reset { results = .loading } else { isLoadingMore = true }
-        defer { isLoadingMore = false }
-        do {
-            let response = try await season.bids.repository.searchMovies(query: query, page: nextPage, seasonYear: season.season.seasonYear)
-            let owned = Set(season.snapshot?.holdings.map(\.tmdbID) ?? [])
-            let fresh = response.movies.filter { !owned.contains($0.tmdbID) && BidEligibility.isBiddable(releaseDate: $0.releaseDate) }
-            let existing = reset ? [] : (results.value ?? [])
-            let combined = existing + fresh.filter { movie in !existing.contains { $0.tmdbID == movie.tmdbID } }
-            page = response.page
-            hasMore = response.hasMore
-            results = combined.isEmpty && !hasMore ? .empty : .loaded(combined)
-        } catch {
-            if !reset, results.value != nil { return }
-            results = .failed(message: error.userMessage)
-        }
     }
 
     // After the cutoff: the contests already running.
@@ -263,14 +248,18 @@ private struct PickupMoviePicker: View {
     }
 }
 
+/// Adds the search field and drives the model, only in search mode.
 private struct SearchableIf: ViewModifier {
-    let enabled: Bool
-    @Binding var query: String
+    let model: MovieSearchModel?
 
     @ViewBuilder
     func body(content: Content) -> some View {
-        if enabled {
-            content.searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search for a movie")
+        if let model {
+            @Bindable var model = model
+            content
+                .searchable(text: $model.filter.query, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search for a movie")
+                .onSubmit(of: .search) { Task { await model.submit() } }
+                .task(id: model.filter) { await model.run() }
         } else {
             content
         }
@@ -365,6 +354,307 @@ private struct CounterpickMoviePicker: View {
             options = list.isEmpty ? .empty : .loaded(list)
         } catch {
             options = .failed(message: error.userMessage)
+        }
+    }
+}
+
+// MARK: - Step 2: amount
+
+/// The amount, the conditional drop (pickups) and the fit forecast.
+private struct BidAmountForm: View {
+    let subject: BidSubject
+    let canGoBack: Bool
+    let onBack: () -> Void
+
+    @Environment(LeagueSeasonStore.self) private var season
+    @Environment(ShellRouter.self) private var router
+    @State private var amount = 0
+    @State private var didSetAmount = false
+    @State private var dropID: HoldingID?
+    @State private var submit = AsyncAction()
+
+    private var bids: BidsStore { season.bids }
+    private var remainingBudget: Int? { season.myTeam?.budget?.remainingBudget }
+
+    private var highBid: Int? {
+        switch subject {
+        case .pickup(let movie): bids.highPickupBid(on: movie.tmdbID)?.amount
+        case .counterpick(let option): bids.highCounterpickBid(on: option.movieID)?.amount
+        }
+    }
+
+    private var highBidIsMine: Bool {
+        let myTeamID = season.myTeam?.id
+        switch subject {
+        case .pickup(let movie): return bids.highPickupBid(on: movie.tmdbID)?.teamID == myTeamID
+        case .counterpick(let option): return bids.highCounterpickBid(on: option.movieID)?.teamID == myTeamID
+        }
+    }
+
+    private var isCounterpick: Bool {
+        if case .counterpick = subject { return true }
+        return false
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
+                movieCard
+                amountCard
+                if case .pickup = subject {
+                    dropCard
+                }
+                fitLine
+                if let message = submit.errorMessage {
+                    InlineBanner(tone: .error, title: message)
+                }
+                Button(action: place) {
+                    Text(submit.isRunning ? "Placing Bid…" : "Place \(SeasonFormat.budget(amount)) \(isCounterpick ? "Counterpick " : "")Bid")
+                }
+                .buttonStyle(.fr(.primary, isLoading: submit.isRunning))
+                .disabled(problem != nil || submit.isRunning)
+                Text("Whole dollars. You're charged only if you win.")
+                    .frFont(.caption)
+                    .foregroundStyle(Color.frTextSecondary)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, FRMetrics.pageMargin)
+            .padding(.bottom, 24)
+        }
+        .navigationTitle(title)
+        .navigationBarBackButtonHidden()
+        .toolbar {
+            if canGoBack {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Back", systemImage: "chevron.left", action: onBack)
+                        .accessibilityLabel(isCounterpick ? "Back to movie selection" : "Back to movies")
+                }
+            }
+        }
+        .onAppear {
+            guard !didSetAmount else { return }
+            amount = BidAmountRule.initialAmount(highBid: highBid)
+            didSetAmount = true
+        }
+        .onChange(of: amount) { _, newValue in
+            if newValue != BidAmountRule.initialAmount(highBid: highBid) { router.sheetHasUnsavedInput = true }
+        }
+        .onChange(of: dropID) { router.sheetHasUnsavedInput = true }
+        .announcesError(submit.errorMessage)
+    }
+
+    private var title: String {
+        guard highBid != nil else { return "Set Your Bid" }
+        if highBidIsMine { return "Raise Your Bid" }
+        return isCounterpick ? "Counter Counterpick Bid" : "Counter Bid"
+    }
+
+    private var problem: String? {
+        BidAmountRule.problem(amount: amount, remainingBudget: remainingBudget, highBid: highBid)
+    }
+
+    // MARK: Sections
+
+    private var movieCard: some View {
+        FRRowGroup {
+            MovieRow(title: subject.title, meta: movieMeta, posterURL: subject.posterURL)
+        }
+    }
+
+    private var movieMeta: String {
+        var parts = [DateOnly.display(subject.releaseDate, style: .short)]
+        if case .counterpick(let option) = subject { parts.insert("vs \(option.ownerTeamName)", at: 0) }
+        if let highBid {
+            parts.append(highBidIsMine ? "Your bid \(SeasonFormat.budget(highBid))" : "High \(SeasonFormat.budget(highBid))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private var amountCard: some View {
+        let maxAmount = min(remainingBudget ?? 0, BidAmountRule.maximum)
+        let minAmount = highBid.map { $0 + 1 } ?? 0
+        return FRCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Your bid")
+                        .frFont(.rowLabel)
+                        .foregroundStyle(Color.frText)
+                    Spacer()
+                    Text(SeasonFormat.budget(amount))
+                        .frFont(.numberHero)
+                        .foregroundStyle(Color.frGold)
+                        .contentTransition(.numericText(value: Double(amount)))
+                        .accessibilityHidden(true)
+                }
+                Stepper("Bid amount", value: $amount, in: 0...max(maxAmount, 0))
+                    .labelsHidden()
+                    .accessibilityValue("\(amount) dollars")
+                HStack(spacing: 8) {
+                    quickButton("+$1") { amount = min(amount + 1, maxAmount) }
+                    quickButton("+$5") { amount = min(amount + 5, maxAmount) }
+                    if highBid != nil {
+                        quickButton("High + $1") { amount = min(minAmount, maxAmount) }
+                    }
+                    quickButton("Max \(SeasonFormat.budget(maxAmount))") { amount = maxAmount }
+                }
+                FRHairline()
+                HStack {
+                    Text("Budget after")
+                        .frFont(.meta)
+                        .foregroundStyle(Color.frTextSecondary)
+                    Spacer()
+                    Text(remainingBudget.map { SeasonFormat.budget(max($0 - amount, 0)) } ?? "Unavailable")
+                        .frFont(.label)
+                        .foregroundStyle(Color.frText)
+                        .monospacedDigit()
+                }
+                .accessibilityElement(children: .combine)
+                Text(problem ?? (amount == 0
+                    ? (isCounterpick ? "Claim this counterpick for free if no one else bids" : "Claim this movie for free if no one else bids")
+                    : "You'll spend \(SeasonFormat.budget(amount)) from your budget if you win"))
+                    .frFont(.caption)
+                    .foregroundStyle(problem == nil ? Color.frTextSecondary : Color.frError)
+            }
+        }
+    }
+
+    private func quickButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.fr(.neutral, size: .compact))
+    }
+
+    /// Holdings a conditional drop may name (`getDroppableBidHoldingIds`).
+    private var droppableHoldings: [TeamHolding] {
+        guard let team = season.myTeam else { return [] }
+        let holdings = season.holdings(of: team.id)
+        let ids = Set(BidFitForecast.droppableHoldingIDs(
+            holdings, today: DateOnly.today(),
+            counterpicksBlockDrops: season.season.counterpicksBlockDrops,
+            contestedMovieIDs: season.snapshot?.contestedMovieIDs ?? []
+        ))
+        return holdings.filter { ids.contains($0.holdingID) }
+    }
+
+    @ViewBuilder
+    private var dropCard: some View {
+        let options = droppableHoldings
+        let freeSlots = freeSlots
+        if freeSlots == 0, dropID == nil {
+            InlineBanner(
+                tone: .warning,
+                title: "Your roster is full",
+                message: options.isEmpty
+                    ? "None of your movies can be dropped: they have all released or been counterpicked. You can still place this bid, but it can only be honored if a slot frees up before bids are processed."
+                    : "You can still place this bid, but it can only be honored if you choose a movie to drop below, or a slot frees up before bids are processed."
+            )
+        }
+        if !options.isEmpty {
+            FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                Picker("If I need room, drop", selection: $dropID) {
+                    Text("Nothing, keep my whole roster").tag(HoldingID?.none)
+                    ForEach(options) { holding in
+                        Text(holding.title).tag(HoldingID?.some(holding.holdingID))
+                    }
+                }
+                .pickerStyle(.navigationLink)
+                .padding(.horizontal, FRMetrics.rowPadding)
+                .frame(minHeight: FRMetrics.minTapTarget)
+            }
+        }
+    }
+
+    private var freeSlots: Int {
+        guard let team = season.myTeam else { return 0 }
+        return max(season.season.totalSlots - season.holdings(of: team.id).count, 0)
+    }
+
+    /// "Fits in your open slot" / "Fits by dropping …" / why it wouldn't fit,
+    /// if every one of my bids won (a forecast; processing decides).
+    @ViewBuilder
+    private var fitLine: some View {
+        if let forecast = fitForecast {
+            Label(forecast.text, systemImage: forecast.fits ? "checkmark.circle" : "exclamationmark.triangle")
+                .frFont(.meta)
+                .foregroundStyle(forecast.fits ? Color.frSuccess : Color.frWarning)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    private var fitForecast: (text: String, fits: Bool)? {
+        switch subject {
+        case .pickup(let movie):
+            // My bids in priority order, this one replacing my existing bid
+            // on the movie or joining at the end.
+            var targets: [HoldingID?] = []
+            var thisIndex: Int?
+            for bid in bids.myPickupBids {
+                if bid.tmdbID == movie.tmdbID {
+                    thisIndex = targets.count
+                    targets.append(dropID)
+                } else {
+                    targets.append(bid.conditionalDropHoldingID)
+                }
+            }
+            if thisIndex == nil {
+                thisIndex = targets.count
+                targets.append(dropID)
+            }
+            let forecast = BidFitForecast.forecast(
+                dropTargets: targets,
+                freeSlots: freeSlots,
+                remainingDrops: season.dropsRemaining,
+                droppable: Set(droppableHoldings.map(\.holdingID))
+            )
+            switch forecast[thisIndex ?? 0] {
+            case .slot?: return ("Fits in your open slot if all your bids win", true)
+            case .drop?:
+                let title = droppableHoldings.first { $0.holdingID == dropID }?.title ?? "your chosen movie"
+                return ("Fits by dropping \(title) if all your bids win", true)
+            case nil: return ("Won't fit if all your higher-priority bids win", false)
+            }
+        case .counterpick(let option):
+            let slots = season.season.biddingCounterpickSlots - (bids.snapshot?.biddingCounterpickCount ?? 0)
+            let mine = bids.myCounterpickBids
+            let position = mine.firstIndex { $0.movieID == option.movieID } ?? mine.count
+            return position < slots
+                ? ("Uses an open counterpick slot if it wins", true)
+                : ("Your higher-priority counterpick bids would fill your slots first", false)
+        }
+    }
+
+    // MARK: Submit
+
+    private func place() {
+        guard problem == nil else { return }
+        if !BidEligibility.isBiddable(releaseDate: subject.releaseDate) {
+            Announcer.announce("\(subject.title) has already released and can no longer be bid on")
+            return
+        }
+        let amount = amount
+        let leagueID = season.season.id
+        let dropHolding = droppableHoldings.first { $0.holdingID == dropID }
+        submit.run {
+            let result: PlaceBidResult
+            switch subject {
+            case .pickup(let movie):
+                result = try await bids.place(PlacePickupBid(
+                    leagueID: leagueID, tmdbID: movie.tmdbID, amount: amount,
+                    conditionalDrop: dropHolding.map { ($0.holdingID, $0.source) }
+                ))
+            case .counterpick(let option):
+                result = try await bids.placeCounterpick(movie: option.movieID, amount: amount)
+            }
+            if result.raceCondition, let message = result.message {
+                Announcer.announce(message)
+            } else if isCounterpick {
+                Announcer.announce("Counterpick bid of \(SeasonFormat.budget(amount)) placed on \(subject.title)")
+            } else if let dropHolding {
+                Announcer.announce("Bid of \(SeasonFormat.budget(amount)) placed on \(subject.title). \(dropHolding.title) drops if it wins.")
+            } else {
+                Announcer.announce("Bid of \(SeasonFormat.budget(amount)) placed on \(subject.title)")
+            }
+            router.sheetHasUnsavedInput = false
+            router.dismissSheet()
         }
     }
 }

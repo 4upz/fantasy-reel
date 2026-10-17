@@ -174,6 +174,16 @@ final class LeagueSeasonStore {
         return reigning.seasonYear
     }
 
+    /// Trades are open with this team: both of us active, trades on, the
+    /// deadline not passed (a deadline day still counts).
+    func canProposeTrade(to teamID: TeamID) -> Bool {
+        guard let me = myTeam, me.id != teamID, me.participantStatus == .active,
+              let team = team(teamID), team.participantStatus == .active else { return false }
+        guard season.status == .active, season.tradesEnabled else { return false }
+        if let deadline = season.tradeDeadline, deadline < DateOnly.today() { return false }
+        return true
+    }
+
     var dropsRemaining: Int { max(season.dropLimit - (snapshot?.myDropCount ?? 0), 0) }
 
     func dropContext() -> DropBlocker.Context {

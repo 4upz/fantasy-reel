@@ -347,9 +347,23 @@ private struct AroundTheLeague: View {
     }
 }
 
-/// Alert cards from other features (bids awaiting you) slot in here.
+/// Alerts that need the person: bids they've been outbid on. (Trades awaiting
+/// a response join here.)
 private struct OverviewBanners: View {
+    @Environment(LeagueSeasonStore.self) private var store
+    @Environment(ShellRouter.self) private var router
+
     var body: some View {
-        EmptyView()
+        let outbid = store.bids.outbidCount
+        if outbid > 0 {
+            InlineBanner(
+                tone: .warning,
+                title: outbid == 1 ? "You've been outbid on a movie" : "You've been outbid on \(outbid) movies",
+                message: "Raise your bid before the cutoff to stay in the race.",
+                systemImage: "tag.fill",
+                actionTitle: "Review",
+                action: { router.select(.bids) }
+            )
+        }
     }
 }

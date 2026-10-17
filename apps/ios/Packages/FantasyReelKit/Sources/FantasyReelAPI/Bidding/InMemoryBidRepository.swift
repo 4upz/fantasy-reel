@@ -82,13 +82,6 @@ public actor InMemoryBidRepository: BidRepository {
         return counterpickOptions.filter { $0.ownerTeamID != teamID }
     }
 
-    public func searchMovies(query: String, page: Int, seasonYear: Int) async throws(APIError) -> MoviePage {
-        try check()
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matches = trimmed.isEmpty ? movies : movies.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
-        return MoviePage(movies: page == 1 ? matches : [], page: page, hasMore: false)
-    }
-
     public func placePickupBid(_ request: PlacePickupBid) async throws(APIError) -> PlaceBidResult {
         try check()
         guard let myTeamID else { throw .server(.init(status: 404, message: "Team not found")) }

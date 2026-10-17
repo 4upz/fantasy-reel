@@ -26,6 +26,9 @@ final class AppEnvironment {
     let teams: any TeamRepository
     /// Pickup and counterpick bidding (F-12).
     let bids: any BidRepository
+    let movies: any MovieRepository
+    let wishlists: any WishlistRepository
+    let leagueMovies: any LeagueMovieRepository
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -36,7 +39,10 @@ final class AppEnvironment {
         profiles: (any ProfileRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
         teams: (any TeamRepository)? = nil,
-        bids: (any BidRepository)? = nil
+        bids: (any BidRepository)? = nil,
+        movies: (any MovieRepository)? = nil,
+        wishlists: (any WishlistRepository)? = nil,
+        leagueMovies: (any LeagueMovieRepository)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
@@ -51,6 +57,9 @@ final class AppEnvironment {
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
         self.teams = teams ?? SupabaseTeamRepository(provider: supabase, functions: edgeFunctions)
         self.bids = bids ?? SupabaseBidRepository(provider: supabase, functions: edgeFunctions)
+        self.movies = movies ?? EdgeMovieRepository(functions: edgeFunctions)
+        self.wishlists = wishlists ?? SupabaseWishlistRepository(provider: supabase)
+        self.leagueMovies = leagueMovies ?? SupabaseLeagueMovieRepository(provider: supabase)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -70,7 +79,10 @@ extension AppEnvironment {
         profiles: any ProfileRepository = InMemoryProfileRepository(),
         notifications: any NotificationRepository = InMemoryNotificationRepository(),
         teams: any TeamRepository = InMemoryTeamRepository(),
-        bids: any BidRepository = InMemoryBidRepository()
+        bids: any BidRepository = InMemoryBidRepository(),
+        movies: any MovieRepository = InMemoryMovieRepository(),
+        wishlists: any WishlistRepository = InMemoryWishlistRepository(),
+        leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -84,7 +96,10 @@ extension AppEnvironment {
             profiles: profiles,
             notifications: notifications,
             teams: teams,
-            bids: bids
+            bids: bids,
+            movies: movies,
+            wishlists: wishlists,
+            leagueMovies: leagueMovies
         )
     }
 }

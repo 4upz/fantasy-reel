@@ -22,8 +22,6 @@ public protocol BidRepository: Sendable {
     func fetchScoredUpcomingTMDbIDs() async throws(APIError) -> Set<TMDbID>
     /// Opponents' movies the team can counterpick (`get_counterpick_options`).
     func fetchCounterpickOptions(in leagueID: LeagueID, for teamID: TeamID) async throws(APIError) -> [CounterpickOption]
-    /// One page of movies to bid on: title search, or the season's browse list.
-    func searchMovies(query: String, page: Int, seasonYear: Int) async throws(APIError) -> MoviePage
 
     func placePickupBid(_ request: PlacePickupBid) async throws(APIError) -> PlaceBidResult
     func placeCounterpickBid(league: LeagueID, movie: MovieID, amount: Int) async throws(APIError) -> PlaceBidResult
@@ -88,19 +86,6 @@ public struct PlaceBidResult: Decodable, Sendable, Hashable {
         message = try c.decodeIfPresent(String.self, forKey: .message)
         wasUpdate = try c.decodeIfPresent(Bool.self, forKey: .wasUpdate) ?? false
         raceCondition = try c.decodeIfPresent(Bool.self, forKey: .raceCondition) ?? false
-    }
-}
-
-/// One page of movie search results.
-public struct MoviePage: Sendable, Hashable {
-    public let movies: [BiddableMovie]
-    public let page: Int
-    public let hasMore: Bool
-
-    public init(movies: [BiddableMovie], page: Int, hasMore: Bool) {
-        self.movies = movies
-        self.page = page
-        self.hasMore = hasMore
     }
 }
 
@@ -224,43 +209,6 @@ public struct SupabaseBidRepository: BidRepository {
         } catch {
             throw APIError.wrap(error)
         }
-    }
-
-    public func searchMovies(query: String, page: Int, seasonYear: Int) async throws(APIError) -> MoviePage {
-        struct SearchBody: Encodable, Sendable {
-            let query: String
-            let page: Int
-            let upcoming_only: Bool
-            let season_year: Int
-        }
-        struct BrowseBody: Encodable, Sendable {
-            let page: Int
-            let release_window: String
-            let sort_by: String
-            let season_year: Int
-        }
-        struct Response: Decodable, Sendable {
-            let results: [BiddableMovie]
-            let page: Int?
-            let total_pages: Int?
-            let has_more: Bool?
-        }
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let response: Response
-        if trimmed.isEmpty {
-            response = try await functions.invoke(
-                "browse-movies",
-                body: BrowseBody(page: page, release_window: "year", sort_by: "popularity", season_year: seasonYear)
-            )
-        } else {
-            response = try await functions.invoke(
-                "search-movies",
-                body: SearchBody(query: trimmed, page: page, upcoming_only: true, season_year: seasonYear)
-            )
-        }
-        let current = response.page ?? page
-        let hasMore = response.has_more ?? (current < (response.total_pages ?? current))
-        return MoviePage(movies: response.results, page: current, hasMore: hasMore)
     }
 
     public func placePickupBid(_ request: PlacePickupBid) async throws(APIError) -> PlaceBidResult {

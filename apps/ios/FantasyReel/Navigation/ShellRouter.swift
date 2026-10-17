@@ -26,6 +26,10 @@ enum MenuRoute: Hashable {
     case howToPlay
     /// App administrators only (F-18); linked from Account.
     case growthDashboard
+    /// A league-mate's shared wishlist (F-07).
+    case sharedWishlist(SharedWishlistOwner)
+    /// A league screen (a movie from the wishlist) pushed inside the sheet.
+    case league(LeagueRoute)
 }
 
 /// The bottom bar's selection: a league tab, or the search button beside it.
