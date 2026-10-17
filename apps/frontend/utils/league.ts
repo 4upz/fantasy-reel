@@ -123,3 +123,11 @@ export function getMovieStatus(
   return 'upcoming'
 }
 
+/**
+ * Whether teams can propose trades right now. Trade validation refuses offers
+ * from the trade deadline's date on, the same on-or-before-today UTC rule as a
+ * release date.
+ */
+export function tradesOpen(league: Pick<League, 'trades_enabled' | 'trade_deadline'>): boolean {
+  return league.trades_enabled && !hasReleased(league.trade_deadline)
+}

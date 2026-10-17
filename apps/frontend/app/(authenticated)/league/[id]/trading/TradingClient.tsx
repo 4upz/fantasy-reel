@@ -10,7 +10,7 @@ import { resolveExpiryBounds, type ResolvedExpiry } from '@/utils/tradeExpiry'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { announce } from '@/utils/announce'
 import { FeatureTour } from '@/components/tours'
-import { hasReleased } from '@/utils/date'
+import { tradesOpen } from '@/utils/league'
 
 // Start the dialog chunk alongside its data; Suspense keeps preparation cancellable.
 const loadProposeTradeModal = () => import('../components/ProposeTradeModal')
@@ -93,9 +93,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
         id="trading"
         ctx={{
           leagueStatus: league.status,
-          // Trade validation refuses offers from the deadline's date on, the same
-          // on-or-before-today UTC rule as a release date.
-          tradesOpen: league.trades_enabled && !hasReleased(league.trade_deadline),
+          tradesOpen: tradesOpen(league),
           reviewEnabled: league.trade_review_enabled,
           isOwner,
         }}

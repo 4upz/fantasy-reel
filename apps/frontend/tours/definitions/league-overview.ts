@@ -23,13 +23,13 @@ export const leagueOverviewTour = defineTour({
     },
     {
       anchor: 'league-nav',
-      when: (ctx) => ctx.tradesEnabled === true,
+      when: (ctx) => ctx.tradesOpen === true,
       title: 'Improve your team between releases',
       body: 'Bid for movies no team holds; bids settle once a week. Trade movies, counterpicks or Fantasy Budget with other teams. If your league allows drops, drop a movie that’s lost its buzz to make room.',
     },
     {
       anchor: 'league-nav',
-      when: (ctx) => ctx.tradesEnabled !== true,
+      when: (ctx) => ctx.tradesOpen !== true,
       title: 'Improve your team between releases',
       body: 'Bid for movies no team holds; bids settle once a week. If your league allows drops, drop a movie that’s lost its buzz to make room.',
     },

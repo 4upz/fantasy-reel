@@ -15,6 +15,7 @@ import MovieGrid from '../components/MovieGrid'
 import LeagueReleaseBoard from '../components/LeagueReleaseBoard'
 import EditTeamModal from '../components/EditTeamModal'
 import { FeatureTour, TourButton } from '@/components/tours'
+import { tradesOpen } from '@/utils/league'
 
 interface Props {
   league: League
@@ -100,7 +101,7 @@ export default function DashboardClient({
     <div className="-mx-4 pt-1.5 sm:-mx-6 lg:-mx-8">
       <FeatureTour
         id="league-overview"
-        ctx={{ leagueStatus: league.status, tradesEnabled: league.trades_enabled }}
+        ctx={{ leagueStatus: league.status, tradesOpen: tradesOpen(league) }}
       />
       <FeatureTour
         id="season-results"
