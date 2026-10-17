@@ -2,6 +2,8 @@ name: iOS
 
 on:
   pull_request:
+    # labeled: adding the ios-screenshots label commits fresh screenshots.
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'apps/ios/**'
       - '.github/workflows/ios.yml'
@@ -24,6 +26,9 @@ jobs:
     name: Build and test (iOS Simulator)
     runs-on: macos-26
     timeout-minutes: 45
+    permissions:
+      # Only the labeled screenshot step writes (to the PR's own branch).
+      contents: write
     defaults:
       run:
         working-directory: apps/ios
@@ -111,6 +116,33 @@ jobs:
           name: ios-screenshots
           path: apps/ios/build/screenshots
           if-no-files-found: error
+
+      # With the ios-screenshots label on a PR from this repo, commit smaller
+      # copies to the PR branch so the description can show them. Pushes made
+      # with GITHUB_TOKEN don't start another run.
+      - name: Commit screenshots to the PR branch
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'ios-screenshots')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          DEST=docs/screenshots
+          rm -rf "$DEST" && mkdir -p "$DEST"
+          for f in build/screenshots/*.png; do
+            sips --resampleWidth 600 "$f" --out "$DEST/$(basename "$f")" >/dev/null
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898+github-actions[bot]@users.noreply.github.com"
+          git fetch --depth=1 origin "$HEAD_REF"
+          git checkout -B "$HEAD_REF" "origin/$HEAD_REF"
+          git add "$DEST"
+          if git diff --cached --quiet; then echo "Screenshots unchanged"; exit 0; fi
+          git commit -m "iOS: update PR screenshots"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "HEAD:$HEAD_REF"
 
       - name: Summarize errors
         if: failure()
