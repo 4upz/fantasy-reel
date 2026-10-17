@@ -40,13 +40,13 @@ function copyFor(step: NextStep): Copy {
     case 'setup-owner':
       return {
         title: `Get ${step.leagueName} ready to draft`,
-        body: 'Invite at least one more player, check the rules in Settings, then start the draft. Players can join until it starts.',
+        body: 'Invite your players, check the rules in Settings, then start the draft. You need at least 2 players, and people can join until it starts.',
         action: { label: 'Open league', href: `${league}/draft` },
       }
     case 'setup-member':
       return {
         title: `${step.leagueName} hasn’t drafted yet`,
-        body: 'The commissioner starts the draft once everyone’s in. Meanwhile, tap the heart on movies you like to build a wishlist you can draft from.',
+        body: 'The commissioner starts the draft once everyone’s in. Meanwhile, save movies you like to your Wishlist so they’re easy to find when you draft.',
         action: { label: 'Browse movies', href: '/movies' },
         secondary: { label: 'Open league', href: `${league}/draft` },
       }
@@ -112,7 +112,7 @@ export default function NextStepCard({ step, userId, onHidden }: Props): React.R
         type="button"
         onClick={hide}
         aria-label="Hide next steps"
-        className="flex-none cursor-pointer p-1 text-foreground-secondary transition-colors hover:text-foreground"
+        className="-m-2 flex-none cursor-pointer p-3 text-foreground-secondary transition-colors hover:text-foreground"
         data-testid="next-step-hide"
       >
         <X className="h-4 w-4" aria-hidden="true" />

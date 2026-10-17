@@ -171,7 +171,7 @@ export default function MoviePicker({
         : undefined
 
   return (
-    <div className="space-y-6" data-testid="movie-picker" data-tour="movie-picker">
+    <div className="space-y-6" data-testid="movie-picker">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="type-panel text-foreground">
@@ -185,7 +185,7 @@ export default function MoviePicker({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-elevated rounded-xl overflow-x-auto" role="group" aria-label="Movie lists">
+      <div className="flex gap-1 p-1 bg-elevated rounded-xl overflow-x-auto" role="group" aria-label="Movie lists" data-tour="movie-picker">
         {TAB_CONFIG.map((tab) => (
           <button
             key={tab.id}

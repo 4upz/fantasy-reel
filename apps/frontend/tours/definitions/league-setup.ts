@@ -15,16 +15,17 @@ export const leagueSetupTour = defineTour({
     {
       anchor: 'join-link',
       title: 'Get your players in',
-      body: 'Share this code or link, or use Invite players to send email invitations. People can join until you start the draft.',
+      body: 'Generate a join link to share, or use Invite players to send email invitations. People can join until you start the draft.',
     },
     {
-      anchor: 'league-nav',
+      anchor: 'settings-tab',
+      centerIfMissing: true,
       title: 'Check the rules in Settings',
-      body: 'Settings holds the draft order, roster size, scoring and counterpicks. The defaults are fine to play with, but most of them lock once the draft starts.',
+      body: 'Settings holds the draft order, roster size, scoring and counterpicks. The defaults are fine to play with, but most of them lock once the draft starts. Settings has its own short tour.',
     },
     {
       anchor: 'start-draft',
-      title: 'Start the draft when everyone’s in',
+      title: 'Start the draft',
       body: [
         'You need at least 2 players. The draft runs live on this page: teams take turns picking, and there’s no timer, so the draft waits for whoever is picking.',
         'Starting it closes the league to new players and locks the draft order.',

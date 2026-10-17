@@ -15,19 +15,19 @@ export const draftRoomTour = defineTour({
     {
       anchor: 'draft-turn',
       title: 'Whose turn it is',
-      body: 'Teams pick one at a time, and the order reverses each round. There’s no timer: the draft waits for whoever is picking. This lights up when it’s your turn, and the queue counts the picks until yours.',
+      body: 'Teams pick one at a time, and the order reverses each round. There’s no timer: the draft waits for whoever is picking. This lights up when it’s your turn.',
     },
     {
       title: 'What makes a good pick',
       body: [
-        'A movie scores its Rotten Tomatoes Tomatometer minus 60, from its release day: 84% earns 24 points and 60% earns nothing. Below 50% the penalty eases off and never passes about −20.',
+        'A movie scores its Rotten Tomatoes Tomatometer minus 60, from its release day: 84% earns 24 points and 60% earns nothing. Below 50% the penalty shrinks, bottoming out near −20.',
         'If your league doubles points above 90%, each point over 90 counts twice. The most points when the season ends wins.',
       ],
     },
     {
       anchor: 'movie-picker',
       title: 'Pick a movie',
-      body: 'Browse and search any time; you can pick only on your turn. Only upcoming movies with a release date can be drafted, and once a team takes one, it’s gone. Your Wishlist tab keeps the movies you scouted close.',
+      body: 'Browse and search any time; you can pick only on your turn. Only upcoming movies with a release date can be drafted, and once a team takes one, it’s gone. The Wishlist tab shows the movies you saved.',
     },
     {
       when: (ctx) => ctx.draftCounterpicks === true,
@@ -37,7 +37,7 @@ export const draftRoomTour = defineTour({
     {
       when: (ctx) => ctx.draftCounterpicks !== true,
       title: 'After the last pick',
-      body: 'The season starts. Movies score as they’re released, and you can bid your Fantasy Budget on movies nobody drafted.',
+      body: 'The season starts. Movies score as they’re released, and, if your league has bidding on, you can spend your Fantasy Budget on movies nobody drafted.',
     },
   ],
 })

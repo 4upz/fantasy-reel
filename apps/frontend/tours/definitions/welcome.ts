@@ -20,7 +20,7 @@ export const welcomeTour = defineTour({
       title: 'Fantasy sports, for movies',
       body: [
         'Draft upcoming movies with friends. Once a movie is released, it scores points from its Rotten Tomatoes Tomatometer, and the team with the most points when the season ends wins.',
-        'The full rules are always in How to play.',
+        'Find the full rules any time under How to play in the menu.',
       ],
     },
     {

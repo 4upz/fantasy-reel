@@ -138,12 +138,20 @@ export default function DraftBoard({
             <ClapperboardIcon className="w-16 h-16 text-foreground-muted" />
           </div>
           <p className="text-foreground-secondary mb-2">The draft hasn&apos;t started yet.</p>
-          <p className="type-body-sm text-foreground-secondary">
-            Waiting for the league owner to start the draft.
-          </p>
-          <p className="type-body-sm text-foreground-secondary mt-2">
-            Meanwhile, add movies you like to your wishlist. It has its own tab in the draft.
-          </p>
+          {league.owner_id === currentUserId ? (
+            <p className="type-body-sm text-foreground-secondary">
+              Start the draft when everyone&rsquo;s in.
+            </p>
+          ) : (
+            <>
+              <p className="type-body-sm text-foreground-secondary">
+                Waiting for the commissioner to start the draft.
+              </p>
+              <p className="type-body-sm text-foreground-secondary mt-2">
+                Meanwhile, save movies you like to your Wishlist. The draft&rsquo;s movie picker has a Wishlist tab.
+              </p>
+            </>
+          )}
           <p className="type-body-sm text-foreground-secondary mt-2">
             {participants.length} of {league.max_participants} participants joined
           </p>

@@ -20,7 +20,7 @@ export const leagueWaitingTour = defineTour({
     {
       title: 'How movies score',
       body: [
-        'Only the Rotten Tomatoes Tomatometer counts, from the day a movie is released. 60% is worth nothing and 84% earns 24 points. Below 50% the penalty eases off and never passes about −20.',
+        'Only the Rotten Tomatoes Tomatometer counts, from the day a movie is released. 60% is worth nothing and 84% earns 24 points. Below 50% the penalty shrinks, bottoming out near −20.',
         'So draft movies you expect critics to love, not just ones you want to see.',
       ],
     },
@@ -28,7 +28,7 @@ export const leagueWaitingTour = defineTour({
       anchor: 'wishlist-nav',
       centerIfMissing: true,
       title: 'Scout while you wait',
-      body: 'Tap the heart on movies you like to add them to your wishlist. The draft’s movie picker has a Wishlist tab, so your shortlist is close at hand on your turn.',
+      body: 'Save movies you like to your Wishlist with the heart on any movie. The draft’s movie picker has a Wishlist tab, so your shortlist is right there on your turn.',
     },
   ],
 })

@@ -144,7 +144,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               Create new league
             </h2>
             <p id="create-league-subtitle" className="type-body-sm text-foreground-secondary mt-1">
-              You’ll be the commissioner. You can change most of this in league settings until the draft starts.
+              You’ll be the commissioner. You can change these in Settings until the draft starts.
             </p>
           </div>
           <button
