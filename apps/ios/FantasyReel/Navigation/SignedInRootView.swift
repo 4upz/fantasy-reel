@@ -139,6 +139,8 @@ private struct ShellSheetView: View {
             NavigationStack { CreateLeagueView() }
         case .joinLeague(let input):
             NavigationStack { JoinLeagueView(input: input) }
+        case .draftMoviePicker(let room):
+            DraftMoviePickerSheet(room: room.model)
         }
     }
 }

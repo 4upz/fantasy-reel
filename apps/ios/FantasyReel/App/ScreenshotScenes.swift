@@ -15,6 +15,11 @@ enum ScreenshotScene: String, CaseIterable {
     case resetPasswordLinkNotice
     case chooseNewPassword
     case appleRelayNotice
+    case draftSetup
+    case draftLive
+    case draftPicker
+    case draftCounterpick
+    case draftOffline
 
     static var requested: ScreenshotScene? {
         ProcessInfo.processInfo.environment["FR_SCREENSHOT"].flatMap(ScreenshotScene.init(rawValue:))
@@ -42,6 +47,16 @@ struct ScreenshotSceneView: View {
             ChooseNewPasswordView()
         case .appleRelayNotice:
             AppleRelayNoticeView()
+        case .draftSetup:
+            DraftPreviewScreen(.setup)
+        case .draftLive:
+            DraftPreviewScreen(.live)
+        case .draftPicker:
+            DraftPreviewScreen(.picker)
+        case .draftCounterpick:
+            DraftPreviewScreen(.counterpick)
+        case .draftOffline:
+            DraftPreviewScreen(.offline)
         default:
             NavigationStack(path: $navigation.path) {
                 WelcomeView()
@@ -60,6 +75,9 @@ struct ScreenshotSceneView: View {
         let session = environment.session
         switch scene {
         case .welcome, .chooseNewPassword, .appleRelayNotice:
+            break
+        case .draftSetup, .draftLive, .draftPicker, .draftCounterpick, .draftOffline:
+            // Seeded by `DraftPreviewScreen` itself.
             break
         case .logIn:
             navigation.path = [.logIn]

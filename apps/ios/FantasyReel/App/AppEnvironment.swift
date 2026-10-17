@@ -22,6 +22,8 @@ final class AppEnvironment {
     let leagueLifecycle: any LeagueLifecycleRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
+    let draft: any DraftRepository
+    let draftCatalog: any DraftMovieCatalog
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -30,7 +32,9 @@ final class AppEnvironment {
         leagues: (any LeagueRepository)? = nil,
         leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
-        notifications: (any NotificationRepository)? = nil
+        notifications: (any NotificationRepository)? = nil,
+        draft: (any DraftRepository)? = nil,
+        draftCatalog: (any DraftMovieCatalog)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
@@ -43,6 +47,8 @@ final class AppEnvironment {
         self.leagueLifecycle = leagueLifecycle ?? EdgeLeagueLifecycleRepository(functions: edgeFunctions)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
+        self.draft = draft ?? SupabaseDraftRepository(provider: supabase, functions: edgeFunctions)
+        self.draftCatalog = draftCatalog ?? SupabaseDraftMovieCatalog(provider: supabase, functions: edgeFunctions)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -60,7 +66,9 @@ extension AppEnvironment {
         leagues: any LeagueRepository = InMemoryLeagueRepository(),
         leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
-        notifications: any NotificationRepository = InMemoryNotificationRepository()
+        notifications: any NotificationRepository = InMemoryNotificationRepository(),
+        draft: any DraftRepository = InMemoryDraftRepository(),
+        draftCatalog: any DraftMovieCatalog = InMemoryDraftMovieCatalog()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -72,7 +80,9 @@ extension AppEnvironment {
             leagues: leagues,
             leagueLifecycle: leagueLifecycle,
             profiles: profiles,
-            notifications: notifications
+            notifications: notifications,
+            draft: draft,
+            draftCatalog: draftCatalog
         )
     }
 }
