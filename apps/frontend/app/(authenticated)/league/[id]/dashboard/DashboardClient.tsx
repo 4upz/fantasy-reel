@@ -101,7 +101,12 @@ export default function DashboardClient({
     <div className="-mx-4 pt-1.5 sm:-mx-6 lg:-mx-8">
       <FeatureTour
         id="league-overview"
-        ctx={{ leagueStatus: league.status, tradesOpen: tradesOpen(league) }}
+        ctx={{
+          leagueStatus: league.status,
+          tradesOpen: tradesOpen(league),
+          dropLimit: league.drop_limit,
+          doublePoints: league.double_points_over_90,
+        }}
       />
       <FeatureTour
         id="season-results"

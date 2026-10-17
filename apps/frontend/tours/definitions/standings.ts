@@ -15,15 +15,11 @@ export const standingsTour = defineTour({
     },
     {
       anchor: 'standings-list',
-      when: (ctx) => ctx.doublePoints !== true,
       title: 'Scout the other teams',
-      body: 'Teams on the same total share a rank. Open any team to see the movies and counterpicks behind its score, and to spot a trade partner.',
-    },
-    {
-      anchor: 'standings-list',
-      when: (ctx) => ctx.doublePoints === true,
-      title: 'Scout the other teams',
-      body: 'This season, each point above 90% counts double. Teams on the same total share a rank. Open any team to see the movies and counterpicks behind its score.',
+      body: (ctx) => [
+        ctx.doublePoints === true && 'This season, each point above 90% counts double.',
+        'Teams on the same total share a rank. Open any team to see the movies and counterpicks behind its score, and to spot a trade partner.',
+      ].filter(Boolean).join(' '),
     },
   ],
 })

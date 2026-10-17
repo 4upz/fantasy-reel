@@ -14,7 +14,10 @@ export const leagueOverviewTour = defineTour({
   steps: [
     {
       title: 'Critics decide your score',
-      body: 'Each movie scores from its Rotten Tomatoes Tomatometer. 60% is worth nothing, every point above it earns a point, and lower scores cost you, though the loss eases off below 50%.',
+      body: (ctx) => [
+        'Each movie scores from its Rotten Tomatoes Tomatometer. 60% is worth nothing, every point above it earns a point, and lower scores cost you, though the loss eases off below 50%.',
+        ...(ctx.doublePoints === true ? ['This season, each point above 90% counts double.'] : []),
+      ],
     },
     {
       anchor: 'team-summary',
@@ -23,15 +26,12 @@ export const leagueOverviewTour = defineTour({
     },
     {
       anchor: 'league-nav',
-      when: (ctx) => ctx.tradesOpen === true,
       title: 'Improve your team between releases',
-      body: 'Bid for movies no team holds; bids settle once a week. Trade movies, counterpicks or Fantasy Budget with other teams. If your league allows drops, drop a movie that’s lost its buzz to make room.',
-    },
-    {
-      anchor: 'league-nav',
-      when: (ctx) => ctx.tradesOpen !== true,
-      title: 'Improve your team between releases',
-      body: 'Bid for movies no team holds; bids settle once a week. If your league allows drops, drop a movie that’s lost its buzz to make room.',
+      body: (ctx) => [
+        'Bid for movies no team holds; bids settle once a week.',
+        ctx.tradesOpen === true && 'Trade movies, counterpicks or Fantasy Budget with other teams.',
+        ctx.dropLimit !== 0 && 'Drop a movie that’s lost its buzz, before it opens, to make room.',
+      ].filter(Boolean).join(' '),
     },
   ],
 })

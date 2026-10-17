@@ -95,6 +95,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
           leagueStatus: league.status,
           tradesOpen: tradesOpen(league),
           reviewEnabled: league.trade_review_enabled,
+          reviewHours: league.trade_veto_hours,
           isOwner,
         }}
       />

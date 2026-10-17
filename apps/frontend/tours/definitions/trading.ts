@@ -1,7 +1,15 @@
-import { defineTour } from '../types'
+import { defineTour, type TourContext } from '../types'
 
-/** Every variant of the last step ends on this rule, since an offer may lose to another one. */
 const COMPETING_OFFERS = 'Several offers can name the same movie. Only the first to go through happens, and the rest expire.'
+
+/** What happens after a yes: straight through, or a review period of the league's `trade_veto_hours`. */
+function afterAccept(ctx: TourContext): string {
+  if (ctx.reviewEnabled !== true) return 'Once the other team accepts, the trade goes through shortly after.'
+  const period = typeof ctx.reviewHours === 'number' ? `a ${ctx.reviewHours}-hour review period` : 'a review period'
+  return ctx.isOwner === true
+    ? `Nothing moves when the other team accepts. As commissioner, you get ${period} to approve it early or veto it. If you do neither, it goes through when the period ends.`
+    : `Nothing moves when the other team accepts. The commissioner gets ${period} to approve it early or veto it. If they do neither, it goes through when the period ends.`
+}
 
 /**
  * The Trading tab while trades are open: making an offer, answering one, and
@@ -27,26 +35,9 @@ export const tradingTour = defineTour({
       body: 'Accept it, reject it, or counter with changes. A counter goes back to them to answer. If the offer shows an expiry, answer before then or it lapses.',
     },
     {
-      when: (ctx) => ctx.reviewEnabled === true && ctx.isOwner !== true,
       title: 'When a trade goes through',
-      body: [
-        'Nothing moves when the other team accepts. The commissioner gets a review period to approve it early or veto it. If they do neither, it goes through when the period ends.',
-        COMPETING_OFFERS,
-      ],
-    },
-    {
-      when: (ctx) => ctx.reviewEnabled === true && ctx.isOwner === true,
-      title: 'When a trade goes through',
-      body: [
-        'Nothing moves when the other team accepts. As commissioner, you get a review period to approve the trade early or veto it. If you do neither, it goes through when the period ends.',
-        COMPETING_OFFERS,
-      ],
-    },
-    {
-      when: (ctx) => ctx.reviewEnabled !== true,
-      title: 'When a trade goes through',
-      body: [
-        'Once the other team accepts, the trade goes through shortly after.',
+      body: (ctx) => [
+        afterAccept(ctx),
         COMPETING_OFFERS,
       ],
     },

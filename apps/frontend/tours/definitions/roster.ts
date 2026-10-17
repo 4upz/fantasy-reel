@@ -25,14 +25,12 @@ export const rosterTour = defineTour({
       body: 'Open a movie to drop it. A drop is permanent, and a movie can’t be dropped once it has opened.',
     },
     {
-      when: (ctx) => ctx.dropLimit !== 0 && ctx.counterpicksBlockDrops !== true,
+      when: (ctx) => ctx.dropLimit !== 0,
       title: 'Locked movies',
-      body: 'A movie that has opened is locked, and every movie is once your drops run out. Open a locked movie to see why.',
-    },
-    {
-      when: (ctx) => ctx.dropLimit !== 0 && ctx.counterpicksBlockDrops === true,
-      title: 'Locked movies',
-      body: 'A movie is locked once it opens, while another team holds a counterpick on it or is bidding for one, and once your drops run out. Open a locked movie to see why.',
+      body: (ctx) =>
+        ctx.counterpicksBlockDrops === true
+          ? 'A movie is locked once it opens, while another team holds a counterpick on it or is bidding for one, and once your drops run out. Open a locked movie to see why.'
+          : 'A movie is locked once it opens, and every movie is once your drops run out. Open a locked movie to see why.',
     },
     {
       anchor: 'roster-counterpicks',
