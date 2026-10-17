@@ -64,7 +64,7 @@ Short walkthroughs that start the first time someone opens a page, so players le
 - **`when(ctx)`:** on the tour, it decides whether the tour applies at all. On a step, it drops that step. Prefer `when` over hoping an anchor is missing: it says why.
 - **`autoStart(ctx)`:** on the tour only. It keeps a tour that applies from starting by itself, while "Show me around" and Settings can still play it. Use it for beginner tours, such as `autoStart: (ctx) => ctx.newPlayer === true`.
 - **`body` as a function:** `body: (ctx) => …` gets the page's ctx when the tour starts. Use it for wording that depends on the viewer or the league, instead of a pair of steps with opposite `when`s.
-- **`placement`:** optional. `auto` picks whichever side has room. Under 640px wide the card always docks to the top or bottom edge, away from the anchor, clear of the mobile header and bottom bar.
+- **`placement`:** optional. `auto` picks whichever side has room. Under 640px wide the card always docks to the top or bottom edge, away from the anchor, clear of the mobile header and bottom bar. It also stays clear of fixed chrome marked `data-tour-inset="top"`, `"bottom"` or `"left"` (the desktop side navigation); mark any new fixed bar the same way.
 
 **Writing.** Keep tours to 5 steps or fewer, and each step to one or two short paragraphs. Say what the thing is *for* and when it happens, not where it is. Use the UI's own terms ("Fantasy Budget", never "FAAB").
 
@@ -101,8 +101,8 @@ Tours always start for a user who asks: the account menu's **Tour this page**, `
 |---|---|---|
 | presses **Finish** on the last step, or leaves the page while on the last step (often by doing what it asked, such as starting the draft) | `completed` | Never starts by itself again at this version. |
 | chooses **Don't show again** | `dismissed` | Same. |
-| chooses **Not now**, presses Escape or ✕, or leaves the page before the last step | `snoozed` | Starts again after 3 days. A second snooze of the same version counts as `dismissed`. |
-| chooses **Turn off all tours** | `dismissed`, plus `prefs:tours = {enabled:false}` | Nothing starts by itself. Replay still works. |
+| chooses **Not now** (the footer, or ✕), presses Escape, or leaves the page before the last step | `snoozed` | Starts again after 3 days. A second snooze of the same version counts as `dismissed`. |
+| chooses **Turn off all tours** (offered on the first step of a tour that started by itself) | `dismissed`, plus `prefs:tours = {enabled:false}` | Nothing starts by itself. Replay still works. A toast says where to turn them back on. |
 
 `record_tour_outcome()` merges outcomes so that nothing can roll them back:
 

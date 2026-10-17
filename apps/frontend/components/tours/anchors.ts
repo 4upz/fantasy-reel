@@ -36,13 +36,14 @@ export function findTourAnchor(name: string): HTMLElement | null {
 
 /**
  * How much of the viewport fixed chrome covers: elements marked
- * `data-tour-inset="top"` (the mobile header, the pinned league header) and
- * `data-tour-inset="bottom"` (the mobile tab bar). Only what is on screen
- * counts, and only while it is pinned (fixed or sticky), so desktop gets zero.
+ * `data-tour-inset="top"` (the mobile header, the pinned league header),
+ * `data-tour-inset="bottom"` (the mobile tab bar) and `data-tour-inset="left"`
+ * (the desktop side navigation). Only what is on screen counts, and only while
+ * it is pinned (fixed or sticky).
  */
 export function measureInsets(): Insets {
   const viewportHeight = window.innerHeight
-  const rects = (edge: 'top' | 'bottom') =>
+  const rects = (edge: 'top' | 'bottom' | 'left') =>
     [...document.querySelectorAll<HTMLElement>(`[data-tour-inset="${edge}"]`)]
       .filter((element) => isShown(element) && ['fixed', 'sticky'].includes(getComputedStyle(element).position))
       .map((element) => element.getBoundingClientRect())
@@ -57,5 +58,6 @@ export function measureInsets(): Insets {
   for (const rect of rects('bottom').sort((a, b) => b.bottom - a.bottom)) {
     if (rect.bottom >= viewportHeight - bottom - 1) bottom = Math.max(bottom, viewportHeight - rect.top)
   }
-  return { top, bottom }
+  const left = Math.max(0, ...rects('left').filter((rect) => rect.left <= 1).map((rect) => rect.right))
+  return { top, bottom, left }
 }

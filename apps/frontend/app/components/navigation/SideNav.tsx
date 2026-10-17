@@ -149,7 +149,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside id={sidebarId} className={`sidenav sidenav-desktop ${isExpanded ? 'sidenav-expanded' : ''}`}>
+      <aside id={sidebarId} data-tour-inset="left" className={`sidenav sidenav-desktop ${isExpanded ? 'sidenav-expanded' : ''}`}>
         {renderSidebarContent(isExpanded)}
 
         <button
