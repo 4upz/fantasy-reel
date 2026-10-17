@@ -43,7 +43,7 @@ struct LogInView: View {
 
                 FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     FormFieldRow(label: "Email") {
-                        TextField("you@example.com", text: $email)
+                        TextField(AuthPlaceholders.email, text: $email)
                             .textContentType(.username)
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)
@@ -109,7 +109,7 @@ struct LogInView: View {
     @ViewBuilder
     private var notices: some View {
         if let notice = session.authLinkNotice, !notice.isRecovery {
-            InlineBanner(tone: .info, title: notice.message)
+            InlineBanner(tone: .info, title: notice.title, message: notice.message)
         }
         if resent {
             InlineBanner(tone: .success, title: "Confirmation email sent! Check your inbox.")

@@ -31,12 +31,12 @@ struct ResetPasswordView: View {
                 }
 
                 if let notice = session.authLinkNotice, notice.isRecovery {
-                    InlineBanner(tone: .info, title: notice.message)
+                    InlineBanner(tone: .info, title: notice.title, message: notice.message)
                 }
 
                 FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     FormFieldRow(label: "Email", labelWidth: 64) {
-                        TextField("you@example.com", text: $email)
+                        TextField(AuthPlaceholders.email, text: $email)
                             .textContentType(.username)
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)

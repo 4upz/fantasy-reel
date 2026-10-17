@@ -142,6 +142,15 @@ public enum AuthLinkFailure: Sendable, Equatable {
         return exchangeErrorCode == "flow_state_expired" ? .expired : .openedElsewhere
     }
 
+    /// The notice's short heading; `message(isRecovery:)` is its body.
+    public var title: String {
+        switch self {
+        case .confirmed: "Email confirmed"
+        case .expired: "Link expired"
+        case .openedElsewhere, .failed: "That link didn't work"
+        }
+    }
+
     /// The notice for the sign-in (or reset) screen.
     public func message(isRecovery: Bool) -> String {
         switch (self, isRecovery) {

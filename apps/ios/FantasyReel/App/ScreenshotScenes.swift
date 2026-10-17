@@ -64,14 +64,22 @@ struct ScreenshotSceneView: View {
         case .logIn:
             navigation.path = [.logIn]
         case .logInLinkNotice:
-            session.authLinkNotice = AuthLinkNotice(message: AuthLinkFailure.expired.message(isRecovery: false), isRecovery: false)
+            session.authLinkNotice = AuthLinkNotice(
+                title: AuthLinkFailure.expired.title,
+                message: AuthLinkFailure.expired.message(isRecovery: false),
+                isRecovery: false
+            )
             navigation.path = [.logIn]
         case .signUp:
             navigation.path = [.signUp]
         case .resetPassword:
             navigation.path = [.logIn, .resetPassword(email: "alice@fantasyreel.test")]
         case .resetPasswordLinkNotice:
-            session.authLinkNotice = AuthLinkNotice(message: AuthLinkFailure.openedElsewhere.message(isRecovery: true), isRecovery: true)
+            session.authLinkNotice = AuthLinkNotice(
+                title: AuthLinkFailure.openedElsewhere.title,
+                message: AuthLinkFailure.openedElsewhere.message(isRecovery: true),
+                isRecovery: true
+            )
             navigation.path = [.logIn, .resetPassword()]
         }
     }

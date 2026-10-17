@@ -160,6 +160,7 @@ final class SessionStore {
         case .revoked, .notFound:
             await signOut()
             authLinkNotice = AuthLinkNotice(
+                title: "Signed out",
                 message: "Sign in with Apple was turned off for Fantasy Reel. Sign in again to continue.",
                 isRecovery: false
             )
@@ -217,7 +218,11 @@ final class SessionStore {
             // a confirmation link still confirmed the email server-side. Say
             // that instead of reporting a bare failure (F-02).
             let failure = AuthLinkFailure.classify(url, exchangeErrorCode: error.serverCode)
-            authLinkNotice = AuthLinkNotice(message: failure.message(isRecovery: isRecovery), isRecovery: isRecovery)
+            authLinkNotice = AuthLinkNotice(
+                title: failure.title,
+                message: failure.message(isRecovery: isRecovery),
+                isRecovery: isRecovery
+            )
         }
     }
 
@@ -232,6 +237,7 @@ final class SessionStore {
 /// screen, where the person can send a fresh link; the rest on Log In.
 struct AuthLinkNotice: Equatable, Identifiable {
     let id = UUID()
+    let title: String
     let message: String
     let isRecovery: Bool
 }
