@@ -102,7 +102,9 @@ and dark mode on every iOS run and uploads them as the `ios-screenshots`
 artifact. To show them in a PR description, add the `ios-screenshots` label:
 the next run commits smaller copies to `apps/ios/docs/screenshots/` on the PR
 branch, which the description can link. Remove the label once they're in, since
-GitHub won't start CI on that bot commit by itself; your next push runs it. To add a
+GitHub won't start CI on that bot commit by itself; your next push runs it. A
+capture that comes out blank is retried, and if it stays blank nothing is
+committed and the step fails, so check the run's warnings. To add a
 screen, add a case to `ScreenshotScene`. Locally, set the `FR_SCREENSHOT`
 environment variable to a case name in the scheme's Run options.
 
