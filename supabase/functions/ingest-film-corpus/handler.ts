@@ -572,31 +572,37 @@ export async function fetchMetadataStage(
   const fetchedAt = new Date().toISOString()
 
   // B1: metadata for new rows, and the weekly refresh of league movies.
-  for (const row of await dueMetadata(client, config)) {
-    if (clock() >= deadline) {
-      deadline_hit = true
-      log.info('metadata deadline reached', { fetched: metadata_fetched, stopped_at: row.tmdb_id })
-      break
-    }
-    const isRefresh = row.metadata_fetched_at !== null
-    try {
-      const meta = await fetchMovieMetadata(row.tmdb_id, deps.tmdbToken)
-      if (!meta) {
-        // Gone from TMDb: never fetch again, and don't spend MDBList on it.
-        const { error: deadEndError } = await client.from('film_corpus')
-          .update({ metadata_fetched_at: fetchedAt, ratings_fetched_at: fetchedAt, ratings_absent: true })
-          .eq('tmdb_id', row.tmdb_id)
-        if (deadEndError) throw deadEndError
-        continue
+  // League rows go first and the backlog last, after B2/B3: the backlog alone
+  // fills the stage deadline, and expansion queued behind it never ran.
+  const fetchMetadata = async (rows: DueMetadataRow[]) => {
+    for (const row of rows) {
+      if (clock() >= deadline) {
+        deadline_hit = true
+        log.info('metadata deadline reached', { fetched: metadata_fetched, stopped_at: row.tmdb_id })
+        return
       }
-      await storeMetadata(client, meta, fetchedAt)
-      if (isRefresh) metadata_refreshed++
-      else metadata_fetched++
-    } catch (err) {
-      log.warn('Metadata fetch failed', { tmdb_id: row.tmdb_id, error: serializeError(err) })
-      errors.push({ stage: 'metadata', id: row.tmdb_id, error: serializeError(err) })
+      const isRefresh = row.metadata_fetched_at !== null
+      try {
+        const meta = await fetchMovieMetadata(row.tmdb_id, deps.tmdbToken)
+        if (!meta) {
+          // Gone from TMDb: never fetch again, and don't spend MDBList on it.
+          const { error: deadEndError } = await client.from('film_corpus')
+            .update({ metadata_fetched_at: fetchedAt, ratings_fetched_at: fetchedAt, ratings_absent: true })
+            .eq('tmdb_id', row.tmdb_id)
+          if (deadEndError) throw deadEndError
+          continue
+        }
+        await storeMetadata(client, meta, fetchedAt)
+        if (isRefresh) metadata_refreshed++
+        else metadata_fetched++
+      } catch (err) {
+        log.warn('Metadata fetch failed', { tmdb_id: row.tmdb_id, error: serializeError(err) })
+        errors.push({ stage: 'metadata', id: row.tmdb_id, error: serializeError(err) })
+      }
     }
   }
+  const due = await dueMetadata(client, config)
+  await fetchMetadata(due.filter((r) => r.priority >= LEAGUE_PRIORITY))
 
   // B2: what league movies look like this week, and who is behind them.
   // Driven entirely by stored rows, so expansion a run did not reach (or a
@@ -689,6 +695,8 @@ export async function fetchMetadataStage(
     log.warn('League expansion read failed', { error: serializeError(err) })
     errors.push({ stage: 'expand', id: 0, error: serializeError(err) })
   }
+
+  await fetchMetadata(due.filter((r) => r.priority < LEAGUE_PRIORITY))
 
   const { count, error: countError } = await client
     .from('film_corpus')
