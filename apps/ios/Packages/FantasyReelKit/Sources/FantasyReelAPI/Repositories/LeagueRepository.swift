@@ -7,12 +7,21 @@ import Supabase
 // Feature threads add their own repository pairs beside these rather than
 // growing them.
 
-/// League and season reads the shell needs.
+/// League and season reads, shared by the shell and every league feature.
+/// Mutations go through `LeagueLifecycleRepository`.
 public protocol LeagueRepository: Sendable {
     /// Every season the signed-in user can see, newest first.
     func fetchVisibleSeasons() async throws(APIError) -> [League]
     /// One season. Nil when the user can no longer see it.
     func fetchSeason(_ id: LeagueID) async throws(APIError) -> League?
+    /// The season's active members with their teams and profiles, in draft
+    /// order (unordered members last). Left and removed people are excluded,
+    /// like every web roster of a season.
+    func fetchMembers(of leagueID: LeagueID) async throws(APIError) -> [LeagueMember]
+    /// Every season of a series the user can see, as full rows (with
+    /// `final_standings`), newest `season_year` first. RLS decides: joining a
+    /// later season doesn't grant the earlier ones.
+    func fetchSeriesSeasons(_ seriesID: SeriesID) async throws(APIError) -> [League]
 }
 
 /// The signed-in user's own profile row.
@@ -62,6 +71,35 @@ public struct SupabaseLeagueRepository: LeagueRepository {
                 .execute()
                 .value
             return rows.first
+        } catch {
+            throw APIError.wrap(error)
+        }
+    }
+
+    public func fetchMembers(of leagueID: LeagueID) async throws(APIError) -> [LeagueMember] {
+        do {
+            let members: [LeagueMember] = try await client
+                .from("league_participants")
+                .select("*, teams (*), profiles (*)")
+                .eq("league_id", value: leagueID.rawValue)
+                .eq("status", value: "active")
+                .execute()
+                .value
+            return members.sortedByDraftOrder()
+        } catch {
+            throw APIError.wrap(error)
+        }
+    }
+
+    public func fetchSeriesSeasons(_ seriesID: SeriesID) async throws(APIError) -> [League] {
+        do {
+            return try await client
+                .from("leagues")
+                .select()
+                .eq("series_id", value: seriesID.rawValue)
+                .order("season_year", ascending: false)
+                .execute()
+                .value
         } catch {
             throw APIError.wrap(error)
         }
