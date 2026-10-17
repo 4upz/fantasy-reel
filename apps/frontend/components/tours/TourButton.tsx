@@ -24,7 +24,7 @@ export default function TourButton({ id, className = '' }: Props): React.ReactEl
     <button
       type="button"
       onClick={() => { void start(target) }}
-      className={`type-control inline-flex items-center gap-1.5 text-foreground-secondary transition-colors hover:text-gold ${className}`}
+      className={`type-control inline-flex min-h-[44px] items-center gap-1.5 sm:min-h-0 text-foreground-secondary transition-colors hover:text-gold ${className}`}
       data-testid="tour-replay"
     >
       <Compass className="h-4 w-4" aria-hidden="true" />
