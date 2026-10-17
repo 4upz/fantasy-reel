@@ -10,6 +10,8 @@ enum LeagueRoute: Hashable {
     case history
     case settings
     case shareInvite
+    /// Owner, setup: invite one player by name or email (pushed from the invite tools).
+    case invitePlayer
     case movie(TMDbID)
     case team(TeamID)
     /// Movie search pushed from the no-league screen, which has no search tab.

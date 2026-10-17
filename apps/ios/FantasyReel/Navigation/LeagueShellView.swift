@@ -101,6 +101,7 @@ struct LeagueDestinationView: View {
         case .history: LeagueHistoryView()
         case .settings: LeagueSettingsView()
         case .shareInvite: ShareInviteView()
+        case .invitePlayer: InvitePlayerView()
         case .movie(let tmdbID): LeagueMovieDetailView(tmdbID: tmdbID)
         case .team(let teamID): TeamDetailView(teamID: teamID)
         case .movieSearch: MovieSearchView()
