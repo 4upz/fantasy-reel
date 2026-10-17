@@ -33,8 +33,8 @@ export const biddingTour = defineTour({
       centerIfMissing: true,
       title: 'After you bid',
       body: (ctx) => [
-        `If you’re outbid, you have ${typeof ctx.counterbidHours === 'number' ? `${ctx.counterbidHours} ${ctx.counterbidHours === 1 ? 'hour' : 'hours'}` : 'a set time'} to counter. Your bid still stands, and it can win at its own price if the leader has no room or budget left.`,
-        'If you win more than you have room or budget for, your bid priority decides which ones you keep.',
+        `If you’re outbid, you have ${typeof ctx.counterbidHours === 'number' ? `${ctx.counterbidHours} ${ctx.counterbidHours === 1 ? 'hour' : 'hours'}` : 'a set time'} to counter. Your bid still stands, and wins at its own price if the leader has no room or budget left.`,
+        'Win more than you can fit or afford? Your bid priority decides which ones you keep.',
       ],
     },
     {

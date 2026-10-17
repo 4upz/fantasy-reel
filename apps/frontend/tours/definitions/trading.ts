@@ -30,6 +30,7 @@ export const tradingTour = defineTour({
     },
     {
       anchor: 'trade-respond',
+      placement: 'right',
       centerIfMissing: true,
       title: 'When an offer comes in',
       body: 'Accept it, reject it, or counter with changes. A counter goes back to them to answer. If the offer shows an expiry, answer before then or it lapses.',

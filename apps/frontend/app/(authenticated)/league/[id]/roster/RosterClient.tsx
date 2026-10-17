@@ -187,18 +187,18 @@ export default function RosterClient({
       />
 
       {/* Counterpicks Section */}
-      <div data-tour="roster-counterpicks">
+      <div>
         <h2 className="type-section text-foreground flex items-center gap-2 mb-4">
           <Target className="w-5 h-5 text-crimson-text" aria-hidden="true" />
           Counterpicks ({counterpicks.length})
         </h2>
 
         {counterpicks.length === 0 ? (
-          <p className="text-foreground-secondary">No counterpicks claimed yet.</p>
+          <p className="text-foreground-secondary" data-tour="roster-counterpicks">No counterpicks claimed yet.</p>
         ) : (
           <ul role="list" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {counterpicks.map((cp) => (
-              <li key={cp.id} className="card overflow-hidden">
+              <li key={cp.id} className="card overflow-hidden" data-tour="roster-counterpicks">
                 <div className="relative aspect-[2/3] bg-elevated">
                   <RosterPoster movie={cp.movies} />
                   {/* Every card in this section is a counterpick, as its heading says. */}
