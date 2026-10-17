@@ -16,6 +16,9 @@ struct SignedInRootView: View {
     @Environment(SessionStore.self) private var session
     @State private var directory: LeagueDirectoryStore
     @State private var inbox: InboxStore
+    @State private var wishlist: WishlistStore
+    @State private var research: LeagueResearchStore
+    @State private var searchHistory = MovieSearchHistory()
     @State private var router = ShellRouter()
     @State private var profile: Profile?
 
@@ -23,6 +26,8 @@ struct SignedInRootView: View {
         self.account = account
         _directory = State(initialValue: LeagueDirectoryStore(userID: account.id, repository: environment.leagues))
         _inbox = State(initialValue: InboxStore(userID: account.id, repository: environment.notifications))
+        _wishlist = State(initialValue: WishlistStore(userID: account.id, repository: environment.wishlists))
+        _research = State(initialValue: LeagueResearchStore(leagues: environment.leagues, leagueMovies: environment.leagueMovies))
     }
 
     var body: some View {
@@ -31,12 +36,18 @@ struct SignedInRootView: View {
             .environment(router)
             .environment(directory)
             .environment(inbox)
+            .environment(wishlist)
+            .environment(research)
+            .environment(searchHistory)
             .environment(\.currentProfile, profile)
             .sheet(item: $router.sheet) { sheet in
                 ShellSheetView(sheet: sheet)
                     .environment(router)
                     .environment(directory)
                     .environment(inbox)
+                    .environment(wishlist)
+                    .environment(research)
+                    .environment(searchHistory)
                     .environment(\.currentProfile, profile)
             }
             .alert(
@@ -53,11 +64,13 @@ struct SignedInRootView: View {
                 let userID = account.id
                 async let loadedProfile = profiles.fetchProfile(for: userID)
                 async let inboxLoaded: Void = inbox.refresh()
+                async let wishlistLoaded: Void = wishlist.load()
                 await directory.load()
                 // Route a shared link as soon as we know which leagues are visible.
                 routePendingLink()
                 profile = try? await loadedProfile
                 await inboxLoaded
+                await wishlistLoaded
             }
             .onChange(of: session.pendingDeepLink) { routePendingLink() }
             // A link that arrived before a failed load is replayed after Try Again.
