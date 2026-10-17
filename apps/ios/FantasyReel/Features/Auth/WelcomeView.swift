@@ -24,7 +24,6 @@ struct WelcomeView: View {
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.frText)
                     .accessibilityAddTraits(.isHeader)
-                    // Never truncated when the screen is filled to its height.
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 8)
                     .padding(.top, 8)
@@ -33,6 +32,7 @@ struct WelcomeView: View {
                     .frFont(.body)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.frTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
 
                 FRRowGroup {
@@ -69,6 +69,7 @@ struct WelcomeView: View {
                     .frFont(.caption)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color.frTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 16)
                     .padding(.top, -8)
             }
@@ -76,6 +77,8 @@ struct WelcomeView: View {
             .padding(.bottom, 8)
             // idealHeight too: the scroll view proposes no height, and the ideal
             // stands in for it so the Spacer can expand to fill the viewport.
+            // Under that fixed proposal the VStack would squeeze its text to one
+            // line, so each Text above takes its full height (fixedSize).
             .frame(minHeight: viewportHeight, idealHeight: viewportHeight, alignment: .top)
         }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -132,6 +135,7 @@ private struct StepRow: View {
                     .frFont(.meta)
                     .foregroundStyle(Color.frTextSecondary)
             }
+            .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
         .frame(minHeight: FRMetrics.rowHeight)
