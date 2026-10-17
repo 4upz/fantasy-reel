@@ -13,3 +13,8 @@ FR_URL_SCHEME = fantasyreel
 // The public website. Shared links on these hosts open the matching app screen.
 // xcconfig treats "//" as a comment, hence the "$()" in the middle of URLs.
 FR_SITE_URL = https:/$()/fantasyreel.com
+
+// Capabilities: Sign in with Apple. A free personal team can't sign this
+// capability for a device; set `CODE_SIGN_ENTITLEMENTS =` in Local.xcconfig to
+// build without it (the Apple button then fails with an error, nothing else).
+CODE_SIGN_ENTITLEMENTS = Config/FantasyReel.entitlements

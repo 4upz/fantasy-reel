@@ -4,11 +4,13 @@ import SwiftUI
 enum AuthRoute: Hashable {
     case logIn
     case signUp
-    case resetPassword
+    /// Pre-filled with whatever the person typed on Log In.
+    case resetPassword(email: String = "")
 }
 
 /// The signed-out experience (F-01, F-02): Welcome, then Log in / Sign up.
 struct AuthFlowView: View {
+    @Environment(SessionStore.self) private var session
     @State private var path: [AuthRoute] = []
 
     var body: some View {
@@ -18,25 +20,16 @@ struct AuthFlowView: View {
                     switch route {
                     case .logIn: LogInView()
                     case .signUp: SignUpView()
-                    case .resetPassword: ResetPasswordView()
+                    case .resetPassword(let email): ResetPasswordView(initialEmail: email)
                     }
                 }
         }
-    }
-}
-
-/// Create an account (F-02): display name, email, password ≥ 8 + confirm,
-/// providers, legal notice, CAPTCHA, check-your-email state.
-struct SignUpView: View {
-    var body: some View {
-        FeaturePlaceholderView(title: "Sign Up", requirements: "F-02, N-03", systemImage: "person.badge.plus", showsHeader: false)
-    }
-}
-
-/// Request a reset link (non-enumerating), and choose a new password from it (F-02).
-struct ResetPasswordView: View {
-    var body: some View {
-        FeaturePlaceholderView(title: "Reset Password", requirements: "F-02", systemImage: "key", showsHeader: false)
+        // A link that couldn't sign in lands where the person can act on it:
+        // Log In, or Reset Password to send a fresh reset link.
+        .task(id: session.authLinkNotice?.id) {
+            guard let notice = session.authLinkNotice else { return }
+            path = [notice.isRecovery ? .resetPassword() : .logIn]
+        }
     }
 }
 

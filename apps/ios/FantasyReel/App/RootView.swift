@@ -18,14 +18,26 @@ struct RootView: View {
                 AuthFlowView()
                     .transition(.opacity)
             case .signedIn(let account):
-                SignedInRootView(account: account, environment: environment)
-                    // A new account gets a brand-new tree: no cache, stack or
-                    // selection from the previous account survives (N-02, N-05).
-                    .id(account.id)
-                    .transition(.opacity)
+                if session.isRecoveringPassword {
+                    // A reset link signed in: choosing the new password comes
+                    // first and can't be swiped away (F-02).
+                    ChooseNewPasswordView()
+                        .transition(.opacity)
+                } else if session.showsAppleRelayNotice {
+                    AppleRelayNoticeView()
+                        .transition(.opacity)
+                } else {
+                    SignedInRootView(account: account, environment: environment)
+                        // A new account gets a brand-new tree: no cache, stack or
+                        // selection from the previous account survives (N-02, N-05).
+                        .id(account.id)
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.default, value: session.state)
+        .animation(.default, value: session.isRecoveringPassword)
+        .animation(.default, value: session.showsAppleRelayNotice)
         .task { session.start() }
         .onOpenURL { url in handle(url) }
     }

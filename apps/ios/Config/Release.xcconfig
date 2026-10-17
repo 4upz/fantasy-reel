@@ -7,4 +7,9 @@
 SUPABASE_URL = https:/$()/YOUR-PROJECT.supabase.co
 SUPABASE_ANON_KEY = REPLACE_WITH_PRODUCTION_ANON_KEY
 
+// The public Turnstile site key (the web's NEXT_PUBLIC_TURNSTILE_SITE_KEY).
+// Production Supabase rejects password sign-in, sign-up, reset and resend
+// without a security-check token (requirements N-03).
+TURNSTILE_SITE_KEY = REPLACE_WITH_TURNSTILE_SITE_KEY
+
 #include? "Local.xcconfig"

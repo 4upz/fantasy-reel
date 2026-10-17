@@ -24,8 +24,12 @@ final class SessionStore {
     /// A link that arrived while signed out (an invitation, a league). Replayed
     /// once the user signs in, then cleared (N-02).
     var pendingDeepLink: DeepLink?
-    /// The latest failure from an incoming auth link, for the sign-in screen to show.
-    var authLinkError: String?
+    /// Why the latest incoming auth link didn't sign in, for the signed-out
+    /// screens to show. Cleared by the next successful sign-in.
+    var authLinkNotice: AuthLinkNotice?
+    /// Sign in with Apple just created a new account behind Hide My Email; the
+    /// person may already play under another sign-in method (L-01).
+    var showsAppleRelayNotice = false
 
     private let auth: AuthService
     private var listener: Task<Void, Never>?
@@ -67,10 +71,12 @@ final class SessionStore {
         case .signedOut:
             state = .signedOut
             isRecoveringPassword = false
+            showsAppleRelayNotice = false
         }
     }
 
     private func setSignedIn(_ account: AuthService.Account) {
+        authLinkNotice = nil
         // Avoid rebuilding the signed-in tree on a token refresh for the same user.
         if self.account != account {
             state = .signedIn(account)
@@ -115,29 +121,38 @@ final class SessionStore {
         }
     }
 
+    /// Sign in with Apple, from a native authorization (L-01).
+    func signInWithApple(idToken: String, nonce: String, fullName: String?) async throws(APIError) {
+        let result = try await auth.signInWithApple(idToken: idToken, nonce: nonce, fullName: fullName)
+        showsAppleRelayNotice = result.isNewRelayAccount
+        setSignedIn(result.account)
+    }
+
     func signOut() async {
         await auth.signOut()
         pendingDeepLink = nil
         isRecoveringPassword = false
+        showsAppleRelayNotice = false
         state = .signedOut
     }
 
     /// Handles `fantasyreel://auth/callback?...` from an email link or OAuth.
     func handleAuthCallback(_ url: URL) async {
+        let isRecovery = AppConfiguration.isRecoveryCallback(url)
         do {
             let account = try await auth.completeSignIn(from: url)
-            authLinkError = nil
-            if AppConfiguration.isRecoveryCallback(url) {
+            if isRecovery {
                 isRecoveringPassword = true
             }
             setSignedIn(account)
         } catch {
-            // A link requested on another device has no PKCE verifier here, but a
-            // confirmation link still confirmed the email server-side. Say that
-            // instead of reporting a bare failure (F-02). The Auth feature maps
-            // specific cases (expired, already used) to the web's exact notices.
+            // Already signed in (a stale or duplicate link): nothing to report.
             guard account == nil else { return }
-            authLinkError = "That link couldn't sign you in on this iPhone. If it was a confirmation link, your email is confirmed. Sign in to continue."
+            // A link requested on another device has no PKCE verifier here, but
+            // a confirmation link still confirmed the email server-side. Say
+            // that instead of reporting a bare failure (F-02).
+            let failure = AuthLinkFailure.classify(url, exchangeErrorCode: error.serverCode)
+            authLinkNotice = AuthLinkNotice(message: failure.message(isRecovery: isRecovery), isRecovery: isRecovery)
         }
     }
 
@@ -146,4 +161,12 @@ final class SessionStore {
         defer { pendingDeepLink = nil }
         return pendingDeepLink
     }
+}
+
+/// A signed-out notice about an auth link. Recovery notices open on the reset
+/// screen, where the person can send a fresh link; the rest on Log In.
+struct AuthLinkNotice: Equatable, Identifiable {
+    let id = UUID()
+    let message: String
+    let isRecovery: Bool
 }

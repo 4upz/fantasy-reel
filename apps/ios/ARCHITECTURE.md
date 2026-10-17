@@ -26,8 +26,8 @@ apps/ios/
 │                                 group: drop a .swift file into FantasyReel/ and it is
 │                                 compiled. Feature work never needs to edit the project.
 ├── Config/                       xcconfigs (Supabase URL/key per build) and Info.plist.
-│                                 No entitlements yet (Universal Links and Sign in with
-│                                 Apple will add one). Local overrides go in
+│                                 FantasyReel.entitlements (Sign in with Apple; Universal
+│                                 Links will join it). Local overrides go in
 │                                 Config/Local.xcconfig (gitignored).
 ├── FantasyReel/                  The app target: everything SwiftUI
 │   ├── App/                      @main, AppEnvironment (dependency container), RootView
@@ -114,9 +114,15 @@ initializer so the shell keeps compiling.
   the `LeagueRoute` and `MenuRoute` enums; add a case for a new screen.
 - Deep links (`DeepLink.parse`) arrive through `onOpenURL`; signed-out links are held
   by `SessionStore.pendingDeepLink` and replayed after sign-in.
-- **Password recovery:** `SessionStore.isRecoveringPassword` is set when a reset link
-  signs the user in, but nothing reads it yet. The Auth thread owns showing a
-  non-dismissible "Choose a new password" screen from `RootView` while it is true.
+- **Password recovery:** while `SessionStore.isRecoveringPassword` is true (a reset
+  link signed the user in), `RootView` shows `ChooseNewPasswordView` in place of the
+  app; saving a password or signing out ends it. `showsAppleRelayNotice` works the
+  same way for a new Hide My Email account (L-01).
+- **Auth wording and CAPTCHA:** `AuthService` returns the web's sentences
+  (`AuthMessages`) with the Auth error code kept in `serverCode`. Any form that
+  calls a CAPTCHA-protected endpoint (password sign-in, sign-up, reset, resend,
+  reauthentication) owns a `SecurityCheck`, shows `SecurityCheckView`, checks
+  `isReady` on submit and sends `take()` as the token.
 
 ## Layout rules from the design review
 
