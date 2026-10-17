@@ -52,6 +52,12 @@ struct RootView: View {
             Task { await session.handleAuthCallback(callbackURL) }
             return
         }
+        // How to Play is public, so signed out it opens now, without
+        // replacing a link held for after sign-in (an invitation).
+        if link == .help, session.state == .signedOut {
+            session.publicHelpRequest = UUID()
+            return
+        }
         // Signed-in routing happens in SignedInRootView, which observes this.
         session.pendingDeepLink = link
     }

@@ -80,8 +80,13 @@ Deno.serve(async (req) => {
 
     log.info('Account deleted', { user_id: user.id })
 
+    // The Apple revoke is best effort and can take seconds, so the response
+    // doesn't wait for it when the runtime can finish it afterwards.
+    const revoke = revokeApple(user.id, apple_authorization_code)
+    const runtime = globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }
+    runtime.EdgeRuntime?.waitUntil?.(revoke)
     await removeUploadedPhotos(serviceClient, user.id, (teams ?? []).map((t: { id: string }) => t.id))
-    await revokeApple(user.id, apple_authorization_code)
+    if (!runtime.EdgeRuntime?.waitUntil) await revoke
 
     return jsonResponse({ deleted: true })
   } catch (error) {
@@ -116,12 +121,10 @@ async function revokeApple(userId: string, code: unknown): Promise<void> {
     log.warn('Apple authorization not revoked: Apple secrets are not configured', { user_id: userId })
     return
   }
-  const result = await revokeAppleAuthorization(code, config)
-  if (result === 'revoked') {
-    log.info('Apple authorization revoked', { user_id: userId })
-  } else {
-    log.error('Apple authorization revoke failed', { user_id: userId })
-  }
+  const result = await revokeAppleAuthorization(code, config, fetch, (failure) => {
+    log.error('Apple authorization revoke failed', { user_id: userId, ...failure })
+  })
+  if (result === 'revoked') log.info('Apple authorization revoked', { user_id: userId })
 }
 
 /**
@@ -138,11 +141,11 @@ async function removeUploadedPhotos(
     ...teamIds.map((id): [string, string] => ['team-avatars', id]),
   ]
 
-  for (const [bucket, folder] of folders) {
+  await Promise.all(folders.map(async ([bucket, folder]) => {
     try {
       const { data: files, error: listError } = await serviceClient.storage.from(bucket).list(folder)
       if (listError) throw listError
-      if (!files || files.length === 0) continue
+      if (!files || files.length === 0) return
       const { error: removeError } = await serviceClient.storage
         .from(bucket)
         .remove(files.map((file: { name: string }) => `${folder}/${file.name}`))
@@ -150,5 +153,5 @@ async function removeUploadedPhotos(
     } catch (error) {
       log.error('Failed to remove uploaded photos', { user_id: userId, bucket, folder, error: serializeError(error) })
     }
-  }
+  }))
 }

@@ -1,19 +1,10 @@
 import SwiftUI
-import UIKit
 
 /// How to add the Fantasy Reel Discord bot (F-17, web `DiscordBotGuide`): the
 /// install link, three setup steps and a few commands. The wording is the
 /// web's. Each caller supplies its own heading.
-///
-/// Signed in, step 2 links to Account to connect Discord. Pass `leagueLink`
-/// to show that league's link, with Copy, in step 3.
 struct DiscordBotGuide: View {
-    var leagueLink: URL?
-    /// Whether step 2 can push Account (inside the menu sheet's stack).
-    var linksToAccount = false
-
     @Environment(AppEnvironment.self) private var environment
-    @State private var copied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -44,49 +35,37 @@ struct DiscordBotGuide: View {
                     Text("You need the Manage Server permission on that Discord server.")
                 }
                 GuideStep(number: 2, title: "Connect your Discord account") {
-                    if linksToAccount {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Connect Discord in Account so the bot knows which manager you are.")
-                            NavigationLink("Open Account", value: MenuRoute.account)
-                                .frFont(.label)
-                                .frame(minHeight: FRMetrics.minTapTarget)
-                        }
-                    } else {
-                        Text("Connect Discord in Account so the bot knows which manager you are.")
-                    }
+                    Text("Connect Discord in Account so the bot knows which manager you are.")
                 }
                 GuideStep(number: 3, title: "Link a channel to your league", isLast: true) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(stepThree)
-                        if let leagueLink {
-                            leagueLinkRow(leagueLink)
-                        }
-                    }
+                    Text(stepThree)
                 }
             }
             .padding(.vertical, 4)
             .background(Color.frSurface, in: RoundedRectangle(cornerRadius: FRMetrics.cardRadius, style: .continuous))
 
             VStack(alignment: .leading, spacing: 8) {
-                SectionHeader("Commands to try")
+                Text("Commands to try")
+                    .frFont(.rowTitle)
+                    .foregroundStyle(Color.frText)
+                    .padding(.horizontal, 4)
+                    .accessibilityAddTraits(.isHeader)
                 FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     ForEach(Self.commands, id: \.name) { command in
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(command.name)
                                 .font(.system(.subheadline, design: .monospaced).weight(.semibold))
                                 .foregroundStyle(Color.frGold)
                             Text(command.description)
-                                .frFont(.body)
+                                .frFont(.bodySmall)
                                 .foregroundStyle(Color.frTextSecondary)
-                            Spacer(minLength: 0)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, FRMetrics.rowPadding)
-                        .padding(.vertical, 12)
-                        .frame(minHeight: 48)
+                        .padding(.vertical, 10)
                         .accessibilityElement(children: .combine)
                     }
                 }
-                GroupFootnote("Type / in Discord to see every command.")
             }
         }
     }
@@ -105,27 +84,6 @@ struct DiscordBotGuide: View {
         code.font = .system(.subheadline, design: .monospaced).weight(.semibold)
         code.foregroundColor = .frText
         return code
-    }
-
-    private func leagueLinkRow(_ link: URL) -> some View {
-        HStack(spacing: 8) {
-            Text(link.absoluteString)
-                .font(.system(.footnote, design: .monospaced))
-                .foregroundStyle(Color.frText)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button(copied ? "Copied" : "Copy") {
-                UIPasteboard.general.url = link
-                copied = true
-                Announcer.announce("League link copied.")
-            }
-            .buttonStyle(.fr(.secondary, size: .compact, fullWidth: false))
-        }
-        .padding(.leading, 12)
-        .padding(.trailing, 6)
-        .padding(.vertical, 6)
-        .background(Color.frElevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     /// Discord's brand blurple, for its own button only.
@@ -191,7 +149,7 @@ struct DiscordBotGuideScreen: View {
                     .foregroundStyle(Color.frTextSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 4)
-                DiscordBotGuide(linksToAccount: true)
+                DiscordBotGuide()
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 32)

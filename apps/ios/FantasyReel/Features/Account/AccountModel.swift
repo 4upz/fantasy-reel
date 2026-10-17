@@ -33,11 +33,14 @@ final class AccountModel {
         self.profiles = profiles
     }
 
-    /// Reads the sign-in methods and the email preference together.
-    func load() async {
+    /// Reads the sign-in methods and the email preference together. Coming
+    /// back to Account doesn't re-read what is already shown; pull to refresh
+    /// passes `force`.
+    func load(force: Bool = false) async {
+        if !force, methods.value != nil, seasonRecaps != nil { return }
         if methods.value == nil { methods = .loading }
-        async let methodsResult = loadMethods()
-        async let recapsResult = loadRecaps()
+        async let methodsResult: Void = loadMethods()
+        async let recapsResult: Void = loadRecaps()
         _ = await (methodsResult, recapsResult)
     }
 
@@ -63,6 +66,7 @@ final class AccountModel {
 
     /// Flips the switch at once and puts it back if the save fails.
     func setSeasonRecaps(_ enabled: Bool) {
+        guard !recaps.isRunning else { return }
         let previous = seasonRecaps
         seasonRecaps = enabled
         recaps.run { [self] in
@@ -78,14 +82,19 @@ final class AccountModel {
     // MARK: Photo
 
     /// Uploads over the one stored photo, saves its URL, then clears any older
-    /// files. If saving the URL fails the old photo stays on the profile.
+    /// files. The file is replaced before the URL is saved (as on the web), so
+    /// a failed save is retried once before it's reported.
     func upload(_ image: AvatarImage.Prepared) {
         photo.run { [self] in
             let url = try await storage.upload(image, to: .profiles, folder: userID.rawValue)
-            try await account.updateAvatarURL(url, for: userID)
+            do {
+                try await account.updateAvatarURL(url, for: userID)
+            } catch {
+                try await account.updateAvatarURL(url, for: userID)
+            }
             profiles.apply(avatarURL: url)
             Announcer.announce("Profile photo updated.")
-            await storage.removeFiles(in: .profiles, folder: userID.rawValue, keepCurrent: true)
+            cleanUpPhotos(keepCurrent: true)
         }
     }
 
@@ -94,8 +103,14 @@ final class AccountModel {
             try await account.updateAvatarURL(nil, for: userID)
             profiles.apply(avatarURL: nil)
             Announcer.announce("Profile photo removed.")
-            await storage.removeFiles(in: .profiles, folder: userID.rawValue, keepCurrent: false)
+            cleanUpPhotos(keepCurrent: false)
         }
+    }
+
+    /// Clears files older uploads left behind, without holding the spinner.
+    private func cleanUpPhotos(keepCurrent: Bool) {
+        let (storage, folder) = (storage, userID.rawValue)
+        Task { await storage.removeFiles(in: .profiles, folder: folder, keepCurrent: keepCurrent) }
     }
 
     /// A pick that never reached the server (unreadable, too large).

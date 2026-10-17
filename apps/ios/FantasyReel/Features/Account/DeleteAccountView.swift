@@ -59,13 +59,15 @@ struct DeleteAccountView: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(delete.isRunning ? "Deleting…" : "Delete", role: .destructive, action: submit)
                         .fontWeight(.semibold)
-                        .tint(Color.frError)
+                        .buttonStyle(.glassProminent)
+                        .tint(Color.frCrimson)
                         .disabled(!isConfirmed || delete.isRunning)
                         .accessibilityHint(isConfirmed ? "Permanently deletes your account." : "Type DELETE to enable.")
                 }
             }
         }
         .announcesError(delete.errorMessage ?? signInAgain.errorMessage)
+        .reportsUnsavedInput(!confirmation.isEmpty)
         .interactiveDismissDisabled(delete.isRunning)
         .navigationBarBackButtonHidden(delete.isRunning)
     }
@@ -77,49 +79,57 @@ struct DeleteAccountView: View {
     // MARK: Form
 
     private var form: some View {
-        VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("This permanently deletes your account, profile and photo. It can't be undone.")
+                .frFont(.body)
+                .foregroundStyle(Color.frText)
+                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(Self.consequences.enumerated()), id: \.offset) { index, item in
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: item.systemImage)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(Color.frTextSecondary)
+                                .frame(width: 24)
+                                .accessibilityHidden(true)
+                            Text(item.text)
+                                .frFont(.bodySmall)
+                                .foregroundStyle(Color.frText)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, FRMetrics.rowPadding)
+                        .padding(.vertical, 12)
+                        .overlay(alignment: .top) {
+                            if index > 0 {
+                                Rectangle()
+                                    .fill(Color.frSeparator)
+                                    .frame(height: 0.5)
+                                    .padding(.leading, 52)
+                            }
+                        }
+                    }
+                }
+                .background(Color.frNeutralFill, in: RoundedRectangle(cornerRadius: FRMetrics.cardRadius, style: .continuous))
+                .accessibilityElement(children: .combine)
+                GroupFootnote("If you're in a draft that's underway, finish it first.")
+            }
             if case .liveDraft(let leagues) = blocker {
-                InlineBanner(
-                    tone: .error,
-                    title: Self.liveDraftTitle(leagues),
-                    message: "Come back once the draft ends. Nothing has been deleted."
-                )
+                InlineBanner(tone: .error, title: Self.liveDraftTitle(leagues))
             }
             if let message = delete.errorMessage {
                 InlineBanner(tone: .error, title: message)
             }
-            InlineBanner(
-                tone: .warning,
-                title: "This permanently deletes your account, profile and photo. It can't be undone."
-            )
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(Self.consequences, id: \.self) { line in
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            Text(verbatim: "•")
-                                .foregroundStyle(Color.frTextMuted)
-                                .accessibilityHidden(true)
-                            Text(line)
-                                .frFont(.body)
-                                .foregroundStyle(Color.frText)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                }
-                .padding(FRMetrics.rowPadding)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.frSurface, in: RoundedRectangle(cornerRadius: FRMetrics.cardRadius, style: .continuous))
-                .accessibilityElement(children: .combine)
-                GroupFootnote("If you're in a draft that's underway, finish it first.")
-            }
             VStack(alignment: .leading, spacing: 8) {
                 Text("Type DELETE to confirm")
-                    .frFont(.label)
+                    .frFont(.meta)
                     .foregroundStyle(Color.frTextSecondary)
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, FRMetrics.rowPadding)
                     .accessibilityHidden(true)
                 TextField("DELETE", text: $confirmation)
-                    .font(.system(.body, design: .monospaced))
+                    .font(.system(.body, design: .monospaced).weight(.semibold))
+                    .tracking(2)
                     .foregroundStyle(Color.frText)
                     .textInputAutocapitalization(.characters)
                     .autocorrectionDisabled()
@@ -128,7 +138,11 @@ struct DeleteAccountView: View {
                     .onSubmit(submit)
                     .padding(.horizontal, FRMetrics.rowPadding)
                     .frame(minHeight: 50)
-                    .background(Color.frSurface, in: RoundedRectangle(cornerRadius: FRMetrics.cardRadius, style: .continuous))
+                    .background(Color.frNeutralFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(isFocused ? Color.frGold : .clear, lineWidth: 2)
+                    }
                     .disabled(delete.isRunning)
                     .accessibilityLabel("Type DELETE to confirm")
                 GroupFootnote("The Delete button stays unavailable until you type DELETE exactly.")
@@ -136,11 +150,16 @@ struct DeleteAccountView: View {
         }
     }
 
+    struct Consequence: Hashable {
+        let systemImage: String
+        let text: String
+    }
+
     static let consequences = [
-        "Leagues you run pass to their longest-standing member. A league nobody else has joined is deleted.",
-        "You're removed from leagues that haven't drafted yet.",
-        "In active and finished seasons your team and roster stay, shown as “Former member”, so trades and counterpicks involving it still hold. A season in progress stops ranking your team; finished seasons keep their results.",
-        "Your pending bids and trade offers are cancelled.",
+        Consequence(systemImage: "crown", text: "Leagues you run pass to their longest-standing member. A league nobody else has joined is deleted."),
+        Consequence(systemImage: "person.badge.minus", text: "You're removed from leagues that haven't drafted yet."),
+        Consequence(systemImage: "person.2", text: "In active and finished seasons your team and roster stay, shown as “Former member”, so trades and counterpicks involving it still hold. A season in progress stops ranking your team; finished seasons keep their results."),
+        Consequence(systemImage: "xmark.circle", text: "Your pending bids and trade offers are cancelled."),
     ]
 
     static func liveDraftTitle(_ leagues: [String]) -> String {
@@ -167,6 +186,8 @@ struct DeleteAccountView: View {
                 .buttonStyle(.fr(.primary, isLoading: signInAgain.isRunning))
                 .disabled(signInAgain.isRunning)
                 GroupFootnote("You'll be signed out first. Nothing has been deleted.")
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
             }
         }
     }
@@ -182,7 +203,19 @@ struct DeleteAccountView: View {
             case .cancelled: return
             case .code(let code): appleCode = code
             }
-            switch try await environment.account.deleteAccount(appleAuthorizationCode: appleCode) {
+            let outcome: AccountDeletionOutcome
+            do throws(APIError) {
+                outcome = try await environment.account.deleteAccount(appleAuthorizationCode: appleCode)
+            } catch {
+                // The server may have deleted the account before the answer
+                // was lost; a retry would then fail as signed out.
+                if error.isUncertainOutcome || error.status == 401, await session.accountNoLongerExists() {
+                    outcome = .deleted
+                } else {
+                    throw error
+                }
+            }
+            switch outcome {
             case .deleted:
                 Announcer.announce("Your account has been deleted.")
                 await session.finishAccountDeletion()

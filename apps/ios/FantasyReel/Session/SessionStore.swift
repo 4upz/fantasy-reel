@@ -32,9 +32,13 @@ final class SessionStore {
     /// person may already play under another sign-in method (L-01).
     var showsAppleRelayNotice = false
     /// Set when the person signs out to sign in again before deleting their
-    /// account (L-02): the next sign-in opens Account. Survives the sign-out,
-    /// unlike `pendingDeepLink`.
-    var opensAccountAfterSignIn = false
+    /// account (L-02): the next sign-in to that same account opens Account.
+    /// Survives the sign-out, unlike `pendingDeepLink`; holds the user ID so
+    /// someone else signing in on the device isn't sent there.
+    var opensAccountAfterSignIn: UserID?
+    /// A How to Play link opened while signed out; the sign-in screens show
+    /// the guide over whatever form is open.
+    var publicHelpRequest: UUID?
     #if DEBUG
     /// Screenshots and previews: returned by `signInMethods()` instead of
     /// asking the server.
@@ -110,9 +114,9 @@ final class SessionStore {
         if authLinkNotice != nil { authLinkNotice = nil }
         // Avoid rebuilding the signed-in tree on a token refresh for the same user.
         if self.account != account {
-            if opensAccountAfterSignIn {
-                opensAccountAfterSignIn = false
-                pendingDeepLink = .settings
+            if let returning = opensAccountAfterSignIn {
+                opensAccountAfterSignIn = nil
+                if returning == account.id, pendingDeepLink == nil { pendingDeepLink = .settings }
             }
             state = .signedIn(account)
         }

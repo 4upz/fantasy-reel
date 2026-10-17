@@ -14,10 +14,15 @@ import Observation
 final class InboxStore {
     private(set) var notifications: [AppNotification] = []
     private(set) var loadError: String?
+    /// A mark-read that failed; separate so it doesn't read as a failed load.
+    private(set) var markError: String?
     private(set) var hasLoaded = false
 
     private let userID: UserID
     private let repository: any NotificationRepository
+    /// Marked here, kept so a refresh that started before the mark can't
+    /// bring the unread dot back.
+    private var markedRead: [NotificationID: Date] = [:]
 
     init(userID: UserID, repository: any NotificationRepository) {
         self.userID = userID
@@ -39,7 +44,11 @@ final class InboxStore {
 
     func refresh() async {
         do {
-            notifications = try await repository.fetchLatest(for: userID)
+            var latest = try await repository.fetchLatest(for: userID)
+            for index in latest.indices where latest[index].readAt == nil {
+                latest[index].readAt = markedRead[latest[index].id]
+            }
+            notifications = latest
             loadError = nil
         } catch {
             loadError = error.userMessage
@@ -52,22 +61,35 @@ final class InboxStore {
         guard let index = notifications.firstIndex(where: { $0.id == id }),
               notifications[index].readAt == nil
         else { return }
+        let now = Date()
         do {
-            try await repository.markRead([id], at: Date())
-            await refresh()
+            try await repository.markRead([id], at: now)
+            markLocally([id], at: now)
         } catch {
-            loadError = error.userMessage
+            markError = error.userMessage
         }
     }
 
     /// Marks every loaded unread notification read.
     func markAllRead() async {
         let unread = notifications.filter { $0.readAt == nil }.map(\.id)
+        guard !unread.isEmpty else { return }
+        let now = Date()
         do {
-            try await repository.markRead(unread, at: Date())
-            await refresh()
+            try await repository.markRead(unread, at: now)
+            markLocally(unread, at: now)
         } catch {
-            loadError = error.userMessage
+            markError = error.userMessage
+        }
+    }
+
+    /// Updates in place; the next open re-reads the inbox anyway.
+    private func markLocally(_ ids: [NotificationID], at date: Date) {
+        markError = nil
+        let marked = Set(ids)
+        for id in marked { markedRead[id] = date }
+        for index in notifications.indices where marked.contains(notifications[index].id) {
+            notifications[index].readAt = date
         }
     }
 }

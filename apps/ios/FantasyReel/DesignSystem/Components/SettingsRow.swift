@@ -18,7 +18,7 @@ struct SettingsRow<Trailing: View>: View {
 
     enum Role {
         case standard
-        /// Log Out, Delete Account: error-colored label.
+        /// Log Out, Delete Account: crimson label.
         case destructive
     }
 
@@ -26,6 +26,7 @@ struct SettingsRow<Trailing: View>: View {
     private let value: String?
     private let accessory: Accessory
     private let role: Role
+    private let leading: AnyView?
     private let trailing: Trailing
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -35,22 +36,25 @@ struct SettingsRow<Trailing: View>: View {
         value: String? = nil,
         accessory: Accessory = .chevron,
         role: Role = .standard,
+        leading: AnyView? = nil,
         @ViewBuilder trailing: () -> Trailing
     ) {
         self.title = title
         self.value = value
         self.accessory = accessory
         self.role = role
+        self.leading = leading
         self.trailing = trailing()
     }
 
     var body: some View {
         let stacked = dynamicTypeSize.isAccessibilitySize
         HStack(spacing: 12) {
+            leading
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .frFont(role == .destructive ? .rowTitle : .rowLabel)
-                    .foregroundStyle(role == .destructive ? Color.frError : Color.frText)
+                    .foregroundStyle(role == .destructive ? Color.frCrimsonText : Color.frText)
                 if stacked, let value {
                     Text(value)
                         .frFont(.body)
@@ -88,8 +92,8 @@ struct SettingsRow<Trailing: View>: View {
 }
 
 extension SettingsRow where Trailing == EmptyView {
-    init(_ title: String, value: String? = nil, accessory: Accessory = .chevron, role: Role = .standard) {
-        self.init(title, value: value, accessory: accessory, role: role) { EmptyView() }
+    init(_ title: String, value: String? = nil, accessory: Accessory = .chevron, role: Role = .standard, leading: AnyView? = nil) {
+        self.init(title, value: value, accessory: accessory, role: role, leading: leading) { EmptyView() }
     }
 }
 

@@ -64,7 +64,7 @@ struct NotificationsView: View {
             )
             .padding(.top, 24)
         } else {
-            if let error = inbox.loadError {
+            if let error = inbox.loadError ?? inbox.markError {
                 InlineBanner(tone: .error, title: error)
             }
             LazyVStack(spacing: 0) {
@@ -80,7 +80,7 @@ struct NotificationsView: View {
                             Rectangle()
                                 .fill(Color.frSeparator)
                                 .frame(height: 0.5)
-                                .padding(.leading, 64)
+                                .padding(.leading, 72)
                                 .accessibilityHidden(true)
                         }
                     }
@@ -110,8 +110,8 @@ struct NotificationsView: View {
 }
 
 /// One notification: unread dot, type icon, title, body, then league and time.
-/// Read rows are dimmed; unread ones also say "Unread" to VoiceOver, so the
-/// state never rests on color or weight alone.
+/// Unread rows have the gold dot and a bolder title, and say "Unread" to
+/// VoiceOver, so the state never rests on color or weight alone.
 private struct NotificationRow: View {
     let notification: AppNotification
     let leagueName: String?
@@ -120,11 +120,6 @@ private struct NotificationRow: View {
         let time = NotificationTime.describe(notification.createdAt)
         let style = NotificationStyle(notification.type)
         HStack(alignment: .top, spacing: 12) {
-            Circle()
-                .fill(notification.isUnread ? Color.frGold : .clear)
-                .frame(width: 8, height: 8)
-                .padding(.top, 16)
-                .accessibilityHidden(true)
             Image(systemName: style.systemImage)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(style.tone.foreground)
@@ -134,7 +129,7 @@ private struct NotificationRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(notification.title)
                     .frFont(notification.isUnread ? .rowTitle : .rowLabel)
-                    .foregroundStyle(notification.isUnread ? Color.frText : Color.frTextSecondary)
+                    .foregroundStyle(Color.frText)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(notification.body)
                     .frFont(.bodySmall)
@@ -142,16 +137,25 @@ private struct NotificationRow: View {
                     .lineLimit(3)
                 Text([leagueName, time.short].compactMap(\.self).joined(separator: " · "))
                     .frFont(.meta)
-                    .foregroundStyle(Color.frTextMuted)
-                    .lineLimit(1)
+                    .foregroundStyle(Color.frTextSecondary)
+                    .lineLimit(2)
                     .padding(.top, 2)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.leading, 8)
+        .padding(.leading, 24)
         .padding(.trailing, FRMetrics.rowPadding)
         .padding(.vertical, 12)
-        .opacity(notification.isUnread ? 1 : 0.8)
+        // The dot sits in the leading gutter, level with the icon's center.
+        .overlay(alignment: .topLeading) {
+            if notification.isUnread {
+                Circle()
+                    .fill(Color.frGold)
+                    .frame(width: 8, height: 8)
+                    .offset(x: 8, y: 26)
+                    .accessibilityHidden(true)
+            }
+        }
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText(spokenTime: time.spoken))
@@ -175,15 +179,17 @@ struct NotificationStyle {
 
     init(_ type: NotificationType) {
         switch type {
-        case .outbid: (systemImage, tone) = ("exclamationmark.triangle.fill", .warning)
-        case .bidWon: (systemImage, tone) = ("dollarsign", .success)
+        case .outbid: (systemImage, tone) = ("dollarsign", .error)
+        case .bidWon: (systemImage, tone) = ("checkmark", .success)
         case .bidLost: (systemImage, tone) = ("chart.line.downtrend.xyaxis", .error)
         case .pickupAvailable: (systemImage, tone) = ("gift.fill", .gold)
         case .seasonCompleted: (systemImage, tone) = ("trophy.fill", .gold)
         case .seasonStarted: (systemImage, tone) = ("movieclapper.fill", .gold)
         case .leagueOwnershipTransferred: (systemImage, tone) = ("crown.fill", .gold)
         case .tradeProposed, .tradeCountered, .tradeAccepted, .tradeRejected, .tradeCancelled,
-             .tradeCompleted, .tradeVetoed, .tradeReview, .unknown:
+             .tradeCompleted, .tradeVetoed, .tradeReview:
+            (systemImage, tone) = ("arrow.left.arrow.right", .gold)
+        case .unknown:
             (systemImage, tone) = ("bell.fill", .neutral)
         }
     }

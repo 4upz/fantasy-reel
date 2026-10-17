@@ -24,6 +24,7 @@ struct AccountView: View {
                 storage: environment.avatarStorage,
                 profiles: profiles
             ), email: account.email)
+            .id(account.id)
         }
     }
 }
@@ -43,7 +44,7 @@ private struct AccountContent: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
+            VStack(alignment: .leading, spacing: 16) {
                 ScreenHeader("Account")
                     .padding(.bottom, 4)
                 profileCard
@@ -61,7 +62,6 @@ private struct AccountContent: View {
                     .buttonStyle(.frRow)
                     .disabled(logOut.isRunning)
                 }
-                .padding(.top, FRMetrics.sectionSpacing)
                 VStack(alignment: .leading, spacing: 8) {
                     FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                         NavigationLink(value: MenuRoute.deleteAccount) {
@@ -86,7 +86,7 @@ private struct AccountContent: View {
         .task { await model.load() }
         .refreshable {
             async let profile: Void = profiles.refresh()
-            async let rest: Void = model.load()
+            async let rest: Void = model.load(force: true)
             _ = await (profile, rest)
         }
         .announcesError(model.photo.errorMessage)
@@ -125,23 +125,27 @@ private struct AccountContent: View {
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     Text(displayName)
-                        .frFont(.cardTitle)
+                        .frFont(.sectionTitle)
                         .foregroundStyle(Color.frText)
                         .lineLimit(2)
                     if let email {
                         Text(email)
-                            .frFont(.body)
+                            .frFont(.label)
                             .foregroundStyle(Color.frTextSecondary)
                             .lineLimit(1)
                             .truncationMode(.middle)
                     }
-                    Text("Contact Support to change email")
-                        .frFont(.meta)
-                        .foregroundStyle(Color.frTextMuted)
                 }
                 .accessibilityElement(children: .combine)
                 Spacer(minLength: 0)
             }
+            Link(destination: SupportLinks.emailChange) {
+                Text("Contact Support to change email")
+                    .frFont(.meta)
+                    .foregroundStyle(Color.frTextSecondary)
+                    .underline()
+            }
+            .frame(minHeight: FRMetrics.minTapTarget)
             if let message = model.photo.errorMessage {
                 InlineBanner(tone: .error, title: message)
             }
@@ -157,13 +161,10 @@ private struct AccountContent: View {
                 SettingsRow("Display name", value: profiles.profile?.displayName)
             }
             .buttonStyle(.frRow)
-            HStack(spacing: 12) {
-                Text("Appearance")
-                    .frFont(.rowLabel)
-                    .foregroundStyle(Color.frText)
-                Spacer(minLength: 8)
-                FRSegmentedControl("Appearance", selection: $appearance, options: AppearancePreference.allCases, track: .elevated, title: { $0.title })
-                    .frame(maxWidth: 220)
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) { appearanceLabel; Spacer(minLength: 8); appearancePicker.frame(maxWidth: 220) }
+                VStack(alignment: .leading, spacing: 8) { appearanceLabel; appearancePicker }
+                    .padding(.vertical, 12)
             }
             .padding(.horizontal, FRMetrics.rowPadding)
             .frame(minHeight: 50)
@@ -174,6 +175,17 @@ private struct AccountContent: View {
         }
     }
 
+    private var appearanceLabel: some View {
+        Text("Appearance")
+            .frFont(.rowLabel)
+            .foregroundStyle(Color.frText)
+            .fixedSize()
+    }
+
+    private var appearancePicker: some View {
+        FRSegmentedControl("Appearance", selection: $appearance, options: AppearancePreference.allCases, track: .elevated, title: { $0.title })
+    }
+
     // MARK: Connected accounts
 
     private var connectedAccounts: some View {
@@ -181,13 +193,14 @@ private struct AccountContent: View {
             SectionHeader("Connected accounts")
             switch model.methods {
             case .idle, .loading:
-                FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                FRRowGroup(separatorInset: Self.providerSeparatorInset) {
                     ForEach(AuthService.OAuthProvider.allCases, id: \.self) { provider in
-                        SettingsRow(provider.displayName, accessory: .none) {
+                        SettingsRow(provider.displayName, accessory: .none, leading: ProviderTile(provider: provider).erased) {
                             ProgressView().controlSize(.small)
                         }
                     }
                 }
+                .accessibilityElement(children: .combine)
                 .accessibilityLabel("Loading connected accounts")
             case .failed(let message):
                 ErrorStateView(title: "Couldn't load connected accounts", message: message, layout: .card) {
@@ -196,7 +209,7 @@ private struct AccountContent: View {
             case .empty:
                 EmptyView()
             case .loaded(let methods):
-                FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                FRRowGroup(separatorInset: Self.providerSeparatorInset) {
                     ForEach(AuthService.OAuthProvider.allCases, id: \.self) { provider in
                         providerRow(provider, methods: methods)
                     }
@@ -209,8 +222,10 @@ private struct AccountContent: View {
                 }
             }
         }
-        .padding(.top, FRMetrics.sectionSpacing)
     }
+
+    /// Row padding, the 30pt logo tile and its 12pt gap.
+    private static let providerSeparatorInset: CGFloat = 58
 
     @ViewBuilder
     private func providerRow(_ provider: AuthService.OAuthProvider, methods: SignInMethods) -> some View {
@@ -224,7 +239,7 @@ private struct AccountContent: View {
                 }
                 .disabled(!methods.canDisconnectProvider)
             } label: {
-                SettingsRow(provider.displayName, value: detail, accessory: .none) {
+                SettingsRow(provider.displayName, value: detail, accessory: .none, leading: ProviderTile(provider: provider).erased) {
                     Image(systemName: "checkmark")
                         .foregroundStyle(Color.frSuccess)
                         .accessibilityLabel("Connected")
@@ -238,7 +253,7 @@ private struct AccountContent: View {
             Button {
                 connect(provider)
             } label: {
-                SettingsRow(provider.displayName, accessory: .none) {
+                SettingsRow(provider.displayName, accessory: .none, leading: ProviderTile(provider: provider).erased) {
                     Text("Connect")
                         .frFont(.control)
                         .foregroundStyle(Color.frGold)
@@ -298,16 +313,25 @@ private struct AccountContent: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader("Email")
             FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
-                Toggle(isOn: Binding(
-                    get: { model.seasonRecaps ?? false },
-                    set: { model.setSeasonRecaps($0) }
-                )) {
-                    Text("Season recaps")
-                        .frFont(.rowLabel)
-                        .foregroundStyle(Color.frText)
+                Group {
+                    if let enabled = model.seasonRecaps {
+                        Toggle(isOn: Binding(
+                            get: { enabled },
+                            set: { model.setSeasonRecaps($0) }
+                        )) {
+                            recapsLabel
+                        }
+                        .disabled(model.recaps.isRunning)
+                    } else {
+                        HStack {
+                            recapsLabel
+                            Spacer(minLength: 8)
+                            ProgressView().controlSize(.small)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityValue("Loading")
+                    }
                 }
-                .tint(Color.frGold)
-                .disabled(model.seasonRecaps == nil || model.recaps.isRunning)
                 .padding(.horizontal, FRMetrics.rowPadding)
                 .frame(minHeight: 50)
             }
@@ -316,7 +340,12 @@ private struct AccountContent: View {
             }
             GroupFootnote("Final standings when a season you played in ends. Emails about your invitations, bids and trades always arrive.")
         }
-        .padding(.top, FRMetrics.sectionSpacing)
+    }
+
+    private var recapsLabel: some View {
+        Text("Season recaps")
+            .frFont(.rowLabel)
+            .foregroundStyle(Color.frText)
     }
 
     // MARK: Help, legal, support
@@ -325,6 +354,10 @@ private struct AccountContent: View {
         FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
             NavigationLink(value: MenuRoute.howToPlay) {
                 SettingsRow("How to Play")
+            }
+            .buttonStyle(.frRow)
+            NavigationLink(value: MenuRoute.discordBot) {
+                SettingsRow("Discord Bot")
             }
             .buttonStyle(.frRow)
             Link(destination: SupportLinks.email) {
@@ -340,7 +373,6 @@ private struct AccountContent: View {
             }
             .buttonStyle(.frRow)
         }
-        .padding(.top, FRMetrics.sectionSpacing)
     }
 
     /// Data export is a support request until it is self-service (D-11).
@@ -363,4 +395,22 @@ private struct PendingDisconnect {
 extension SupportLinks {
     /// A prefilled request: data export goes through support (D-11).
     static let dataExport = URL(string: "mailto:support@fantasyreel.com?subject=Data%20export%20request")!
+    /// Email changes go through support, as on the web.
+    static let emailChange = URL(string: "mailto:support@fantasyreel.com?subject=Email%20change%20request")!
+}
+
+/// A provider's logo on a 30pt white tile, the same mark as its sign-in
+/// button, so the rows read as the buttons people signed in with.
+private struct ProviderTile: View {
+    let provider: AuthService.OAuthProvider
+
+    var body: some View {
+        provider.signInButtonProvider.logo(box: 20)
+            .frame(width: 30, height: 30)
+            .background(FRPalette.fixed(0xFFFFFF), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Color.frBorder, lineWidth: 0.5))
+            .accessibilityHidden(true)
+    }
+
+    var erased: AnyView { AnyView(self) }
 }

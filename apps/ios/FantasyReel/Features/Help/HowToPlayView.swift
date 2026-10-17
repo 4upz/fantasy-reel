@@ -238,7 +238,7 @@ struct HowToPlayView: View {
     private var discord: some View {
         GuideSection("Discord bot", systemImage: Topic.discord.systemImage) {
             Paragraph("Bring your league into your Discord server. The Fantasy Reel bot posts draft picks, bid results, trades, and score updates to the channel you choose, and answers commands like standings and rosters without leaving the chat.")
-            DiscordBotGuide(linksToAccount: !isPublic)
+            DiscordBotGuide()
         }
     }
 

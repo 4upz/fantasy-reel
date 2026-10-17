@@ -94,6 +94,14 @@ export async function appleClientSecret(config: AppleRevocationConfig, nowMs: nu
   return `${signingInput}.${base64Url(new Uint8Array(signature))}`
 }
 
+/** Why a revoke failed, for the log. */
+export interface AppleRevocationFailure {
+  stage: 'token' | 'revoke' | 'exception'
+  status?: number
+  apple_error?: string
+  error?: string
+}
+
 /**
  * Exchanges the authorization code for a refresh token and revokes it.
  * Never throws: the caller has already deleted the account, so a failure is
@@ -102,8 +110,22 @@ export async function appleClientSecret(config: AppleRevocationConfig, nowMs: nu
 export async function revokeAppleAuthorization(
   authorizationCode: string,
   config: AppleRevocationConfig,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  onFailure: (detail: AppleRevocationFailure) => void = () => {}
 ): Promise<AppleRevocationResult> {
+  // Apple's `error` (invalid_client, invalid_grant) names a misconfigured key
+  // or client ID; it holds no secret.
+  const fail = async (stage: AppleRevocationFailure['stage'], response?: Response) => {
+    let appleError: string | undefined
+    if (response) {
+      try {
+        const body = await response.json()
+        if (typeof body?.error === 'string') appleError = body.error
+      } catch { /* not JSON */ }
+    }
+    onFailure({ stage, status: response?.status, apple_error: appleError })
+    return 'failed' as const
+  }
   try {
     const clientSecret = await appleClientSecret(config)
     const tokenResponse = await fetchWithTimeout(
@@ -117,14 +139,14 @@ export async function revokeAppleAuthorization(
       APPLE_TIMEOUT_MS,
       fetchImpl
     )
-    if (!tokenResponse.ok) return 'failed'
+    if (!tokenResponse.ok) return await fail('token', tokenResponse)
     const tokens: { refresh_token?: unknown; access_token?: unknown } = await tokenResponse.json()
     const [token, hint] = typeof tokens.refresh_token === 'string'
       ? [tokens.refresh_token, 'refresh_token']
       : typeof tokens.access_token === 'string'
         ? [tokens.access_token, 'access_token']
         : [null, null]
-    if (!token || !hint) return 'failed'
+    if (!token || !hint) return await fail('token')
 
     const revokeResponse = await fetchWithTimeout(
       REVOKE_URL,
@@ -132,8 +154,9 @@ export async function revokeAppleAuthorization(
       APPLE_TIMEOUT_MS,
       fetchImpl
     )
-    return revokeResponse.ok ? 'revoked' : 'failed'
-  } catch {
+    return revokeResponse.ok ? 'revoked' : await fail('revoke', revokeResponse)
+  } catch (error) {
+    onFailure({ stage: 'exception', error: error instanceof Error ? error.name : 'unknown' })
     return 'failed'
   }
 }

@@ -48,12 +48,17 @@ struct AuthFlowView: View {
             navigation.path = notice.isRecovery ? [.logIn, .resetPassword()] : [.logIn]
         }
         // How to Play is public (the web's /how-to-play), so its link opens
-        // here without signing in. Every other link waits for sign-in.
-        .task(id: session.pendingDeepLink) {
+        // here without signing in, on top of any form in progress. Every
+        // other link waits for sign-in.
+        .task(id: session.publicHelpRequest) {
+            // A link held while the session was restoring arrives as pending.
             if session.pendingDeepLink == .help {
                 _ = session.consumePendingDeepLink()
-                navigation.path = [.howToPlay]
+            } else {
+                guard session.publicHelpRequest != nil else { return }
             }
+            session.publicHelpRequest = nil
+            if navigation.path.last != .howToPlay { navigation.path.append(.howToPlay) }
         }
     }
 }

@@ -49,6 +49,7 @@ struct ChangePasswordView: View {
         }
         .task { await load() }
         .announcesError(localError ?? save.errorMessage ?? sendLink.errorMessage)
+        .reportsUnsavedInput(!(current.isEmpty && password.isEmpty && confirmation.isEmpty) && !save.isRunning)
     }
 
     private func load() async {

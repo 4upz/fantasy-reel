@@ -77,7 +77,9 @@ public struct SupabaseAccountRepository: AccountRepository {
         do {
             try await client
                 .from("email_preferences")
-                .upsert(EmailPreferences(userID: userID, seasonRecapEmails: enabled), onConflict: "user_id")
+                // Minimal: members can't read `unsubscribe_token`, so asking
+                // for the row back (the default) is refused.
+                .upsert(EmailPreferences(userID: userID, seasonRecapEmails: enabled), onConflict: "user_id", returning: .minimal)
                 .execute()
         } catch {
             throw APIError.wrap(error)

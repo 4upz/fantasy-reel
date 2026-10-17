@@ -3,7 +3,7 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// An avatar with the gold camera badge (V2Account profile card) that opens a
+/// An avatar with the gold pencil badge (V2Account profile card) that opens a
 /// menu: Choose Photo, Choose File, and Remove Photo when there is one.
 /// Used for the profile photo and, by the team editor, for team photos, so
 /// both pick and prepare images the same way (F-03, F-10, N-09).
@@ -57,7 +57,7 @@ struct EditableAvatar: View {
                     Button("Remove Photo", systemImage: "trash", role: .destructive) { onRemove() }
                 }
             } label: {
-                Image(systemName: "camera.fill")
+                Image(systemName: "pencil")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.frGold)
                     .frame(width: 26, height: 26)
@@ -73,7 +73,7 @@ struct EditableAvatar: View {
             .accessibilityLabel("Change \(subject)")
             .accessibilityValue(busy ? "Updating" : "")
         }
-        .photosPicker(isPresented: $showsPhotoPicker, selection: $photoItem, matching: .images, preferredItemEncoding: .compatible)
+        .photosPicker(isPresented: $showsPhotoPicker, selection: $photoItem, matching: .images, preferredItemEncoding: .current)
         .fileImporter(isPresented: $showsFileImporter, allowedContentTypes: Self.fileTypes) { result in
             if case .success(let url) = result { prepare { try Self.readFile(url) } }
         }

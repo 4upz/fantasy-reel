@@ -54,10 +54,12 @@ struct EditDisplayNameView: View {
             }
         }
         .announcesError(localError ?? save.errorMessage)
-        .onAppear {
-            name = profiles.profile?.displayName ?? ""
-            isFocused = true
+        .reportsUnsavedInput(hasChanges && !save.isRunning)
+        // Fills in when the profile arrives, unless the person has typed.
+        .onChange(of: profiles.profile?.displayName, initial: true) { old, new in
+            if name.isEmpty || name == (old ?? "") { name = new ?? "" }
         }
+        .onAppear { isFocused = true }
     }
 
     private var hasChanges: Bool {

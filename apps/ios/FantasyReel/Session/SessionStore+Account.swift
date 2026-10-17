@@ -48,8 +48,9 @@ extension SessionStore {
     /// last 15 minutes. Signs out, says why on Log In, and opens Account after
     /// the next sign-in so the person can finish.
     func signInAgainToDeleteAccount() async {
+        let returning = account?.id
         await signOut()
-        opensAccountAfterSignIn = true
+        opensAccountAfterSignIn = returning
         authLinkNotice = AuthLinkNotice(
             title: "Sign in to continue",
             message: "Sign in again, then come back to Account to finish deleting your account. Nothing has been deleted.",
@@ -61,7 +62,19 @@ extension SessionStore {
     /// more, so only the local copy is cleared (Keychain session and Apple
     /// user ID), and the app returns to Welcome.
     func finishAccountDeletion() async {
-        opensAccountAfterSignIn = false
+        opensAccountAfterSignIn = nil
         await signOut()
+    }
+
+    /// After a delete whose answer was lost (a timeout, a dropped connection):
+    /// true when the server no longer knows this account, so the delete went
+    /// through. Any other answer, including no answer, is false.
+    func accountNoLongerExists() async -> Bool {
+        do {
+            _ = try await auth.signInMethods()
+            return false
+        } catch {
+            return ["user_not_found", "bad_jwt", "session_not_found"].contains(error.serverCode ?? "")
+        }
     }
 }
