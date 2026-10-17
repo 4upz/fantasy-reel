@@ -141,11 +141,13 @@ environment variable to a case name in the scheme's Run options.
   make sure the key's allowed hostnames include `fantasyreel.com` (the app's
   challenge page uses the website's origin). Release refuses to launch while
   the placeholder is there.
-- **Privacy policy for Apple sign-in.** Proposed wording, not yet approved:
-  in "Information we collect", *"Google, Discord or Apple sign-in shares basic
-  profile information with us, but not your password. If you use Apple's Hide
-  My Email, we receive a private address that forwards to you."*; in "Service
-  providers", *"Google, Discord and Apple process information when you use
-  their sign-in or connected features, under their own policies."* Separately,
-  the policy doesn't name Cloudflare Turnstile, which the website already uses
-  for its security check.
+- **Privacy policy for Apple sign-in and the security check.** Approved
+  wording (Arik, 2026-10-17): in "Information we collect", *"Google, Discord
+  or Apple sign-in shares basic profile information with us, but not your
+  password. If you use Apple's Hide My Email, we receive a private address
+  that forwards to you."*; in "Service providers", *"Google, Discord and Apple
+  process information when you use their sign-in or connected features, under
+  their own policies."* and *"Cloudflare Turnstile runs a security check when
+  you sign up, log in or reset your password, to block automated abuse.
+  Cloudflare processes technical information from your browser or device to
+  do this, under its own policy."*
