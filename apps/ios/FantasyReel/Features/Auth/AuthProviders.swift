@@ -59,6 +59,8 @@ struct AppleSignInButton: View {
         } catch let error as ASAuthorizationError where error.code == .canceled {
             // Closing Apple's sheet is not an error; any session stays as it was.
             return
+        } catch is CancellationError {
+            return
         } catch {
             throw AppleSignInError.failed
         }
@@ -89,11 +91,23 @@ private final class AppleAuthorizer: NSObject {
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self
         controller.presentationContextProvider = self
+        // Only one request at a time; settle any earlier one first.
+        finish(.failure(CancellationError()))
         self.controller = controller
-        return try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            controller.performRequests()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                controller.performRequests()
+            }
+        } onCancel: {
+            Task { @MainActor in self.cancel() }
         }
+    }
+
+    /// Closes Apple's sheet if it is still up and ends the wait.
+    func cancel() {
+        controller?.cancel()
+        finish(.failure(CancellationError()))
     }
 
     private func finish(_ result: Result<ASAuthorization, any Error>) {
@@ -118,7 +132,9 @@ extension AppleAuthorizer: @preconcurrency ASAuthorizationControllerPresentation
         let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows)
-        return windows.first(where: \.isKeyWindow) ?? windows.first ?? ASPresentationAnchor()
+        if let window = windows.first(where: \.isKeyWindow) ?? windows.first { return window }
+        // Not expected while a button on screen started the request.
+        preconditionFailure("Sign in with Apple needs a window to present from.")
     }
 }
 

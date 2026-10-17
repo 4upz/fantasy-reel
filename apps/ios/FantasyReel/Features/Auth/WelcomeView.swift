@@ -5,79 +5,75 @@ import SwiftUI
 /// no TMDb attribution; that goes on the screens that do.
 struct WelcomeView: View {
     @Environment(AppEnvironment.self) private var environment
-    /// The scroll view's visible height, so the content can fill it and pin
-    /// the actions to the bottom (V2Welcome's flex spacer) yet still scroll at
-    /// large text sizes.
-    @State private var viewportHeight: CGFloat = 0
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: FRMetrics.sectionSpacing) {
-                Image("Wordmark")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 44)
-                    .accessibilityLabel("Fantasy Reel")
-                    .padding(.top, 40)
+        // The visible height (inside the safe area), so the content can fill
+        // it and pin the actions to the bottom (V2Welcome's flex spacer) yet
+        // still scroll at large text sizes.
+        GeometryReader { viewport in
+            ScrollView {
+                VStack(spacing: FRMetrics.sectionSpacing) {
+                    Image("Wordmark")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 44)
+                        .accessibilityLabel("Fantasy Reel")
+                        .padding(.top, 40)
 
-                Text("Draft upcoming movies. Beat your friends on the Tomatometer.")
-                    .frFont(.pageTitle)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.frText)
-                    .accessibilityAddTraits(.isHeader)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8)
+                    Text("Draft upcoming movies. Beat your friends on the Tomatometer.")
+                        .frFont(.pageTitle)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.frText)
+                        .accessibilityAddTraits(.isHeader)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 8)
 
-                Text("A season-long fantasy league for the films you can't wait to see.")
-                    .frFont(.body)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.frTextSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
+                    Text("A season-long fantasy league for the films you can't wait to see.")
+                        .frFont(.body)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color.frTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 16)
 
-                FRRowGroup {
-                    StepRow(number: 1, title: "Draft movies before release", detail: "Snake draft this year's releases")
-                    StepRow(number: 2, title: "Score on the Tomatometer", detail: "Above 60% earns points, below loses")
-                    StepRow(number: 3, title: "Bid and trade all season", detail: "Spend your budget, swap with rivals")
+                    FRRowGroup {
+                        StepRow(number: 1, title: "Draft movies before release", detail: "Snake draft this year's releases")
+                        StepRow(number: 2, title: "Score on the Tomatometer", detail: "Above 60% earns points, below loses")
+                        StepRow(number: 3, title: "Bid and trade all season", detail: "Spend your budget, swap with rivals")
+                    }
+                    .padding(.top, 12)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel("How it plays")
+
+                    Spacer(minLength: 24)
+
+                    VStack(spacing: 12) {
+                        NavigationLink("Create Account", value: AuthRoute.signUp)
+                            .buttonStyle(.frPrimary)
+                        NavigationLink("Log In", value: AuthRoute.logIn)
+                            .buttonStyle(.frSecondary)
+                    }
+
+                    HStack(spacing: 8) {
+                        Link("Privacy", destination: LegalLinks.privacy(site: environment.configuration.siteURL))
+                            .padding(.horizontal, 12)
+                        Link("Terms", destination: LegalLinks.terms(site: environment.configuration.siteURL))
+                            .padding(.horizontal, 12)
+                        Link("Support", destination: SupportLinks.email)
+                            .padding(.horizontal, 12)
+                    }
+                    .frFont(.meta)
+                    .frame(minHeight: FRMetrics.minTapTarget)
+                    .padding(.top, 4)
                 }
-                .padding(.top, 12)
-                .accessibilityElement(children: .contain)
-                .accessibilityLabel("How it plays")
-
-                Spacer(minLength: 24)
-
-                VStack(spacing: 12) {
-                    NavigationLink("Create Account", value: AuthRoute.signUp)
-                        .buttonStyle(.frPrimary)
-                    NavigationLink("Log In", value: AuthRoute.logIn)
-                        .buttonStyle(.frSecondary)
-                }
-
-                HStack(spacing: 8) {
-                    Link("Privacy", destination: LegalLinks.privacy(site: environment.configuration.siteURL))
-                        .padding(.horizontal, 12)
-                    Link("Terms", destination: LegalLinks.terms(site: environment.configuration.siteURL))
-                        .padding(.horizontal, 12)
-                    Link("Support", destination: SupportLinks.email)
-                        .padding(.horizontal, 12)
-                }
-                .frFont(.meta)
-                .frame(minHeight: FRMetrics.minTapTarget)
-                .padding(.top, 4)
+                .padding(.horizontal, FRMetrics.pageMargin)
+                .padding(.bottom, 8)
+                // idealHeight too: the scroll view proposes no height, and the ideal
+                // stands in for it so the Spacer can expand to fill the viewport.
+                // Under that fixed proposal the VStack would squeeze its text to one
+                // line, so each Text above takes its full height (fixedSize).
+                .frame(minHeight: viewport.size.height, idealHeight: viewport.size.height, alignment: .top)
             }
-            .padding(.horizontal, FRMetrics.pageMargin)
-            .padding(.bottom, 8)
-            // idealHeight too: the scroll view proposes no height, and the ideal
-            // stands in for it so the Spacer can expand to fill the viewport.
-            // Under that fixed proposal the VStack would squeeze its text to one
-            // line, so each Text above takes its full height (fixedSize).
-            .frame(minHeight: viewportHeight, idealHeight: viewportHeight, alignment: .top)
-        }
-        .onScrollGeometryChange(for: CGFloat.self) { geometry in
-            geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom
-        } action: { _, height in
-            viewportHeight = max(0, height)
         }
         .background(alignment: .top) {
             WelcomeGlow()
