@@ -13,7 +13,7 @@ struct LeagueShellView: View {
     @Environment(LeagueDirectoryStore.self) private var directory
 
     var body: some View {
-        LeagueSeasonScope(selection: selection, repository: environment.teams) {
+        LeagueSeasonScope(selection: selection, environment: environment) {
             tabs
         }
         .environment(\.leagueSelection, selection)
@@ -25,22 +25,7 @@ struct LeagueShellView: View {
     }
 
     private var tabs: some View {
-        @Bindable var router = router
-        return TabView(selection: $router.selectedTab) {
-            ForEach(selection.tabs, id: \.self) { tab in
-                Tab(tab.title, systemImage: tab.systemImage, value: ShellTab.league(tab)) {
-                    LeagueTabStack(tab: tab)
-                }
-            }
-            Tab(value: ShellTab.search, role: .search) {
-                NavigationStack(path: $router.searchPath) {
-                    MovieSearchView()
-                        .navigationDestination(for: LeagueRoute.self) { route in
-                            LeagueDestinationView(route: route)
-                        }
-                }
-            }
-        }
+        LeagueTabs(tabs: selection.tabs)
     }
 
     /// Keeps the selection on a tab that exists in this phase.
@@ -63,6 +48,42 @@ struct LeagueShellView: View {
                 continue
             }
             await directory.refresh()
+        }
+    }
+}
+
+/// The tab bar itself. Reads the season store for the badges: outbid offers
+/// on Bids, offers waiting on you on Trades.
+private struct LeagueTabs: View {
+    let tabs: [LeagueTab]
+
+    @Environment(ShellRouter.self) private var router
+    @Environment(LeagueSeasonStore.self) private var store
+
+    var body: some View {
+        @Bindable var router = router
+        TabView(selection: $router.selectedTab) {
+            ForEach(tabs, id: \.self) { tab in
+                Tab(tab.title, systemImage: tab.systemImage, value: ShellTab.league(tab)) {
+                    LeagueTabStack(tab: tab)
+                }
+                .badge(badge(for: tab))
+            }
+            Tab(value: ShellTab.search, role: .search) {
+                NavigationStack(path: $router.searchPath) {
+                    MovieSearchView()
+                        .navigationDestination(for: LeagueRoute.self) { route in
+                            LeagueDestinationView(route: route)
+                        }
+                }
+            }
+        }
+    }
+
+    private func badge(for tab: LeagueTab) -> Int {
+        switch tab {
+        case .bids: store.bids.outbidCount
+        default: 0
         }
     }
 }
@@ -109,6 +130,7 @@ struct LeagueDestinationView: View {
         case .shareInvite: ShareInviteView()
         case .movie(let tmdbID): LeagueMovieDetailView(tmdbID: tmdbID)
         case .team(let teamID): TeamDetailView(teamID: teamID)
+        case .bidPriorities: BidPrioritiesView()
         case .movieSearch: MovieSearchView()
         }
     }

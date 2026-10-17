@@ -155,6 +155,8 @@ private struct ShellSheetView: View {
             NavigationStack { DropMovieView(holdingID: holdingID) }
         case .proposeTrade(let teamID):
             NavigationStack { TradeComposerView(recipientTeamID: teamID) }
+        case .placeBid(let target):
+            NavigationStack { PlaceBidView(target: target) }
         }
     }
 }

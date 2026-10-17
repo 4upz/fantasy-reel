@@ -24,6 +24,8 @@ final class BidsStore {
     private(set) var leagueID: LeagueID
     private(set) var teamID: TeamID?
     let repository: any BidRepository
+    /// Cancels from the Bids tab, so one error shows above the list.
+    let cancelling = AsyncAction()
     /// My bids that were active at the last read, to announce a new outbid once.
     private var lastActiveBidIDs: Set<BidID>?
 
@@ -78,7 +80,8 @@ final class BidsStore {
         if case .idle = history { history = .loading }
         do {
             let settled = try await repository.fetchSettledBids(in: leagueID)
-            history = .loaded(BidHistory.group(pickupBids: settled.pickups, counterpickBids: settled.counterpicks))
+            let rounds = BidHistory.group(pickupBids: settled.pickups, counterpickBids: settled.counterpicks)
+            history = rounds.isEmpty ? .empty : .loaded(rounds)
         } catch {
             if case .loaded = history { return }
             history = .failed(message: error.userMessage)

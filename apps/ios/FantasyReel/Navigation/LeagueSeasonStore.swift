@@ -35,12 +35,15 @@ final class LeagueSeasonStore {
     let userID: UserID
     private var seriesSeasons: [League]
     private let repository: any TeamRepository
+    /// Open bids and the bidding week (F-12), loaded while the season is active.
+    let bids: BidsStore
 
-    init(selection: LeagueSelection, repository: any TeamRepository) {
+    init(selection: LeagueSelection, repository: any TeamRepository, bidRepository: any BidRepository) {
         self.season = selection.season
         self.userID = selection.userID
         self.seriesSeasons = selection.seriesSeasons
         self.repository = repository
+        self.bids = BidsStore(leagueID: selection.season.id, repository: bidRepository)
     }
 
     var snapshot: Snapshot? { state.value }
@@ -95,6 +98,9 @@ final class LeagueSeasonStore {
                 reigningChampions: reigning
             )
             if state != .loaded(snapshot) { state = .loaded(snapshot) }
+            if season.status == .active {
+                await bids.update(leagueID: leagueID, teamID: myTeamID)
+            }
         } catch {
             if case .loaded = state { return }
             state = .failed(message: APIError.wrap(error).userMessage)
@@ -222,9 +228,11 @@ struct LeagueSeasonScope<Content: View>: View {
     @Environment(ShellRouter.self) private var router
     private let content: Content
 
-    init(selection: LeagueSelection, repository: any TeamRepository, @ViewBuilder content: () -> Content) {
+    init(selection: LeagueSelection, environment: AppEnvironment, @ViewBuilder content: () -> Content) {
         self.selection = selection
-        _store = State(initialValue: LeagueSeasonStore(selection: selection, repository: repository))
+        _store = State(initialValue: LeagueSeasonStore(
+            selection: selection, repository: environment.teams, bidRepository: environment.bids
+        ))
         self.content = content()
     }
 
@@ -235,22 +243,49 @@ struct LeagueSeasonScope<Content: View>: View {
             .onDisappear { if router.seasonStore === store { router.seasonStore = nil } }
             .task(id: selection.season.id) { await watch() }
             .onChange(of: selection) { Task { await store.update(selection: selection) } }
-            .refreshOnForeground { await store.refresh() }
+            .refreshOnForeground {
+                await store.refresh()
+                // The week can roll over while the app is away: re-read the cutoff.
+                if store.season.status == .active { await store.bids.refresh() }
+            }
     }
 
     private func watch() async {
         await store.load()
         let leagueID = selection.season.id.rawValue
-        let watches = ["draft_picks", "pickups", "counterpicks", "counterpick_bids"].map {
-            ChangeFeed.Watch(table: $0, filter: .equals("league_id", leagueID))
+        let feed = environment.changeFeed
+        let store = store
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask {
+                await Self.forEachChange(feed, topic: "league-season", tables: ["draft_picks", "pickups", "counterpicks", "counterpick_bids"], leagueID: leagueID) {
+                    await store.refresh()
+                }
+            }
+            group.addTask {
+                await Self.forEachChange(feed, topic: "league-bids", tables: ["pickup_bids", "counterpick_bids"], leagueID: leagueID) {
+                    if await store.season.status == .active { await store.bids.refresh() }
+                }
+            }
         }
+    }
+
+    /// Runs `action` on every change to `tables` in the league, skipping the
+    /// first signal (it only confirms the subscription).
+    private static func forEachChange(
+        _ feed: ChangeFeed,
+        topic: String,
+        tables: [String],
+        leagueID: String,
+        action: @escaping @Sendable () async -> Void
+    ) async {
+        let watches = tables.map { ChangeFeed.Watch(table: $0, filter: .equals("league_id", leagueID)) }
         var isFirstSignal = true
-        for await _ in environment.changeFeed.signals(topic: "league-season", watching: watches) {
+        for await _ in feed.signals(topic: topic, watching: watches) {
             if isFirstSignal {
                 isFirstSignal = false
                 continue
             }
-            await store.refresh()
+            await action()
         }
     }
 }

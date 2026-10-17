@@ -12,6 +12,8 @@ enum LeagueRoute: Hashable {
     case shareInvite
     case movie(TMDbID)
     case team(TeamID)
+    /// Reorder my pending bids (F-12).
+    case bidPriorities
     /// Movie search pushed from the no-league screen, which has no search tab.
     case movieSearch
 }
@@ -53,6 +55,8 @@ enum ShellSheet: Identifiable, Hashable {
     case dropMovie(HoldingID)
     /// Compose a trade offer, optionally to a chosen team (F-13).
     case proposeTrade(TeamID?)
+    /// Place, raise or counter a pickup or counterpick bid (F-12).
+    case placeBid(BidTarget)
 
     var id: Self { self }
 }
