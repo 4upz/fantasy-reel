@@ -131,7 +131,17 @@ struct SignedInRootView: View {
 private struct ShellSheetView: View {
     let sheet: ShellSheet
 
+    @Environment(ShellRouter.self) private var router
+    @Environment(LeagueDirectoryStore.self) private var directory
+
     var body: some View {
+        content
+            .environment(\.leagueSelection, directory.selection)
+            .modifier(SeasonStoreEnvironment(store: router.seasonStore))
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch sheet {
         case .menu:
             MenuSheetView()
@@ -139,6 +149,26 @@ private struct ShellSheetView: View {
             NavigationStack { CreateLeagueView() }
         case .joinLeague(let input):
             NavigationStack { JoinLeagueView(input: input) }
+        case .editTeam:
+            NavigationStack { EditTeamView() }
+        case .dropMovie(let holdingID):
+            NavigationStack { DropMovieView(holdingID: holdingID) }
+        case .proposeTrade(let teamID):
+            NavigationStack { TradeComposerView(recipientTeamID: teamID) }
+        }
+    }
+}
+
+/// Hands the open season's store to a sheet when there is one.
+private struct SeasonStoreEnvironment: ViewModifier {
+    let store: LeagueSeasonStore?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let store {
+            content.environment(store)
+        } else {
+            content
         }
     }
 }

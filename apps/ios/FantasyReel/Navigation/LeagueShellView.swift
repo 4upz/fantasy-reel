@@ -13,8 +13,20 @@ struct LeagueShellView: View {
     @Environment(LeagueDirectoryStore.self) private var directory
 
     var body: some View {
+        LeagueSeasonScope(selection: selection, repository: environment.teams) {
+            tabs
+        }
+        .environment(\.leagueSelection, selection)
+        .onAppear(perform: normalizeSelectedTab)
+        .onChange(of: selection.tabs) { normalizeSelectedTab() }
+        .task(id: selection.season.id) {
+            await watchSeasonRow()
+        }
+    }
+
+    private var tabs: some View {
         @Bindable var router = router
-        TabView(selection: $router.selectedTab) {
+        return TabView(selection: $router.selectedTab) {
             ForEach(selection.tabs, id: \.self) { tab in
                 Tab(tab.title, systemImage: tab.systemImage, value: ShellTab.league(tab)) {
                     LeagueTabStack(tab: tab)
@@ -28,12 +40,6 @@ struct LeagueShellView: View {
                         }
                 }
             }
-        }
-        .environment(\.leagueSelection, selection)
-        .onAppear(perform: normalizeSelectedTab)
-        .onChange(of: selection.tabs) { normalizeSelectedTab() }
-        .task(id: selection.season.id) {
-            await watchSeasonRow()
         }
     }
 

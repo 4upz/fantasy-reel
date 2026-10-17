@@ -22,6 +22,8 @@ final class AppEnvironment {
     let leagueLifecycle: any LeagueLifecycleRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
+    /// Teams, rosters, standings and drops (F-10, F-11, F-14).
+    let teams: any TeamRepository
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -30,7 +32,8 @@ final class AppEnvironment {
         leagues: (any LeagueRepository)? = nil,
         leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
-        notifications: (any NotificationRepository)? = nil
+        notifications: (any NotificationRepository)? = nil,
+        teams: (any TeamRepository)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
@@ -43,6 +46,7 @@ final class AppEnvironment {
         self.leagueLifecycle = leagueLifecycle ?? EdgeLeagueLifecycleRepository(functions: edgeFunctions)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
+        self.teams = teams ?? SupabaseTeamRepository(provider: supabase, functions: edgeFunctions)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -60,7 +64,8 @@ extension AppEnvironment {
         leagues: any LeagueRepository = InMemoryLeagueRepository(),
         leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
-        notifications: any NotificationRepository = InMemoryNotificationRepository()
+        notifications: any NotificationRepository = InMemoryNotificationRepository(),
+        teams: any TeamRepository = InMemoryTeamRepository()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -72,7 +77,8 @@ extension AppEnvironment {
             leagues: leagues,
             leagueLifecycle: leagueLifecycle,
             profiles: profiles,
-            notifications: notifications
+            notifications: notifications,
+            teams: teams
         )
     }
 }

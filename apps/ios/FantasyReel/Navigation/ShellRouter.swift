@@ -47,6 +47,12 @@ enum ShellSheet: Identifiable, Hashable {
     case menu
     case createLeague
     case joinLeague(JoinInput)
+    /// Rename the team or change its image (F-10).
+    case editTeam
+    /// Confirm dropping one of my holdings (F-11).
+    case dropMovie(HoldingID)
+    /// Compose a trade offer, optionally to a chosen team (F-13).
+    case proposeTrade(TeamID?)
 
     var id: Self { self }
 }
@@ -75,6 +81,9 @@ final class ShellRouter {
     private(set) var activeSeasonID: LeagueID?
     /// Shown when a link points at a league this account can't open.
     var unavailableLinkMessage: String?
+    /// The open season's shared data, so sheets (which sit above the tabs)
+    /// see the same store as the tabs. Set by `LeagueSeasonScope`.
+    var seasonStore: LeagueSeasonStore?
 
     func path(for tab: LeagueTab) -> Binding<[LeagueRoute]> {
         Binding(
