@@ -21,6 +21,8 @@ export interface TourContext {
 /** Which side of its anchor a step's card prefers. `auto` picks whichever side has room. */
 export type TourPlacement = 'auto' | 'top' | 'bottom' | 'left' | 'right'
 
+export type StepBody = string | string[]
+
 export interface TourStep {
   /**
    * The `data-tour` value of the element this step points at. Several elements
@@ -31,8 +33,12 @@ export interface TourStep {
   anchor?: string
   /** A short heading, sentence case, no trailing period. */
   title: string
-  /** One or two short paragraphs. Say what the thing is for, not where it is. */
-  body: string | string[]
+  /**
+   * One or two short paragraphs. Say what the thing is for, not where it is.
+   * A function gets the page's ctx when the tour starts, for wording that
+   * depends on the viewer or the league (the length of the trade review).
+   */
+  body: StepBody | ((ctx: TourContext) => StepBody)
   placement?: TourPlacement
   /** Leave the step out when this returns false - an owner-only control, say. */
   when?: (ctx: TourContext) => boolean
@@ -59,6 +65,13 @@ export interface TourDefinition {
   description: string
   /** Whether the page's tour applies to this viewer right now. Default: always. */
   when?: (ctx: TourContext) => boolean
+  /**
+   * Whether the tour may start by itself for this viewer. Default: always.
+   * `when` decides whether the tour applies at all (and so whether it can be
+   * replayed); this only keeps it from starting unasked, e.g. beginner tours
+   * for someone who has already played a season.
+   */
+  autoStart?: (ctx: TourContext) => boolean
   /** When two tours on one page both apply, the higher priority goes first. Default 0. */
   priority?: number
   /** At most five. A tour that needs more is two tours. */
@@ -69,3 +82,6 @@ export interface TourDefinition {
 export function defineTour(tour: TourDefinition): TourDefinition {
   return tour
 }
+
+/** A step as it shows: `body` resolved against the page's ctx. */
+export type ResolvedStep = Omit<TourStep, 'body'> & { body: StepBody }

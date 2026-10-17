@@ -3,7 +3,7 @@
  * should start, and where a step's card goes. Free of React and the DOM so
  * scripts/tests/tours.test.cjs can check them directly.
  */
-import type { TourContext, TourDefinition, TourPlacement, TourStep } from './types'
+import type { ResolvedStep, TourContext, TourDefinition, TourPlacement } from './types'
 
 /**
  * How a tour ended for this user, as `record_tour_outcome()` stores it under
@@ -54,9 +54,11 @@ export function toursEnabled(pref: Record<string, unknown> | undefined): boolean
 }
 
 /** Does the tour apply to this page's context, and which of its steps do. */
-export function applicableSteps(tour: TourDefinition, ctx: TourContext): TourStep[] {
+export function applicableSteps(tour: TourDefinition, ctx: TourContext): ResolvedStep[] {
   if (tour.when && !tour.when(ctx)) return []
-  return tour.steps.filter((step) => !step.when || step.when(ctx))
+  return tour.steps
+    .filter((step) => !step.when || step.when(ctx))
+    .map((step) => ({ ...step, body: typeof step.body === 'function' ? step.body(ctx) : step.body }))
 }
 
 export interface Candidate {
@@ -78,6 +80,7 @@ export function pickAutoStart(
   return (
     [...candidates]
       .filter((candidate) => applicableSteps(candidate.tour, candidate.ctx).length > 0)
+      .filter((candidate) => candidate.tour.autoStart?.(candidate.ctx) ?? true)
       .filter((candidate) => mayAutoStart(states.get(candidate.tour.id), candidate.tour, now))
       .sort((a, b) => (b.tour.priority ?? 0) - (a.tour.priority ?? 0) || a.order - b.order)[0] ?? null
   )
