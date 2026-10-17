@@ -134,6 +134,12 @@ test('the page starts the highest-priority applicable tour that has not been see
   assert.equal(engine.pickAutoStart(candidates, seen, now), null)
 })
 
+test('a step body can depend on the page ctx', () => {
+  const tour = { id: 'review', version: 1, steps: [{ title: 'Review', body: (ctx) => (ctx.isOwner ? 'You can veto.' : 'The commissioner can veto.') }] }
+  assert.equal(engine.applicableSteps(tour, { isOwner: true })[0].body, 'You can veto.')
+  assert.equal(engine.applicableSteps(tour, {})[0].body, 'The commissioner can veto.')
+})
+
 test('a tour that applies can still be kept from starting by itself', () => {
   const beginner = { id: 'beginner', version: 1, autoStart: (ctx) => ctx.newPlayer === true, steps: [{ title: 'A' }] }
   assert.equal(engine.pickAutoStart([{ tour: beginner, ctx: { newPlayer: false }, order: 0 }], new Map(), now), null)

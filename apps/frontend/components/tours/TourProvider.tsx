@@ -18,7 +18,7 @@ import {
   type TourState,
   type UiStateRow,
 } from '@/tours/engine'
-import type { TourContext, TourDefinition, TourStep } from '@/tours/types'
+import type { ResolvedStep, TourContext, TourDefinition } from '@/tours/types'
 import TourOverlay from './TourOverlay'
 import { findTourAnchor, topModal } from './anchors'
 
@@ -28,6 +28,12 @@ const AUTO_START_DELAY_MS = 800
 const POLL_MS = 250
 /** Anchors count as settled once the set found stays the same this many polls running. */
 const STABLE_POLLS = 3
+/**
+ * An automatic start with some anchors still missing waits longer, so steps
+ * whose elements arrive with a client fetch (bid cards, trade offers) aren't
+ * dropped just because a server-rendered anchor was already there.
+ */
+const PARTIAL_STABLE_POLLS = 12
 /** Give up waiting for an auto-started tour's anchors after this long. */
 const AUTO_START_TIMEOUT_MS = 8000
 /** Keeps tabs in step: an outcome saved in one closes the same tour in the others. */
@@ -42,7 +48,7 @@ interface Registration {
 export interface ActiveTour {
   tour: TourDefinition
   /** Fixed when the tour starts, so "Step 2 of 4" stays honest. */
-  steps: TourStep[]
+  steps: ResolvedStep[]
   index: number
   /** The modal the tour runs inside, if it started in one (create league). */
   hostModal: HTMLDialogElement | null
@@ -100,10 +106,10 @@ function automationOptedOut(): boolean {
  * timed out, or - for an automatic start - nothing to point at but an intro.
  */
 async function planSteps(
-  steps: TourStep[],
+  steps: ResolvedStep[],
   automatic: boolean,
   cancelled: () => boolean
-): Promise<TourStep[] | null> {
+): Promise<ResolvedStep[] | null> {
   const anchored = steps.filter((step) => step.anchor)
   const deadline = Date.now() + (automatic ? AUTO_START_TIMEOUT_MS : POLL_MS * STABLE_POLLS)
   let previous = ''
@@ -116,7 +122,8 @@ async function planSteps(
     stableFor = signature === previous ? stableFor + 1 : 0
     previous = signature
 
-    const settled = stableFor >= STABLE_POLLS - 1 && (anchored.length === 0 || found.length > 0)
+    const required = automatic && found.length < anchored.length ? PARTIAL_STABLE_POLLS : STABLE_POLLS
+    const settled = stableFor >= required - 1 && (anchored.length === 0 || found.length > 0)
     const blocked = automatic && (isEditing() || (topModal() !== null && !found.some((step) => topModal()!.contains(findTourAnchor(step.anchor!)))))
     if (settled && !blocked) {
       return steps.filter((step) => !step.anchor || step.centerIfMissing || found.includes(step))
@@ -162,6 +169,10 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
   // under the viewer (the draft tab going from setup to drafting) offers a
   // new tour, and that counts as a new visit.
   const lastAutoStart = useRef<{ pathname: string; tourIds: ReadonlySet<string> } | null>(null)
+  // Tours that couldn't start by themselves on this path (their elements
+  // never showed): skipped for the rest of the visit, so the page's next tour
+  // gets its turn instead of the same one being retried.
+  const failedAutoStarts = useRef<{ pathname: string; tourIds: Set<string> }>({ pathname: '', tourIds: new Set() })
   const autoStartedIds = useRef(new Set<string>())
   const channel = useRef<BroadcastChannel | null>(null)
 
@@ -306,8 +317,10 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
     const offered = [...registrations.current.values()]
     const last = lastAutoStart.current
     if (last?.pathname === pathname && offered.every((registration) => last.tourIds.has(registration.id))) return
+    if (failedAutoStarts.current.pathname !== pathname) failedAutoStarts.current = { pathname, tourIds: new Set() }
+    const failed = failedAutoStarts.current.tourIds
     const candidates = offered
-      .filter((registration) => !autoStartedIds.current.has(registration.id))
+      .filter((registration) => !autoStartedIds.current.has(registration.id) && !failed.has(registration.id))
       .map((registration) => ({ tour: getTour(registration.id)!, ctx: registration.ctx, order: registration.order }))
     const outcomes = new Map(
       TOUR_LIST.map((tour) => [tour.id, tourState(tour.id)] as const).filter((entry): entry is [string, TourState] => entry[1] !== undefined)
@@ -318,7 +331,13 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
     let cancelled = false
     const timer = window.setTimeout(() => {
       void launch(pick.tour.id as TourId, pick.ctx, true, () => cancelled).then((started) => {
-        if (!started) return
+        if (!started) {
+          if (!cancelled && !activeRef.current) {
+            failed.add(pick.tour.id)
+            bumpRegistrations()
+          }
+          return
+        }
         lastAutoStart.current = { pathname, tourIds: new Set(offered.map((registration) => registration.id)) }
         autoStartedIds.current.add(pick.tour.id)
       })

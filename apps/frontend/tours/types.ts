@@ -21,6 +21,8 @@ export interface TourContext {
 /** Which side of its anchor a step's card prefers. `auto` picks whichever side has room. */
 export type TourPlacement = 'auto' | 'top' | 'bottom' | 'left' | 'right'
 
+export type StepBody = string | string[]
+
 export interface TourStep {
   /**
    * The `data-tour` value of the element this step points at. Several elements
@@ -31,8 +33,12 @@ export interface TourStep {
   anchor?: string
   /** A short heading, sentence case, no trailing period. */
   title: string
-  /** One or two short paragraphs. Say what the thing is for, not where it is. */
-  body: string | string[]
+  /**
+   * One or two short paragraphs. Say what the thing is for, not where it is.
+   * A function gets the page's ctx when the tour starts, for wording that
+   * depends on the viewer or the league (the length of the trade review).
+   */
+  body: StepBody | ((ctx: TourContext) => StepBody)
   placement?: TourPlacement
   /** Leave the step out when this returns false - an owner-only control, say. */
   when?: (ctx: TourContext) => boolean
@@ -76,3 +82,6 @@ export interface TourDefinition {
 export function defineTour(tour: TourDefinition): TourDefinition {
   return tour
 }
+
+/** A step as it shows: `body` resolved against the page's ctx. */
+export type ResolvedStep = Omit<TourStep, 'body'> & { body: StepBody }

@@ -63,6 +63,7 @@ Short walkthroughs that start the first time someone opens a page, so players le
 - **Anchor disappears mid-tour:** the step shows centered, so the step count stays honest.
 - **`when(ctx)`:** on the tour, it decides whether the tour applies at all. On a step, it drops that step. Prefer `when` over hoping an anchor is missing: it says why.
 - **`autoStart(ctx)`:** on the tour only. It keeps a tour that applies from starting by itself, while "Show me around" and Settings can still play it. Use it for beginner tours, such as `autoStart: (ctx) => ctx.newPlayer === true`.
+- **`body` as a function:** `body: (ctx) => …` gets the page's ctx when the tour starts. Use it for wording that depends on the viewer or the league, instead of a pair of steps with opposite `when`s.
 - **`placement`:** optional. `auto` picks whichever side has room. Under 640px wide the card always docks to the top or bottom edge, away from the anchor, clear of the mobile header and bottom bar.
 
 **Writing.** Keep tours to 5 steps or fewer, and each step to one or two short paragraphs. Say what the thing is *for* and when it happens, not where it is. Use the UI's own terms ("Fantasy Budget", never "FAAB").
@@ -86,11 +87,11 @@ When several tours qualify, the one with the highest `priority` wins (default 0)
 
 Before starting, it waits for the page to settle:
 
-- **Loading content.** It polls until the set of visible anchors stops changing, for up to 8 seconds, so skeletons and Suspense boundaries can fill in.
+- **Loading content.** It polls until the set of visible anchors stops changing. When every anchor is on screen, that's about 0.75 seconds of no change. While some are still missing, it waits about 3 seconds of no change, so elements that arrive with a client fetch (bid cards, trade offers) can still make it. It gives up after 8 seconds. A step whose element still isn't there is dropped, so use `centerIfMissing` for steps about content that may be slow or empty.
 - **Typing.** It won't start while the user is typing in a field, so it never takes focus mid-keystroke.
 - **Open modals.** It won't start while an unrelated modal is open.
 
-A tour whose anchors never show up doesn't start at all, so a lone intro card is never recorded as "seen".
+A tour whose anchors never show up doesn't start at all, so a lone intro card is never recorded as "seen". The page's next tour, if it has one, gets its turn on the same visit.
 
 Tours always start for a user who asks: the account menu's **Tour this page**, `<TourButton>`, or Settings.
 
