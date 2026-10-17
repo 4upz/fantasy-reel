@@ -41,6 +41,7 @@ export default function DraftBoardHeader({
           </div>
           {turn && (
             <div
+              data-tour="draft-turn"
               className={`p-4 rounded-xl border-2 transition-all ${isMyTurn
                 ? 'bg-success-bg border-success shadow-glow-gold animate-glow-pulse'
                 : 'bg-elevated border-border'}`}

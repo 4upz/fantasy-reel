@@ -74,6 +74,7 @@ export default function LeagueManager({
             onClick={onCreateClick}
             className="btn btn-primary text-lg px-6 py-3"
             data-testid="create-league-button"
+            data-tour="create-league"
             onMouseEnter={preloadCreateLeagueModal}
             onFocus={preloadCreateLeagueModal}
           >

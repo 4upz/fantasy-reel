@@ -68,7 +68,7 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
   }
 
   return (
-    <section className="card p-6">
+    <section className="card p-6" data-tour="settings-scoring">
       <SectionHeader
         icon={Trophy}
         title="Scoring"
