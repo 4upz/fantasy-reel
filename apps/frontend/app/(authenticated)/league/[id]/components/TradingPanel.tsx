@@ -13,6 +13,7 @@ import type {
 import type { ExpiryBounds } from '@/utils/tradeExpiry'
 import TradeOfferCard from './TradeOfferCard'
 import type { TradeComposerState } from './TradeComposerLoading'
+import { TourButton } from '@/components/tours'
 
 interface Props {
   team: Team
@@ -176,7 +177,8 @@ export default function TradingPanel({
             </p>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <TourButton id="trading" />
             {/* Not a live region: new offers are announced as they arrive (useTrading). */}
             {!isLoading && actionNeededCount > 0 && (
               <span className="type-label text-crimson-text">
@@ -188,6 +190,7 @@ export default function TradingPanel({
               onClick={onProposeTrade}
               className="btn btn-primary"
               data-testid="propose-trade-button"
+              data-tour="propose-trade"
             >
               Propose trade
             </button>

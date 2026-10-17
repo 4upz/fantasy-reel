@@ -1,5 +1,10 @@
 import type { TourDefinition } from './types'
+import { leagueOverviewTour } from './definitions/league-overview'
+import { standingsTour } from './definitions/standings'
+import { rosterTour } from './definitions/roster'
 import { biddingTour } from './definitions/bidding'
+import { tradingTour } from './definitions/trading'
+import { seasonResultsTour } from './definitions/season-results'
 
 /**
  * Every tour, keyed by id, in the order a new player meets them - which is
@@ -7,7 +12,12 @@ import { biddingTour } from './definitions/bidding'
  * its tour's `id`; scripts/tests/tours.test.cjs checks that and more.
  */
 export const TOURS = {
+  'league-overview': leagueOverviewTour,
+  standings: standingsTour,
+  roster: rosterTour,
   bidding: biddingTour,
+  trading: tradingTour,
+  'season-results': seasonResultsTour,
 } as const satisfies Record<string, TourDefinition>
 
 export type TourId = keyof typeof TOURS
