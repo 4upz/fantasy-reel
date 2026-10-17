@@ -5,13 +5,18 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { placeCard, type Box, type CardPosition } from '@/tours/engine'
 import type { ActiveTour } from './TourProvider'
-import { findTourAnchor, measureInsets, topModal } from './anchors'
+import { describeAnchor, findTourAnchor, measureInsets, topModal } from './anchors'
 
 /** Breathing room between a highlighted element and its outline. */
 const SPOTLIGHT_PADDING = 6
 /** Re-measure this often: anchors move as data loads and sticky headers pin. */
 const TICK_MS = 200
+/** Long enough for a smooth scrollIntoView to finish. */
+const SCROLL_SETTLE_MS = 450
 const FALLBACK_CARD = { width: 352, height: 220 }
+/** Footer links: a full 44px tap target on phones, compact on larger screens. */
+const FOOTER_BUTTON =
+  'inline-flex min-h-[44px] items-center text-foreground-secondary transition-colors hover:text-gold sm:min-h-0 sm:py-1'
 
 interface Props {
   tour: ActiveTour
@@ -37,6 +42,22 @@ function sameLayout(a: Layout | null, b: Layout): boolean {
   if (!a.anchor || !b.anchor) return a.anchor === b.anchor
   return a.anchor.top === b.anchor.top && a.anchor.left === b.anchor.left
     && a.anchor.width === b.anchor.width && a.anchor.height === b.anchor.height
+}
+
+/**
+ * The ring around an anchor, padded but kept on screen: a full-width element
+ * (a phone's summary card) would otherwise lose its left and right edges.
+ */
+function spotlightBox(anchor: Box): React.CSSProperties {
+  const edge = 2
+  const left = Math.max(anchor.left - SPOTLIGHT_PADDING, edge)
+  const right = Math.min(anchor.left + anchor.width + SPOTLIGHT_PADDING, window.innerWidth - edge)
+  return {
+    top: anchor.top - SPOTLIGHT_PADDING,
+    left,
+    width: Math.max(0, right - left),
+    height: anchor.height + SPOTLIGHT_PADDING * 2,
+  }
 }
 
 function prefersReducedMotion(): boolean {
@@ -69,6 +90,7 @@ export default function TourOverlay({
   const cardRef = useRef<HTMLElement>(null)
   const titleRef = useRef<HTMLParagraphElement>(null)
   const [layout, setLayout] = useState<Layout | null>(null)
+  const [highlighted, setHighlighted] = useState('')
   const [returnFocusTo] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null))
 
   const measure = useCallback(() => {
@@ -90,6 +112,7 @@ export default function TourOverlay({
   // the card, and move focus to it.
   useLayoutEffect(() => {
     const element = step.anchor ? findTourAnchor(step.anchor) : null
+    setHighlighted(element ? describeAnchor(element) : '')
     if (element) {
       const rect = element.getBoundingClientRect()
       const insets = measureInsets()
@@ -100,6 +123,30 @@ export default function TourOverlay({
     measure()
     titleRef.current?.focus({ preventScroll: true })
   }, [tour.index, step, measure])
+
+  // On a phone the card docks to an edge. If a tall card still covers the
+  // element, scroll once per step, after the step's own scroll has settled,
+  // so the element sits in the free part of the screen (or starts there).
+  const docked = layout?.position.docked ?? false
+  useEffect(() => {
+    if (!docked || !step.anchor || tour.hostModal) return
+    const timer = window.setTimeout(() => {
+      const element = findTourAnchor(step.anchor!)
+      const card = cardRef.current?.getBoundingClientRect()
+      if (!element || !card) return
+      const anchor = element.getBoundingClientRect()
+      if (anchor.bottom <= card.top || anchor.top >= card.bottom) return
+      const insets = measureInsets()
+      const gap = 12
+      // Moving the element further toward the edge it is near keeps the card
+      // docked where it is, so this settles in one scroll.
+      const delta = card.top > window.innerHeight / 2
+        ? Math.min(anchor.bottom - (card.top - gap), anchor.top - (insets.top + gap))
+        : Math.max(anchor.top - (card.bottom + gap), anchor.bottom - (window.innerHeight - insets.bottom - gap))
+      if (delta !== 0) window.scrollBy({ top: delta, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+    }, SCROLL_SETTLE_MS)
+    return () => window.clearTimeout(timer)
+  }, [docked, step, tour.index, tour.hostModal])
 
   useEffect(() => {
     const interval = window.setInterval(measure, TICK_MS)
@@ -151,12 +198,7 @@ export default function TourOverlay({
         <div
           aria-hidden="true"
           className="tour-spotlight"
-          style={{
-            top: anchor.top - SPOTLIGHT_PADDING,
-            left: anchor.left - SPOTLIGHT_PADDING,
-            width: anchor.width + SPOTLIGHT_PADDING * 2,
-            height: anchor.height + SPOTLIGHT_PADDING * 2,
-          }}
+          style={spotlightBox(anchor)}
         />
       ) : (
         <div aria-hidden="true" className="tour-scrim" />
@@ -170,7 +212,7 @@ export default function TourOverlay({
         aria-describedby={bodyId}
         data-testid="tour-card"
         data-tour-id={tour.tour.id}
-        className={`card tour-card pointer-events-auto fixed overflow-y-auto p-4 shadow-heavy animate-fade-in motion-reduce:animate-none ${
+        className={`card tour-card has-[:focus-visible]:border-gold/40 pointer-events-auto fixed overflow-y-auto p-4 shadow-heavy animate-fade-in motion-reduce:animate-none ${
           position?.docked ? 'w-[calc(100vw-24px)]' : 'w-[min(22rem,calc(100vw-24px))]'
         } ${position ? '' : 'opacity-0'}`}
         style={position ? { top: position.top, left: position.left, maxHeight: position.maxHeight } : { top: 0, left: 0 }}
@@ -182,8 +224,8 @@ export default function TourOverlay({
           <button
             type="button"
             onClick={onNotNow}
-            className="-mr-1 rounded p-1 text-foreground-secondary transition-colors hover:text-foreground"
-            aria-label="Close tour"
+            className="-my-2 -mr-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-foreground-secondary transition-colors hover:text-foreground sm:-mr-2 sm:min-h-0 sm:min-w-0 sm:p-2.5"
+            aria-label="Not now"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -196,39 +238,37 @@ export default function TourOverlay({
           {paragraphs.map((paragraph) => (
             <p key={paragraph}>{paragraph}</p>
           ))}
+          {highlighted && <p className="sr-only">Highlighted: {highlighted}</p>}
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3">
           {tour.index > 0 ? (
-            <button type="button" onClick={onBack} className="btn btn-ghost px-3 py-1.5">
+            <button type="button" onClick={onBack} className="btn btn-ghost -ml-3 min-h-[44px] px-3 py-2.5 sm:min-h-0 sm:py-1.5">
               Back
             </button>
           ) : (
             <span />
           )}
-          <button type="button" onClick={onNext} className="btn btn-primary px-4 py-1.5" data-testid="tour-next">
+          <button type="button" onClick={onNext} className="btn btn-primary min-h-[44px] px-4 py-2.5 sm:min-h-0 sm:py-1.5" data-testid="tour-next">
             {isLast ? 'Finish' : 'Next'}
           </button>
         </div>
 
-        <div className="type-meta mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3">
-          <button type="button" onClick={onNotNow} className="text-foreground-secondary transition-colors hover:text-gold">
-            Not now
-          </button>
-          <button
-            type="button"
-            onClick={onDontShowAgain}
-            className="text-foreground-secondary transition-colors hover:text-gold"
-            data-testid="tour-dont-show"
-          >
-            Don’t show again
-          </button>
-          {tour.automatic && (
-            <button type="button" onClick={onTurnOffTours} className="text-foreground-secondary transition-colors hover:text-gold">
-              Turn off all tours
+        {!isLast && (
+          <div className="type-meta mt-3 flex flex-wrap gap-x-4 border-t border-border pt-2 sm:pt-3">
+            <button type="button" onClick={onNotNow} className={FOOTER_BUTTON}>
+              Not now
             </button>
-          )}
-        </div>
+            <button type="button" onClick={onDontShowAgain} className={FOOTER_BUTTON} data-testid="tour-dont-show">
+              Don’t show again
+            </button>
+            {tour.automatic && tour.index === 0 && (
+              <button type="button" onClick={onTurnOffTours} className={FOOTER_BUTTON}>
+                Turn off all tours
+              </button>
+            )}
+          </div>
+        )}
       </section>
     </div>,
     container

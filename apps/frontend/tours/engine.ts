@@ -98,10 +98,14 @@ export interface Size {
   height: number
 }
 
-/** Fixed chrome the card must not cover: the mobile header above, the bottom bar below. */
+/**
+ * Fixed chrome the card must not cover: the mobile header above, the bottom
+ * bar below, the desktop side navigation on the left.
+ */
 export interface Insets {
   top: number
   bottom: number
+  left?: number
 }
 
 export interface CardPosition {
@@ -145,12 +149,13 @@ export function placeCard(
   const maxHeight = Math.max(120, bandBottom - bandTop)
   const height = Math.min(card.height, maxHeight)
   const maxTop = bandBottom - height
+  const minLeft = (insets.left ?? 0) + VIEWPORT_MARGIN
   const maxLeft = viewport.width - card.width - VIEWPORT_MARGIN
 
   if (!anchor) {
     return {
       top: clamp(bandTop + (bandBottom - bandTop - height) / 2, bandTop, maxTop),
-      left: clamp((viewport.width - card.width) / 2, VIEWPORT_MARGIN, maxLeft),
+      left: clamp((insets.left ?? 0) + (viewport.width - (insets.left ?? 0) - card.width) / 2, minLeft, maxLeft),
       docked: false,
       maxHeight,
     }
@@ -167,7 +172,7 @@ export function placeCard(
     }
   }
 
-  const centeredLeft = clamp(anchor.left + anchor.width / 2 - card.width / 2, VIEWPORT_MARGIN, maxLeft)
+  const centeredLeft = clamp(anchor.left + anchor.width / 2 - card.width / 2, minLeft, maxLeft)
   const centeredTop = clamp(anchor.top + anchor.height / 2 - height / 2, bandTop, maxTop)
   const below = anchor.top + anchor.height + ANCHOR_GAP
   const above = anchor.top - ANCHOR_GAP - height
@@ -177,18 +182,23 @@ export function placeCard(
     bottom: { top: below, left: centeredLeft, fits: below + height <= bandBottom },
     top: { top: above, left: centeredLeft, fits: above >= bandTop },
     right: { top: centeredTop, left: right, fits: right + card.width <= viewport.width - VIEWPORT_MARGIN },
-    left: { top: centeredTop, left, fits: left >= VIEWPORT_MARGIN },
+    left: { top: centeredTop, left, fits: left >= minLeft },
   }
 
   const order = placement === 'auto' ? AUTO_ORDER : [placement, ...AUTO_ORDER.filter((side) => side !== placement)]
   const side = order.find((candidate) => candidates[candidate].fits)
-  // Nothing fits beside a tall anchor (a whole page section): sit at the
-  // bottom of the band, over its lower part, rather than off screen.
-  const chosen = side ? candidates[side] : { top: maxTop, left: centeredLeft }
+  // Nothing fits beside a tall, wide anchor (a whole page section): pin the
+  // card to the viewport edge with more room beside it, so it covers as
+  // little of the anchor as it can, rather than sitting in its middle.
+  const roomRight = viewport.width - (anchor.left + anchor.width)
+  const roomLeft = anchor.left - (insets.left ?? 0)
+  const chosen = side
+    ? candidates[side]
+    : { top: centeredTop, left: roomRight >= roomLeft ? maxLeft : minLeft }
 
   return {
     top: clamp(chosen.top, bandTop, maxTop),
-    left: clamp(chosen.left, VIEWPORT_MARGIN, maxLeft),
+    left: clamp(chosen.left, minLeft, maxLeft),
     docked: false,
     maxHeight,
   }

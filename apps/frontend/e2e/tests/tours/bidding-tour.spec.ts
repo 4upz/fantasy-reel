@@ -15,7 +15,8 @@ import { scanA11y } from '../../helpers/a11y.helper'
  * - tour-next: Next / Finish
  * - tour-dont-show: Don't show again
  * - tour-replay: "Show me around" on the page
- * - tour-preferences / tours-reset-all: Settings → Tours
+ * - tour-preferences: Settings → Tours (with one tour, its own Show again
+ *   button stands in for tours-reset-all)
  */
 
 declare global {
@@ -101,7 +102,7 @@ test.describe('Guided tours @tours', () => {
     const preferences = authedPage.getByTestId('tour-preferences')
     await expect(preferences).toBeVisible({ timeout: 10000 })
     await expect(preferences).toContainText('Hidden')
-    await authedPage.getByTestId('tours-reset-all').click()
+    await preferences.getByRole('button', { name: /^Show again/ }).click()
     await expect(preferences).toContainText('Not seen yet')
 
     await authedPage.goto(`/league/${biddingLeague.id}/bidding`)

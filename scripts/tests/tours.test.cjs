@@ -179,6 +179,20 @@ test('the card stays inside the viewport and clear of fixed chrome', () => {
   }
 })
 
+test('a centered card stays clear of the side navigation', () => {
+  const position = engine.placeCard(null, card, viewport, { top: 0, bottom: 0, left: 240 })
+  assert.equal(position.left, 240 + (1280 - 240 - 352) / 2)
+  const nearNav = engine.placeCard({ top: 300, left: 250, width: 100, height: 40 }, card, viewport, { top: 0, bottom: 0, left: 240 })
+  assert.ok(nearNav.left >= 240 + engine.VIEWPORT_MARGIN, 'never over the side navigation')
+})
+
+test('beside a tall anchor with no room on any side, the card pins to the roomier edge', () => {
+  const tall = { top: 40, left: 300, width: 760, height: 700 }
+  const position = engine.placeCard(tall, card, viewport, { top: 0, bottom: 0, left: 240 })
+  assert.equal(position.left, 1280 - 352 - engine.VIEWPORT_MARGIN, 'right edge: more room there than beside the nav')
+  assert.ok(position.top >= engine.VIEWPORT_MARGIN && position.top + 220 <= 800 - engine.VIEWPORT_MARGIN)
+})
+
 test('on a phone the card docks to the edge away from its anchor', () => {
   const phone = { width: 390, height: 844 }
   const insets = { top: 104, bottom: 76 }
