@@ -22,6 +22,12 @@ enum MenuRoute: Hashable {
     case wishlist
     case account
     case howToPlay
+    /// Account's focused edit screens (F-03, F-02) and Delete Account (L-02).
+    case editDisplayName
+    case changePassword
+    case deleteAccount
+    /// The Discord bot setup guide, from How to Play and Notifications (F-17).
+    case discordBot
 }
 
 /// The bottom bar's selection: a league tab, or the search button beside it.

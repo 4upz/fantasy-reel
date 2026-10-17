@@ -45,6 +45,12 @@ struct WelcomeView: View {
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel("How it plays")
 
+                    NavigationLink(value: AuthRoute.howToPlay) {
+                        Label("How to Play", systemImage: "info.circle")
+                            .frFont(.label)
+                            .frame(minHeight: FRMetrics.minTapTarget)
+                    }
+
                     Spacer(minLength: 24)
 
                     VStack(spacing: 12) {

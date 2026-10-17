@@ -6,6 +6,8 @@ enum AuthRoute: Hashable {
     case signUp
     /// Pre-filled with whatever the person typed on Log In.
     case resetPassword(email: String = "")
+    /// The full rules guide, before signing up (F-01).
+    case howToPlay
 }
 
 /// The signed-out stack. Log In and Sign Up link to each other by swapping
@@ -34,6 +36,7 @@ struct AuthFlowView: View {
                     case .logIn: LogInView()
                     case .signUp: SignUpView()
                     case .resetPassword(let email): ResetPasswordView(initialEmail: email)
+                    case .howToPlay: HowToPlayView(isPublic: true)
                     }
                 }
         }
@@ -44,13 +47,14 @@ struct AuthFlowView: View {
             guard let notice = session.authLinkNotice else { return }
             navigation.path = notice.isRecovery ? [.logIn, .resetPassword()] : [.logIn]
         }
-    }
-}
-
-/// The full how-to-play guide, signed in or out (F-01).
-struct HowToPlayView: View {
-    var body: some View {
-        FeaturePlaceholderView(title: "How to Play", requirements: "F-01", systemImage: "questionmark.circle", showsHeader: false)
+        // How to Play is public (the web's /how-to-play), so its link opens
+        // here without signing in. Every other link waits for sign-in.
+        .task(id: session.pendingDeepLink) {
+            if session.pendingDeepLink == .help {
+                _ = session.consumePendingDeepLink()
+                navigation.path = [.howToPlay]
+            }
+        }
     }
 }
 

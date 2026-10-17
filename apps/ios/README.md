@@ -112,13 +112,8 @@ environment variable to a case name in the scheme's Run options.
 
 - Every feature screen beyond sign-in and the shell (see the folder table in
   ARCHITECTURE.md for which thread owns which).
-- The full How to Play guide (F-01) is still a placeholder.
-- Connecting or disconnecting Google, Discord or Apple on an existing account,
-  and changing a password, belong to the Account screen (F-03).
-- Account deletion (F-03) must also revoke the Apple token for accounts that
-  use Sign in with Apple (App Review guideline 5.1.1(v)); the app keeps the
-  Apple user ID in the Keychain, but the revoke call needs the server's Apple
-  client secret, so it belongs in the `delete-account` Edge Function.
+- The Growth Dashboard row (F-18) joins Account's support group once the
+  league lifecycle contract (`GrowthDashboardRow`) is on main.
 - TMDb attribution ("This product uses the TMDb API but is not endorsed or
   certified by TMDb.", with TMDb's logo) goes on the screens that show movie
   data, as the web does; the sign-in screens show none.
@@ -145,6 +140,15 @@ environment variable to a case name in the scheme's Run options.
   rules ask custom buttons to use the logo-only artwork from Apple Design
   Resources, so swap that PDF into the asset catalog (vector data preserved)
   in `ProviderSignInButton.Provider.logo`.
+- **Apple token revocation on account deletion** (App Review 5.1.1(v)). Set
+  the `delete-account` Edge Function secrets `APPLE_TEAM_ID`, `APPLE_KEY_ID`,
+  `APPLE_PRIVATE_KEY` (a Sign in with Apple key from the developer portal, the
+  `.p8` contents) and `APPLE_CLIENT_ID` (the bundle ID). Without them deletion
+  still works and logs a warning, but Apple keeps the app listed under the
+  person's Apple ID.
+- **Discord bot install link.** Put the bot's public application ID (the web's
+  `NEXT_PUBLIC_DISCORD_CLIENT_ID`) in `DISCORD_CLIENT_ID`; empty hides the
+  "Add to Discord" button in the guide.
 - **Security check.** Put the web's public Turnstile site key
   (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`) in `TURNSTILE_SITE_KEY` for Release, and
   make sure the key's allowed hostnames include `fantasyreel.com` (the app's

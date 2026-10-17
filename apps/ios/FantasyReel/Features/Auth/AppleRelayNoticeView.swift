@@ -20,7 +20,7 @@ struct AppleRelayNoticeView: View {
                 InlineBanner(
                     tone: .info,
                     title: "Already play Fantasy Reel?",
-                    message: "Your leagues are on the account you made with Google, Discord or email. Sign out and sign in that way to see them.",
+                    message: "Your leagues are on the account you made with Google, Discord or email. Sign out, sign in that way, then connect Apple in Account so Sign in with Apple opens those leagues next time.",
                     systemImage: "person.2.fill",
                     iconStyle: .badge
                 )

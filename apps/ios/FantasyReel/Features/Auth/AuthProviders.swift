@@ -78,15 +78,16 @@ struct AppleSignInButton: View {
 
 /// Runs one Apple ID request and hands back its result. Apple reports through
 /// a delegate, so the controller and the waiting continuation are kept here
-/// until it answers.
+/// until it answers. Also used by Account to connect Apple and, before
+/// deleting an account, to get the code the server revokes.
 @MainActor
-private final class AppleAuthorizer: NSObject {
+final class AppleAuthorizer: NSObject {
     private var controller: ASAuthorizationController?
     private var continuation: CheckedContinuation<ASAuthorization, any Error>?
 
-    func authorize(hashedNonce: String) async throws -> ASAuthorization {
+    func authorize(hashedNonce: String, scopes: [ASAuthorization.Scope] = [.fullName, .email]) async throws -> ASAuthorization {
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
+        request.requestedScopes = scopes
         request.nonce = hashedNonce
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self
@@ -138,7 +139,7 @@ extension AppleAuthorizer: @preconcurrency ASAuthorizationControllerPresentation
     }
 }
 
-private enum AppleSignInError: LocalizedError {
+enum AppleSignInError: LocalizedError {
     case incomplete, failed
 
     var errorDescription: String? {

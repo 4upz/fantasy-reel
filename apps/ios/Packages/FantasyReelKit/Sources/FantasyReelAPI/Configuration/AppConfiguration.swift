@@ -19,13 +19,39 @@ public struct AppConfiguration: Sendable, Equatable {
     /// is right for local Supabase (CAPTCHA off there) and wrong for production
     /// (N-03), so Release refuses to launch with the placeholder.
     public let turnstileSiteKey: String?
+    /// The Fantasy Reel bot's public Discord application ID, the web's
+    /// `NEXT_PUBLIC_DISCORD_CLIENT_ID`. Nil hides "Add to Discord"; the guide's
+    /// steps still show (F-17).
+    public let discordClientID: String?
 
-    public init(supabaseURL: URL, supabaseAnonKey: String, siteURL: URL, urlScheme: String, turnstileSiteKey: String? = nil) {
+    public init(
+        supabaseURL: URL,
+        supabaseAnonKey: String,
+        siteURL: URL,
+        urlScheme: String,
+        turnstileSiteKey: String? = nil,
+        discordClientID: String? = nil
+    ) {
         self.supabaseURL = supabaseURL
         self.supabaseAnonKey = supabaseAnonKey
         self.siteURL = siteURL
         self.urlScheme = urlScheme
         self.turnstileSiteKey = turnstileSiteKey
+        self.discordClientID = discordClientID
+    }
+
+    /// The bot's server-install link, as the web builds it: View Channels
+    /// (1 << 10) and Manage Webhooks (1 << 29) only. Nil without a client ID.
+    public var discordBotInstallURL: URL? {
+        guard let discordClientID else { return nil }
+        var components = URLComponents(string: "https://discord.com/oauth2/authorize")
+        components?.queryItems = [
+            URLQueryItem(name: "client_id", value: discordClientID),
+            URLQueryItem(name: "scope", value: "bot applications.commands"),
+            URLQueryItem(name: "permissions", value: String((1 << 10) | (1 << 29))),
+            URLQueryItem(name: "integration_type", value: "0"),
+        ]
+        return components?.url
     }
 
     /// Where Supabase sends OAuth and email-link results: `fantasyreel://auth/callback`.
@@ -115,7 +141,8 @@ public struct AppConfiguration: Sendable, Equatable {
             supabaseAnonKey: try string("FRSupabaseAnonKey"),
             siteURL: try url("FRSiteURL"),
             urlScheme: try string("FRURLScheme"),
-            turnstileSiteKey: try optionalString("FRTurnstileSiteKey")
+            turnstileSiteKey: try optionalString("FRTurnstileSiteKey"),
+            discordClientID: try optionalString("FRDiscordClientID")
         )
     }
 

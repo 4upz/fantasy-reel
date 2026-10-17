@@ -65,7 +65,8 @@ saying why, so parallel threads don't collide.
 | `Movies` | Search tab, league movie detail | F-06, F-19 |
 | `Wishlist` | Wishlist | F-07 |
 | `Inbox` | Notifications | F-17 |
-| `Account` | Account, delete account, admin dashboard | F-03, L-02, F-18 |
+| `Account` | Account, display name, change password, delete account, admin dashboard | F-02, F-03, L-01, L-02, F-18 |
+| `Help` | How to Play (signed in and out), Discord bot guide | F-01, F-17 |
 | `LeagueRules` | League rules (read-only) | V-01 |
 | `LeagueSettings` | Owner settings, history | F-15, F-16 |
 

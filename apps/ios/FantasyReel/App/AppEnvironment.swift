@@ -21,6 +21,9 @@ final class AppEnvironment {
     let leagues: any LeagueRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
+    let account: any AccountRepository
+    /// Profile and team photo uploads (shared by Account and team editing).
+    let avatarStorage: any AvatarStorage
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -28,17 +31,22 @@ final class AppEnvironment {
         configuration: AppConfiguration,
         leagues: (any LeagueRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
-        notifications: (any NotificationRepository)? = nil
+        notifications: (any NotificationRepository)? = nil,
+        account: (any AccountRepository)? = nil,
+        avatarStorage: (any AvatarStorage)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
         self.supabase = supabase
-        self.edgeFunctions = EdgeFunctionClient(provider: supabase)
+        let edgeFunctions = EdgeFunctionClient(provider: supabase)
+        self.edgeFunctions = edgeFunctions
         self.changeFeed = ChangeFeed(provider: supabase)
         self.session = SessionStore(auth: AuthService(provider: supabase))
         self.leagues = leagues ?? SupabaseLeagueRepository(provider: supabase)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
+        self.account = account ?? SupabaseAccountRepository(provider: supabase, edgeFunctions: edgeFunctions)
+        self.avatarStorage = avatarStorage ?? SupabaseAvatarStorage(provider: supabase)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -55,7 +63,9 @@ extension AppEnvironment {
     static func preview(
         leagues: any LeagueRepository = InMemoryLeagueRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
-        notifications: any NotificationRepository = InMemoryNotificationRepository()
+        notifications: any NotificationRepository = InMemoryNotificationRepository(),
+        account: any AccountRepository = InMemoryAccountRepository(),
+        avatarStorage: any AvatarStorage = InMemoryAvatarStorage()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -66,7 +76,9 @@ extension AppEnvironment {
             ),
             leagues: leagues,
             profiles: profiles,
-            notifications: notifications
+            notifications: notifications,
+            account: account,
+            avatarStorage: avatarStorage
         )
     }
 }

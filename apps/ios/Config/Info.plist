@@ -13,6 +13,8 @@
 	<string>$(FR_URL_SCHEME)</string>
 	<key>FRTurnstileSiteKey</key>
 	<string>$(TURNSTILE_SITE_KEY)</string>
+	<key>FRDiscordClientID</key>
+	<string>$(DISCORD_CLIENT_ID)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

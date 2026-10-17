@@ -17,12 +17,13 @@ struct SignedInRootView: View {
     @State private var directory: LeagueDirectoryStore
     @State private var inbox: InboxStore
     @State private var router = ShellRouter()
-    @State private var profile: Profile?
+    @State private var profiles: ProfileStore
 
     init(account: AuthService.Account, environment: AppEnvironment) {
         self.account = account
         _directory = State(initialValue: LeagueDirectoryStore(userID: account.id, repository: environment.leagues))
         _inbox = State(initialValue: InboxStore(userID: account.id, repository: environment.notifications))
+        _profiles = State(initialValue: ProfileStore(userID: account.id, repository: environment.profiles))
     }
 
     var body: some View {
@@ -31,13 +32,15 @@ struct SignedInRootView: View {
             .environment(router)
             .environment(directory)
             .environment(inbox)
-            .environment(\.currentProfile, profile)
+            .environment(profiles)
+            .environment(\.currentProfile, profiles.profile)
             .sheet(item: $router.sheet) { sheet in
                 ShellSheetView(sheet: sheet)
                     .environment(router)
                     .environment(directory)
                     .environment(inbox)
-                    .environment(\.currentProfile, profile)
+                    .environment(profiles)
+                    .environment(\.currentProfile, profiles.profile)
             }
             .alert(
                 "Link unavailable",
@@ -49,14 +52,12 @@ struct SignedInRootView: View {
                 message: { Text(router.unavailableLinkMessage ?? "") }
             )
             .task {
-                let profiles = environment.profiles
-                let userID = account.id
-                async let loadedProfile = profiles.fetchProfile(for: userID)
+                async let profileLoaded: Void = profiles.refresh()
                 async let inboxLoaded: Void = inbox.refresh()
                 await directory.load()
                 // Route a shared link as soon as we know which leagues are visible.
                 routePendingLink()
-                profile = try? await loadedProfile
+                await profileLoaded
                 await inboxLoaded
             }
             .onChange(of: session.pendingDeepLink) { routePendingLink() }
