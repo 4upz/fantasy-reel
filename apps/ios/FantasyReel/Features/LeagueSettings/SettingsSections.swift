@@ -14,14 +14,12 @@ struct SettingsGeneralSection: View {
     let model: SettingsModel
 
     @State private var name: String
-    @State private var inviteOnly: Bool
     @State private var maxPlayers: Int
 
     init(season: League, model: SettingsModel) {
         self.season = season
         self.model = model
         _name = State(initialValue: season.name)
-        _inviteOnly = State(initialValue: season.inviteOnly)
         _maxPlayers = State(initialValue: season.maxParticipants)
     }
 
@@ -57,10 +55,8 @@ struct SettingsGeneralSection: View {
 
     private var updates: [LeagueUpdate] {
         var list: [LeagueUpdate] = []
-        let nameChanged = trimmedName != season.name
-        let inviteChanged = inviteOnly != season.inviteOnly
-        if nameChanged || inviteChanged {
-            list.append(.info(name: nameChanged ? trimmedName : nil, inviteOnly: inviteChanged ? inviteOnly : nil))
+        if trimmedName != season.name {
+            list.append(.info(name: trimmedName))
         }
         if isSetup, maxPlayers != season.maxParticipants {
             list.append(.participantLimit(maxPlayers))
@@ -90,25 +86,17 @@ struct SettingsGeneralSection: View {
             } else {
                 SettingsValueRow("Max players", value: "\(season.maxParticipants)", isLocked: true)
             }
-            SettingsToggleRow(
-                "Invite only",
-                detail: inviteOnly
-                    ? "Only invited users can join this league"
-                    : "Anyone with the link can join this league",
-                isOn: $inviteOnly
-            )
-            .disabled(model.general.isRunning)
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 if let nameError { SettingsFieldError(nameError) }
                 if let maxPlayersError { SettingsFieldError(maxPlayersError) }
-                SettingsFootnote(
+                FRFootnote(
                     "Renaming changes the league's name in every season. "
                         + "\(nameLength)/\(SettingsLimits.maxNameLength) characters."
                 )
                 if isSetup {
                     if let count = model.activeCount {
-                        SettingsFootnote("Current participants: \(count) / \(season.maxParticipants)")
+                        FRFootnote("Current participants: \(count) / \(season.maxParticipants)")
                     }
                 } else {
                     SettingsLockNote(
@@ -119,7 +107,6 @@ struct SettingsGeneralSection: View {
             }
         }
         .onChange(of: season.name) { _, new in name = new }
-        .onChange(of: season.inviteOnly) { _, new in inviteOnly = new }
         .onChange(of: season.maxParticipants) { _, new in maxPlayers = new }
     }
 
@@ -127,6 +114,53 @@ struct SettingsGeneralSection: View {
         guard canSave else { return }
         model.save(updates, with: model.general) {
             Announcer.announce("League info updated.")
+        }
+    }
+}
+
+// MARK: - Joining
+
+/// Who may join (invite only) and the share code. The toggle saves through
+/// `update_info`, like the web's general settings.
+struct SettingsJoiningSection: View {
+    let season: League
+    let model: SettingsModel
+
+    @State private var inviteOnly: Bool
+
+    init(season: League, model: SettingsModel) {
+        self.season = season
+        self.model = model
+        _inviteOnly = State(initialValue: season.inviteOnly)
+    }
+
+    private var hasChanges: Bool { inviteOnly != season.inviteOnly }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
+            SettingsSection(
+                "Joining",
+                error: model.joining.errorMessage,
+                save: SettingsSaveButton(isEnabled: hasChanges, isRunning: model.joining.isRunning, action: save)
+            ) {
+                SettingsToggleRow(
+                    "Invite only",
+                    detail: inviteOnly
+                        ? "Only invited users can join this league"
+                        : "Anyone with the link can join this league",
+                    isOn: $inviteOnly
+                )
+                .disabled(model.joining.isRunning)
+            }
+            JoinCodeCard(season: season)
+        }
+        .onChange(of: season.inviteOnly) { _, new in inviteOnly = new }
+    }
+
+    private func save() {
+        guard hasChanges else { return }
+        model.save(.info(inviteOnly: inviteOnly), with: model.joining) {
+            Announcer.announce("Joining settings updated.")
         }
     }
 }
@@ -210,7 +244,9 @@ struct SettingsSeasonSection: View {
             if isCompleted {
                 SettingsValueRow("Season ends", value: season.seasonEnd.formattedFull, isLocked: true)
             } else {
-                SettingsDateRow("Season ends", date: $end, from: DateOnly.today())
+                // A stored end already in the past stays selectable as it is
+                // (validation explains it) instead of being clamped to today.
+                SettingsDateRow("Season ends", date: $end, from: min(season.seasonEnd, DateOnly.today()))
                     .disabled(model.season.isRunning)
             }
         } footer: {
@@ -220,17 +256,17 @@ struct SettingsSeasonSection: View {
                     SettingsLockNote("This season is complete. Its dates and results are final.")
                 } else {
                     if isSetup {
-                        SettingsFootnote(
+                        FRFootnote(
                             "Decides which movies are in play — anything released before this season is off "
                                 + "the board. Creating this league for next year's movies? Pick \(thisYear + 1)."
                         )
                         if yearChanged, !endChanged {
-                            SettingsFootnote("Changing only the year moves the season end to December 31, \(String(year)).")
+                            FRFootnote("Changing only the year moves the season end to December 31, \(String(year)).")
                         }
                     } else {
                         SettingsLockNote("The season year is fixed once the draft starts.")
                     }
-                    SettingsFootnote(endFootnote)
+                    FRFootnote(endFootnote)
                 }
             }
         }
@@ -290,15 +326,7 @@ struct SettingsScoringSection: View {
                     isLocked: true
                 )
             } footer: {
-                SettingsLockNote(
-                    "Scoring locks once the draft is over, so the whole season plays under one rule. "
-                        + "This season uses "
-                        + (season.doublePointsOver90
-                            ? "double points above 90%"
-                            : "1 point per Tomatometer point above 90%")
-                        + ": a \(Self.exampleRT)% movie earns "
-                        + FantasyPoints.signed(Self.points(season.doublePointsOver90)) + "."
-                )
+                SettingsLockNote(lockedScoringNote)
             }
         } else {
             SettingsSection(
@@ -318,26 +346,42 @@ struct SettingsScoringSection: View {
                     isOn: $doublePoints
                 )
                 .disabled(model.scoring.isRunning)
-                SettingsValueRow(
-                    "A \(Self.exampleRT)% movie earns",
-                    value: FantasyPoints.signed(Self.points(doublePoints)) + " pts"
-                )
-                SettingsValueRow(
-                    "A counterpick on it scores",
-                    value: FantasyPoints.signed(-Self.points(doublePoints)) + " pts"
-                )
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
-                    SettingsFootnote(
-                        "It would earn \(FantasyPoints.signed(Self.points(!doublePoints))) with double points "
-                            + (doublePoints ? "off" : "on")
-                            + ". A counterpick always loses whatever the movie earns."
-                    )
-                    SettingsFootnote("You can change this until the draft is over. After that it stays fixed for the season.")
+                    FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                        SettingsExampleRow(
+                            "A \(Self.exampleRT)% movie earns",
+                            points: Self.points(doublePoints),
+                            tone: .frGold
+                        )
+                        SettingsExampleRow(
+                            "A counterpick on it scores",
+                            points: -Self.points(doublePoints),
+                            tone: .frCrimsonText
+                        )
+                    }
+                    .padding(.bottom, 2)
+                    FRFootnote(otherRuleNote)
+                    FRFootnote("You can change this until the draft is over. After that it stays fixed for the season.")
                 }
             }
             .onChange(of: season.doublePointsOver90) { _, new in doublePoints = new }
         }
+    }
+
+    private var otherRuleNote: String {
+        let other = FantasyPoints.signed(Self.points(!doublePoints))
+        let setting = doublePoints ? "off" : "on"
+        return "It would earn \(other) with double points \(setting). A counterpick always loses whatever the movie earns."
+    }
+
+    private var lockedScoringNote: String {
+        let rule = season.doublePointsOver90
+            ? "double points above 90%"
+            : "1 point per Tomatometer point above 90%"
+        let earned = FantasyPoints.signed(Self.points(season.doublePointsOver90))
+        return "Scoring locks once the draft is over, so the whole season plays under one rule. "
+            + "This season uses \(rule): a \(Self.exampleRT)% movie earns \(earned)."
     }
 
     private func save() {
@@ -435,13 +479,7 @@ struct SettingsRosterSection: View {
             SettingsValueRow("Counter window", value: SettingsText.hours(season.counterbidHours), isLocked: true)
             SettingsValueRow("New-bid cutoff", value: Self.cutoffValue(season.newBidCutoffHours), isLocked: true)
         } footer: {
-            SettingsLockNote(
-                "Bidding configuration cannot be changed after the draft has started. Current settings: "
-                    + "\(season.draftSlots) draft slots, \(season.totalSlots - season.draftSlots) pickup slots, "
-                    + "\(season.dropLimit) max drops, \(season.counterbidHours)h counterbid window, "
-                    + (season.newBidCutoffHours == 0 ? "no new-bid cutoff" : "\(season.newBidCutoffHours)h new-bid cutoff")
-                    + "."
-            )
+            SettingsLockNote(lockedRosterNote)
         }
     }
 
@@ -467,12 +505,12 @@ struct SettingsRosterSection: View {
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(errors, id: \.self) { SettingsFieldError($0) }
-                SettingsFootnote(openSlotsText)
-                SettingsFootnote(
+                FRFootnote(openSlotsText)
+                FRFootnote(
                     "Drop limit is per team per season (0–10). The counter window is the time to counter "
                         + "when outbid (1–72h)."
                 )
-                SettingsFootnote(cutoffHelp)
+                FRFootnote(cutoffHelp)
             }
         }
         .disabled(model.roster.isRunning)
@@ -488,6 +526,14 @@ struct SettingsRosterSection: View {
         .onChange(of: season.dropLimit) { _, new in dropLimit = new }
         .onChange(of: season.counterbidHours) { _, new in counterbidText = String(new) }
         .onChange(of: season.newBidCutoffHours) { _, new in cutoffText = String(new) }
+    }
+
+    private var lockedRosterNote: String {
+        let cutoff = season.newBidCutoffHours == 0 ? "no new-bid cutoff" : "\(season.newBidCutoffHours)h new-bid cutoff"
+        let pickupSlots = season.totalSlots - season.draftSlots
+        let current = "\(season.draftSlots) draft slots, \(pickupSlots) pickup slots, \(season.dropLimit) max drops, "
+            + "\(season.counterbidHours)h counterbid window, \(cutoff)"
+        return "Bidding configuration cannot be changed after the draft has started. Current settings: \(current)."
     }
 
     private var openSlotsText: String {
@@ -568,6 +614,20 @@ struct SettingsCounterpickSection: View {
         return nil
     }
 
+    private var totalNote: String {
+        let detail = draftSlots > 0 || biddingSlots > 0
+            ? "Teams can bet against opponent movies to earn points if they underperform."
+            : "Counterpicks are disabled. Enable by setting slots above 0."
+        return "Total counterpicks available: \(draftSlots + biddingSlots) per team. \(detail)"
+    }
+
+    private var lockedNote: String {
+        let blocking = season.counterpicksBlockDrops ? "enabled" : "disabled"
+        let current = "\(season.draftCounterpickSlots) draft slots, \(season.biddingCounterpickSlots) bidding slots, "
+            + "drop blocking \(blocking)"
+        return "Counterpick configuration cannot be changed after the draft has started. Current settings: \(current)."
+    }
+
     private var hasChanges: Bool {
         draftSlots != season.draftCounterpickSlots
             || biddingSlots != season.biddingCounterpickSlots
@@ -585,11 +645,7 @@ struct SettingsCounterpickSection: View {
                     isLocked: true
                 )
             } footer: {
-                SettingsLockNote(
-                    "Counterpick configuration cannot be changed after the draft has started. Current settings: "
-                        + "\(season.draftCounterpickSlots) draft slots, \(season.biddingCounterpickSlots) bidding slots, "
-                        + "drop blocking \(season.counterpicksBlockDrops ? "enabled" : "disabled")."
-                )
+                SettingsLockNote(lockedNote)
             }
         } else {
             SettingsSection(
@@ -611,12 +667,7 @@ struct SettingsCounterpickSection: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     if let rangeError { SettingsFieldError(rangeError) }
-                    SettingsFootnote(
-                        "Total counterpicks available: \(draftSlots + biddingSlots) per team. "
-                            + (draftSlots > 0 || biddingSlots > 0
-                                ? "Teams can bet against opponent movies to earn points if they underperform."
-                                : "Counterpicks are disabled. Enable by setting slots above 0.")
-                    )
+                    FRFootnote(totalNote)
                 }
             }
             .disabled(model.counterpicks.isRunning)
@@ -825,13 +876,13 @@ struct SettingsTradingSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 ForEach(errors, id: \.self) { SettingsFieldError($0) }
                 if reviewEnabled {
-                    SettingsFootnote(vetoHelp)
+                    FRFootnote(vetoHelp)
                 }
-                SettingsFootnote(
+                FRFootnote(
                     "Offer windows: how long an offer can stand before it expires unanswered. Leave a field "
                         + "blank to use the app default (default 1–2160h, minimum 1–168h, maximum 1–90 days)."
                 )
-                SettingsFootnote("Trade settings stay editable until the season is complete.")
+                FRFootnote("Trade settings stay editable until the season is complete.")
             }
         }
         .disabled(model.trades.isRunning)

@@ -87,7 +87,7 @@ struct SettingsParticipantsSection: View {
             if !isSetup {
                 SettingsLockNote("Participants cannot be removed after the draft has started.")
             } else {
-                SettingsFootnote("Removed participants need a new invitation to rejoin.")
+                FRFootnote("Removed participants need a new invitation to rejoin.")
             }
         }
         .confirmationDialog(
@@ -161,23 +161,19 @@ struct SettingsNextSeasonSection: View {
                 router.select(.home)
             }
         } footer: {
-            SettingsFootnote("This season is complete. Its results are final.")
+            FRFootnote("This season is complete. Its results are final.")
         }
     }
 }
 
 // MARK: - Danger zone
 
-/// The pushed confirmations the danger zone opens.
-enum SettingsDestination: Hashable {
-    case endSeason
-    case deleteSeason
-    case announcement
-}
-
+/// End Season (active) or Delete Season (setup), each a pushed typed
+/// confirmation (`LeagueRoute.endSeason` / `.deleteSeason`).
 struct SettingsDangerZoneSection: View {
     let season: League
-    @Binding var destination: SettingsDestination?
+
+    @Environment(ShellRouter.self) private var router
 
     private var year: String { String(season.seasonYear) }
 
@@ -186,31 +182,31 @@ struct SettingsDangerZoneSection: View {
         case .active:
             SettingsSection("Danger zone") {
                 SettingsActionRow("End Season…", tone: .frCrimsonText) {
-                    destination = .endSeason
+                    router.push(.endSeason)
                 }
             } footer: {
-                SettingsFootnote(
+                FRFootnote(
                     "Ends the \(year) Season now: final scoring, champions, pending bids cancelled, "
                         + "open trades expired. You'll type \(year) to confirm."
                 )
             }
         case .setup:
             SettingsSection("Danger zone") {
-                SettingsActionRow("Delete Season…", tone: .frCrimsonText) {
-                    destination = .deleteSeason
+                SettingsActionRow("Delete season…", tone: .frCrimsonText) {
+                    router.push(.deleteSeason)
                 }
             } footer: {
-                SettingsFootnote(
-                    "Permanently deletes the \(year) season of \(season.name) and all its data. "
+                FRFootnote(
+                    "Permanently deletes the \(year) season of \(season.name). "
                         + "You'll type the league name to confirm."
                 )
             }
         case .drafting, .counterpicking:
             SettingsSection("Danger zone") {
-                SettingsValueRow("Delete Season", value: "Unavailable", isLocked: true)
+                SettingsValueRow("Delete season", value: "Unavailable", isLocked: true)
             } footer: {
                 SettingsLockNote(
-                    "League cannot be deleted after the draft has started. You can end the season once it's active."
+                    "A season can't be deleted after the draft has started. You can end the season once it's active."
                 )
             }
         case .completed, .unknown:
@@ -242,6 +238,7 @@ struct SettingsEndSeasonView: View {
     let model: SettingsModel
 
     @State private var confirmText = ""
+    @FocusState private var isConfirmFocused: Bool
     @Environment(\.dismiss) private var dismiss
 
     private var year: String { String(season.seasonYear) }
@@ -278,12 +275,13 @@ struct SettingsEndSeasonView: View {
                             + "you're freezing scores \(SettingsText.plural(daysEarly, "day", "days")) early."
                     )
                 }
-                SettingsFootnote("This can't be undone. There is no way to reopen a season.")
+                FRFootnote("This can't be undone. There is no way to reopen a season.")
                 FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     FormFieldRow(label: "Type \(year)", labelWidth: 110) {
                         TextField(year, text: $confirmText)
                             .keyboardType(.numberPad)
                             .autocorrectionDisabled()
+                            .focused($isConfirmFocused)
                             .accessibilityLabel("Type \(year) to confirm")
                     }
                 }
@@ -304,8 +302,13 @@ struct SettingsEndSeasonView: View {
         }
         .background(Color.frBackground)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("End Season")
-        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // The number pad has no return key.
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { isConfirmFocused = false }
+            }
+        }
         .announcesError(model.completion.errorMessage)
     }
 
@@ -334,32 +337,36 @@ struct SettingsDeleteSeasonView: View {
                 ScreenHeader("Delete season", eyebrow: "\(season.name) · \(String(season.seasonYear)) Season")
                 FRCard(tone: .error) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("This will permanently delete the league and all associated data including:")
+                        Text("This permanently deletes the \(String(season.seasonYear)) season of \(season.name), with:")
                             .frFont(.rowTitle)
                             .foregroundStyle(Color.frText)
                             .fixedSize(horizontal: false, vertical: true)
-                        SettingsBullet(text: "All participants and teams")
-                        SettingsBullet(text: "All draft picks")
-                        SettingsBullet(text: "All invitations")
+                        SettingsBullet(text: "Its participants and their teams")
+                        SettingsBullet(text: "Every invitation and join code sent for it")
+                        SettingsBullet(text: "Its draft settings and draft order")
+                        Text("This action cannot be undone.")
+                            .frFont(.label)
+                            .foregroundStyle(Color.frCrimsonText)
+                            .padding(.top, 4)
                     }
                 }
                 FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     FormFieldRow(label: "League name", labelWidth: 110) {
-                        TextField(season.name, text: $confirmText)
+                        TextField("Enter league name", text: $confirmText)
                             .autocorrectionDisabled()
                             .textInputAutocapitalization(.never)
                             .accessibilityLabel("Type \(season.name) to confirm")
                     }
                 }
                 .disabled(model.deletion.isRunning)
-                SettingsFootnote("Type \(season.name) to confirm. Must match the league name exactly, including capital letters.")
+                FRFootnote("Type \(season.name) to confirm. Must match the league name exactly, including capital letters.")
                 if let message = model.deletion.errorMessage {
                     InlineBanner(tone: .error, title: message)
                 }
                 Button {
                     deleteSeason()
                 } label: {
-                    Text(model.deletion.isRunning ? "Deleting…" : "Delete Season")
+                    Text(model.deletion.isRunning ? "Deleting…" : "Delete season")
                 }
                 .buttonStyle(.fr(.destructive, isLoading: model.deletion.isRunning))
                 .disabled(!isConfirmed || model.deletion.isRunning)
@@ -369,8 +376,6 @@ struct SettingsDeleteSeasonView: View {
         }
         .background(Color.frBackground)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("Delete Season")
-        .navigationBarTitleDisplayMode(.inline)
         .announcesError(model.deletion.errorMessage)
     }
 

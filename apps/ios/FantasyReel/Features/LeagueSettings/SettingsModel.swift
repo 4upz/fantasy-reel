@@ -20,6 +20,7 @@ final class SettingsModel {
     private(set) var members: LoadState<[LeagueMember]> = .idle
 
     let general = AsyncAction()
+    let joining = AsyncAction()
     let season = AsyncAction()
     let scoring = AsyncAction()
     let roster = AsyncAction()
@@ -55,11 +56,20 @@ final class SettingsModel {
     /// The active count once members have loaded; nil before.
     var activeCount: Int? { members.value.map(\.count) }
 
+    /// True once members have loaded (or the season has none).
+    var hasLoadedMembers: Bool {
+        switch members {
+        case .loaded, .empty: true
+        case .idle, .loading, .failed: false
+        }
+    }
+
     func loadMembers() async {
         if members.value == nil { members = .loading }
         do {
             let list = try await leagues.fetchMembers(of: seasonID)
-            members = list.isEmpty ? .empty : .loaded(list.sortedByDraftOrder())
+            // `fetchMembers` already returns draft order.
+            members = list.isEmpty ? .empty : .loaded(list)
         } catch {
             // Keep the list we had if a background re-read fails.
             if members.value == nil {

@@ -2,107 +2,42 @@ import FantasyReelAPI
 import FantasyReelCore
 import SwiftUI
 
-/// The create-league form's values. Defaults and limits are `create-league`'s
-/// (and the web's `CreateLeagueModal`); the server stays authoritative.
-struct CreateLeagueForm: Equatable {
-    static let participantRange = 2...20
-    static let totalSlotRange = 1...20
-    static let minDraftSlots = 1
-    static let dropLimitRange = 0...10
-    static let counterbidHourRange = 1...72
-    /// 0 turns the cutoff off (new bids stay open all week).
-    static let newBidCutoffRange = 0...144
-    static let draftCounterpickRange = 0...5
-    static let biddingCounterpickRange = 0...3
-
-    var name = ""
-    var teamName = ""
-    var maxParticipants = 8
-    var inviteOnly = false
-    var totalSlots = 8
-    var draftSlots = 5
-    var dropLimit = 2
-    var counterbidHours = 24
-    var newBidCutoffHours = 48
-    var draftCounterpickSlots = 1
-    var biddingCounterpickSlots = 0
-    var counterpicksBlockDrops = true
-
-    var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
-    var trimmedTeamName: String { teamName.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    /// The draft slots range for the current roster size.
-    var draftSlotRange: ClosedRange<Int> { Self.minDraftSlots...max(Self.minDraftSlots, totalSlots) }
-
-    /// Slots left for pickups after the draft.
-    var openSlotsAfterDraft: Int { max(0, totalSlots - draftSlots) }
-
-    /// The first problem that would make `create-league` refuse the form.
-    var validationMessage: String? {
-        if trimmedName.isEmpty { return "Please enter a league name" }
-        if trimmedName.count > CreateLeagueRequest.maxNameLength {
-            return "League name can be at most \(CreateLeagueRequest.maxNameLength) characters"
-        }
-        if trimmedTeamName.count > CreateLeagueRequest.maxTeamNameLength {
-            return "Team name can be at most \(CreateLeagueRequest.maxTeamNameLength) characters"
-        }
-        if draftSlots > totalSlots { return "Draft slots cannot exceed total slots" }
-        return nil
-    }
-
-    var request: CreateLeagueRequest {
-        CreateLeagueRequest(
-            name: trimmedName,
-            teamName: trimmedTeamName.isEmpty ? nil : trimmedTeamName,
-            inviteOnly: inviteOnly,
-            maxParticipants: maxParticipants,
-            totalSlots: totalSlots,
-            draftSlots: min(draftSlots, totalSlots),
-            dropLimit: dropLimit,
-            counterbidHours: counterbidHours,
-            newBidCutoffHours: newBidCutoffHours,
-            draftCounterpickSlots: draftCounterpickSlots,
-            biddingCounterpickSlots: biddingCounterpickSlots,
-            counterpicksBlockDrops: counterpicksBlockDrops
-        )
-    }
-}
-
 /// Create a league (F-05, mockup V2CreateLeague). Presented as the one sheet
 /// inside the `NavigationStack` that `ShellSheetView` provides.
 ///
-/// `create-league` is never retried: a success with a `warning` still opens
-/// the new league, and an uncertain failure re-reads the directory and asks the
-/// person to check their leagues before trying again.
+/// Submission, reconciliation and the uncertain-outcome message live in
+/// `CreateLeagueModel`; the form's values and limits in `CreateLeagueForm`.
 struct CreateLeagueView: View {
-    @Environment(AppEnvironment.self) private var environment
     @Environment(ShellRouter.self) private var router
-    @Environment(LeagueDirectoryStore.self) private var directory
 
-    @State private var form = CreateLeagueForm()
+    @State private var model: CreateLeagueModel
     @State private var showsAdvanced = false
-    @State private var create = AsyncAction()
-    @State private var localError: String?
-    @State private var outcomeUncertain = false
     @State private var confirmsDiscard = false
     @FocusState private var focusedField: Field?
 
     private enum Field { case name, team }
 
+    init(lifecycle: any LeagueLifecycleRepository, directory: LeagueDirectoryStore) {
+        _model = State(initialValue: CreateLeagueModel(lifecycle: lifecycle, directory: directory))
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
+                if let result = model.completed, let warning = result.warning {
+                    InlineBanner(tone: .warning, title: "\(result.leagueName) was created", message: warning)
+                }
                 leagueGroup
                 rosterGroup
                 advancedToggle
                 if showsAdvanced {
                     advancedGroups
                 }
-                if let message = errorMessage {
+                if let message = model.errorMessage {
                     InlineBanner(tone: .error, title: "Couldn't create the league", message: message)
                 }
             }
-            .disabled(create.isRunning)
+            .disabled(model.isRunning || model.completed != nil)
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.top, 8)
             .padding(.bottom, 24)
@@ -112,23 +47,30 @@ struct CreateLeagueView: View {
         .navigationTitle("New League")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    if isDirty {
-                        confirmsDiscard = true
-                    } else {
-                        router.dismissSheet()
-                    }
+            if model.completed != nil {
+                // Created with a warning: the league is open behind the sheet.
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") { router.dismissSheet() }
+                        .buttonStyle(.glassProminent)
+                        .tint(Color.frGold)
                 }
-                .disabled(create.isRunning)
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                if create.isRunning {
-                    ProgressView()
-                        .accessibilityLabel("Creating league")
-                } else {
-                    Button("Create", action: submit)
-                        .disabled(form.trimmedName.isEmpty)
+            } else {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", systemImage: "xmark") {
+                        if model.isDirty {
+                            confirmsDiscard = true
+                        } else {
+                            router.dismissSheet()
+                        }
+                    }
+                    .disabled(model.isRunning)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create", systemImage: "checkmark", action: submit)
+                        .buttonStyle(.glassProminent)
+                        .tint(Color.frGold)
+                        .disabled(model.form.trimmedName.isEmpty || model.isRunning)
+                        .accessibilityValue(model.isRunning ? "Creating league" : "")
                 }
             }
         }
@@ -138,26 +80,14 @@ struct CreateLeagueView: View {
         } message: {
             Text("Nothing has been created yet.")
         }
-        .interactiveDismissDisabled(isDirty || create.isRunning)
-        .onChange(of: isDirty, initial: true) { _, dirty in
+        .interactiveDismissDisabled(model.isDirty || model.isRunning)
+        .onChange(of: model.isDirty, initial: true) { _, dirty in
             router.sheetHasUnsavedInput = dirty
         }
-        .onChange(of: form.totalSlots) { _, total in
-            // Lowering the roster lowers the draft to match, as on the web.
-            if form.draftSlots > total { form.draftSlots = total }
+        .onChange(of: model.form) { old, _ in
+            model.formDidChange(from: old)
         }
-        .onChange(of: form.name) { _, name in
-            if name.count > CreateLeagueRequest.maxNameLength {
-                form.name = String(name.prefix(CreateLeagueRequest.maxNameLength))
-            }
-            localError = nil
-        }
-        .onChange(of: form.teamName) { _, team in
-            if team.count > CreateLeagueRequest.maxTeamNameLength {
-                form.teamName = String(team.prefix(CreateLeagueRequest.maxTeamNameLength))
-            }
-        }
-        .announcesError(errorMessage)
+        .announcesError(model.errorMessage)
     }
 
     // MARK: Sections
@@ -166,7 +96,7 @@ struct CreateLeagueView: View {
         VStack(alignment: .leading, spacing: 8) {
             FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                 FormFieldRow(label: "League", labelWidth: 100) {
-                    TextField("Required", text: $form.name)
+                    TextField("Required", text: $model.form.name)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.next)
                         .focused($focusedField, equals: .name)
@@ -174,7 +104,7 @@ struct CreateLeagueView: View {
                         .accessibilityLabel("League name")
                 }
                 FormFieldRow(label: "Your team", labelWidth: 100) {
-                    TextField("Optional", text: $form.teamName)
+                    TextField("Optional", text: $model.form.teamName)
                         .textInputAutocapitalization(.words)
                         .submitLabel(.done)
                         .focused($focusedField, equals: .team)
@@ -183,12 +113,12 @@ struct CreateLeagueView: View {
                 }
                 CreateLeagueStepperRow(
                     title: "Max players",
-                    value: $form.maxParticipants,
+                    value: $model.form.maxParticipants,
                     range: CreateLeagueForm.participantRange
                 )
-                CreateLeagueToggleRow(title: "Invite only", isOn: $form.inviteOnly)
+                CreateLeagueToggleRow(title: "Invite only", isOn: $model.form.inviteOnly)
             }
-            CreateLeagueFootnote(text: "Players join with your code, link or an email invite.")
+            FRFootnote("Players join with your code, link or an email invite.")
         }
     }
 
@@ -198,25 +128,26 @@ struct CreateLeagueView: View {
             FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                 CreateLeagueStepperRow(
                     title: "Roster slots",
-                    value: $form.totalSlots,
+                    value: $model.form.totalSlots,
                     range: CreateLeagueForm.totalSlotRange
                 )
                 CreateLeagueStepperRow(
                     title: "Draft slots",
-                    value: $form.draftSlots,
-                    range: form.draftSlotRange
+                    value: $model.form.draftSlots,
+                    range: model.form.draftSlotRange
                 )
                 CreateLeagueStepperRow(
                     title: "Drops per season",
-                    value: $form.dropLimit,
+                    value: $model.form.dropLimit,
                     range: CreateLeagueForm.dropLimitRange
                 )
             }
-            CreateLeagueFootnote(text: rosterFootnote)
+            FRFootnote(rosterFootnote)
         }
     }
 
     private var rosterFootnote: String {
+        let form = model.form
         let draft = form.draftSlots == 1 ? "1 draft slot" : "\(form.draftSlots) draft slots"
         let open = form.openSlotsAfterDraft == 1 ? "1 open" : "\(form.openSlotsAfterDraft) open"
         return "Drafted movies and pickups share these slots. Draft slots set how many arrive in the draft: \(draft), \(open) after the draft."
@@ -256,7 +187,7 @@ struct CreateLeagueView: View {
                     CreateLeagueStepperRow(
                         title: "Counter window",
                         subtitle: "Time to answer a higher bid",
-                        value: $form.counterbidHours,
+                        value: $model.form.counterbidHours,
                         range: CreateLeagueForm.counterbidHourRange,
                         display: { "\($0)h" },
                         spoken: { $0 == 1 ? "1 hour" : "\($0) hours" }
@@ -264,7 +195,7 @@ struct CreateLeagueView: View {
                     CreateLeagueStepperRow(
                         title: "New-bid cutoff",
                         subtitle: "Hours before processing",
-                        value: $form.newBidCutoffHours,
+                        value: $model.form.newBidCutoffHours,
                         range: CreateLeagueForm.newBidCutoffRange,
                         display: { $0 == 0 ? "Off" : "\($0)h" },
                         spoken: { (hours: Int) -> String in
@@ -273,8 +204,8 @@ struct CreateLeagueView: View {
                         }
                     )
                 }
-                CreateLeagueFootnote(
-                    text: form.newBidCutoffHours == 0
+                FRFootnote(
+                    model.form.newBidCutoffHours == 0
                         ? "New bids stay open all week."
                         : "After the cutoff, only counters to existing bids."
                 )
@@ -284,20 +215,20 @@ struct CreateLeagueView: View {
                 FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     CreateLeagueStepperRow(
                         title: "Draft slots",
-                        value: $form.draftCounterpickSlots,
+                        value: $model.form.draftCounterpickSlots,
                         range: CreateLeagueForm.draftCounterpickRange,
                         spokenTitle: "Draft counterpick slots"
                     )
                     CreateLeagueStepperRow(
                         title: "Bidding slots",
-                        value: $form.biddingCounterpickSlots,
+                        value: $model.form.biddingCounterpickSlots,
                         range: CreateLeagueForm.biddingCounterpickRange,
                         spokenTitle: "Bidding counterpick slots"
                     )
-                    CreateLeagueToggleRow(title: "Block drops", isOn: $form.counterpicksBlockDrops)
+                    CreateLeagueToggleRow(title: "Block drops", isOn: $model.form.counterpicksBlockDrops)
                 }
-                CreateLeagueFootnote(
-                    text: "A counterpick scores the opposite of a rival's movie. With Block drops on, a movie with a pending counterpick bid can't be dropped."
+                FRFootnote(
+                    "A counterpick scores the opposite of a rival's movie. With Block drops on, a movie with a pending counterpick bid can't be dropped."
                 )
             }
         }
@@ -306,43 +237,17 @@ struct CreateLeagueView: View {
 
     // MARK: Submit
 
-    private var isDirty: Bool { form != CreateLeagueForm() }
-
-    private var errorMessage: String? {
-        if let localError { return localError }
-        if outcomeUncertain {
-            return "We couldn't confirm the league was created. Check your league list before trying again."
-        }
-        return create.errorMessage
-    }
-
     private func submit() {
-        guard !create.isRunning else { return }
-        localError = nil
-        outcomeUncertain = false
-        if let problem = form.validationMessage {
-            localError = problem
-            if form.trimmedName.isEmpty { focusedField = .name }
+        guard !model.isRunning else { return }
+        guard model.validate() else {
+            if model.form.trimmedName.isEmpty { focusedField = .name }
             return
         }
         focusedField = nil
-        let request = form.request
-        let lifecycle = environment.leagueLifecycle
         Task {
-            let succeeded = await create.runAndWait {
-                let result = try await lifecycle.createLeague(request)
-                // A `warning` means the league exists but the team step failed;
-                // open it anyway (the home screen offers recovery) and never
-                // create a second one.
-                await directory.refresh()
-                directory.select(result.leagueID)
-                Announcer.announce("\(result.leagueName) created")
+            // With a warning the sheet stays open to show it, with Done.
+            if let result = await model.submit(), result.warning == nil {
                 router.dismissSheet()
-            }
-            if !succeeded, create.lastError?.isUncertainOutcome == true {
-                // The league may exist: show it in the menu before anyone retries.
-                await directory.refresh()
-                outcomeUncertain = true
             }
         }
     }
@@ -365,7 +270,13 @@ private struct CreateLeagueStepperRow: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        HStack(spacing: 12) {
+        // At accessibility sizes the title stacks above the value and
+        // stepper instead of squeezing them (as `FormFieldRow` does).
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6))
+            : AnyLayout(HStackLayout(spacing: 12))
+        layout {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .frFont(.input)
@@ -374,31 +285,34 @@ private struct CreateLeagueStepperRow: View {
                     Text(subtitle)
                         .frFont(.meta)
                         .foregroundStyle(Color.frTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityHidden(true)
 
-            Text(display(value))
-                .frFont(.number)
-                .foregroundStyle(Color.frText)
-                .monospacedDigit()
-                .accessibilityHidden(true)
+            HStack(spacing: 12) {
+                Text(display(value))
+                    .frFont(.number)
+                    .foregroundStyle(Color.frText)
+                    .monospacedDigit()
+                    .accessibilityHidden(true)
 
-            Stepper(value: $value, in: range) {
-                Text(spokenTitle ?? title)
+                Stepper(value: $value, in: range) {
+                    Text(spokenTitle ?? title)
+                }
+                .labelsHidden()
+                .accessibilityValue(spoken?(value) ?? display(value))
+                .accessibilityHint(subtitle ?? "")
             }
-            .labelsHidden()
-            .accessibilityValue(spoken?(value) ?? display(value))
-            .accessibilityHint(subtitle ?? "")
         }
         .padding(.horizontal, FRMetrics.rowPadding)
-        .padding(.vertical, 6)
+        .padding(.vertical, stacked ? 10 : 6)
         .frame(minHeight: subtitle == nil ? 50 : 60)
     }
 }
 
-/// A switch row (`.toggle`) in the form's gold.
+/// A switch row (`.toggle`).
 private struct CreateLeagueToggleRow: View {
     let title: String
     @Binding var isOn: Bool
@@ -409,23 +323,9 @@ private struct CreateLeagueToggleRow: View {
                 .frFont(.input)
                 .foregroundStyle(Color.frText)
         }
-        .tint(Color.frGold)
         .padding(.horizontal, FRMetrics.rowPadding)
         .padding(.vertical, 6)
         .frame(minHeight: 50)
-    }
-}
-
-/// The `.foot` note under a group.
-private struct CreateLeagueFootnote: View {
-    let text: String
-
-    var body: some View {
-        Text(text)
-            .frFont(.meta)
-            .foregroundStyle(Color.frTextSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 16)
     }
 }
 
@@ -445,10 +345,11 @@ private struct CreateLeagueSubheader: View {
 #if DEBUG
 #Preview("Create league") {
     let environment = AppEnvironment.preview()
-    NavigationStack { CreateLeagueView() }
+    let directory = LeagueDirectoryStore(userID: "preview-user", repository: environment.leagues)
+    NavigationStack { CreateLeagueView(lifecycle: environment.leagueLifecycle, directory: directory) }
         .environment(environment)
         .environment(environment.session)
         .environment(ShellRouter())
-        .environment(LeagueDirectoryStore(userID: "preview-user", repository: environment.leagues))
+        .environment(directory)
 }
 #endif

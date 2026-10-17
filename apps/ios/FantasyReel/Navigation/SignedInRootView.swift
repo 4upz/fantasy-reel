@@ -8,7 +8,8 @@ extension EnvironmentValues {
 }
 
 /// Everything that exists only while one account is signed in: the league
-/// directory, navigation state, the inbox badge, and the single sheet.
+/// directory, navigation state, the inbox badge, the admin check, and the
+/// single sheet.
 struct SignedInRootView: View {
     let account: AuthService.Account
 
@@ -16,6 +17,7 @@ struct SignedInRootView: View {
     @Environment(SessionStore.self) private var session
     @State private var directory: LeagueDirectoryStore
     @State private var inbox: InboxStore
+    @State private var admin: AdminStore
     @State private var router = ShellRouter()
     @State private var profile: Profile?
 
@@ -23,6 +25,7 @@ struct SignedInRootView: View {
         self.account = account
         _directory = State(initialValue: LeagueDirectoryStore(userID: account.id, repository: environment.leagues))
         _inbox = State(initialValue: InboxStore(userID: account.id, repository: environment.notifications))
+        _admin = State(initialValue: AdminStore(repository: environment.admin))
     }
 
     var body: some View {
@@ -31,12 +34,14 @@ struct SignedInRootView: View {
             .environment(router)
             .environment(directory)
             .environment(inbox)
+            .environment(admin)
             .environment(\.currentProfile, profile)
             .sheet(item: $router.sheet) { sheet in
                 ShellSheetView(sheet: sheet)
                     .environment(router)
                     .environment(directory)
                     .environment(inbox)
+                    .environment(admin)
                     .environment(\.currentProfile, profile)
             }
             .alert(
@@ -131,14 +136,21 @@ struct SignedInRootView: View {
 private struct ShellSheetView: View {
     let sheet: ShellSheet
 
+    @Environment(AppEnvironment.self) private var environment
+    @Environment(LeagueDirectoryStore.self) private var directory
+
     var body: some View {
         switch sheet {
         case .menu:
             MenuSheetView()
         case .createLeague:
-            NavigationStack { CreateLeagueView() }
+            NavigationStack {
+                CreateLeagueView(lifecycle: environment.leagueLifecycle, directory: directory)
+            }
         case .joinLeague(let input):
-            NavigationStack { JoinLeagueView(input: input) }
+            NavigationStack {
+                JoinLeagueView(input: input, lifecycle: environment.leagueLifecycle, directory: directory)
+            }
         }
     }
 }

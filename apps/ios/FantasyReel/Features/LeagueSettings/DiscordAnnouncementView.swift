@@ -29,7 +29,7 @@ struct DiscordAnnouncementView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
                 ScreenHeader("Announcement", eyebrow: "\(season.name) · \(String(season.seasonYear)) Season")
-                SettingsFootnote("Post a message to every Discord channel linked to this league.")
+                FRFootnote("Post a message to every Discord channel linked to this league.")
 
                 ZStack(alignment: .topLeading) {
                     if message.isEmpty {
@@ -47,7 +47,6 @@ struct DiscordAnnouncementView: View {
                         .focused($isEditing)
                         .frame(minHeight: 160)
                         .accessibilityLabel("Message")
-                        .accessibilityValue(message.isEmpty ? "Empty" : message)
                 }
                 .padding(12)
                 .background(Color.frSurface, in: RoundedRectangle(cornerRadius: FRMetrics.cardRadius, style: .continuous))
@@ -58,14 +57,18 @@ struct DiscordAnnouncementView: View {
                 .disabled(model.announcement.isRunning)
 
                 HStack(alignment: .firstTextBaseline) {
-                    SettingsFootnote("Sent as an embed to every linked channel, regardless of their notification settings")
+                    Text("Sent as an embed to every linked channel, regardless of their notification settings")
+                        .frFont(.meta)
+                        .foregroundStyle(Color.frTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     Text("\(length)/\(Self.maxLength)")
                         .frFont(.meta)
                         .monospacedDigit()
                         .foregroundStyle(charsOver > 0 ? Color.frError : Color.frTextSecondary)
                         .accessibilityLabel("\(length) of \(Self.maxLength) characters")
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, FRMetrics.rowPadding)
 
                 if charsOver > 0 {
                     SettingsFieldError(
@@ -103,8 +106,6 @@ struct DiscordAnnouncementView: View {
         }
         .background(Color.frBackground)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("Post Announcement")
-        .navigationBarTitleDisplayMode(.inline)
         .announcesError(model.announcement.errorMessage)
     }
 

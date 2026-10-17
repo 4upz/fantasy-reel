@@ -7,6 +7,7 @@ import SwiftUI
 /// the Account feature builds the rest around them.
 struct AccountView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(AdminStore.self) private var admin
     @AppStorage(AppearancePreference.storageKey) private var appearance: AppearancePreference = .system
     @State private var signOut = AsyncAction()
 
@@ -19,6 +20,12 @@ struct AccountView: View {
                     }
                 }
             }
+            if admin.isAdmin == true {
+                Section {
+                    GrowthDashboardRow()
+                        .listRowInsets(EdgeInsets())
+                }
+            }
             Section {
                 Button("Sign Out", role: .destructive) {
                     signOut.run { await session.signOut() }
@@ -27,5 +34,8 @@ struct AccountView: View {
             }
         }
         .navigationTitle("Account")
+        // Asked here rather than on the row: the row is absent for everyone
+        // who isn't an administrator, so a task on it would never run.
+        .task { await admin.checkIfNeeded() }
     }
 }

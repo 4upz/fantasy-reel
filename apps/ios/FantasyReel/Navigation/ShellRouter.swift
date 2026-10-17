@@ -9,6 +9,12 @@ enum LeagueRoute: Hashable {
     case draftResults
     case history
     case settings
+    /// Owner, active season: end it (typed confirmation). Pushed from Settings.
+    case endSeason
+    /// Owner, setup season: delete it (typed confirmation). Pushed from Settings.
+    case deleteSeason
+    /// Owner: post an announcement to the league's Discord channels. Pushed from Settings.
+    case postAnnouncement
     case shareInvite
     /// Owner, setup: invite one player by name or email (pushed from the invite tools).
     case invitePlayer

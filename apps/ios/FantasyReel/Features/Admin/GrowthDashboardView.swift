@@ -10,8 +10,7 @@ import SwiftUI
 /// When the server says this account isn't an administrator, the screen shows
 /// "Not available" and nothing else.
 struct GrowthDashboardView: View {
-    @Environment(AppEnvironment.self) private var environment
-    @Environment(SessionStore.self) private var session
+    @Environment(AdminStore.self) private var admin
 
     @State private var state: LoadState<GrowthStats> = .idle
     /// A failed pull-to-refresh while numbers are already on screen.
@@ -23,8 +22,12 @@ struct GrowthDashboardView: View {
             loadingLabel: "Loading growth…",
             retry: { Task { await load() } }
         ) { stats in
-            GrowthDashboardContent(stats: stats, refreshError: refreshError)
-                .refreshable { await load() }
+            GrowthDashboardContent(
+                stats: stats,
+                chartData: admin.chartData ?? GrowthChartData(stats: stats),
+                refreshError: refreshError
+            )
+            .refreshable { await load() }
         } empty: {
             EmptyStateView(
                 title: "Not available",
@@ -35,26 +38,21 @@ struct GrowthDashboardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.frBackground)
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
+        .headerScreenTitle("Growth")
         .task {
-            if state.value == nil, let userID = session.account?.id,
-               let cached = AdminAccess.shared.cachedStats[userID] {
+            if state.value == nil, let cached = admin.stats {
                 state = .loaded(cached)
             }
+            // Opened again within a minute of the last load: keep those numbers.
+            if admin.hasFreshStats { return }
             await load()
         }
     }
 
     private func load() async {
-        guard let userID = session.account?.id else {
-            state = .empty
-            return
-        }
         if state.value == nil { state = .loading }
         do {
-            let stats = try await environment.admin.fetchGrowthStats()
-            AdminAccess.shared.record(stats, for: userID)
+            let stats = try await admin.loadStats()
             refreshError = nil
             if let stats {
                 state = .loaded(stats)
@@ -63,7 +61,7 @@ struct GrowthDashboardView: View {
                 state = .empty
             }
         } catch {
-            let message = APIError.wrap(error).userMessage
+            let message = error.userMessage
             if state.value != nil {
                 refreshError = message
             } else {
@@ -77,6 +75,7 @@ struct GrowthDashboardView: View {
 
 private struct GrowthDashboardContent: View {
     let stats: GrowthStats
+    let chartData: GrowthChartData
     let refreshError: String?
 
     var body: some View {
@@ -94,7 +93,7 @@ private struct GrowthDashboardContent: View {
                         Text("Running totals at the end of each week.")
                             .frFont(.bodySmall)
                             .foregroundStyle(Color.frTextSecondary)
-                        GrowthLineChart(weeks: stats.growth)
+                        GrowthLineChart(data: chartData)
                     }
                 }
 
@@ -123,8 +122,8 @@ private struct GrowthDashboardContent: View {
                     ]
                 )
 
-                GrowthMonthlyBars(title: "New users by month", months: stats.monthly, field: .signups)
-                GrowthMonthlyBars(title: "New leagues by month", months: stats.monthly, field: .leagues)
+                GrowthMonthlyBars(title: "New users by month", data: chartData, field: .signups)
+                GrowthMonthlyBars(title: "New leagues by month", data: chartData, field: .leagues)
 
                 gameplay
                 newestLeagues
@@ -513,12 +512,12 @@ enum GrowthFormat {
         GrowthDashboardView()
     }
     .environment(environment)
-    .environment(environment.session)
+    .environment(AdminStore(repository: environment.admin))
 }
 
 #Preview("Growth · content") {
     if let stats = GrowthPreviewData.stats {
-        GrowthDashboardContent(stats: stats, refreshError: nil)
+        GrowthDashboardContent(stats: stats, chartData: GrowthChartData(stats: stats), refreshError: nil)
             .background(Color.frBackground)
     } else {
         Text("Sample stats didn't decode.")

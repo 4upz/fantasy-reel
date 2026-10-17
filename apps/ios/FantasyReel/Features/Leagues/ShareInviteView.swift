@@ -31,15 +31,15 @@ struct ShareInviteView: View {
             .padding(.bottom, 24)
         }
         .background(Color.frBackground)
-        .navigationTitle("Invite")
-        .navigationBarTitleDisplayMode(.inline)
+        .headerScreenTitle("Invite Players")
     }
 }
 
 /// The owner's invite tools for a setup season (F-05): the join code and link
 /// with Share and Regenerate, Invite Player, and the invitation list with
-/// Resend and Cancel. The draft room (setup) embeds this; it renders nothing
-/// for members or once the draft has started.
+/// Resend and Cancel. The Draft tab's setup screen embeds this (the Draft
+/// feature owns that placement); it renders nothing for members or once the
+/// draft has started.
 struct LeagueInvitesSection: View {
     @Environment(\.leagueSelection) private var selection
 
@@ -115,14 +115,17 @@ struct JoinCodeCard: View {
             }
         }
         .task(id: season.id) {
-            guard season.status == .setup else { return }
+            // Already showing a code (from an earlier appearance or a
+            // generate): no need to read it again. Try Again and an uncertain
+            // generate still reload.
+            guard season.status == .setup, state.value == nil else { return }
             await load()
         }
-        .confirmationDialog("Regenerate the join code?", isPresented: $confirmsRegenerate, titleVisibility: .visible) {
+        .confirmationDialog("Regenerate join link?", isPresented: $confirmsRegenerate, titleVisibility: .visible) {
             Button("Regenerate", role: .destructive) { generateCode(replacing: true) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text(Self.regenerateHint)
+            Text("The current code will stop working immediately. Anyone who already has the old link won't be able to use it.")
         }
         .announcesError(generate.errorMessage)
     }
@@ -166,7 +169,7 @@ struct JoinCodeCard: View {
             Button {
                 confirmsRegenerate = true
             } label: {
-                Text(generate.isRunning ? "Regenerating…" : "Regenerate…")
+                Text(generate.isRunning ? "Regenerating…" : "Regenerate Join Link…")
                     .frFont(.label)
                     .foregroundStyle(generate.isRunning ? Color.frTextMuted : Color.frGold)
                     .frame(minHeight: FRMetrics.minTapTarget)
@@ -174,7 +177,7 @@ struct JoinCodeCard: View {
             }
             .buttonStyle(.plain)
             .disabled(generate.isRunning)
-            .accessibilityLabel("Regenerate join code")
+            .accessibilityLabel("Regenerate join link")
             .accessibilityHint(Self.regenerateHint)
             .padding(.vertical, -8)
             Text(Self.regenerateHint)
@@ -354,6 +357,8 @@ private struct LeagueInvitationsList: View {
                     ForEach(invitations) { invitation in
                         LeagueInvitationRow(
                             invitation: invitation,
+                            // Resend and cancel only while the season can still be joined.
+                            allowsActions: season.status == .setup,
                             isBusy: busyID == invitation.id,
                             actionsDisabled: action.isRunning,
                             resend: { resend(invitation) },
@@ -453,6 +458,7 @@ private struct LeagueInvitationsList: View {
 /// the recipient, "Pending · sent Oct 3", and an actions menu.
 private struct LeagueInvitationRow: View {
     let invitation: LeagueInvitation
+    let allowsActions: Bool
     let isBusy: Bool
     let actionsDisabled: Bool
     let resend: () -> Void
@@ -463,8 +469,8 @@ private struct LeagueInvitationRow: View {
 
     var body: some View {
         let now = Date()
-        let canResend = invitation.canResend(now: now)
-        let canCancel = invitation.canCancel(now: now)
+        let canResend = allowsActions && invitation.canResend(now: now)
+        let canCancel = allowsActions && invitation.canCancel(now: now)
         HStack(spacing: FRMetrics.rowGap) {
             HStack(spacing: FRMetrics.rowGap) {
                 Image(systemName: hasEmail ? "envelope" : "person")
@@ -525,7 +531,8 @@ private struct LeagueInvitationRow: View {
     private func meta(now: Date) -> String {
         let status = invitation.effectiveStatus(now: now).displayName
         guard let sentAt = invitation.sentAt else { return status }
-        return "\(status) · sent \(sentAt.formatted(.dateTime.month(.abbreviated).day()))"
+        // "Pending · sent 2 days ago".
+        return "\(status) · sent \(sentAt.formatted(.relative(presentation: .numeric, unitsStyle: .wide)))"
     }
 }
 

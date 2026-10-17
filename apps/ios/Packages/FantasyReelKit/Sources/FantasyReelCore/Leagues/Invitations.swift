@@ -1,20 +1,10 @@
 import Foundation
 
-/// `invitations.status` as stored. A pending row past `expires_at` is
-/// expired even before anything rewrites it; use `effectiveStatus(now:)`.
-public enum InvitationStatus: String, Codable, Sendable, Hashable, CaseIterable {
-    case pending
-    case accepted
-    case declined
-    case expired
-    case cancelled
-
-    public init(from decoder: any Decoder) throws {
-        let raw = try decoder.singleValueContainer().decode(String.self)
-        // An unknown status enables nothing: treat it like a closed invitation.
-        self = InvitationStatus(rawValue: raw) ?? .cancelled
-    }
-
+/// Display wording for `invitations.status` (the enum itself is in
+/// `WireEnums.swift`). A pending row past `expires_at` is expired even before
+/// anything rewrites it; use `LeagueInvitation.effectiveStatus(now:)`. An
+/// unknown status enables nothing (no resend, no cancel).
+extension InvitationStatus {
     public var displayName: String {
         switch self {
         case .pending: "Pending"
@@ -22,6 +12,7 @@ public enum InvitationStatus: String, Codable, Sendable, Hashable, CaseIterable 
         case .declined: "Declined"
         case .expired: "Expired"
         case .cancelled: "Cancelled"
+        case .unknown: "Unknown"
         }
     }
 }

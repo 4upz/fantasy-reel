@@ -7,7 +7,7 @@ import SwiftUI
 /// nothing while there are none.
 ///
 /// Accept opens the join sheet in invitation mode, which waits for the person
-/// to confirm (links and cards only pre-fill). Decline goes straight to
+/// to confirm (links and cards only pre-fill). Decline asks first, then calls
 /// `decline-invitation`.
 struct PendingInvitationsSection: View {
     @Environment(AppEnvironment.self) private var environment
@@ -18,6 +18,7 @@ struct PendingInvitationsSection: View {
     @State private var loadError: String?
     @State private var decline = AsyncAction()
     @State private var decliningID: InvitationID?
+    @State private var pendingDecline: PendingInvitation?
 
     var body: some View {
         VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
@@ -36,7 +37,7 @@ struct PendingInvitationsSection: View {
                         isDeclining: decliningID == invitation.id,
                         isBusy: decline.isRunning,
                         accept: { accept(invitation) },
-                        decline: { declineInvitation(invitation) }
+                        decline: { pendingDecline = invitation }
                     )
                 }
             } else if let loadError {
@@ -53,6 +54,18 @@ struct PendingInvitationsSection: View {
         .task(id: session.account?.email) { await load() }
         .refreshOnForeground { await load() }
         .announcesError(decline.errorMessage)
+        .confirmationDialog(
+            pendingDecline.map { "Decline the invitation to \($0.leagueName)?" } ?? "Decline this invitation?",
+            isPresented: Binding(
+                get: { pendingDecline != nil },
+                set: { if !$0 { pendingDecline = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingDecline
+        ) { invitation in
+            Button("Decline", role: .destructive) { declineInvitation(invitation) }
+            Button("Keep", role: .cancel) {}
+        }
     }
 
     private func load() async {

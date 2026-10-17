@@ -53,11 +53,17 @@ private struct CompletedSeasonContent: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
-                ScreenHeader(
-                    season.name,
-                    subtitle: SeasonText.seasonTitle(season.seasonYear),
-                    status: season.status
-                )
+                if selection.seriesSeasons.count >= 2 {
+                    ScreenHeader(season.name, status: season.status) {
+                        seasonSwitcher
+                    }
+                } else {
+                    ScreenHeader(
+                        season.name,
+                        subtitle: SeasonText.seasonTitle(season.seasonYear),
+                        status: season.status
+                    )
+                }
                 ChampionBanner(seasonYear: season.seasonYear, champions: champions)
                     .padding(.top, 8)
                 nextSeasonCard
@@ -68,7 +74,6 @@ private struct CompletedSeasonContent: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color.frBackground)
-        .navigationTitle("")
         .alert(
             "Start the \(String(nextYear)) season?",
             isPresented: $isConfirmingStart,
@@ -81,9 +86,46 @@ private struct CompletedSeasonContent: View {
         .task(id: season.id) {
             await loadCarryOverNames()
         }
-        .onChange(of: startAction.errorMessage) { _, message in
-            if let message { Announcer.announce(message) }
+        .announcesError(startAction.errorMessage)
+    }
+
+    // MARK: - Season switcher
+
+    /// "2025 Season ▾": every season of this league the account can see, as in
+    /// the menu sheet's Seasons group. Picking one switches the whole shell.
+    private var seasonSwitcher: some View {
+        Menu {
+            ForEach(selection.seriesSeasons) { option in
+                Button {
+                    if option.id != season.id { directory.select(option.id) }
+                } label: {
+                    if option.id == season.id {
+                        Label(seasonOptionTitle(option), systemImage: "checkmark")
+                    } else {
+                        Text(seasonOptionTitle(option))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(SeasonText.seasonTitle(season.seasonYear))
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .accessibilityHidden(true)
+            }
+            .frFont(.label)
+            .foregroundStyle(Color.frGold)
+            .frame(minHeight: FRMetrics.minTapTarget)
+            .contentShape(Rectangle())
         }
+        .padding(.vertical, -10)
+        .accessibilityLabel("Season")
+        .accessibilityValue(SeasonText.seasonTitle(season.seasonYear))
+        .accessibilityHint("Switches to another season of this league.")
+    }
+
+    private func seasonOptionTitle(_ option: League) -> String {
+        "\(SeasonText.seasonTitle(option.seasonYear)) · \(option.status.displayName)"
     }
 
     // MARK: - Next season
@@ -158,17 +200,18 @@ private struct CompletedSeasonContent: View {
     /// what resets. It says nothing about leaving the new season; there is no
     /// way to do that in the app.
     private var confirmationMessage: String {
-        var message = "League settings carry over to \(nextYear), and everyone still in the \(season.seasonYear) "
-            + "season comes along with their team name and team image. Rosters start empty. "
-            + "People who left or were removed aren't brought back."
-        if let names = carryOverNames, !names.isEmpty {
-            message += "\n\nCarrying over (\(names.count)): \(SeasonText.sentenceList(names))"
-        }
-        return message
+        let carry = "League settings carry over to \(nextYear), and everyone still in the \(season.seasonYear) "
+            + "season comes along with their team name and team image."
+        let reset = "Rosters start empty. People who left or were removed aren't brought back."
+        let message = "\(carry) \(reset)"
+        guard let names = carryOverNames, !names.isEmpty else { return message }
+        let list = SeasonText.sentenceList(names)
+        return "\(message)\n\nCarrying over (\(names.count)): \(list)"
     }
 
+    /// Once per season: the names only feed the confirmation.
     private func loadCarryOverNames() async {
-        guard selection.isOwner, nextSeason == nil else { return }
+        guard carryOverNames == nil, selection.isOwner, nextSeason == nil else { return }
         let leagues = environment.leagues
         let seasonID = season.id
         guard let members = try? await leagues.fetchMembers(of: seasonID) else { return }
@@ -366,6 +409,9 @@ struct FinalStandingListRow: View {
     let row: FinalStandingRow
     let isYou: Bool
 
+    /// Wide enough for "T-12" at the current text size.
+    @ScaledMetric(relativeTo: .body) private var rankWidth: CGFloat = 36
+
     var body: some View {
         let owner = SeasonText.ownerName(row)
         ListRow(
@@ -379,8 +425,7 @@ struct FinalStandingListRow: View {
                     .frFont(.number)
                     .foregroundStyle(rankColor)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .frame(width: 32, alignment: .leading)
+                    .frame(width: rankWidth, alignment: .leading)
                 Avatar(name: row.teamName, size: .medium)
             }
         } trailing: {

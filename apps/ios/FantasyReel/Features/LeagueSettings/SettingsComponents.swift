@@ -1,3 +1,4 @@
+import FantasyReelCore
 import SwiftUI
 
 // Building blocks shared by the settings sections: a section with its header,
@@ -51,7 +52,6 @@ struct SettingsSection<Rows: View, Footer: View>: View {
                 rows
             }
             footer
-                .padding(.horizontal, 4)
             if let error {
                 InlineBanner(tone: .error, title: error)
             }
@@ -61,7 +61,8 @@ struct SettingsSection<Rows: View, Footer: View>: View {
                     Button(action: save.action) {
                         Text(save.isRunning ? "Saving…" : save.title)
                     }
-                    .buttonStyle(.fr(.primary, size: .medium, isLoading: save.isRunning))
+                    // Secondary, so a screen of sections isn't a stack of filled primaries.
+                    .buttonStyle(.fr(.secondary, size: .compact, isLoading: save.isRunning))
                     .disabled(!save.isEnabled || save.isRunning)
                 }
             }
@@ -78,23 +79,6 @@ extension SettingsSection where Footer == EmptyView {
         @ViewBuilder rows: () -> Rows
     ) {
         self.init(title, error: error, save: save, rows: rows) { EmptyView() }
-    }
-}
-
-/// Footer text under a section's rows.
-struct SettingsFootnote: View {
-    private let text: String
-
-    init(_ text: String) {
-        self.text = text
-    }
-
-    var body: some View {
-        Text(text)
-            .frFont(.meta)
-            .foregroundStyle(Color.frTextSecondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -118,6 +102,7 @@ struct SettingsLockNote: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, FRMetrics.rowPadding)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Locked. \(text)")
     }
@@ -142,6 +127,7 @@ struct SettingsFieldError: View {
         }
         .foregroundStyle(Color.frError)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, FRMetrics.rowPadding)
     }
 }
 
@@ -224,10 +210,41 @@ struct SettingsToggleRow: View {
                 }
             }
         }
-        .tint(Color.frGold)
         .padding(.horizontal, FRMetrics.rowPadding)
         .padding(.vertical, 10)
         .frame(minHeight: 50)
+    }
+}
+
+/// A worked-example row: what a score earns under the current rule, as a
+/// signed whole number in the value's color, read as "plus 36 points".
+struct SettingsExampleRow: View {
+    private let title: String
+    private let points: Double
+    private let tone: Color
+
+    init(_ title: String, points: Double, tone: Color) {
+        self.title = title
+        self.points = points
+        self.tone = tone
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title)
+                .frFont(.rowLabel)
+                .foregroundStyle(Color.frText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(verbatim: "\(FantasyPoints.signed(points)) pts")
+                .frFont(.number)
+                .foregroundStyle(tone)
+        }
+        .padding(.horizontal, FRMetrics.rowPadding)
+        .padding(.vertical, 10)
+        .frame(minHeight: 50)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(FantasyPoints.spokenLabel(points, preRelease: false))
     }
 }
 
@@ -272,6 +289,7 @@ struct SettingsNumberFieldRow: View {
     private let unit: String
     private let placeholder: String
     @Binding private var text: String
+    @FocusState private var isFocused: Bool
 
     init(_ title: String, text: Binding<String>, unit: String, placeholder: String = "") {
         self.title = title
@@ -286,11 +304,22 @@ struct SettingsNumberFieldRow: View {
                 TextField(placeholder, text: $text)
                     .keyboardType(.numberPad)
                     .multilineTextAlignment(.trailing)
+                    .focused($isFocused)
                     .accessibilityLabel("\(title), \(unit)")
                 Text(unit)
                     .frFont(.label)
                     .foregroundStyle(Color.frTextSecondary)
                     .accessibilityHidden(true)
+            }
+        }
+        .toolbar {
+            // A number pad has no return key. Only the focused row adds the
+            // button, so the keyboard shows one Done.
+            ToolbarItemGroup(placement: .keyboard) {
+                if isFocused {
+                    Spacer()
+                    Button("Done") { isFocused = false }
+                }
             }
         }
     }

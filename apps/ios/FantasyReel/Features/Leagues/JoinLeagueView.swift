@@ -9,71 +9,44 @@ import SwiftUI
 /// Join. A pasted invitation link switches to invitation mode. Errors stay
 /// inline in an "Unable to join" banner, including the code-attempt rate limit.
 struct JoinLeagueView: View {
-    let input: JoinInput
-
-    @Environment(AppEnvironment.self) private var environment
     @Environment(ShellRouter.self) private var router
-    @Environment(LeagueDirectoryStore.self) private var directory
     @Environment(SessionStore.self) private var session
     @Environment(\.currentProfile) private var profile
 
-    @State private var mode: Mode
-    @State private var code: String
-    @State private var teamName = ""
-    @State private var join = AsyncAction()
-    @State private var localError: String?
-    @State private var outcomeUncertain = false
+    @State private var model: JoinLeagueModel
+    @State private var confirmsDiscard = false
     @FocusState private var focusedField: Field?
-
-    private let initialCode: String
-
-    private enum Mode: Equatable {
-        case code
-        case invitation(token: String)
-    }
 
     private enum Field { case code, team }
 
-    init(input: JoinInput) {
-        self.input = input
-        switch input {
-        case .manual:
-            _mode = State(initialValue: .code)
-            _code = State(initialValue: "")
-            initialCode = ""
-        case .code(let value):
-            let normalized = JoinCode.normalize(value)
-            _mode = State(initialValue: .code)
-            _code = State(initialValue: normalized)
-            initialCode = normalized
-        case .invitation(let token):
-            _mode = State(initialValue: .invitation(token: token))
-            _code = State(initialValue: "")
-            initialCode = ""
-        }
+    init(input: JoinInput, lifecycle: any LeagueLifecycleRepository, directory: LeagueDirectoryStore) {
+        _model = State(initialValue: JoinLeagueModel(input: input, lifecycle: lifecycle, directory: directory))
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
-                switch mode {
-                case .code:
+                if let result = model.completed, let warning = result.warning {
+                    InlineBanner(tone: .warning, title: "You joined \(result.leagueName)", message: warning)
+                }
+                if model.isCodeMode {
                     codeEntry
-                case .invitation:
+                } else {
                     invitationHeader
                 }
 
-                if let message = errorMessage {
+                if let message = model.errorMessage {
                     InlineBanner(tone: .error, title: "Unable to join", message: message)
                 }
 
                 FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
                     FormFieldRow(label: "Team name", labelWidth: 100) {
-                        TextField("Optional", text: $teamName)
+                        TextField("Optional", text: $model.form.teamName)
                             .textInputAutocapitalization(.words)
                             .submitLabel(.join)
                             .focused($focusedField, equals: .team)
                             .onSubmit(submit)
+                            .accessibilityLabel("Team name")
                             .accessibilityHint(teamHint)
                     }
                     FormFieldRow(label: "Joining as", labelWidth: 100) {
@@ -82,13 +55,9 @@ struct JoinLeagueView: View {
                 }
                 .padding(.top, 4)
 
-                Text(footnote)
-                    .frFont(.meta)
-                    .foregroundStyle(Color.frTextSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
+                FRFootnote(footnote)
             }
-            .disabled(join.isRunning)
+            .disabled(model.isRunning || model.completed != nil)
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.top, 8)
             .padding(.bottom, 24)
@@ -98,33 +67,50 @@ struct JoinLeagueView: View {
         .navigationTitle("Join a League")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { router.dismissSheet() }
-                    .disabled(join.isRunning)
-            }
-            ToolbarItem(placement: .confirmationAction) {
-                if join.isRunning {
-                    ProgressView()
-                        .accessibilityLabel("Joining league")
-                } else {
-                    Button("Join", action: submit)
-                        .disabled(!canSubmit)
+            if model.completed != nil {
+                // Joined with a warning: the league is open behind the sheet.
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done", systemImage: "checkmark") { router.dismissSheet() }
+                        .buttonStyle(.glassProminent)
+                        .tint(Color.frGold)
+                }
+            } else {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", systemImage: "xmark") {
+                        if model.hasUnsavedInput {
+                            confirmsDiscard = true
+                        } else {
+                            router.dismissSheet()
+                        }
+                    }
+                    .disabled(model.isRunning)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Join", systemImage: "checkmark", action: submit)
+                        .buttonStyle(.glassProminent)
+                        .tint(Color.frGold)
+                        .disabled(!model.form.canSubmit || model.isRunning)
+                        .accessibilityValue(model.isRunning ? "Joining league" : "")
                 }
             }
         }
-        .interactiveDismissDisabled(join.isRunning)
-        .onChange(of: hasUnsavedInput, initial: true) { _, unsaved in
+        .confirmationDialog("Discard what you entered?", isPresented: $confirmsDiscard, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { router.dismissSheet() }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("You haven't joined yet.")
+        }
+        .interactiveDismissDisabled(model.hasUnsavedInput || model.isRunning)
+        .onChange(of: model.hasUnsavedInput, initial: true) { _, unsaved in
             router.sheetHasUnsavedInput = unsaved
         }
-        .onChange(of: code) { _, newValue in
-            codeDidChange(newValue)
+        .onChange(of: model.form.code) { _, newValue in
+            model.codeDidChange(newValue)
         }
-        .onChange(of: teamName) { _, newValue in
-            if newValue.count > CreateLeagueRequest.maxTeamNameLength {
-                teamName = String(newValue.prefix(CreateLeagueRequest.maxTeamNameLength))
-            }
+        .onChange(of: model.form.teamName) {
+            model.teamNameDidChange()
         }
-        .announcesError(errorMessage)
+        .announcesError(model.errorMessage)
     }
 
     // MARK: Code mode
@@ -138,7 +124,7 @@ struct JoinLeagueView: View {
                 .frame(maxWidth: .infinity)
                 .accessibilityHidden(true)
 
-            TextField("K7MPQ2XW", text: $code)
+            TextField("K7MPQ2XW", text: $model.form.code)
                 .font(.system(.title, design: .monospaced, weight: .semibold))
                 .tracking(4)
                 .multilineTextAlignment(.center)
@@ -155,14 +141,15 @@ struct JoinLeagueView: View {
                 .background(Color.frSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(localError == nil ? Color.frBorder : Color.frError, lineWidth: 1)
+                        .strokeBorder(model.localError == nil ? Color.frBorder : Color.frError, lineWidth: 1)
                 }
                 .accessibilityLabel("Join code")
                 .accessibilityHint("Enter the code shared by your league commissioner, or paste a join link.")
 
-            PasteButton(payloadType: String.self) { strings in
+            PasteButton(payloadType: String.self) { [model] strings in
+                // The paste callback isn't main-actor isolated; hop before touching the model.
                 guard let pasted = strings.first else { return }
-                applyPasted(pasted)
+                Task { @MainActor in model.applyPasted(pasted) }
             }
             .labelStyle(.titleAndIcon)
             .buttonBorderShape(.capsule)
@@ -192,9 +179,7 @@ struct JoinLeagueView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Use a Code Instead") {
-                mode = .code
-                localError = nil
-                join.clearError()
+                model.useCodeInstead()
                 focusedField = .code
             }
             .buttonStyle(.fr(.secondary, size: .compact))
@@ -238,107 +223,22 @@ struct JoinLeagueView: View {
     }
 
     private var footnote: String {
-        switch mode {
-        case .code:
-            "\(teamHint) Invited by email? Open the link in that email instead."
-        case .invitation:
-            teamHint
-        }
+        model.isCodeMode ? "\(teamHint) Invited by email? Open the link in that email instead." : teamHint
     }
 
-    // MARK: State
-
-    private var errorMessage: String? {
-        if let localError { return localError }
-        if outcomeUncertain {
-            return "We couldn't confirm whether you joined. Check your league list before trying again."
-        }
-        return join.errorMessage
-    }
-
-    private var hasUnsavedInput: Bool {
-        !teamName.isEmpty || (mode == .code && code != initialCode)
-    }
-
-    private var canSubmit: Bool {
-        switch mode {
-        case .code: !code.isEmpty
-        case .invitation: true
-        }
-    }
-
-    private func codeDidChange(_ newValue: String) {
-        localError = nil
-        outcomeUncertain = false
-        // A pasted or typed link: read the code or the invitation token from it.
-        if newValue.contains("?") || newValue.contains("://") {
-            applyPasted(newValue)
-            return
-        }
-        let normalized = JoinCode.normalize(newValue)
-        if normalized != newValue { code = normalized }
-    }
-
-    private func applyPasted(_ text: String) {
-        localError = nil
-        outcomeUncertain = false
-        join.clearError()
-        switch JoinCode.parse(text) {
-        case .invitation(let token):
-            code = ""
-            mode = .invitation(token: token)
-            Announcer.announce("Invitation link pasted")
-        case .code(let parsed):
-            mode = .code
-            code = parsed
-            if !parsed.isEmpty {
-                let spelled = parsed.map { String($0) }.joined(separator: " ")
-                Announcer.announce("Code \(spelled) pasted")
-            }
-        }
-    }
+    // MARK: Submit
 
     private func submit() {
-        guard !join.isRunning else { return }
-        localError = nil
-        outcomeUncertain = false
-
-        let route: JoinLeagueRequest.Route
-        switch mode {
-        case .code:
-            let normalized = JoinCode.normalize(code)
-            guard !normalized.isEmpty else {
-                localError = "Please enter a join code"
-                focusedField = .code
-                return
-            }
-            guard JoinCode.isValid(normalized) else {
-                localError = JoinCode.invalidFormatMessage
-                focusedField = .code
-                return
-            }
-            route = .code(normalized)
-        case .invitation(let token):
-            route = .invitation(token: token)
+        guard !model.isRunning else { return }
+        guard model.validate() else {
+            if model.isCodeMode { focusedField = .code }
+            return
         }
-
-        let team = teamName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let request = JoinLeagueRequest(route: route, teamName: team.isEmpty ? nil : team)
-        let lifecycle = environment.leagueLifecycle
         focusedField = nil
         Task {
-            let succeeded = await join.runAndWait {
-                let result = try await lifecycle.joinLeague(request)
-                // A `warning` still means the person is in: open the league
-                // and let its home screen offer recovery. Never join again.
-                await directory.refresh()
-                directory.select(result.leagueID)
-                Announcer.announce("Joined \(result.leagueName)")
+            // With a warning the sheet stays open to show it, with Done.
+            if let result = await model.submit(), result.warning == nil {
                 router.dismissSheet()
-            }
-            if !succeeded, join.lastError?.isUncertainOutcome == true {
-                await directory.refresh()
-                outcomeUncertain = true
             }
         }
     }
@@ -347,20 +247,26 @@ struct JoinLeagueView: View {
 #if DEBUG
 #Preview("Join with code") {
     let environment = AppEnvironment.preview()
-    NavigationStack { JoinLeagueView(input: .code("k7mp-q2xw")) }
-        .environment(environment)
-        .environment(environment.session)
-        .environment(ShellRouter())
-        .environment(LeagueDirectoryStore(userID: "preview-user", repository: environment.leagues))
+    let directory = LeagueDirectoryStore(userID: "preview-user", repository: environment.leagues)
+    NavigationStack {
+        JoinLeagueView(input: .code("k7mp-q2xw"), lifecycle: environment.leagueLifecycle, directory: directory)
+    }
+    .environment(environment)
+    .environment(environment.session)
+    .environment(ShellRouter())
+    .environment(directory)
 }
 
 #Preview("Join by invitation") {
     let environment = AppEnvironment.preview()
-    NavigationStack { JoinLeagueView(input: .invitation(token: "preview-token")) }
-        .environment(environment)
-        .environment(environment.session)
-        .environment(ShellRouter())
-        .environment(LeagueDirectoryStore(userID: "preview-user", repository: environment.leagues))
-        .preferredColorScheme(.light)
+    let directory = LeagueDirectoryStore(userID: "preview-user", repository: environment.leagues)
+    NavigationStack {
+        JoinLeagueView(input: .invitation(token: "preview-token"), lifecycle: environment.leagueLifecycle, directory: directory)
+    }
+    .environment(environment)
+    .environment(environment.session)
+    .environment(ShellRouter())
+    .environment(directory)
+    .preferredColorScheme(.light)
 }
 #endif

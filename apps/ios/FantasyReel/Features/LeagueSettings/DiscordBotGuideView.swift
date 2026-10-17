@@ -5,8 +5,9 @@ import UIKit
 
 /// How to add the Fantasy Reel Discord bot (`DiscordBotGuide.tsx`): the
 /// install button (only when a client ID is configured), three setup steps,
-/// the league link with a copy button, and a few commands. Read-only; the
-/// caller supplies the heading. Also usable from How to Play (no league link).
+/// the league link with a copy button. Read-only; the caller supplies the
+/// heading and places `DiscordBotCommandsSection` after the card. Also usable
+/// from How to Play (no league link).
 struct DiscordBotGuideView: View {
     private let leagueLink: String?
     private let installURL: URL?
@@ -14,6 +15,8 @@ struct DiscordBotGuideView: View {
 
     @Environment(\.openURL) private var openURL
     @State private var copied = false
+    /// The step number circle grows with Dynamic Type.
+    @ScaledMetric(relativeTo: .body) private var stepCircle: CGFloat = 26
 
     init(leagueLink: String? = nil, installURL: URL? = nil, onOpenAccount: (() -> Void)? = nil) {
         self.leagueLink = leagueLink
@@ -95,28 +98,6 @@ struct DiscordBotGuideView: View {
                     }
                 }
             }
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Commands to try")
-                    .frFont(.rowTitle)
-                    .foregroundStyle(Color.frText)
-                    .accessibilityAddTraits(.isHeader)
-                ForEach(Self.commands, id: \.name) { command in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(command.name)
-                            .font(.system(.subheadline, design: .monospaced))
-                            .foregroundStyle(Color.frGold)
-                        Text(command.description)
-                            .frFont(.bodySmall)
-                            .foregroundStyle(Color.frTextSecondary)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.frElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .accessibilityElement(children: .combine)
-                }
-            }
         }
     }
 
@@ -125,7 +106,7 @@ struct DiscordBotGuideView: View {
             Text("\(number)")
                 .frFont(.numberSmall)
                 .foregroundStyle(Color.frOnGold)
-                .frame(width: 26, height: 26)
+                .frame(width: stepCircle, height: stepCircle)
                 .background(Color.frGold, in: Circle())
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
@@ -164,6 +145,33 @@ struct DiscordBotGuideView: View {
         .padding(.leading, 12)
         .padding(.vertical, 4)
         .background(Color.frElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+/// "Commands to try": the guide's sample commands as their own section, so
+/// they sit in a row group rather than a card inside the guide's card.
+struct DiscordBotCommandsSection: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader("Commands to try")
+                .padding(.bottom, 4)
+            FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                ForEach(DiscordBotGuideView.commands, id: \.name) { command in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(command.name)
+                            .font(.system(.subheadline, design: .monospaced))
+                            .foregroundStyle(Color.frGold)
+                        Text(command.description)
+                            .frFont(.bodySmall)
+                            .foregroundStyle(Color.frTextSecondary)
+                    }
+                    .padding(.horizontal, FRMetrics.rowPadding)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
     }
 }
 

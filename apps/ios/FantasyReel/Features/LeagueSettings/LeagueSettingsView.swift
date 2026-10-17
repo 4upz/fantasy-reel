@@ -5,14 +5,64 @@ import SwiftUI
 /// Owner settings: every F-15 section, end season and delete (F-15, F-16).
 /// Pushed onto a league tab's stack from the league `⋯` menu (owner only).
 struct LeagueSettingsView: View {
+    var body: some View {
+        SettingsScreen(title: "Settings") { selection, model in
+            SettingsContent(selection: selection, model: model)
+        }
+    }
+}
+
+/// End Season, pushed from Settings' danger zone (`LeagueRoute.endSeason`).
+struct SettingsEndSeasonScreen: View {
+    var body: some View {
+        SettingsScreen(title: "End Season") { selection, model in
+            SettingsEndSeasonView(season: selection.season, model: model)
+        }
+    }
+}
+
+/// Delete Season, pushed from Settings' danger zone (`LeagueRoute.deleteSeason`).
+struct SettingsDeleteSeasonScreen: View {
+    var body: some View {
+        SettingsScreen(title: "Delete season") { selection, model in
+            SettingsDeleteSeasonView(season: selection.season, model: model)
+        }
+    }
+}
+
+/// The announcement composer, pushed from Settings (`LeagueRoute.postAnnouncement`).
+struct DiscordAnnouncementScreen: View {
+    var body: some View {
+        SettingsScreen(title: "Announcement") { selection, model in
+            DiscordAnnouncementView(season: selection.season, model: model)
+        }
+    }
+}
+
+/// Hosts an owner settings screen: builds its `SettingsModel` once (not on
+/// every parent render) from the environment's repositories and the selected
+/// season, and shows the owner-only notice to anyone else. The shell is
+/// rebuilt per season, so the model never outlives its season.
+private struct SettingsScreen<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: (LeagueSelection, SettingsModel) -> Content
+
     @Environment(\.leagueSelection) private var selection
     @Environment(AppEnvironment.self) private var environment
     @Environment(LeagueDirectoryStore.self) private var directory
 
+    @State private var model: SettingsModel?
+
     var body: some View {
         Group {
             if let selection, selection.isOwner {
-                SettingsContent(selection: selection, environment: environment, directory: directory)
+                if let model {
+                    content(selection, model)
+                } else {
+                    LoadingView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.frBackground)
+                }
             } else {
                 ScrollView {
                     EmptyStateView(
@@ -26,36 +76,32 @@ struct LeagueSettingsView: View {
                 .background(Color.frBackground)
             }
         }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .headerScreenTitle(title)
+        .onAppear(perform: makeModelIfNeeded)
+    }
+
+    private func makeModelIfNeeded() {
+        guard model == nil, let selection, selection.isOwner else { return }
+        model = SettingsModel(
+            seasonID: selection.season.id,
+            leagues: environment.leagues,
+            lifecycle: environment.leagueLifecycle,
+            announcements: environment.announcements,
+            directory: directory
+        )
     }
 }
 
-/// The owner's settings for the selected season. The model lives as long as
-/// this screen; the season itself is read from the selection on every render,
-/// so a save (which refreshes the directory) shows the server's values.
+/// The owner's settings for the selected season. The season itself is read
+/// from the selection on every render, so a save (which refreshes the
+/// directory) shows the server's values.
 private struct SettingsContent: View {
     let selection: LeagueSelection
-
-    @State private var model: SettingsModel
-    @State private var destination: SettingsDestination?
+    let model: SettingsModel
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
-
-    init(selection: LeagueSelection, environment: AppEnvironment, directory: LeagueDirectoryStore) {
-        self.selection = selection
-        _model = State(
-            initialValue: SettingsModel(
-                seasonID: selection.season.id,
-                leagues: environment.leagues,
-                lifecycle: environment.leagueLifecycle,
-                announcements: environment.announcements,
-                directory: directory
-            )
-        )
-    }
 
     private var season: League { selection.season }
 
@@ -73,19 +119,15 @@ private struct SettingsContent: View {
                 SettingsDraftOrderSection(selection: selection)
                 SettingsParticipantsSection(season: season, currentUserID: selection.userID, model: model)
 
-                VStack(alignment: .leading, spacing: 8) {
-                    SectionHeader("Joining")
-                        .padding(.bottom, 4)
-                    JoinCodeCard(season: season)
-                }
-
+                discordBotSection
                 discordSection
+                SettingsJoiningSection(season: season, model: model)
 
                 if season.status == .completed {
                     SettingsNextSeasonSection(season: season)
                 }
 
-                SettingsDangerZoneSection(season: season, destination: $destination)
+                SettingsDangerZoneSection(season: season)
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 32)
@@ -93,38 +135,19 @@ private struct SettingsContent: View {
         .background(Color.frBackground)
         .scrollDismissesKeyboard(.interactively)
         .task {
+            guard !model.hasLoadedMembers else { return }
             await model.loadMembers()
         }
         .refreshable {
-            await directory.refresh()
-            await model.loadMembers()
-        }
-        .navigationDestination(item: $destination) { destination in
-            switch destination {
-            case .endSeason:
-                SettingsEndSeasonView(season: season, model: model)
-            case .deleteSeason:
-                SettingsDeleteSeasonView(season: season, model: model)
-            case .announcement:
-                DiscordAnnouncementView(season: season, model: model)
-            }
+            async let refreshed: Void = directory.refresh()
+            async let membersLoaded: Void = model.loadMembers()
+            await refreshed
+            await membersLoaded
         }
     }
 
-    private var discordSection: some View {
+    private var discordBotSection: some View {
         VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
-            SettingsSection("Discord") {
-                SettingsActionRow(
-                    "Post Announcement…",
-                    detail: "Post a message to every Discord channel linked to this league"
-                ) {
-                    model.announcement.clearError()
-                    destination = .announcement
-                }
-            } footer: {
-                SettingsFootnote("Link channels and choose alerts with the bot's commands in Discord.")
-            }
-
             VStack(alignment: .leading, spacing: 8) {
                 SectionHeader("Discord Bot")
                     .padding(.bottom, 4)
@@ -146,6 +169,20 @@ private struct SettingsContent: View {
                     }
                 }
             }
+            DiscordBotCommandsSection()
+        }
+    }
+
+    private var discordSection: some View {
+        SettingsSection("Discord") {
+            SettingsActionRow(
+                "Post Announcement…",
+                detail: "Post a message to every Discord channel linked to this league"
+            ) {
+                router.push(.postAnnouncement)
+            }
+        } footer: {
+            FRFootnote("Link channels and choose alerts with the bot's commands in Discord.")
         }
     }
 }

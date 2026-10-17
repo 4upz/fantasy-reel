@@ -55,7 +55,9 @@ struct InvitationTests {
         #expect(!rows[0].canCancel(now: now))
         #expect(rows[1].recipient == "eve@example.com")
         #expect(!rows[1].canResend(now: now))
-        #expect(rows[2].status == .cancelled)
+        #expect(rows[2].status == .unknown("mystery"))
+        #expect(!rows[2].canResend(now: now))
+        #expect(!rows[2].canCancel(now: now))
     }
 }
 
