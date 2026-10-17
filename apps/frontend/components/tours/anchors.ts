@@ -35,6 +35,20 @@ export function findTourAnchor(name: string): HTMLElement | null {
 }
 
 /**
+ * A short name for what a step highlights, for screen readers: the element's
+ * label, else its first heading, else its text, cut to a phrase.
+ */
+export function describeAnchor(element: HTMLElement): string {
+  const labelledBy = element.getAttribute('aria-labelledby')
+  const label = element.getAttribute('aria-label')
+    ?? (labelledBy ? document.getElementById(labelledBy.split(' ')[0])?.textContent : null)
+    ?? (element.querySelector<HTMLElement>('h1, h2, h3, h4, legend')?.innerText || null)
+    ?? element.innerText
+  const text = (label ?? '').replace(/\s+/g, ' ').trim()
+  return text.length > 60 ? `${text.slice(0, 57).trimEnd()}…` : text
+}
+
+/**
  * How much of the viewport fixed chrome covers: elements marked
  * `data-tour-inset="top"` (the mobile header, the pinned league header),
  * `data-tour-inset="bottom"` (the mobile tab bar) and `data-tour-inset="left"`
