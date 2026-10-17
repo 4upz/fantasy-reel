@@ -65,6 +65,7 @@ jobs:
             -scheme FantasyReel \
             -configuration Debug \
             -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee build/xcodebuild.log
 
@@ -78,6 +79,38 @@ jobs:
             -resultBundlePath ../../build/FantasyReelKit.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee -a ../../build/xcodebuild.log
+
+      # Fixed screens (FantasyReel/App/ScreenshotScenes.swift) in light and
+      # dark, for reviewers. Uploaded as the ios-screenshots artifact.
+      - name: Capture screenshots
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          APP=build/DerivedData/Build/Products/Debug-iphonesimulator/FantasyReel.app
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p build/screenshots
+          SCENES=$(sed -n 's/^    case \([a-zA-Z]*\)$/\1/p' FantasyReel/App/ScreenshotScenes.swift)
+          for appearance in light dark; do
+            xcrun simctl ui "$UDID" appearance "$appearance"
+            for scene in $SCENES; do
+              SIMCTL_CHILD_FR_SCREENSHOT="$scene" xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID"
+              sleep 4
+              xcrun simctl io "$UDID" screenshot "build/screenshots/$scene-$appearance.png"
+            done
+          done
+          ls build/screenshots
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-screenshots
+          path: apps/ios/build/screenshots
+          if-no-files-found: error
 
       - name: Summarize errors
         if: failure()
