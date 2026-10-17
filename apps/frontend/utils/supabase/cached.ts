@@ -29,6 +29,15 @@ export const getCachedProfile = cache(async (userId: string) => {
 })
 
 /**
+ * The user's tour state (`user_ui_state`), read once per request by the
+ * authenticated layout so tours know what was seen without a client fetch.
+ */
+export const getCachedUiState = cache(async (userId: string) => {
+  const supabase = await createClient()
+  return supabase.from('user_ui_state').select('key, value').eq('user_id', userId)
+})
+
+/**
  * Cache league by ID - shared across layout and page components.
  * Returns full league data including all columns.
  */

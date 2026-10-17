@@ -170,7 +170,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
       </aside>
 
       {/* Mobile Header Bar */}
-      <header className="sidenav-mobile-header">
+      <header className="sidenav-mobile-header" data-tour-inset="top">
         <button
           onClick={() => setIsMobileOpen(true)}
           className="sidenav-mobile-trigger"

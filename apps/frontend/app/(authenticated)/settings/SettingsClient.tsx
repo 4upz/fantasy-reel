@@ -12,6 +12,7 @@ import ConnectedAccounts from './components/ConnectedAccounts'
 import ChangePasswordModal from './components/ChangePasswordModal'
 import DeleteAccountModal from './components/DeleteAccountModal'
 import EmailPreferences from './components/EmailPreferences'
+import TourPreferences from './components/TourPreferences'
 
 interface Props {
   userId: string
@@ -208,6 +209,8 @@ export default function SettingsClient({
       </section>
 
       <EmailPreferences seasonRecapEmails={seasonRecapEmails} />
+
+      <TourPreferences />
 
       {/* Connected accounts Section */}
       <ConnectedAccounts email={email} identities={identities} hasPassword={hasPassword} />
