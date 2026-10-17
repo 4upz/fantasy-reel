@@ -12,6 +12,9 @@ const SPOTLIGHT_PADDING = 6
 /** Re-measure this often: anchors move as data loads and sticky headers pin. */
 const TICK_MS = 200
 const FALLBACK_CARD = { width: 352, height: 220 }
+/** Footer links: a full 44px tap target on phones, compact on larger screens. */
+const FOOTER_BUTTON =
+  'inline-flex min-h-[44px] items-center text-foreground-secondary transition-colors hover:text-gold sm:min-h-0 sm:py-1'
 
 interface Props {
   tour: ActiveTour
@@ -170,7 +173,7 @@ export default function TourOverlay({
         aria-describedby={bodyId}
         data-testid="tour-card"
         data-tour-id={tour.tour.id}
-        className={`card tour-card pointer-events-auto fixed overflow-y-auto p-4 shadow-heavy animate-fade-in motion-reduce:animate-none ${
+        className={`card tour-card has-[:focus-visible]:border-gold/40 pointer-events-auto fixed overflow-y-auto p-4 shadow-heavy animate-fade-in motion-reduce:animate-none ${
           position?.docked ? 'w-[calc(100vw-24px)]' : 'w-[min(22rem,calc(100vw-24px))]'
         } ${position ? '' : 'opacity-0'}`}
         style={position ? { top: position.top, left: position.left, maxHeight: position.maxHeight } : { top: 0, left: 0 }}
@@ -182,8 +185,8 @@ export default function TourOverlay({
           <button
             type="button"
             onClick={onNotNow}
-            className="-mr-1 rounded p-1 text-foreground-secondary transition-colors hover:text-foreground"
-            aria-label="Close tour"
+            className="-my-2 -mr-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded text-foreground-secondary transition-colors hover:text-foreground sm:-mr-2 sm:min-h-0 sm:min-w-0 sm:p-2.5"
+            aria-label="Not now"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -200,35 +203,32 @@ export default function TourOverlay({
 
         <div className="mt-4 flex items-center justify-between gap-3">
           {tour.index > 0 ? (
-            <button type="button" onClick={onBack} className="btn btn-ghost px-3 py-1.5">
+            <button type="button" onClick={onBack} className="btn btn-ghost -ml-3 min-h-[44px] px-3 py-2.5 sm:min-h-0 sm:py-1.5">
               Back
             </button>
           ) : (
             <span />
           )}
-          <button type="button" onClick={onNext} className="btn btn-primary px-4 py-1.5" data-testid="tour-next">
+          <button type="button" onClick={onNext} className="btn btn-primary min-h-[44px] px-4 py-2.5 sm:min-h-0 sm:py-1.5" data-testid="tour-next">
             {isLast ? 'Finish' : 'Next'}
           </button>
         </div>
 
-        <div className="type-meta mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t border-border pt-3">
-          <button type="button" onClick={onNotNow} className="text-foreground-secondary transition-colors hover:text-gold">
-            Not now
-          </button>
-          <button
-            type="button"
-            onClick={onDontShowAgain}
-            className="text-foreground-secondary transition-colors hover:text-gold"
-            data-testid="tour-dont-show"
-          >
-            Don’t show again
-          </button>
-          {tour.automatic && (
-            <button type="button" onClick={onTurnOffTours} className="text-foreground-secondary transition-colors hover:text-gold">
-              Turn off all tours
+        {!isLast && (
+          <div className="type-meta mt-3 flex flex-wrap gap-x-4 border-t border-border pt-2 sm:pt-3">
+            <button type="button" onClick={onNotNow} className={FOOTER_BUTTON}>
+              Not now
             </button>
-          )}
-        </div>
+            <button type="button" onClick={onDontShowAgain} className={FOOTER_BUTTON} data-testid="tour-dont-show">
+              Don’t show again
+            </button>
+            {tour.automatic && tour.index === 0 && (
+              <button type="button" onClick={onTurnOffTours} className={FOOTER_BUTTON}>
+                Turn off all tours
+              </button>
+            )}
+          </div>
+        )}
       </section>
     </div>,
     container
