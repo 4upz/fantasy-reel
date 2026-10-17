@@ -102,6 +102,10 @@ are. Two pieces need settings from outside the repo:
 - The full How to Play guide (F-01) is still a placeholder.
 - Connecting or disconnecting Google, Discord or Apple on an existing account,
   and changing a password, belong to the Account screen (F-03).
+- Account deletion (F-03) must also revoke the Apple token for accounts that
+  use Sign in with Apple (App Review guideline 5.1.1(v)); the app keeps the
+  Apple user ID in the Keychain, but the revoke call needs the server's Apple
+  client secret, so it belongs in the `delete-account` Edge Function.
 - Universal Links (needs the Apple team ID and an `apple-app-site-association`
   file on the website), push notifications (optional, O-01).
 

@@ -39,6 +39,10 @@ struct RootView: View {
         .animation(.default, value: session.isRecoveringPassword)
         .animation(.default, value: session.showsAppleRelayNotice)
         .task { session.start() }
+        // Someone who stops using Apple with Fantasy Reel (Settings → Apple ID)
+        // is signed out at launch, after sign-in, and on return to the app.
+        .task(id: session.account?.id) { await session.checkAppleCredential() }
+        .refreshOnForeground { await session.checkAppleCredential() }
         .onOpenURL { url in handle(url) }
     }
 

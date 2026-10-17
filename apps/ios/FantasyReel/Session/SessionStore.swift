@@ -1,3 +1,4 @@
+import AuthenticationServices
 import FantasyReelAPI
 import FantasyReelCore
 import Foundation
@@ -33,9 +34,15 @@ final class SessionStore {
 
     private let auth: AuthService
     private var listener: Task<Void, Never>?
+    /// Sign-ins that decide more than "signed in" (Apple's relay notice, a
+    /// reset link) run with the listener's sign-in events held, so the app
+    /// isn't built and torn down again before the right screen is known.
+    private var heldSignIns = 0
+    private let defaults: UserDefaults
 
-    init(auth: AuthService) {
+    init(auth: AuthService, defaults: UserDefaults = .standard) {
         self.auth = auth
+        self.defaults = defaults
     }
 
     var account: AuthService.Account? {
@@ -52,7 +59,14 @@ final class SessionStore {
             let changes = auth.changes()
             let restored = await auth.restoreSession()
             if let self, case .restoring = self.state {
-                self.state = restored.map(State.signedIn) ?? .signedOut
+                if let restored {
+                    // A reset link that signed in before the app was closed
+                    // still needs its new password.
+                    self.isRecoveringPassword = self.recoveryPendingUserID == restored.id.rawValue
+                    self.state = .signedIn(restored)
+                } else {
+                    self.state = .signedOut
+                }
             }
             for await change in changes {
                 guard let self else { return }
@@ -64,19 +78,19 @@ final class SessionStore {
     private func apply(_ change: AuthService.Change) {
         switch change {
         case .signedIn(let account), .updated(let account):
+            guard heldSignIns == 0 else { return }
             setSignedIn(account)
         case .passwordRecovery(let account):
-            isRecoveringPassword = true
+            beginRecovery(for: account)
             setSignedIn(account)
         case .signedOut:
+            clearSignedInState()
             state = .signedOut
-            isRecoveringPassword = false
-            showsAppleRelayNotice = false
         }
     }
 
     private func setSignedIn(_ account: AuthService.Account) {
-        authLinkNotice = nil
+        if authLinkNotice != nil { authLinkNotice = nil }
         // Avoid rebuilding the signed-in tree on a token refresh for the same user.
         if self.account != account {
             state = .signedIn(account)
@@ -110,7 +124,7 @@ final class SessionStore {
 
     func updatePassword(_ password: String) async throws(APIError) {
         try await auth.updatePassword(password)
-        isRecoveringPassword = false
+        endRecovery()
     }
 
     /// Provider sign-in. Cancelling the system sheet is not an error and leaves
@@ -121,28 +135,79 @@ final class SessionStore {
         }
     }
 
-    /// Sign in with Apple, from a native authorization (L-01).
-    func signInWithApple(idToken: String, nonce: String, fullName: String?) async throws(APIError) {
-        let result = try await auth.signInWithApple(idToken: idToken, nonce: nonce, fullName: fullName)
+    /// Sign in with Apple, from a native authorization (L-01). The relay
+    /// notice is decided before the app is shown, so a link held for after
+    /// sign-in survives until the person continues.
+    func signInWithApple(idToken: String, nonce: String, appleUserID: String, fullName: String?) async throws(APIError) {
+        heldSignIns += 1
+        defer { heldSignIns -= 1 }
+        // Apple sends the name once; keep it until a sign-in uses it.
+        if let fullName { AppleCredentialStore.setPendingName(fullName, for: appleUserID) }
+        let name = fullName ?? AppleCredentialStore.pendingName(for: appleUserID)
+        let result = try await auth.signInWithApple(idToken: idToken, nonce: nonce, fullName: name)
+        AppleCredentialStore.setPendingName(nil, for: appleUserID)
+        AppleCredentialStore.signedInAppleUserID = appleUserID
         showsAppleRelayNotice = result.isNewRelayAccount
         setSignedIn(result.account)
     }
 
+    /// Signs out when the person has stopped using Apple with Fantasy Reel
+    /// (Settings → Apple ID), as Apple asks. Checked at launch and foreground.
+    func checkAppleCredential() async {
+        guard account != nil, let appleUserID = AppleCredentialStore.signedInAppleUserID else { return }
+        guard let credentialState = try? await ASAuthorizationAppleIDProvider().credentialState(forUserID: appleUserID) else { return }
+        switch credentialState {
+        case .revoked, .notFound:
+            await signOut()
+            authLinkNotice = AuthLinkNotice(
+                message: "Sign in with Apple was turned off for Fantasy Reel. Sign in again to continue.",
+                isRecovery: false
+            )
+        default:
+            break
+        }
+    }
+
     func signOut() async {
         await auth.signOut()
-        pendingDeepLink = nil
-        isRecoveringPassword = false
-        showsAppleRelayNotice = false
+        clearSignedInState()
         state = .signedOut
+    }
+
+    private func clearSignedInState() {
+        pendingDeepLink = nil
+        endRecovery()
+        showsAppleRelayNotice = false
+        AppleCredentialStore.signedInAppleUserID = nil
+    }
+
+    // MARK: Password recovery, remembered until a new password is saved
+
+    private static let recoveryKey = "fr.recoveryPendingUserID"
+
+    private var recoveryPendingUserID: String? {
+        defaults.string(forKey: Self.recoveryKey)
+    }
+
+    private func beginRecovery(for account: AuthService.Account) {
+        isRecoveringPassword = true
+        defaults.set(account.id.rawValue, forKey: Self.recoveryKey)
+    }
+
+    private func endRecovery() {
+        isRecoveringPassword = false
+        defaults.removeObject(forKey: Self.recoveryKey)
     }
 
     /// Handles `fantasyreel://auth/callback?...` from an email link or OAuth.
     func handleAuthCallback(_ url: URL) async {
         let isRecovery = AppConfiguration.isRecoveryCallback(url)
+        heldSignIns += 1
+        defer { heldSignIns -= 1 }
         do {
             let account = try await auth.completeSignIn(from: url)
             if isRecovery {
-                isRecoveringPassword = true
+                beginRecovery(for: account)
             }
             setSignedIn(account)
         } catch {

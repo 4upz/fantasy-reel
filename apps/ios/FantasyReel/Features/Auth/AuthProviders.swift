@@ -31,8 +31,8 @@ struct AuthProviderButtons: View {
 }
 
 /// Sign in with Apple (L-01), with Apple's own button so it meets Apple's
-/// design rules: white on the dark theme, black on the light one, the same
-/// 50pt capsule as the other providers.
+/// design rules. White in both themes with the same 50pt capsule and soft
+/// shadow as the other providers, growing with large text.
 ///
 /// The request carries the SHA-256 of a fresh random nonce; Supabase receives
 /// the raw nonce and checks the two match, so a stolen token can't be replayed.
@@ -40,7 +40,7 @@ struct AppleSignInButton: View {
     let action: AsyncAction
 
     @Environment(SessionStore.self) private var session
-    @Environment(\.colorScheme) private var colorScheme
+    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 50
     /// A reference, not state: Apple calls `onRequest` and `onCompletion`
     /// back to back, and the completion must see the nonce the request used.
     @State private var nonce = NonceBox()
@@ -54,12 +54,10 @@ struct AppleSignInButton: View {
         } onCompletion: { result in
             complete(result)
         }
-        .signInWithAppleButtonStyle(colorScheme == .light ? .black : .white)
-        // Restyling (the color scheme) rebuilds the button; this keeps the
-        // nonce box and the button in step.
-        .id(colorScheme)
-        .frame(height: 50)
+        .signInWithAppleButtonStyle(.white)
+        .frame(height: min(height, 64))
         .clipShape(Capsule())
+        .shadow(color: .black.opacity(0.35), radius: 1, x: 0, y: 1)
         .disabled(action.isRunning)
         .opacity(action.isRunning ? 0.5 : 1)
     }
@@ -78,11 +76,12 @@ struct AppleSignInButton: View {
                 return
             }
             // Apple shares the name only the first time someone authorizes the app.
-            let fullName = credential.fullName.map {
-                PersonNameComponentsFormatter.localizedString(from: $0, style: .default)
-            }
+            let fullName = credential.fullName
+                .map { PersonNameComponentsFormatter.localizedString(from: $0, style: .default) }
+                .flatMap { $0.isEmpty ? nil : $0 }
+            let appleUserID = credential.user
             action.run {
-                try await session.signInWithApple(idToken: idToken, nonce: rawNonce, fullName: fullName)
+                try await session.signInWithApple(idToken: idToken, nonce: rawNonce, appleUserID: appleUserID, fullName: fullName)
             }
         case .failure(let error):
             // Closing Apple's sheet is not an error; any session stays as it was.
@@ -143,15 +142,19 @@ struct AuthLegalNotice: View {
             .multilineTextAlignment(.center)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 16)
+            .accessibilityHint("Links open in Safari.")
     }
 
     private var text: AttributedString {
         let site = environment.configuration.siteURL
         var result = AttributedString("By \(action), you agree to the ")
+        // Underlined, so the links don't rely on color alone.
         var terms = AttributedString("Terms of Service")
         terms.link = LegalLinks.terms(site: site)
+        terms.underlineStyle = .single
         var privacy = AttributedString("Privacy Policy")
         privacy.link = LegalLinks.privacy(site: site)
+        privacy.underlineStyle = .single
         result.append(terms)
         result.append(AttributedString(" and acknowledge the "))
         result.append(privacy)

@@ -28,6 +28,10 @@ struct AuthMessagesTests {
             == "Please confirm your email address before signing in")
     }
 
+    @Test func invalidAddressMatchesTheWeb() {
+        #expect(AuthMessages.message(code: "email_address_invalid", serverMessage: "", context: .emailRequest) == AuthMessages.invalidEmail)
+    }
+
     @Test func signUpDuplicateEmail() {
         #expect(AuthMessages.message(code: "user_already_exists", serverMessage: "User already registered", context: .signUp)
             == "An account with this email already exists")
@@ -86,6 +90,11 @@ struct AuthLinkFailureTests {
         #expect(AuthLinkFailure.classify(link) == .openedElsewhere)
         #expect(AuthLinkFailure.classify(link, exchangeErrorCode: "flow_state_not_found") == .openedElsewhere)
         #expect(AuthLinkFailure.classify(link, exchangeErrorCode: "flow_state_expired") == .expired)
+    }
+
+    @Test func aResentConfirmationWithoutACodeIsConfirmed() throws {
+        #expect(AuthLinkFailure.classify(try url("fantasyreel://auth/callback#access_token=a&refresh_token=b&type=signup")) == .confirmed)
+        #expect(AuthLinkFailure.confirmed.message(isRecovery: false) == "Your email is confirmed. Sign in to continue.")
     }
 
     @Test func noticesMatchTheWebForConfirmationLinks() {

@@ -14,8 +14,10 @@ import WebKit
 @MainActor
 final class SecurityCheck {
     private(set) var token: String?
-    /// Bumped to load a fresh challenge.
-    private(set) var generation = 0
+    /// Bumped to run a fresh challenge in the widget already on screen.
+    private(set) var resets = 0
+    /// Bumped to reload the widget from scratch (Try Again).
+    private(set) var reloads = 0
     /// The challenge script couldn't load (offline, content blocker).
     fileprivate(set) var loadFailed = false
 
@@ -34,8 +36,17 @@ final class SecurityCheck {
 
     func reset() {
         token = nil
+        if loadFailed {
+            reload()
+        } else {
+            resets += 1
+        }
+    }
+
+    func reload() {
+        token = nil
         loadFailed = false
-        generation += 1
+        reloads += 1
     }
 
     fileprivate func receive(_ token: String?) {
@@ -63,21 +74,26 @@ struct SecurityCheckView: View {
                     // site key allows; nothing is fetched from it.
                     baseURL: environment.configuration.siteURL,
                     theme: colorScheme == .light ? "light" : "dark",
-                    generation: check.generation,
+                    resets: check.resets,
+                    reloads: check.reloads,
                     onEvent: handle
                 )
                 .frame(height: 65)
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel("Security check")
-                if check.loadFailed {
+                if check.token != nil {
+                    AuthNote(systemImage: "checkmark.shield", text: "Security check passed")
+                        .frame(maxWidth: .infinity)
+                } else if check.loadFailed {
                     Text("The security check couldn't load. Check your connection, then try again.")
                         .frFont(.meta)
                         .foregroundStyle(Color.frError)
                         .multilineTextAlignment(.center)
-                    Button("Try Again") { check.reset() }
+                    Button("Try Again") { check.reload() }
                         .buttonStyle(.fr(.secondary, size: .compact))
                 }
             }
+            // A theme change reloads the widget, so the token it gave is gone.
+            .onChange(of: colorScheme) { check.receive(nil) }
         }
     }
 
@@ -85,6 +101,7 @@ struct SecurityCheckView: View {
         switch event {
         case .token(let token):
             check.receive(token)
+            Announcer.announce("Security check passed.")
         case .expired, .failed:
             check.receive(nil)
         case .loadFailed:
@@ -104,18 +121,21 @@ private struct TurnstileWebView: UIViewRepresentable {
     let siteKey: String
     let baseURL: URL
     let theme: String
-    let generation: Int
+    let resets: Int
+    let reloads: Int
     let onEvent: @MainActor (Event) -> Void
 
     static let handlerName = "turnstile"
     static let challengeHost = "challenges.cloudflare.com"
+    /// In memory only, so nothing from a challenge outlives the app session;
+    /// shared so each form doesn't spin up its own web process storage.
+    @MainActor private static let dataStore = WKWebsiteDataStore.nonPersistent()
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        // Nothing from the challenge outlives the form.
-        configuration.websiteDataStore = .nonPersistent()
+        configuration.websiteDataStore = Self.dataStore
         configuration.userContentController.add(context.coordinator, name: Self.handlerName)
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -131,8 +151,13 @@ private struct TurnstileWebView: UIViewRepresentable {
 
     func updateUIView(_ webView: WKWebView, context: Context) {
         context.coordinator.onEvent = onEvent
-        if context.coordinator.loadedPage != pageKey {
-            load(into: webView, coordinator: context.coordinator)
+        let coordinator = context.coordinator
+        if coordinator.loadedPage != pageKey {
+            load(into: webView, coordinator: coordinator)
+        } else if coordinator.resets != resets {
+            // A token was used: run a new challenge without reloading the page.
+            coordinator.resets = resets
+            webView.evaluateJavaScript("if (window.frWidget !== undefined) { turnstile.reset(window.frWidget) }")
         }
     }
 
@@ -140,10 +165,11 @@ private struct TurnstileWebView: UIViewRepresentable {
         webView.configuration.userContentController.removeScriptMessageHandler(forName: handlerName)
     }
 
-    private var pageKey: String { "\(generation)|\(theme)" }
+    private var pageKey: String { "\(reloads)|\(theme)" }
 
     private func load(into webView: WKWebView, coordinator: Coordinator) {
         coordinator.loadedPage = pageKey
+        coordinator.resets = resets
         coordinator.baseURL = baseURL
         webView.loadHTMLString(html, baseURL: baseURL)
     }
@@ -160,7 +186,7 @@ private struct TurnstileWebView: UIViewRepresentable {
         <script>
         function post(m){window.webkit.messageHandlers.\(Self.handlerName).postMessage(m)}
         function frReady(){
-          turnstile.render('#check',{
+          window.frWidget=turnstile.render('#check',{
             sitekey:\(key),theme:\(theme),size:'flexible',
             callback:function(t){post({type:'token',token:t})},
             'expired-callback':function(){post({type:'expired'})},
@@ -184,10 +210,15 @@ private struct TurnstileWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
         var onEvent: (@MainActor (Event) -> Void)?
         var loadedPage: String?
+        var resets = 0
         var baseURL: URL?
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
+            // Only the page this view loaded, never one of Cloudflare's frames.
+            guard message.frameInfo.isMainFrame,
+                  let body = message.body as? [String: Any],
+                  let type = body["type"] as? String
+            else { return }
             switch type {
             case "token":
                 if let token = body["token"] as? String, !token.isEmpty { onEvent?(.token(token)) }
@@ -233,12 +264,20 @@ private struct TurnstileWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
-            onEvent?(.loadFailed)
+            report(error)
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
-            // A cancelled navigation is the policy above doing its job.
-            if (error as NSError).code == NSURLErrorCancelled { return }
+            report(error)
+        }
+
+        private func report(_ error: any Error) {
+            let error = error as NSError
+            // A cancelled or interrupted load is a reload replacing the page or
+            // the policy above doing its job, not a failure.
+            let cancelled = error.domain == NSURLErrorDomain && error.code == NSURLErrorCancelled
+            let interrupted = error.domain == "WebKitErrorDomain" && error.code == 102
+            if cancelled || interrupted { return }
             onEvent?(.loadFailed)
         }
 
