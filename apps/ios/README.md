@@ -117,6 +117,9 @@ environment variable to a case name in the scheme's Run options.
   use Sign in with Apple (App Review guideline 5.1.1(v)); the app keeps the
   Apple user ID in the Keychain, but the revoke call needs the server's Apple
   client secret, so it belongs in the `delete-account` Edge Function.
+- TMDb attribution ("This product uses the TMDb API but is not endorsed or
+  certified by TMDb.", with TMDb's logo) goes on the screens that show movie
+  data, as the web does; the sign-in screens show none.
 - Universal Links (needs the Apple team ID and an `apple-app-site-association`
   file on the website), push notifications (optional, O-01).
 
