@@ -64,6 +64,7 @@ export default function LeagueTabs({
       className="relative flex gap-2 border-b border-border"
       aria-label="League navigation"
       data-testid="league-tabs"
+      data-tour="league-nav"
     >
       {tabs.map((tab) => {
         const isActive = isTabActive(pathname, tab.href)

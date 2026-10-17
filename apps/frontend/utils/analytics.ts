@@ -19,6 +19,9 @@ import { track } from '@vercel/analytics'
  * - `season_started`        — { league_id }
  * - `realtime_degraded`     — { league_id, status }
  * - `realtime_recovered`    — { league_id }
+ * - `tour_started`          — { tour_id, trigger: 'auto'|'manual' }
+ * - `tour_completed`        — { tour_id } (pressed Finish)
+ * - `tour_dismissed`        — { tour_id } (chose "Don't show again"; "Not now" is not tracked)
  *
  * Fire only at the SUCCESS point of a user action (after the API/action
  * succeeds), never on click, error, or cancel paths. Keep props limited to
