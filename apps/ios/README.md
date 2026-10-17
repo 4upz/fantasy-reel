@@ -95,6 +95,17 @@ are. Two pieces need settings from outside the repo:
   set. Local Supabase has CAPTCHA off, so Debug leaves it empty. Production
   requires it (see the release checklist).
 
+## Screenshots for pull requests
+
+CI captures fixed screens (`FantasyReel/App/ScreenshotScenes.swift`) in light
+and dark mode on every iOS run and uploads them as the `ios-screenshots`
+artifact. To show them in a PR description, add the `ios-screenshots` label:
+the next run commits smaller copies to `apps/ios/docs/screenshots/` on the PR
+branch, which the description can link. Remove the label once they're in, since
+GitHub won't start CI on that bot commit by itself; your next push runs it. To add a
+screen, add a case to `ScreenshotScene`. Locally, set the `FR_SCREENSHOT`
+environment variable to a case name in the scheme's Run options.
+
 ## Not yet done (tracked for feature work)
 
 - Every feature screen beyond sign-in and the shell (see the folder table in
