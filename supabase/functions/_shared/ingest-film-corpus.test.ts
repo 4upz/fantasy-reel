@@ -324,6 +324,33 @@ Deno.test('ingest-film-corpus: metadata', async (t) => {
     }
   })
 
+  await t.step('the discover backlog cannot starve league expansion of the stage budget', async () => {
+    // Production stalled here: the backlog filled every run's metadata budget,
+    // and the expansion queued behind it never ran.
+    const backlog = [21, 22, 23].map((tmdb_id) => ({
+      tmdb_id, title: `Backlog ${tmdb_id}`, seed_source: 'discover', priority: 0, metadata_fetched_at: null, effective_release_date: '2020-01-01',
+    }))
+    const db = metadataDb([leagueSequel({ metadata_fetched_at: `${TODAY}T01:00:00Z` }), ...backlog], {
+      film_people: [{ tmdb_person_id: 2001, name: 'Dir', credits_fetched_at: null }],
+      film_credits: [{ tmdb_id: 10, tmdb_person_id: 2001, role: 'director', billing: null }],
+    })
+    const responder = tmdbResponder()
+    const { restore } = stubFetch((url) => {
+      const backlogId = backlog.find((r) => url.includes(`/movie/${r.tmdb_id}?`))?.tmdb_id
+      if (backlogId) return new Response(JSON.stringify({ ...sequelDetails(), id: backlogId, belongs_to_collection: null }), { status: 200 })
+      return responder(url)
+    })
+    try {
+      // 5s per clock read against a 17s budget: room for three items.
+      const result = await fetchMetadataStage(client(db), { ...DEPS, now: steppingClock(5_000) }, CONFIG)
+      assertEquals(result.people_expanded, 1)
+      assertEquals(result.metadata_fetched, 2)
+      assertEquals(result.deadline_hit, true)
+    } finally {
+      restore()
+    }
+  })
+
   await t.step('a predecessor already in the sweep is promoted; a league movie is never demoted', async () => {
     const db = metadataDb([
       leagueSequel(),
