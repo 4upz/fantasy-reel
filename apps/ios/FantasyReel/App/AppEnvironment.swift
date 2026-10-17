@@ -20,6 +20,9 @@ final class AppEnvironment {
 
     let leagues: any LeagueRepository
     let leagueLifecycle: any LeagueLifecycleRepository
+    let invitations: any InvitationRepository
+    let announcements: any AnnouncementRepository
+    let admin: any AdminRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
 
@@ -29,6 +32,9 @@ final class AppEnvironment {
         configuration: AppConfiguration,
         leagues: (any LeagueRepository)? = nil,
         leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
+        invitations: (any InvitationRepository)? = nil,
+        announcements: (any AnnouncementRepository)? = nil,
+        admin: (any AdminRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
         notifications: (any NotificationRepository)? = nil
     ) {
@@ -41,6 +47,9 @@ final class AppEnvironment {
         self.session = SessionStore(auth: AuthService(provider: supabase))
         self.leagues = leagues ?? SupabaseLeagueRepository(provider: supabase)
         self.leagueLifecycle = leagueLifecycle ?? EdgeLeagueLifecycleRepository(functions: edgeFunctions)
+        self.invitations = invitations ?? SupabaseInvitationRepository(provider: supabase, functions: edgeFunctions)
+        self.announcements = announcements ?? EdgeAnnouncementRepository(functions: edgeFunctions)
+        self.admin = admin ?? SupabaseAdminRepository(provider: supabase)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
     }
@@ -59,6 +68,9 @@ extension AppEnvironment {
     static func preview(
         leagues: any LeagueRepository = InMemoryLeagueRepository(),
         leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
+        invitations: any InvitationRepository = InMemoryInvitationRepository(),
+        announcements: any AnnouncementRepository = InMemoryAnnouncementRepository(),
+        admin: any AdminRepository = InMemoryAdminRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
         notifications: any NotificationRepository = InMemoryNotificationRepository()
     ) -> AppEnvironment {
@@ -71,6 +83,9 @@ extension AppEnvironment {
             ),
             leagues: leagues,
             leagueLifecycle: leagueLifecycle,
+            invitations: invitations,
+            announcements: announcements,
+            admin: admin,
             profiles: profiles,
             notifications: notifications
         )
