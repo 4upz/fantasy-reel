@@ -4,7 +4,9 @@ import SwiftUI
 /// Create an account (mockup v2 "Sign up", F-02): the providers, then display
 /// name, email, password (8+) and confirmation behind the security check, with
 /// the legal notice under the button. When Supabase asks for email
-/// confirmation first, the form becomes "Check your email" with Resend.
+/// confirmation first, the form becomes "Check your email" with Resend. That
+/// screen, not the form, explains the confirmation link (Arik's call: the note
+/// read as out of place before anyone had signed up).
 struct SignUpView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppEnvironment.self) private var environment
