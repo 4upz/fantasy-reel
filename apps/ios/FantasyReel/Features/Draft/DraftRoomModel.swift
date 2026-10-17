@@ -182,7 +182,7 @@ final class DraftRoomModel {
             if counterpickOptions != .idle { counterpickOptions = .idle }
             return
         }
-        let key = OptionsKey(status: snapshot.league.status, picks: snapshot.draftPicksMade, counterpicks: snapshot.counterpicks.count)
+        let key = OptionsKey(status: snapshot.league.status, picks: snapshot.draftPicksMade, counterpicks: snapshot.counterpicksMade)
         if key == optionsKey, counterpickOptions.value != nil || counterpickOptions == .empty { return }
         if counterpickOptions.value == nil { counterpickOptions = .loading }
         do {

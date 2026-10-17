@@ -174,14 +174,14 @@ struct DraftMoviePickerView: View {
     /// detail and VoiceOver reaches each one.
     private func row(_ movie: MovieSearchResult) -> some View {
         let drafter = room.snapshot?.drafter(of: movie.tmdbID)
-        let date = movie.releaseDate.map { DateOnly.display($0, style: .medium) }
-        let draftedBy = drafter.map { "Drafted by \($0.userID == room.userID ? "you" : firstName($0))" }
+        let date = movie.releaseDate?.formatted(.medium)
+        let draftedBy = drafter.map { "Drafted by \($0.userID == room.userID ? "you" : $0.firstName)" }
         let meta = [draftedBy, date, drafter == nil ? MovieGenre.primaryName(of: movie.genreIDs) : nil]
             .compactMap { $0 }
             .joined(separator: " · ")
         return HStack(spacing: 0) {
             NavigationLink(value: LeagueRoute.movie(movie.tmdbID)) {
-                MovieRow(title: movie.title, meta: meta, posterURL: movie.posterURL) { EmptyView() }
+                MovieRow(title: movie.title, meta: meta, posterURL: movie.posterURL)
             }
             .buttonStyle(.frRow)
             .accessibilityHint("Shows movie details")
@@ -193,10 +193,6 @@ struct DraftMoviePickerView: View {
                     .padding(.trailing, FRMetrics.rowPadding)
             }
         }
-    }
-
-    private func firstName(_ member: LeagueMember) -> String {
-        member.displayName.split(separator: " ").first.map(String.init) ?? member.displayName
     }
 
     private func emptyMessage(_ model: DraftMoviePickerModel) -> String {
@@ -211,7 +207,7 @@ struct DraftMoviePickerView: View {
 
     private func confirmationMessage(_ movie: MovieSearchResult) -> String {
         guard let turn = room.myTurn else { return "" }
-        let date = movie.releaseDate.map { " It releases \(DateOnly.display($0, style: .full))." } ?? ""
+        let date = movie.releaseDate.map { " It releases \($0.formatted(.full))." } ?? ""
         return "This is your round \(turn.round) pick (pick \(turn.overallPick)).\(date)"
     }
 }

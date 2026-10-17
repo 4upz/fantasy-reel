@@ -111,7 +111,7 @@ private struct DraftHeader: View {
             subtitle: subtitle(league),
             status: league.status
         ) {
-            if league.status == .drafting || league.status == .counterpicking {
+            if model.isLive {
                 ConnectionStatusIndicator(status: model.connection)
             }
         }
@@ -137,11 +137,9 @@ private struct DraftConnectionNotice: View {
     let model: DraftRoomModel
 
     var body: some View {
-        let status = model.snapshot?.league.status
-        let isLive = status == .drafting || status == .counterpicking
-        if isLive, model.connection == .offline || model.connection == .reconnecting {
+        if model.isLive, model.connection == .offline || model.connection == .reconnecting {
             ConnectionStatusBanner(status: model.connection, message: "Showing last saved draft.")
-        } else if isLive, model.connection == .periodicUpdates {
+        } else if model.isLive, model.connection == .periodicUpdates {
             ConnectionStatusBanner(status: .periodicUpdates)
         }
         if let message = model.refreshError, model.connection != .offline {
@@ -254,11 +252,14 @@ private struct UpNextRow: View {
     }
 
     private func name(_ turn: DraftTurn) -> String {
-        turn.isMine(userID) ? "You" : firstName(turn.participant)
+        turn.isMine(userID) ? "You" : turn.participant.firstName
     }
+}
 
-    private func firstName(_ member: LeagueMember) -> String {
-        member.displayName.split(separator: " ").first.map(String.init) ?? member.displayName
+extension LeagueMember {
+    /// "Bob" for "Bob Nolan": the short name the queue and picker rows use.
+    var firstName: String {
+        displayName.split(separator: " ").first.map(String.init) ?? displayName
     }
 }
 

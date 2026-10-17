@@ -192,7 +192,7 @@ private struct CounterpickExplainer: View {
     var body: some View {
         let negative = Text(FantasyPoints.signed(-16)).foregroundStyle(Color.frCrimsonText)
         let positive = Text(FantasyPoints.signed(16)).foregroundStyle(Color.frSuccess)
-        Text("\(negative) movie scores \(positive) for you. Uses no roster slot.")
+        Text("A \(negative) movie scores \(positive) for you. Uses no roster slot.")
             .frFont(.label)
             .foregroundStyle(Color.frTextSecondary)
             .frame(maxWidth: .infinity, alignment: .leading)

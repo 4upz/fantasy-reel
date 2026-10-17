@@ -31,8 +31,6 @@ struct DraftRoomHandle: Hashable {
 @Observable
 @MainActor
 final class DraftMoviePickerModel {
-    typealias ReleaseWindow = MovieBrowseRequest.ReleaseWindow
-
     enum Phase: Equatable {
         case loading
         case loaded
@@ -41,7 +39,7 @@ final class DraftMoviePickerModel {
 
     var tab: CatalogTab = .all
     var query = ""
-    var window: ReleaseWindow = .year
+    var window: MovieBrowseRequest.ReleaseWindow = .year
     var genres: Set<Int> = []
 
     private(set) var movies: [MovieSearchResult] = []
