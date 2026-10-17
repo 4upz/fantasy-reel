@@ -11,6 +11,8 @@ import { describeAnchor, findTourAnchor, measureInsets, topModal } from './ancho
 const SPOTLIGHT_PADDING = 6
 /** Re-measure this often: anchors move as data loads and sticky headers pin. */
 const TICK_MS = 200
+/** Long enough for a smooth scrollIntoView to finish. */
+const SCROLL_SETTLE_MS = 450
 const FALLBACK_CARD = { width: 352, height: 220 }
 /** Footer links: a full 44px tap target on phones, compact on larger screens. */
 const FOOTER_BUTTON =
@@ -121,6 +123,30 @@ export default function TourOverlay({
     measure()
     titleRef.current?.focus({ preventScroll: true })
   }, [tour.index, step, measure])
+
+  // On a phone the card docks to an edge. If a tall card still covers the
+  // element, scroll once per step, after the step's own scroll has settled,
+  // so the element sits in the free part of the screen (or starts there).
+  const docked = layout?.position.docked ?? false
+  useEffect(() => {
+    if (!docked || !step.anchor || tour.hostModal) return
+    const timer = window.setTimeout(() => {
+      const element = findTourAnchor(step.anchor!)
+      const card = cardRef.current?.getBoundingClientRect()
+      if (!element || !card) return
+      const anchor = element.getBoundingClientRect()
+      if (anchor.bottom <= card.top || anchor.top >= card.bottom) return
+      const insets = measureInsets()
+      const gap = 12
+      // Moving the element further toward the edge it is near keeps the card
+      // docked where it is, so this settles in one scroll.
+      const delta = card.top > window.innerHeight / 2
+        ? Math.min(anchor.bottom - (card.top - gap), anchor.top - (insets.top + gap))
+        : Math.max(anchor.top - (card.bottom + gap), anchor.bottom - (window.innerHeight - insets.bottom - gap))
+      if (delta !== 0) window.scrollBy({ top: delta, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
+    }, SCROLL_SETTLE_MS)
+    return () => window.clearTimeout(timer)
+  }, [docked, step, tour.index, tour.hostModal])
 
   useEffect(() => {
     const interval = window.setInterval(measure, TICK_MS)
