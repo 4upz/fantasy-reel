@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { placeCard, type Box, type CardPosition } from '@/tours/engine'
 import type { ActiveTour } from './TourProvider'
-import { findTourAnchor, measureInsets, topModal } from './anchors'
+import { describeAnchor, findTourAnchor, measureInsets, topModal } from './anchors'
 
 /** Breathing room between a highlighted element and its outline. */
 const SPOTLIGHT_PADDING = 6
@@ -42,6 +42,22 @@ function sameLayout(a: Layout | null, b: Layout): boolean {
     && a.anchor.width === b.anchor.width && a.anchor.height === b.anchor.height
 }
 
+/**
+ * The ring around an anchor, padded but kept on screen: a full-width element
+ * (a phone's summary card) would otherwise lose its left and right edges.
+ */
+function spotlightBox(anchor: Box): React.CSSProperties {
+  const edge = 2
+  const left = Math.max(anchor.left - SPOTLIGHT_PADDING, edge)
+  const right = Math.min(anchor.left + anchor.width + SPOTLIGHT_PADDING, window.innerWidth - edge)
+  return {
+    top: anchor.top - SPOTLIGHT_PADDING,
+    left,
+    width: Math.max(0, right - left),
+    height: anchor.height + SPOTLIGHT_PADDING * 2,
+  }
+}
+
 function prefersReducedMotion(): boolean {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
@@ -72,6 +88,7 @@ export default function TourOverlay({
   const cardRef = useRef<HTMLElement>(null)
   const titleRef = useRef<HTMLParagraphElement>(null)
   const [layout, setLayout] = useState<Layout | null>(null)
+  const [highlighted, setHighlighted] = useState('')
   const [returnFocusTo] = useState(() => (document.activeElement instanceof HTMLElement ? document.activeElement : null))
 
   const measure = useCallback(() => {
@@ -93,6 +110,7 @@ export default function TourOverlay({
   // the card, and move focus to it.
   useLayoutEffect(() => {
     const element = step.anchor ? findTourAnchor(step.anchor) : null
+    setHighlighted(element ? describeAnchor(element) : '')
     if (element) {
       const rect = element.getBoundingClientRect()
       const insets = measureInsets()
@@ -154,12 +172,7 @@ export default function TourOverlay({
         <div
           aria-hidden="true"
           className="tour-spotlight"
-          style={{
-            top: anchor.top - SPOTLIGHT_PADDING,
-            left: anchor.left - SPOTLIGHT_PADDING,
-            width: anchor.width + SPOTLIGHT_PADDING * 2,
-            height: anchor.height + SPOTLIGHT_PADDING * 2,
-          }}
+          style={spotlightBox(anchor)}
         />
       ) : (
         <div aria-hidden="true" className="tour-scrim" />
@@ -199,6 +212,7 @@ export default function TourOverlay({
           {paragraphs.map((paragraph) => (
             <p key={paragraph}>{paragraph}</p>
           ))}
+          {highlighted && <p className="sr-only">Highlighted: {highlighted}</p>}
         </div>
 
         <div className="mt-4 flex items-center justify-between gap-3">
