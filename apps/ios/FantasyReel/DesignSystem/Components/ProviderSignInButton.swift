@@ -2,9 +2,9 @@ import SwiftUI
 
 /// A "Continue with …" sign-in button (`.pbtn`, V2LogIn / V2SignUp): a 50pt
 /// white capsule with #1f1f1f DM Sans 600 17 text and the provider's logo
-/// 18pt from the leading edge. It looks the same in both appearances, as the
-/// providers' brand rules ask: the black Apple logo, Google's four-color "G"
-/// and Discord's blurple mark on white.
+/// 18pt from the leading edge. It stays white in both appearances, as the
+/// providers' brand rules ask, with a gray outline on light pages: the black
+/// Apple logo, Google's four-color "G" and Discord's blurple mark on white.
 ///
 /// ```swift
 /// ProviderSignInButton(provider: .google) { … }
@@ -26,19 +26,20 @@ struct ProviderSignInButton: View {
         /// The provider's mark. Google's and Discord's are the web's
         /// (`GoogleIcon`, `DiscordIcon`) in their brand colors; Apple's is the
         /// system Apple logo in black, as a custom Sign in with Apple button uses.
+        /// Drawn in a `box`-point square (24pt at the default text size).
         @MainActor @ViewBuilder
-        var logo: some View {
+        func logo(box: CGFloat) -> some View {
             switch self {
             case .apple:
                 Image(systemName: "apple.logo")
-                    .font(.system(size: 20, weight: .medium))
+                    .font(.system(size: box * 0.83, weight: .medium))
                     .foregroundStyle(FRPalette.fixed(0x000000))
                     // The glyph sits a little low in its box; center it optically.
-                    .offset(y: -1)
+                    .offset(y: -box / 24)
             case .google:
-                Image("GoogleLogo").resizable().scaledToFit().frame(width: 20, height: 20)
+                Image("GoogleLogo").resizable().scaledToFit().frame(width: box * 0.83, height: box * 0.83)
             case .discord:
-                Image("DiscordLogo").resizable().scaledToFit().frame(width: 22, height: 22)
+                Image("DiscordLogo").resizable().scaledToFit().frame(width: box * 0.92, height: box * 0.92)
             }
         }
     }
@@ -73,30 +74,45 @@ private struct ProviderSignInButtonBody: View {
     let provider: ProviderSignInButton.Provider
 
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.colorScheme) private var colorScheme
+    /// The logo grows with the title at larger text sizes.
+    @ScaledMetric(relativeTo: .body) private var logoBox: CGFloat = 24
 
     /// Fixed, not themed: the same white button in dark and light.
     private static let fill = FRPalette.fixed(0xFFFFFF)
     private static let ink = FRPalette.fixed(0x1F1F1F)
+    /// On a light page a white button needs an edge: Apple's "white with
+    /// outline" style and Google's light button both draw one (#747775).
+    private static let outline = FRPalette.fixed(0x747775)
 
     var body: some View {
         label
             .frFont(.control)
             .tracking(-0.17)
-            .lineLimit(2)
             .multilineTextAlignment(.center)
             .foregroundStyle(Self.ink)
             // Clear the logo on both sides so the title stays centered.
-            .padding(.horizontal, 56)
+            .padding(.horizontal, 32 + logoBox)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, minHeight: 50)
             .overlay(alignment: .leading) {
-                provider.logo
-                    .frame(width: 24, height: 24)
+                provider.logo(box: logoBox)
+                    .frame(width: logoBox, height: logoBox)
                     .padding(.leading, 18)
                     .accessibilityHidden(true)
             }
-            .background(Self.fill, in: Capsule())
-            .shadow(color: .black.opacity(0.35), radius: 1, x: 0, y: 1)
+            // Only the capsule casts the shadow; on the whole view it would
+            // blur the title and the logo too.
+            .background {
+                Capsule()
+                    .fill(Self.fill)
+                    .shadow(color: .black.opacity(0.35), radius: 1, x: 0, y: 1)
+            }
+            .overlay {
+                if colorScheme == .light {
+                    Capsule().strokeBorder(Self.outline, lineWidth: 1)
+                }
+            }
             .opacity(isEnabled ? (isPressed ? 0.8 : 1) : 0.5)
             .contentShape(Capsule())
             .animation(.easeOut(duration: 0.12), value: isPressed)

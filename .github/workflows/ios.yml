@@ -111,11 +111,13 @@ jobs:
                 sleep $((2 + attempt * 2))
                 xcrun simctl io "$UDID" screenshot "$OUT"
                 sips --resampleWidth 600 "$OUT" --out build/check.png >/dev/null
-                [ "$(stat -f%z build/check.png)" -gt 60000 ] && break
+                if [ "$(stat -f%z build/check.png)" -gt 60000 ]; then break; fi
                 echo "::warning::$scene ($appearance) looked blank on attempt $attempt"
+                if [ "$attempt" = 3 ]; then echo "$scene-$appearance" >> build/blank-screenshots.txt; fi
               done
             done
           done
+          rm -f build/check.png
           ls build/screenshots
 
       - name: Upload screenshots
@@ -138,6 +140,10 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
+          if [ -f build/blank-screenshots.txt ]; then
+            echo "::error::Not committing: these screenshots stayed blank: $(tr '\n' ' ' < build/blank-screenshots.txt)"
+            exit 1
+          fi
           DEST=docs/screenshots
           rm -rf "$DEST" && mkdir -p "$DEST"
           for f in build/screenshots/*.png; do

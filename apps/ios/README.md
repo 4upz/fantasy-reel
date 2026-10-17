@@ -139,6 +139,10 @@ environment variable to a case name in the scheme's Run options.
   the Apple provider in production Supabase with the bundle ID as a Client ID,
   and test it on a real iPhone, including Hide My Email (the app warns that a
   new account was made) and a first sign-in that shares the person's name.
+  The custom Apple button draws the system `apple.logo` symbol; Apple's design
+  rules ask custom buttons to use the logo-only artwork from Apple Design
+  Resources, so swap that PDF into the asset catalog (vector data preserved)
+  in `ProviderSignInButton.Provider.logo`.
 - **Security check.** Put the web's public Turnstile site key
   (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`) in `TURNSTILE_SITE_KEY` for Release, and
   make sure the key's allowed hostnames include `fantasyreel.com` (the app's
