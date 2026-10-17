@@ -8,6 +8,7 @@ import SwiftUI
 struct LogInView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppEnvironment.self) private var environment
+    @Environment(AuthNavigation.self) private var navigation
     @State private var email = ""
     @State private var password = ""
     @State private var signIn = AsyncAction()
@@ -29,6 +30,7 @@ struct LogInView: View {
                     .frFont(.largeTitle)
                     .foregroundStyle(Color.frText)
                     .accessibilityAddTraits(.isHeader)
+                    .padding(.bottom, 8)
 
                 notices
 
@@ -66,6 +68,8 @@ struct LogInView: View {
                         .frFont(.label)
                         .frame(minHeight: FRMetrics.minTapTarget)
                 }
+                // Sits close under the fields, as in the mockup.
+                .padding(.vertical, -8)
 
                 SecurityCheckView(check: securityCheck)
 
@@ -91,7 +95,7 @@ struct LogInView: View {
                 Text(verbatim: "").accessibilityHidden(true)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink("Sign Up", value: AuthRoute.signUp)
+                Button("Sign Up") { navigation.switchTo(.signUp) }
             }
         }
         .announcesError(errorMessage)
@@ -171,9 +175,11 @@ struct LogInView: View {
             return
         }
         let token = securityCheck.take()
+        resent = false
         resend.run {
             try await session.resendConfirmation(email: unconfirmedEmail, captchaToken: token)
             resent = true
+            session.authLinkNotice = nil
             Announcer.announce("Confirmation email sent.")
         }
     }
@@ -185,5 +191,6 @@ struct LogInView: View {
     NavigationStack { LogInView() }
         .environment(environment)
         .environment(environment.session)
+        .environment(AuthNavigation())
 }
 #endif

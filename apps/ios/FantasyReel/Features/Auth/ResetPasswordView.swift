@@ -98,6 +98,7 @@ struct ResetPasswordView: View {
     private func submit() {
         guard !trimmedEmail.isEmpty, !send.isRunning else { return }
         localError = nil
+        sent = false
         guard AuthMessages.looksLikeEmail(trimmedEmail) else {
             localError = AuthMessages.invalidEmail
             return
@@ -111,6 +112,8 @@ struct ResetPasswordView: View {
         send.run {
             try await session.sendPasswordReset(email: email, captchaToken: token)
             sent = true
+            // The new link supersedes whatever the failed one was about.
+            session.authLinkNotice = nil
             Announcer.announce("Check your email for a reset link.")
         }
     }
@@ -228,6 +231,7 @@ struct ChooseNewPasswordView: View {
     NavigationStack { ResetPasswordView(initialEmail: "alice@fantasyreel.test") }
         .environment(environment)
         .environment(environment.session)
+        .environment(AuthNavigation())
 }
 
 #Preview("Choose a new password") {

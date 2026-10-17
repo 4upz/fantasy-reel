@@ -190,7 +190,8 @@ public struct AuthService: Sendable {
     /// authorization (L-01). `nonce` is the raw value whose SHA-256 went into
     /// the Apple request; Supabase checks it against the token. Apple shares the
     /// person's name only on their first authorization, so pass it when present:
-    /// it replaces a profile name that was only the email prefix.
+    /// it replaces a profile name that was only the email prefix. That write
+    /// finishes before this returns, so the app never loads the old name.
     public func signInWithApple(idToken: String, nonce: String, fullName: String?) async throws(APIError) -> AppleSignIn {
         let session: Session
         do {
@@ -208,11 +209,10 @@ public struct AuthService: Sendable {
     }
 
     /// Best effort: the sign-in already succeeded, and a missing name only means
-    /// the profile keeps the email-prefix name `handle_new_user` gave it.
+    /// the profile keeps the email-prefix name `handle_new_user` gave it. Only
+    /// that fallback is replaced, never a name the person chose (an existing
+    /// account Apple auto-linked by email).
     private func adoptAppleName(_ fullName: String, for user: User) async {
-        _ = try? await auth.update(user: UserAttributes(data: ["full_name": .string(fullName)]))
-        // Only replace the trigger's email-prefix fallback, never a name the
-        // person chose (an existing account Apple auto-linked by email).
         guard let prefix = user.email?.split(separator: "@").first.map(String.init) else { return }
         _ = try? await provider.client
             .from("profiles")
@@ -272,7 +272,12 @@ public struct AuthService: Sendable {
     static func rethrowUnlessEnumerating(_ error: any Error) throws(APIError) {
         let wrapped = authError(error, context: .emailRequest)
         guard case .server(let server) = wrapped else { throw wrapped }
-        if server.message == AuthMessages.captchaFailed || server.message == AuthMessages.emailRateLimited {
+        // A server failure or a rejected address says nothing about whether an
+        // account exists, and in both cases nothing was sent.
+        if server.message == AuthMessages.captchaFailed
+            || server.message == AuthMessages.emailRateLimited
+            || server.code == "email_address_invalid"
+            || (server.status ?? 0) >= 500 {
             throw wrapped
         }
     }

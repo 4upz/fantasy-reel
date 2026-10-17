@@ -8,6 +8,7 @@ import SwiftUI
 struct SignUpView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppEnvironment.self) private var environment
+    @Environment(AuthNavigation.self) private var navigation
     @State private var displayName = ""
     @State private var email = ""
     @State private var password = ""
@@ -42,7 +43,7 @@ struct SignUpView: View {
                 Text(verbatim: "").accessibilityHidden(true)
             }
             ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink("Log In", value: AuthRoute.logIn)
+                Button("Log In") { navigation.switchTo(.logIn) }
             }
         }
         .announcesError(errorMessage)
@@ -54,6 +55,7 @@ struct SignUpView: View {
             .frFont(.largeTitle)
             .foregroundStyle(Color.frText)
             .accessibilityAddTraits(.isHeader)
+            .padding(.bottom, 8)
 
         AuthProviderButtons(action: create)
 
@@ -178,6 +180,7 @@ private struct CheckEmailView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(AppEnvironment.self) private var environment
+    @Environment(AuthNavigation.self) private var navigation
     @State private var resend = AsyncAction()
     @State private var securityCheck = SecurityCheck()
     @State private var localError: String?
@@ -192,15 +195,13 @@ private struct CheckEmailView: View {
 
             InlineBanner(
                 tone: .success,
-                title: "Confirmation link sent",
-                message: "We sent it to \(email). Open it on this iPhone to finish signing up.",
+                title: resent ? "Confirmation email sent!" : "Confirmation link sent",
+                message: resent
+                    ? "We sent another link to \(email). Use the newest one, on this iPhone."
+                    : "We sent it to \(email). Open it on this iPhone to finish signing up.",
                 systemImage: "checkmark",
                 iconStyle: .badge
             )
-
-            if resent {
-                InlineBanner(tone: .success, title: "Confirmation email sent! Check your inbox.")
-            }
 
             SecurityCheckView(check: securityCheck)
 
@@ -214,7 +215,7 @@ private struct CheckEmailView: View {
             .buttonStyle(.fr(.secondary, isLoading: resend.isRunning))
             .disabled(resend.isRunning)
 
-            NavigationLink("Back to Log In", value: AuthRoute.logIn)
+            Button("Back to Log In") { navigation.switchTo(.logIn) }
                 .frFont(.label)
                 .frame(maxWidth: .infinity, minHeight: FRMetrics.minTapTarget)
 
@@ -267,5 +268,6 @@ struct AuthNote: View {
     NavigationStack { SignUpView() }
         .environment(environment)
         .environment(environment.session)
+        .environment(AuthNavigation())
 }
 #endif

@@ -66,6 +66,8 @@ public enum AuthMessages {
             return emailNotConfirmed
         case "user_already_exists", "email_exists":
             return accountExists
+        case "email_address_invalid":
+            return invalidEmail
         default:
             break
         }
@@ -109,6 +111,10 @@ public enum AuthMessages {
 /// Why an incoming `fantasyreel://auth/callback` link didn't sign this iPhone in,
 /// worded like the web's login notices (F-02).
 public enum AuthLinkFailure: Sendable, Equatable {
+    /// A confirmation link that confirmed the email without a PKCE code (a
+    /// resent confirmation is sent without one). The person signs in next; the
+    /// tokens on the URL are never used, since any app can open the scheme.
+    case confirmed
     /// The link was used already or is too old.
     case expired
     /// The link was requested somewhere else (or before a reinstall), so this
@@ -126,17 +132,25 @@ public enum AuthLinkFailure: Sendable, Equatable {
         if let code = params["error_code"] ?? params["error"] {
             return code == "otp_expired" ? .expired : .failed
         }
-        guard params["code"] != nil else { return .failed }
+        guard params["code"] != nil else {
+            let confirmationTypes: Set<String> = ["signup", "email"]
+            if params["access_token"] != nil || confirmationTypes.contains(params["type"] ?? "") {
+                return .confirmed
+            }
+            return .failed
+        }
         return exchangeErrorCode == "flow_state_expired" ? .expired : .openedElsewhere
     }
 
     /// The notice for the sign-in (or reset) screen.
     public func message(isRecovery: Bool) -> String {
         switch (self, isRecovery) {
+        case (.confirmed, _):
+            return "Your email is confirmed. Sign in to continue."
         case (.expired, true):
             return "That reset link has expired or was already used. Send yourself a new one."
         case (.openedElsewhere, true):
-            return "Reset links only work on the device that asked for them. Send a new link from this iPhone."
+            return "That reset link didn't work here. Reset links only work on the device that asked for them, and only the newest one does. Send a new link from this iPhone."
         case (.expired, false):
             return "That link has expired or was already used. If it was a confirmation link, sign in to get a new one."
         case (.openedElsewhere, false):
