@@ -14,22 +14,22 @@ export const biddingTour = defineTour({
   steps: [
     {
       title: 'Pick up movies the draft missed',
-      body: 'Spend your Fantasy Budget on movies no team holds. Bids are settled once a week. The highest bid usually wins, and the winner pays what they bid. If that team has no room or budget left, the next-highest bid wins instead.',
+      body: 'Spend your Fantasy Budget on movies no team holds. Bids are settled once a week. The highest bid usually wins and pays its own amount. If that team can’t take the movie, the next-highest bid wins and pays its own amount.',
     },
     {
       anchor: 'bidding-budget',
       title: 'Your budget',
-      body: 'What you have left to spend. Winning bids come out of it, and it doesn’t reset each week, so pace yourself.',
+      body: 'What you have left to spend. Winning bids come out of it, and it doesn’t refill during the season, so pace yourself.',
     },
     {
       anchor: 'bid-week',
       title: 'The bidding week',
-      body: 'New bids close at the cutoff. After that comes counter bidding: until bids are settled, you can only bid on movies that already have bids, to top them or raise your own.',
+      body: 'New bids close at the cutoff. After that comes the counter-bid window: until bids are settled, you can only bid on movies that already have bids, to top them or raise your own.',
     },
     {
       anchor: 'place-bid',
       title: 'Place a bid',
-      body: 'Pick a movie and an amount. Your roster can be full. Choose a movie to drop, and it’s dropped only if this bid wins. If someone outbids you, you’ll hear about it and can bid again.',
+      body: 'Pick a movie and an amount. If your roster is full, choose a movie to drop. It’s dropped only if this bid wins. If someone outbids you, you’ll hear about it and can bid again.',
     },
     {
       anchor: 'place-counterpick-bid',
