@@ -59,6 +59,13 @@ export interface TourDefinition {
   description: string
   /** Whether the page's tour applies to this viewer right now. Default: always. */
   when?: (ctx: TourContext) => boolean
+  /**
+   * Whether the tour may start by itself for this viewer. Default: always.
+   * `when` decides whether the tour applies at all (and so whether it can be
+   * replayed); this only keeps it from starting unasked, e.g. beginner tours
+   * for someone who has already played a season.
+   */
+  autoStart?: (ctx: TourContext) => boolean
   /** When two tours on one page both apply, the higher priority goes first. Default 0. */
   priority?: number
   /** At most five. A tour that needs more is two tours. */

@@ -78,6 +78,7 @@ export function pickAutoStart(
   return (
     [...candidates]
       .filter((candidate) => applicableSteps(candidate.tour, candidate.ctx).length > 0)
+      .filter((candidate) => candidate.tour.autoStart?.(candidate.ctx) ?? true)
       .filter((candidate) => mayAutoStart(states.get(candidate.tour.id), candidate.tour, now))
       .sort((a, b) => (b.tour.priority ?? 0) - (a.tour.priority ?? 0) || a.order - b.order)[0] ?? null
   )

@@ -134,6 +134,13 @@ test('the page starts the highest-priority applicable tour that has not been see
   assert.equal(engine.pickAutoStart(candidates, seen, now), null)
 })
 
+test('a tour that applies can still be kept from starting by itself', () => {
+  const beginner = { id: 'beginner', version: 1, autoStart: (ctx) => ctx.newPlayer === true, steps: [{ title: 'A' }] }
+  assert.equal(engine.pickAutoStart([{ tour: beginner, ctx: { newPlayer: false }, order: 0 }], new Map(), now), null)
+  assert.equal(engine.pickAutoStart([{ tour: beginner, ctx: { newPlayer: true }, order: 0 }], new Map(), now).tour.id, 'beginner')
+  assert.equal(engine.applicableSteps(beginner, { newPlayer: false }).length, 1, 'it can still be replayed')
+})
+
 // ---- Placement ----------------------------------------------------------
 
 const viewport = { width: 1280, height: 800 }

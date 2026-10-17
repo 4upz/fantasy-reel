@@ -272,9 +272,12 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
         bumpRegistrations()
         // The page that offered the tour is gone (navigation, a phase change,
         // a closed dialog). Unless the same tour is still registered by
-        // something else on screen, end it as "not now" so it isn't lost.
+        // something else on screen, end it: on the last step that is usually
+        // the user doing what the step asked (Start draft), so it counts as
+        // finished; earlier, it's "not now" so the tour isn't lost.
         const stillOffered = [...registrations.current.values()].some((registration) => registration.id === id)
-        if (activeRef.current?.tour.id === id && !stillOffered) end('snoozed')
+        const current = activeRef.current
+        if (current?.tour.id === id && !stillOffered) end(current.index === current.steps.length - 1 ? 'completed' : 'snoozed')
       },
     }
   }, [end])
