@@ -119,9 +119,6 @@ struct SignUpView: View {
             AuthLegalNotice(action: "continuing with Apple, Google, Discord or email")
         }
         .padding(.top, 4)
-
-        AuthNote(systemImage: "envelope", text: "Next, we'll email you a link to confirm your address. Open it on this iPhone to finish signing up.")
-            .padding(.top, 8)
     }
 
     private var passwordHint: String {
