@@ -38,6 +38,10 @@ struct LeagueMovieActions: View {
                             .buttonStyle(.fr(action.kind, size: .medium, fullWidth: true))
                     }
                 }
+                // A bid, drop or trade may have changed who holds the movie.
+                .onChange(of: router.sheet == nil) { _, closed in
+                    if closed { Task { await context.reload() } }
+                }
             }
         }
     }
@@ -55,15 +59,24 @@ struct LeagueMovieActions: View {
         let tmdbID = context.details.tmdbID
         let releaseDate = context.holding?.releaseDate ?? context.movie?.releaseDate ?? context.details.releaseDate
         let isScored = FantasyPoints.isScoreLocked(context.holding?.fantasyPoints ?? context.movie?.fantasyPoints)
-        let biddable = !isScored && BidEligibility.isBiddable(releaseDate: releaseDate)
+        // The same gates as the Bids tab: a budget, and after the weekly cutoff
+        // only movies that already have bids on them.
+        let snapshot = store.bids.snapshot
+        let counterPhase = snapshot?.week.isCounterBidPhase() ?? false
+        let canBid = myTeam.budget != nil && !isScored && BidEligibility.isBiddable(releaseDate: releaseDate)
         var result: [Action] = []
 
         guard let holding = context.holding else {
-            if biddable {
+            let contested = snapshot?.pickupBids.contains { $0.tmdbID == tmdbID } ?? false
+            if canBid, !counterPhase || contested {
                 let mine = store.bids.myPickupBids.contains { $0.tmdbID == tmdbID }
+                let movie = BiddableMovie(
+                    tmdbID: tmdbID, title: context.details.title, overview: context.details.overview,
+                    releaseDate: releaseDate, posterURL: context.details.posterURL
+                )
                 result.append(Action(
                     title: mine ? "Raise Bid" : "Place Bid", systemImage: "tag",
-                    kind: .primary, sheet: .placeBid(.pickup(tmdbID))
+                    kind: .primary, sheet: .placeBid(.pickup(movie))
                 ))
             }
             return result
@@ -79,10 +92,18 @@ struct LeagueMovieActions: View {
             return result
         }
 
-        if biddable, season.biddingCounterpickSlots > 0, holding.counterpickedByTeamID == nil {
+        let contested = snapshot?.counterpickBids.contains { $0.movieID == holding.movieID } ?? false
+        let alreadyBidding = store.bids.myCounterpickBids.contains { $0.movieID == holding.movieID }
+        let slots = season.biddingCounterpickSlots
+        let hasSlot = alreadyBidding || (snapshot.map { $0.biddingCounterpickCount < slots } ?? false)
+        if canBid, slots > 0, hasSlot, holding.counterpickedByTeamID == nil, !counterPhase || contested {
+            let option = CounterpickOption(
+                movieID: holding.movieID, title: holding.title, posterURL: holding.posterURL, releaseDate: releaseDate,
+                ownerTeamID: holding.teamID, ownerTeamName: holding.teamName, fantasyPoints: holding.fantasyPoints
+            )
             result.append(Action(
-                title: "Counterpick Bid", systemImage: "arrow.uturn.down",
-                kind: .secondary, sheet: .placeBid(.counterpick(holding.movieID))
+                title: alreadyBidding ? "Raise Counterpick Bid" : "Counterpick Bid", systemImage: "arrow.uturn.down",
+                kind: .secondary, sheet: .placeBid(.counterpick(option))
             ))
         }
         if !isScored, store.canProposeTrade(to: holding.teamID) {

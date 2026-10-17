@@ -161,8 +161,10 @@ struct TradeActionSheetView: View {
             Button(action.isRunning ? "Approving…" : "Approve & Process") {
                 action.run {
                     try await trades.approve(offer)
-                    await season.refresh()
                     dismiss()
+                    // Rosters and budgets moved; Realtime would catch up, but
+                    // the commissioner expects to see it now.
+                    Task { await season.refresh() }
                 }
             }
             .buttonStyle(.fr(.primary, isLoading: action.isRunning))

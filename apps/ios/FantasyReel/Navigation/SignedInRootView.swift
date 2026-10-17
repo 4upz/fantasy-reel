@@ -146,11 +146,34 @@ private struct ShellSheetView: View {
 
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
+    /// The season the sheet opened in. A link can switch seasons while a sheet
+    /// with unsaved input stays up; the sheet keeps acting on its own season
+    /// rather than sending a bid or trade to the new one.
+    @State private var pinnedStore: LeagueSeasonStore?
 
     var body: some View {
-        content
-            .environment(\.leagueSelection, directory.selection)
-            .modifier(SeasonStoreEnvironment(store: router.seasonStore))
+        let store = pinnedStore ?? router.seasonStore
+        Group {
+            if sheet.needsSeason, store == nil {
+                NavigationStack {
+                    EmptyStateView(
+                        title: "This season isn't open",
+                        message: "Close this and open the league again.",
+                        systemImage: "film.stack"
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { router.dismissSheet() }
+                        }
+                    }
+                }
+            } else {
+                content
+            }
+        }
+        .environment(\.leagueSelection, store?.selection ?? directory.selection)
+        .modifier(SeasonStoreEnvironment(store: store))
+        .onAppear { if pinnedStore == nil { pinnedStore = router.seasonStore } }
     }
 
     @ViewBuilder
@@ -172,6 +195,16 @@ private struct ShellSheetView: View {
             NavigationStack { TradeComposerView(mode: .counter(offerID)) }
         case .placeBid(let target):
             NavigationStack { PlaceBidView(target: target) }
+        }
+    }
+}
+
+private extension ShellSheet {
+    /// Sheets that act on the open season and read its store.
+    var needsSeason: Bool {
+        switch self {
+        case .menu, .createLeague, .joinLeague: false
+        case .editTeam, .dropMovie, .proposeTrade, .counterTrade, .placeBid: true
         }
     }
 }

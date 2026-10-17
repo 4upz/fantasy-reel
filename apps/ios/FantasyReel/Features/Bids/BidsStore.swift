@@ -24,6 +24,7 @@ final class BidsStore {
     private(set) var leagueID: LeagueID
     private(set) var teamID: TeamID?
     let repository: any BidRepository
+    private let refresher = RefreshCoalescer()
     /// Cancels from the Bids tab, so one error shows above the list.
     let cancelling = AsyncAction()
     /// My bids that were active at the last read, to announce a new outbid once.
@@ -37,7 +38,10 @@ final class BidsStore {
     var snapshot: Snapshot? { state.value }
 
     func update(leagueID: LeagueID, teamID: TeamID?) async {
-        guard leagueID != self.leagueID || teamID != self.teamID else { return }
+        // An idle store has never read: load it even when nothing changed.
+        if case .idle = state {} else {
+            guard leagueID != self.leagueID || teamID != self.teamID else { return }
+        }
         let leagueChanged = leagueID != self.leagueID
         self.leagueID = leagueID
         self.teamID = teamID
@@ -50,6 +54,10 @@ final class BidsStore {
     }
 
     func refresh() async {
+        await refresher.run { [weak self] in await self?.performRefresh() }
+    }
+
+    private func performRefresh() async {
         let repository = repository
         let leagueID = leagueID
         let teamID = teamID

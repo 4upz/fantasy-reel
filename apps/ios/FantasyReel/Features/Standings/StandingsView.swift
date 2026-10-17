@@ -110,8 +110,8 @@ private struct StandingRowView: View {
                     Text(rankLabel)
                         .frFont(.number)
                         .foregroundStyle(rankColor)
-                        .frame(width: 32, alignment: .leading)
-                        .minimumScaleFactor(0.7)
+                        .frame(minWidth: 32, alignment: .leading)
+                        .fixedSize()
                     Avatar(name: team?.team.name ?? row.teamName, imageURL: team?.team.avatarURL, size: .medium, corners: .rounded)
                         .overlay(alignment: .topTrailing) {
                             if crown != nil {

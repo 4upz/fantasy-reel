@@ -12,6 +12,7 @@ final class TradesStore {
     private(set) var leagueID: LeagueID
     private(set) var teamID: TeamID?
     let repository: any TradeRepository
+    private let refresher = RefreshCoalescer()
     /// Status and recipient at the last read (a counter keeps `countered` but
     /// swaps sides), to announce other people's changes once.
     private var lastStates: [TradeOfferID: OfferState]?
@@ -26,7 +27,10 @@ final class TradesStore {
     var trades: [TradeOffer] { state.value ?? [] }
 
     func update(leagueID: LeagueID, teamID: TeamID?) async {
-        guard leagueID != self.leagueID || teamID != self.teamID else { return }
+        // An idle store has never read: load it even when nothing changed.
+        if case .idle = state {} else {
+            guard leagueID != self.leagueID || teamID != self.teamID else { return }
+        }
         if leagueID != self.leagueID {
             state = .idle
             lastStates = nil
@@ -37,6 +41,10 @@ final class TradesStore {
     }
 
     func refresh() async {
+        await refresher.run { [weak self] in await self?.performRefresh() }
+    }
+
+    private func performRefresh() async {
         let repository = repository
         let leagueID = leagueID
         if case .idle = state { state = .loading }
@@ -105,21 +113,36 @@ final class TradesStore {
 
     func cancel(_ offer: TradeOffer) async throws {
         markOwnAction(offer.id)
-        try await repository.cancel(offer.id)
+        do {
+            try await repository.cancel(offer.id)
+        } catch {
+            await refresh()
+            throw error
+        }
         Announcer.announce("You cancelled your trade offer to \(offer.recipientName).")
         await refresh()
     }
 
     func veto(_ offer: TradeOffer, reason: String?) async throws {
         markOwnAction(offer.id)
-        try await repository.veto(offer.id, reason: reason)
+        do {
+            try await repository.veto(offer.id, reason: reason)
+        } catch {
+            await refresh()
+            throw error
+        }
         Announcer.announce("You vetoed the trade between \(offer.initiatorName) and \(offer.recipientName).")
         await refresh()
     }
 
     func approve(_ offer: TradeOffer) async throws {
         markOwnAction(offer.id)
-        try await repository.approve(offer.id)
+        do {
+            try await repository.approve(offer.id)
+        } catch {
+            await refresh()
+            throw error
+        }
         Announcer.announce("You approved the trade between \(offer.initiatorName) and \(offer.recipientName). It has been processed.")
         await refresh()
     }

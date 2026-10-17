@@ -6,12 +6,12 @@ import SwiftUI
 enum BidTarget: Hashable {
     /// Pick a movie to bid on (search before the cutoff, contests after).
     case newPickup
-    /// Raise or counter the bids on one movie.
-    case pickup(TMDbID)
+    /// Bid on one movie: a new bid, or raise or counter the bids on it.
+    case pickup(BiddableMovie)
     /// Pick an opponent's movie to counterpick.
     case newCounterpick
-    /// Raise or counter the counterpick bids on one movie.
-    case counterpick(MovieID)
+    /// Counterpick one opponent's movie, or raise or counter the bids on it.
+    case counterpick(CounterpickOption)
 }
 
 /// Bids tab (F-12, mockup V2Bids): budget and the bidding week, then my
@@ -323,7 +323,12 @@ private struct PickupBidRow: View {
             amount: bid.amount,
             amountCaption: isMine ? "your bid" : "high bid",
             actionTitle: canCounter ? actionTitle(isMine: isMine) : nil,
-            action: { router.present(.placeBid(.pickup(bid.tmdbID))) }
+            action: {
+                router.present(.placeBid(.pickup(BiddableMovie(
+                    tmdbID: bid.tmdbID, title: bid.title, overview: bid.movieData?.overview,
+                    releaseDate: bid.releaseDate, posterURL: bid.posterURL
+                ))))
+            }
         )
         .contextMenu {
             if canCancel {
@@ -380,6 +385,7 @@ private struct CounterpickBidRow: View {
 
     @Environment(LeagueSeasonStore.self) private var season
     @Environment(ShellRouter.self) private var router
+    @State private var confirmingCancel = false
 
     var body: some View {
         let bids = season.bids
@@ -397,19 +403,28 @@ private struct CounterpickBidRow: View {
             amount: bid.amount,
             amountCaption: isMine ? "your bid" : "high bid",
             actionTitle: canCounter ? (isMine && bid.status == .active ? "Raise" : "Counter") : nil,
-            action: { router.present(.placeBid(.counterpick(bid.movieID))) }
+            action: {
+                router.present(.placeBid(.counterpick(CounterpickOption(
+                    movieID: bid.movieID, title: bid.title, posterURL: bid.movie?.posterURL, releaseDate: bid.releaseDate,
+                    ownerTeamID: bid.targetTeamID,
+                    ownerTeamName: bid.targetTeamName ?? season.team(bid.targetTeamID)?.team.name ?? "Unknown team",
+                    fantasyPoints: bid.movie?.fantasyPoints
+                ))))
+            }
         )
         .contextMenu {
             if canCancel {
-                Button("Cancel Counterpick Bid", systemImage: "trash", role: .destructive) {
-                    bids.cancelling.run { try await bids.cancel(counterpick: bid) }
-                }
+                Button("Cancel Counterpick Bid", systemImage: "trash", role: .destructive) { confirmingCancel = true }
             }
         }
         .accessibilityActions {
-            if canCancel {
-                Button("Cancel bid") { bids.cancelling.run { try await bids.cancel(counterpick: bid) } }
-            }
+            if canCancel { Button("Cancel bid") { confirmingCancel = true } }
+        }
+        .confirmationDialog("Cancel your \(SeasonFormat.budget(bid.amount)) counterpick bid on \(bid.title)?", isPresented: $confirmingCancel, titleVisibility: .visible) {
+            Button("Cancel Bid", role: .destructive) { bids.cancelling.run { try await bids.cancel(counterpick: bid) } }
+            Button("Keep Bid", role: .cancel) {}
+        } message: {
+            Text("This bid will no longer be eligible to win.")
         }
     }
 

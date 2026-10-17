@@ -95,6 +95,18 @@ struct TradeExpiryTests {
         #expect(throws: TradeExpiry.ReleaseUnavailable.tooFar("14 days")) { try result.get() }
     }
 
+    @Test func aReleaseChoiceThatLeftTheTradeIsRefused() throws {
+        let release = DateOnly(year: 2027, month: 1, day: 10)
+        let bounds = TradeExpiryBounds(maxDays: 30)
+        let now = TradeExpiry.releaseBoundary(release).addingTimeInterval(-5 * 86_400)
+        let movies: [(movieID: MovieID, title: String, releaseDate: DateOnly?)] = [("m1", "Dune", release)]
+        let candidates = TradeExpiry.releaseCandidates(movies, bounds: bounds, now: now)
+        let gone = TradeExpiry.resolve(.release(movieID: "m2"), candidates: candidates, bounds: bounds, now: now)
+        #expect(throws: TradeExpiry.ResolveError.release(.choiceUnavailable)) { try gone.get() }
+        let soonest = TradeExpiry.resolve(.release(movieID: nil), candidates: candidates, bounds: bounds, now: now)
+        #expect((try? soonest.get())?.anchorMovieID == "m1")
+    }
+
     @Test func customTimesMustRespectTheMinimumWindow() {
         let bounds = TradeExpiryBounds()
         let tooSoon = TradeExpiry.resolve(.custom(now.addingTimeInterval(30 * 60)), candidates: .failure(.noMovies), bounds: bounds, now: now)

@@ -40,7 +40,7 @@ struct TeamMarketScreenshotView: View {
         case .standings: stack { StandingsView() }
         case .teamDetail: stack { TeamDetailView(teamID: TeamMarketFixture.team("bob")) }
         case .bids: stack { BidsView() }
-        case .placeBid: NavigationStack { PlaceBidView(target: .pickup(1004)) }
+        case .placeBid: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23")))) }
         case .bidPriorities: stack { BidPrioritiesView() }
         case .trades: stack { TradesView() }
         case .tradeComposer: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("dave"))) }

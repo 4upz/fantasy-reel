@@ -155,11 +155,11 @@ struct EditTeamView: View {
                 imageError = "Could not read that image"
                 return
             }
-            guard data.count <= AvatarImage.maxInputBytes else {
+            guard data.count <= TeamPhoto.maxInputBytes else {
                 imageError = "Image must be less than 10MB"
                 return
             }
-            guard let prepared = AvatarImage.prepare(data) else {
+            guard let prepared = TeamPhoto.prepare(data) else {
                 imageError = "Could not read that image"
                 return
             }
@@ -173,7 +173,7 @@ struct EditTeamView: View {
 /// crop to a square, at most 512px, metadata stripped (re-encoding drops it), a
 /// GIF reduced to its first frame. JPEG at 0.85 on the surface color, since the
 /// web's JPEG fallback is what every browser can read.
-enum AvatarImage {
+enum TeamPhoto {
     static let maxInputBytes = 10 * 1024 * 1024
     static let maxSide: CGFloat = 512
 

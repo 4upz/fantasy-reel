@@ -20,6 +20,9 @@ struct TradeComposerView: View {
     @State private var draft = TradeDraft()
     @State private var reviewing = false
     @State private var didStart = false
+    /// The draft the sheet opened with: a counter starts prefilled, and only
+    /// changes from that count as unsaved input.
+    @State private var startingDraft = TradeDraft()
 
     private var counterOffer: TradeOffer? {
         if case .counter(let id) = mode { return season.trades.offer(id) }
@@ -62,7 +65,7 @@ struct TradeComposerView: View {
             }
         }
         .onAppear(perform: start)
-        .onChange(of: draft) { router.sheetHasUnsavedInput = !draft.isEmpty }
+        .onChange(of: draft) { router.sheetHasUnsavedInput = draft != startingDraft }
     }
 
     private func start() {
@@ -81,6 +84,7 @@ struct TradeComposerView: View {
                 receive: Set(offer.initiatorItems.movies.map(\.sourceID)),
                 receiveBudget: offer.initiatorItems.budget
             )
+            startingDraft = draft
         }
     }
 }
@@ -313,6 +317,7 @@ private struct TradeChecklistRow: View {
             .opacity(movie.isScoreLocked && !isSelected ? 0.6 : 1)
         }
         .buttonStyle(.frRow)
+        .disabled(movie.isScoreLocked && !isSelected)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityHint(movie.isScoreLocked && !isSelected ? "Already scored, can't be traded" : "")
     }

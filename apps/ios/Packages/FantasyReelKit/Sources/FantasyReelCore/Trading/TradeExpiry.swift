@@ -125,6 +125,8 @@ public enum TradeExpiry {
         case noneUnreleased
         case tooFar(String)
         case tooSoon(String)
+        /// The chosen movie left the trade (or its release moved out of range).
+        case choiceUnavailable
 
         public var reason: String {
             switch self {
@@ -132,6 +134,7 @@ public enum TradeExpiry {
             case .noneUnreleased: "Nothing in this trade is still unreleased"
             case .tooFar(let days): "Nothing in this trade releases within \(days)"
             case .tooSoon(let title): "\(title) is out too soon"
+            case .choiceUnavailable: "That movie can't set the expiry any more. Choose another."
             }
         }
     }
@@ -167,7 +170,12 @@ public enum TradeExpiry {
             case .failure(let reason):
                 return .failure(.release(reason))
             case .success(let list):
-                let chosen = list.first { $0.movieID == movieID } ?? list[0]
+                // A movie that dropped out of the trade is refused, never
+                // swapped for another one (the server refuses that too).
+                let chosen = movieID == nil ? list.first : list.first { $0.movieID == movieID }
+                guard let chosen else {
+                    return .failure(.release(.choiceUnavailable))
+                }
                 return .success(TradeExpiryRequest(expiresAt: chosen.boundary, anchor: "movie_release", anchorMovieID: chosen.movieID))
             }
         case .custom(let date):

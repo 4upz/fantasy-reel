@@ -35,6 +35,7 @@ final class LeagueSeasonStore {
     let userID: UserID
     private var seriesSeasons: [League]
     private let repository: any TeamRepository
+    private let refresher = RefreshCoalescer()
     /// Open bids and the bidding week (F-12), loaded while the season is active.
     let bids: BidsStore
     /// Trade offers (F-13), loaded while the season is active.
@@ -56,6 +57,11 @@ final class LeagueSeasonStore {
 
     var snapshot: Snapshot? { state.value }
 
+    /// The selection this store was last given.
+    var selection: LeagueSelection {
+        LeagueSelection(userID: userID, season: season, seriesSeasons: seriesSeasons)
+    }
+
     /// The directory re-read this season's row (a phase change, completion,
     /// a rename): adopt it and reload what depends on it.
     func update(selection: LeagueSelection) async {
@@ -75,6 +81,10 @@ final class LeagueSeasonStore {
 
     /// Re-reads everything. A failed background refresh keeps what's on screen.
     func refresh() async {
+        await refresher.run { [weak self] in await self?.performRefresh() }
+    }
+
+    private func performRefresh() async {
         let repository = repository
         let leagueID = season.id
         let includeFormer = season.isCompleted
@@ -107,8 +117,9 @@ final class LeagueSeasonStore {
             )
             if state != .loaded(snapshot) { state = .loaded(snapshot) }
             if season.status == .active {
-                await bids.update(leagueID: leagueID, teamID: myTeamID)
+                async let bidsUpdated: Void = bids.update(leagueID: leagueID, teamID: myTeamID)
                 if season.tradesEnabled { await trades.update(leagueID: leagueID, teamID: myTeamID) }
+                await bidsUpdated
             }
         } catch {
             if case .loaded = state { return }
@@ -286,42 +297,45 @@ struct LeagueSeasonScope<Content: View>: View {
         let store = store
         await withTaskGroup(of: Void.self) { group in
             group.addTask {
-                await Self.forEachChange(feed, topic: "league-season", tables: ["draft_picks", "pickups", "counterpicks", "counterpick_bids"], leagueID: leagueID) {
+                await forEachChange(feed, topic: "league-season", tables: ["draft_picks", "pickups", "counterpicks", "counterpick_bids"], leagueID: leagueID) {
                     await store.refresh()
                 }
             }
             group.addTask {
-                await Self.forEachChange(feed, topic: "league-bids", tables: ["pickup_bids", "counterpick_bids"], leagueID: leagueID) {
+                await forEachChange(feed, topic: "league-bids", tables: ["pickup_bids", "counterpick_bids"], leagueID: leagueID) {
                     if await store.season.status == .active { await store.bids.refresh() }
                 }
             }
             group.addTask {
-                // A completed trade also moves rosters and budgets: the roster
-                // tables' own changes refresh the season.
-                await Self.forEachChange(feed, topic: "league-trades", tables: ["trade_offers"], leagueID: leagueID) {
-                    if await store.season.status == .active { await store.trades.refresh() }
+                // A completed trade can move only budgets, and `team_budgets`
+                // can't be filtered by league: re-read the season too.
+                await forEachChange(feed, topic: "league-trades", tables: ["trade_offers"], leagueID: leagueID) {
+                    guard await store.season.status == .active else { return }
+                    async let seasonRefreshed: Void = store.refresh()
+                    await store.trades.refresh()
+                    await seasonRefreshed
                 }
             }
         }
     }
+}
 
-    /// Runs `action` on every change to `tables` in the league, skipping the
-    /// first signal (it only confirms the subscription).
-    private static func forEachChange(
-        _ feed: ChangeFeed,
-        topic: String,
-        tables: [String],
-        leagueID: String,
-        action: @escaping @Sendable () async -> Void
-    ) async {
-        let watches = tables.map { ChangeFeed.Watch(table: $0, filter: .equals("league_id", leagueID)) }
-        var isFirstSignal = true
-        for await _ in feed.signals(topic: topic, watching: watches) {
-            if isFirstSignal {
-                isFirstSignal = false
-                continue
-            }
-            await action()
+/// Runs `action` on every change to `tables` in the league, skipping the
+/// first signal (it only confirms the subscription).
+private func forEachChange(
+    _ feed: ChangeFeed,
+    topic: String,
+    tables: [String],
+    leagueID: String,
+    action: @escaping @Sendable () async -> Void
+) async {
+    let watches = tables.map { ChangeFeed.Watch(table: $0, filter: .equals("league_id", leagueID)) }
+    var isFirstSignal = true
+    for await _ in feed.signals(topic: topic, watching: watches) {
+        if isFirstSignal {
+            isFirstSignal = false
+            continue
         }
+        await action()
     }
 }

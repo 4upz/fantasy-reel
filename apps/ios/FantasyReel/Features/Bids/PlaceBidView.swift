@@ -15,6 +15,9 @@ struct PlaceBidView: View {
     /// The phase when the sheet opened: the movie list doesn't flip under the
     /// player's thumb if the cutoff passes while it's open.
     @State private var counterPhaseAtOpen: Bool?
+    /// Lives here, not in the picker, so Back from the amount keeps the query
+    /// and results.
+    @State private var search: MovieSearchModel?
 
     var body: some View {
         Group {
@@ -23,7 +26,7 @@ struct PlaceBidView: View {
             } else {
                 switch target {
                 case .newPickup, .pickup:
-                    PickupMoviePicker(counterPhase: counterPhaseAtOpen ?? false) { selected = .pickup($0) }
+                    PickupMoviePicker(counterPhase: counterPhaseAtOpen ?? false, search: $search) { selected = .pickup($0) }
                 case .newCounterpick, .counterpick:
                     CounterpickMoviePicker { selected = .counterpick($0) }
                 }
@@ -40,36 +43,25 @@ struct PlaceBidView: View {
         .onAppear {
             guard counterPhaseAtOpen == nil else { return }
             counterPhaseAtOpen = season.bids.snapshot?.week.isCounterBidPhase() ?? false
-            selected = initialSubject
         }
     }
 
-    private var canGoBack: Bool {
-        switch target {
-        case .newPickup, .newCounterpick: true
-        case .pickup, .counterpick: false
-        }
+    init(target: BidTarget) {
+        self.target = target
+        _selected = State(initialValue: target.subject)
     }
 
-    private var initialSubject: BidSubject? {
-        let snapshot = season.bids.snapshot
-        switch target {
-        case .newPickup, .newCounterpick:
-            return nil
-        case .pickup(let tmdbID):
-            guard let bid = snapshot?.pickupBids.first(where: { $0.tmdbID == tmdbID }) else { return nil }
-            return .pickup(BiddableMovie(
-                tmdbID: tmdbID, title: bid.title, overview: bid.movieData?.overview,
-                releaseDate: bid.releaseDate, posterURL: bid.posterURL
-            ))
-        case .counterpick(let movieID):
-            guard let bid = snapshot?.counterpickBids.first(where: { $0.movieID == movieID }) else { return nil }
-            return .counterpick(CounterpickOption(
-                movieID: movieID, title: bid.title, posterURL: bid.movie?.posterURL, releaseDate: bid.releaseDate,
-                ownerTeamID: bid.targetTeamID,
-                ownerTeamName: bid.targetTeamName ?? season.team(bid.targetTeamID)?.team.name ?? "Unknown team",
-                fantasyPoints: bid.movie?.fantasyPoints
-            ))
+    /// A sheet opened on one movie has nothing to go back to.
+    private var canGoBack: Bool { target.subject == nil }
+}
+
+extension BidTarget {
+    /// The movie the sheet opens on, or nil to pick one first.
+    var subject: BidSubject? {
+        switch self {
+        case .newPickup, .newCounterpick: nil
+        case .pickup(let movie): .pickup(movie)
+        case .counterpick(let option): .counterpick(option)
         }
     }
 }
@@ -105,11 +97,11 @@ enum BidSubject: Hashable {
 
 private struct PickupMoviePicker: View {
     let counterPhase: Bool
+    @Binding var search: MovieSearchModel?
     let onSelect: (BiddableMovie) -> Void
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(LeagueSeasonStore.self) private var season
-    @State private var search: MovieSearchModel?
 
     var body: some View {
         ScrollView {
@@ -489,13 +481,12 @@ private struct BidAmountForm: View {
                 Stepper("Bid amount", value: $amount, in: 0...max(maxAmount, 0))
                     .labelsHidden()
                     .accessibilityValue("\(amount) dollars")
-                HStack(spacing: 8) {
-                    quickButton("+$1") { amount = min(amount + 1, maxAmount) }
-                    quickButton("+$5") { amount = min(amount + 5, maxAmount) }
-                    if highBid != nil {
-                        quickButton("High + $1") { amount = min(minAmount, maxAmount) }
+                // One row when it fits; two columns at large text sizes.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { quickButtons(min: minAmount, max: maxAmount) }
+                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible())], alignment: .leading, spacing: 8) {
+                        quickButtons(min: minAmount, max: maxAmount)
                     }
-                    quickButton("Max \(SeasonFormat.budget(maxAmount))") { amount = maxAmount }
                 }
                 FRHairline()
                 HStack {
@@ -516,6 +507,16 @@ private struct BidAmountForm: View {
                     .foregroundStyle(problem == nil ? Color.frTextSecondary : Color.frError)
             }
         }
+    }
+
+    @ViewBuilder
+    private func quickButtons(min minAmount: Int, max maxAmount: Int) -> some View {
+        quickButton("+$1") { amount = Swift.min(amount + 1, maxAmount) }
+        quickButton("+$5") { amount = Swift.min(amount + 5, maxAmount) }
+        if highBid != nil {
+            quickButton("High + $1") { amount = Swift.min(minAmount, maxAmount) }
+        }
+        quickButton("Max \(SeasonFormat.budget(maxAmount))") { amount = maxAmount }
     }
 
     private func quickButton(_ title: String, action: @escaping () -> Void) -> some View {
