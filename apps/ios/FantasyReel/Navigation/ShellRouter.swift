@@ -59,6 +59,8 @@ enum ShellSheet: Identifiable, Hashable {
     case dropMovie(HoldingID)
     /// Compose a trade offer, optionally to a chosen team (F-13).
     case proposeTrade(TeamID?)
+    /// Counter an offer sent to my team (F-13).
+    case counterTrade(TradeOfferID)
     /// Place, raise or counter a pickup or counterpick bid (F-12).
     case placeBid(BidTarget)
 

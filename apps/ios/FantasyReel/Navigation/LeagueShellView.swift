@@ -83,6 +83,7 @@ private struct LeagueTabs: View {
     private func badge(for tab: LeagueTab) -> Int {
         switch tab {
         case .bids: store.bids.outbidCount
+        case .trades: store.trades.needingResponse.count
         default: 0
         }
     }

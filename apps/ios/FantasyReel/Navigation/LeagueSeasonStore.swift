@@ -37,13 +37,21 @@ final class LeagueSeasonStore {
     private let repository: any TeamRepository
     /// Open bids and the bidding week (F-12), loaded while the season is active.
     let bids: BidsStore
+    /// Trade offers (F-13), loaded while the season is active.
+    let trades: TradesStore
 
-    init(selection: LeagueSelection, repository: any TeamRepository, bidRepository: any BidRepository) {
+    init(
+        selection: LeagueSelection,
+        repository: any TeamRepository,
+        bidRepository: any BidRepository,
+        tradeRepository: any TradeRepository
+    ) {
         self.season = selection.season
         self.userID = selection.userID
         self.seriesSeasons = selection.seriesSeasons
         self.repository = repository
         self.bids = BidsStore(leagueID: selection.season.id, repository: bidRepository)
+        self.trades = TradesStore(leagueID: selection.season.id, repository: tradeRepository)
     }
 
     var snapshot: Snapshot? { state.value }
@@ -100,6 +108,7 @@ final class LeagueSeasonStore {
             if state != .loaded(snapshot) { state = .loaded(snapshot) }
             if season.status == .active {
                 await bids.update(leagueID: leagueID, teamID: myTeamID)
+                if season.tradesEnabled { await trades.update(leagueID: leagueID, teamID: myTeamID) }
             }
         } catch {
             if case .loaded = state { return }
@@ -122,6 +131,12 @@ final class LeagueSeasonStore {
         return teams.first { $0.userID == userID && $0.participantStatus == .active }
             ?? teams.first { $0.userID == userID }
     }
+
+    /// Every team that has been in the season, active or not.
+    var teams: [SeasonTeam] { snapshot?.teams ?? [] }
+
+    /// The commissioner is the season's owner (`leagues.owner_id`).
+    var isCommissioner: Bool { season.ownerID == userID }
 
     func team(_ id: TeamID) -> SeasonTeam? {
         snapshot?.teams.first { $0.id == id }
@@ -241,7 +256,8 @@ struct LeagueSeasonScope<Content: View>: View {
     init(selection: LeagueSelection, environment: AppEnvironment, @ViewBuilder content: () -> Content) {
         self.selection = selection
         _store = State(initialValue: LeagueSeasonStore(
-            selection: selection, repository: environment.teams, bidRepository: environment.bids
+            selection: selection, repository: environment.teams,
+            bidRepository: environment.bids, tradeRepository: environment.trades
         ))
         self.content = content()
     }
@@ -256,7 +272,10 @@ struct LeagueSeasonScope<Content: View>: View {
             .refreshOnForeground {
                 await store.refresh()
                 // The week can roll over while the app is away: re-read the cutoff.
-                if store.season.status == .active { await store.bids.refresh() }
+                if store.season.status == .active {
+                    await store.bids.refresh()
+                    if store.season.tradesEnabled { await store.trades.refresh() }
+                }
             }
     }
 
@@ -274,6 +293,13 @@ struct LeagueSeasonScope<Content: View>: View {
             group.addTask {
                 await Self.forEachChange(feed, topic: "league-bids", tables: ["pickup_bids", "counterpick_bids"], leagueID: leagueID) {
                     if await store.season.status == .active { await store.bids.refresh() }
+                }
+            }
+            group.addTask {
+                // A completed trade also moves rosters and budgets: the roster
+                // tables' own changes refresh the season.
+                await Self.forEachChange(feed, topic: "league-trades", tables: ["trade_offers"], leagueID: leagueID) {
+                    if await store.season.status == .active { await store.trades.refresh() }
                 }
             }
         }

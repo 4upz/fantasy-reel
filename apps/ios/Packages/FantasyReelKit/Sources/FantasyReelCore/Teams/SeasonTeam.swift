@@ -110,6 +110,9 @@ public struct SeasonTeam: Sendable, Hashable, Identifiable {
         self.budget = budget
     }
 
+    public var name: String { team.name }
+    public var avatarURL: String? { team.avatarURL }
+
     /// Counted points (`team_scores.total_points`), zero before the first score.
     public var totalPoints: Double { score?.totalPoints ?? 0 }
 

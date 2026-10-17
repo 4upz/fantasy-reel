@@ -347,13 +347,23 @@ private struct AroundTheLeague: View {
     }
 }
 
-/// Alerts that need the person: bids they've been outbid on. (Trades awaiting
-/// a response join here.)
+/// Alerts that need the person: trade offers awaiting their answer and bids
+/// they've been outbid on.
 private struct OverviewBanners: View {
     @Environment(LeagueSeasonStore.self) private var store
     @Environment(ShellRouter.self) private var router
 
     var body: some View {
+        let offers = store.trades.needingResponse.count
+        if offers > 0 {
+            InlineBanner(
+                tone: .info,
+                title: offers == 1 ? "1 trade needs your response" : "\(offers) trades need your response",
+                systemImage: "arrow.left.arrow.right",
+                actionTitle: "Review",
+                action: { router.select(.trades) }
+            )
+        }
         let outbid = store.bids.outbidCount
         if outbid > 0 {
             InlineBanner(
