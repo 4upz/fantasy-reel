@@ -78,7 +78,7 @@ The provider starts a tour on its own only when all of these hold:
 - its `when` passes and at least one step applies;
 - the user hasn't finished or hidden it at this version, and it isn't snoozed;
 - automatic tours are on in Settings → Tours;
-- no other tour has started by itself on this page visit.
+- no other tour has started by itself on this page visit. A page that starts offering a new tour while it's open (the Draft tab moving from setup to drafting) counts as a new visit.
 
 When several tours qualify, the one with the highest `priority` wins (default 0), then whichever mounted first.
 
