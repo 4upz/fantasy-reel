@@ -18,6 +18,7 @@ import JoinLinkCard from '../components/JoinLinkCard'
 import ParticipantsList from '../components/ParticipantsList'
 import type { ReigningChampions } from '@/utils/seasonQueries'
 import { SpinnerIcon } from '../components/Icons'
+import { FeatureTour, TourButton } from '@/components/tours'
 
 // Dynamic import for code splitting (bundle-dynamic-imports optimization)
 const InviteModal = dynamic(() => import('../components/InviteModal'), {
@@ -64,6 +65,8 @@ interface Props {
   isOwner: boolean
   /** Last season's winners, crowned in the participants list. */
   reigningChampions?: ReigningChampions | null
+  /** Hasn't played a season yet: the draft tab's tours start by themselves. */
+  newPlayer: boolean
 }
 
 export default function DraftClient({
@@ -74,6 +77,7 @@ export default function DraftClient({
   currentUserId,
   isOwner,
   reigningChampions = null,
+  newPlayer,
 }: Props): React.ReactElement {
   const speak = useGatheredAnnouncer()
   // Live news for screen readers at every width: picks by others, counterpicks,
@@ -197,8 +201,28 @@ export default function DraftClient({
   const error = startDraftError || startCounterpickError
   const canEndCounterpicks = isOwner && league.status === 'counterpicking'
 
+  // Each phase has its own tour, mounted only while that phase is live, so a
+  // phase change ends the old one rather than leaving it over the new board.
+  const tourCtx = {
+    isOwner,
+    leagueStatus: league.status,
+    newPlayer,
+    draftComplete: isDraftComplete,
+    draftCounterpicks: league.draft_counterpick_slots > 0,
+    hasTeam: participants.some((participant) => participant.user_id === currentUserId),
+  }
+
   return (
     <>
+      {league.status === 'setup' && (
+        <>
+          <FeatureTour id="league-setup" ctx={tourCtx} />
+          <FeatureTour id="league-waiting" ctx={tourCtx} />
+        </>
+      )}
+      {league.status === 'drafting' && <FeatureTour id="draft-room" ctx={tourCtx} />}
+      {league.status === 'counterpicking' && <FeatureTour id="counterpick-round" ctx={tourCtx} />}
+
       {/* Owner Controls for Setup */}
       {isOwner && league.status === 'setup' && (
         <div className="mb-6 flex flex-wrap items-center gap-3">
@@ -211,6 +235,7 @@ export default function DraftClient({
             aria-describedby={participants.length < 2 ? startDraftHelpId : undefined}
             className="btn btn-primary"
             data-testid="start-draft-button"
+            data-tour="start-draft"
           >
             {startingDraft ? 'Starting...' : 'Start Draft'}
           </button>
@@ -226,7 +251,7 @@ export default function DraftClient({
       {/* Owner Controls for Starting Counterpick Round */}
       {(canStartCounterpick || canEndCounterpicks) && (
         <div className="mb-6">
-          <div className="card p-4 bg-crimson/10 border-crimson/30">
+          <div className="card p-4 bg-crimson/10 border-crimson/30" data-tour="end-counterpicks">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-crimson/20 rounded-full flex items-center justify-center">
@@ -308,11 +333,14 @@ export default function DraftClient({
       )}
 
       {(league.status === 'drafting' || league.status === 'counterpicking') && (
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <ConnectionStatusIndicator status={realtimeStatus} />
-          {realtimeStatus === 'polling' && (
-            <span className="type-meta text-foreground-secondary">Updates every 10s</span>
-          )}
+          <div className="flex items-center gap-4">
+            {realtimeStatus === 'polling' && (
+              <span className="type-meta text-foreground-secondary">Updates every 10s</span>
+            )}
+            <TourButton />
+          </div>
         </div>
       )}
 

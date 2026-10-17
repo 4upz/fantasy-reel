@@ -15,6 +15,7 @@ import DraftBoardHeader from './DraftBoardHeader'
 import DraftTurnStatus from './DraftTurnStatus'
 import CounterpickRound from './CounterpickRound'
 import { ClapperboardIcon } from './Icons'
+import { TourButton } from '@/components/tours'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, NextPickInfo, CounterpickWithDetails } from '@/types'
 
 interface Props {
@@ -130,7 +131,7 @@ export default function DraftBoard({
   // Render different views based on league status
   if (league.status === 'setup') {
     return (
-      <div className="card p-6">
+      <div className="card p-6" data-tour="draft-waiting">
         <h2 className="type-section text-foreground mb-4" tabIndex={-1} data-draft-heading>Draft board</h2>
         <div className="text-center py-8">
           <div className="flex justify-center mb-4">
@@ -141,8 +142,12 @@ export default function DraftBoard({
             Waiting for the league owner to start the draft.
           </p>
           <p className="type-body-sm text-foreground-secondary mt-2">
+            Meanwhile, add movies you like to your wishlist. It has its own tab in the draft.
+          </p>
+          <p className="type-body-sm text-foreground-secondary mt-2">
             {participants.length} of {league.max_participants} participants joined
           </p>
+          <TourButton className="mt-4" />
         </div>
       </div>
     )

@@ -1,5 +1,6 @@
 import { cache } from 'react'
 import { createClient } from './server'
+import type { Membership } from '@/utils/onboarding'
 
 /**
  * React.cache() wrapped Supabase utilities for request deduplication.
@@ -35,6 +36,24 @@ export const getCachedProfile = cache(async (userId: string) => {
 export const getCachedUiState = cache(async (userId: string) => {
   const supabase = await createClient()
   return supabase.from('user_ui_state').select('key, value').eq('user_id', userId)
+})
+
+/**
+ * Every season the user has a team in, with just enough of the league to tell
+ * a newcomer from someone who has played a season (`utils/onboarding.ts`).
+ * Read from `league_participants` rather than `leagues`, whose read policy also
+ * returns leagues the user is only invited to. `left` counts: someone who left
+ * a finished season still played it.
+ */
+export const getCachedMemberships = cache(async (userId: string) => {
+  const supabase = await createClient()
+  return supabase
+    .from('league_participants')
+    .select('status, leagues (id, name, status, owner_id)')
+    .eq('user_id', userId)
+    .in('status', ['active', 'left'])
+    .order('joined_at', { ascending: false })
+    .returns<Membership[]>()
 })
 
 /**

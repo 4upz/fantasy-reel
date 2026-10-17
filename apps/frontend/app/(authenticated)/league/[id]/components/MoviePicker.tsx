@@ -171,7 +171,7 @@ export default function MoviePicker({
         : undefined
 
   return (
-    <div className="space-y-6" data-testid="movie-picker">
+    <div className="space-y-6" data-testid="movie-picker" data-tour="movie-picker">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="type-panel text-foreground">

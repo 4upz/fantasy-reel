@@ -144,7 +144,7 @@ export default function CreateLeagueModal({ isOpen, onClose, onSuccess }: Props)
               Create new league
             </h2>
             <p id="create-league-subtitle" className="type-body-sm text-foreground-secondary mt-1">
-              Set up your fantasy movie league
+              You’ll be the commissioner. You can change most of this in league settings until the draft starts.
             </p>
           </div>
           <button
