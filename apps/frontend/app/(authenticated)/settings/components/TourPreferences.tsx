@@ -13,7 +13,9 @@ function statusLabel(state: TourState | undefined, version: number): string {
   if (!state || state.v < version || !state.status) return 'Not seen yet'
   if (state.status === 'completed') return 'Finished'
   if (state.status === 'dismissed') return 'Hidden'
-  return 'Snoozed'
+  const until = state.until ? new Date(state.until) : null
+  if (!until || until.getTime() <= Date.now()) return 'Not seen yet'
+  return `Snoozed until ${until.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
 }
 
 /**
@@ -29,7 +31,7 @@ export default function TourPreferences(): React.ReactElement {
       await setEnabled(next)
       toast.success(next ? 'Tours turned on' : 'Tours turned off')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not save your tour setting')
+      toast.error(error instanceof Error ? error.message : 'Couldn’t save your tour setting. Try again.')
     }
   }, [setEnabled])
   const { execute: executeToggle, isLoading: toggling } = useAsyncAction(toggle)
@@ -37,14 +39,15 @@ export default function TourPreferences(): React.ReactElement {
   const showAgain = useCallback(async (id?: TourId) => {
     try {
       await reset(id)
-      toast.success(id ? 'That tour will show on your next visit' : 'Every tour will show again')
+      toast.success(id ? 'This tour will start next time you open its page' : 'All tours will start again on your next visit to each page')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not reset your tours')
+      toast.error(error instanceof Error ? error.message : 'Couldn’t reset your tours. Try again.')
     }
   }, [reset])
   const { execute: executeReset, isLoading: resetting } = useAsyncAction(showAgain)
 
-  const anyHidden = TOUR_LIST.some((tour) => tourState(tour.id)?.status)
+  // With one tour, its own Show again button already does this.
+  const showResetAll = TOUR_LIST.length > 1 && TOUR_LIST.some((tour) => tourState(tour.id)?.status)
 
   return (
     <section className="card p-6" aria-labelledby="tour-preferences-heading" data-testid="tour-preferences">
@@ -56,7 +59,7 @@ export default function TourPreferences(): React.ReactElement {
           <h2 id="tour-preferences-heading" className="type-section text-foreground">
             Tours
           </h2>
-          <p className="type-body-sm text-foreground-secondary">Short walkthroughs the first time you open a page</p>
+          <p className="type-body-sm text-foreground-secondary">Short guides that start the first time you open a page</p>
         </div>
       </div>
 
@@ -70,7 +73,7 @@ export default function TourPreferences(): React.ReactElement {
         <div>
           <p id="tours-enabled-label" className="type-label text-foreground">Show tours automatically</p>
           <p id="tours-enabled-description" className="type-meta text-foreground-secondary mt-0.5">
-            When this is off, you can still open any page’s tour with Show me around or Tour this page in the account menu.
+            When this is off, tours start only when you choose “Show me around” on a page or “Tour this page” in the account menu.
           </p>
         </div>
         <button
@@ -120,7 +123,7 @@ export default function TourPreferences(): React.ReactElement {
         })}
       </ul>
 
-      {anyHidden && (
+      {showResetAll && (
         <button
           type="button"
           onClick={() => executeReset()}

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { toast } from 'sonner'
 import { createClient } from '@/utils/supabase/client'
 import { captureException } from '@/utils/sentry'
 import { trackEvent } from '@/utils/analytics'
@@ -353,7 +354,7 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
       let query = supabase.from('user_ui_state').delete().eq('user_id', userId)
       query = id ? query.eq('key', tourKey(id)) : query.like('key', `${TOUR_KEY_PREFIX}%`)
       const { error } = await query
-      if (error) throw new Error('Could not reset your tours. Please try again.')
+      if (error) throw new Error('Couldn’t reset your tours. Try again.')
       const keys = id ? [tourKey(id)] : [...states.keys()].filter((key) => key.startsWith(TOUR_KEY_PREFIX))
       for (const key of keys) {
         applyState(key, null)
@@ -371,7 +372,7 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
       const { error } = await supabase
         .from('user_ui_state')
         .upsert({ user_id: userId, key: TOURS_PREF_KEY, value }, { onConflict: 'user_id,key' })
-      if (error) throw new Error('Could not save your tour setting. Please try again.')
+      if (error) throw new Error('Couldn’t save your tour setting. Try again.')
       applyState(TOURS_PREF_KEY, value)
       broadcast(TOURS_PREF_KEY, value)
     },
@@ -399,7 +400,12 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
           onDontShowAgain={() => end('dismissed')}
           onTurnOffTours={() => {
             end('dismissed')
-            void setEnabled(false).catch((error: unknown) => captureException(error, { tags: { source: 'tours' } }))
+            void setEnabled(false)
+              .then(() => toast.success('Tours turned off. You can turn them back on in Settings.'))
+              .catch((error: unknown) => {
+                captureException(error, { tags: { source: 'tours' } })
+                toast.error('Couldn’t turn tours off. Try again from Settings.')
+              })
           }}
         />
       )}
