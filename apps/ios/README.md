@@ -76,15 +76,34 @@ to add a screen.
   (`supabase/config.toml`); the production Supabase dashboard needs the same two
   URLs added under Authentication → URL Configuration before release.
 
+## Sign-in setup
+
+Email and password, Google and Discord work against local Supabase as they
+are. Two pieces need settings from outside the repo:
+
+- **Sign in with Apple** needs the Apple Developer account. Until then the
+  Apple button shows "Sign in with Apple didn't finish" in the Simulator. Once
+  the bundle ID is registered with the Sign in with Apple capability, turn on
+  the Apple provider in Supabase (Authentication → Providers → Apple) and add
+  the bundle ID to its Client IDs; the app's native flow needs no secret. To
+  try it locally, set `enabled = true` and `client_id = "com.fantasyreel.ios"`
+  under `[auth.external.apple]` in `supabase/config.toml`.
+  A free personal team can't sign this capability for a phone. If Xcode
+  reports a signing error about it, add `CODE_SIGN_ENTITLEMENTS =` to
+  `Config/Local.xcconfig`; everything except the Apple button keeps working.
+- **The security check (CAPTCHA)** only appears when `TURNSTILE_SITE_KEY` is
+  set. Local Supabase has CAPTCHA off, so Debug leaves it empty. Production
+  requires it (see the release checklist).
+
 ## Not yet done (tracked for feature work)
 
 - Every feature screen beyond sign-in and the shell (see the folder table in
   ARCHITECTURE.md for which thread owns which).
-- Sign in with Apple (L-01): **approved for v1** (Arik, 2026-10-16), built by the
-  sign-in thread. App Review guideline 4.8 requires it beside Google and Discord.
-- CAPTCHA for production sign-in (N-03), Universal
-  Links (needs the Apple team ID and an `apple-app-site-association` file on the
-  website), push notifications (optional, O-01).
+- The full How to Play guide (F-01) is still a placeholder.
+- Connecting or disconnecting Google, Discord or Apple on an existing account,
+  and changing a password, belong to the Account screen (F-03).
+- Universal Links (needs the Apple team ID and an `apple-app-site-association`
+  file on the website), push notifications (optional, O-01).
 
 ## Release checklist (before the first TestFlight build)
 
@@ -98,4 +117,20 @@ to add a screen.
 - **Supabase redirect URLs.** Add `fantasyreel://auth/callback` and
   `fantasyreel://auth/callback?flow=recovery` in the production dashboard under
   Authentication → URL Configuration.
-- **Sign in with Apple** shipped, with the Apple provider enabled in Supabase.
+- **Sign in with Apple.** Register the bundle ID with the capability, enable
+  the Apple provider in production Supabase with the bundle ID as a Client ID,
+  and test it on a real iPhone, including Hide My Email (the app warns that a
+  new account was made) and a first sign-in that shares the person's name.
+- **Security check.** Put the web's public Turnstile site key
+  (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`) in `TURNSTILE_SITE_KEY` for Release, and
+  make sure the key's allowed hostnames include `fantasyreel.com` (the app's
+  challenge page uses the website's origin). Release refuses to launch while
+  the placeholder is there.
+- **Privacy policy for Apple sign-in.** Proposed wording, not yet approved:
+  in "Information we collect", *"Google, Discord or Apple sign-in shares basic
+  profile information with us, but not your password. If you use Apple's Hide
+  My Email, we receive a private address that forwards to you."*; in "Service
+  providers", *"Google, Discord and Apple process information when you use
+  their sign-in or connected features, under their own policies."* Separately,
+  the policy doesn't name Cloudflare Turnstile, which the website already uses
+  for its security check.

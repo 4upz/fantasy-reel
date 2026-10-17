@@ -14,12 +14,18 @@ public struct AppConfiguration: Sendable, Equatable {
     public let siteURL: URL
     /// The custom URL scheme registered in Info.plist (`fantasyreel`).
     public let urlScheme: String
+    /// The public Cloudflare Turnstile site key, the web's
+    /// `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. Nil turns the security check off, which
+    /// is right for local Supabase (CAPTCHA off there) and wrong for production
+    /// (N-03), so Release refuses to launch with the placeholder.
+    public let turnstileSiteKey: String?
 
-    public init(supabaseURL: URL, supabaseAnonKey: String, siteURL: URL, urlScheme: String) {
+    public init(supabaseURL: URL, supabaseAnonKey: String, siteURL: URL, urlScheme: String, turnstileSiteKey: String? = nil) {
         self.supabaseURL = supabaseURL
         self.supabaseAnonKey = supabaseAnonKey
         self.siteURL = siteURL
         self.urlScheme = urlScheme
+        self.turnstileSiteKey = turnstileSiteKey
     }
 
     /// Where Supabase sends OAuth and email-link results: `fantasyreel://auth/callback`.
@@ -87,6 +93,15 @@ public struct AppConfiguration: Sendable, Equatable {
             }
             return value
         }
+        /// An optional setting: empty (or never defined) means off.
+        func optionalString(_ key: String) throws(LoadError) -> String? {
+            guard let value = (info[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty,
+                  !value.hasPrefix("$(")
+            else { return nil }
+            if value.hasPrefix("REPLACE_WITH") { throw .placeholder(key: key) }
+            return value
+        }
         func url(_ key: String) throws(LoadError) -> URL {
             let value = try string(key)
             guard let url = URL(string: value), let scheme = url.scheme, scheme.hasPrefix("http"), url.host() != nil else {
@@ -99,7 +114,8 @@ public struct AppConfiguration: Sendable, Equatable {
             supabaseURL: try url("FRSupabaseURL"),
             supabaseAnonKey: try string("FRSupabaseAnonKey"),
             siteURL: try url("FRSiteURL"),
-            urlScheme: try string("FRURLScheme")
+            urlScheme: try string("FRURLScheme"),
+            turnstileSiteKey: try optionalString("FRTurnstileSiteKey")
         )
     }
 
