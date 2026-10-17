@@ -2,6 +2,7 @@ import AuthenticationServices
 import CryptoKit
 import FantasyReelAPI
 import SwiftUI
+import UIKit
 
 /// "Continue with Apple / Google / Discord" (V2LogIn, V2SignUp). Each one signs
 /// in or, on first use, creates an account, so a legal notice goes with them.
@@ -30,9 +31,10 @@ struct AuthProviderButtons: View {
     }
 }
 
-/// Sign in with Apple (L-01), with Apple's own button so it meets Apple's
-/// design rules. White in both themes with the same 50pt capsule and soft
-/// shadow as the other providers, growing with large text.
+/// Sign in with Apple (L-01). A custom button in the same style as Google and
+/// Discord, which Apple's design rules allow: "Continue with Apple" with the
+/// Apple logo on a white button. Apple's own `SignInWithAppleButton` centers
+/// its logo and uses the system font, so it couldn't line up with the others.
 ///
 /// The request carries the SHA-256 of a fresh random nonce; Supabase receives
 /// the raw nonce and checks the two match, so a stolen token can't be replayed.
@@ -40,59 +42,84 @@ struct AppleSignInButton: View {
     let action: AsyncAction
 
     @Environment(SessionStore.self) private var session
-    @ScaledMetric(relativeTo: .body) private var height: CGFloat = 50
-    /// A reference, not state: Apple calls `onRequest` and `onCompletion`
-    /// back to back, and the completion must see the nonce the request used.
-    @State private var nonce = NonceBox()
+    @State private var authorizer = AppleAuthorizer()
 
     var body: some View {
-        SignInWithAppleButton(.continue) { request in
-            let raw = AppleNonce.make()
-            nonce.value = raw
-            request.requestedScopes = [.fullName, .email]
-            request.nonce = AppleNonce.sha256(raw)
-        } onCompletion: { result in
-            complete(result)
+        ProviderSignInButton(provider: .apple) {
+            action.run { try await signIn() }
         }
-        .signInWithAppleButtonStyle(.white)
-        .frame(height: min(height, 64))
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.35), radius: 1, x: 0, y: 1)
         .disabled(action.isRunning)
-        .opacity(action.isRunning ? 0.5 : 1)
     }
 
-    private func complete(_ result: Result<ASAuthorization, any Error>) {
-        let rawNonce = nonce.value
-        nonce.value = nil
-        switch result {
-        case .success(let authorization):
-            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                  let tokenData = credential.identityToken,
-                  let idToken = String(data: tokenData, encoding: .utf8),
-                  let rawNonce
-            else {
-                action.run { throw AppleSignInError.incomplete }
-                return
-            }
-            // Apple shares the name only the first time someone authorizes the app.
-            let fullName = credential.fullName
-                .map { PersonNameComponentsFormatter.localizedString(from: $0, style: .default) }
-                .flatMap { $0.isEmpty ? nil : $0 }
-            let appleUserID = credential.user
-            action.run {
-                try await session.signInWithApple(idToken: idToken, nonce: rawNonce, appleUserID: appleUserID, fullName: fullName)
-            }
-        case .failure(let error):
+    private func signIn() async throws {
+        let rawNonce = AppleNonce.make()
+        let authorization: ASAuthorization
+        do {
+            authorization = try await authorizer.authorize(hashedNonce: AppleNonce.sha256(rawNonce))
+        } catch let error as ASAuthorizationError where error.code == .canceled {
             // Closing Apple's sheet is not an error; any session stays as it was.
-            if (error as? ASAuthorizationError)?.code == .canceled { return }
-            action.run { throw AppleSignInError.failed }
+            return
+        } catch {
+            throw AppleSignInError.failed
         }
+        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+              let tokenData = credential.identityToken,
+              let idToken = String(data: tokenData, encoding: .utf8)
+        else { throw AppleSignInError.incomplete }
+        // Apple shares the name only the first time someone authorizes the app.
+        let fullName = credential.fullName
+            .map { PersonNameComponentsFormatter.localizedString(from: $0, style: .default) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        try await session.signInWithApple(idToken: idToken, nonce: rawNonce, appleUserID: credential.user, fullName: fullName)
     }
 }
 
-private final class NonceBox {
-    var value: String?
+/// Runs one Apple ID request and hands back its result. Apple reports through
+/// a delegate, so the controller and the waiting continuation are kept here
+/// until it answers.
+@MainActor
+private final class AppleAuthorizer: NSObject {
+    private var controller: ASAuthorizationController?
+    private var continuation: CheckedContinuation<ASAuthorization, any Error>?
+
+    func authorize(hashedNonce: String) async throws -> ASAuthorization {
+        let request = ASAuthorizationAppleIDProvider().createRequest()
+        request.requestedScopes = [.fullName, .email]
+        request.nonce = hashedNonce
+        let controller = ASAuthorizationController(authorizationRequests: [request])
+        controller.delegate = self
+        controller.presentationContextProvider = self
+        self.controller = controller
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            controller.performRequests()
+        }
+    }
+
+    private func finish(_ result: Result<ASAuthorization, any Error>) {
+        controller = nil
+        continuation?.resume(with: result)
+        continuation = nil
+    }
+}
+
+extension AppleAuthorizer: @preconcurrency ASAuthorizationControllerDelegate {
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
+        finish(.success(authorization))
+    }
+
+    func authorizationController(controller: ASAuthorizationController, didCompleteWithError error: any Error) {
+        finish(.failure(error))
+    }
+}
+
+extension AppleAuthorizer: @preconcurrency ASAuthorizationControllerPresentationContextProviding {
+    func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+        return windows.first(where: \.isKeyWindow) ?? windows.first ?? ASPresentationAnchor()
+    }
 }
 
 private enum AppleSignInError: LocalizedError {

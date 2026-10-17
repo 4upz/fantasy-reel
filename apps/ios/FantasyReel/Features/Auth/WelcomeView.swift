@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Signed-out welcome (mockup v2 "Welcome"): what the game is, Create Account,
-/// Log In, and legal/support links with movie-data attribution (F-01).
+/// Log In, and legal/support links (F-01). It shows no movie data, so it has
+/// no TMDb attribution; that goes on the screens that do.
 struct WelcomeView: View {
     @Environment(AppEnvironment.self) private var environment
     /// The scroll view's visible height, so the content can fill it and pin
@@ -64,14 +65,6 @@ struct WelcomeView: View {
                 .frFont(.meta)
                 .frame(minHeight: FRMetrics.minTapTarget)
                 .padding(.top, 4)
-
-                Text("Movie data from TMDb. This product uses the TMDb API but is not endorsed or certified by TMDb.")
-                    .frFont(.caption)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.frTextSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.top, -8)
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 8)

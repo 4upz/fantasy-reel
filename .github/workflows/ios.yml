@@ -103,9 +103,17 @@ jobs:
           for appearance in light dark; do
             xcrun simctl ui "$UDID" appearance "$appearance"
             for scene in $SCENES; do
-              SIMCTL_CHILD_FR_SCREENSHOT="$scene" xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID"
-              sleep 4
-              xcrun simctl io "$UDID" screenshot "build/screenshots/$scene-$appearance.png"
+              OUT="build/screenshots/$scene-$appearance.png"
+              # A capture taken before the first frame is drawn is a blank
+              # page that compresses to almost nothing; relaunch and wait longer.
+              for attempt in 1 2 3; do
+                SIMCTL_CHILD_FR_SCREENSHOT="$scene" xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID"
+                sleep $((2 + attempt * 2))
+                xcrun simctl io "$UDID" screenshot "$OUT"
+                sips --resampleWidth 600 "$OUT" --out build/check.png >/dev/null
+                [ "$(stat -f%z build/check.png)" -gt 60000 ] && break
+                echo "::warning::$scene ($appearance) looked blank on attempt $attempt"
+              done
             done
           done
           ls build/screenshots

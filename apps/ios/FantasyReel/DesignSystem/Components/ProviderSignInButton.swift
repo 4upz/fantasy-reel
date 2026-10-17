@@ -1,18 +1,15 @@
 import SwiftUI
 
 /// A "Continue with …" sign-in button (`.pbtn`, V2LogIn / V2SignUp): a 50pt
-/// white capsule with #1f1f1f DM Sans 600 17 text and the provider's 24pt logo
+/// white capsule with #1f1f1f DM Sans 600 17 text and the provider's logo
 /// 18pt from the leading edge. It looks the same in both appearances, as the
-/// providers' brand rules ask.
+/// providers' brand rules ask: the black Apple logo, Google's four-color "G"
+/// and Discord's blurple mark on white.
 ///
 /// ```swift
 /// ProviderSignInButton(provider: .google) { … }
 ///     .disabled(action.isRunning)
 /// ```
-///
-/// TODO: official logo assets are required for brand compliance (Sign in with
-/// Apple, Google and Discord guidelines). The glyphs below are placeholders
-/// until the vendor marks are added to the asset catalog.
 struct ProviderSignInButton: View {
     enum Provider: Hashable, Sendable, CaseIterable {
         case apple, google, discord
@@ -26,12 +23,22 @@ struct ProviderSignInButton: View {
             }
         }
 
-        /// Placeholder glyph; see the TODO on `ProviderSignInButton`.
-        var placeholderSymbol: String {
+        /// The provider's mark. Google's and Discord's are the web's
+        /// (`GoogleIcon`, `DiscordIcon`) in their brand colors; Apple's is the
+        /// system Apple logo in black, as a custom Sign in with Apple button uses.
+        @MainActor @ViewBuilder
+        var logo: some View {
             switch self {
-            case .apple: "apple.logo"
-            case .google: "g.circle.fill"
-            case .discord: "bubble.left.fill"
+            case .apple:
+                Image(systemName: "apple.logo")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(FRPalette.fixed(0x000000))
+                    // The glyph sits a little low in its box; center it optically.
+                    .offset(y: -1)
+            case .google:
+                Image("GoogleLogo").resizable().scaledToFit().frame(width: 20, height: 20)
+            case .discord:
+                Image("DiscordLogo").resizable().scaledToFit().frame(width: 22, height: 22)
             }
         }
     }
@@ -48,29 +55,28 @@ struct ProviderSignInButton: View {
         Button(action: action) {
             Text(provider.title)
         }
-        .buttonStyle(ProviderSignInButtonStyle(symbol: provider.placeholderSymbol))
+        .buttonStyle(ProviderSignInButtonStyle(provider: provider))
     }
 }
 
 private struct ProviderSignInButtonStyle: ButtonStyle {
-    let symbol: String
+    let provider: ProviderSignInButton.Provider
 
     func makeBody(configuration: Configuration) -> some View {
-        ProviderSignInButtonBody(label: configuration.label, isPressed: configuration.isPressed, symbol: symbol)
+        ProviderSignInButtonBody(label: configuration.label, isPressed: configuration.isPressed, provider: provider)
     }
 }
 
 private struct ProviderSignInButtonBody: View {
     let label: ButtonStyleConfiguration.Label
     let isPressed: Bool
-    let symbol: String
+    let provider: ProviderSignInButton.Provider
 
     @Environment(\.isEnabled) private var isEnabled
 
     /// Fixed, not themed: the same white button in dark and light.
     private static let fill = FRPalette.fixed(0xFFFFFF)
     private static let ink = FRPalette.fixed(0x1F1F1F)
-    private static let logoInk = FRPalette.fixed(0x000000)
 
     var body: some View {
         label
@@ -84,9 +90,7 @@ private struct ProviderSignInButtonBody: View {
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, minHeight: 50)
             .overlay(alignment: .leading) {
-                Image(systemName: symbol)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(Self.logoInk)
+                provider.logo
                     .frame(width: 24, height: 24)
                     .padding(.leading, 18)
                     .accessibilityHidden(true)
