@@ -22,6 +22,9 @@ final class AppEnvironment {
     let leagueLifecycle: any LeagueLifecycleRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
+    let movies: any MovieRepository
+    let wishlists: any WishlistRepository
+    let leagueMovies: any LeagueMovieRepository
     let draft: any DraftRepository
     let draftCatalog: any DraftMovieCatalog
 
@@ -33,6 +36,9 @@ final class AppEnvironment {
         leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
+        movies: (any MovieRepository)? = nil,
+        wishlists: (any WishlistRepository)? = nil,
+        leagueMovies: (any LeagueMovieRepository)? = nil,
         draft: (any DraftRepository)? = nil,
         draftCatalog: (any DraftMovieCatalog)? = nil
     ) {
@@ -47,6 +53,9 @@ final class AppEnvironment {
         self.leagueLifecycle = leagueLifecycle ?? EdgeLeagueLifecycleRepository(functions: edgeFunctions)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
+        self.movies = movies ?? EdgeMovieRepository(functions: edgeFunctions)
+        self.wishlists = wishlists ?? SupabaseWishlistRepository(provider: supabase)
+        self.leagueMovies = leagueMovies ?? SupabaseLeagueMovieRepository(provider: supabase)
         self.draft = draft ?? SupabaseDraftRepository(provider: supabase, functions: edgeFunctions)
         self.draftCatalog = draftCatalog ?? SupabaseDraftMovieCatalog(provider: supabase, functions: edgeFunctions)
     }
@@ -67,6 +76,9 @@ extension AppEnvironment {
         leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
         notifications: any NotificationRepository = InMemoryNotificationRepository(),
+        movies: any MovieRepository = InMemoryMovieRepository(),
+        wishlists: any WishlistRepository = InMemoryWishlistRepository(),
+        leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository(),
         draft: any DraftRepository = InMemoryDraftRepository(),
         draftCatalog: any DraftMovieCatalog = InMemoryDraftMovieCatalog()
     ) -> AppEnvironment {
@@ -81,6 +93,9 @@ extension AppEnvironment {
             leagueLifecycle: leagueLifecycle,
             profiles: profiles,
             notifications: notifications,
+            movies: movies,
+            wishlists: wishlists,
+            leagueMovies: leagueMovies,
             draft: draft,
             draftCatalog: draftCatalog
         )
