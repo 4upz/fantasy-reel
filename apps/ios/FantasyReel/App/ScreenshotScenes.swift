@@ -17,6 +17,21 @@ enum ScreenshotScene: String, CaseIterable {
     case resetPasswordLinkNotice
     case chooseNewPassword
     case appleRelayNotice
+    case movieSearch
+    case movieSearchIdle
+    case movieDetail
+    case wishlist
+    case sharedWishlists
+    case leagueHome
+    case roster
+    case standings
+    case teamDetail
+    case bids
+    case placeBid
+    case bidPriorities
+    case trades
+    case tradeComposer
+    case dropMovie
     case noLeaguesWithInvitation
     case createLeague
     case joinLeague
@@ -27,18 +42,6 @@ enum ScreenshotScene: String, CaseIterable {
     case shareInvite
     case growthDashboard
 
-    /// Scenes that show the signed-in app rather than the sign-in flow.
-    var isSignedIn: Bool {
-        switch self {
-        case .welcome, .logIn, .logInLinkNotice, .signUp, .resetPassword, .resetPasswordLinkNotice,
-             .chooseNewPassword, .appleRelayNotice:
-            false
-        case .noLeaguesWithInvitation, .createLeague, .joinLeague, .menuSeasons, .leagueSettings,
-             .leagueHistory, .seasonComplete, .shareInvite, .growthDashboard:
-            true
-        }
-    }
-
     static var requested: ScreenshotScene? {
         ProcessInfo.processInfo.environment["FR_SCREENSHOT"].flatMap(ScreenshotScene.init(rawValue:))
     }
@@ -48,12 +51,29 @@ struct ScreenshotSceneView: View {
     let scene: ScreenshotScene
 
     var body: some View {
-        if scene.isSignedIn {
+        if Self.movieResearchScenes.contains(scene) {
+            MovieResearchScreenshotView(scene: scene)
+        } else if Self.teamMarketScenes.contains(scene) {
+            TeamMarketScreenshotView(scene: scene)
+        } else if Self.leagueLifecycleScenes.contains(scene) {
             SignedInScreenshotView(scene: scene)
         } else {
             AuthScreenshotView(scene: scene)
         }
     }
+
+    private static let movieResearchScenes: Set<ScreenshotScene> = [
+        .movieSearch, .movieSearchIdle, .movieDetail, .wishlist, .sharedWishlists,
+    ]
+
+    private static let teamMarketScenes: Set<ScreenshotScene> = [
+        .leagueHome, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie,
+    ]
+
+    private static let leagueLifecycleScenes: Set<ScreenshotScene> = [
+        .noLeaguesWithInvitation, .createLeague, .joinLeague, .menuSeasons, .leagueSettings,
+        .leagueHistory, .seasonComplete, .shareInvite, .growthDashboard,
+    ]
 }
 
 /// The sign-in flow scenes.
@@ -117,9 +137,8 @@ private struct AuthScreenshotView: View {
                 isRecovery: true
             )
             navigation.path = [.logIn, .resetPassword()]
-        case .noLeaguesWithInvitation, .createLeague, .joinLeague, .menuSeasons, .leagueSettings,
-             .leagueHistory, .seasonComplete, .shareInvite, .growthDashboard:
-            // Signed-in scenes: `SignedInScreenshotView`.
+        default:
+            // Signed-in scenes have their own views (see `ScreenshotSceneView`).
             break
         }
     }
@@ -138,6 +157,9 @@ private struct SignedInScreenshotView: View {
     @State private var directory: LeagueDirectoryStore
     @State private var inbox: InboxStore
     @State private var admin: AdminStore
+    @State private var wishlist: WishlistStore
+    @State private var research: LeagueResearchStore
+    @State private var searchHistory = MovieSearchHistory()
     @State private var router = ShellRouter()
     private let profile: Profile?
 
@@ -165,6 +187,8 @@ private struct SignedInScreenshotView: View {
         _directory = State(initialValue: LeagueDirectoryStore(userID: viewer, repository: environment.leagues))
         _inbox = State(initialValue: InboxStore(userID: viewer, repository: environment.notifications))
         _admin = State(initialValue: AdminStore(repository: environment.admin))
+        _wishlist = State(initialValue: WishlistStore(userID: viewer, repository: environment.wishlists))
+        _research = State(initialValue: LeagueResearchStore(leagues: environment.leagues, leagueMovies: environment.leagueMovies))
         profile = ScreenshotData.profile(of: viewer)
     }
 
@@ -204,6 +228,9 @@ private struct SignedInScreenshotView: View {
             .environment(directory)
             .environment(inbox)
             .environment(admin)
+            .environment(wishlist)
+            .environment(research)
+            .environment(searchHistory)
             .environment(\.currentProfile, profile)
     }
 
@@ -232,8 +259,7 @@ private struct SignedInScreenshotView: View {
             router.push(.shareInvite)
         case .noLeaguesWithInvitation, .seasonComplete:
             break
-        case .welcome, .logIn, .logInLinkNotice, .signUp, .resetPassword, .resetPasswordLinkNotice,
-             .chooseNewPassword, .appleRelayNotice:
+        default:
             break
         }
     }

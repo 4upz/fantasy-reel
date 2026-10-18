@@ -7,6 +7,7 @@ import SwiftUI
 /// inside the sheet instead of opening a second sheet.
 struct MenuSheetView: View {
     @Environment(ShellRouter.self) private var router
+    @Environment(LeagueDirectoryStore.self) private var directory
 
     var body: some View {
         @Bindable var router = router
@@ -19,9 +20,14 @@ struct MenuSheetView: View {
                     case .account: AccountView()
                     case .howToPlay: HowToPlayView()
                     case .growthDashboard: GrowthDashboardView()
+                    case .sharedWishlist(let owner): SharedWishlistView(owner: owner)
+                    case .league(let route):
+                        LeagueDestinationView(route: route)
+                            .environment(\.leagueSelection, directory.selection)
                     }
                 }
         }
+        .environment(\.routesThroughMenu, true)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
@@ -31,6 +37,7 @@ private struct MenuRootView: View {
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
     @Environment(InboxStore.self) private var inbox
+    @Environment(WishlistStore.self) private var wishlist
     @Environment(\.currentProfile) private var profile
     @Environment(SessionStore.self) private var session
     @Environment(AppEnvironment.self) private var environment
@@ -42,6 +49,9 @@ private struct MenuRootView: View {
                 seasons
                 PendingInvitationsSection()
                 links
+            }
+            .task {
+                if case .idle = wishlist.state { await wishlist.load() }
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 24)
@@ -124,9 +134,7 @@ private struct MenuRootView: View {
     private var links: some View {
         FRRowGroup {
             NavigationLink(value: MenuRoute.wishlist) {
-                // The wishlist count (V2Menu "12") goes here as a trailing
-                // value once a wishlist store is available to the menu.
-                MenuLinkRow(title: "Wishlist", systemImage: "bookmark")
+                MenuLinkRow(title: "Wishlist", systemImage: "bookmark", value: wishlist.count > 0 ? "\(wishlist.count)" : nil)
             }
             NavigationLink(value: MenuRoute.notifications) {
                 MenuLinkRow(title: "Notifications", systemImage: "bell", count: inbox.unreadCount)
@@ -239,6 +247,8 @@ private struct MenuLinkRow: View {
     let title: String
     let systemImage: String
     var count: Int = 0
+    /// Secondary text before the chevron (the wishlist's "12").
+    var value: String?
     var trailing: Trailing = .chevron
 
     var body: some View {
@@ -251,6 +261,11 @@ private struct MenuLinkRow: View {
                 .frFont(.rowLabel)
                 .foregroundStyle(Color.frText)
             Spacer()
+            if let value {
+                Text(value)
+                    .frFont(.label)
+                    .foregroundStyle(Color.frTextSecondary)
+            }
             if count > 0 {
                 CountBadge(count: count)
                     .accessibilityLabel("\(count) unread")

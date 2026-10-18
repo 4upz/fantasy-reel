@@ -4,6 +4,9 @@ import Testing
 struct LeagueNavigationTests {
     @Test func tabsPerStatus() {
         #expect(LeagueNavigation.tabs(for: .setup) == [.home, .draft, .roster])
+        #expect(LeagueNavigation.showsSearchTab(beside: LeagueNavigation.tabs(for: .setup)))
+        #expect(LeagueNavigation.showsSearchTab(beside: LeagueNavigation.tabs(for: .completed)))
+        #expect(!LeagueNavigation.showsSearchTab(beside: LeagueNavigation.tabs(for: .active)))
         #expect(LeagueNavigation.tabs(for: .drafting) == [.home, .draft, .roster])
         #expect(LeagueNavigation.tabs(for: .counterpicking) == [.home, .draft, .roster])
         #expect(LeagueNavigation.tabs(for: .active) == [.home, .roster, .bids, .trades, .standings])
