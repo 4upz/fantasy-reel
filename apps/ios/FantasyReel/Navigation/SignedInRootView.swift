@@ -144,7 +144,40 @@ struct SignedInRootView: View {
 private struct ShellSheetView: View {
     let sheet: ShellSheet
 
+    @Environment(ShellRouter.self) private var router
+    @Environment(LeagueDirectoryStore.self) private var directory
+    /// The season the sheet opened in. A link can switch seasons while a sheet
+    /// with unsaved input stays up; the sheet keeps acting on its own season
+    /// rather than sending a bid or trade to the new one.
+    @State private var pinnedStore: LeagueSeasonStore?
+
     var body: some View {
+        let store = pinnedStore ?? router.seasonStore
+        Group {
+            if sheet.needsSeason, store == nil {
+                NavigationStack {
+                    EmptyStateView(
+                        title: "This season isn't open",
+                        message: "Close this and open the league again.",
+                        systemImage: "film.stack"
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { router.dismissSheet() }
+                        }
+                    }
+                }
+            } else {
+                content
+            }
+        }
+        .environment(\.leagueSelection, store?.selection ?? directory.selection)
+        .modifier(SeasonStoreEnvironment(store: store))
+        .onAppear { if pinnedStore == nil { pinnedStore = router.seasonStore } }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch sheet {
         case .menu:
             MenuSheetView()
@@ -154,6 +187,40 @@ private struct ShellSheetView: View {
             NavigationStack { JoinLeagueView(input: input) }
         case .draftMoviePicker(let room):
             DraftMoviePickerSheet(room: room.model)
+        case .editTeam:
+            NavigationStack { EditTeamView() }
+        case .dropMovie(let holdingID):
+            NavigationStack { DropMovieView(holdingID: holdingID) }
+        case .proposeTrade(let teamID):
+            NavigationStack { TradeComposerView(mode: .propose(teamID)) }
+        case .counterTrade(let offerID):
+            NavigationStack { TradeComposerView(mode: .counter(offerID)) }
+        case .placeBid(let target):
+            NavigationStack { PlaceBidView(target: target) }
+        }
+    }
+}
+
+private extension ShellSheet {
+    /// Sheets that act on the open season and read its store.
+    var needsSeason: Bool {
+        switch self {
+        case .menu, .createLeague, .joinLeague, .draftMoviePicker: false
+        case .editTeam, .dropMovie, .proposeTrade, .counterTrade, .placeBid: true
+        }
+    }
+}
+
+/// Hands the open season's store to a sheet when there is one.
+private struct SeasonStoreEnvironment: ViewModifier {
+    let store: LeagueSeasonStore?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let store {
+            content.environment(store)
+        } else {
+            content
         }
     }
 }

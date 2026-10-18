@@ -25,6 +25,16 @@ enum ScreenshotScene: String, CaseIterable {
     case draftPicker
     case draftCounterpick
     case draftOffline
+    case leagueHome
+    case roster
+    case standings
+    case teamDetail
+    case bids
+    case placeBid
+    case bidPriorities
+    case trades
+    case tradeComposer
+    case dropMovie
 
     static var requested: ScreenshotScene? {
         ProcessInfo.processInfo.environment["FR_SCREENSHOT"].flatMap(ScreenshotScene.init(rawValue:))
@@ -40,6 +50,8 @@ struct ScreenshotSceneView: View {
     var body: some View {
         if Self.movieResearchScenes.contains(scene) {
             MovieResearchScreenshotView(scene: scene)
+        } else if Self.teamMarketScenes.contains(scene) {
+            TeamMarketScreenshotView(scene: scene)
         } else {
             authScene
         }
@@ -47,6 +59,10 @@ struct ScreenshotSceneView: View {
 
     private static let movieResearchScenes: Set<ScreenshotScene> = [
         .movieSearch, .movieSearchIdle, .movieDetail, .wishlist, .sharedWishlists,
+    ]
+
+    private static let teamMarketScenes: Set<ScreenshotScene> = [
+        .leagueHome, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie,
     ]
 
     private var authScene: some View {
@@ -92,7 +108,8 @@ struct ScreenshotSceneView: View {
         let session = environment.session
         switch scene {
         case .welcome, .chooseNewPassword, .appleRelayNotice,
-             .movieSearch, .movieSearchIdle, .movieDetail, .wishlist, .sharedWishlists:
+             .movieSearch, .movieSearchIdle, .movieDetail, .wishlist, .sharedWishlists,
+             .leagueHome, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie:
             break
         case .draftSetup, .draftLive, .draftPicker, .draftCounterpick, .draftOffline:
             // Seeded by `DraftPreviewScreen` itself.

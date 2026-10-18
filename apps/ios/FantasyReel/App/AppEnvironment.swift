@@ -22,6 +22,12 @@ final class AppEnvironment {
     let leagueLifecycle: any LeagueLifecycleRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
+    /// Teams, rosters, standings and drops (F-10, F-11, F-14).
+    let teams: any TeamRepository
+    /// Pickup and counterpick bidding (F-12).
+    let bids: any BidRepository
+    /// Trade offers (F-13).
+    let trades: any TradeRepository
     let movies: any MovieRepository
     let wishlists: any WishlistRepository
     let leagueMovies: any LeagueMovieRepository
@@ -35,6 +41,9 @@ final class AppEnvironment {
         leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
+        teams: (any TeamRepository)? = nil,
+        bids: (any BidRepository)? = nil,
+        trades: (any TradeRepository)? = nil,
         movies: (any MovieRepository)? = nil,
         wishlists: (any WishlistRepository)? = nil,
         leagueMovies: (any LeagueMovieRepository)? = nil,
@@ -51,6 +60,9 @@ final class AppEnvironment {
         self.leagueLifecycle = leagueLifecycle ?? EdgeLeagueLifecycleRepository(functions: edgeFunctions)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
+        self.teams = teams ?? SupabaseTeamRepository(provider: supabase, functions: edgeFunctions)
+        self.bids = bids ?? SupabaseBidRepository(provider: supabase, functions: edgeFunctions)
+        self.trades = trades ?? EdgeTradeRepository(functions: edgeFunctions)
         self.movies = movies ?? EdgeMovieRepository(functions: edgeFunctions)
         self.wishlists = wishlists ?? SupabaseWishlistRepository(provider: supabase)
         self.leagueMovies = leagueMovies ?? SupabaseLeagueMovieRepository(provider: supabase)
@@ -73,6 +85,9 @@ extension AppEnvironment {
         leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
         notifications: any NotificationRepository = InMemoryNotificationRepository(),
+        teams: any TeamRepository = InMemoryTeamRepository(),
+        bids: any BidRepository = InMemoryBidRepository(),
+        trades: any TradeRepository = InMemoryTradeRepository(),
         movies: any MovieRepository = InMemoryMovieRepository(),
         wishlists: any WishlistRepository = InMemoryWishlistRepository(),
         leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository(),
@@ -89,6 +104,9 @@ extension AppEnvironment {
             leagueLifecycle: leagueLifecycle,
             profiles: profiles,
             notifications: notifications,
+            teams: teams,
+            bids: bids,
+            trades: trades,
             movies: movies,
             wishlists: wishlists,
             leagueMovies: leagueMovies,

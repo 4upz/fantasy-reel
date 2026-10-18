@@ -248,6 +248,10 @@ public struct CounterpickOption: Codable, Sendable, Hashable, Identifiable {
         draftPickID = try c.decodeIfPresent(HoldingID.self, forKey: .draftPickID)
         pickupID = try c.decodeIfPresent(HoldingID.self, forKey: .pickupID)
     }
+
+    /// Scored movies are still listed by bidding (shown locked); a scored
+    /// movie can't be counterpicked in the market.
+    public var isScoreLocked: Bool { FantasyPoints.isScoreLocked(fantasyPoints) }
 }
 
 extension KeyedDecodingContainer {

@@ -4,7 +4,8 @@ import SwiftUI
 
 /// A league season's tab bar (mockup v2): Home, Draft, Roster before the season;
 /// Home, Roster, Bids, Trades, Standings during it; Home, Roster, Standings once
-/// it's over. Movie search is the round button beside the bar.
+/// it's over. Movie search is the round button beside the bar, or a top-bar
+/// button when five league tabs fill the bar.
 struct LeagueShellView: View {
     let selection: LeagueSelection
 
@@ -13,21 +14,8 @@ struct LeagueShellView: View {
     @Environment(LeagueDirectoryStore.self) private var directory
 
     var body: some View {
-        @Bindable var router = router
-        TabView(selection: $router.selectedTab) {
-            ForEach(selection.tabs, id: \.self) { tab in
-                Tab(tab.title, systemImage: tab.systemImage, value: ShellTab.league(tab)) {
-                    LeagueTabStack(tab: tab)
-                }
-            }
-            Tab(value: ShellTab.search, role: .search) {
-                NavigationStack(path: $router.searchPath) {
-                    MovieSearchView(isSearchTabRoot: true)
-                        .navigationDestination(for: LeagueRoute.self) { route in
-                            LeagueDestinationView(route: route)
-                        }
-                }
-            }
+        LeagueSeasonScope(selection: selection, environment: environment) {
+            tabs
         }
         .environment(\.leagueSelection, selection)
         .onAppear(perform: normalizeSelectedTab)
@@ -37,10 +25,19 @@ struct LeagueShellView: View {
         }
     }
 
+    private var tabs: some View {
+        LeagueTabs(tabs: selection.tabs)
+    }
+
     /// Keeps the selection on a tab that exists in this phase.
     private func normalizeSelectedTab() {
-        if case .league(let tab) = router.selectedTab, !selection.tabs.contains(tab) {
+        switch router.selectedTab {
+        case .league(let tab) where !selection.tabs.contains(tab):
             router.select(selection.defaultTab)
+        case .search where !selection.showsSearchTab:
+            router.select(selection.defaultTab)
+        default:
+            break
         }
     }
 
@@ -61,6 +58,45 @@ struct LeagueShellView: View {
     }
 }
 
+/// The tab bar itself. Reads the season store for the badges: outbid offers
+/// on Bids, offers waiting on you on Trades.
+struct LeagueTabs: View {
+    let tabs: [LeagueTab]
+
+    @Environment(ShellRouter.self) private var router
+    @Environment(LeagueSeasonStore.self) private var store
+
+    var body: some View {
+        @Bindable var router = router
+        TabView(selection: $router.selectedTab) {
+            ForEach(tabs, id: \.self) { tab in
+                Tab(tab.title, systemImage: tab.systemImage, value: ShellTab.league(tab)) {
+                    LeagueTabStack(tab: tab)
+                }
+                .badge(badge(for: tab))
+            }
+            if LeagueNavigation.showsSearchTab(beside: tabs) {
+                Tab(value: ShellTab.search, role: .search) {
+                    NavigationStack(path: $router.searchPath) {
+                        MovieSearchView(isSearchTabRoot: true)
+                            .navigationDestination(for: LeagueRoute.self) { route in
+                                LeagueDestinationView(route: route)
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    private func badge(for tab: LeagueTab) -> Int {
+        switch tab {
+        case .bids: store.bids.outbidCount
+        case .trades: store.trades.needingResponse.count
+        default: 0
+        }
+    }
+}
+
 /// One tab's navigation stack: its root screen, the shared top bar, and every
 /// screen that can be pushed from a league.
 struct LeagueTabStack: View {
@@ -70,10 +106,20 @@ struct LeagueTabStack: View {
     var body: some View {
         NavigationStack(path: router.path(for: tab)) {
             root
-                .leagueTopBar()
+                .leagueTopBar(primaryAction: primaryAction)
                 .navigationDestination(for: LeagueRoute.self) { route in
                     LeagueDestinationView(route: route)
                 }
+        }
+    }
+
+    /// The tab's "+", passed into the top bar so it keeps its own glass button
+    /// before the bell (a toolbar added from inside the root merges into the ⋯ group).
+    private var primaryAction: LeagueTopBarAction? {
+        switch tab {
+        case .bids: LeagueTopBarAction(accessibilityLabel: "Place bid") { router.present(.placeBid(.newPickup)) }
+        case .trades: LeagueTopBarAction(accessibilityLabel: "Propose trade") { router.present(.proposeTrade(nil)) }
+        default: nil
         }
     }
 
@@ -103,6 +149,7 @@ struct LeagueDestinationView: View {
         case .shareInvite: ShareInviteView()
         case .movie(let tmdbID): LeagueMovieDetailView(tmdbID: tmdbID)
         case .team(let teamID): TeamDetailView(teamID: teamID)
+        case .bidPriorities: BidPrioritiesView()
         case .movieSearch: MovieSearchView()
         }
     }
