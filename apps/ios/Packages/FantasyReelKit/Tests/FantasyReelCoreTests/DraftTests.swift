@@ -159,6 +159,7 @@ struct DraftBoardTests {
         #expect(snapshot.draftedTMDbIDs == [TMDbID(rawValue: 42)])
         #expect(snapshot.drafter(of: TMDbID(rawValue: 42))?.userID == "u1")
         #expect(snapshot.drafter(of: TMDbID(rawValue: 7)) == nil)
+        #expect(snapshot.draftersByTMDbID[TMDbID(rawValue: 42)]?.userID == "u1")
     }
 }
 

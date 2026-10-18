@@ -108,6 +108,16 @@ public struct DraftSnapshot: Sendable, Hashable {
         Set(picks.compactMap { $0.movie?.tmdbID })
     }
 
+    /// Who drafted each drafted TMDb movie, built once for a list of rows.
+    public var draftersByTMDbID: [TMDbID: LeagueMember] {
+        var result: [TMDbID: LeagueMember] = [:]
+        for pick in picks {
+            guard let tmdbID = pick.movie?.tmdbID, let member = participant(forTeam: pick.teamID) else { continue }
+            result[tmdbID] = member
+        }
+        return result
+    }
+
     /// Who drafted a TMDb movie, when someone has.
     public func drafter(of tmdbID: TMDbID) -> LeagueMember? {
         guard let pick = picks.first(where: { $0.movie?.tmdbID == tmdbID }) else { return nil }

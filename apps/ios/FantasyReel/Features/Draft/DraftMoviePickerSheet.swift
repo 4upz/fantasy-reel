@@ -85,7 +85,7 @@ struct DraftMoviePickerView: View {
                 turnLine
                 DraftSubmissionNotice(model: room)
                 FRSegmentedControl("Movie lists", selection: $bindable.tab, options: CatalogTab.allCases, title: { $0.title })
-                results(picker, drafted: room.snapshot?.draftedTMDbIDs ?? [])
+                results(picker, drafters: room.snapshot?.draftersByTMDbID ?? [:])
                 TMDbAttribution()
             }
             .padding(.horizontal, FRMetrics.pageMargin)
@@ -115,7 +115,8 @@ struct DraftMoviePickerView: View {
     }
 
     @ViewBuilder
-    private func results(_ model: DraftMoviePickerModel, drafted: Set<TMDbID>) -> some View {
+    private func results(_ model: DraftMoviePickerModel, drafters: [TMDbID: LeagueMember]) -> some View {
+        let drafted = Set(drafters.keys)
         switch model.phase {
         case .loading:
             LoadingView(label: "Loading movies…")
@@ -138,7 +139,7 @@ struct DraftMoviePickerView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             LazyVStack(spacing: 0) {
                 ForEach(model.movies) { movie in
-                    row(movie)
+                    row(movie, drafter: drafters[movie.tmdbID])
                         .overlay(alignment: .top) {
                             if movie.id != model.movies.first?.id {
                                 Divider().padding(.leading, FRMetrics.separatorInset)
@@ -168,8 +169,7 @@ struct DraftMoviePickerView: View {
 
     /// The link and Pick are siblings, so a tap on Pick never pushes the
     /// detail and VoiceOver reaches each one.
-    private func row(_ movie: MovieSearchResult) -> some View {
-        let drafter = room.snapshot?.drafter(of: movie.tmdbID)
+    private func row(_ movie: MovieSearchResult, drafter: LeagueMember?) -> some View {
         let date = movie.releaseDate?.formatted(.medium)
         let draftedBy = drafter.map { "Drafted by \($0.userID == room.userID ? "you" : $0.firstName)" }
         let meta = [draftedBy, date, drafter == nil ? MovieGenre.primaryName(of: movie.genreIDs) : nil]

@@ -187,13 +187,20 @@ final class DraftRoomModel {
         let key = OptionsKey(status: snapshot.league.status, picks: snapshot.draftPicksMade, counterpicks: snapshot.counterpicksMade)
         if key == optionsKey, counterpickOptions.value != nil || counterpickOptions == .empty { return }
         if counterpickOptions.value == nil { counterpickOptions = .loading }
+        let draft = draft
+        let leagueID = leagueID
         do {
-            let options = try await draft.fetchCounterpickOptions(leagueID, teamID: teamID)
+            // Its own deadline: a slow RPC must not hold the coalesced refresh.
+            let options = try await withDeadline(Self.refreshDeadline, label: "counterpick-options") {
+                try await draft.fetchCounterpickOptions(leagueID, teamID: teamID)
+            }
             let next: LoadState<[CounterpickOption]> = options.isEmpty ? .empty : .loaded(options)
             if next != counterpickOptions { counterpickOptions = next }
             optionsKey = key
         } catch {
-            if counterpickOptions.value == nil { counterpickOptions = .failed(message: error.userMessage) }
+            let apiError = APIError.wrap(error)
+            if apiError.isCancellation { return }
+            if counterpickOptions.value == nil { counterpickOptions = .failed(message: apiError.userMessage) }
         }
     }
 
