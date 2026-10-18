@@ -449,8 +449,7 @@ private struct BidAmountForm: View {
     }
 
     private var problem: String? {
-        if case .counterpick(let option) = subject,
-           !bids.hasCounterpickSlot(for: option.movieID, slots: season.season.biddingCounterpickSlots) {
+        if isCounterpick, !bids.hasFreeCounterpickSlot(slots: season.season.biddingCounterpickSlots) {
             return "All counterpick slots used"
         }
         return BidAmountRule.problem(amount: amount, remainingBudget: remainingBudget, highBid: highBid)

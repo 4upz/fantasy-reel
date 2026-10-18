@@ -106,15 +106,14 @@ final class BidsStore {
             .sorted { ($0.priority, $0.createdAt) < ($1.priority, $1.createdAt) }
     }
 
-    /// My pending counterpick bids in priority order.
-    /// Whether I can bid on this counterpick: raising my own bid always can,
-    /// a new one needs a free bidding counterpick slot.
-    func hasCounterpickSlot(for movieID: MovieID, slots: Int) -> Bool {
-        if myCounterpickBids.contains(where: { $0.movieID == movieID }) { return true }
+    /// Whether I can place, raise or counter any counterpick bid: the server
+    /// refuses all of them once my bidding counterpick slots are used.
+    func hasFreeCounterpickSlot(slots: Int) -> Bool {
         guard let snapshot else { return false }
         return snapshot.biddingCounterpickCount < slots
     }
 
+    /// My pending counterpick bids in priority order.
     var myCounterpickBids: [CounterpickBid] {
         guard let teamID else { return [] }
         return (snapshot?.counterpickBids ?? [])

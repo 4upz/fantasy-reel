@@ -364,7 +364,8 @@ private struct PickupBidRow: View {
         if isMine, bid.status == .outbid {
             parts.append("Yours \(SeasonFormat.budget(bid.amount))")
             if let high { parts.append("High \(SeasonFormat.budget(high.amount))") }
-            parts.append("\(BidTiming.timeRemaining(until: bid.responseDeadline)) to counter")
+            // Countering needs a free slot, so say why the button is missing.
+            parts.append(hasSlot ? "\(BidTiming.timeRemaining(until: bid.responseDeadline)) to counter" : "Can't counter, all counterpick slots used")
         } else {
             if let date = bid.releaseDate { parts.append(date.formattedShort) }
             parts.append(deadlineText(window: season.bids.counterWindow(forPickup: bid.tmdbID)))
@@ -391,8 +392,9 @@ private struct CounterpickBidRow: View {
         let bids = season.bids
         let isMine = bid.teamID == season.myTeam?.id
         let high = bids.highCounterpickBid(on: bid.movieID)
+        let hasSlot = bids.hasFreeCounterpickSlot(slots: season.season.biddingCounterpickSlots)
         let canCounter = season.myTeam?.budget != nil && BidEligibility.isBiddable(releaseDate: bid.releaseDate) && !bid.isScoreLocked
-            && bids.hasCounterpickSlot(for: bid.movieID, slots: season.season.biddingCounterpickSlots)
+            && hasSlot
         let week = bids.snapshot?.week ?? BidWeek(processingDeadline: nil, cutoffAt: nil)
         let canCancel = isMine && week.canCancel(bidProcessingDeadline: bid.processingDeadline)
 
@@ -400,7 +402,7 @@ private struct CounterpickBidRow: View {
             title: bid.title,
             posterURL: bid.movie?.posterURL,
             status: isMine ? (bid.status == .outbid ? .outbid : .leading) : nil,
-            meta: meta(isMine: isMine, high: high),
+            meta: meta(isMine: isMine, high: high, hasSlot: hasSlot),
             amount: bid.amount,
             amountCaption: isMine ? "your bid" : "high bid",
             actionTitle: canCounter ? (isMine && bid.status == .active ? "Raise" : "Counter") : nil,
@@ -429,14 +431,15 @@ private struct CounterpickBidRow: View {
         }
     }
 
-    private func meta(isMine: Bool, high: CounterpickBid?) -> String {
+    private func meta(isMine: Bool, high: CounterpickBid?, hasSlot: Bool) -> String {
         if bid.isScoreLocked {
             return isMine ? "Already scored, this bid will be cancelled uncharged" : "Already scored, bids on it will be cancelled"
         }
         var parts = ["Counterpick vs \(bid.targetTeamName ?? season.team(bid.targetTeamID)?.team.name ?? "Unknown team")"]
         if isMine, bid.status == .outbid {
             if let high { parts.append("High \(SeasonFormat.budget(high.amount))") }
-            parts.append("\(BidTiming.timeRemaining(until: bid.responseDeadline)) to counter")
+            // Countering needs a free slot, so say why the button is missing.
+            parts.append(hasSlot ? "\(BidTiming.timeRemaining(until: bid.responseDeadline)) to counter" : "Can't counter, all counterpick slots used")
         } else if let window = season.bids.counterWindow(forCounterpick: bid.movieID) {
             parts.append("Counter window \(BidTiming.timeRemaining(until: window)) left")
         } else {
