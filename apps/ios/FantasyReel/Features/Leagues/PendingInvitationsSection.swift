@@ -9,7 +9,16 @@ import SwiftUI
 /// Accept opens the join sheet in invitation mode, which waits for the person
 /// to confirm (links and cards only pre-fill). Decline asks first, then calls
 /// `decline-invitation`.
+///
+/// `hasInvitations` reports whether any invitation card is showing, so a host
+/// screen can step its own filled button down to one primary action (Accept).
 struct PendingInvitationsSection: View {
+    private let hasInvitations: Binding<Bool>?
+
+    init(hasInvitations: Binding<Bool>? = nil) {
+        self.hasInvitations = hasInvitations
+    }
+
     @Environment(AppEnvironment.self) private var environment
     @Environment(SessionStore.self) private var session
     @Environment(ShellRouter.self) private var router
@@ -54,6 +63,9 @@ struct PendingInvitationsSection: View {
         .task(id: session.account?.email) { await load() }
         .refreshOnForeground { await load() }
         .announcesError(decline.errorMessage)
+        .onChange(of: invitations.isEmpty, initial: true) { _, isEmpty in
+            hasInvitations?.wrappedValue = !isEmpty
+        }
         .confirmationDialog(
             pendingDecline.map { "Decline the invitation to \($0.leagueName)?" } ?? "Decline this invitation?",
             isPresented: Binding(
@@ -96,7 +108,13 @@ struct PendingInvitationsSection: View {
         let repository = environment.invitations
         decline.run {
             defer { decliningID = nil }
-            try await repository.decline(invitation.id)
+            do {
+                try await repository.decline(invitation.id)
+            } catch {
+                // It may have gone through: re-read so a declined card disappears.
+                if APIError.wrap(error).isUncertainOutcome { await load() }
+                throw error
+            }
             invitations.removeAll { $0.id == invitation.id }
             Announcer.announce("Invitation to \(invitation.leagueName) declined")
         }
@@ -167,7 +185,7 @@ private struct PendingInvitationCard: View {
             Button(action: accept) {
                 Text("Accept")
             }
-            .buttonStyle(.fr(.secondary, size: .medium, fullWidth: true))
+            .buttonStyle(.fr(.primary, size: .medium, fullWidth: true))
             .disabled(isDeclining)
             .accessibilityLabel("Accept invitation to \(invitation.leagueName)")
         }

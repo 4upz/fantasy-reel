@@ -58,6 +58,7 @@ private struct InvitePlayerForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
             FRSegmentedControl("Invite by", selection: $model.mode, options: InviteMode.allCases, title: \.title)
+                .disabled(model.isRunning)
 
             switch model.mode {
             case .name:
@@ -146,7 +147,12 @@ private struct InvitePlayerForm: View {
                 LoadingView(label: "Searching…")
                     .frame(minHeight: 88)
             case .empty:
-                FRFootnote("No users found. Invite them by email instead.")
+                if model.resultsAreCurrent {
+                    FRFootnote("No users found. Invite them by email instead.")
+                } else {
+                    LoadingView(label: "Searching…")
+                        .frame(minHeight: 88)
+                }
             case .failed(let message):
                 if model.searchRateLimited {
                     InlineBanner(tone: .warning, title: "Try again later", message: message)
@@ -171,6 +177,10 @@ private struct InvitePlayerForm: View {
                         .accessibilityHint("Selects this person to invite.")
                     }
                 }
+                // Results for an earlier query stay visible but can't be
+                // picked until the current search answers.
+                .opacity(model.resultsAreCurrent ? 1 : 0.5)
+                .disabled(!model.resultsAreCurrent)
             }
         }
     }

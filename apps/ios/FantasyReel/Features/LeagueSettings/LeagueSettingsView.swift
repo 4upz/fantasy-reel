@@ -102,6 +102,10 @@ private struct SettingsContent: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var confirmsLeaving = false
+    @State private var isSavingBeforeLeaving = false
 
     private var season: League { selection.season }
 
@@ -143,6 +147,48 @@ private struct SettingsContent: View {
             async let membersLoaded: Void = model.loadMembers()
             await refreshed
             await membersLoaded
+        }
+        // Sections save one at a time, so Back (and the swipe, which hiding
+        // the system button turns off) asks before dropping another section's edits.
+        .navigationBarBackButtonHidden(model.hasUnsavedChanges)
+        .toolbar {
+            if model.hasUnsavedChanges {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        confirmsLeaving = true
+                    } label: {
+                        Image(systemName: "chevron.left")
+                    }
+                    .accessibilityLabel("Back")
+                    .disabled(isSavingBeforeLeaving)
+                }
+            }
+        }
+        .confirmationDialog(
+            "You have unsaved changes",
+            isPresented: $confirmsLeaving,
+            titleVisibility: .visible
+        ) {
+            if model.canSaveAllUnsaved {
+                Button("Save Changes") { saveAndLeave() }
+            }
+            Button("Discard Changes", role: .destructive) { dismiss() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            if !model.canSaveAllUnsaved {
+                Text("Some changes have errors. Fix them to save, or discard every unsaved change.")
+            }
+        }
+    }
+
+    /// Saves every edited section through its own save path; leaves only when
+    /// all of them saved, so a refusal stays visible in its section.
+    private func saveAndLeave() {
+        isSavingBeforeLeaving = true
+        Task {
+            let saved = await model.saveAllUnsaved()
+            isSavingBeforeLeaving = false
+            if saved { dismiss() }
         }
     }
 

@@ -250,6 +250,10 @@ struct SettingsEndSeasonView: View {
         DateOnly.today().days(until: season.seasonEnd)
     }
 
+    /// The season is over: this attempt finished it after an uncertain
+    /// result (the refresh shows it completed), or another device did.
+    private var hasEnded: Bool { season.status == .completed }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
@@ -285,17 +289,21 @@ struct SettingsEndSeasonView: View {
                             .accessibilityLabel("Type \(year) to confirm")
                     }
                 }
-                .disabled(model.completion.isRunning)
-                if let message = model.completion.errorMessage {
-                    InlineBanner(tone: .error, title: message)
+                .disabled(model.completion.isRunning || hasEnded)
+                if hasEnded {
+                    InlineBanner(tone: .success, title: "The \(year) season ended.")
+                } else {
+                    if let message = model.completion.errorMessage {
+                        InlineBanner(tone: .error, title: message)
+                    }
+                    Button {
+                        endSeason()
+                    } label: {
+                        Text(model.completion.isRunning ? "Ending…" : "End Season")
+                    }
+                    .buttonStyle(.fr(.destructive, isLoading: model.completion.isRunning))
+                    .disabled(!isConfirmed || model.completion.isRunning)
                 }
-                Button {
-                    endSeason()
-                } label: {
-                    Text(model.completion.isRunning ? "Ending…" : "End Season")
-                }
-                .buttonStyle(.fr(.destructive, isLoading: model.completion.isRunning))
-                .disabled(!isConfirmed || model.completion.isRunning)
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 32)
@@ -310,6 +318,13 @@ struct SettingsEndSeasonView: View {
             }
         }
         .announcesError(model.completion.errorMessage)
+        .onChange(of: hasEnded) { _, ended in
+            // A success already announced and closed this screen; this is the
+            // uncertain result that turned out to have landed.
+            if ended, model.completion.errorMessage != nil {
+                Announcer.announce("The \(year) season ended.")
+            }
+        }
     }
 
     private func endSeason() {

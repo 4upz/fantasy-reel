@@ -254,6 +254,14 @@ private struct CompletedSeasonContent: View {
         Announcer.announce(showsAllStandings ? "Showing all teams." : "Showing the top 3.")
     }
 
+    /// When the season was completed (the snapshot's moment), else its end date.
+    private var frozenDate: String {
+        if let completedAt = season.completedAt {
+            return completedAt.formatted(.dateTime.month(.wide).day().year())
+        }
+        return season.seasonEnd.formattedFull
+    }
+
     @ViewBuilder
     private var standingsSection: some View {
         let table = finalTable
@@ -264,7 +272,7 @@ private struct CompletedSeasonContent: View {
                     Text("No final standings saved")
                         .frFont(.rowTitle)
                         .foregroundStyle(Color.frText)
-                    Text("This season finished before final standings were recorded. The Standings tab shows its table.")
+                    Text("This season finished before final standings were recorded, so they aren't available.")
                         .frFont(.meta)
                         .foregroundStyle(Color.frTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -298,7 +306,7 @@ private struct CompletedSeasonContent: View {
             Image(systemName: "lock.fill")
                 .imageScale(.small)
                 .accessibilityHidden(true)
-            Text(verbatim: "Final standings are frozen as of \(season.seasonEnd.formattedFull).")
+            Text(verbatim: "Final standings are frozen as of \(frozenDate).")
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frFont(.meta)

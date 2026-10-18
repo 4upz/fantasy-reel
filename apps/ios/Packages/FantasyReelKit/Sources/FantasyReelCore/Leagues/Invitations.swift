@@ -63,9 +63,10 @@ public struct PendingInvitation: Decodable, Sendable, Hashable, Identifiable {
         leagueName = league?.name ?? ""
     }
 
-    /// Whole days until expiry, 0 on the last day (the web's "Expires today").
+    /// Days until expiry, rounded up as the web's `getDaysUntil` does (12
+    /// hours left is 1 day); 0 once it has passed (the web's "Expires today").
     public func daysLeft(now: Date = Date()) -> Int {
-        max(0, Int((expiresAt.timeIntervalSince(now) / 86_400).rounded(.up)) - 1)
+        max(0, Int((expiresAt.timeIntervalSince(now) / 86_400).rounded(.up)))
     }
 }
 
@@ -126,10 +127,11 @@ public struct LeagueInvitation: Decodable, Sendable, Hashable, Identifiable {
         return status
     }
 
-    /// Resend works on pending and expired invitations (it rotates the token
-    /// and the expiry); accepted and declined ones can't be resent.
+    /// Resend is offered only once an invitation has expired (it rotates the
+    /// token and the expiry), as the web's `InvitationsList` does; a pending
+    /// one is still live and its link can be copied instead.
     public func canResend(now: Date = Date()) -> Bool {
-        [.pending, .expired].contains(effectiveStatus(now: now))
+        effectiveStatus(now: now) == .expired
     }
 
     public func canCancel(now: Date = Date()) -> Bool {

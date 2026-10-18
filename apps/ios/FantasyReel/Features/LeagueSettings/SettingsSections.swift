@@ -15,6 +15,7 @@ struct SettingsGeneralSection: View {
 
     @State private var name: String
     @State private var maxPlayers: Int
+    @FocusState private var isNameFocused: Bool
 
     init(season: League, model: SettingsModel) {
         self.season = season
@@ -68,6 +69,10 @@ struct SettingsGeneralSection: View {
         !updates.isEmpty && nameError == nil && maxPlayersError == nil
     }
 
+    private var unsavedEdits: SettingsEdits? {
+        updates.isEmpty ? nil : SettingsEdits(updates: canSave ? updates : nil)
+    }
+
     var body: some View {
         SettingsSection(
             "General",
@@ -75,10 +80,25 @@ struct SettingsGeneralSection: View {
             save: SettingsSaveButton(isEnabled: canSave, isRunning: model.general.isRunning, action: save)
         ) {
             FormFieldRow(label: "Name", labelWidth: 110) {
-                TextField("League name", text: $name)
-                    .textInputAutocapitalization(.words)
-                    .submitLabel(.done)
-                    .disabled(model.general.isRunning)
+                HStack(spacing: 4) {
+                    TextField("League name", text: $name, prompt: Text("League name"))
+                        .textInputAutocapitalization(.words)
+                        .submitLabel(.done)
+                        .focused($isNameFocused)
+                    if isNameFocused, !name.isEmpty {
+                        Button {
+                            name = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(Color.frTextSecondary)
+                                .frame(minWidth: FRMetrics.minTapTarget, minHeight: FRMetrics.minTapTarget)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Clear name")
+                    }
+                }
+                .disabled(model.general.isRunning)
             }
             if isSetup {
                 SettingsStepperRow("Max players", value: $maxPlayers, in: SettingsLimits.participants)
@@ -90,9 +110,12 @@ struct SettingsGeneralSection: View {
             VStack(alignment: .leading, spacing: 6) {
                 if let nameError { SettingsFieldError(nameError) }
                 if let maxPlayersError { SettingsFieldError(maxPlayersError) }
+                // The count matters only while typing.
                 FRFootnote(
-                    "Renaming changes the league's name in every season. "
-                        + "\(nameLength)/\(SettingsLimits.maxNameLength) characters."
+                    isNameFocused
+                        ? "Renaming changes the league's name in every season. "
+                            + "\(nameLength)/\(SettingsLimits.maxNameLength) characters."
+                        : "Renaming changes the league's name in every season."
                 )
                 if isSetup {
                     if let count = model.activeCount {
@@ -108,12 +131,13 @@ struct SettingsGeneralSection: View {
         }
         .onChange(of: season.name) { _, new in name = new }
         .onChange(of: season.maxParticipants) { _, new in maxPlayers = new }
+        .tracksUnsavedEdits(unsavedEdits, for: .general, in: model)
     }
 
     private func save() {
         guard canSave else { return }
         model.save(updates, with: model.general) {
-            Announcer.announce("League info updated.")
+            Announcer.announce(SettingsSectionKey.general.savedAnnouncement)
         }
     }
 }
@@ -136,6 +160,10 @@ struct SettingsJoiningSection: View {
 
     private var hasChanges: Bool { inviteOnly != season.inviteOnly }
 
+    private var unsavedEdits: SettingsEdits? {
+        hasChanges ? SettingsEdits(updates: [.info(inviteOnly: inviteOnly)]) : nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
             SettingsSection(
@@ -155,12 +183,13 @@ struct SettingsJoiningSection: View {
             JoinCodeCard(season: season)
         }
         .onChange(of: season.inviteOnly) { _, new in inviteOnly = new }
+        .tracksUnsavedEdits(unsavedEdits, for: .joining, in: model)
     }
 
     private func save() {
         guard hasChanges else { return }
         model.save(.info(inviteOnly: inviteOnly), with: model.joining) {
-            Announcer.announce("Joining settings updated.")
+            Announcer.announce(SettingsSectionKey.joining.savedAnnouncement)
         }
     }
 }
@@ -219,6 +248,15 @@ struct SettingsSeasonSection: View {
         !isCompleted && (yearChanged || endChanged) && validationError == nil
     }
 
+    private var update: LeagueUpdate {
+        LeagueUpdate.season(year: yearChanged ? year : nil, end: endChanged ? end : nil)
+    }
+
+    private var unsavedEdits: SettingsEdits? {
+        guard !isCompleted, yearChanged || endChanged else { return nil }
+        return SettingsEdits(updates: canSave ? [update] : nil)
+    }
+
     var body: some View {
         SettingsSection(
             "Season",
@@ -272,6 +310,7 @@ struct SettingsSeasonSection: View {
         }
         .onChange(of: season.seasonYear) { _, new in year = new }
         .onChange(of: season.seasonEnd) { _, new in end = new }
+        .tracksUnsavedEdits(unsavedEdits, for: .season, in: model)
     }
 
     private var endFootnote: String {
@@ -284,9 +323,8 @@ struct SettingsSeasonSection: View {
 
     private func save() {
         guard canSave else { return }
-        let update = LeagueUpdate.season(year: yearChanged ? year : nil, end: endChanged ? end : nil)
         model.save(update, with: model.season) {
-            Announcer.announce("Season settings updated.")
+            Announcer.announce(SettingsSectionKey.season.savedAnnouncement)
         }
     }
 }
@@ -366,7 +404,14 @@ struct SettingsScoringSection: View {
                 }
             }
             .onChange(of: season.doublePointsOver90) { _, new in doublePoints = new }
+            .tracksUnsavedEdits(unsavedEdits, for: .scoring, in: model)
         }
+    }
+
+    private var unsavedEdits: SettingsEdits? {
+        doublePoints == season.doublePointsOver90
+            ? nil
+            : SettingsEdits(updates: [.scoring(doublePointsOver90: doublePoints)])
     }
 
     private var otherRuleNote: String {
@@ -387,7 +432,7 @@ struct SettingsScoringSection: View {
     private func save() {
         guard doublePoints != season.doublePointsOver90 else { return }
         model.save(.scoring(doublePointsOver90: doublePoints), with: model.scoring) {
-            Announcer.announce("Scoring updated.")
+            Announcer.announce(SettingsSectionKey.scoring.savedAnnouncement)
         }
     }
 }
@@ -437,7 +482,7 @@ struct SettingsRosterSection: View {
 
     private var counterbidError: String? {
         let range = SettingsLimits.counterbidHours
-        guard let counterbidHours, range.contains(counterbidHours) else {
+        guard SettingsText.integer(counterbidText, in: range) != nil else {
             return "Counter window must be between \(range.lowerBound) and \(range.upperBound) hours"
         }
         return nil
@@ -445,7 +490,7 @@ struct SettingsRosterSection: View {
 
     private var cutoffError: String? {
         let range = SettingsLimits.newBidCutoffHours
-        guard let cutoffHours, range.contains(cutoffHours) else {
+        guard SettingsText.integer(cutoffText, in: range) != nil else {
             return "New bid cutoff must be between \(range.lowerBound) and \(range.upperBound) hours"
         }
         return nil
@@ -526,6 +571,23 @@ struct SettingsRosterSection: View {
         .onChange(of: season.dropLimit) { _, new in dropLimit = new }
         .onChange(of: season.counterbidHours) { _, new in counterbidText = String(new) }
         .onChange(of: season.newBidCutoffHours) { _, new in cutoffText = String(new) }
+        .tracksUnsavedEdits(unsavedEdits, for: .roster, in: model)
+    }
+
+    /// The update Save sends, or nil while a field is invalid.
+    private var update: LeagueUpdate? {
+        guard errors.isEmpty, let counterbidHours, let cutoffHours else { return nil }
+        return LeagueUpdate.roster(
+            totalSlots: totalSlots,
+            draftSlots: draftSlots,
+            dropLimit: dropLimit,
+            counterbidHours: counterbidHours,
+            newBidCutoffHours: cutoffHours
+        )
+    }
+
+    private var unsavedEdits: SettingsEdits? {
+        hasChanges ? SettingsEdits(updates: update.map { [$0] }) : nil
     }
 
     private var lockedRosterNote: String {
@@ -547,7 +609,7 @@ struct SettingsRosterSection: View {
     }
 
     private var cutoffHelp: String {
-        guard let cutoffHours, SettingsLimits.newBidCutoffHours.contains(cutoffHours) else {
+        guard let cutoffHours = SettingsText.integer(cutoffText, in: SettingsLimits.newBidCutoffHours) else {
             return "New bids close this many hours before weekly processing (0–144h)."
         }
         if cutoffHours == 0 {
@@ -572,16 +634,9 @@ struct SettingsRosterSection: View {
     }
 
     private func save() {
-        guard hasChanges, errors.isEmpty, let counterbidHours, let cutoffHours else { return }
-        let update = LeagueUpdate.roster(
-            totalSlots: totalSlots,
-            draftSlots: draftSlots,
-            dropLimit: dropLimit,
-            counterbidHours: counterbidHours,
-            newBidCutoffHours: cutoffHours
-        )
+        guard hasChanges, let update else { return }
         model.save(update, with: model.roster) {
-            Announcer.announce("Bidding configuration updated.")
+            Announcer.announce(SettingsSectionKey.roster.savedAnnouncement)
         }
     }
 }
@@ -674,14 +729,22 @@ struct SettingsCounterpickSection: View {
             .onChange(of: season.draftCounterpickSlots) { _, new in draftSlots = new }
             .onChange(of: season.biddingCounterpickSlots) { _, new in biddingSlots = new }
             .onChange(of: season.counterpicksBlockDrops) { _, new in blockDrops = new }
+            .tracksUnsavedEdits(unsavedEdits, for: .counterpicks, in: model)
         }
+    }
+
+    private var update: LeagueUpdate {
+        LeagueUpdate.counterpicks(draftSlots: draftSlots, biddingSlots: biddingSlots, blockDrops: blockDrops)
+    }
+
+    private var unsavedEdits: SettingsEdits? {
+        hasChanges ? SettingsEdits(updates: rangeError == nil ? [update] : nil) : nil
     }
 
     private func save() {
         guard hasChanges, rangeError == nil else { return }
-        let update = LeagueUpdate.counterpicks(draftSlots: draftSlots, biddingSlots: biddingSlots, blockDrops: blockDrops)
         model.save(update, with: model.counterpicks) {
-            Announcer.announce("Counterpick configuration updated.")
+            Announcer.announce(SettingsSectionKey.counterpicks.savedAnnouncement)
         }
     }
 }
@@ -726,10 +789,15 @@ struct SettingsTradingSection: View {
         case invalid
     }
 
+    /// "1 and 2160".
+    private static func span(_ range: ClosedRange<Int>) -> String {
+        "\(range.lowerBound) and \(range.upperBound)"
+    }
+
     private static func parse(_ text: String, in range: ClosedRange<Int>) -> Nullable {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return .value(nil) }
-        guard let number = Int(trimmed), range.contains(number) else { return .invalid }
+        guard let number = SettingsText.integer(trimmed, in: range) else { return .invalid }
         return .value(number)
     }
 
@@ -737,8 +805,7 @@ struct SettingsTradingSection: View {
         var list: [String] = []
         if reviewEnabled {
             let range = SettingsLimits.vetoHours
-            let hours = SettingsText.integer(vetoText)
-            if hours.map({ !range.contains($0) }) ?? true {
+            if SettingsText.integer(vetoText, in: range) == nil {
                 list.append("Review window must be between \(range.lowerBound) and \(range.upperBound) hours")
             }
         }
@@ -749,13 +816,20 @@ struct SettingsTradingSection: View {
         let minValue = Self.parse(minText, in: SettingsLimits.expiryMinHours)
         let maxValue = Self.parse(maxText, in: SettingsLimits.expiryMaxDays)
         if case .invalid = defaultValue {
-            list.append("Default offer window must be a whole number between 1 and 2160 hours")
+            list.append(
+                "Default offer window must be a whole number "
+                    + "between \(Self.span(SettingsLimits.expiryDefaultHours)) hours"
+            )
         }
         if case .invalid = minValue {
-            list.append("Minimum offer window must be a whole number between 1 and 168 hours")
+            list.append(
+                "Minimum offer window must be a whole number between \(Self.span(SettingsLimits.expiryMinHours)) hours"
+            )
         }
         if case .invalid = maxValue {
-            list.append("Maximum offer window must be a whole number between 1 and 90 days")
+            list.append(
+                "Maximum offer window must be a whole number between \(Self.span(SettingsLimits.expiryMaxDays)) days"
+            )
         }
         if case .value(let d) = defaultValue, case .value(let mn) = minValue, case .value(let mx) = maxValue {
             let effectiveDefault = d ?? SettingsLimits.appDefaultExpiryHours
@@ -794,6 +868,29 @@ struct SettingsTradingSection: View {
     private var canSave: Bool {
         guard !isCompleted, let draft else { return false }
         return draft != TradeSettings(league: season)
+    }
+
+    /// True when any field differs from the saved settings, valid or not.
+    private var hasChanges: Bool {
+        tradesEnabled != season.tradesEnabled
+            || hasDeadline != (season.tradeDeadline != nil)
+            || (hasDeadline && deadline != season.tradeDeadline)
+            || reviewEnabled != season.tradeReviewEnabled
+            || (reviewEnabled && Self.trimmed(vetoText) != String(season.tradeVetoHours))
+            || Self.trimmed(defaultText) != Self.text(season.tradeOfferExpiryDefaultHours)
+            || Self.trimmed(minText) != Self.text(season.tradeOfferExpiryMinHours)
+            || Self.trimmed(maxText) != Self.text(season.tradeOfferExpiryMaxDays)
+    }
+
+    private static func trimmed(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var unsavedEdits: SettingsEdits? {
+        guard !isCompleted, hasChanges else { return nil }
+        guard let draft else { return SettingsEdits(updates: nil) }
+        // Edits that normalize back to the saved values ("24 " for 24) have nothing to send.
+        return SettingsEdits(updates: canSave ? [.trades(draft)] : [])
     }
 
     var body: some View {
@@ -887,6 +984,12 @@ struct SettingsTradingSection: View {
         }
         .disabled(model.trades.isRunning)
         .onChange(of: TradeSettings(league: season)) { _, new in reset(to: new) }
+        .onChange(of: season.seasonEnd) { _, new in
+            // The hidden deadline defaults to the season end; follow a moved end
+            // so turning the deadline on doesn't start past it.
+            if !hasDeadline { deadline = new }
+        }
+        .tracksUnsavedEdits(unsavedEdits, for: .trades, in: model)
     }
 
     private var vetoHelp: String {
@@ -910,7 +1013,7 @@ struct SettingsTradingSection: View {
     private func save() {
         guard canSave, let draft else { return }
         model.save(.trades(draft), with: model.trades) {
-            Announcer.announce("Trade settings updated.")
+            Announcer.announce(SettingsSectionKey.trades.savedAnnouncement)
         }
     }
 }

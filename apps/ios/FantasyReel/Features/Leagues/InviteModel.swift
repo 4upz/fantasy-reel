@@ -29,6 +29,8 @@ final class InviteModel {
     var query = ""
     var email = ""
     private(set) var results: LoadState<[UserSearchResult]> = .idle
+    /// The query `results` answer; older results stay up (dimmed) while typing.
+    private(set) var resultsQuery: String?
     private(set) var searchRateLimited = false
     private(set) var selectedUser: UserSearchResult?
 
@@ -53,6 +55,9 @@ final class InviteModel {
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
     var trimmedEmail: String { email.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// True when the results on screen are for what's in the field now.
+    var resultsAreCurrent: Bool { resultsQuery == trimmedQuery }
 
     var canSend: Bool {
         switch mode {
@@ -81,6 +86,7 @@ final class InviteModel {
             let users = try await invitations.searchUsers(text, in: leagueID)
             if Task.isCancelled { return }
             searchRateLimited = false
+            resultsQuery = text
             results = users.isEmpty ? .empty : .loaded(users)
         } catch {
             if error.isCancellation || Task.isCancelled { return }
@@ -89,6 +95,7 @@ final class InviteModel {
             } else {
                 searchRateLimited = false
             }
+            resultsQuery = text
             results = .failed(message: error.userMessage)
         }
     }

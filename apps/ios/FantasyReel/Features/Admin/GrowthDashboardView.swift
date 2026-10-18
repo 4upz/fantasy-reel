@@ -61,6 +61,8 @@ struct GrowthDashboardView: View {
                 state = .empty
             }
         } catch {
+            // The screen went away mid-load: nothing failed, so show nothing new.
+            if error.isCancellation || Task.isCancelled { return }
             let message = error.userMessage
             if state.value != nil {
                 refreshError = message

@@ -26,38 +26,50 @@ struct JoinLeagueView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
-                if let result = model.completed, let warning = result.warning {
-                    InlineBanner(tone: .warning, title: "You joined \(result.leagueName)", message: warning)
+                if let result = model.completed, model.needsOpening {
+                    // Saved on the server; only opening it failed. Retry re-reads, never re-sends.
+                    InlineBanner(
+                        tone: .info,
+                        title: "Joined \(result.leagueName). Open it from your leagues.",
+                        actionTitle: model.isOpening ? "Retrying…" : "Retry",
+                        action: { Task { @MainActor in await model.openCompleted() } }
+                    )
+                    .disabled(model.isOpening)
                 }
-                if model.isCodeMode {
-                    codeEntry
-                } else {
-                    invitationHeader
-                }
-
-                if let message = model.errorMessage {
-                    InlineBanner(tone: .error, title: "Unable to join", message: message)
-                }
-
-                FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
-                    FormFieldRow(label: "Team name", labelWidth: 100) {
-                        TextField("Optional", text: $model.form.teamName)
-                            .textInputAutocapitalization(.words)
-                            .submitLabel(.join)
-                            .focused($focusedField, equals: .team)
-                            .onSubmit(submit)
-                            .accessibilityLabel("Team name")
-                            .accessibilityHint(teamHint)
+                VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
+                    if let result = model.completed, let warning = result.warning {
+                        InlineBanner(tone: .warning, title: "You joined \(result.leagueName)", message: warning)
                     }
-                    FormFieldRow(label: "Joining as", labelWidth: 100) {
-                        joiningAs
+                    if model.isCodeMode {
+                        codeEntry
+                    } else {
+                        invitationHeader
                     }
-                }
-                .padding(.top, 4)
 
-                FRFootnote(footnote)
+                    if let message = model.errorMessage {
+                        InlineBanner(tone: .error, title: "Unable to join", message: message)
+                    }
+
+                    FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                        FormFieldRow(label: "Team name", labelWidth: 100) {
+                            TextField("Optional", text: $model.form.teamName)
+                                .textInputAutocapitalization(.words)
+                                .submitLabel(.join)
+                                .focused($focusedField, equals: .team)
+                                .onSubmit(submit)
+                                .accessibilityLabel("Team name")
+                                .accessibilityHint(teamHint)
+                        }
+                        FormFieldRow(label: "Joining as", labelWidth: 100) {
+                            joiningAs
+                        }
+                    }
+                    .padding(.top, 4)
+
+                    FRFootnote(footnote)
+                }
+                .disabled(model.isRunning || model.completed != nil)
             }
-            .disabled(model.isRunning || model.completed != nil)
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.top, 8)
             .padding(.bottom, 24)
@@ -101,7 +113,9 @@ struct JoinLeagueView: View {
             Text("You haven't joined yet.")
         }
         .interactiveDismissDisabled(model.hasUnsavedInput || model.isRunning)
-        .onChange(of: model.hasUnsavedInput, initial: true) { _, unsaved in
+        // A send in flight counts too: a link replacing the sheet mid-request
+        // would hide its outcome.
+        .onChange(of: model.hasUnsavedInput || model.isRunning, initial: true) { _, unsaved in
             router.sheetHasUnsavedInput = unsaved
         }
         .onChange(of: model.form.code) { _, newValue in
@@ -236,8 +250,9 @@ struct JoinLeagueView: View {
         }
         focusedField = nil
         Task {
-            // With a warning the sheet stays open to show it, with Done.
-            if let result = await model.submit(), result.warning == nil {
+            // With a warning, or when the league couldn't be opened yet, the
+            // sheet stays open to show it, with Done.
+            if let result = await model.submit(), result.warning == nil, !model.needsOpening {
                 router.dismissSheet()
             }
         }

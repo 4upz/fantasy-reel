@@ -24,6 +24,11 @@ final class JoinLeagueModel {
     private(set) var serverError: String?
     /// The person may have joined even though we saw an error.
     private(set) var outcomeUncertain = false
+    /// The server said yes but the league isn't in the directory yet (its
+    /// re-read failed), so it couldn't be opened. The sheet stays open with
+    /// Retry; the mutation is never sent again.
+    private(set) var needsOpening = false
+    private(set) var isOpening = false
 
     private let lifecycle: any LeagueLifecycleRepository
     private let directory: LeagueDirectoryStore
@@ -121,8 +126,7 @@ final class JoinLeagueModel {
             completed = result
             // A `warning` still means the person is in: open the league and
             // show the warning in the sheet. Never join again.
-            await directory.refresh()
-            directory.select(result.leagueID)
+            await openCompleted()
             let joined = "Joined \(result.leagueName)"
             Announcer.announce(result.warning.map { "\(joined). \($0)" } ?? joined)
             return result
@@ -135,6 +139,25 @@ final class JoinLeagueModel {
             if error.isCancellation { return nil }
             serverError = error.userMessage
             return nil
+        }
+    }
+
+    /// Re-reads the directory and selects the league the server confirmed.
+    /// Tries a second refresh before giving up, then shows Retry.
+    func openCompleted() async {
+        guard let result = completed, !isOpening else { return }
+        isOpening = true
+        defer { isOpening = false }
+        let wasWaiting = needsOpening
+        await directory.refresh()
+        var opened = directory.select(result.leagueID)
+        if !opened {
+            await directory.refresh()
+            opened = directory.select(result.leagueID)
+        }
+        needsOpening = !opened
+        if opened, wasWaiting {
+            Announcer.announce("\(result.leagueName) opened")
         }
     }
 

@@ -23,6 +23,11 @@ final class CreateLeagueModel {
     private(set) var serverError: String?
     /// The league may exist even though we saw an error.
     private(set) var outcomeUncertain = false
+    /// The server said yes but the league isn't in the directory yet (its
+    /// re-read failed), so it couldn't be opened. The sheet stays open with
+    /// Retry; the mutation is never sent again.
+    private(set) var needsOpening = false
+    private(set) var isOpening = false
 
     private let lifecycle: any LeagueLifecycleRepository
     private let directory: LeagueDirectoryStore
@@ -71,8 +76,7 @@ final class CreateLeagueModel {
             // A `warning` means the league exists but the team step failed;
             // open it anyway (the sheet shows the warning) and never
             // create a second one.
-            await directory.refresh()
-            directory.select(result.leagueID)
+            await openCompleted()
             let created = "\(result.leagueName) created"
             Announcer.announce(result.warning.map { "\(created). \($0)" } ?? created)
             return result
@@ -86,6 +90,25 @@ final class CreateLeagueModel {
             if error.isCancellation { return nil }
             serverError = error.userMessage
             return nil
+        }
+    }
+
+    /// Re-reads the directory and selects the league the server confirmed.
+    /// Tries a second refresh before giving up, then shows Retry.
+    func openCompleted() async {
+        guard let result = completed, !isOpening else { return }
+        isOpening = true
+        defer { isOpening = false }
+        let wasWaiting = needsOpening
+        await directory.refresh()
+        var opened = directory.select(result.leagueID)
+        if !opened {
+            await directory.refresh()
+            opened = directory.select(result.leagueID)
+        }
+        needsOpening = !opened
+        if opened, wasWaiting {
+            Announcer.announce("\(result.leagueName) opened")
         }
     }
 

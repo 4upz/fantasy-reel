@@ -17,6 +17,15 @@ public enum TextLimit {
         }
         return result
     }
+
+    /// Keeps typed text within `limit` as the server counts it: trimmed of
+    /// surrounding whitespace. Text whose trimmed length fits is left as
+    /// typed (a trailing space mid-word stays); longer text is trimmed, then cut.
+    public static func clampTrimmed(_ text: String, utf16 limit: Int) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.utf16.count > limit else { return text }
+        return clamp(trimmed, utf16: limit)
+    }
 }
 
 // MARK: - Create league
@@ -77,9 +86,9 @@ public struct CreateLeagueForm: Sendable, Hashable {
 
     /// Keeps typed names within the server's limits (call after each edit).
     public mutating func clampNames() {
-        let clampedName = TextLimit.clamp(name, utf16: CreateLeagueRequest.maxNameLength)
+        let clampedName = TextLimit.clampTrimmed(name, utf16: CreateLeagueRequest.maxNameLength)
         if clampedName != name { name = clampedName }
-        let clampedTeam = TextLimit.clamp(teamName, utf16: CreateLeagueRequest.maxTeamNameLength)
+        let clampedTeam = TextLimit.clampTrimmed(teamName, utf16: CreateLeagueRequest.maxTeamNameLength)
         if clampedTeam != teamName { teamName = clampedTeam }
     }
 
@@ -181,7 +190,7 @@ public struct JoinLeagueForm: Sendable, Hashable {
 
     /// Keeps the team name within the server's limit (call after each edit).
     public mutating func clampTeamName() {
-        let clamped = TextLimit.clamp(teamName, utf16: CreateLeagueRequest.maxTeamNameLength)
+        let clamped = TextLimit.clampTrimmed(teamName, utf16: CreateLeagueRequest.maxTeamNameLength)
         if clamped != teamName { teamName = clamped }
     }
 

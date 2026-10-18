@@ -27,19 +27,6 @@ public protocol InvitationRepository: Sendable {
     func generateJoinCode(for leagueID: LeagueID) async throws(APIError) -> String
 }
 
-/// The restricted growth dashboard (F-18).
-public protocol AdminRepository: Sendable {
-    /// The stats, or nil when this account isn't an app administrator (the
-    /// RPC refuses with 42501). Other failures throw.
-    func fetchGrowthStats() async throws(APIError) -> GrowthStats?
-}
-
-/// Commissioner announcements to the league's linked Discord channels (F-15).
-public protocol AnnouncementRepository: Sendable {
-    /// Returns how many channels it reached (0 when none are linked).
-    func postAnnouncement(_ message: String, to leagueID: LeagueID) async throws(APIError) -> Int
-}
-
 public struct SupabaseInvitationRepository: InvitationRepository {
     private let client: SupabaseClient
     private let functions: EdgeFunctionClient
@@ -150,42 +137,5 @@ public struct SupabaseInvitationRepository: InvitationRepository {
     public func generateJoinCode(for leagueID: LeagueID) async throws(APIError) -> String {
         let row: JoinLinkRow = try await functions.invoke("generate-join-link", body: ["league_id": leagueID.rawValue])
         return row.join_code
-    }
-}
-
-public struct SupabaseAdminRepository: AdminRepository {
-    private let client: SupabaseClient
-
-    public init(provider: SupabaseProvider) {
-        self.client = provider.client
-    }
-
-    public func fetchGrowthStats() async throws(APIError) -> GrowthStats? {
-        do {
-            return try await client.rpc("admin_growth_stats").execute().value
-        } catch {
-            let wrapped = APIError.wrap(error)
-            if wrapped.serverCode == "42501" { return nil }
-            throw wrapped
-        }
-    }
-}
-
-public struct EdgeAnnouncementRepository: AnnouncementRepository {
-    private let functions: EdgeFunctionClient
-
-    public init(functions: EdgeFunctionClient) {
-        self.functions = functions
-    }
-
-    private struct Response: Decodable, Sendable {
-        let channels_notified: Int?
-    }
-
-    public func postAnnouncement(_ message: String, to leagueID: LeagueID) async throws(APIError) -> Int {
-        let response: Response = try await functions.invoke(
-            "send-announcement", body: ["league_id": leagueID.rawValue, "message": message]
-        )
-        return response.channels_notified ?? 0
     }
 }

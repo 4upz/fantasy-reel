@@ -131,17 +131,34 @@ struct GrowthLineChart: View {
             }
         }
         .chartXAxis {
-            AxisMarks(values: .automatic(desiredCount: 4)) { _ in
+            AxisMarks(values: .stride(by: .weekOfYear, count: axisWeekStride, calendar: Self.weekCalendar)) { value in
                 AxisGridLine()
-                AxisValueLabel(format: GrowthFormat.utc.month(.abbreviated).day())
+                // Date labels start at their tick, so the last one would run
+                // past the plot's edge ("Oc…"); end that one at its tick instead.
+                AxisValueLabel(
+                    format: GrowthFormat.utc.month(.abbreviated).day(),
+                    anchor: value.index == value.count - 1 ? UnitPoint.topTrailing : nil,
+                    collisionResolution: .greedy
+                )
             }
         }
-        // Room for the last date label, which would otherwise be clipped.
-        .chartXScale(range: .plotDimension(startPadding: 0, endPadding: 20))
         .chartYAxis {
             AxisMarks(position: .leading)
         }
     }
+
+    /// Weeks between labels: every two weeks, widening as history grows so the
+    /// axis keeps about four labels.
+    private var axisWeekStride: Int {
+        max(2, (data.weeks.count + 2) / 4)
+    }
+
+    /// Weeks as Postgres buckets them (`date_trunc('week')`): Monday starts, UTC.
+    private static let weekCalendar: Calendar = {
+        var calendar = Calendar(identifier: .iso8601)
+        calendar.timeZone = .gmt
+        return calendar
+    }()
 
     private var legend: some View {
         HStack(spacing: 16) {

@@ -2,6 +2,7 @@ import FantasyReelAPI
 import FantasyReelCore
 import Foundation
 import Observation
+import SwiftUI
 
 /// State for the owner settings screen (F-15, F-16): the season's active
 /// members, and one `AsyncAction` per section so each section's Save shows its
@@ -71,6 +72,8 @@ final class SettingsModel {
             // `fetchMembers` already returns draft order.
             members = list.isEmpty ? .empty : .loaded(list)
         } catch {
+            // A cancelled read (the screen went away) didn't fail.
+            if error.isCancellation || Task.isCancelled { return }
             // Keep the list we had if a background re-read fails.
             if members.value == nil {
                 members = .failed(message: error.userMessage)
@@ -86,27 +89,80 @@ final class SettingsModel {
         onSuccess: (@MainActor () async -> Void)? = nil
     ) {
         guard !updates.isEmpty else { return }
-        let seasonID = seasonID
-        let lifecycle = lifecycle
-        let directory = directory
         action.run {
-            do {
-                for update in updates {
-                    _ = try await lifecycle.update(seasonID, update)
-                }
-            } catch {
-                // A partial save (first update landed, second refused) or an
-                // uncertain result: show the server's current values.
-                await directory.refresh()
-                throw error
-            }
-            await directory.refresh()
+            try await self.send(updates)
             if let onSuccess { await onSuccess() }
         }
     }
 
+    private func send(_ updates: [LeagueUpdate]) async throws {
+        do {
+            for update in updates {
+                _ = try await lifecycle.update(seasonID, update)
+            }
+        } catch {
+            // A partial save (first update landed, second refused) or an
+            // uncertain result: show the server's current values.
+            await directory.refresh()
+            throw error
+        }
+        await directory.refresh()
+    }
+
     func save(_ update: LeagueUpdate, with action: AsyncAction, onSuccess: (@MainActor () async -> Void)? = nil) {
         save([update], with: action, onSuccess: onSuccess)
+    }
+
+    // MARK: Unsaved edits
+
+    /// Each section's unsaved edits, reported by the section itself
+    /// (`tracksUnsavedEdits`). Leaving Settings with any of them asks first.
+    private(set) var unsavedEdits: [SettingsSectionKey: SettingsEdits] = [:]
+
+    var hasUnsavedChanges: Bool { !unsavedEdits.isEmpty }
+
+    /// True when every unsaved section could be saved as it stands (no field error).
+    var canSaveAllUnsaved: Bool { unsavedEdits.values.allSatisfy { $0.updates != nil } }
+
+    func setUnsavedEdits(_ edits: SettingsEdits?, for key: SettingsSectionKey) {
+        guard unsavedEdits[key] != edits else { return }
+        unsavedEdits[key] = edits
+    }
+
+    func action(for key: SettingsSectionKey) -> AsyncAction {
+        switch key {
+        case .general: general
+        case .season: season
+        case .scoring: scoring
+        case .roster: roster
+        case .counterpicks: counterpicks
+        case .trades: trades
+        case .joining: joining
+        }
+    }
+
+    /// Saves every section with unsaved edits, one after another, through the
+    /// same path as each section's Save button, so a refusal shows inline in
+    /// its section. True only when every one saved.
+    func saveAllUnsaved() async -> Bool {
+        var allSaved = true
+        for key in SettingsSectionKey.allCases {
+            guard let edits = unsavedEdits[key] else { continue }
+            guard let updates = edits.updates else {
+                allSaved = false
+                continue
+            }
+            guard !updates.isEmpty else { continue }
+            let saved = await action(for: key).runAndWait {
+                try await self.send(updates)
+            }
+            if saved {
+                Announcer.announce(key.savedAnnouncement)
+            } else {
+                allSaved = false
+            }
+        }
+        return allSaved
     }
 
     /// Removes a member (setup only), then re-reads the member list.
@@ -126,6 +182,47 @@ final class SettingsModel {
             let count = try await announcements.postAnnouncement(message, to: seasonID)
             onPosted(count)
         }
+    }
+}
+
+// MARK: - Unsaved edits
+
+/// The settings sections with their own Save button, in screen order.
+enum SettingsSectionKey: Hashable, CaseIterable {
+    case general, season, scoring, roster, counterpicks, trades, joining
+
+    /// Spoken after the section saves.
+    var savedAnnouncement: String {
+        switch self {
+        case .general: "League info updated."
+        case .season: "Season settings updated."
+        case .scoring: "Scoring updated."
+        case .roster: "Bidding configuration updated."
+        case .counterpicks: "Counterpick configuration updated."
+        case .trades: "Trade settings updated."
+        case .joining: "Joining settings updated."
+        }
+    }
+}
+
+/// A section's unsaved edits: the updates its Save button would send, or nil
+/// while a field is invalid (the edits can't be saved as they stand).
+struct SettingsEdits: Equatable {
+    let updates: [LeagueUpdate]?
+}
+
+extension View {
+    /// Reports a section's unsaved edits (nil: none) to the model while the
+    /// section is on screen, so leaving Settings can offer to save them.
+    @MainActor
+    func tracksUnsavedEdits(
+        _ edits: SettingsEdits?,
+        for key: SettingsSectionKey,
+        in model: SettingsModel
+    ) -> some View {
+        onAppear { model.setUnsavedEdits(edits, for: key) }
+            .onChange(of: edits) { _, new in model.setUnsavedEdits(new, for: key) }
+            .onDisappear { model.setUnsavedEdits(nil, for: key) }
     }
 }
 
@@ -172,6 +269,11 @@ enum SettingsText {
     /// Parses a whole number typed into a field; nil when empty or not a number.
     static func integer(_ text: String) -> Int? {
         Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    /// A whole number typed into a field, or nil when empty, not a number, or outside `range`.
+    static func integer(_ text: String, in range: ClosedRange<Int>) -> Int? {
+        integer(text).flatMap { range.contains($0) ? $0 : nil }
     }
 }
 

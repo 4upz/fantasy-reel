@@ -24,20 +24,32 @@ struct CreateLeagueView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
-                if let result = model.completed, let warning = result.warning {
-                    InlineBanner(tone: .warning, title: "\(result.leagueName) was created", message: warning)
+                if let result = model.completed, model.needsOpening {
+                    // Saved on the server; only opening it failed. Retry re-reads, never re-sends.
+                    InlineBanner(
+                        tone: .info,
+                        title: "Created \(result.leagueName). Open it from your leagues.",
+                        actionTitle: model.isOpening ? "Retrying…" : "Retry",
+                        action: { Task { @MainActor in await model.openCompleted() } }
+                    )
+                    .disabled(model.isOpening)
                 }
-                leagueGroup
-                rosterGroup
-                advancedToggle
-                if showsAdvanced {
-                    advancedGroups
+                VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
+                    if let result = model.completed, let warning = result.warning {
+                        InlineBanner(tone: .warning, title: "\(result.leagueName) was created", message: warning)
+                    }
+                    leagueGroup
+                    rosterGroup
+                    advancedToggle
+                    if showsAdvanced {
+                        advancedGroups
+                    }
+                    if let message = model.errorMessage {
+                        InlineBanner(tone: .error, title: "Couldn't create the league", message: message)
+                    }
                 }
-                if let message = model.errorMessage {
-                    InlineBanner(tone: .error, title: "Couldn't create the league", message: message)
-                }
+                .disabled(model.isRunning || model.completed != nil)
             }
-            .disabled(model.isRunning || model.completed != nil)
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.top, 8)
             .padding(.bottom, 24)
@@ -81,7 +93,9 @@ struct CreateLeagueView: View {
             Text("Nothing has been created yet.")
         }
         .interactiveDismissDisabled(model.isDirty || model.isRunning)
-        .onChange(of: model.isDirty, initial: true) { _, dirty in
+        // A send in flight counts too: a link replacing the sheet mid-request
+        // would hide its outcome.
+        .onChange(of: model.isDirty || model.isRunning, initial: true) { _, dirty in
             router.sheetHasUnsavedInput = dirty
         }
         .onChange(of: model.form) { old, _ in
@@ -245,8 +259,9 @@ struct CreateLeagueView: View {
         }
         focusedField = nil
         Task {
-            // With a warning the sheet stays open to show it, with Done.
-            if let result = await model.submit(), result.warning == nil {
+            // With a warning, or when the league couldn't be opened yet, the
+            // sheet stays open to show it, with Done.
+            if let result = await model.submit(), result.warning == nil, !model.needsOpening {
                 router.dismissSheet()
             }
         }

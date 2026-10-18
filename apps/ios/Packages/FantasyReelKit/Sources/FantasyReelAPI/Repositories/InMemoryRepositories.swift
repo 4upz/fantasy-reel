@@ -229,13 +229,18 @@ public actor InMemoryAdminRepository: AdminRepository {
 
 public actor InMemoryAnnouncementRepository: AnnouncementRepository {
     public var channels: Int
+    public var failure: APIError?
     public private(set) var posted: [String] = []
 
-    public init(channels: Int = 1) {
+    public init(channels: Int = 1, failure: APIError? = nil) {
         self.channels = channels
+        self.failure = failure
     }
 
+    public func setFailure(_ failure: APIError?) { self.failure = failure }
+
     public func postAnnouncement(_ message: String, to leagueID: LeagueID) async throws(APIError) -> Int {
+        if let failure { throw failure }
         posted.append(message)
         return channels
     }

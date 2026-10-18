@@ -15,6 +15,14 @@ struct TextLimitTests {
         #expect(clamped == "ab")
         #expect(clamped.utf16.count <= 3)
     }
+
+    @Test func clampTrimmedCountsWhatTheServerKeeps() {
+        // Surrounding spaces don't count, and text that fits is left as typed.
+        #expect(TextLimit.clampTrimmed("  abcd ", utf16: 4) == "  abcd ")
+        #expect(TextLimit.clampTrimmed("abc ", utf16: 4) == "abc ")
+        // Too long once trimmed: trimmed, then cut.
+        #expect(TextLimit.clampTrimmed("  abcdef  ", utf16: 4) == "abcd")
+    }
 }
 
 struct CreateLeagueFormTests {
