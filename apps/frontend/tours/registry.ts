@@ -1,4 +1,4 @@
-import type { TourDefinition } from './types'
+import type { TourContext, TourDefinition } from './types'
 import { welcomeTour } from './definitions/welcome'
 import { leagueSetupTour } from './definitions/league-setup'
 import { leagueSettingsTour } from './definitions/league-settings'
@@ -23,6 +23,9 @@ export const TOURS = {
 } as const satisfies Record<string, TourDefinition>
 
 export type TourId = keyof typeof TOURS
+
+/** The facts a tour reads, as its `defineTour<Ctx>()` declared them. */
+export type TourCtx<Id extends TourId> = (typeof TOURS)[Id] extends TourDefinition<infer Ctx extends TourContext> ? Ctx : TourContext
 
 /**
  * Ids that once named a tour. Progress is stored by id, so reusing one would

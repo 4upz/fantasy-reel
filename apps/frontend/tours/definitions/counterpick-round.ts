@@ -1,10 +1,11 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
  * The Draft tab during the counterpick round, for players with a team. The
  * commissioner also learns how to end a round nobody can finish.
  */
-export const counterpickRoundTour = defineTour({
+export const counterpickRoundTour = defineTour<{ isOwner: boolean; leagueStatus: LeagueStatus; newPlayer: boolean; hasTeam: boolean }>({
   id: 'counterpick-round',
   version: 1,
   title: 'The counterpick round',

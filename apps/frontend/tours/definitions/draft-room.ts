@@ -1,10 +1,11 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
  * The Draft tab while the draft runs. It carries the scoring rule, because
  * this is the first time a player commits to a choice that scores.
  */
-export const draftRoomTour = defineTour({
+export const draftRoomTour = defineTour<{ leagueStatus: LeagueStatus; newPlayer: boolean; draftComplete: boolean; draftCounterpicks: boolean }>({
   id: 'draft-room',
   version: 1,
   title: 'The draft',

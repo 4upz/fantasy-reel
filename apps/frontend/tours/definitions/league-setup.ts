@@ -1,10 +1,11 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
  * The Draft tab before the draft, for the commissioner: the three things that
  * stand between a new league and draft day. Settings has its own tour.
  */
-export const leagueSetupTour = defineTour({
+export const leagueSetupTour = defineTour<{ isOwner: boolean; leagueStatus: LeagueStatus; newPlayer: boolean }>({
   id: 'league-setup',
   version: 1,
   title: 'Setting up your league',

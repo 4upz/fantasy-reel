@@ -5,7 +5,7 @@ import { defineTour } from '../types'
  * and the two ways into a league. Three steps at most; the invitation step
  * replaces the join step when an email invitation is waiting.
  */
-export const welcomeTour = defineTour({
+export const welcomeTour = defineTour<{ loaded: boolean; newPlayer: boolean; hasPendingInvites: boolean }>({
   id: 'welcome',
   version: 1,
   title: 'Welcome to Fantasy Reel',

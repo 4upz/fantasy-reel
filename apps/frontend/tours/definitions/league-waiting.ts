@@ -1,10 +1,11 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
  * The Draft tab before the draft, for a player who joined someone else's
  * league: what draft day looks like, how picks score, and how to get ready.
  */
-export const leagueWaitingTour = defineTour({
+export const leagueWaitingTour = defineTour<{ isOwner: boolean; leagueStatus: LeagueStatus; newPlayer: boolean }>({
   id: 'league-waiting',
   version: 1,
   title: 'Waiting for the draft',

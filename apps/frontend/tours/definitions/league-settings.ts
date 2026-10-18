@@ -1,10 +1,11 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
  * League settings before the draft, for the commissioner: the four settings
  * that change how the game plays, and when each one locks.
  */
-export const leagueSettingsTour = defineTour({
+export const leagueSettingsTour = defineTour<{ leagueStatus: LeagueStatus; newPlayer: boolean }>({
   id: 'league-settings',
   version: 1,
   title: 'League settings',

@@ -21,14 +21,11 @@ function isShown(element: HTMLElement): boolean {
 /**
  * The element a tour step points at: the first `[data-tour="name"]` on
  * screen. Several elements may carry one name (the desktop tabs and the mobile
- * bottom bar) and only one is visible at a time. While a modal is open, only
- * elements inside it count - everything else is inert behind it.
+ * bottom bar) and only one is visible at a time.
  */
 export function findTourAnchor(name: string): HTMLElement | null {
-  const modal = topModal()
   const candidates = document.querySelectorAll<HTMLElement>(`[data-tour="${CSS.escape(name)}"]`)
   for (const element of candidates) {
-    if (modal && !modal.contains(element)) continue
     if (isShown(element)) return element
   }
   return null
