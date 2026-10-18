@@ -166,7 +166,8 @@ buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
   `get-movie-projections` answers `enabled: false` unless `projections_display`
   is on for the league's series. Each season's `LeagueSeasonStore.projections`
   (`ProjectionStore`, also `\.projectionStore` in the environment) batches the
-  ids a render asks for into one request (≤100), and an "off" answer or a
+  ids a render asks for into requests of up to 100 (the first one alone,
+  as a probe), and an "off" answer or a
   failed first request turns it off for the season, so every screen renders
   as before. Show a chip only on an unscored movie; `ProjectionAccessory`
   builds the chip and its spoken label for a `ListRow`/`MovieRow` `accessory`.
