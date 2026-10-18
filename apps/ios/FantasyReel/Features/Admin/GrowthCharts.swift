@@ -133,9 +133,11 @@ struct GrowthLineChart: View {
         .chartXAxis {
             AxisMarks(values: .automatic(desiredCount: 4)) { _ in
                 AxisGridLine()
-                AxisValueLabel(format: GrowthFormat.utc.month(.abbreviated).year(.twoDigits))
+                AxisValueLabel(format: GrowthFormat.utc.month(.abbreviated).day())
             }
         }
+        // Room for the last date label, which would otherwise be clipped.
+        .chartXScale(range: .plotDimension(startPadding: 0, endPadding: 20))
         .chartYAxis {
             AxisMarks(position: .leading)
         }
