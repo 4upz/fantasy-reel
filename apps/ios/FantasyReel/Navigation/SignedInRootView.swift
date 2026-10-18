@@ -108,6 +108,13 @@ struct SignedInRootView: View {
                 await inboxRefreshed
             }
             // A push that lands while the app is open is already in the inbox.
+            // Opening a push reads it, as opening it in the inbox does. It is
+            // usually newer than the loaded inbox, so that is re-read first.
+            .task(id: environment.push.openedNotification) {
+                guard let id = environment.push.openedNotification else { return }
+                await inbox.refresh()
+                await inbox.markRead(id)
+            }
             // A burst of pushes (a score run) becomes one inbox read.
             .task(id: environment.push.receivedWhileOpen) {
                 guard environment.push.receivedWhileOpen > 0,

@@ -217,7 +217,7 @@ function NotificationItem({ notification, onClick }: NotificationItemProps) {
   // Determine link based on notification type
   let href = leagueId ? `/league/${leagueId}` : '/dashboard'
   if ((notification.type === 'outbid' || notification.type === 'bid_lost' || notification.type === 'pickup_available') && leagueId) {
-    href = `/league/${leagueId}?tab=bidding`
+    href = `/league/${leagueId}/bidding`
   } else if (notification.type.startsWith('trade_') && leagueId) {
     href = `/league/${leagueId}/trading`
   } else if (notification.type === 'bid_won' && leagueId) {

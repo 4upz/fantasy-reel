@@ -30,7 +30,7 @@ const SECTIONS: LegalSection[] = [
         <li>
           <strong>iPhone notifications:</strong> if you allow notifications in our iPhone app, the device token
           Apple gives us and which kinds of notifications you have turned on. Notifications are delivered through
-          Apple&apos;s push notification service and include league, team, and movie names.
+          Apple&apos;s push notification service and include league, team, and movie names, scores and points, and bid amounts.
         </li>
         <li>
           <strong>Technical information:</strong> IP address, browser and device details, pages visited, feature
@@ -138,7 +138,7 @@ const SECTIONS: LegalSection[] = [
           draft updates sent to Discord 7 days after delivery (30 days if delivery failed); and records used to
           avoid repeating other Discord posts 90 days after the season ends; records of iPhone notifications 7 days
           after they are sent; and an iPhone&apos;s device token after 180 days without opening the app. Signing out of
-          the app deletes that phone&apos;s token. Scheduled-job logs are kept for 90 days.
+          the app stops notifications to that phone and deletes its token. Scheduled-job logs are kept for 90 days.
         </p>
         <p>
           You can delete your account in Settings, or request deletion at <SupportEmailLink />. Deleting your

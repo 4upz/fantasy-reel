@@ -2,6 +2,7 @@ import { assert, assertEquals } from '@std/assert'
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
   ApnsTokenSigner,
+  signerFor,
   buildPayload,
   classifyApnsResponse,
   interruptionLevel,
@@ -100,6 +101,26 @@ Deno.test('the provider token is an ES256 JWT, reused until it is 50 minutes old
   assert((await signer.token()) !== jwt, 'refreshed after 50 minutes')
 })
 
+Deno.test('concurrent sends share one signing, and only a rejection of the current token re-signs', async () => {
+  const { credentials } = await testCredentials()
+  let now = Date.UTC(2026, 9, 18, 12)
+  const signer = new ApnsTokenSigner(credentials, () => now)
+  const first = await Promise.all(Array.from({ length: 20 }, () => signer.token()))
+  assertEquals(new Set(first).size, 1, 'one token for the whole burst')
+
+  await signer.reset('an older token')
+  assertEquals(await signer.token(), first[0], 'a stale rejection keeps the current token')
+
+  now += 1000 // a new iat, so a re-signed token differs
+  await Promise.all([signer.reset(first[0]), signer.reset(first[0])])
+  const second = await signer.token()
+  assert(second !== first[0], 're-signed after Apple rejects it')
+  await signer.reset(first[0])
+  assertEquals(await signer.token(), second, 'later 403s for the old token change nothing')
+
+  assert(signerFor(credentials) === signerFor({ ...credentials }), 'warm runs reuse the signer')
+})
+
 function stubClient(batches: ClaimedPush[][]) {
   const finished: Array<Array<Record<string, unknown>>> = []
   const client = {
@@ -177,4 +198,11 @@ Deno.test('a stalled APNs connection never outlasts the run deadline', async () 
   assertEquals(summary.processed, 20)
   assertEquals(summary.metadata.unsent, 1)
   assertEquals(summary.failed, 0)
+})
+
+Deno.test('a long notification is clipped to stay under the APNs size limit', () => {
+  const payload = buildPayload(push({ title: 'T'.repeat(500), body: 'é'.repeat(5000) }))
+  assert(new TextEncoder().encode(JSON.stringify(payload)).length < 4096)
+  const alert = (payload.aps as { alert: { body: string } }).alert
+  assert(alert.body.endsWith('…'))
 })
