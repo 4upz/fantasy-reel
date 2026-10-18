@@ -34,7 +34,9 @@ final class LeagueSeasonStore {
         didSet { snapshotGeneration &+= 1 }
     }
     /// Bumps whenever `state` is set, so derived tables re-derive only then.
-    @ObservationIgnored private var snapshotGeneration = 0
+    /// Observed: a cache hit reads only this, and views fed only by a derived
+    /// table must still re-render when the snapshot changes.
+    private var snapshotGeneration = 0
     private(set) var season: League
     let userID: UserID
     private var seriesSeasons: [League]
