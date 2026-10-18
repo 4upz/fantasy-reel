@@ -77,8 +77,8 @@ final class MovieSearchModel {
         await search(query)
     }
 
-    /// Runs the current filter now (the keyboard's Search key, a recent chip,
-    /// Try Again).
+    /// Runs the current filter now, skipping the debounce (the keyboard's
+    /// Search key, Try Again).
     func submit() async {
         guard let query = normalizedQuery else { return }
         await search(query)

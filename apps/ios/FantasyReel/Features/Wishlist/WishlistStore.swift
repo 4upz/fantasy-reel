@@ -64,7 +64,8 @@ final class WishlistStore {
             async let rows = repository.fetchWishlist(of: userID)
             async let shared = repository.fetchSharing(for: userID)
             let (loaded, sharing) = try await (rows, shared)
-            if epoch == changeEpoch {
+            // A read that overlapped a change may or may not include it.
+            if epoch == changeEpoch, saving.isEmpty, !isSavingSharing {
                 movies = loaded
                 isShared = sharing
                 needsReload = false
@@ -78,6 +79,15 @@ final class WishlistStore {
             // Keep a list that already loaded rather than blanking it.
             if case .loaded = state { return }
             state = .failed(message: "Couldn't load your wishlist. \(apiError.userMessage)")
+        }
+    }
+
+    /// Loads unless a load has succeeded or is under way: screens with
+    /// bookmarks call this so a failed first load gets another try.
+    func loadIfNeeded() async {
+        switch state {
+        case .idle, .failed: await load()
+        default: break
         }
     }
 
@@ -110,7 +120,11 @@ final class WishlistStore {
         movies.insert(placeholder, at: 0)
         do {
             let saved = try await repository.add(insert, for: userID)
-            if let index = movies.firstIndex(where: { $0.tmdbID == tmdbID }) { movies[index] = saved }
+            if let index = movies.firstIndex(where: { $0.tmdbID == tmdbID }) {
+                movies[index] = saved
+            } else {
+                movies.insert(saved, at: 0)
+            }
             Announcer.announce("Saved \(insert.title) to your wishlist")
         } catch {
             movies.removeAll { $0.tmdbID == tmdbID }
@@ -131,8 +145,8 @@ final class WishlistStore {
             try await repository.remove(tmdbID, for: userID)
             Announcer.announce("Removed \(name) from your wishlist")
         } catch {
-            // Put it back where it was.
-            movies.insert(removed, at: min(index, movies.count))
+            // Put it back where it was, unless a read already did.
+            if !contains(tmdbID) { movies.insert(removed, at: min(index, movies.count)) }
             report(tmdbID, message(for: error, fallback: "Couldn't remove \(name) from your wishlist."))
         }
     }

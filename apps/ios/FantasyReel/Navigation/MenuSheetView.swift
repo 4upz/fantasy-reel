@@ -50,7 +50,7 @@ private struct MenuRootView: View {
                 links
             }
             .task {
-                if case .idle = wishlist.state { await wishlist.load() }
+                await wishlist.loadIfNeeded()
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 24)

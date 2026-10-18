@@ -246,7 +246,7 @@ private struct SearchIdleContent: View {
             }
         }
         .task {
-            if case .idle = wishlist.state { await wishlist.load() }
+            await wishlist.loadIfNeeded()
         }
     }
 }

@@ -57,7 +57,7 @@ struct WishlistView: View {
             await mine
         }
         .task {
-            if case .idle = wishlist.state { await wishlist.load() }
+            await wishlist.loadIfNeeded()
         }
         .task(id: selection?.season.id) {
             if let selection { await research.load(selection) }
@@ -336,7 +336,7 @@ struct SharedWishlistView: View {
                                 title: movie.title,
                                 posterURL: movie.posterURL,
                                 detail: wishlist.contains(movie.tmdbID) ? "Also on yours" : nil,
-                                status: directory.selection.map { _ in research.holdings(in: directory.selection?.season.id).status(of: movie.tmdbID) },
+                                status: directory.selection.map { research.holdings(in: $0.season.id).status(of: movie.tmdbID) },
                                 candidate: WishlistCandidate(movie)
                             )
                         }

@@ -29,6 +29,8 @@ final class LeagueMovieDetailModel {
     /// screen reappearing (back from a franchise film) doesn't read it all again.
     private var loaded: (league: LeagueID?, at: Date)?
     private let freshness: TimeInterval = 60
+    /// Bumped by each load; only the newest one writes what it read.
+    private var generation = 0
     private let movies: any MovieRepository
     private let leagueMovies: any LeagueMovieRepository
 
@@ -43,6 +45,8 @@ final class LeagueMovieDetailModel {
     func load(league: League?, force: Bool = true) async {
         if !force, let loaded, loaded.league == league?.id, state.value != nil,
            Date().timeIntervalSince(loaded.at) < freshness { return }
+        generation += 1
+        let current = generation
         if state.value == nil { state = .loading }
         if loaded != nil, loaded?.league != league?.id {
             // Another season: nothing from the last one applies.
@@ -69,6 +73,9 @@ final class LeagueMovieDetailModel {
 
         let (detailsResult, movieResult, holdingResult, historyResult, projectionResult) =
             await (details, movieRow, holdingRow, history, projections)
+        // A load the screen abandoned (it went away) or a newer one replaced
+        // saw only part of the picture: neither writes, nor counts as fresh.
+        guard !Task.isCancelled, current == generation else { return }
 
         switch detailsResult {
         case .success(let details):
@@ -96,6 +103,8 @@ final class LeagueMovieDetailModel {
             holdingUnknown = false
         case .failure(let error):
             leagueFailure = leagueFailure ?? error
+            // Don't hand actions a holding that may no longer be true.
+            holding = nil
             holdingUnknown = true
         }
         leagueError = leagueFailure.flatMap { $0.isCancellation ? nil : "Couldn't load the score and who holds it. \($0.userMessage)" }

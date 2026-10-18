@@ -80,7 +80,8 @@ struct WishlistToggleButton: View {
                     .contentShape(Rectangle())
             }
         }
-        .disabled(wishlist.isSaving(candidate.tmdbID))
+        // Until the list has loaded, a saved movie would read as unsaved.
+        .disabled(wishlist.isSaving(candidate.tmdbID) || wishlist.state.value == nil)
         .accessibilityLabel(saved ? "Remove \(candidate.title) from wishlist" : "Add \(candidate.title) to wishlist")
         .accessibilityAddTraits(saved ? .isSelected : [])
         .sensoryFeedback(.selection, trigger: saved)

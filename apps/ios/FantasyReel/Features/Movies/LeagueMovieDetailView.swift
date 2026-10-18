@@ -131,7 +131,7 @@ private struct MovieDetailScreen: View {
         let season = selection?.season
         async let modelLoaded: Void = model.load(league: season, force: force)
         if let selection { await research.load(selection, force: force) }
-        if case .idle = wishlist.state { await wishlist.load() }
+        await wishlist.loadIfNeeded()
         await modelLoaded
     }
 }
