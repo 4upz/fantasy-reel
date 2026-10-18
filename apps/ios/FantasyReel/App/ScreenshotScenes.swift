@@ -22,6 +22,11 @@ enum ScreenshotScene: String, CaseIterable {
     case movieDetail
     case wishlist
     case sharedWishlists
+    case draftSetup
+    case draftLive
+    case draftPicker
+    case draftCounterpick
+    case draftOffline
     case leagueHome
     case roster
     case standings
@@ -98,6 +103,16 @@ private struct AuthScreenshotView: View {
             ChooseNewPasswordView()
         case .appleRelayNotice:
             AppleRelayNoticeView()
+        case .draftSetup:
+            DraftPreviewScreen(.setup)
+        case .draftLive:
+            DraftPreviewScreen(.live)
+        case .draftPicker:
+            DraftPreviewScreen(.picker)
+        case .draftCounterpick:
+            DraftPreviewScreen(.counterpick)
+        case .draftOffline:
+            DraftPreviewScreen(.offline)
         default:
             NavigationStack(path: $navigation.path) {
                 WelcomeView()
@@ -116,6 +131,9 @@ private struct AuthScreenshotView: View {
         let session = environment.session
         switch scene {
         case .welcome, .chooseNewPassword, .appleRelayNotice:
+            break
+        case .draftSetup, .draftLive, .draftPicker, .draftCounterpick, .draftOffline:
+            // Seeded by `DraftPreviewScreen` itself.
             break
         case .logIn:
             navigation.path = [.logIn]
