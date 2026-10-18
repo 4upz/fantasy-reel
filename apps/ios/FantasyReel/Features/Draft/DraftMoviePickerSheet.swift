@@ -85,7 +85,11 @@ struct DraftMoviePickerView: View {
                 turnLine
                 DraftSubmissionNotice(model: room)
                 FRSegmentedControl("Movie lists", selection: $bindable.tab, options: CatalogTab.allCases, title: { $0.title })
-                results(picker, drafters: room.snapshot?.draftersByTMDbID ?? [:])
+                results(
+                    picker,
+                    drafted: room.snapshot?.draftedTMDbIDs ?? [],
+                    drafters: room.snapshot?.draftersByTMDbID ?? [:]
+                )
                 TMDbAttribution()
             }
             .padding(.horizontal, FRMetrics.pageMargin)
@@ -114,9 +118,10 @@ struct DraftMoviePickerView: View {
         }
     }
 
+    /// `drafted` excludes every picked movie; `drafters` only names who
+    /// picked it, and skips teams with no active member.
     @ViewBuilder
-    private func results(_ model: DraftMoviePickerModel, drafters: [TMDbID: LeagueMember]) -> some View {
-        let drafted = Set(drafters.keys)
+    private func results(_ model: DraftMoviePickerModel, drafted: Set<TMDbID>, drafters: [TMDbID: LeagueMember]) -> some View {
         switch model.phase {
         case .loading:
             LoadingView(label: "Loading movies…")
@@ -139,7 +144,7 @@ struct DraftMoviePickerView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             LazyVStack(spacing: 0) {
                 ForEach(model.movies) { movie in
-                    row(movie, drafter: drafters[movie.tmdbID])
+                    row(movie, isDrafted: drafted.contains(movie.tmdbID), drafter: drafters[movie.tmdbID])
                         .overlay(alignment: .top) {
                             if movie.id != model.movies.first?.id {
                                 Divider().padding(.leading, FRMetrics.separatorInset)
@@ -169,10 +174,12 @@ struct DraftMoviePickerView: View {
 
     /// The link and Pick are siblings, so a tap on Pick never pushes the
     /// detail and VoiceOver reaches each one.
-    private func row(_ movie: MovieSearchResult, drafter: LeagueMember?) -> some View {
+    private func row(_ movie: MovieSearchResult, isDrafted: Bool, drafter: LeagueMember?) -> some View {
         let date = movie.releaseDate?.formatted(.medium)
-        let draftedBy = drafter.map { "Drafted by \($0.userID == room.userID ? "you" : $0.firstName)" }
-        let meta = [draftedBy, date, drafter == nil ? MovieGenre.primaryName(of: movie.genreIDs) : nil]
+        let draftedBy = isDrafted
+            ? drafter.map { "Drafted by \($0.userID == room.userID ? "you" : $0.firstName)" } ?? "Drafted"
+            : nil
+        let meta = [draftedBy, date, isDrafted ? nil : MovieGenre.primaryName(of: movie.genreIDs)]
             .compactMap { $0 }
             .joined(separator: " · ")
         return HStack(spacing: 0) {
@@ -181,7 +188,7 @@ struct DraftMoviePickerView: View {
             }
             .buttonStyle(.frRow)
             .accessibilityHint("Shows movie details")
-            if drafter == nil {
+            if !isDrafted {
                 Button("Pick") { pendingPick = movie }
                     .buttonStyle(.fr(.secondary, size: .compact))
                     .disabled(!room.canSubmit || room.myTurn?.kind != .draft)
