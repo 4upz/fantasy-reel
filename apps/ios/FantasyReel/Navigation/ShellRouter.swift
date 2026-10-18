@@ -204,8 +204,12 @@ final class ShellRouter {
             }
         case .movies:
             if !sheetHasUnsavedInput { sheet = nil }
-            if directory.selection != nil {
-                selectedTab = .search
+            if let selection = directory.selection {
+                if selection.showsSearchTab {
+                    selectedTab = .search
+                } else {
+                    push(.movieSearch)
+                }
             } else {
                 standalonePath = [.movieSearch]
             }

@@ -21,9 +21,9 @@ extension View {
     /// primary action ("+"), the notifications bell and the league `⋯` menu
     /// (V2Trades/V2Bids order: +, bell, ⋯).
     ///
-    /// `LeagueTabStack` already applies `leagueTopBar()` to every tab root, so a
-    /// tab root that needs a "+" should not call this again; it adds
-    /// `.leagueTopBarPrimaryAction(_:)` instead.
+    /// `LeagueTabStack` already applies this to every tab root; a tab that needs
+    /// a "+" gets a case in `LeagueTabStack.primaryAction`. When five league tabs
+    /// fill the tab bar, movie search is a button here too.
     func leagueTopBar(primaryAction: LeagueTopBarAction? = nil) -> some View {
         modifier(LeagueTopBarModifier(primaryAction: primaryAction))
     }
@@ -31,11 +31,8 @@ extension View {
     /// Adds the top bar's "+" from inside a tab root, e.g.
     /// `.leagueTopBarPrimaryAction(.init(accessibilityLabel: "Place bid") { … })`.
     ///
-    /// Order caveat: SwiftUI merges toolbar items from nested modifiers, placing
-    /// the items of the modifier closer to the content first within the same
-    /// placement. Apply this on the root screen's own view (inside the
-    /// `leagueTopBar()` that `LeagueTabStack` adds) so the "+" lands before the
-    /// bell and `⋯`. Applied outside `leagueTopBar()`, it would land after them.
+    /// Prefer `LeagueTabStack.primaryAction` on a tab root: on iOS 26 a toolbar
+    /// added from inside the root lands after `⋯`, in the same glass group.
     func leagueTopBarPrimaryAction(_ action: LeagueTopBarAction) -> some View {
         toolbar {
             LeagueTopBarPrimaryItems(action: action)
@@ -87,6 +84,16 @@ private struct LeagueTopBarModifier: ViewModifier {
                 }
                 if let primaryAction {
                     LeagueTopBarPrimaryItems(action: primaryAction)
+                }
+                if selection?.showsSearchTab == false {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            router.push(.movieSearch)
+                        } label: {
+                            Image(systemName: "magnifyingglass")
+                        }
+                        .accessibilityLabel("Search movies")
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     NotificationsButton()

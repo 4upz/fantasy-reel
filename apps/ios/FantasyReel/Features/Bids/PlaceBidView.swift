@@ -679,7 +679,7 @@ private struct BidAmountForm: View {
                 // Saved, but an equal or higher bid landed at the same moment, so it's
                 // already outbid. Stay open on the new high bid so they can counter.
                 notice = result.message ?? "Someone else bid at the same time. You can counter."
-                amount = BidAmountRule.initialAmount(highBid: highBid)
+                self.amount = BidAmountRule.initialAmount(highBid: highBid)
                 router.sheetHasUnsavedInput = false
                 return
             }

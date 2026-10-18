@@ -54,9 +54,6 @@ struct BidsView: View {
             await bids.refresh()
             if section == .history { await bids.loadHistory() }
         }
-        .leagueTopBarPrimaryAction(.init(accessibilityLabel: "Place bid") {
-            router.present(.placeBid(.newPickup))
-        })
     }
 }
 

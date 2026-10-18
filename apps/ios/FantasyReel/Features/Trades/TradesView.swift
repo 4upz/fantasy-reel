@@ -47,9 +47,6 @@ struct TradesView: View {
         }
         .background(Color.frBackground)
         .refreshable { await trades.refresh() }
-        .leagueTopBarPrimaryAction(.init(accessibilityLabel: "Propose trade") {
-            router.present(.proposeTrade(nil))
-        })
         .onChange(of: trades.trades.isEmpty, initial: true) {
             // Open on Mine when nothing waits on me but I have offers out.
             guard !didPickInitialSection, case .loaded = trades.state else { return }
