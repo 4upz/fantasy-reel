@@ -376,13 +376,14 @@ private struct AccountContent: View {
     }
 
     /// Data export is a support request until it is self-service (D-11).
-    /// The Growth Dashboard row (F-18, admins only) joins this group.
+    /// The Growth Dashboard row shows only for app administrators (F-18).
     private var supportRows: some View {
         FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
             Link(destination: SupportLinks.dataExport) {
                 SettingsRow("Request Data Export", accessory: .external)
             }
             .buttonStyle(.frRow)
+            GrowthDashboardRow()
         }
     }
 }

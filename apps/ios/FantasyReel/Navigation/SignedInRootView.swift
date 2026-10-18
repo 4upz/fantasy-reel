@@ -16,6 +16,9 @@ struct SignedInRootView: View {
     @Environment(SessionStore.self) private var session
     @State private var directory: LeagueDirectoryStore
     @State private var inbox: InboxStore
+    @State private var wishlist: WishlistStore
+    @State private var research: LeagueResearchStore
+    @State private var searchHistory = MovieSearchHistory()
     @State private var router = ShellRouter()
     @State private var profiles: ProfileStore
 
@@ -24,6 +27,8 @@ struct SignedInRootView: View {
         _directory = State(initialValue: LeagueDirectoryStore(userID: account.id, repository: environment.leagues))
         _inbox = State(initialValue: InboxStore(userID: account.id, repository: environment.notifications))
         _profiles = State(initialValue: ProfileStore(userID: account.id, repository: environment.profiles))
+        _wishlist = State(initialValue: WishlistStore(userID: account.id, repository: environment.wishlists))
+        _research = State(initialValue: LeagueResearchStore(leagues: environment.leagues, leagueMovies: environment.leagueMovies))
     }
 
     var body: some View {
@@ -34,6 +39,9 @@ struct SignedInRootView: View {
             .environment(inbox)
             .environment(profiles)
             .environment(\.currentProfile, profiles.profile)
+            .environment(wishlist)
+            .environment(research)
+            .environment(searchHistory)
             .sheet(item: $router.sheet) { sheet in
                 ShellSheetView(sheet: sheet)
                     .environment(router)
@@ -41,6 +49,9 @@ struct SignedInRootView: View {
                     .environment(inbox)
                     .environment(profiles)
                     .environment(\.currentProfile, profiles.profile)
+                    .environment(wishlist)
+                    .environment(research)
+                    .environment(searchHistory)
             }
             .alert(
                 "Link unavailable",
@@ -54,11 +65,13 @@ struct SignedInRootView: View {
             .task {
                 async let profileLoaded: Void = profiles.refresh()
                 async let inboxLoaded: Void = inbox.refresh()
+                async let wishlistLoaded: Void = wishlist.load()
                 await directory.load()
                 // Route a shared link as soon as we know which leagues are visible.
                 routePendingLink()
                 await profileLoaded
                 await inboxLoaded
+                await wishlistLoaded
             }
             .onChange(of: session.pendingDeepLink) { routePendingLink() }
             // A link that arrived before a failed load is replayed after Try Again.
@@ -132,7 +145,40 @@ struct SignedInRootView: View {
 private struct ShellSheetView: View {
     let sheet: ShellSheet
 
+    @Environment(ShellRouter.self) private var router
+    @Environment(LeagueDirectoryStore.self) private var directory
+    /// The season the sheet opened in. A link can switch seasons while a sheet
+    /// with unsaved input stays up; the sheet keeps acting on its own season
+    /// rather than sending a bid or trade to the new one.
+    @State private var pinnedStore: LeagueSeasonStore?
+
     var body: some View {
+        let store = pinnedStore ?? router.seasonStore
+        Group {
+            if sheet.needsSeason, store == nil {
+                NavigationStack {
+                    EmptyStateView(
+                        title: "This season isn't open",
+                        message: "Close this and open the league again.",
+                        systemImage: "film.stack"
+                    )
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Close") { router.dismissSheet() }
+                        }
+                    }
+                }
+            } else {
+                content
+            }
+        }
+        .environment(\.leagueSelection, store?.selection ?? directory.selection)
+        .modifier(SeasonStoreEnvironment(store: store))
+        .onAppear { if pinnedStore == nil { pinnedStore = router.seasonStore } }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch sheet {
         case .menu:
             MenuSheetView()
@@ -140,6 +186,40 @@ private struct ShellSheetView: View {
             NavigationStack { CreateLeagueView() }
         case .joinLeague(let input):
             NavigationStack { JoinLeagueView(input: input) }
+        case .editTeam:
+            NavigationStack { EditTeamView() }
+        case .dropMovie(let holdingID):
+            NavigationStack { DropMovieView(holdingID: holdingID) }
+        case .proposeTrade(let teamID):
+            NavigationStack { TradeComposerView(mode: .propose(teamID)) }
+        case .counterTrade(let offerID):
+            NavigationStack { TradeComposerView(mode: .counter(offerID)) }
+        case .placeBid(let target):
+            NavigationStack { PlaceBidView(target: target) }
+        }
+    }
+}
+
+private extension ShellSheet {
+    /// Sheets that act on the open season and read its store.
+    var needsSeason: Bool {
+        switch self {
+        case .menu, .createLeague, .joinLeague: false
+        case .editTeam, .dropMovie, .proposeTrade, .counterTrade, .placeBid: true
+        }
+    }
+}
+
+/// Hands the open season's store to a sheet when there is one.
+private struct SeasonStoreEnvironment: ViewModifier {
+    let store: LeagueSeasonStore?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let store {
+            content.environment(store)
+        } else {
+            content
         }
     }
 }

@@ -28,6 +28,21 @@ enum ScreenshotScene: String, CaseIterable {
     case notifications
     case notificationsEmpty
     case discordBot
+    case movieSearch
+    case movieSearchIdle
+    case movieDetail
+    case wishlist
+    case sharedWishlists
+    case leagueHome
+    case roster
+    case standings
+    case teamDetail
+    case bids
+    case placeBid
+    case bidPriorities
+    case trades
+    case tradeComposer
+    case dropMovie
 
     static var requested: ScreenshotScene? {
         ProcessInfo.processInfo.environment["FR_SCREENSHOT"].flatMap(ScreenshotScene.init(rawValue:))
@@ -59,6 +74,24 @@ struct ScreenshotSceneView: View {
     }
 
     var body: some View {
+        if Self.movieResearchScenes.contains(scene) {
+            MovieResearchScreenshotView(scene: scene)
+        } else if Self.teamMarketScenes.contains(scene) {
+            TeamMarketScreenshotView(scene: scene)
+        } else {
+            authScene
+        }
+    }
+
+    private static let movieResearchScenes: Set<ScreenshotScene> = [
+        .movieSearch, .movieSearchIdle, .movieDetail, .wishlist, .sharedWishlists,
+    ]
+
+    private static let teamMarketScenes: Set<ScreenshotScene> = [
+        .leagueHome, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie,
+    ]
+
+    private var authScene: some View {
         content
             .environment(environment)
             .environment(environment.session)
@@ -159,7 +192,7 @@ private struct ScreenshotMenuView: View {
                         default: DeleteAccountView()
                         }
                     case .discordBot: DiscordBotGuideScreen()
-                    case .wishlist, .howToPlay: EmptyView()
+                    case .wishlist, .howToPlay, .growthDashboard, .sharedWishlist, .league: EmptyView()
                     }
                 }
         }

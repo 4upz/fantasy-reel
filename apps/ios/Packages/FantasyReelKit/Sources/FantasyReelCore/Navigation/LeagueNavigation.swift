@@ -89,6 +89,14 @@ public enum LeagueNavigation {
         }
     }
 
+    /// Whether movie search can be its own tab beside `tabs`. An iPhone tab bar
+    /// holds five items and the search tab counts as one, so a sixth item would
+    /// push tabs into a system "More" list. With five league tabs, search moves
+    /// to the top bar instead.
+    public static func showsSearchTab(beside tabs: [LeagueTab]) -> Bool {
+        tabs.count < 5
+    }
+
     /// The tab a league opens on: Draft before the season (the main event),
     /// otherwise Home. Matches the web's `/league/[id]` redirect.
     public static func defaultTab(for status: LeagueStatus) -> LeagueTab {

@@ -111,8 +111,6 @@ environment variable to a case name in the scheme's Run options.
 ## Not yet done (tracked for feature work)
 
 - Every feature screen beyond sign-in and the shell (see the folder table in
-  ARCHITECTURE.md for which thread owns which).
-- The Growth Dashboard row (F-18) joins Account's support group once the
   league lifecycle contract (`GrowthDashboardRow`) is on main.
 - TMDb attribution ("This product uses the TMDb API but is not endorsed or
   certified by TMDb.", with TMDb's logo) goes on the screens that show movie
