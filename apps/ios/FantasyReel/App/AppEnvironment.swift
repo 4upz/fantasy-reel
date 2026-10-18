@@ -103,7 +103,9 @@ extension AppEnvironment {
                 supabaseURL: URL(string: "http://127.0.0.1:1")!,
                 supabaseAnonKey: "preview",
                 siteURL: URL(string: "https://fantasyreel.com")!,
-                urlScheme: "fantasyreel"
+                urlScheme: "fantasyreel",
+                // Shows the Discord guide's Add to Discord button; never opened.
+                discordClientID: "preview"
             ),
             leagues: leagues,
             leagueLifecycle: leagueLifecycle,

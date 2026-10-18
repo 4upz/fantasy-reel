@@ -59,7 +59,13 @@ struct EditDisplayNameView: View {
         .onChange(of: profiles.profile?.displayName, initial: true) { old, new in
             if name.isEmpty || name == (old ?? "") { name = new ?? "" }
         }
-        .onAppear { isFocused = true }
+        .onAppear {
+            #if DEBUG
+            // Screenshots skip the keyboard, whose first-run tip covers the screen.
+            if ScreenshotScene.requested != nil { return }
+            #endif
+            isFocused = true
+        }
     }
 
     private var hasChanges: Bool {

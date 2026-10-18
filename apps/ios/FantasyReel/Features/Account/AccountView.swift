@@ -161,13 +161,11 @@ private struct AccountContent: View {
                 SettingsRow("Display name", value: profiles.profile?.displayName)
             }
             .buttonStyle(.frRow)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) { appearanceLabel; Spacer(minLength: 8); appearancePicker.frame(maxWidth: 220) }
-                VStack(alignment: .leading, spacing: 8) { appearanceLabel; appearancePicker }
-                    .padding(.vertical, 12)
-            }
-            .padding(.horizontal, FRMetrics.rowPadding)
-            .frame(minHeight: 50)
+            // Stacked: beside the label the three segments truncate "System".
+            VStack(alignment: .leading, spacing: 8) { appearanceLabel; appearancePicker }
+                .padding(.vertical, 12)
+                .padding(.horizontal, FRMetrics.rowPadding)
+                .frame(maxWidth: .infinity, alignment: .leading)
             NavigationLink(value: MenuRoute.changePassword) {
                 SettingsRow("Change Password")
             }
