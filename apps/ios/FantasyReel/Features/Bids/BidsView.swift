@@ -361,8 +361,7 @@ private struct PickupBidRow: View {
         if isMine, bid.status == .outbid {
             parts.append("Yours \(SeasonFormat.budget(bid.amount))")
             if let high { parts.append("High \(SeasonFormat.budget(high.amount))") }
-            // Countering needs a free slot, so say why the button is missing.
-            parts.append(hasSlot ? "\(BidTiming.timeRemaining(until: bid.responseDeadline)) to counter" : "Can't counter, all counterpick slots used")
+            parts.append("\(BidTiming.timeRemaining(until: bid.responseDeadline)) to counter")
         } else {
             if let date = bid.releaseDate { parts.append(date.formattedShort) }
             parts.append(deadlineText(window: season.bids.counterWindow(forPickup: bid.tmdbID)))
