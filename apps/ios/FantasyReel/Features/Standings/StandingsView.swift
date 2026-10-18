@@ -319,7 +319,7 @@ struct TeamDetailView: View {
             items.append(StatItem(
                 "Budget",
                 value: SeasonFormat.budget(remaining),
-                suffix: "\(SeasonFormat.budget(team.budget?.totalSpent ?? 0)) spent",
+                caption: "\(SeasonFormat.budget(team.budget?.totalSpent ?? 0)) spent",
                 accessibilityLabel: "Fantasy Budget, \(remaining) dollars left, \(team.budget?.totalSpent ?? 0) spent"
             ))
         }

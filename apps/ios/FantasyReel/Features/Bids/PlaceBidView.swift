@@ -551,15 +551,34 @@ private struct BidAmountForm: View {
         }
         if !options.isEmpty {
             FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
-                Picker("If I need room, drop", selection: $dropID) {
-                    Text("Nothing, keep my whole roster").tag(HoldingID?.none)
-                    ForEach(options) { holding in
-                        Text(holding.title).tag(HoldingID?.some(holding.holdingID))
+                Menu {
+                    Picker("If I need room, drop", selection: $dropID) {
+                        Text("Nothing, keep my roster").tag(HoldingID?.none)
+                        ForEach(options) { holding in
+                            Text(holding.title).tag(HoldingID?.some(holding.holdingID))
+                        }
                     }
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("If I need room, drop")
+                            .frFont(.rowLabel)
+                            .foregroundStyle(Color.frText)
+                        Spacer(minLength: 8)
+                        Text(options.first { $0.holdingID == dropID }?.title ?? "Nothing")
+                            .frFont(.body)
+                            .foregroundStyle(Color.frTextSecondary)
+                            .lineLimit(1)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.frTextMuted)
+                            .accessibilityHidden(true)
+                    }
+                    .padding(.horizontal, FRMetrics.rowPadding)
+                    .frame(minHeight: FRMetrics.minTapTarget)
+                    .contentShape(Rectangle())
                 }
-                .pickerStyle(.navigationLink)
-                .padding(.horizontal, FRMetrics.rowPadding)
-                .frame(minHeight: FRMetrics.minTapTarget)
+                .accessibilityLabel("If I need room, drop")
+                .accessibilityValue(options.first { $0.holdingID == dropID }?.title ?? "Nothing")
             }
         }
     }

@@ -132,13 +132,13 @@ struct DropMovieView: View {
                     router.dismissSheet()
                 }
             } label: {
-                Text(action.isRunning ? "Dropping…" : "Drop movie")
+                Text(action.isRunning ? "Dropping…" : "Drop Movie")
             }
             .buttonStyle(.fr(.destructive, isLoading: action.isRunning))
             .disabled(action.isRunning)
             .accessibilityLabel("Drop \(holding.title)")
 
-            Button("Keep movie") { router.dismissSheet() }
+            Button("Keep Movie") { router.dismissSheet() }
                 .buttonStyle(.fr(.neutral))
                 .disabled(action.isRunning)
         }

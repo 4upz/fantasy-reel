@@ -462,7 +462,8 @@ private struct BidRowLayout: View {
 
     var body: some View {
         // The row reads as one element; its button becomes a VoiceOver action.
-        MovieRow(title: title, meta: metaLine, posterURL: posterURL, accessibilityLabel: spokenLabel) {
+        // Two meta lines: the amounts and the deadline are what the row is for.
+        MovieRow(title: title, meta: metaLine, posterURL: posterURL, metaLineLimit: 2, accessibilityLabel: spokenLabel) {
             HStack(spacing: 8) {
                 if status == .outbid, let actionTitle {
                     Button(actionTitle, action: action)

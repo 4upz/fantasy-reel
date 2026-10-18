@@ -25,34 +25,29 @@ struct TeamMarketScreenshotView: View {
         .environment(fixture.router)
         .environment(fixture.directory)
         .environment(fixture.season)
+        .environment(fixture.inbox)
+        .environment(fixture.wishlist)
+        .environment(fixture.research)
+        .environment(fixture.history)
         .environment(\.leagueSelection, fixture.directory.selection)
         .task {
             await fixture.prepare()
+            fixture.route(to: scene)
             isReady = true
         }
     }
 
+    /// Tab screens render inside the real shell (top bar, tab bar, pushed
+    /// screens with their back button); sheets render on their own.
     @ViewBuilder
     private var content: some View {
         switch scene {
-        case .leagueHome: stack { LeagueHomeView() }
-        case .roster: stack { RosterView() }
-        case .standings: stack { StandingsView() }
-        case .teamDetail: stack { TeamDetailView(teamID: TeamMarketFixture.team("bob")) }
-        case .bids: stack { BidsView() }
+        case .leagueHome, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades:
+            LeagueTabs(tabs: LeagueNavigation.tabs(for: .active))
         case .placeBid: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23")))) }
-        case .bidPriorities: stack { BidPrioritiesView() }
-        case .trades: stack { TradesView() }
         case .tradeComposer: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("dave"))) }
         case .dropMovie: NavigationStack { DropMovieView(holdingID: "h-1006") }
         default: EmptyView()
-        }
-    }
-
-    private func stack(@ViewBuilder _ root: () -> some View) -> some View {
-        NavigationStack {
-            root()
-                .navigationDestination(for: LeagueRoute.self) { LeagueDestinationView(route: $0) }
         }
     }
 }
@@ -66,6 +61,10 @@ final class TeamMarketFixture {
     let router = ShellRouter()
     let directory: LeagueDirectoryStore
     let season: LeagueSeasonStore
+    let inbox: InboxStore
+    let wishlist: WishlistStore
+    let research: LeagueResearchStore
+    let history = MovieSearchHistory()
 
     init() {
         let now = Date()
@@ -211,6 +210,27 @@ final class TeamMarketFixture {
             selection: LeagueSelection(userID: Self.alice, season: league, seriesSeasons: [league]),
             repository: environment.teams, bidRepository: environment.bids, tradeRepository: environment.trades
         )
+        inbox = InboxStore(userID: Self.alice, repository: environment.notifications)
+        wishlist = WishlistStore(userID: Self.alice, repository: environment.wishlists)
+        research = LeagueResearchStore(leagues: environment.leagues, leagueMovies: environment.leagueMovies)
+    }
+
+    /// Selects the scene's tab and pushes its screen onto that tab's stack.
+    func route(to scene: ScreenshotScene) {
+        switch scene {
+        case .leagueHome: router.select(.home)
+        case .roster: router.select(.roster)
+        case .standings: router.select(.standings)
+        case .teamDetail:
+            router.select(.standings)
+            router.paths[.standings] = [.team(Self.team("bob"))]
+        case .bids: router.select(.bids)
+        case .bidPriorities:
+            router.select(.bids)
+            router.paths[.bids] = [.bidPriorities]
+        case .trades: router.select(.trades)
+        default: break
+        }
     }
 
     func prepare() async {

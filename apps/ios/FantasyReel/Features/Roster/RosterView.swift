@@ -100,7 +100,7 @@ private struct RosterContent: View {
     }
 }
 
-/// "7 of 8 slots · 1 open", drops left and counterpicks used.
+/// "7 of 8" with "1 open" under it, drops left and counterpicks used.
 private struct CapacityCard: View {
     let slotsFilled: Int
     let counterpicks: Int
@@ -117,7 +117,8 @@ private struct CapacityCard: View {
                 StatItem(
                     "Roster",
                     value: String(slotsFilled),
-                    suffix: "of \(season.totalSlots) slots" + (open > 0 ? " · \(open) open" : ""),
+                    suffix: "of \(season.totalSlots)",
+                    caption: open > 0 ? "\(open) open" : "Full",
                     accessibilityLabel: "Roster, \(slotsFilled) of \(season.totalSlots) slots filled, \(open) open"
                 ),
                 StatItem(

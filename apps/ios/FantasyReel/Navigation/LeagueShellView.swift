@@ -54,7 +54,7 @@ struct LeagueShellView: View {
 
 /// The tab bar itself. Reads the season store for the badges: outbid offers
 /// on Bids, offers waiting on you on Trades.
-private struct LeagueTabs: View {
+struct LeagueTabs: View {
     let tabs: [LeagueTab]
 
     @Environment(ShellRouter.self) private var router
