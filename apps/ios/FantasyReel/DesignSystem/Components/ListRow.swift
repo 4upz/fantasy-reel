@@ -15,6 +15,7 @@ struct ListRow<Leading: View, Trailing: View>: View {
     private let meta: String?
     private let showsChevron: Bool
     private let isHero: Bool
+    private let metaLineLimit: Int
     private let accessibilityLabelOverride: String?
     private let leading: Leading
     private let trailing: Trailing
@@ -26,6 +27,7 @@ struct ListRow<Leading: View, Trailing: View>: View {
         meta: String? = nil,
         showsChevron: Bool = false,
         isHero: Bool = false,
+        metaLineLimit: Int = 1,
         accessibilityLabel: String? = nil,
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
@@ -34,6 +36,7 @@ struct ListRow<Leading: View, Trailing: View>: View {
         self.meta = meta
         self.showsChevron = showsChevron
         self.isHero = isHero
+        self.metaLineLimit = metaLineLimit
         self.accessibilityLabelOverride = accessibilityLabel
         self.leading = leading()
         self.trailing = trailing()
@@ -51,7 +54,7 @@ struct ListRow<Leading: View, Trailing: View>: View {
                     Text(meta)
                         .frFont(.meta)
                         .foregroundStyle(Color.frTextSecondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? 4 : 1)
+                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? max(4, metaLineLimit) : metaLineLimit)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

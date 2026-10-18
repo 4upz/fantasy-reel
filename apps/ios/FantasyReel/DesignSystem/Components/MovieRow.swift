@@ -1,8 +1,8 @@
 import FantasyReelCore
 import SwiftUI
 
-/// The `.mrow` movie row: 36×54 poster, one-line title, one-line meta, a fixed
-/// 64pt trailing column and an optional chevron. 64pt minimum height (72 for
+/// The `.mrow` movie row: 36×54 poster, one-line title, one-line meta (or
+/// `metaLineLimit` lines), a fixed 64pt trailing column and an optional chevron. 64pt minimum height (72 for
 /// `isHero`), growing with Dynamic Type.
 ///
 /// ```swift
@@ -20,6 +20,7 @@ struct MovieRow<Trailing: View>: View {
     private let posterURL: String?
     private let showsChevron: Bool
     private let isHero: Bool
+    private let metaLineLimit: Int
     private let accessibilityLabelOverride: String?
     private let trailing: Trailing
 
@@ -30,6 +31,7 @@ struct MovieRow<Trailing: View>: View {
         posterURL: String?,
         showsChevron: Bool = false,
         isHero: Bool = false,
+        metaLineLimit: Int = 1,
         accessibilityLabel: String? = nil,
         @ViewBuilder trailing: () -> Trailing
     ) {
@@ -38,6 +40,7 @@ struct MovieRow<Trailing: View>: View {
         self.posterURL = posterURL
         self.showsChevron = showsChevron
         self.isHero = isHero
+        self.metaLineLimit = metaLineLimit
         self.accessibilityLabelOverride = accessibilityLabel
         self.trailing = trailing()
     }
@@ -48,6 +51,7 @@ struct MovieRow<Trailing: View>: View {
             meta: meta,
             showsChevron: showsChevron,
             isHero: isHero,
+            metaLineLimit: metaLineLimit,
             accessibilityLabel: accessibilityLabelOverride
         ) {
             PosterImage(posterURL: posterURL, title: title)
