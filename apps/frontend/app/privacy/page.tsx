@@ -165,7 +165,7 @@ const SECTIONS: LegalSection[] = [
           You can edit your profile and wishlist-sharing preferences, or delete your account, in the app. You can
           turn off season recap emails in Settings or with the unsubscribe link in any of them; emails about your
           invitations, bids, and trades are part of the service and still arrive. You can choose which kinds of
-          iPhone notifications you get in the app&apos;s Settings, or turn them off in your iPhone&apos;s Settings.
+          iPhone notifications you get on the app&apos;s Account screen, or turn them off in your iPhone&apos;s Settings.
           Depending on your location, you
           may have rights to access, correct, delete, or receive a portable copy of your information; restrict or
           object to processing; withdraw consent; appeal a refusal; or complain to a data protection authority.
