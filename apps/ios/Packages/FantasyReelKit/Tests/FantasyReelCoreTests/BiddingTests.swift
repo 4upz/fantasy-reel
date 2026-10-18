@@ -69,7 +69,7 @@ struct BidFitForecastTests {
         ]
         let ids = BidFitForecast.droppableHoldingIDs(
             holdings,
-            today: DateOnly(year: 2026, month: 9, day: 27),
+            today: DateOnly(year: 2026, month: 9, day: 27)!,
             counterpicksBlockDrops: counterpicksBlockDrops,
             contestedMovieIDs: ["m5"]
         ).map(\.rawValue)
