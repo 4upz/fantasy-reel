@@ -137,7 +137,8 @@ struct DraftBoardList: View {
                 ) {
                     Avatar(name: member?.teamName ?? "?", imageURL: member?.team?.avatarURL, size: .custom(36), corners: .rounded, fill: isCurrent ? .brand : .neutral)
                 } trailing: {
-                    if isMine {
+                    // The turn card already says it's yours when it's on the clock.
+                    if isMine && !isCurrent {
                         Text("Your pick")
                             .frFont(.label)
                             .foregroundStyle(Color.frGold)
@@ -161,6 +162,13 @@ private struct BoardRow<Content: View>: View {
 
     @ScaledMetric(relativeTo: .body) private var labelWidth: CGFloat = 44
 
+    /// "2.3" reads as a decimal; say "Round 2, pick 3".
+    private var spokenLabel: String {
+        let parts = label.split(separator: ".")
+        guard parts.count == 2 else { return "Pick \(label)" }
+        return "Round \(parts[0]), pick \(parts[1])"
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             Text(label)
@@ -168,7 +176,7 @@ private struct BoardRow<Content: View>: View {
                 .foregroundStyle(Color.frTextSecondary)
                 .frame(width: labelWidth)
                 .padding(.leading, 8)
-                .accessibilityLabel("Pick \(label)")
+                .accessibilityLabel(spokenLabel)
             content()
                 .padding(.leading, -8)
         }

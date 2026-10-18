@@ -42,7 +42,7 @@ struct DraftMoviePickerView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Done") { router.dismissSheet() }
+                Button("Close", systemImage: "xmark", role: .close) { router.dismissSheet() }
             }
             if let model, model.filtersApply {
                 ToolbarItem(placement: .primaryAction) {
@@ -86,10 +86,6 @@ struct DraftMoviePickerView: View {
                 DraftSubmissionNotice(model: room)
                 FRSegmentedControl("Movie lists", selection: $bindable.tab, options: CatalogTab.allCases, title: { $0.title })
                 results(picker, drafted: room.snapshot?.draftedTMDbIDs ?? [])
-                Text("Pick asks you to confirm. If the connection drops, it's retried safely and never doubled.")
-                    .frFont(.label)
-                    .foregroundStyle(Color.frTextSecondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 TMDbAttribution()
             }
             .padding(.horizontal, FRMetrics.pageMargin)

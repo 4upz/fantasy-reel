@@ -37,6 +37,8 @@ final class DraftRoomModel {
 
     private(set) var pendingAttempt: DraftAttempt?
     private(set) var submissionStatus: SubmissionStatus = .idle
+    /// Bumped each time this user's pick is saved (or found saved), for haptics.
+    private(set) var savedPickCount = 0
     /// Owner phase calls and draft-order edits, each double-tap protected.
     let phaseAction = AsyncAction()
     let orderAction = AsyncAction()
@@ -257,6 +259,7 @@ final class DraftRoomModel {
             _ = try await draft.submit(attempt)
             pendingAttempt = nil
             submissionStatus = .idle
+            savedPickCount += 1
             Announcer.announce(selection.kind == .draft ? "You drafted \(title)." : "You counterpicked \(title).")
             await refresh()
             return true
@@ -320,6 +323,7 @@ final class DraftRoomModel {
         case .saved:
             pendingAttempt = nil
             submissionStatus = .idle
+            savedPickCount += 1
             Announcer.announce("Your pick of \(attempt.title) was saved.")
         case .superseded:
             pendingAttempt = nil

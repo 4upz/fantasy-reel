@@ -94,6 +94,9 @@ struct DraftRoomContent: View {
                 .padding(.bottom, 24)
             }
             .refreshable { await model.refresh() }
+            .sensoryFeedback(.success, trigger: model.savedPickCount)
+            // A light tap when this user goes on the clock.
+            .sensoryFeedback(.impact(weight: .light), trigger: model.myTurn?.overallPick) { _, new in new != nil }
         }
     }
 }

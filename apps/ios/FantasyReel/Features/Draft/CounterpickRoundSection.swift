@@ -150,8 +150,10 @@ struct CounterpickRoundSection: View {
                 .accessibilityLabel("Counterpick \(option.title)")
         }
         // The row reads as one element; Pick stays reachable as its action.
-        .accessibilityAction(named: "Counterpick") {
-            if canPick { pendingPick = option }
+        .accessibilityActions {
+            if canPick {
+                Button("Counterpick") { pendingPick = option }
+            }
         }
     }
 
