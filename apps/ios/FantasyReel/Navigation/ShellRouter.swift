@@ -9,9 +9,19 @@ enum LeagueRoute: Hashable {
     case draftResults
     case history
     case settings
+    /// Owner, active season: end it (typed confirmation). Pushed from Settings.
+    case endSeason
+    /// Owner, setup season: delete it (typed confirmation). Pushed from Settings.
+    case deleteSeason
+    /// Owner: post an announcement to the league's Discord channels. Pushed from Settings.
+    case postAnnouncement
     case shareInvite
+    /// Owner, setup: invite one player by name or email (pushed from the invite tools).
+    case invitePlayer
     case movie(TMDbID)
     case team(TeamID)
+    /// Reorder my pending bids (F-12).
+    case bidPriorities
     /// Movie search pushed from the no-league screen, which has no search tab.
     case movieSearch
 }
@@ -22,6 +32,18 @@ enum MenuRoute: Hashable {
     case wishlist
     case account
     case howToPlay
+    /// Account's focused edit screens (F-03, F-02) and Delete Account (L-02).
+    case editDisplayName
+    case changePassword
+    case deleteAccount
+    /// The Discord bot setup guide, from Account (F-17).
+    case discordBot
+    /// App administrators only (F-18); linked from Account.
+    case growthDashboard
+    /// A league-mate's shared wishlist (F-07).
+    case sharedWishlist(SharedWishlistOwner)
+    /// A league screen (a movie from the wishlist) pushed inside the sheet.
+    case league(LeagueRoute)
 }
 
 /// The bottom bar's selection: a league tab, or the search button beside it.
@@ -45,6 +67,18 @@ enum ShellSheet: Identifiable, Hashable {
     case menu
     case createLeague
     case joinLeague(JoinInput)
+    /// The draft's movie picker (F-08), over the draft room it picks for.
+    case draftMoviePicker(DraftRoomHandle)
+    /// Rename the team or change its image (F-10).
+    case editTeam
+    /// Confirm dropping one of my holdings (F-11).
+    case dropMovie(HoldingID)
+    /// Compose a trade offer, optionally to a chosen team (F-13).
+    case proposeTrade(TeamID?)
+    /// Counter an offer sent to my team (F-13).
+    case counterTrade(TradeOfferID)
+    /// Place, raise or counter a pickup or counterpick bid (F-12).
+    case placeBid(BidTarget)
 
     var id: Self { self }
 }
@@ -73,6 +107,9 @@ final class ShellRouter {
     private(set) var activeSeasonID: LeagueID?
     /// Shown when a link points at a league this account can't open.
     var unavailableLinkMessage: String?
+    /// The open season's shared data, so sheets (which sit above the tabs)
+    /// see the same store as the tabs. Set by `LeagueSeasonScope`.
+    var seasonStore: LeagueSeasonStore?
 
     func path(for tab: LeagueTab) -> Binding<[LeagueRoute]> {
         Binding(
@@ -83,6 +120,16 @@ final class ShellRouter {
 
     func select(_ tab: LeagueTab) {
         selectedTab = .league(tab)
+    }
+
+    /// Opens movie search on the stack on screen, unless it's already showing.
+    func pushMovieSearch() {
+        let current: [LeagueRoute] = switch selectedTab {
+        case .league(let tab): paths[tab] ?? []
+        case .search: searchPath
+        }
+        guard current.last != .movieSearch else { return }
+        push(.movieSearch)
     }
 
     /// Pushes onto whichever stack is on screen: the selected league tab, the
@@ -171,6 +218,8 @@ final class ShellRouter {
             present(.joinLeague(.invitation(token: token)))
         case .league(let id, let section):
             guard directory.select(id) else {
+                // The alert hangs off the root, under any sheet.
+                if !sheetHasUnsavedInput { sheet = nil }
                 unavailableLinkMessage = "That league isn't available on this account. You may need an invitation, or it may have been deleted."
                 return
             }
@@ -183,8 +232,12 @@ final class ShellRouter {
             }
         case .movies:
             if !sheetHasUnsavedInput { sheet = nil }
-            if directory.selection != nil {
-                selectedTab = .search
+            if let selection = directory.selection {
+                if selection.showsSearchTab {
+                    selectedTab = .search
+                } else {
+                    pushMovieSearch()
+                }
             } else {
                 standalonePath = [.movieSearch]
             }
@@ -227,5 +280,24 @@ final class ShellRouter {
         case .settings: select(defaultTab); push(.settings)
         case .rules: select(defaultTab); push(.rules)
         }
+    }
+}
+
+extension View {
+    /// Tells the router a form in the sheet has input, so a notification tap
+    /// or link doesn't replace the screen and lose it. Cleared on leaving.
+    func reportsUnsavedInput(_ hasInput: Bool) -> some View {
+        modifier(UnsavedInputReporter(hasInput: hasInput))
+    }
+}
+
+private struct UnsavedInputReporter: ViewModifier {
+    let hasInput: Bool
+    @Environment(ShellRouter.self) private var router
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: hasInput, initial: true) { _, hasInput in router.sheetHasUnsavedInput = hasInput }
+            .onDisappear { router.sheetHasUnsavedInput = false }
     }
 }

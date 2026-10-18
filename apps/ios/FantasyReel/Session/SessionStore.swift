@@ -1,3 +1,4 @@
+import AuthenticationServices
 import FantasyReelAPI
 import FantasyReelCore
 import Foundation
@@ -24,14 +25,39 @@ final class SessionStore {
     /// A link that arrived while signed out (an invitation, a league). Replayed
     /// once the user signs in, then cleared (N-02).
     var pendingDeepLink: DeepLink?
-    /// The latest failure from an incoming auth link, for the sign-in screen to show.
-    var authLinkError: String?
+    /// Why the latest incoming auth link didn't sign in, for the signed-out
+    /// screens to show. Cleared by the next successful sign-in.
+    var authLinkNotice: AuthLinkNotice?
+    /// Sign in with Apple just created a new account behind Hide My Email; the
+    /// person may already play under another sign-in method (L-01).
+    var showsAppleRelayNotice = false
+    /// Set when the person signs out to sign in again before deleting their
+    /// account (L-02): the next sign-in to that same account opens Account.
+    /// Survives the sign-out, unlike `pendingDeepLink`; holds the user ID so
+    /// someone else signing in on the device isn't sent there.
+    var opensAccountAfterSignIn: UserID?
+    /// A How to Play link opened while signed out; the sign-in screens show
+    /// the guide over whatever form is open.
+    var publicHelpRequest: UUID?
+    #if DEBUG
+    /// Screenshots and previews: returned by `signInMethods()` instead of
+    /// asking the server.
+    var previewSignInMethods: SignInMethods?
+    #endif
 
-    private let auth: AuthService
+    /// Account screens reach the account-level auth calls (linking, password
+    /// change) through `SessionStore+Account.swift`.
+    let auth: AuthService
     private var listener: Task<Void, Never>?
+    /// Sign-ins that decide more than "signed in" (Apple's relay notice, a
+    /// reset link) run with the listener's sign-in events held, so the app
+    /// isn't built and torn down again before the right screen is known.
+    private var heldSignIns = 0
+    private let defaults: UserDefaults
 
-    init(auth: AuthService) {
+    init(auth: AuthService, defaults: UserDefaults = .standard) {
         self.auth = auth
+        self.defaults = defaults
     }
 
     var account: AuthService.Account? {
@@ -48,7 +74,14 @@ final class SessionStore {
             let changes = auth.changes()
             let restored = await auth.restoreSession()
             if let self, case .restoring = self.state {
-                self.state = restored.map(State.signedIn) ?? .signedOut
+                if let restored {
+                    // A reset link that signed in before the app was closed
+                    // still needs its new password.
+                    self.isRecoveringPassword = self.recoveryPendingUserID == restored.id.rawValue
+                    self.state = .signedIn(restored)
+                } else {
+                    self.state = .signedOut
+                }
             }
             for await change in changes {
                 guard let self else { return }
@@ -60,19 +93,25 @@ final class SessionStore {
     private func apply(_ change: AuthService.Change) {
         switch change {
         case .signedIn(let account), .updated(let account):
+            guard heldSignIns == 0 else { return }
             setSignedIn(account)
         case .passwordRecovery(let account):
-            isRecoveringPassword = true
+            beginRecovery(for: account)
             setSignedIn(account)
         case .signedOut:
+            clearSignedInState()
             state = .signedOut
-            isRecoveringPassword = false
         }
     }
 
     private func setSignedIn(_ account: AuthService.Account) {
+        if authLinkNotice != nil { authLinkNotice = nil }
         // Avoid rebuilding the signed-in tree on a token refresh for the same user.
         if self.account != account {
+            if let returning = opensAccountAfterSignIn {
+                opensAccountAfterSignIn = nil
+                if returning == account.id, pendingDeepLink == nil { pendingDeepLink = .settings }
+            }
             state = .signedIn(account)
         }
     }
@@ -104,7 +143,7 @@ final class SessionStore {
 
     func updatePassword(_ password: String) async throws(APIError) {
         try await auth.updatePassword(password)
-        isRecoveringPassword = false
+        endRecovery()
     }
 
     /// Provider sign-in. Cancelling the system sheet is not an error and leaves
@@ -115,29 +154,94 @@ final class SessionStore {
         }
     }
 
+    /// Sign in with Apple, from a native authorization (L-01). The relay
+    /// notice is decided before the app is shown, so a link held for after
+    /// sign-in survives until the person continues.
+    func signInWithApple(idToken: String, nonce: String, appleUserID: String, fullName: String?) async throws(APIError) {
+        heldSignIns += 1
+        defer { heldSignIns -= 1 }
+        // Apple sends the name once; keep it until a sign-in uses it.
+        if let fullName { AppleCredentialStore.setPendingName(fullName, for: appleUserID) }
+        let name = fullName ?? AppleCredentialStore.pendingName(for: appleUserID)
+        let result = try await auth.signInWithApple(idToken: idToken, nonce: nonce, fullName: name)
+        AppleCredentialStore.setPendingName(nil, for: appleUserID)
+        AppleCredentialStore.signedInAppleUserID = appleUserID
+        showsAppleRelayNotice = result.isNewRelayAccount
+        setSignedIn(result.account)
+    }
+
+    /// Signs out when the person has stopped using Apple with Fantasy Reel
+    /// (Settings → Apple ID), as Apple asks. Checked at launch and foreground.
+    func checkAppleCredential() async {
+        guard account != nil, let appleUserID = AppleCredentialStore.signedInAppleUserID else { return }
+        guard let credentialState = try? await ASAuthorizationAppleIDProvider().credentialState(forUserID: appleUserID) else { return }
+        switch credentialState {
+        case .revoked, .notFound:
+            await signOut()
+            authLinkNotice = AuthLinkNotice(
+                title: "Signed out",
+                message: "Sign in with Apple was turned off for Fantasy Reel. Sign in again to continue.",
+                isRecovery: false
+            )
+        default:
+            break
+        }
+    }
+
     func signOut() async {
         await auth.signOut()
-        pendingDeepLink = nil
-        isRecoveringPassword = false
+        clearSignedInState()
         state = .signedOut
+    }
+
+    private func clearSignedInState() {
+        pendingDeepLink = nil
+        endRecovery()
+        showsAppleRelayNotice = false
+        AppleCredentialStore.signedInAppleUserID = nil
+    }
+
+    // MARK: Password recovery, remembered until a new password is saved
+
+    private static let recoveryKey = "fr.recoveryPendingUserID"
+
+    private var recoveryPendingUserID: String? {
+        defaults.string(forKey: Self.recoveryKey)
+    }
+
+    private func beginRecovery(for account: AuthService.Account) {
+        isRecoveringPassword = true
+        defaults.set(account.id.rawValue, forKey: Self.recoveryKey)
+    }
+
+    private func endRecovery() {
+        isRecoveringPassword = false
+        defaults.removeObject(forKey: Self.recoveryKey)
     }
 
     /// Handles `fantasyreel://auth/callback?...` from an email link or OAuth.
     func handleAuthCallback(_ url: URL) async {
+        let isRecovery = AppConfiguration.isRecoveryCallback(url)
+        heldSignIns += 1
+        defer { heldSignIns -= 1 }
         do {
             let account = try await auth.completeSignIn(from: url)
-            authLinkError = nil
-            if AppConfiguration.isRecoveryCallback(url) {
-                isRecoveringPassword = true
+            if isRecovery {
+                beginRecovery(for: account)
             }
             setSignedIn(account)
         } catch {
-            // A link requested on another device has no PKCE verifier here, but a
-            // confirmation link still confirmed the email server-side. Say that
-            // instead of reporting a bare failure (F-02). The Auth feature maps
-            // specific cases (expired, already used) to the web's exact notices.
+            // Already signed in (a stale or duplicate link): nothing to report.
             guard account == nil else { return }
-            authLinkError = "That link couldn't sign you in on this iPhone. If it was a confirmation link, your email is confirmed. Sign in to continue."
+            // A link requested on another device has no PKCE verifier here, but
+            // a confirmation link still confirmed the email server-side. Say
+            // that instead of reporting a bare failure (F-02).
+            let failure = AuthLinkFailure.classify(url, exchangeErrorCode: error.serverCode)
+            authLinkNotice = AuthLinkNotice(
+                title: failure.title,
+                message: failure.message(isRecovery: isRecovery),
+                isRecovery: isRecovery
+            )
         }
     }
 
@@ -146,4 +250,24 @@ final class SessionStore {
         defer { pendingDeepLink = nil }
         return pendingDeepLink
     }
+}
+
+#if DEBUG
+extension SessionStore {
+    /// Screenshot scenes only (`ScreenshotScenes.swift`): shows the signed-in
+    /// app for `account` without a stored session or a network call. A store
+    /// signed in this way must never be `start()`ed.
+    func previewSignIn(_ account: AuthService.Account) {
+        setSignedIn(account)
+    }
+}
+#endif
+
+/// A signed-out notice about an auth link. Recovery notices open on the reset
+/// screen, where the person can send a fresh link; the rest on Log In.
+struct AuthLinkNotice: Equatable, Identifiable {
+    let id = UUID()
+    let title: String
+    let message: String
+    let isRecovery: Bool
 }

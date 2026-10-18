@@ -1,13 +1,15 @@
 import SwiftUI
 
 /// One cell of `StatColumns`: a small label over a large numeric value with an
-/// optional suffix ("2" + " of 8"). Give it an `action` to make the cell a
-/// button (Rank opens Standings on V2Home).
+/// optional suffix ("2" + " of 8") and an optional caption on its own line
+/// ("1 open"), for detail too long to sit beside the value. Give it an
+/// `action` to make the cell a button (Rank opens Standings on V2Home).
 struct StatItem: Identifiable {
     let id: String
     let label: String
     let value: String
     let suffix: String?
+    let caption: String?
     let accessibilityLabel: String?
     let action: (() -> Void)?
 
@@ -15,6 +17,7 @@ struct StatItem: Identifiable {
         _ label: String,
         value: String,
         suffix: String? = nil,
+        caption: String? = nil,
         accessibilityLabel: String? = nil,
         action: (() -> Void)? = nil
     ) {
@@ -22,6 +25,7 @@ struct StatItem: Identifiable {
         self.label = label
         self.value = value
         self.suffix = suffix
+        self.caption = caption
         self.accessibilityLabel = accessibilityLabel
         self.action = action
     }
@@ -93,6 +97,11 @@ struct StatColumns: View {
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)
+            if let caption = item.caption {
+                Text(caption)
+                    .frFont(.caption)
+                    .foregroundStyle(Color.frTextSecondary)
+            }
         }
     }
 }

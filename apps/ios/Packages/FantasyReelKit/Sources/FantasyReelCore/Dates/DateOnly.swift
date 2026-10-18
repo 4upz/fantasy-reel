@@ -120,6 +120,8 @@ extension DateOnly {
     public enum DisplayStyle: Sendable, Hashable {
         /// "Oct 16"
         case short
+        /// "Oct 16, 2026"
+        case medium
         /// "October 16, 2026"
         case full
     }
@@ -133,6 +135,7 @@ extension DateOnly {
         let format: Date.FormatStyle
         switch style {
         case .short: format = base.month(.abbreviated).day()
+        case .medium: format = base.month(.abbreviated).day().year()
         case .full: format = base.month(.wide).day().year()
         }
         return date(in: .gmt).formatted(format)

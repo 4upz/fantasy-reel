@@ -9,4 +9,8 @@ SUPABASE_URL = http:/$()/127.0.0.1:54321
 // It only works against a local stack. Never put a service-role key in the app.
 SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
 
+// Local Supabase has CAPTCHA off, so no security check is shown. Set the web's
+// Turnstile site key in Local.xcconfig when pointing at production.
+TURNSTILE_SITE_KEY =
+
 #include? "Local.xcconfig"

@@ -14,11 +14,10 @@ in the PR, since this folder is shared).
   points column. Rows grow with Dynamic Type; nothing clips.
 - **One filled primary action per card** (`.frPrimary`); the rest secondary.
 - A glass "+" in the top bar instead of floating create buttons. On a league
-  tab root, add it with `.leagueTopBarPrimaryAction(.init(accessibilityLabel:
-  "Place bid") { … })` on the root view itself: `LeagueTabStack` applies
-  `leagueTopBar()` outside it, and SwiftUI puts the inner modifier's toolbar
-  items first in a placement, giving "+", bell, `⋯`. Applied outside
-  `leagueTopBar()`, the "+" would land after `⋯`.
+  tab root, add a case to `LeagueTabStack.primaryAction`, which passes it to
+  `leagueTopBar(primaryAction:)` so it gets its own glass button before the
+  bell. A toolbar added from inside the root merges into the `⋯` group on
+  iOS 26 instead.
 - Points are whole numbers with a sign: "+28", "−4" (U+2212), "0"; "Pending"
   when unscored; muted with "at release" before release.
 - One sheet per multi-step task (pushes inside the sheet, never sheet on sheet).
@@ -40,14 +39,15 @@ in the PR, since this folder is shared).
 | `.beta` | `BetaBadge` |
 | `.cnt` | `CountBadge(count:style:size:)` |
 | `.sh` | `SectionHeader` |
-| `.hd` + `.lt` | `ScreenHeader` |
+| `.hd` + `.lt` | `ScreenHeader`; a pushed screen that draws one sets its title with `.headerScreenTitle("Settings")` (kept for VoiceOver and the back menu, not shown in the bar) |
+| `.foot` | `FRFootnote` (16pt inset, under a row group or form) |
 | `.av`, `.ac1–4` | `Avatar(name:imageURL:size:corners:fill:)` |
 | `.btn-p` / `.btn-s` / `.btn-d` / neutral | `.frPrimary` / `.frSecondary` / `.frDestructive` / `.frNeutral` |
 | `.cap44`, `.pill44`, `.btn-sm` | `.fr(kind, size: .large / .medium / .compact, isLoading:)` |
 | `.gbtn.glass` | `GlassIconButton` |
 | `.gpill.glass` | `GlassPill`; its content alone is `GlassPillLabel` (used by the toolbar pill) |
 | `.gbtn .cnt` (bell badge) | `.iconButtonBadge(count)` on the 44pt frame |
-| `.gnav` league top bar | `.leagueTopBar(primaryAction:)` (Navigation); a tab root adds "+" with `.leagueTopBarPrimaryAction(_:)` |
+| `.gnav` league top bar | `.leagueTopBar(primaryAction:)` (Navigation); a tab's "+" goes in `LeagueTabStack.primaryAction` |
 | adjacent glass controls | `GlassCluster` (`GlassEffectContainer`) |
 | `.cols` + `.statv` | `StatColumns([StatItem])` |
 | `.alert-i`, `.ai-*` | `InlineBanner(tone:title:message:)` |

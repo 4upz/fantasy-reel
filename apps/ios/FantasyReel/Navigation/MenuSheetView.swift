@@ -7,6 +7,7 @@ import SwiftUI
 /// inside the sheet instead of opening a second sheet.
 struct MenuSheetView: View {
     @Environment(ShellRouter.self) private var router
+    @Environment(LeagueDirectoryStore.self) private var directory
 
     var body: some View {
         @Bindable var router = router
@@ -18,9 +19,19 @@ struct MenuSheetView: View {
                     case .wishlist: WishlistView()
                     case .account: AccountView()
                     case .howToPlay: HowToPlayView()
+                    case .editDisplayName: EditDisplayNameView()
+                    case .changePassword: ChangePasswordView()
+                    case .deleteAccount: DeleteAccountView()
+                    case .discordBot: DiscordBotGuideScreen()
+                    case .growthDashboard: GrowthDashboardView()
+                    case .sharedWishlist(let owner): SharedWishlistView(owner: owner)
+                    case .league(let route):
+                        LeagueDestinationView(route: route)
+                            .environment(\.leagueSelection, directory.selection)
                     }
                 }
         }
+        .environment(\.routesThroughMenu, true)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
@@ -30,6 +41,7 @@ private struct MenuRootView: View {
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
     @Environment(InboxStore.self) private var inbox
+    @Environment(WishlistStore.self) private var wishlist
     @Environment(\.currentProfile) private var profile
     @Environment(SessionStore.self) private var session
     @Environment(AppEnvironment.self) private var environment
@@ -38,8 +50,12 @@ private struct MenuRootView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
                 leagues
+                seasons
                 PendingInvitationsSection()
                 links
+            }
+            .task {
+                await wishlist.loadIfNeeded()
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 24)
@@ -96,12 +112,33 @@ private struct MenuRootView: View {
         .accessibilityLabel("Your leagues")
     }
 
+    /// The current league's seasons (F-04), when it has more than one: the
+    /// season menu within a league. Each season the account can read is listed;
+    /// joining a later season doesn't grant earlier ones.
+    @ViewBuilder
+    private var seasons: some View {
+        if let selection = directory.selection, selection.seriesSeasons.count >= 2 {
+            SectionHeader("Seasons")
+            FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                ForEach(selection.seriesSeasons) { season in
+                    Button {
+                        directory.select(season.id)
+                        router.dismissSheet()
+                    } label: {
+                        MenuSeasonRow(season: season, isSelected: season.id == selection.season.id)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Seasons of \(selection.season.name)")
+        }
+    }
+
     private var links: some View {
         FRRowGroup {
             NavigationLink(value: MenuRoute.wishlist) {
-                // The wishlist count (V2Menu "12") goes here as a trailing
-                // value once a wishlist store is available to the menu.
-                MenuLinkRow(title: "Wishlist", systemImage: "bookmark")
+                MenuLinkRow(title: "Wishlist", systemImage: "bookmark", value: wishlist.count > 0 ? "\(wishlist.count)" : nil)
             }
             NavigationLink(value: MenuRoute.notifications) {
                 MenuLinkRow(title: "Notifications", systemImage: "bell", count: inbox.unreadCount)
@@ -154,6 +191,35 @@ private struct LeagueMenuRow: View {
     }
 }
 
+/// One season of the current league: "2026 Season · Active", checked when selected.
+private struct MenuSeasonRow: View {
+    let season: League
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar")
+                .foregroundStyle(Color.frTextSecondary)
+                .frame(width: 36)
+                .accessibilityHidden(true)
+            Text("\(String(season.seasonYear)) Season · \(season.status.displayName)")
+                .frFont(.rowLabel)
+                .foregroundStyle(Color.frText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.frGold)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(minHeight: 48)
+        .padding(.horizontal, 16)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 private struct MenuActionRow: View {
     let title: String
     let systemImage: String
@@ -185,6 +251,8 @@ private struct MenuLinkRow: View {
     let title: String
     let systemImage: String
     var count: Int = 0
+    /// Secondary text before the chevron (the wishlist's "12").
+    var value: String?
     var trailing: Trailing = .chevron
 
     var body: some View {
@@ -197,6 +265,11 @@ private struct MenuLinkRow: View {
                 .frFont(.rowLabel)
                 .foregroundStyle(Color.frText)
             Spacer()
+            if let value {
+                Text(value)
+                    .frFont(.label)
+                    .foregroundStyle(Color.frTextSecondary)
+            }
             if count > 0 {
                 CountBadge(count: count)
                     .accessibilityLabel("\(count) unread")
