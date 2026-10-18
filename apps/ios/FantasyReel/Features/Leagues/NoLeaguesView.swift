@@ -6,18 +6,22 @@ import SwiftUI
 struct NoLeaguesView: View {
     @Environment(ShellRouter.self) private var router
 
+    /// While an invitation card shows, its Accept is the screen's one filled
+    /// primary, so Create League steps down to the tinted style.
+    @State private var hasInvitations = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: FRMetrics.sectionSpacing) {
                 ScreenHeader("Leagues")
-                PendingInvitationsSection()
+                PendingInvitationsSection(hasInvitations: $hasInvitations)
                 EmptyStateView(
                     title: "You're not in a league yet",
                     message: "Start one with friends, or join with the code your commissioner shared.",
                     systemImage: "film.stack"
                 ) {
                     Button("Create League") { router.present(.createLeague) }
-                        .buttonStyle(.frPrimary)
+                        .buttonStyle(.fr(hasInvitations ? .secondary : .primary))
                     Button("Join with Code") { router.present(.joinLeague(.manual)) }
                         .buttonStyle(.frSecondary)
                 }

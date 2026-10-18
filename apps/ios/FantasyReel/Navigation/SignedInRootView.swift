@@ -8,7 +8,8 @@ extension EnvironmentValues {
 }
 
 /// Everything that exists only while one account is signed in: the league
-/// directory, navigation state, the inbox badge, and the single sheet.
+/// directory, navigation state, the inbox badge, the admin check, and the
+/// single sheet.
 struct SignedInRootView: View {
     let account: AuthService.Account
 
@@ -16,6 +17,7 @@ struct SignedInRootView: View {
     @Environment(SessionStore.self) private var session
     @State private var directory: LeagueDirectoryStore
     @State private var inbox: InboxStore
+    @State private var admin: AdminStore
     @State private var wishlist: WishlistStore
     @State private var research: LeagueResearchStore
     @State private var searchHistory = MovieSearchHistory()
@@ -26,6 +28,7 @@ struct SignedInRootView: View {
         self.account = account
         _directory = State(initialValue: LeagueDirectoryStore(userID: account.id, repository: environment.leagues))
         _inbox = State(initialValue: InboxStore(userID: account.id, repository: environment.notifications))
+        _admin = State(initialValue: AdminStore(repository: environment.admin))
         _wishlist = State(initialValue: WishlistStore(userID: account.id, repository: environment.wishlists))
         _research = State(initialValue: LeagueResearchStore(leagues: environment.leagues, leagueMovies: environment.leagueMovies))
     }
@@ -36,6 +39,7 @@ struct SignedInRootView: View {
             .environment(router)
             .environment(directory)
             .environment(inbox)
+            .environment(admin)
             .environment(wishlist)
             .environment(research)
             .environment(searchHistory)
@@ -45,6 +49,7 @@ struct SignedInRootView: View {
                     .environment(router)
                     .environment(directory)
                     .environment(inbox)
+                    .environment(admin)
                     .environment(wishlist)
                     .environment(research)
                     .environment(searchHistory)
@@ -140,10 +145,11 @@ struct SignedInRootView: View {
     }
 }
 
-/// Renders whichever single sheet is up.
-private struct ShellSheetView: View {
+/// Renders whichever single sheet is up. Also used by the screenshot scenes.
+struct ShellSheetView: View {
     let sheet: ShellSheet
 
+    @Environment(AppEnvironment.self) private var environment
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
     /// The season the sheet opened in. A link can switch seasons while a sheet
@@ -182,9 +188,13 @@ private struct ShellSheetView: View {
         case .menu:
             MenuSheetView()
         case .createLeague:
-            NavigationStack { CreateLeagueView() }
+            NavigationStack {
+                CreateLeagueView(lifecycle: environment.leagueLifecycle, directory: directory)
+            }
         case .joinLeague(let input):
-            NavigationStack { JoinLeagueView(input: input) }
+            NavigationStack {
+                JoinLeagueView(input: input, lifecycle: environment.leagueLifecycle, directory: directory)
+            }
         case .editTeam:
             NavigationStack { EditTeamView() }
         case .dropMovie(let holdingID):
