@@ -45,6 +45,8 @@ SELECT throws_ok($$SELECT register_push_device('not-a-token', 'sandbox', 'com.fa
   '23514', NULL, 'a malformed token is refused');
 SELECT throws_ok($$SELECT register_push_device(pg_temp.token(9), 'staging', 'com.fantasyreel.ios')$$,
   '23514', NULL, 'an unknown APNs environment is refused');
+SELECT throws_ok($$SELECT register_push_device(pg_temp.token(9), 'sandbox', 'com.example.other')$$,
+  '23514', NULL, 'another app''s bundle ID is refused (it would become the APNs topic)');
 RESET ROLE;
 SELECT is((SELECT user_id FROM push_devices WHERE token = pg_temp.token(1)), pg_temp.push_id(1),
   'the token is stored lowercase for user 1');
@@ -180,10 +182,27 @@ SELECT is((SELECT data->>'round' FROM notifications WHERE league_id = pg_temp.pu
 -- Retention and account deletion
 -- ---------------------------------------------------------------------------
 UPDATE push_outbox SET created_at = now() - interval '8 days' WHERE notification_id = pg_temp.push_id(101);
+-- A stale pending push is expired, never deleted; one another run is sending is left alone.
+SELECT set_config('request.jwt.claim.sub', pg_temp.push_id(3)::TEXT, true);
+SET LOCAL ROLE authenticated;
+SELECT register_push_device(pg_temp.token(4), 'sandbox', 'com.fantasyreel.ios');
+RESET ROLE;
+INSERT INTO notifications(id, user_id, type, title, body) VALUES
+  (pg_temp.push_id(150), pg_temp.push_id(3), 'outbid', 'Stale', 'b'),
+  (pg_temp.push_id(151), pg_temp.push_id(3), 'outbid', 'In flight', 'b');
+UPDATE push_outbox SET created_at = now() - interval '5 hours' WHERE notification_id IN (pg_temp.push_id(150), pg_temp.push_id(151));
+DELETE FROM push_outbox o USING push_devices d
+  WHERE d.id = o.device_id AND d.token = pg_temp.token(1) AND o.notification_id IN (pg_temp.push_id(150), pg_temp.push_id(151));
+UPDATE push_outbox SET leased_until = now() + interval '1 minute', lease_token = gen_random_uuid()
+  WHERE notification_id = pg_temp.push_id(151);
 UPDATE push_devices SET last_registered_at = now() - interval '200 days' WHERE token = pg_temp.token(1);
 SET LOCAL ROLE service_role;
 SELECT is((purge_expired_data() ->> 'push_outbox')::INT, 1, 'settled pushes go after 7 days');
 RESET ROLE;
+SELECT is((SELECT status FROM push_outbox WHERE notification_id = pg_temp.push_id(150)), 'expired',
+  'a push past its three hours is expired, not deleted');
+SELECT is((SELECT status FROM push_outbox WHERE notification_id = pg_temp.push_id(151)), 'pending',
+  'a push another run is sending is left to that run');
 SELECT is((SELECT count(*)::INT FROM push_devices WHERE token = pg_temp.token(1)), 0,
   'phones that haven''t opened the app in 180 days are forgotten');
 

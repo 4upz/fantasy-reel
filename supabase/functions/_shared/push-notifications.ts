@@ -59,11 +59,19 @@ export interface ClaimedPush {
  * APNs payload: alert, badge, and grouping per league. The app decides where a
  * tap goes from `type` and `league_id`, exactly as a tap in its inbox does.
  */
+/** APNs refuses a payload over 4 KB; these keep any notification well under it. */
+const MAX_TITLE = 200
+const MAX_BODY = 1000
+
+function clip(text: string, max: number): string {
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`
+}
+
 export function buildPayload(push: ClaimedPush): Record<string, unknown> {
   const level = interruptionLevel(push.type)
   return {
     aps: {
-      alert: { title: push.title, body: push.body },
+      alert: { title: clip(push.title, MAX_TITLE), body: clip(push.body, MAX_BODY) },
       badge: push.badge,
       ...(level === 'passive' ? {} : { sound: 'default' }),
       'interruption-level': level,
@@ -103,18 +111,41 @@ function pemToPkcs8(pem: string): Uint8Array<ArrayBuffer> {
 }
 
 /**
- * The provider token. Apple refuses one older than an hour and throttles
- * refreshing more than every 20 minutes, so it is reused for 50 minutes.
+ * The provider token. Apple refuses one older than an hour and answers
+ * `TooManyProviderTokenUpdates` to refreshing more than every 20 minutes, so
+ * it is reused for 50 minutes: across a run's concurrent sends (the signing
+ * itself is shared) and across runs while the isolate lives (`signerFor`).
  */
 export class ApnsTokenSigner {
-  private cached: { jwt: string; issuedAt: number } | null = null
+  private cached: { jwt: Promise<string>; issuedAt: number } | null = null
   private key: Promise<CryptoKey> | null = null
 
   constructor(private readonly credentials: ApnsCredentials, private readonly now: () => number = Date.now) {}
 
-  async token(): Promise<string> {
+  token(): Promise<string> {
     const nowMs = this.now()
     if (this.cached && nowMs - this.cached.issuedAt < 50 * 60_000) return this.cached.jwt
+    const jwt = this.sign(nowMs)
+    const entry = { jwt, issuedAt: nowMs }
+    this.cached = entry
+    // A failed signing isn't kept: the next send tries again.
+    jwt.catch(() => {
+      if (this.cached === entry) this.cached = null
+    })
+    return jwt
+  }
+
+  /**
+   * Apple said `jwt` is invalid or expired: sign a new one next time. A
+   * rejection of an older token (one already replaced) changes nothing, so a
+   * burst of 403s signs once.
+   */
+  async reset(jwt: string): Promise<void> {
+    const entry = this.cached
+    if (entry && (await entry.jwt.catch(() => null)) === jwt && this.cached === entry) this.cached = null
+  }
+
+  private async sign(nowMs: number): Promise<string> {
     this.key ??= crypto.subtle.importKey(
       'pkcs8',
       pemToPkcs8(this.credentials.keyP8),
@@ -131,15 +162,21 @@ export class ApnsTokenSigner {
       await this.key,
       new TextEncoder().encode(signingInput),
     )
-    const jwt = `${signingInput}.${base64url(new Uint8Array(signature))}`
-    this.cached = { jwt, issuedAt: nowMs }
-    return jwt
+    return `${signingInput}.${base64url(new Uint8Array(signature))}`
   }
+}
 
-  /** Apple said the token is invalid or expired: sign a new one next time. */
-  reset(): void {
-    this.cached = null
+const signers = new Map<string, ApnsTokenSigner>()
+
+/** One signer per key for the life of the isolate, so warm runs reuse the token. */
+export function signerFor(credentials: ApnsCredentials): ApnsTokenSigner {
+  const id = `${credentials.teamId}:${credentials.keyId}:${credentials.keyP8.length}`
+  let signer = signers.get(id)
+  if (!signer) {
+    signer = new ApnsTokenSigner(credentials)
+    signers.set(id, signer)
   }
+  return signer
 }
 
 /** `unsent`: the run ran out of time before trying it (see `finish_push_notifications`). */
@@ -179,13 +216,15 @@ export async function sendToApns(
 ): Promise<SendResult> {
   const level = interruptionLevel(push.type)
   let response: Response
+  let jwt: string
   try {
+    jwt = await signer.token()
     response = await fetchWithTimeout(
       `${APNS_HOSTS[push.environment]}/3/device/${push.token}`,
       {
         method: 'POST',
         headers: {
-          authorization: `bearer ${await signer.token()}`,
+          authorization: `bearer ${jwt}`,
           'apns-topic': push.bundle_id,
           'apns-push-type': 'alert',
           // Passive pushes may be batched to save the battery.
@@ -214,7 +253,9 @@ export async function sendToApns(
   } catch {
     reason = undefined
   }
-  if (response.status === 403) signer.reset()
+  if (response.status === 403 && (reason === 'ExpiredProviderToken' || reason === 'InvalidProviderToken')) {
+    await signer.reset(jwt)
+  }
   // Only Apple's reason code is stored: never the token or the payload.
   return { outcome: classifyApnsResponse(response.status, reason), error: `${response.status} ${reason ?? ''}`.trim() }
 }
@@ -259,7 +300,7 @@ export async function sendPushNotifications(
     summary.metadata.skipped = 'apns_not_configured'
     return summary
   }
-  const signer = options.signer ?? new ApnsTokenSigner(credentials)
+  const signer = options.signer ?? signerFor(credentials)
   const deadline = Date.now() + (options.deadlineMs ?? RUN_DEADLINE_MS)
   const counts = summary.metadata as Record<string, number>
 

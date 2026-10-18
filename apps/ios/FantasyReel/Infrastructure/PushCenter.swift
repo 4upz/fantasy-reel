@@ -21,6 +21,9 @@ protocol PushSystem: AnyObject {
     /// Shows the iOS permission alert (only ever once per install).
     func requestAuthorization() async -> Bool
     func registerForRemoteNotifications()
+    /// The fallback when sign-out couldn't reach the server: iOS stops
+    /// delivering to this install, and APNs then reports the token dead.
+    func unregisterForRemoteNotifications()
     func setBadgeCount(_ count: Int) async
 }
 
@@ -44,6 +47,9 @@ final class PushCenter {
     /// "Not now" on the prompt card. Kept on this device; Settings still offers
     /// the switch.
     private(set) var promptDismissed: Bool
+    /// The notification the person last opened from a push, for the inbox to
+    /// mark read.
+    private(set) var openedNotification: NotificationID?
 
     /// Set by `RootView`; a tap that arrives before it is held until then.
     @ObservationIgnored var openLink: ((DeepLink) -> Void)? {
@@ -61,13 +67,19 @@ final class PushCenter {
     private let environment: PushEnvironment
     private let bundleID: String
     private let defaults: UserDefaults
-    @ObservationIgnored private var token: String?
+    /// The latest APNs token, kept across launches so sign-out can remove it
+    /// even when this launch never got to register it.
+    @ObservationIgnored private var token: String? {
+        didSet { defaults.set(token, forKey: Self.tokenKey) }
+    }
+    @ObservationIgnored private var upload: Task<Void, Never>?
     @ObservationIgnored private var userID: UserID?
     /// The account the current token was last registered to.
     @ObservationIgnored private var registeredFor: (token: String, user: UserID)?
     @ObservationIgnored private var pendingLink: DeepLink?
 
     private static let promptKey = "fr.pushPromptDismissed"
+    private static let tokenKey = "fr.pushToken"
 
     init(
         repository: any PushRepository,
@@ -82,6 +94,7 @@ final class PushCenter {
         self.bundleID = bundleID
         self.defaults = defaults
         self.promptDismissed = defaults.bool(forKey: Self.promptKey)
+        self.token = defaults.string(forKey: Self.tokenKey)
     }
 
     /// The contextual ask: shown until the person answers iOS or says not now.
@@ -91,15 +104,20 @@ final class PushCenter {
 
     // MARK: Permission
 
+    /// Also registers this phone when notifications just became allowed while
+    /// signed in: from the prompt, or turned on in iOS Settings meanwhile.
     func refreshAuthorization() async {
+        let previous = authorization
         authorization = await system.authorization()
+        if authorization == .allowed, previous != .allowed, userID != nil {
+            system.registerForRemoteNotifications()
+        }
     }
 
-    /// Asks iOS, then registers this phone if the person said yes.
+    /// Asks iOS; a yes registers this phone (`refreshAuthorization`).
     func requestPermission() async {
-        let granted = await system.requestAuthorization()
+        _ = await system.requestAuthorization()
         await refreshAuthorization()
-        if granted { system.registerForRemoteNotifications() }
     }
 
     func dismissPrompt() {
@@ -112,11 +130,13 @@ final class PushCenter {
     /// Called whenever the signed-in account changes (nil when signed out).
     func accountDidChange(_ userID: UserID?) async {
         self.userID = userID
+        let wasAllowed = authorization == .allowed
         await refreshAuthorization()
         guard userID != nil else { return }
         // iOS hands back the token through the app delegate; asking again
-        // each time is how Apple says to keep it current.
-        if authorization == .allowed { system.registerForRemoteNotifications() }
+        // each time is how Apple says to keep it current. (A change to
+        // allowed already asked, in refreshAuthorization.)
+        if wasAllowed, authorization == .allowed { system.registerForRemoteNotifications() }
         await uploadToken()
     }
 
@@ -126,33 +146,60 @@ final class PushCenter {
         await uploadToken()
     }
 
+    /// Only sends a token that isn't known to be on this account already
+    /// (and only once iOS allows notifications, so a token left from an
+    /// earlier grant isn't re-attached after the person turned them off).
     private func uploadToken() async {
-        guard let token, let userID else { return }
+        guard let token, let userID, authorization == .allowed else { return }
         if let registeredFor, registeredFor.token == token, registeredFor.user == userID { return }
-        do {
-            try await repository.register(token: token, environment: environment, bundleID: bundleID)
-            registeredFor = (token, userID)
-        } catch {
-            // Not shown: the next launch or sign-in tries again, and the
-            // inbox works either way.
+        let repository = repository, environment = environment, bundleID = bundleID
+        let task = Task {
+            do {
+                try await repository.register(token: token, environment: environment, bundleID: bundleID)
+                // Signed out meanwhile: prepareForSignOut waits for this task
+                // and removes the token after it.
+                if self.userID == userID { self.registeredFor = (token, userID) }
+            } catch {
+                // Not shown: the next launch or sign-in tries again, and the
+                // inbox works either way.
+            }
         }
+        upload = task
+        await task.value
     }
 
     /// Before signing out: takes this phone off the account and clears the
-    /// badge. Bounded, so a slow network never holds up signing out.
+    /// badge. A registration still in flight lands first, so it can't put the
+    /// phone back afterwards. Bounded, so a slow network never holds up
+    /// signing out; when the server can't be reached, iOS is told to stop
+    /// delivering instead, so the next person on this phone never sees the
+    /// last one's pushes.
     func prepareForSignOut() async {
-        let token = registeredFor?.token
         registeredFor = nil
         userID = nil
         await system.setBadgeCount(0)
         guard let token else { return }
         let repository = repository
-        await withTaskGroup(of: Void.self) { group in
-            group.addTask { try? await repository.unregister(token: token) }
-            group.addTask { try? await Task.sleep(for: .seconds(3)) }
-            await group.next()
+        let pending = upload
+        let removed = await withTaskGroup(of: Bool.self) { group in
+            group.addTask {
+                await pending?.value
+                do {
+                    try await repository.unregister(token: token)
+                    return true
+                } catch {
+                    return false
+                }
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(3))
+                return false
+            }
+            let first = await group.next() ?? false
             group.cancelAll()
+            return first
         }
+        if !removed { system.unregisterForRemoteNotifications() }
     }
 
     // MARK: Badge and incoming pushes
@@ -166,6 +213,7 @@ final class PushCenter {
     }
 
     func didTap(_ payload: PushPayload) {
+        if let id = payload.notificationID { openedNotification = id }
         let link = payload.destination
         if let openLink {
             openLink(link)
@@ -195,6 +243,10 @@ final class SystemPushHooks: PushSystem {
         UIApplication.shared.registerForRemoteNotifications()
     }
 
+    func unregisterForRemoteNotifications() {
+        UIApplication.shared.unregisterForRemoteNotifications()
+    }
+
     func setBadgeCount(_ count: Int) async {
         try? await UNUserNotificationCenter.current().setBadgeCount(count)
     }
@@ -213,6 +265,7 @@ final class PreviewPushSystem: PushSystem {
     func authorization() async -> PushAuthorization { state }
     func requestAuthorization() async -> Bool { state = .allowed; return true }
     func registerForRemoteNotifications() {}
+    func unregisterForRemoteNotifications() {}
     func setBadgeCount(_ count: Int) async {}
 }
 #endif

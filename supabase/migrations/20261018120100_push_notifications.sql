@@ -30,7 +30,8 @@ CREATE TABLE public.push_devices (
   token TEXT NOT NULL UNIQUE CHECK (token ~ '^[0-9a-f]{64,200}$'),
   -- Debug builds get sandbox tokens, TestFlight and App Store builds production.
   environment TEXT NOT NULL CHECK (environment IN ('sandbox', 'production')),
-  bundle_id TEXT NOT NULL CHECK (bundle_id ~ '^[A-Za-z0-9.-]{1,155}$'),
+  -- It becomes the apns-topic, so only the app's own bundle ID is accepted.
+  bundle_id TEXT NOT NULL CHECK (bundle_id IN ('com.fantasyreel.ios')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   -- The app re-registers on every launch; purge_expired_data drops tokens of
   -- phones that haven't opened the app in 180 days.
@@ -255,12 +256,15 @@ AS $$
 BEGIN
   UPDATE public.push_outbox o
   SET status = 'expired', finished_at = now(), lease_token = NULL, leased_until = NULL
-  WHERE o.status = 'pending' AND o.created_at < now() - interval '3 hours';
+  WHERE o.status = 'pending' AND o.created_at < now() - interval '3 hours'
+    -- A row another run is sending is left to that run's result.
+    AND (o.leased_until IS NULL OR o.leased_until < now());
 
   UPDATE public.push_outbox o
   SET status = 'skipped', finished_at = now(), lease_token = NULL, leased_until = NULL
   FROM public.push_devices d, public.notifications n
   WHERE o.status = 'pending'
+    AND (o.leased_until IS NULL OR o.leased_until < now())
     AND d.id = o.device_id
     AND n.id = o.notification_id
     AND (
@@ -320,7 +324,7 @@ DECLARE
 BEGIN
   FOR v_result IN SELECT * FROM jsonb_array_elements(COALESCE(p_results, '[]'::JSONB)) LOOP
     v_outcome := v_result->>'outcome';
-    IF v_outcome NOT IN ('sent', 'retry', 'failed', 'unregistered', 'unsent') THEN
+    IF v_outcome IS NULL OR v_outcome NOT IN ('sent', 'retry', 'failed', 'unregistered', 'unsent') THEN
       RAISE EXCEPTION 'Invalid push outcome: %', v_outcome;
     END IF;
 
@@ -443,10 +447,11 @@ CREATE TRIGGER notify_draft_turn_on_phase
 -- ============================================================================
 
 -- Adds two windows to the daily purge (see 20261004130700): settled pushes
--- 7 days after they were queued, pushes never claimed after a day (the
--- sender expires them after three hours, but only while it runs with an APNs
--- key), and tokens of phones that haven't opened the app in 180 days.
--- Everything else is unchanged.
+-- 7 days after they were queued, and tokens of phones that haven't opened the
+-- app in 180 days. Pushes still pending past the sender's three hours (it
+-- only runs with an APNs key) are first marked expired, the same as the
+-- sender would, so no undelivered row is ever deleted. Everything else is
+-- unchanged.
 CREATE OR REPLACE FUNCTION public.purge_expired_data(p_batch_size integer DEFAULT 5000)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -534,12 +539,16 @@ BEGIN
   );
   GET DIAGNOSTICS v_discord_log = ROW_COUNT;
 
+  UPDATE push_outbox
+  SET status = 'expired', finished_at = now(), lease_token = NULL, leased_until = NULL
+  WHERE status = 'pending'
+    AND created_at < now() - interval '3 hours'
+    AND (leased_until IS NULL OR leased_until < now());
+
   DELETE FROM push_outbox
   WHERE id IN (
     SELECT id FROM push_outbox
-    WHERE (status <> 'pending' AND created_at < now() - interval '7 days')
-       -- Never claimed (the sender has no APNs key yet): long past sending.
-       OR (status = 'pending' AND created_at < now() - interval '1 day')
+    WHERE status <> 'pending' AND created_at < now() - interval '7 days'
     LIMIT p_batch_size
   );
   GET DIAGNOSTICS v_push_outbox = ROW_COUNT;
