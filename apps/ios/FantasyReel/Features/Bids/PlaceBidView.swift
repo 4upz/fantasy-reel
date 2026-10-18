@@ -364,6 +364,8 @@ private struct BidAmountForm: View {
     @State private var didSetAmount = false
     @State private var dropID: HoldingID?
     @State private var submit = AsyncAction()
+    /// A refusal or warning that isn't an error from the request itself.
+    @State private var notice: String?
 
     private var bids: BidsStore { season.bids }
     private var remainingBudget: Int? { season.myTeam?.budget?.remainingBudget }
@@ -399,6 +401,8 @@ private struct BidAmountForm: View {
                 fitLine
                 if let message = submit.errorMessage {
                     InlineBanner(tone: .error, title: message)
+                } else if let notice {
+                    InlineBanner(tone: .warning, title: notice)
                 }
                 Button(action: place) {
                     Text(submit.isRunning ? "Placing Bid…" : "Place \(SeasonFormat.budget(amount)) \(isCounterpick ? "Counterpick " : "")Bid")
@@ -433,6 +437,9 @@ private struct BidAmountForm: View {
         }
         .onChange(of: dropID) { router.sheetHasUnsavedInput = true }
         .announcesError(submit.errorMessage)
+        .onChange(of: notice) { _, newValue in
+            if let newValue { Announcer.announce(newValue) }
+        }
     }
 
     private var title: String {
@@ -442,7 +449,11 @@ private struct BidAmountForm: View {
     }
 
     private var problem: String? {
-        BidAmountRule.problem(amount: amount, remainingBudget: remainingBudget, highBid: highBid)
+        if case .counterpick(let option) = subject,
+           !bids.hasCounterpickSlot(for: option.movieID, slots: season.season.biddingCounterpickSlots) {
+            return "All counterpick slots used"
+        }
+        return BidAmountRule.problem(amount: amount, remainingBudget: remainingBudget, highBid: highBid)
     }
 
     // MARK: Sections
@@ -646,8 +657,9 @@ private struct BidAmountForm: View {
 
     private func place() {
         guard problem == nil else { return }
+        notice = nil
         if !BidEligibility.isBiddable(releaseDate: subject.releaseDate) {
-            Announcer.announce("\(subject.title) has already released and can no longer be bid on")
+            notice = "\(subject.title) has already released and can no longer be bid on"
             return
         }
         let amount = amount
@@ -664,9 +676,15 @@ private struct BidAmountForm: View {
             case .counterpick(let option):
                 result = try await bids.placeCounterpick(movie: option.movieID, amount: amount)
             }
-            if result.raceCondition, let message = result.message {
-                Announcer.announce(message)
-            } else if isCounterpick {
+            if result.raceCondition {
+                // Saved, but an equal or higher bid landed at the same moment, so it's
+                // already outbid. Stay open on the new high bid so they can counter.
+                notice = result.message ?? "Someone else bid at the same time. You can counter."
+                amount = BidAmountRule.initialAmount(highBid: highBid)
+                router.sheetHasUnsavedInput = false
+                return
+            }
+            if isCounterpick {
                 Announcer.announce("Counterpick bid of \(SeasonFormat.budget(amount)) placed on \(subject.title)")
             } else if let dropHolding {
                 Announcer.announce("Bid of \(SeasonFormat.budget(amount)) placed on \(subject.title). \(dropHolding.title) drops if it wins.")

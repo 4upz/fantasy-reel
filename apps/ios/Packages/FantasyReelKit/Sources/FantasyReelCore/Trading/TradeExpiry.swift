@@ -6,6 +6,9 @@ public struct TradeExpiryBounds: Sendable, Hashable {
     public static let defaultHours = 48
     public static let minimumMinutes = 60
     public static let maximumDays = 14
+    /// The server accepts an offer up to a minute under the minimum
+    /// (`MIN_WINDOW_GRACE_MS`), so a window chosen just now still passes at submit.
+    public static let minimumGrace: TimeInterval = 60
 
     public let defaultHours: Int
     public let minMinutes: Int
@@ -46,6 +49,11 @@ public struct TradeExpiryBounds: Sendable, Hashable {
     /// "24h", "48h", "3 days", "7 days".
     public static func label(hours: Int) -> String {
         hours >= 72 && hours % 24 == 0 ? "\(hours / 24) days" : "\(hours)h"
+    }
+
+    /// The earliest expiry the server accepts at `now`.
+    public func earliestExpiry(now: Date) -> Date {
+        now.addingTimeInterval(TimeInterval(minMinutes) * 60 - Self.minimumGrace)
     }
 
     public var maxDaysText: String { "\(maxDays) \(maxDays == 1 ? "day" : "days")" }
@@ -111,7 +119,7 @@ public enum TradeExpiry {
             return TradeReleaseCandidate(movieID: movie.movieID, title: movie.title, releaseDate: date, boundary: boundary)
         }.sorted { $0.boundary < $1.boundary }
         guard let soonest = upcoming.first else { return .failure(.noneUnreleased) }
-        let earliest = now.addingTimeInterval(TimeInterval(bounds.minMinutes) * 60)
+        let earliest = bounds.earliestExpiry(now: now)
         let latest = now.addingTimeInterval(TimeInterval(bounds.maxDays) * 86_400)
         let inWindow = upcoming.filter { $0.boundary >= earliest && $0.boundary <= latest }
         if inWindow.isEmpty {
@@ -180,7 +188,7 @@ public enum TradeExpiry {
             }
         case .custom(let date):
             let zeroed = Date(timeIntervalSince1970: (date.timeIntervalSince1970 / 60).rounded(.down) * 60)
-            if zeroed < now.addingTimeInterval(TimeInterval(bounds.minMinutes) * 60) {
+            if zeroed < bounds.earliestExpiry(now: now) {
                 return .failure(.tooSoon(bounds.minWindowText))
             }
             if zeroed > now.addingTimeInterval(TimeInterval(bounds.maxDays) * 86_400) {

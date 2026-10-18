@@ -115,4 +115,14 @@ struct TradeExpiryTests {
         #expect((try? fine.get())?.anchor == "fixed")
         #expect((try? TradeExpiry.resolve(.none, candidates: .failure(.noMovies), bounds: bounds, now: now).get()) == .noExpiry)
     }
+
+    @Test func theMinimumWindowAllowsTheServersMinuteOfGrace() {
+        let bounds = TradeExpiryBounds()
+        let chosen = now.addingTimeInterval(60 * 60)
+        // Picked at exactly the minimum, sent 30 seconds later: the server still takes it.
+        let sentLater = TradeExpiry.resolve(.custom(chosen), candidates: .failure(.noMovies), bounds: bounds, now: now.addingTimeInterval(30))
+        #expect((try? sentLater.get())?.expiresAt == chosen)
+        let tooLate = TradeExpiry.resolve(.custom(chosen), candidates: .failure(.noMovies), bounds: bounds, now: now.addingTimeInterval(120))
+        #expect(throws: TradeExpiry.ResolveError.tooSoon(bounds.minWindowText)) { try tooLate.get() }
+    }
 }

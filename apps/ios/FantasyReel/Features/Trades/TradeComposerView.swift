@@ -344,6 +344,8 @@ private struct TradeReviewStep: View {
     @Environment(LeagueSeasonStore.self) private var season
     @Environment(ShellRouter.self) private var router
     @State private var submit = AsyncAction()
+    /// The expiry stopped fitting between choosing it and sending.
+    @State private var expiryError: String?
 
     private var isCounter: Bool {
         if case .counter = mode { return true }
@@ -373,7 +375,7 @@ private struct TradeReviewStep: View {
                     .buttonStyle(.fr(.neutral, size: .medium))
                 messageField
                 TradeExpiryPicker(choice: $draft.expiry, movies: give.movies + receive.movies, bounds: bounds)
-                if let message = submit.errorMessage {
+                if let message = submit.errorMessage ?? expiryError {
                     InlineBanner(tone: .error, title: message)
                 }
                 Button(submit.isRunning ? (isCounter ? "Sending…" : "Proposing…") : (isCounter ? "Send Counter" : "Propose Trade")) {
@@ -388,7 +390,8 @@ private struct TradeReviewStep: View {
         .navigationTitle(isCounter ? "Review Counter" : "Review Offer")
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(submit.isRunning)
-        .announcesError(submit.errorMessage)
+        .announcesError(submit.errorMessage ?? expiryError)
+        .onChange(of: draft.expiry) { expiryError = nil }
     }
 
     private var messageField: some View {
@@ -428,6 +431,7 @@ private struct TradeReviewStep: View {
     }
 
     private func send(give: TradeItems, receive: TradeItems, bounds: TradeExpiryBounds) {
+        expiryError = nil
         let choice = draft.expiry ?? .preset(hours: bounds.defaultHours)
         let candidates = TradeExpiry.releaseCandidates(
             (give.movies + receive.movies).map { ($0.movieID, $0.displayTitle, $0.releaseDate) }, bounds: bounds
@@ -436,7 +440,7 @@ private struct TradeReviewStep: View {
         switch TradeExpiry.resolve(choice, candidates: candidates, bounds: bounds) {
         case .success(let request): expiry = request
         case .failure(let error):
-            Announcer.announce(error.message)
+            expiryError = error.message
             return
         }
         let trimmed = draft.message.trimmingCharacters(in: .whitespacesAndNewlines)

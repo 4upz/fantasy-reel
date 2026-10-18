@@ -95,7 +95,7 @@ struct LeagueMovieActions: View {
         let contested = snapshot?.counterpickBids.contains { $0.movieID == holding.movieID } ?? false
         let alreadyBidding = store.bids.myCounterpickBids.contains { $0.movieID == holding.movieID }
         let slots = season.biddingCounterpickSlots
-        let hasSlot = alreadyBidding || (snapshot.map { $0.biddingCounterpickCount < slots } ?? false)
+        let hasSlot = store.bids.hasCounterpickSlot(for: holding.movieID, slots: slots)
         if canBid, slots > 0, hasSlot, holding.counterpickedByTeamID == nil, !counterPhase || contested {
             let option = CounterpickOption(
                 movieID: holding.movieID, title: holding.title, posterURL: holding.posterURL, releaseDate: releaseDate,

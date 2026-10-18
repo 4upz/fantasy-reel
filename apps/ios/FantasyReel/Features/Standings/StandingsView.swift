@@ -92,19 +92,22 @@ private struct StandingRowView: View {
 
     var body: some View {
         let team = store.team(row.teamID)
+        // A completed season reads its frozen names, like the champion card.
+        let isFrozen = store.season.finalStandings != nil
+        let name = isFrozen ? row.teamName : team?.team.name ?? row.teamName
         let isMe = row.userID == store.userID
         let crown = store.crownYear(for: row.teamID, userID: row.userID)
-        let owner = team?.ownerDisplayName ?? row.displayName ?? "Former member"
+        let owner = (isFrozen ? row.displayName : team?.ownerDisplayName ?? row.displayName) ?? "Former member"
         let rankLabel = CompetitionRank.label(rank: row.rank, isTied: row.isTied)
 
         Button {
             router.push(.team(row.teamID))
         } label: {
             ListRow(
-                title: team?.team.name ?? row.teamName,
+                title: name,
                 meta: crown.map { "\(String($0)) champion" } ?? owner,
                 showsChevron: true,
-                accessibilityLabel: accessibilityLabel(team: team, owner: owner, isMe: isMe, crown: crown)
+                accessibilityLabel: accessibilityLabel(name: name, owner: owner, isMe: isMe, crown: crown)
             ) {
                 HStack(spacing: FRMetrics.rowGap) {
                     Text(rankLabel)
@@ -112,7 +115,7 @@ private struct StandingRowView: View {
                         .foregroundStyle(rankColor)
                         .frame(minWidth: 32, alignment: .leading)
                         .fixedSize()
-                    Avatar(name: team?.team.name ?? row.teamName, imageURL: team?.team.avatarURL, size: .medium, corners: .rounded)
+                    Avatar(name: name, imageURL: team?.team.avatarURL, size: .medium, corners: .rounded)
                         .overlay(alignment: .topTrailing) {
                             if crown != nil {
                                 Image(systemName: "crown.fill")
@@ -143,10 +146,10 @@ private struct StandingRowView: View {
         }
     }
 
-    private func accessibilityLabel(team: SeasonTeam?, owner: String, isMe: Bool, crown: Int?) -> String {
+    private func accessibilityLabel(name: String, owner: String, isMe: Bool, crown: Int?) -> String {
         var parts = [
             CompetitionRank.spokenLabel(rank: row.rank, isTied: row.isTied),
-            team?.team.name ?? row.teamName,
+            name,
             owner,
         ]
         if isMe { parts.append("your team") }

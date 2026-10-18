@@ -392,6 +392,7 @@ private struct CounterpickBidRow: View {
         let isMine = bid.teamID == season.myTeam?.id
         let high = bids.highCounterpickBid(on: bid.movieID)
         let canCounter = season.myTeam?.budget != nil && BidEligibility.isBiddable(releaseDate: bid.releaseDate) && !bid.isScoreLocked
+            && bids.hasCounterpickSlot(for: bid.movieID, slots: season.season.biddingCounterpickSlots)
         let week = bids.snapshot?.week ?? BidWeek(processingDeadline: nil, cutoffAt: nil)
         let canCancel = isMine && week.canCancel(bidProcessingDeadline: bid.processingDeadline)
 
