@@ -171,6 +171,11 @@ buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
   (`@State var model = ...`). A view model takes the specific repositories it uses
   (`init(holdings: any HoldingsRepository, ...)`), never the whole `AppEnvironment`;
   the view reads `@Environment(AppEnvironment.self)` and passes them in.
+  Because the repositories come from the environment, which `init` can't read,
+  a screen creates its model once in `onAppear` into an optional `@State` and
+  hands it to an inner view that takes `let model` (see `MovieSearchView`).
+  `@State var model = Model(...)` in the initializer would build a new model,
+  and start new reads, on every parent re-render.
 - **Repositories are protocols** with a live `Supabase…Repository` and an in-memory
   fake (`FantasyReelAPI/Repositories/`). Add your feature's pair the same way, so
   previews (`AppEnvironment.preview(...)`) and tests never touch the network.

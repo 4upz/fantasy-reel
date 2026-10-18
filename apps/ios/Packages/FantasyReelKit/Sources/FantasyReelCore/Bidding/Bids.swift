@@ -391,56 +391,6 @@ public struct CounterpickBid: Codable, Sendable, Hashable, Identifiable {
     public var isScoreLocked: Bool { FantasyPoints.isScoreLocked(movie?.fantasyPoints) }
 }
 
-/// One row of `get_counterpick_options`: an opponent's movie that can be
-/// targeted. Scored movies are still listed (shown locked).
-public struct CounterpickOption: Codable, Sendable, Hashable, Identifiable {
-    public var movieID: MovieID
-    public var title: String
-    public var posterURL: String?
-    public var releaseDate: DateOnly?
-    public var ownerTeamID: TeamID
-    public var ownerTeamName: String
-    public var fantasyPoints: Double?
-
-    public var id: MovieID { movieID }
-
-    public init(
-        movieID: MovieID, title: String, posterURL: String? = nil, releaseDate: DateOnly? = nil,
-        ownerTeamID: TeamID, ownerTeamName: String, fantasyPoints: Double? = nil
-    ) {
-        self.movieID = movieID
-        self.title = title
-        self.posterURL = posterURL
-        self.releaseDate = releaseDate
-        self.ownerTeamID = ownerTeamID
-        self.ownerTeamName = ownerTeamName
-        self.fantasyPoints = fantasyPoints
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case movieID = "movie_id"
-        case title = "movie_title"
-        case posterURL = "poster_url"
-        case releaseDate = "release_date"
-        case ownerTeamID = "owner_team_id"
-        case ownerTeamName = "owner_team_name"
-        case fantasyPoints = "fantasy_points"
-    }
-
-    public init(from decoder: any Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        movieID = try c.decode(MovieID.self, forKey: .movieID)
-        title = try c.decode(String.self, forKey: .title)
-        posterURL = try c.decodeIfPresent(String.self, forKey: .posterURL)
-        releaseDate = try c.decodeIfPresent(DateOnly.self, forKey: .releaseDate)
-        ownerTeamID = try c.decode(TeamID.self, forKey: .ownerTeamID)
-        ownerTeamName = try c.decode(String.self, forKey: .ownerTeamName)
-        fantasyPoints = try c.decodeNumeric(forKey: .fantasyPoints)
-    }
-
-    public var isScoreLocked: Bool { FantasyPoints.isScoreLocked(fantasyPoints) }
-}
-
 /// A movie a pickup bid can target, from search or browse.
 public struct BiddableMovie: Codable, Sendable, Hashable, Identifiable {
     public var tmdbID: TMDbID

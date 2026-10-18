@@ -67,6 +67,8 @@ enum ShellSheet: Identifiable, Hashable {
     case menu
     case createLeague
     case joinLeague(JoinInput)
+    /// The draft's movie picker (F-08), over the draft room it picks for.
+    case draftMoviePicker(DraftRoomHandle)
     /// Rename the team or change its image (F-10).
     case editTeam
     /// Confirm dropping one of my holdings (F-11).

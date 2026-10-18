@@ -196,6 +196,8 @@ struct ShellSheetView: View {
             NavigationStack {
                 JoinLeagueView(input: input, lifecycle: environment.leagueLifecycle, directory: directory)
             }
+        case .draftMoviePicker(let room):
+            DraftMoviePickerSheet(room: room.model)
         case .editTeam:
             NavigationStack { EditTeamView() }
         case .dropMovie(let holdingID):
@@ -214,7 +216,7 @@ private extension ShellSheet {
     /// Sheets that act on the open season and read its store.
     var needsSeason: Bool {
         switch self {
-        case .menu, .createLeague, .joinLeague: false
+        case .menu, .createLeague, .joinLeague, .draftMoviePicker: false
         case .editTeam, .dropMovie, .proposeTrade, .counterTrade, .placeBid: true
         }
     }

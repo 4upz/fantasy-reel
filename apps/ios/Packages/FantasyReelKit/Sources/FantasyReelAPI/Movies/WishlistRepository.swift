@@ -99,16 +99,25 @@ public struct SupabaseWishlistRepository: WishlistRepository {
 
     public func fetchVisibleCounts(of userIDs: [UserID]) async throws(APIError) -> [UserID: Int] {
         guard !userIDs.isEmpty else { return [:] }
+        // One count per person: a single row read would stop at the API's
+        // row cap once a few lists are long.
+        let client = client
         do {
-            let rows: [OwnerRow] = try await client
-                .from("wishlisted_movies")
-                .select("user_id")
-                .in("user_id", values: userIDs.map(\.rawValue))
-                .execute()
-                .value
-            var counts: [UserID: Int] = [:]
-            for row in rows { counts[row.userID, default: 0] += 1 }
-            return counts
+            return try await withThrowingTaskGroup(of: (UserID, Int).self) { group in
+                for userID in Set(userIDs) {
+                    group.addTask {
+                        let response = try await client
+                            .from("wishlisted_movies")
+                            .select("id", head: true, count: .exact)
+                            .eq("user_id", value: userID.rawValue)
+                            .execute()
+                        return (userID, response.count ?? 0)
+                    }
+                }
+                var counts: [UserID: Int] = [:]
+                for try await (userID, count) in group { counts[userID] = count }
+                return counts
+            }
         } catch {
             throw APIError.wrap(error)
         }
@@ -140,7 +149,3 @@ private struct SharingRow: Decodable, Sendable {
     enum CodingKeys: String, CodingKey { case wishlistPublic = "wishlist_public" }
 }
 
-private struct OwnerRow: Decodable, Sendable {
-    let userID: UserID
-    enum CodingKeys: String, CodingKey { case userID = "user_id" }
-}

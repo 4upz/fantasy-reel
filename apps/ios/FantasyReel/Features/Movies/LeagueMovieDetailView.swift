@@ -12,16 +12,29 @@ struct LeagueMovieDetailView: View {
     let tmdbID: TMDbID
 
     @Environment(AppEnvironment.self) private var environment
+    @State private var model: LeagueMovieDetailModel?
 
     var body: some View {
-        MovieDetailScreen(
-            model: LeagueMovieDetailModel(tmdbID: tmdbID, movies: environment.movies, leagueMovies: environment.leagueMovies)
-        )
+        Group {
+            if let model {
+                MovieDetailScreen(model: model)
+            } else {
+                Color.frBackground.ignoresSafeArea()
+            }
+        }
+        .onAppear {
+            if model == nil {
+                model = LeagueMovieDetailModel(tmdbID: tmdbID, movies: environment.movies, leagueMovies: environment.leagueMovies)
+            }
+        }
     }
 }
 
 private struct MovieDetailScreen: View {
-    @State var model: LeagueMovieDetailModel
+    let model: LeagueMovieDetailModel
+
+    /// The header's title has scrolled under the bar, so the bar shows it.
+    @State private var showsBarTitle = false
 
     @Environment(\.leagueSelection) private var tabSelection
     @Environment(LeagueDirectoryStore.self) private var directory
@@ -42,13 +55,14 @@ private struct MovieDetailScreen: View {
                         InlineBanner(tone: .warning, title: "Some details are missing", message: error, actionTitle: "Retry", action: reload)
                     }
                     ScoreCard(
-                        releaseDate: details.releaseDate,
+                        // Our row's date is what the server's release gate uses.
+                        releaseDate: model.holding?.releaseDate ?? model.movie?.releaseDate ?? details.releaseDate,
                         movie: model.movie,
                         holding: model.holding,
                         season: selection?.season
                     )
                     if let selection {
-                        OwnershipSection(selection: selection, holding: model.holding, myTeamID: myTeamID)
+                        OwnershipSection(selection: selection, holding: model.holding, isUnknown: model.holdingUnknown, myTeamID: myTeamID)
                         LeagueMovieActions(context: LeagueMovieContext(
                             selection: selection,
                             details: details,
@@ -74,10 +88,15 @@ private struct MovieDetailScreen: View {
                 .padding(.bottom, 24)
                 .animation(.default, value: wishlist.failure)
             }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > Self.headerHeight
+            } action: { _, scrolledPast in
+                withAnimation(.easeInOut(duration: 0.2)) { showsBarTitle = scrolledPast }
+            }
             .refreshable { await refresh() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    WishlistToggleButton(candidate: WishlistCandidate(details))
+                    WishlistToggleButton(candidate: WishlistCandidate(details), style: .toolbar)
                 }
             }
         }
@@ -85,13 +104,22 @@ private struct MovieDetailScreen: View {
         .navigationTitle(model.state.value?.title ?? "Movie")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // The header draws the title; keep the bar free of a duplicate.
+            // The header draws the title; the bar fades it in once the
+            // header scrolls away, as App Store detail pages do.
             ToolbarItem(placement: .principal) {
-                Text(verbatim: "").accessibilityHidden(true)
+                Text(model.state.value?.title ?? "")
+                    .font(.headline)
+                    .foregroundStyle(Color.frText)
+                    .lineLimit(1)
+                    .opacity(showsBarTitle ? 1 : 0)
+                    .accessibilityHidden(!showsBarTitle)
             }
         }
         .task(id: selection?.season.id) { await refresh(force: false) }
     }
+
+    /// Roughly where the header's title passes under the bar.
+    private static let headerHeight: CGFloat = 120
 
     private var myTeamID: TeamID? { research.holdings(in: selection?.season.id).myTeamID }
 
@@ -100,9 +128,10 @@ private struct MovieDetailScreen: View {
     }
 
     private func refresh(force: Bool = true) async {
-        async let modelLoaded: Void = model.load(league: selection?.season)
+        let season = selection?.season
+        async let modelLoaded: Void = model.load(league: season, force: force)
         if let selection { await research.load(selection, force: force) }
-        if case .idle = wishlist.state { await wishlist.load() }
+        await wishlist.loadIfNeeded()
         await modelLoaded
     }
 }
@@ -112,8 +141,14 @@ private struct MovieDetailScreen: View {
 private struct MovieHeader: View {
     let details: MovieDetails
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
-        HStack(alignment: .bottom, spacing: 16) {
+        // At accessibility sizes the title gets the full width under the poster.
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+            : AnyLayout(HStackLayout(alignment: .bottom, spacing: 16))
+        layout {
             PosterImage(posterURL: details.posterURL, title: details.title, size: CGSize(width: 96, height: 144), cornerRadius: 12)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
@@ -229,12 +264,19 @@ private struct ScoreCard: View {
 private struct OwnershipSection: View {
     let selection: LeagueSelection
     let holding: TeamHolding?
+    let isUnknown: Bool
     let myTeamID: TeamID?
 
     var body: some View {
         SectionHeader("In \(selection.season.name)")
         FRRowGroup {
-            if let holding {
+            if isUnknown {
+                ListRow(title: "Couldn't check who holds it", meta: "Pull down to try again") {
+                    IconTile(systemImage: "questionmark.circle")
+                } trailing: {
+                    EmptyView()
+                }
+            } else if let holding {
                 LeagueLink(route: .team(holding.teamID)) {
                     ListRow(title: holding.teamName, meta: holderMeta(holding), showsChevron: true) {
                         Avatar(name: holding.teamName, size: .medium)
@@ -369,7 +411,11 @@ private struct ProjectionCard: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(ProjectionText.chipSpokenLabel(state)). \(subhead)")
+        .accessibilityLabel([
+            ProjectionText.chipSpokenLabel(state),
+            subhead,
+            projection.computedAt.map { "Updated \($0.formatted(.dateTime.month(.wide).day()))" },
+        ].compactMap { $0 }.joined(separator: ". "))
     }
 
     private var subhead: String {
@@ -503,6 +549,7 @@ private struct ProjectionBar: View {
             }
             .frame(height: 16)
             .frFont(.caption)
+            .dynamicTypeSize(...DynamicTypeSize.large)
             .foregroundStyle(Color.frTextSecondary)
         }
         .accessibilityHidden(true)
@@ -593,7 +640,7 @@ private struct FranchiseChart: View {
             AxisMarks(values: [0, 50, 100]) { value in
                 AxisGridLine().foregroundStyle(Color.frSeparator)
                 AxisValueLabel {
-                    if let number = value.as(Int.self) { Text("\(number)%").frFont(.caption) }
+                    if let number = value.as(Double.self) { Text("\(Int(number))%").frFont(.caption) }
                 }
             }
         }

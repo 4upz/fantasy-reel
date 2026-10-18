@@ -12,26 +12,38 @@ struct MovieSearchView: View {
     var initialQuery = ""
 
     @Environment(AppEnvironment.self) private var environment
+    @State private var model: MovieSearchModel?
 
     var body: some View {
-        MovieSearchScreen(movies: environment.movies, isSearchTabRoot: isSearchTabRoot, initialQuery: initialQuery)
+        Group {
+            if let model {
+                MovieSearchScreen(model: model, isSearchTabRoot: isSearchTabRoot)
+            } else {
+                Color.frBackground.ignoresSafeArea()
+            }
+        }
+        .onAppear {
+            if model == nil {
+                let created = MovieSearchModel(movies: environment.movies)
+                created.filter.query = initialQuery
+                model = created
+            }
+        }
     }
 }
 
 private struct MovieSearchScreen: View {
     let isSearchTabRoot: Bool
 
-    @State private var model: MovieSearchModel
+    let model: MovieSearchModel
     @Environment(\.leagueSelection) private var selection
     @Environment(WishlistStore.self) private var wishlist
     @Environment(MovieSearchHistory.self) private var history
     @Environment(LeagueResearchStore.self) private var research
 
-    init(movies: any MovieRepository, isSearchTabRoot: Bool, initialQuery: String) {
+    init(model: MovieSearchModel, isSearchTabRoot: Bool) {
+        self.model = model
         self.isSearchTabRoot = isSearchTabRoot
-        let model = MovieSearchModel(movies: movies)
-        model.filter.query = initialQuery
-        _model = State(initialValue: model)
     }
 
     var body: some View {
@@ -119,7 +131,6 @@ private struct MovieSearchScreen: View {
                     status: status(of: movie.tmdbID),
                     candidate: WishlistCandidate(movie)
                 )
-                .simultaneousGesture(TapGesture().onEnded { history.record(model.filter.query) })
                 .onAppear {
                     if movie.id == model.results.last?.id { Task { await model.loadMore() } }
                 }
@@ -235,7 +246,7 @@ private struct SearchIdleContent: View {
             }
         }
         .task {
-            if case .idle = wishlist.state { await wishlist.load() }
+            await wishlist.loadIfNeeded()
         }
     }
 }
@@ -288,7 +299,9 @@ struct WishlistCarousel: View {
         ScrollView(.horizontal) {
             LazyHStack(alignment: .top, spacing: 12) {
                 ForEach(movies) { movie in
-                    PosterCard(title: movie.title, posterURL: movie.posterURL, candidate: WishlistCandidate(movie))
+                    // Every card here is saved; a bookmark on each would only
+                    // invite an accidental removal.
+                    PosterCard(title: movie.title, posterURL: movie.posterURL, candidate: WishlistCandidate(movie), showsBookmark: false)
                 }
             }
             .padding(.horizontal, FRMetrics.pageMargin)
@@ -305,6 +318,7 @@ struct PosterCard: View {
     let posterURL: String?
     var subtitle: String?
     let candidate: WishlistCandidate
+    var showsBookmark = true
 
     var body: some View {
         LeagueLink(route: .movie(candidate.tmdbID)) {
@@ -327,7 +341,9 @@ struct PosterCard: View {
         }
         .buttonStyle(.plain)
         .overlay(alignment: .topTrailing) {
-            WishlistToggleButton(candidate: candidate, style: .overlay)
+            if showsBookmark {
+                WishlistToggleButton(candidate: candidate, style: .overlay)
+            }
         }
     }
 }

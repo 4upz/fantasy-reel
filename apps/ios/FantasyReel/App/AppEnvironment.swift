@@ -37,6 +37,7 @@ final class AppEnvironment {
     let movies: any MovieRepository
     let wishlists: any WishlistRepository
     let leagueMovies: any LeagueMovieRepository
+    let draft: any DraftRepository
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -56,7 +57,8 @@ final class AppEnvironment {
         trades: (any TradeRepository)? = nil,
         movies: (any MovieRepository)? = nil,
         wishlists: (any WishlistRepository)? = nil,
-        leagueMovies: (any LeagueMovieRepository)? = nil
+        leagueMovies: (any LeagueMovieRepository)? = nil,
+        draft: (any DraftRepository)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
@@ -80,6 +82,7 @@ final class AppEnvironment {
         self.movies = movies ?? EdgeMovieRepository(functions: edgeFunctions)
         self.wishlists = wishlists ?? SupabaseWishlistRepository(provider: supabase)
         self.leagueMovies = leagueMovies ?? SupabaseLeagueMovieRepository(provider: supabase)
+        self.draft = draft ?? SupabaseDraftRepository(provider: supabase, functions: edgeFunctions)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -108,7 +111,8 @@ extension AppEnvironment {
         trades: any TradeRepository = InMemoryTradeRepository(),
         movies: any MovieRepository = InMemoryMovieRepository(),
         wishlists: any WishlistRepository = InMemoryWishlistRepository(),
-        leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository()
+        leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository(),
+        draft: any DraftRepository = InMemoryDraftRepository()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -133,7 +137,8 @@ extension AppEnvironment {
             trades: trades,
             movies: movies,
             wishlists: wishlists,
-            leagueMovies: leagueMovies
+            leagueMovies: leagueMovies,
+            draft: draft
         )
     }
 }
