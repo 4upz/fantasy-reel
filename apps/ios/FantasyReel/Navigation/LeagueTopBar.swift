@@ -27,17 +27,6 @@ extension View {
     func leagueTopBar(primaryAction: LeagueTopBarAction? = nil) -> some View {
         modifier(LeagueTopBarModifier(primaryAction: primaryAction))
     }
-
-    /// Adds the top bar's "+" from inside a tab root, e.g.
-    /// `.leagueTopBarPrimaryAction(.init(accessibilityLabel: "Place bid") { … })`.
-    ///
-    /// Prefer `LeagueTabStack.primaryAction` on a tab root: on iOS 26 a toolbar
-    /// added from inside the root lands after `⋯`, in the same glass group.
-    func leagueTopBarPrimaryAction(_ action: LeagueTopBarAction) -> some View {
-        toolbar {
-            LeagueTopBarPrimaryItems(action: action)
-        }
-    }
 }
 
 /// The "+" button and the fixed spacer that separates it from the bell.
@@ -88,7 +77,7 @@ private struct LeagueTopBarModifier: ViewModifier {
                 if selection?.showsSearchTab == false {
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
-                            router.push(.movieSearch)
+                            router.pushMovieSearch()
                         } label: {
                             Image(systemName: "magnifyingglass")
                         }

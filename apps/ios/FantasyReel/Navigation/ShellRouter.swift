@@ -106,6 +106,16 @@ final class ShellRouter {
         selectedTab = .league(tab)
     }
 
+    /// Opens movie search on the stack on screen, unless it's already showing.
+    func pushMovieSearch() {
+        let current: [LeagueRoute] = switch selectedTab {
+        case .league(let tab): paths[tab] ?? []
+        case .search: searchPath
+        }
+        guard current.last != .movieSearch else { return }
+        push(.movieSearch)
+    }
+
     /// Pushes onto whichever stack is on screen: the selected league tab, the
     /// search tab, or the no-league screen.
     func push(_ route: LeagueRoute) {
@@ -208,7 +218,7 @@ final class ShellRouter {
                 if selection.showsSearchTab {
                     selectedTab = .search
                 } else {
-                    push(.movieSearch)
+                    pushMovieSearch()
                 }
             } else {
                 standalonePath = [.movieSearch]

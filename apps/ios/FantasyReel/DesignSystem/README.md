@@ -16,8 +16,8 @@ in the PR, since this folder is shared).
 - A glass "+" in the top bar instead of floating create buttons. On a league
   tab root, add a case to `LeagueTabStack.primaryAction`, which passes it to
   `leagueTopBar(primaryAction:)` so it gets its own glass button before the
-  bell. A toolbar added from inside the root (`.leagueTopBarPrimaryAction`)
-  merges into the `⋯` group on iOS 26 instead.
+  bell. A toolbar added from inside the root merges into the `⋯` group on
+  iOS 26 instead.
 - Points are whole numbers with a sign: "+28", "−4" (U+2212), "0"; "Pending"
   when unscored; muted with "at release" before release.
 - One sheet per multi-step task (pushes inside the sheet, never sheet on sheet).

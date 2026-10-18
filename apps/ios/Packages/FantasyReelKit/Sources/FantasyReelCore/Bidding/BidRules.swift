@@ -63,6 +63,13 @@ public enum BidTiming {
         return "\(hours)h \(minutes)m"
     }
 
+    /// "2d 4h to counter", or "Processing soon" once the window has closed.
+    public static func counterTimeLeft(until deadline: Date?, now: Date = Date()) -> String {
+        let remaining = timeRemaining(until: deadline, now: now)
+        guard let deadline, deadline > now else { return remaining }
+        return "\(remaining) to counter"
+    }
+
     /// The latest still-open counter-response window among a contest's bids.
     /// While one is open, processing holds the whole contest past Saturday.
     public static func latestOpenCounterWindow(_ deadlines: [Date?], now: Date = Date()) -> Date? {

@@ -100,3 +100,12 @@ struct BidRuleTests {
         #expect(BidAmountRule.initialAmount(highBid: nil) == 0)
     }
 }
+
+struct BidTimingTests {
+    @Test func theCounterCountdownDropsItsSuffixOnceTheWindowCloses() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(BidTiming.counterTimeLeft(until: now.addingTimeInterval(2 * 3600 + 5 * 60), now: now) == "2h 5m to counter")
+        #expect(BidTiming.counterTimeLeft(until: now.addingTimeInterval(-60), now: now) == "Processing soon")
+        #expect(BidTiming.counterTimeLeft(until: nil, now: now) == "Processing soon")
+    }
+}
