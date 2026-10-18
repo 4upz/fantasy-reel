@@ -69,8 +69,8 @@ export interface Candidate {
 }
 
 /**
- * The tour a page should start by itself, if any: the applicable one with the
- * highest priority (earliest mounted on a tie) that may auto-start.
+ * The tour a page should start by itself, if any: the earliest mounted one
+ * that applies and may auto-start.
  */
 export function pickAutoStart(
   candidates: Candidate[],
@@ -82,7 +82,7 @@ export function pickAutoStart(
       .filter((candidate) => applicableSteps(candidate.tour, candidate.ctx).length > 0)
       .filter((candidate) => candidate.tour.autoStart?.(candidate.ctx) ?? true)
       .filter((candidate) => mayAutoStart(states.get(candidate.tour.id), candidate.tour, now))
-      .sort((a, b) => (b.tour.priority ?? 0) - (a.tour.priority ?? 0) || a.order - b.order)[0] ?? null
+      .sort((a, b) => a.order - b.order)[0] ?? null
   )
 }
 

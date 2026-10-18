@@ -109,11 +109,11 @@ test('tours are on unless turned off', () => {
 // ---- Choosing a tour ----------------------------------------------------
 
 const ownerOnly = {
-  id: 'owner-only', version: 1, priority: 0, when: (ctx) => ctx.isOwner === true,
+  id: 'owner-only', version: 1, when: (ctx) => ctx.isOwner === true,
   steps: [{ title: 'A' }, { title: 'B', when: (ctx) => ctx.leagueStatus === 'setup' }],
 }
 const everyone = { id: 'everyone', version: 1, steps: [{ title: 'A' }] }
-const urgent = { id: 'urgent', version: 1, priority: 10, steps: [{ title: 'A' }] }
+const later = { id: 'later', version: 1, steps: [{ title: 'A' }] }
 
 test('when rules decide which tours and steps apply', () => {
   assert.equal(engine.applicableSteps(ownerOnly, { isOwner: false }).length, 0)
@@ -121,16 +121,16 @@ test('when rules decide which tours and steps apply', () => {
   assert.equal(engine.applicableSteps(ownerOnly, { isOwner: true, leagueStatus: 'setup' }).length, 2)
 })
 
-test('the page starts the highest-priority applicable tour that has not been seen', () => {
+test('the page starts the first-mounted applicable tour that has not been seen', () => {
   const candidates = [
+    { tour: later, ctx: {}, order: 2 },
     { tour: ownerOnly, ctx: { isOwner: false }, order: 0 },
     { tour: everyone, ctx: {}, order: 1 },
-    { tour: urgent, ctx: {}, order: 2 },
   ]
-  assert.equal(engine.pickAutoStart(candidates, new Map(), now).tour.id, 'urgent')
-  const seen = new Map([['urgent', { v: 1, status: 'completed' }]])
-  assert.equal(engine.pickAutoStart(candidates, seen, now).tour.id, 'everyone', 'owner-only does not apply to a member')
-  seen.set('everyone', { v: 1, status: 'dismissed' })
+  assert.equal(engine.pickAutoStart(candidates, new Map(), now).tour.id, 'everyone', 'owner-only does not apply to a member')
+  const seen = new Map([['everyone', { v: 1, status: 'completed' }]])
+  assert.equal(engine.pickAutoStart(candidates, seen, now).tour.id, 'later')
+  seen.set('later', { v: 1, status: 'dismissed' })
   assert.equal(engine.pickAutoStart(candidates, seen, now), null)
 })
 
