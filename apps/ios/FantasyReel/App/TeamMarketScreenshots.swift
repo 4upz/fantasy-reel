@@ -233,8 +233,8 @@ final class TeamMarketFixture {
     /// Projected scores (Beta) for the movies still to come: holdings, bids.
     private static var projections: MovieProjectionsResponse {
         let ranges: [(TMDbID, ClosedRange<Double>)] = [
-            (1003, 70...84), (1004, 30...52), (1006, 33...51), (1008, 74...87), (1009, 52...70),
-            (1010, 85...94), (1012, 56...72), (1013, 80...92), (1014, 72...88), (1015, 77...89),
+            (1003, 73...81), (1004, 36...44), (1006, 37...45), (1008, 77...85), (1009, 52...70),
+            (1010, 85...93), (1012, 60...68), (1013, 81...89), (1014, 76...84), (1015, 79...87),
         ]
         return ProjectionPreviewData.response(ranges.map { tmdbID, range in
             ProjectionPreviewData.projection(tmdbID, range50: range, lowConfidence: tmdbID == 1009)

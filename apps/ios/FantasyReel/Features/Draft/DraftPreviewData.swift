@@ -121,8 +121,8 @@ enum DraftPreviewData {
     /// Projected scores (Beta) for every title, for the projected variants.
     static var projections: MovieProjectionsResponse {
         let ranges: [ClosedRange<Double>] = [
-            70...84, 82...93, 74...88, 58...74, 55...71, 60...79, 38...57,
-            66...80, 45...68, 34...52, 49...66, 81...92, 72...86, 28...47,
+            74...82, 84...92, 76...84, 62...70, 59...67, 66...74, 38...57,
+            69...77, 45...68, 38...46, 54...62, 83...91, 75...83, 31...39,
         ]
         return ProjectionPreviewData.response(titles.indices.map { index in
             ProjectionPreviewData.projection(
