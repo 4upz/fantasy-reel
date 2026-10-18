@@ -32,6 +32,12 @@ enum MenuRoute: Hashable {
     case wishlist
     case account
     case howToPlay
+    /// Account's focused edit screens (F-03, F-02) and Delete Account (L-02).
+    case editDisplayName
+    case changePassword
+    case deleteAccount
+    /// The Discord bot setup guide, from Account (F-17).
+    case discordBot
     /// App administrators only (F-18); linked from Account.
     case growthDashboard
     /// A league-mate's shared wishlist (F-07).
@@ -212,6 +218,8 @@ final class ShellRouter {
             present(.joinLeague(.invitation(token: token)))
         case .league(let id, let section):
             guard directory.select(id) else {
+                // The alert hangs off the root, under any sheet.
+                if !sheetHasUnsavedInput { sheet = nil }
                 unavailableLinkMessage = "That league isn't available on this account. You may need an invitation, or it may have been deleted."
                 return
             }
@@ -272,5 +280,24 @@ final class ShellRouter {
         case .settings: select(defaultTab); push(.settings)
         case .rules: select(defaultTab); push(.rules)
         }
+    }
+}
+
+extension View {
+    /// Tells the router a form in the sheet has input, so a notification tap
+    /// or link doesn't replace the screen and lose it. Cleared on leaving.
+    func reportsUnsavedInput(_ hasInput: Bool) -> some View {
+        modifier(UnsavedInputReporter(hasInput: hasInput))
+    }
+}
+
+private struct UnsavedInputReporter: ViewModifier {
+    let hasInput: Bool
+    @Environment(ShellRouter.self) private var router
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: hasInput, initial: true) { _, hasInput in router.sheetHasUnsavedInput = hasInput }
+            .onDisappear { router.sheetHasUnsavedInput = false }
     }
 }

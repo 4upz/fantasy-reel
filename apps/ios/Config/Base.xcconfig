@@ -20,6 +20,7 @@ FR_SITE_URL = https:/$()/fantasyreel.com
 CODE_SIGN_ENTITLEMENTS = Config/FantasyReel.entitlements
 
 // The public Discord application (client) ID used to build the bot's "Add to
-// Discord" link in league settings (the web's NEXT_PUBLIC_DISCORD_CLIENT_ID).
+// Discord" link in league settings and the bot guide (the web's
+// NEXT_PUBLIC_DISCORD_CLIENT_ID).
 // Empty hides the button, as on the web.
 FR_DISCORD_CLIENT_ID =

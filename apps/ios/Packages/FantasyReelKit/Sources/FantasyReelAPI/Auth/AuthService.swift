@@ -46,8 +46,8 @@ public struct AuthService: Sendable {
         case updated(Account)
     }
 
-    private let provider: SupabaseProvider
-    private var auth: AuthClient { provider.client.auth }
+    let provider: SupabaseProvider
+    var auth: AuthClient { provider.client.auth }
 
     public init(provider: SupabaseProvider) {
         self.provider = provider

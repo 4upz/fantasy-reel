@@ -31,8 +31,23 @@ final class SessionStore {
     /// Sign in with Apple just created a new account behind Hide My Email; the
     /// person may already play under another sign-in method (L-01).
     var showsAppleRelayNotice = false
+    /// Set when the person signs out to sign in again before deleting their
+    /// account (L-02): the next sign-in to that same account opens Account.
+    /// Survives the sign-out, unlike `pendingDeepLink`; holds the user ID so
+    /// someone else signing in on the device isn't sent there.
+    var opensAccountAfterSignIn: UserID?
+    /// A How to Play link opened while signed out; the sign-in screens show
+    /// the guide over whatever form is open.
+    var publicHelpRequest: UUID?
+    #if DEBUG
+    /// Screenshots and previews: returned by `signInMethods()` instead of
+    /// asking the server.
+    var previewSignInMethods: SignInMethods?
+    #endif
 
-    private let auth: AuthService
+    /// Account screens reach the account-level auth calls (linking, password
+    /// change) through `SessionStore+Account.swift`.
+    let auth: AuthService
     private var listener: Task<Void, Never>?
     /// Sign-ins that decide more than "signed in" (Apple's relay notice, a
     /// reset link) run with the listener's sign-in events held, so the app
@@ -93,6 +108,10 @@ final class SessionStore {
         if authLinkNotice != nil { authLinkNotice = nil }
         // Avoid rebuilding the signed-in tree on a token refresh for the same user.
         if self.account != account {
+            if let returning = opensAccountAfterSignIn {
+                opensAccountAfterSignIn = nil
+                if returning == account.id, pendingDeepLink == nil { pendingDeepLink = .settings }
+            }
             state = .signedIn(account)
         }
     }

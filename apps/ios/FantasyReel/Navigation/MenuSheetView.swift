@@ -19,6 +19,10 @@ struct MenuSheetView: View {
                     case .wishlist: WishlistView()
                     case .account: AccountView()
                     case .howToPlay: HowToPlayView()
+                    case .editDisplayName: EditDisplayNameView()
+                    case .changePassword: ChangePasswordView()
+                    case .deleteAccount: DeleteAccountView()
+                    case .discordBot: DiscordBotGuideScreen()
                     case .growthDashboard: GrowthDashboardView()
                     case .sharedWishlist(let owner): SharedWishlistView(owner: owner)
                     case .league(let route):

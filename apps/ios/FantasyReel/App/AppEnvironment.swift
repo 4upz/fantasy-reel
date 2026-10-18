@@ -25,6 +25,9 @@ final class AppEnvironment {
     let admin: any AdminRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
+    let account: any AccountRepository
+    /// Profile and team photo uploads (shared by Account and team editing).
+    let avatarStorage: any AvatarStorage
     /// Teams, rosters, standings and drops (F-10, F-11, F-14).
     let teams: any TeamRepository
     /// Pickup and counterpick bidding (F-12).
@@ -47,6 +50,8 @@ final class AppEnvironment {
         admin: (any AdminRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
         notifications: (any NotificationRepository)? = nil,
+        account: (any AccountRepository)? = nil,
+        avatarStorage: (any AvatarStorage)? = nil,
         teams: (any TeamRepository)? = nil,
         bids: (any BidRepository)? = nil,
         trades: (any TradeRepository)? = nil,
@@ -69,6 +74,8 @@ final class AppEnvironment {
         self.admin = admin ?? SupabaseAdminRepository(provider: supabase)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
+        self.account = account ?? SupabaseAccountRepository(provider: supabase, edgeFunctions: edgeFunctions)
+        self.avatarStorage = avatarStorage ?? SupabaseAvatarStorage(provider: supabase)
         self.teams = teams ?? SupabaseTeamRepository(provider: supabase, functions: edgeFunctions)
         self.bids = bids ?? SupabaseBidRepository(provider: supabase, functions: edgeFunctions)
         self.trades = trades ?? EdgeTradeRepository(functions: edgeFunctions)
@@ -97,6 +104,8 @@ extension AppEnvironment {
         admin: any AdminRepository = InMemoryAdminRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
         notifications: any NotificationRepository = InMemoryNotificationRepository(),
+        account: any AccountRepository = InMemoryAccountRepository(),
+        avatarStorage: any AvatarStorage = InMemoryAvatarStorage(),
         teams: any TeamRepository = InMemoryTeamRepository(),
         bids: any BidRepository = InMemoryBidRepository(),
         trades: any TradeRepository = InMemoryTradeRepository(),
@@ -110,7 +119,9 @@ extension AppEnvironment {
                 supabaseURL: URL(string: "http://127.0.0.1:1")!,
                 supabaseAnonKey: "preview",
                 siteURL: URL(string: "https://fantasyreel.com")!,
-                urlScheme: "fantasyreel"
+                urlScheme: "fantasyreel",
+                // Shows the Discord guide's Add to Discord button; never opened.
+                discordClientID: "preview"
             ),
             leagues: leagues,
             leagueLifecycle: leagueLifecycle,
@@ -119,6 +130,8 @@ extension AppEnvironment {
             admin: admin,
             profiles: profiles,
             notifications: notifications,
+            account: account,
+            avatarStorage: avatarStorage,
             teams: teams,
             bids: bids,
             trades: trades,
