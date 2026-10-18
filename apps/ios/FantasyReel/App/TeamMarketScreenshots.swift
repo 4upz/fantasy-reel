@@ -54,6 +54,10 @@ struct TeamMarketScreenshotView: View {
         case .teamProjection: NavigationStack { TeamProjectionView(teamID: TeamMarketFixture.team("alice")) }
         case .placeBidProjected: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1013, title: "Toy Story 5", releaseDate: DateOnly("2026-11-19")))) }
         case .tradeComposerProjected: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("bob"))) }
+        case .tradeComposerProjectedLargeText:
+            // The narrowest row a chip sits in, at an accessibility text size.
+            NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("bob"))) }
+                .dynamicTypeSize(.accessibility3)
         case .placeBid: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23")))) }
         case .tradeComposer: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("dave"))) }
         case .dropMovie: NavigationStack { DropMovieView(holdingID: "h-1006") }
@@ -68,6 +72,7 @@ final class TeamMarketFixture {
     static func team(_ user: String) -> TeamID { TeamID("t-\(user)") }
     static let projectedScenes: Set<ScreenshotScene> = [
         .rosterProjected, .standingsProjected, .teamProjection, .placeBidProjected, .tradeComposerProjected,
+        .tradeComposerProjectedLargeText,
     ]
 
     let environment: AppEnvironment

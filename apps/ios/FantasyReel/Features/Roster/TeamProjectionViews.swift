@@ -60,7 +60,7 @@ struct ProjectedFinishCard: View {
                     .foregroundStyle(Color.frTextSecondary)
             }
             .padding(.top, 4)
-            Text("of \(count) · \(team.remaining) still to count · rank uses real points only")
+            Text("of \(count) · \(team.remaining) still to count · official rank uses real points only")
                 .frFont(.meta)
                 .foregroundStyle(Color.frTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -70,7 +70,7 @@ struct ProjectedFinishCard: View {
         .accessibilityLabel(
             "Projected finish, Beta: \(ProjectedStandings.spokenPosition(team)) of \(count), "
                 + "about \(FantasyPoints.whole(team.projected)) points. "
-                + "\(team.remaining) still to count. Rank uses real points only."
+                + "\(team.remaining) still to count. Official rank uses real points only."
         )
     }
 }

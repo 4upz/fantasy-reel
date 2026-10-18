@@ -27,11 +27,19 @@ struct ProjectionChip: View {
     let projection: MovieProjection
     var size: Size = .small
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         let state = ProjectionText.chipState(projection)
         let small = size == .small
         let tone = Self.color(ProjectionText.tone(projection, state: state))
-        HStack(spacing: small ? 4 : 5) {
+        // At accessibility sizes the chip is wider than a row's text column:
+        // stack its parts and let them wrap rather than run off the edge.
+        let stacked = dynamicTypeSize.isAccessibilitySize
+        let layout = stacked
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+            : AnyLayout(HStackLayout(spacing: small ? 4 : 5))
+        layout {
             if !small {
                 ProjectedTomato(early: state.isEarly)
                     .frame(width: 14, height: 14)
@@ -46,15 +54,16 @@ struct ProjectionChip: View {
             }
             BetaBadge(compact: small)
         }
-        .lineLimit(1)
+        .lineLimit(stacked ? nil : 1)
         .padding(.leading, 6)
         .padding(.trailing, small ? 3 : 4)
+        .padding(.vertical, stacked ? 4 : 0)
         .frame(minHeight: small ? 20 : 24)
         .overlay {
             RoundedRectangle(cornerRadius: small ? 7 : 8, style: .continuous)
                 .strokeBorder(tone.opacity(Self.borderOpacity(state)), style: StrokeStyle(lineWidth: 1, dash: [3, 2]))
         }
-        .fixedSize()
+        .fixedSize(horizontal: !stacked, vertical: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.spokenLabel(projection))
     }

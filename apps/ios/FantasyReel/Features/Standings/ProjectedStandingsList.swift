@@ -12,7 +12,7 @@ struct ProjectedStandingsList: View {
 
     var body: some View {
         let toRelease = ProjectedStandings.moviesToRelease(standings)
-        Text("If every unreleased movie lands at its most likely score. \(toRelease) \(toRelease == 1 ? "movie" : "movies") still to release. Tap a team to see how it adds up.")
+        Text("If every unreleased movie lands at its most likely score. \(toRelease) \(toRelease == 1 ? "movie" : "movies") still to release, counting a counterpicked movie once. Tap a team to see how it adds up.")
             .frFont(.caption)
             .foregroundStyle(Color.frTextSecondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -75,7 +75,6 @@ private struct ProjectedStandingRow: View {
                     Text(FantasyPoints.whole(team.projected))
                         .frFont(.number)
                         .foregroundStyle(Color.frText)
-                        .underline(pattern: .dot, color: .frTextMuted)
                     if team.tossUp {
                         Text("Toss-up")
                             .frFont(.captionStrong)

@@ -56,6 +56,7 @@ enum ScreenshotScene: String, CaseIterable {
     case teamProjection
     case placeBidProjected
     case tradeComposerProjected
+    case tradeComposerProjectedLargeText
     case noLeaguesWithInvitation
     case createLeague
     case joinLeague
@@ -106,6 +107,7 @@ struct ScreenshotSceneView: View {
     private static let teamMarketScenes: Set<ScreenshotScene> = [
         .leagueHome, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie,
         .rosterProjected, .standingsProjected, .teamProjection, .placeBidProjected, .tradeComposerProjected,
+        .tradeComposerProjectedLargeText,
     ]
 
     private static let leagueLifecycleScenes: Set<ScreenshotScene> = [
