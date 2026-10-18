@@ -142,7 +142,8 @@ export class ApnsTokenSigner {
   }
 }
 
-export type PushOutcome = 'sent' | 'retry' | 'failed' | 'unregistered'
+/** `unsent`: the run ran out of time before trying it (see `finish_push_notifications`). */
+export type PushOutcome = 'sent' | 'retry' | 'failed' | 'unregistered' | 'unsent'
 
 /**
  * Turns an APNs response into an outbox outcome. A dead token (410, or a
@@ -168,10 +169,13 @@ export interface SendResult {
   error?: string
 }
 
+const SEND_TIMEOUT_MS = 10_000
+
 export async function sendToApns(
   push: ClaimedPush,
   signer: ApnsTokenSigner,
   fetchImpl: typeof fetch = fetch,
+  timeoutMs = SEND_TIMEOUT_MS,
 ): Promise<SendResult> {
   const level = interruptionLevel(push.type)
   let response: Response
@@ -193,7 +197,7 @@ export async function sendToApns(
         },
         body: JSON.stringify(buildPayload(push)),
       },
-      10_000,
+      timeoutMs,
       fetchImpl,
     )
   } catch (error) {
@@ -227,6 +231,8 @@ export interface PushRunSummary {
 }
 
 const BATCH_SIZE = 200
+/** Below the cron proxy's 55 s abort, and well inside the claim's 2-minute lease. */
+const RUN_DEADLINE_MS = 40_000
 /** `finish_push_notifications` fails a retry after this many attempts. */
 const MAX_ATTEMPTS = 5
 const CONCURRENCY = 20
@@ -248,13 +254,13 @@ export async function sendPushNotifications(
   credentials: ApnsCredentials | null,
   options: { fetchImpl?: typeof fetch; deadlineMs?: number; signer?: ApnsTokenSigner } = {},
 ): Promise<PushRunSummary> {
-  const summary: PushRunSummary = { processed: 0, failed: 0, errors: [], metadata: { sent: 0, unregistered: 0, retried: 0 } }
+  const summary: PushRunSummary = { processed: 0, failed: 0, errors: [], metadata: { sent: 0, unregistered: 0, retried: 0, unsent: 0 } }
   if (!credentials) {
     summary.metadata.skipped = 'apns_not_configured'
     return summary
   }
   const signer = options.signer ?? new ApnsTokenSigner(credentials)
-  const deadline = Date.now() + (options.deadlineMs ?? 40_000)
+  const deadline = Date.now() + (options.deadlineMs ?? RUN_DEADLINE_MS)
   const counts = summary.metadata as Record<string, number>
 
   while (Date.now() < deadline) {
@@ -263,9 +269,14 @@ export async function sendPushNotifications(
     const pushes = (data ?? []) as ClaimedPush[]
     if (pushes.length === 0) break
 
-    const results = await mapConcurrent(pushes, CONCURRENCY, async (push) => {
+    // A claimed batch must finish inside the deadline too, or a stalled APNs
+    // connection would outlast the lease and the next run would send these
+    // again. Whatever isn't started in time goes back unspent.
+    const results = await mapConcurrent(pushes, CONCURRENCY, async (push): Promise<SendResult> => {
+      const remaining = deadline - Date.now()
+      if (remaining <= 0) return { outcome: 'unsent' }
       try {
-        return await sendToApns(push, signer, options.fetchImpl)
+        return await sendToApns(push, signer, options.fetchImpl, Math.min(SEND_TIMEOUT_MS, remaining))
       } catch (error) {
         log.error('Push send failed', { outbox_id: push.id, error: serializeError(error) })
         return { outcome: 'retry', error: 'send failed' } as SendResult
@@ -284,6 +295,10 @@ export async function sendPushNotifications(
 
     pushes.forEach((push, i) => {
       const { outcome, error } = results[i]
+      if (outcome === 'unsent') {
+        counts.unsent++
+        return
+      }
       summary.processed++
       if (outcome === 'sent') counts.sent++
       else if (outcome === 'unregistered') counts.unregistered++

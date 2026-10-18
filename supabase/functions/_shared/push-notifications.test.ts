@@ -154,5 +154,27 @@ Deno.test('a run sends, drops dead tokens, and retries without failing the run',
   assertEquals(finished[0][0].lease_token, sent.lease_token)
   assertEquals(summary.processed, 4)
   assertEquals(summary.failed, 1, 'only the push on its last attempt counts as failed')
-  assertEquals(summary.metadata, { sent: 1, unregistered: 1, retried: 1 })
+  assertEquals(summary.metadata, { sent: 1, unregistered: 1, retried: 1, unsent: 0 })
+})
+
+Deno.test('a stalled APNs connection never outlasts the run deadline', async () => {
+  const { credentials } = await testCredentials()
+  // One more than the concurrency, so the last push starts after the deadline.
+  const pushes = Array.from({ length: 21 }, (_, i) => push({ token: i.toString(16).padStart(2, '0').repeat(32) }))
+  const fetchImpl = ((_input: string | URL | Request, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+    })) as typeof fetch
+
+  const { client, finished } = stubClient([pushes])
+  const started = Date.now()
+  const summary = await sendPushNotifications(client, credentials, { fetchImpl, deadlineMs: 200 })
+
+  assert(Date.now() - started < 2_000, 'each send is cut off at the deadline, not its own 10 s timeout')
+  const outcomes = finished[0].map((r) => r.outcome)
+  assertEquals(outcomes.filter((o) => o === 'retry').length, 20)
+  assertEquals(outcomes.filter((o) => o === 'unsent').length, 1, 'the push never tried goes back unspent')
+  assertEquals(summary.processed, 20)
+  assertEquals(summary.metadata.unsent, 1)
+  assertEquals(summary.failed, 0)
 })

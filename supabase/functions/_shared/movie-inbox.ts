@@ -197,15 +197,19 @@ async function loadStakes(client: SupabaseClient, leagueIds: string[], movieIds:
     return stake
   }
 
-  for (const ids of chunks(movieIds, ID_BATCH)) {
+  // Both id lists go in the URL, so each is chunked.
+  const pairs = chunks(leagueIds, ID_BATCH / 2).flatMap((leagues) =>
+    chunks(movieIds, ID_BATCH / 2).map((movies) => [leagues, movies] as const)
+  )
+  for (const [leagues, ids] of pairs) {
     const [holdings, counterpicks] = await Promise.all([
       client.from('team_holdings').select('league_id, movie_id, team_id, team_name')
-        .in('league_id', leagueIds).in('movie_id', ids),
+        .in('league_id', leagues).in('movie_id', ids),
       // A counterpick survives its movie being dropped, so it is read from
       // its own table rather than through the holding.
       client.from('counterpicks')
         .select('league_id, movie_id, counterpicker_team_id, teams!counterpicks_counterpicker_team_id_fkey(name)')
-        .in('league_id', leagueIds).in('movie_id', ids),
+        .in('league_id', leagues).in('movie_id', ids),
     ])
     if (holdings.error) throw holdings.error
     if (counterpicks.error) throw counterpicks.error
