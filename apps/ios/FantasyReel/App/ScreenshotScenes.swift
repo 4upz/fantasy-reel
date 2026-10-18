@@ -330,7 +330,6 @@ private enum ScreenshotFixtures {
         ]
     }
 }
-#endif
 
 // MARK: - Signed in
 
