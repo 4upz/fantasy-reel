@@ -18,4 +18,9 @@ struct LeagueLifecycleTests {
         let forbidden = APIError.server(.init(status: 403, message: "Only the league commissioner can start the next season"))
         #expect(EdgeLeagueLifecycleRepository.existingSeason(in: forbidden) == nil)
     }
+
+    @Test func conflictWithoutSeasonStaysAnError() {
+        let conflict = APIError.server(.init(status: 409, message: "Conflict", body: ["error": "Conflict"]))
+        #expect(EdgeLeagueLifecycleRepository.existingSeason(in: conflict) == nil)
+    }
 }

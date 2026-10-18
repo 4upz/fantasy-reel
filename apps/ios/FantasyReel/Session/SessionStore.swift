@@ -233,6 +233,17 @@ final class SessionStore {
     }
 }
 
+#if DEBUG
+extension SessionStore {
+    /// Screenshot scenes only (`ScreenshotScenes.swift`): shows the signed-in
+    /// app for `account` without a stored session or a network call. A store
+    /// signed in this way must never be `start()`ed.
+    func previewSignIn(_ account: AuthService.Account) {
+        setSignedIn(account)
+    }
+}
+#endif
+
 /// A signed-out notice about an auth link. Recovery notices open on the reset
 /// screen, where the person can send a fresh link; the rest on Log In.
 struct AuthLinkNotice: Equatable, Identifiable {

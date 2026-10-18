@@ -204,6 +204,7 @@ public struct TradeSettings: Sendable, Hashable {
 /// also enforces the phase each one is allowed in.
 public enum LeagueUpdate: Sendable, Hashable {
     /// Series name (renames every season) and/or this season's invite-only.
+    /// Set at least one: the server refuses an update with neither.
     case info(name: String? = nil, inviteOnly: Bool? = nil)
     /// Setup only. 2–20 and not below the active count.
     case participantLimit(Int)

@@ -19,13 +19,25 @@ public struct AppConfiguration: Sendable, Equatable {
     /// is right for local Supabase (CAPTCHA off there) and wrong for production
     /// (N-03), so Release refuses to launch with the placeholder.
     public let turnstileSiteKey: String?
+    /// The Fantasy Reel bot's public Discord application ID, the web's
+    /// `NEXT_PUBLIC_DISCORD_CLIENT_ID` (Info.plist `FRDiscordClientID`). Nil
+    /// hides the "Add to Discord" install button; the bot guide still shows.
+    public let discordClientID: String?
 
-    public init(supabaseURL: URL, supabaseAnonKey: String, siteURL: URL, urlScheme: String, turnstileSiteKey: String? = nil) {
+    public init(
+        supabaseURL: URL,
+        supabaseAnonKey: String,
+        siteURL: URL,
+        urlScheme: String,
+        turnstileSiteKey: String? = nil,
+        discordClientID: String? = nil
+    ) {
         self.supabaseURL = supabaseURL
         self.supabaseAnonKey = supabaseAnonKey
         self.siteURL = siteURL
         self.urlScheme = urlScheme
         self.turnstileSiteKey = turnstileSiteKey
+        self.discordClientID = discordClientID
     }
 
     /// Where Supabase sends OAuth and email-link results: `fantasyreel://auth/callback`.
@@ -115,7 +127,8 @@ public struct AppConfiguration: Sendable, Equatable {
             supabaseAnonKey: try string("FRSupabaseAnonKey"),
             siteURL: try url("FRSiteURL"),
             urlScheme: try string("FRURLScheme"),
-            turnstileSiteKey: try optionalString("FRTurnstileSiteKey")
+            turnstileSiteKey: try optionalString("FRTurnstileSiteKey"),
+            discordClientID: try optionalString("FRDiscordClientID")
         )
     }
 
