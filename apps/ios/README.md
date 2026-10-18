@@ -111,7 +111,7 @@ environment variable to a case name in the scheme's Run options.
 ## Not yet done (tracked for feature work)
 
 - Every feature screen beyond sign-in and the shell (see the folder table in
-  league lifecycle contract (`GrowthDashboardRow`) is on main.
+  ARCHITECTURE.md for which thread owns which).
 - TMDb attribution ("This product uses the TMDb API but is not endorsed or
   certified by TMDb.", with TMDb's logo) goes on the screens that show movie
   data, as the web does; the sign-in screens show none.

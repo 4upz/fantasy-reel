@@ -197,10 +197,11 @@ struct HowToPlayView: View {
             GuideCard(title: "Fantasy Budget bidding") {
                 Paragraph("Your Fantasy Budget is your currency for pickups. Each league sets a budget amount (e.g., $100) that you can use throughout the season.", secondary: true)
                 BulletList([
-                    "Place blind bids on available movies",
-                    "Highest bid wins the movie when the bidding period closes",
+                    "Bid on available movies. If another team outbids you, you're told the new amount and get time to raise your bid",
+                    "When bidding closes, the highest bid wins if that team has a roster slot and budget left. If not, the movie goes to the next eligible bidder at their own bid",
                     "Winning bid amount is deducted from your fantasy budget",
                     "Budget doesn't reset, so spend wisely!",
+                    "Movies that already have a Tomatometer score can't be bid on or traded",
                 ])
             }
             GuideCard(title: "Dropping movies") {
@@ -226,7 +227,7 @@ struct HowToPlayView: View {
             }
             GuideCard(title: "Responding to trades") {
                 TipList([
-                    ("Accept:", "Trade executes immediately"),
+                    ("Accept:", "Trade goes through after the league's review period, or within a few minutes if the league has none"),
                     ("Reject:", "Trade is cancelled"),
                     ("Counter:", "Modify and send back"),
                 ], symbol: "arrow.right")

@@ -50,7 +50,10 @@ final class InboxStore {
             }
             notifications = latest
             loadError = nil
+            markError = nil
         } catch {
+            // Leaving the screen cancels the read; that isn't a failure.
+            if error.isCancellation { return }
             loadError = error.userMessage
         }
         hasLoaded = true

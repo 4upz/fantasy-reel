@@ -6,7 +6,7 @@ public enum DisplayName {
     public static let maxLength = 100
 
     public static let required = "Display name is required"
-    public static let tooLong = "Display names can be at most \(maxLength) characters."
+    public static let tooLong = "Display name must be \(maxLength) characters or less"
 
     public static func trimmed(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -16,7 +16,8 @@ public enum DisplayName {
     public static func problem(_ name: String) -> String? {
         let value = trimmed(name)
         if value.isEmpty { return required }
-        if value.count > maxLength { return tooLong }
+        // UTF-16 units, as the web counts, so a name saved here also saves there.
+        if value.utf16.count > maxLength { return tooLong }
         return nil
     }
 }

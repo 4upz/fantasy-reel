@@ -197,6 +197,7 @@ struct DeleteAccountView: View {
     private func submit() {
         guard isConfirmed, !delete.isRunning else { return }
         isFocused = false
+        if case .liveDraft = blocker { blocker = nil }
         delete.run {
             let appleCode: String?
             switch try await appleAuthorizationCode() {

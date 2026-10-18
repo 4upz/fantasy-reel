@@ -140,7 +140,7 @@ struct ChangePasswordView: View {
             InlineBanner(
                 tone: .info,
                 title: "No password set",
-                message: "You sign in with Apple, Google or Discord. Use forgot password to set one: we'll email a link to choose a password, and you can then sign in with your email too."
+                message: "You sign in with Apple, Google or Discord. We'll email you a link to choose a password, then you can sign in with your email too."
             )
             if linkSent {
                 InlineBanner(tone: .success, title: "Check your email", message: "A link to choose a password is on its way.", systemImage: "checkmark", iconStyle: .badge)

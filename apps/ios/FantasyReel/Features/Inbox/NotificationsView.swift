@@ -101,10 +101,9 @@ struct NotificationsView: View {
         if notification.isUnread {
             Task { await inbox.markRead(notification.id) }
         }
+        // One with nowhere to go is just read in place.
         if let destination = notification.destination {
             router.open(destination, directory: directory)
-        } else {
-            router.dismissSheet()
         }
     }
 }

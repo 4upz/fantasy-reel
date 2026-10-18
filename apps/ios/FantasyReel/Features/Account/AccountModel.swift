@@ -83,13 +83,14 @@ final class AccountModel {
 
     /// Uploads over the one stored photo, saves its URL, then clears any older
     /// files. The file is replaced before the URL is saved (as on the web), so
-    /// a failed save is retried once before it's reported.
+    /// a save lost to the network is retried once before it's reported.
     func upload(_ image: AvatarImage.Prepared) {
         photo.run { [self] in
             let url = try await storage.upload(image, to: .profiles, folder: userID.rawValue)
             do {
                 try await account.updateAvatarURL(url, for: userID)
             } catch {
+                guard error.isUncertainOutcome else { throw error }
                 try await account.updateAvatarURL(url, for: userID)
             }
             profiles.apply(avatarURL: url)
