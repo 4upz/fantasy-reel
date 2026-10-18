@@ -87,16 +87,16 @@ struct TradeExpiryTests {
     }
 
     @Test func releaseAnchorWaitsForTheDayAfterReleaseUTC() throws {
-        let release = DateOnly(year: 2027, month: 1, day: 10)
+        let release = try #require(DateOnly(year: 2027, month: 1, day: 10))
         let boundary = TradeExpiry.releaseBoundary(release)
-        #expect(boundary == DateOnly(year: 2027, month: 1, day: 11).date(in: .gmt))
+        #expect(boundary == DateOnly(year: 2027, month: 1, day: 11)?.date(in: .gmt))
         let movies: [(movieID: MovieID, title: String, releaseDate: DateOnly?)] = [("m1", "Far", DateOnly(year: 2027, month: 6, day: 1))]
         let result = TradeExpiry.releaseCandidates(movies, bounds: TradeExpiryBounds(), now: boundary.addingTimeInterval(-3 * 86_400))
         #expect(throws: TradeExpiry.ReleaseUnavailable.tooFar("14 days")) { try result.get() }
     }
 
     @Test func aReleaseChoiceThatLeftTheTradeIsRefused() throws {
-        let release = DateOnly(year: 2027, month: 1, day: 10)
+        let release = try #require(DateOnly(year: 2027, month: 1, day: 10))
         let bounds = TradeExpiryBounds(maxDays: 30)
         let now = TradeExpiry.releaseBoundary(release).addingTimeInterval(-5 * 86_400)
         let movies: [(movieID: MovieID, title: String, releaseDate: DateOnly?)] = [("m1", "Dune", release)]
