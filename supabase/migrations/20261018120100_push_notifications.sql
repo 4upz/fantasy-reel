@@ -304,6 +304,8 @@ GRANT EXECUTE ON FUNCTION public.claim_push_notifications(INTEGER) TO service_ro
 --   failed         a permanent failure for this push (bad payload, wrong topic)
 --   unregistered   APNs says the token is dead: the device is deleted, which
 --                  also clears its other queued pushes
+--   unsent         the run ran out of time before trying it: back in the
+--                  queue at once, and the claim's attempt is given back
 -- Results whose lease has lapsed are ignored, so a slow run can't overwrite
 -- the run that took the row over.
 CREATE FUNCTION public.finish_push_notifications(p_results JSONB)
@@ -318,7 +320,7 @@ DECLARE
 BEGIN
   FOR v_result IN SELECT * FROM jsonb_array_elements(COALESCE(p_results, '[]'::JSONB)) LOOP
     v_outcome := v_result->>'outcome';
-    IF v_outcome NOT IN ('sent', 'retry', 'failed', 'unregistered') THEN
+    IF v_outcome NOT IN ('sent', 'retry', 'failed', 'unregistered', 'unsent') THEN
       RAISE EXCEPTION 'Invalid push outcome: %', v_outcome;
     END IF;
 
@@ -326,16 +328,22 @@ BEGIN
     SET status = CASE
           WHEN v_outcome = 'sent' THEN 'sent'
           WHEN v_outcome = 'retry' AND o.attempts < 5 THEN 'pending'
+          WHEN v_outcome = 'unsent' THEN 'pending'
           ELSE 'failed'
         END,
+        attempts = CASE WHEN v_outcome = 'unsent' THEN greatest(o.attempts - 1, 0) ELSE o.attempts END,
         available_at = CASE
           WHEN v_outcome = 'retry' THEN now() + make_interval(secs => least(600, 30 * power(2, least(o.attempts, 5))::INTEGER))
+          WHEN v_outcome = 'unsent' THEN now()
           ELSE o.available_at
         END,
-        finished_at = CASE WHEN v_outcome = 'retry' AND o.attempts < 5 THEN NULL ELSE now() END,
+        finished_at = CASE
+          WHEN v_outcome = 'unsent' OR (v_outcome = 'retry' AND o.attempts < 5) THEN NULL
+          ELSE now()
+        END,
         lease_token = NULL,
         leased_until = NULL,
-        last_error = left(v_result->>'error', 500)
+        last_error = CASE WHEN v_outcome = 'unsent' THEN o.last_error ELSE left(v_result->>'error', 500) END
     WHERE o.id = (v_result->>'id')::UUID
       AND o.lease_token = (v_result->>'lease_token')::UUID
       AND o.status = 'pending'

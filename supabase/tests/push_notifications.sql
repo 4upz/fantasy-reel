@@ -116,6 +116,19 @@ SELECT throws_ok($$SELECT finish_push_notifications('[{"id": "8e700000-0000-4000
 RESET ROLE;
 SELECT is((SELECT count(*)::INT FROM push_devices WHERE user_id = pg_temp.push_id(2)), 0, 'and the dead token is deleted');
 
+-- A run out of time hands back what it never tried, attempt and all.
+UPDATE push_outbox SET available_at = now() WHERE notification_id = pg_temp.push_id(101);
+SET LOCAL ROLE service_role;
+CREATE TEMP TABLE reclaimed AS SELECT * FROM claim_push_notifications(10);
+SELECT is(finish_push_notifications(jsonb_build_array(jsonb_build_object(
+  'id', (SELECT id FROM reclaimed), 'lease_token', (SELECT lease_token FROM reclaimed), 'outcome', 'unsent'))),
+  1, 'an unsent push is handed back');
+RESET ROLE;
+SELECT is((SELECT attempts FROM push_outbox WHERE notification_id = pg_temp.push_id(101)), 1,
+  'without using up an attempt');
+SELECT ok((SELECT status = 'pending' AND available_at <= now() AND lease_token IS NULL AND last_error = '503'
+  FROM push_outbox WHERE notification_id = pg_temp.push_id(101)), 'and is ready for the next run');
+
 -- A token that moved to another account, and a push that sat too long, are never sent.
 UPDATE push_outbox SET available_at = now() WHERE notification_id = pg_temp.push_id(101);
 SELECT set_config('request.jwt.claim.sub', pg_temp.push_id(3)::TEXT, true);
