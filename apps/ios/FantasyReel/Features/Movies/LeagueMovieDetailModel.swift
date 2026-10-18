@@ -20,8 +20,17 @@ final class LeagueMovieDetailModel {
     /// Set when the league or score reads failed (the screen still shows TMDb data).
     private(set) var leagueError: String?
     private(set) var franchiseError: String?
+    /// The holding read failed, so who holds the movie is unknown (never
+    /// shown as "Available").
+    private(set) var holdingUnknown = false
 
     let tmdbID: TMDbID
+    /// The season (nil outside a league) and time of the last full read, so a
+    /// screen reappearing (back from a franchise film) doesn't read it all again.
+    private var loaded: (league: LeagueID?, at: Date)?
+    private let freshness: TimeInterval = 60
+    /// Bumped by each load; only the newest one writes what it read.
+    private var generation = 0
     private let movies: any MovieRepository
     private let leagueMovies: any LeagueMovieRepository
 
@@ -33,8 +42,18 @@ final class LeagueMovieDetailModel {
 
     /// Reads (or rereads) the movie in a season, or outside one when `league`
     /// is nil. Safe to call again after a bid, drop or trade elsewhere.
-    func load(league: League?) async {
+    func load(league: League?, force: Bool = true) async {
+        if !force, let loaded, loaded.league == league?.id, state.value != nil,
+           Date().timeIntervalSince(loaded.at) < freshness { return }
+        generation += 1
+        let current = generation
         if state.value == nil { state = .loading }
+        if loaded != nil, loaded?.league != league?.id {
+            // Another season: nothing from the last one applies.
+            holding = nil
+            movie = nil
+            projection = nil
+        }
         let tmdbID = tmdbID
         let movies = movies
         let leagueMovies = leagueMovies
@@ -54,10 +73,14 @@ final class LeagueMovieDetailModel {
 
         let (detailsResult, movieResult, holdingResult, historyResult, projectionResult) =
             await (details, movieRow, holdingRow, history, projections)
+        // A load the screen abandoned (it went away) or a newer one replaced
+        // saw only part of the picture: neither writes, nor counts as fresh.
+        guard !Task.isCancelled, current == generation else { return }
 
         switch detailsResult {
-        case .success(let loaded):
-            state = .loaded(loaded)
+        case .success(let details):
+            state = .loaded(details)
+            loaded = (league?.id, Date())
         case .failure(let error):
             if error.isCancellation { return }
             // Keep a screen that already loaded; a refresh failure only notes it.
@@ -75,8 +98,14 @@ final class LeagueMovieDetailModel {
         case .failure(let error): leagueFailure = error
         }
         switch holdingResult {
-        case .success(let row): holding = row
-        case .failure(let error): leagueFailure = leagueFailure ?? error
+        case .success(let row):
+            holding = row
+            holdingUnknown = false
+        case .failure(let error):
+            leagueFailure = leagueFailure ?? error
+            // Don't hand actions a holding that may no longer be true.
+            holding = nil
+            holdingUnknown = true
         }
         leagueError = leagueFailure.flatMap { $0.isCancellation ? nil : "Couldn't load the score and who holds it. \($0.userMessage)" }
 
@@ -90,8 +119,9 @@ final class LeagueMovieDetailModel {
 
         // A projection is a Beta extra: when it can't be read, the card is
         // simply absent, as it is when the feature is off.
-        if case .success(let response) = projectionResult {
-            projection = response.projection(for: tmdbID)
+        switch projectionResult {
+        case .success(let response): projection = response.projection(for: tmdbID)
+        case .failure: if league == nil { projection = nil }
         }
     }
 

@@ -57,7 +57,7 @@ struct WishlistView: View {
             await mine
         }
         .task {
-            if case .idle = wishlist.state { await wishlist.load() }
+            await wishlist.loadIfNeeded()
         }
         .task(id: selection?.season.id) {
             if let selection { await research.load(selection) }
@@ -100,27 +100,27 @@ struct WishlistView: View {
         }
     }
 
+    @ViewBuilder
     private var movieRows: some View {
+        let movies = sort.sorted(wishlist.movies)
+        let holdings = selection.map { research.holdings(in: $0.season.id) }
         Section {
-            ForEach(Array(sort.sorted(wishlist.movies).enumerated()), id: \.element.id) { index, movie in
+            ForEach(movies) { movie in
                 let added = AddedDateText(movie.addedAt)
                 ResearchMovieRow(
                     title: movie.title,
                     posterURL: movie.posterURL,
                     detail: "Added \(added.compact)",
                     spokenDetail: "Added \(added.spoken)",
-                    status: selection.map { _ in research.holdings(in: selection?.season.id).status(of: movie.tmdbID) },
+                    status: holdings?.status(of: movie.tmdbID),
                     candidate: WishlistCandidate(movie),
                     showsBookmark: false
                 )
-                .groupedRow(isFirst: index == 0, isLast: index == wishlist.movies.count - 1)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                .groupedRow(isFirst: movie.id == movies.first?.id, isLast: movie.id == movies.last?.id)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button("Remove", systemImage: "trash", role: .destructive) {
                         Task { await wishlist.remove(movie.tmdbID) }
                     }
-                }
-                .accessibilityAction(named: "Remove from wishlist") {
-                    Task { await wishlist.remove(movie.tmdbID) }
                 }
             }
         } header: {
@@ -148,10 +148,12 @@ struct WishlistView: View {
                 .padding(.top, 12)
             }
             .listRowInsets(EdgeInsets(top: 0, leading: FRMetrics.pageMargin, bottom: 4, trailing: FRMetrics.pageMargin))
-        } footer: {
-            TMDbAttribution()
-                .listRowInsets(EdgeInsets())
         }
+        // Plain rows, not a section footer: a plain List paints footers with
+        // a bar background.
+        TMDbAttribution()
+            .padding(.top, 8)
+            .plainListRow()
     }
 }
 
@@ -257,16 +259,14 @@ private struct SharedWishlistsSection: View {
                 } header: {
                     SectionHeader("Shared with you", detail: "\(sharing.count)")
                         .listRowInsets(EdgeInsets(top: 0, leading: FRMetrics.pageMargin, bottom: 4, trailing: FRMetrics.pageMargin))
-                } footer: {
-                    if mates.count > sharing.count {
-                        let hidden = mates.count - sharing.count
-                        Text("\(hidden) \(hidden == 1 ? "league-mate keeps their list" : "league-mates keep their lists") private.")
-                            .frFont(.meta)
-                            .foregroundStyle(Color.frTextSecondary)
-                            .padding(.horizontal, 4)
-                            .padding(.top, 8)
-                            .listRowInsets(EdgeInsets(top: 0, leading: FRMetrics.pageMargin, bottom: 0, trailing: FRMetrics.pageMargin))
-                    }
+                }
+                if mates.count > sharing.count {
+                    let hidden = mates.count - sharing.count
+                    Text("\(hidden) \(hidden == 1 ? "league-mate keeps their list" : "league-mates keep their lists") private.")
+                        .frFont(.meta)
+                        .foregroundStyle(Color.frTextSecondary)
+                        .padding(.horizontal, 4)
+                        .plainListRow()
                 }
             }
         }
@@ -336,7 +336,7 @@ struct SharedWishlistView: View {
                                 title: movie.title,
                                 posterURL: movie.posterURL,
                                 detail: wishlist.contains(movie.tmdbID) ? "Also on yours" : nil,
-                                status: directory.selection.map { _ in research.holdings(in: directory.selection?.season.id).status(of: movie.tmdbID) },
+                                status: directory.selection.map { research.holdings(in: $0.season.id).status(of: movie.tmdbID) },
                                 candidate: WishlistCandidate(movie)
                             )
                         }
@@ -404,8 +404,13 @@ private extension View {
             .listRowSeparator(isFirst ? .hidden : .visible, edges: .top)
             .listRowSeparator(isLast ? .hidden : .visible, edges: .bottom)
             .listRowSeparatorTint(Color.frSeparator)
+            // The row draws its own chevron inside the card; the List's would
+            // sit outside it.
+            .navigationLinkIndicatorVisibility(.hidden)
+            .padding(.horizontal, FRMetrics.pageMargin)
+            // Measured on the padded row, so the hairline runs from the text
+            // column to the card's trailing edge.
             .alignmentGuide(.listRowSeparatorLeading) { _ in FRMetrics.pageMargin + FRMetrics.separatorInset }
             .alignmentGuide(.listRowSeparatorTrailing) { dimensions in dimensions.width - FRMetrics.pageMargin }
-            .padding(.horizontal, FRMetrics.pageMargin)
     }
 }
