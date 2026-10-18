@@ -28,6 +28,11 @@ const SECTIONS: LegalSection[] = [
           your email before you register.
         </li>
         <li>
+          <strong>iPhone notifications:</strong> if you allow notifications in our iPhone app, the device token
+          Apple gives us and which kinds of notifications you have turned on. Notifications are delivered through
+          Apple&apos;s push notification service and include league, team, and movie names.
+        </li>
+        <li>
           <strong>Technical information:</strong> IP address, browser and device details, pages visited, feature
           activity, performance data, and errors. Activity records may include league IDs and game actions.
         </li>
@@ -81,7 +86,8 @@ const SECTIONS: LegalSection[] = [
         <p>
           We share information with providers that help operate Fantasy Reel: Supabase for accounts, data, and
           images; Vercel for hosting, analytics, and performance measurement; Railway for hosting our Discord bot;
-          Sentry for diagnostics and session replay; and Resend for email delivery.
+          Sentry for diagnostics and session replay; Resend for email delivery; and Apple for notifications sent to
+          our iPhone app.
         </p>
         <p>
           Google and Discord process information when you use their sign-in or connected features, under their
@@ -130,14 +136,15 @@ const SECTIONS: LegalSection[] = [
           invitations 30 days after they are declined, cancelled, or expire, and accepted invitations 30 days after
           that season ends; in-app notifications 90 days after you read them, or 180 days if unread; records of
           draft updates sent to Discord 7 days after delivery (30 days if delivery failed); and records used to
-          avoid repeating other Discord posts 90 days after the season ends. Scheduled-job logs are kept for 90
-          days.
+          avoid repeating other Discord posts 90 days after the season ends; records of iPhone notifications 7 days
+          after they are sent; and an iPhone&apos;s device token after 180 days without opening the app. Signing out of
+          the app deletes that phone&apos;s token. Scheduled-job logs are kept for 90 days.
         </p>
         <p>
           You can delete your account in Settings, or request deletion at <SupportEmailLink />. Deleting your
           account removes your sign-in details, email address, profile name and photo, uploaded team photos,
-          wishlist, notifications, invitations sent to your email or sent by you, and our records of emails sent
-          to you. Leagues you run pass to another member, who is told, or are deleted if no other member can take
+          wishlist, notifications, notification settings and iPhone device tokens, invitations sent to your email or
+          sent by you, and our records of emails sent to you. Leagues you run pass to another member, who is told, or are deleted if no other member can take
           them over. You are removed from
           leagues that have not drafted yet. In seasons that have started, your team stays, shown as &ldquo;Former
           member&rdquo;: its name, roster, scores, trades, and trade messages remain part of that league&apos;s
@@ -157,7 +164,9 @@ const SECTIONS: LegalSection[] = [
         <p>
           You can edit your profile and wishlist-sharing preferences, or delete your account, in the app. You can
           turn off season recap emails in Settings or with the unsubscribe link in any of them; emails about your
-          invitations, bids, and trades are part of the service and still arrive. Depending on your location, you
+          invitations, bids, and trades are part of the service and still arrive. You can choose which kinds of
+          iPhone notifications you get in the app&apos;s Settings, or turn them off in your iPhone&apos;s Settings.
+          Depending on your location, you
           may have rights to access, correct, delete, or receive a portable copy of your information; restrict or
           object to processing; withdraw consent; appeal a refusal; or complain to a data protection authority.
         </p>
@@ -225,7 +234,7 @@ export default function PrivacyPage(): React.ReactElement {
   return (
     <LegalPage
       title="Privacy policy"
-      effectiveDate="2026-10-07"
+      effectiveDate="2026-10-18"
       intro={
         <>
           <p>

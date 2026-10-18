@@ -7,6 +7,7 @@ struct FantasyReelApp: App {
     /// shows a screen that says exactly what to fix instead of crashing.
     @State private var bootstrap: Result<AppEnvironment, AppConfiguration.LoadError>
     @AppStorage(AppearancePreference.storageKey) private var appearance: AppearancePreference = .system
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
         FRFonts.registerIfNeeded()
@@ -43,6 +44,7 @@ struct FantasyReelApp: App {
             RootView()
                 .environment(environment)
                 .environment(environment.session)
+                .onAppear { appDelegate.push = environment.push }
         case .failure(let error):
             ConfigurationErrorView(message: error.description)
         }

@@ -3,7 +3,7 @@ import FantasyReelCore
 import SwiftUI
 
 /// Chooses between launch, signed-out and signed-in, and is the single entry
-/// point for incoming URLs (auth callbacks, shared links).
+/// point for incoming URLs (auth callbacks, shared links) and push taps.
 struct RootView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(SessionStore.self) private var session
@@ -42,12 +42,20 @@ struct RootView: View {
         // Someone who stops using Apple with Fantasy Reel (Settings → Apple ID)
         // is signed out at launch, after sign-in, and on return to the app.
         .task(id: session.account?.id) { await session.checkAppleCredential() }
-        .refreshOnForeground { await session.checkAppleCredential() }
-        .onOpenURL { url in handle(url) }
+        .refreshOnForeground {
+            await session.checkAppleCredential()
+            // The person may have changed notification access in iOS Settings.
+            await environment.push.refreshAuthorization()
+        }
+        // Registers this phone's push token to whoever is signed in now.
+        .task(id: session.account?.id) { await environment.push.accountDidChange(session.account?.id) }
+        .onAppear { environment.push.openLink = { link in handle(link) } }
+        .onOpenURL { url in
+            if let link = environment.deepLink(from: url) { handle(link) }
+        }
     }
 
-    private func handle(_ url: URL) {
-        guard let link = environment.deepLink(from: url) else { return }
+    private func handle(_ link: DeepLink) {
         if case .authCallback(let callbackURL) = link {
             Task { await session.handleAuthCallback(callbackURL) }
             return

@@ -661,6 +661,10 @@ export type NotificationType =
   | 'season_completed'
   | 'season_started'
   | 'league_ownership_transferred'
+  | 'draft_turn'
+  | 'movie_scored'
+  | 'movie_released'
+  | 'league_movie_scored'
 
 export interface Notification {
   id: string

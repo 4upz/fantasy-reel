@@ -17,6 +17,7 @@ import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { sendDiscordNotification, DISCORD_COLORS, DISCORD_MAX_EMBED_FIELDS, buildLeagueUrl, buildEmbedAuthor, getLeagueName } from '../_shared/discord.ts'
 import { fetchRosterHoldings, groupHoldingsByLeague } from '../_shared/roster-holdings.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { notifyMovieEvents } from '../_shared/movie-inbox.ts'
 
 const log = createLogger('release-day-announcements')
 
@@ -31,6 +32,7 @@ interface MovieRow {
   id: string
   title: string
   poster_url: string | null
+  combined_score: number | null
 }
 
 export async function runReleaseDayAnnouncements(
@@ -40,7 +42,7 @@ export async function runReleaseDayAnnouncements(
 
   const { data: movies, error: moviesError } = await serviceClient
     .from('movies')
-    .select('id, title, poster_url')
+    .select('id, title, poster_url, combined_score')
     .eq('release_date', today)
 
   if (moviesError) {
@@ -92,6 +94,19 @@ export async function runReleaseDayAnnouncements(
       log.error('Failed to record notification log', { league_id: leagueId, error: serializeError(insertError) })
       continue
     }
+
+    // A movie already scored before release was announced by today's score
+    // run ("its score now counts"); one notification per movie a day is enough.
+    await notifyMovieEvents(
+      serviceClient,
+      unsent.flatMap((h) => {
+        const movie = movieById.get(h.movieId)
+        return movie && movie.combined_score === null
+          ? [{ movieId: movie.id, title: movie.title, kind: 'released' as const, rtScore: null, points: null, released: true }]
+          : []
+      }),
+      [leagueId]
+    )
 
     const leagueName = await getLeagueName(serviceClient, leagueId)
     const shown = unsent.slice(0, DISCORD_MAX_EMBED_FIELDS)

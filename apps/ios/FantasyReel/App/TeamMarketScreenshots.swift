@@ -9,8 +9,14 @@ import SwiftUI
 struct TeamMarketScreenshotView: View {
     let scene: ScreenshotScene
 
-    @State private var fixture = TeamMarketFixture()
+    @State private var fixture: TeamMarketFixture
     @State private var isReady = false
+
+    init(scene: ScreenshotScene) {
+        self.scene = scene
+        // League Home asks for notification permission until it's answered.
+        _fixture = State(initialValue: TeamMarketFixture(push: scene == .leagueHomePushPrompt ? .notDetermined : .allowed))
+    }
 
     var body: some View {
         Group {
@@ -42,7 +48,7 @@ struct TeamMarketScreenshotView: View {
     @ViewBuilder
     private var content: some View {
         switch scene {
-        case .leagueHome, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades:
+        case .leagueHome, .leagueHomePushPrompt, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades:
             LeagueTabs(tabs: LeagueNavigation.tabs(for: .active))
         case .placeBid: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23")))) }
         case .tradeComposer: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("dave"))) }
@@ -66,7 +72,7 @@ final class TeamMarketFixture {
     let research: LeagueResearchStore
     let history = MovieSearchHistory()
 
-    init() {
+    init(push: PushAuthorization = .allowed) {
         let now = Date()
         let day: TimeInterval = 86_400
         let leagueID: LeagueID = "l-popcorn"
@@ -202,7 +208,8 @@ final class TeamMarketFixture {
                 movies: [BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23"))],
                 myTeamID: Self.team("alice")
             ),
-            trades: InMemoryTradeRepository(trades: trades, myTeamID: Self.team("alice"))
+            trades: InMemoryTradeRepository(trades: trades, myTeamID: Self.team("alice")),
+            push: push
         )
         self.environment = environment
         directory = LeagueDirectoryStore(userID: Self.alice, repository: environment.leagues, defaults: UserDefaults(suiteName: "fr.screenshots") ?? .standard)
@@ -218,7 +225,7 @@ final class TeamMarketFixture {
     /// Selects the scene's tab and pushes its screen onto that tab's stack.
     func route(to scene: ScreenshotScene) {
         switch scene {
-        case .leagueHome: router.select(.home)
+        case .leagueHome, .leagueHomePushPrompt: router.select(.home)
         case .roster: router.select(.roster)
         case .standings: router.select(.standings)
         case .teamDetail:
@@ -236,6 +243,7 @@ final class TeamMarketFixture {
     func prepare() async {
         await directory.load()
         await season.load()
+        await environment.push.refreshAuthorization()
         router.seasonStore = season
     }
 }

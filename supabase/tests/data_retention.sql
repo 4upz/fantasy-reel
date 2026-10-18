@@ -81,7 +81,7 @@ INSERT INTO discord_notification_log (id, league_id, movie_id, notification_type
 SET LOCAL ROLE service_role;
 SELECT is(
   purge_expired_data(),
-  '{"notification_log": 1, "invitations": 4, "notifications": 2, "draft_notification_outbox": 2, "discord_notification_log": 1, "more_remaining": false}'::jsonb,
+  '{"notification_log": 1, "invitations": 4, "notifications": 2, "draft_notification_outbox": 2, "discord_notification_log": 1, "push_outbox": 0, "push_devices": 0, "more_remaining": false}'::jsonb,
   'the purge reports what it deleted'
 );
 RESET ROLE;

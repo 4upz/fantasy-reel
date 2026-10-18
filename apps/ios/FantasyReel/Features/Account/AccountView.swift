@@ -54,6 +54,7 @@ private struct AccountContent: View {
                 profileCard
                 profileRows
                 connectedAccounts
+                notificationRows
                 emailSection
                 helpRows
                 supportRows
@@ -306,6 +307,28 @@ private struct AccountContent: View {
                 return
             }
             model.connectApple(idToken: idToken, nonce: rawNonce)
+        }
+    }
+
+    // MARK: Notifications
+
+    private var notificationRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader("Notifications")
+            FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                NavigationLink(value: MenuRoute.pushSettings) {
+                    SettingsRow("Push Notifications", value: pushValue)
+                }
+                .buttonStyle(.frRow)
+            }
+        }
+    }
+
+    /// Off only when iOS says so; which kinds are on lives on the next screen.
+    private var pushValue: String? {
+        switch environment.push.authorization {
+        case .denied, .notDetermined: "Off"
+        case .allowed, nil: nil
         }
     }
 
