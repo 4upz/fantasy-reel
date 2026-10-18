@@ -118,27 +118,23 @@ public struct DraftSubmissionRequest: Encodable, Sendable, Hashable {
     }
 }
 
-/// The parts of a `draft-pick` / `make-counterpick` answer the app uses. The
-/// room re-reads its state after every submission, so only these flags matter.
+/// The part of a `draft-pick` / `make-counterpick` answer the app uses. The
+/// room re-reads its state after every submission, so phase flags aren't kept.
 public struct DraftSubmissionResult: Decodable, Sendable, Hashable {
     /// The server found this request id's receipt and returned the saved pick.
     public var replayed: Bool
-    public var draftComplete: Bool
 
-    public init(replayed: Bool = false, draftComplete: Bool = false) {
+    public init(replayed: Bool = false) {
         self.replayed = replayed
-        self.draftComplete = draftComplete
     }
 
     private enum CodingKeys: String, CodingKey {
         case replayed
-        case draftComplete = "draft_complete"
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         replayed = (try? c.decodeIfPresent(Bool.self, forKey: .replayed)) ?? false
-        draftComplete = (try? c.decodeIfPresent(Bool.self, forKey: .draftComplete)) ?? false
     }
 }
 

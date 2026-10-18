@@ -91,7 +91,8 @@ final class DraftRoomModel {
     /// Picks are refused while a submission is in flight or unresolved, or the
     /// room is showing data it couldn't refresh.
     var canSubmit: Bool {
-        myTurn != nil && submissionStatus != .submitting && connection != .offline && refreshError == nil
+        myTurn != nil && submissionStatus != .submitting && submissionStatus != .uncertain
+            && connection != .offline && refreshError == nil
     }
 
     /// The draft or counterpick round is running, so turns can change at any moment.
@@ -287,6 +288,7 @@ final class DraftRoomModel {
                 submissionStatus = .uncertain
             case .notSent:
                 // Never reached the server; keep the id for a safe retry anyway.
+                // It needs no settling: the next pick at this slot reuses or replaces it.
                 submissionStatus = .failed(error.userMessage)
             }
             await refresh()
