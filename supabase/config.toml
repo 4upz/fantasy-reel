@@ -524,3 +524,6 @@ verify_jwt = false
 
 [functions.process-draft-notifications]
 verify_jwt = false
+
+[functions.send-push-notifications]
+verify_jwt = false

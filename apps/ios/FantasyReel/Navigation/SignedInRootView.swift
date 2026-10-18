@@ -107,6 +107,12 @@ struct SignedInRootView: View {
                 await directory.refresh()
                 await inboxRefreshed
             }
+            // A push that lands while the app is open is already in the inbox.
+            .onChange(of: environment.push.receivedWhileOpen) { Task { await inbox.refresh() } }
+            // The app icon badge is the inbox's unread count (as pushes set it).
+            .task(id: inbox.hasLoaded ? inbox.unreadCount : nil) {
+                if inbox.hasLoaded { await environment.push.setBadge(inbox.unreadCount) }
+            }
     }
 
     @ViewBuilder

@@ -7,5 +7,13 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<!-- Push notifications (O-01). Xcode signs App Store and TestFlight
+	     builds with "production" in place of this. -->
+	<key>aps-environment</key>
+	<string>development</string>
+	<!-- Lets draft turns, outbids and trades waiting on you break through a
+	     Focus (the push sets interruption-level time-sensitive). -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 </dict>
 </plist>

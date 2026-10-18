@@ -42,13 +42,14 @@ struct WireEnumTests {
     @Test func notificationTypeCoversDatabaseEnum() throws {
         let raw = ["outbid", "bid_won", "bid_lost", "pickup_available", "trade_proposed", "trade_countered",
                    "trade_accepted", "trade_rejected", "trade_cancelled", "trade_completed", "trade_vetoed",
-                   "trade_review", "season_completed", "season_started", "league_ownership_transferred"]
+                   "trade_review", "season_completed", "season_started", "league_ownership_transferred",
+                   "draft_turn", "movie_scored", "movie_released", "league_movie_scored"]
         for value in raw {
             let type = NotificationType(rawValue: value)
             #expect(type != .unknown(value), "\(value)")
             #expect(type.rawValue == value)
         }
-        #expect(NotificationType(rawValue: "draft_turn") == .unknown("draft_turn"))
+        #expect(NotificationType(rawValue: "something_new") == .unknown("something_new"))
     }
 }
 
@@ -240,7 +241,12 @@ struct NotificationDecodingTests {
         #expect(destination(.seasonCompleted) == .league(league, section: .standings))
         #expect(destination(.seasonStarted) == .league(league, section: .overview))
         #expect(destination(.leagueOwnershipTransferred) == .league(league, section: .settings))
-        #expect(destination(.tradeProposed) == .league(league, section: nil))
+        #expect(destination(.tradeProposed) == .league(league, section: .trading))
+        #expect(destination(.bidLost) == .league(league, section: .bidding))
+        #expect(destination(.draftTurn) == .league(league, section: .draft))
+        #expect(destination(.movieScored) == .league(league, section: .roster))
+        #expect(destination(.leagueMovieScored) == .league(league, section: .standings))
+        #expect(destination(.unknown("x")) == .league(league, section: nil))
     }
 
     @Test func invitationWithEmbeddedLeague() throws {

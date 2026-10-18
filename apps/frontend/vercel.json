@@ -10,6 +10,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/send-push-notifications",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/process-bids/weekly",
       "schedule": "0 20 * * 6"
     },

@@ -79,6 +79,9 @@ struct DraftRoomContent: View {
                 VStack(spacing: FRMetrics.sectionSpacing) {
                     DraftHeader(model: model)
                     DraftConnectionNotice(model: model)
+                    if [.setup, .drafting, .counterpicking].contains(snapshot.league.status) {
+                        PushPromptCard()
+                    }
                     switch snapshot.league.status {
                     case .setup:
                         DraftSetupSection(model: model, snapshot: snapshot)

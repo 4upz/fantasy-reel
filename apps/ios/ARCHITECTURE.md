@@ -116,6 +116,15 @@ initializer so the shell keeps compiling.
   the `LeagueRoute` and `MenuRoute` enums; add a case for a new screen.
 - Deep links (`DeepLink.parse`) arrive through `onOpenURL`; signed-out links are held
   by `SessionStore.pendingDeepLink` and replayed after sign-in.
+- **Push (O-01):** `PushCenter` (`Infrastructure/PushCenter.swift`) owns permission,
+  this phone's APNs token, the icon badge and taps. `AppDelegate` forwards the token
+  and taps to it; `RootView` registers the token on every sign-in and turns a tap
+  into a `DeepLink` (`PushPayload.destination`, the same place the inbox row opens).
+  Sign-out removes the token first (`SessionStore.beforeSignOut`). Permission is only
+  asked in context: `PushPromptCard` (League Home, draft room) and Push Notifications
+  in Account. Which kinds are sent are server-side switches (`push_preferences`, one
+  `PushCategory` per column); the server decides urgency (`interruptionLevel` in
+  `supabase/functions/_shared/push-notifications.ts`).
 - **Password recovery:** while `SessionStore.isRecoveringPassword` is true (a reset
   link signed the user in), `RootView` shows `ChooseNewPasswordView` in place of the
   app; saving a password or signing out ends it. `showsAppleRelayNotice` works the

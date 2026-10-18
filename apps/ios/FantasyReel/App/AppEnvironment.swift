@@ -38,6 +38,8 @@ final class AppEnvironment {
     let wishlists: any WishlistRepository
     let leagueMovies: any LeagueMovieRepository
     let draft: any DraftRepository
+    /// Push permission, this phone's token, the badge and push taps (O-01).
+    let push: PushCenter
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
@@ -58,7 +60,8 @@ final class AppEnvironment {
         movies: (any MovieRepository)? = nil,
         wishlists: (any WishlistRepository)? = nil,
         leagueMovies: (any LeagueMovieRepository)? = nil,
-        draft: (any DraftRepository)? = nil
+        draft: (any DraftRepository)? = nil,
+        push: PushCenter? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
@@ -83,7 +86,23 @@ final class AppEnvironment {
         self.wishlists = wishlists ?? SupabaseWishlistRepository(provider: supabase)
         self.leagueMovies = leagueMovies ?? SupabaseLeagueMovieRepository(provider: supabase)
         self.draft = draft ?? SupabaseDraftRepository(provider: supabase, functions: edgeFunctions)
+        let push = push ?? PushCenter(
+            repository: SupabasePushRepository(provider: supabase),
+            system: SystemPushHooks(),
+            // Matches the build's aps-environment: Debug builds are signed
+            // for the APNs sandbox, TestFlight and the App Store for production.
+            environment: Self.pushEnvironment,
+            bundleID: Bundle.main.bundleIdentifier ?? "com.fantasyreel.ios"
+        )
+        self.push = push
+        session.beforeSignOut = { await push.prepareForSignOut() }
     }
+
+    #if DEBUG
+    private static let pushEnvironment = PushEnvironment.sandbox
+    #else
+    private static let pushEnvironment = PushEnvironment.production
+    #endif
 
     /// Parses an incoming URL against this build's site hosts and scheme.
     func deepLink(from url: URL) -> DeepLink? {
@@ -112,7 +131,9 @@ extension AppEnvironment {
         movies: any MovieRepository = InMemoryMovieRepository(),
         wishlists: any WishlistRepository = InMemoryWishlistRepository(),
         leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository(),
-        draft: any DraftRepository = InMemoryDraftRepository()
+        draft: any DraftRepository = InMemoryDraftRepository(),
+        push: PushAuthorization = .allowed,
+        pushPreferences: PushPreferences = .allOn
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
@@ -138,8 +159,23 @@ extension AppEnvironment {
             movies: movies,
             wishlists: wishlists,
             leagueMovies: leagueMovies,
-            draft: draft
+            draft: draft,
+            push: PushCenter(
+                repository: InMemoryPushRepository(preferences: pushPreferences),
+                system: PreviewPushSystem(push),
+                environment: .sandbox,
+                bundleID: "com.fantasyreel.ios",
+                defaults: previewPushDefaults()
+            )
         )
+    }
+
+    /// A fresh store each time, so a "Not now" tapped in one preview doesn't
+    /// hide the prompt in the next.
+    private static func previewPushDefaults() -> UserDefaults {
+        let name = "fr.preview.push"
+        UserDefaults.standard.removePersistentDomain(forName: name)
+        return UserDefaults(suiteName: name) ?? .standard
     }
 }
 #endif

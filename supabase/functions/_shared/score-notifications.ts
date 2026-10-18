@@ -33,6 +33,7 @@ import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { leagueFantasyPoints } from './fantasy-points.ts'
 import { COMPLETED_STATUS } from './league-status.ts'
 import { createLogger, serializeError } from './logger.ts'
+import { notifyMovieEvents, type MovieInboxKind } from './movie-inbox.ts'
 import { hasReleased, utcDate } from './utils.ts'
 import {
   sendDiscordNotification,
@@ -109,6 +110,12 @@ export interface ScoreNotificationContext {
  * or that a score posted before release now counts because it has released.
  */
 export type MovieScoreChangeKind = 'new' | 'moved' | 'release'
+
+const INBOX_KIND: Record<MovieScoreChangeKind, MovieInboxKind> = {
+  new: 'scored',
+  moved: 'moved',
+  release: 'counts',
+}
 
 /**
  * A movie's move from a starting score -- the pre-run snapshot for notable-miss
@@ -1015,6 +1022,21 @@ export async function sendScoreNotifications(
     summary.notable_misses = await sendNotableMissNotifications(supabase, context, sinceSnapshot)
 
     const announcements = await recordAnnouncements(supabase, toAnnounce)
+
+    // The same moves reach the inbox (and iOS push), once each, because they
+    // ride on the announcement just recorded.
+    await notifyMovieEvents(
+      supabase,
+      [...announcements.values()].map((change) => ({
+        movieId: change.movieId,
+        title: change.title,
+        kind: INBOX_KIND[change.kind],
+        rtScore: change.newRtScore,
+        points: change.newPoints,
+        released: change.released,
+      })),
+      context.leagueIds
+    )
 
     const leagueIds = context.leagueIds
     const currentStandings = await snapshotStandings(supabase, leagueIds)

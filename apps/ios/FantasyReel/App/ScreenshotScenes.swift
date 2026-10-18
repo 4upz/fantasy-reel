@@ -28,6 +28,8 @@ enum ScreenshotScene: String, CaseIterable {
     case deleteAccountDraft
     case notifications
     case notificationsEmpty
+    case pushSettings
+    case pushSettingsDenied
     case discordBot
     case movieSearch
     case movieSearchIdle
@@ -40,6 +42,7 @@ enum ScreenshotScene: String, CaseIterable {
     case draftCounterpick
     case draftOffline
     case leagueHome
+    case leagueHomePushPrompt
     case roster
     case standings
     case teamDetail
@@ -72,6 +75,7 @@ enum ScreenshotScene: String, CaseIterable {
         case .deleteAccount, .deleteAccountReauth, .deleteAccountDraft: .deleteAccount
         case .notifications, .notificationsEmpty: .notifications
         case .discordBot: .discordBot
+        case .pushSettings, .pushSettingsDenied: .pushSettings
         default: nil
         }
     }
@@ -97,7 +101,7 @@ struct ScreenshotSceneView: View {
     ]
 
     private static let teamMarketScenes: Set<ScreenshotScene> = [
-        .leagueHome, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie,
+        .leagueHome, .leagueHomePushPrompt, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie,
     ]
 
     private static let leagueLifecycleScenes: Set<ScreenshotScene> = [
@@ -237,6 +241,7 @@ private struct ScreenshotMenuView: View {
                         default: DeleteAccountView()
                         }
                     case .discordBot: DiscordBotGuideScreen()
+                    case .pushSettings: PushSettingsView()
                     case .wishlist, .howToPlay, .growthDashboard, .sharedWishlist, .league: EmptyView()
                     }
                 }
@@ -271,7 +276,11 @@ private enum ScreenshotFixtures {
                 Profile(id: "p1", userID: account.id, displayName: "Alice Spielberg", discordUsername: "alice"),
             ]),
             notifications: InMemoryNotificationRepository(notifications: scene == .notificationsEmpty ? [] : notifications),
-            account: InMemoryAccountRepository()
+            account: InMemoryAccountRepository(),
+            push: scene == .pushSettings ? .notDetermined : scene == .pushSettingsDenied ? .denied : .allowed,
+            pushPreferences: scene == .pushSettingsDenied ? .allOn : PushPreferences(
+                draft: true, bids: true, trades: true, myMovies: true, leagueActivity: false, season: true
+            )
         )
         guard scene.menuRoute != nil else { return environment }
         environment.session.previewSignIn(account)
