@@ -104,6 +104,10 @@ A tour whose anchors never show up doesn't start at all, so a lone intro card is
 
 Tours always start for a user who asks: the account menu's **Tour this page**, `<TourButton>`, or Settings.
 
+### Onboarding tours start only for newcomers
+
+`welcome`, `league-setup`, `league-waiting`, `league-settings`, `draft-room` and `counterpick-round` teach a first season. Each has `autoStart: (ctx) => ctx.newPlayer === true`. The page works out `newPlayer` with `isNewPlayer()` from `utils/onboarding.ts`, reading `getCachedMemberships()`. Someone who has had a team in an active or completed season isn't new. Pass `false` when the read fails, so nobody gets walked through by mistake. Use the same rule for a new beginner tour. Feature tours, such as `bidding`, start for everyone.
+
 ## How a tour ends
 
 | The user… | Stored as | Effect |
