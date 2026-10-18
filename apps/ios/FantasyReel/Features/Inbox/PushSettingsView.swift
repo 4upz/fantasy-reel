@@ -101,7 +101,7 @@ private struct PushSettingsContent: View {
         case .notDetermined:
             FRCard {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Notifications are off on this iPhone")
+                    Text("Get notifications on this iPhone")
                         .frFont(.cardTitle)
                         .foregroundStyle(Color.frText)
                     Text("Turn them on to hear about your picks, bids and trades without opening the app.")
@@ -192,10 +192,11 @@ private struct PushSettingsContent: View {
 }
 
 /// The in-context ask (App Review 4.5.4): shown on League Home and in the
-/// draft room until the person answers iOS or taps Not Now. Settings keeps
+/// draft room before the draft starts, until the person answers iOS or taps Not Now. Settings keeps
 /// the switch either way.
 struct PushPromptCard: View {
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var asking = AsyncAction()
 
     /// Reads `PushCenter.authorization`, which `RootView` fills at launch, so
@@ -212,22 +213,33 @@ struct PushPromptCard: View {
                             .frFont(.cardTitle)
                             .foregroundStyle(Color.frText)
                     }
-                    Text("Get a push when it's your pick, you're outbid, or a trade is waiting on you. You choose which in Account.")
+                    Text("Get a notification when it's your pick, you're outbid, or a trade is waiting on you. You choose which in Account.")
                         .frFont(.body)
                         .foregroundStyle(Color.frTextSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 12) {
-                        Button("Not Now") { environment.push.dismissPrompt() }
-                            .buttonStyle(.fr(.neutral, size: .medium, fullWidth: true))
-                            .disabled(asking.isRunning)
-                        Button("Turn On") {
-                            asking.run { await environment.push.requestPermission() }
-                        }
-                        .buttonStyle(.fr(.primary, size: .medium, isLoading: asking.isRunning, fullWidth: true))
-                        .disabled(asking.isRunning)
+                    // Side by side, or stacked with Turn On first once the
+                    // labels would squeeze.
+                    if dynamicTypeSize.isAccessibilitySize {
+                        VStack(spacing: 12) { turnOn; notNow }
+                    } else {
+                        HStack(spacing: 12) { notNow; turnOn }
                     }
                 }
             }
         }
+    }
+
+    private var turnOn: some View {
+        Button("Turn On") {
+            asking.run { await environment.push.requestPermission() }
+        }
+        .buttonStyle(.fr(.primary, size: .medium, isLoading: asking.isRunning, fullWidth: true))
+        .disabled(asking.isRunning)
+    }
+
+    private var notNow: some View {
+        Button("Not Now") { environment.push.dismissPrompt() }
+            .buttonStyle(.fr(.neutral, size: .medium, fullWidth: true))
+            .disabled(asking.isRunning)
     }
 }
