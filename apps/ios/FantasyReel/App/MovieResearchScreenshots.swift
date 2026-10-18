@@ -10,6 +10,7 @@ struct MovieResearchScreenshotView: View {
 
     @State private var fixture = MovieResearchFixture()
     @State private var isReady = false
+    @State private var detailPath: [LeagueRoute] = [.movie(MovieResearchFixture.streetFighter)]
 
     var body: some View {
         Group {
@@ -42,7 +43,11 @@ struct MovieResearchScreenshotView: View {
         case .movieSearchIdle:
             stack { MovieSearchView(isSearchTabRoot: true) }
         case .movieDetail:
-            stack { LeagueMovieDetailView(tmdbID: MovieResearchFixture.streetFighter) }
+            // Pushed from search, as in the app, so the back button shows.
+            NavigationStack(path: $detailPath) {
+                MovieSearchView(isSearchTabRoot: true)
+                    .navigationDestination(for: LeagueRoute.self) { LeagueDestinationView(route: $0) }
+            }
         case .wishlist:
             stack { WishlistView() }
         case .sharedWishlists:

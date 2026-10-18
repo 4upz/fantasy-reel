@@ -117,7 +117,7 @@ struct WishlistView: View {
                     showsBookmark: false
                 )
                 .groupedRow(isFirst: movie.id == movies.first?.id, isLast: movie.id == movies.last?.id)
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                     Button("Remove", systemImage: "trash", role: .destructive) {
                         Task { await wishlist.remove(movie.tmdbID) }
                     }

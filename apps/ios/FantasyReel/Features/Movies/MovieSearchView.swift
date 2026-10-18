@@ -299,7 +299,9 @@ struct WishlistCarousel: View {
         ScrollView(.horizontal) {
             LazyHStack(alignment: .top, spacing: 12) {
                 ForEach(movies) { movie in
-                    PosterCard(title: movie.title, posterURL: movie.posterURL, candidate: WishlistCandidate(movie))
+                    // Every card here is saved; a bookmark on each would only
+                    // invite an accidental removal.
+                    PosterCard(title: movie.title, posterURL: movie.posterURL, candidate: WishlistCandidate(movie), showsBookmark: false)
                 }
             }
             .padding(.horizontal, FRMetrics.pageMargin)
@@ -316,6 +318,7 @@ struct PosterCard: View {
     let posterURL: String?
     var subtitle: String?
     let candidate: WishlistCandidate
+    var showsBookmark = true
 
     var body: some View {
         LeagueLink(route: .movie(candidate.tmdbID)) {
@@ -338,7 +341,9 @@ struct PosterCard: View {
         }
         .buttonStyle(.plain)
         .overlay(alignment: .topTrailing) {
-            WishlistToggleButton(candidate: candidate, style: .overlay)
+            if showsBookmark {
+                WishlistToggleButton(candidate: candidate, style: .overlay)
+            }
         }
     }
 }

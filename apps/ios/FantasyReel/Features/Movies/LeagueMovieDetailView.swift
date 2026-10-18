@@ -33,6 +33,9 @@ struct LeagueMovieDetailView: View {
 private struct MovieDetailScreen: View {
     let model: LeagueMovieDetailModel
 
+    /// The header's title has scrolled under the bar, so the bar shows it.
+    @State private var showsBarTitle = false
+
     @Environment(\.leagueSelection) private var tabSelection
     @Environment(LeagueDirectoryStore.self) private var directory
     @Environment(LeagueResearchStore.self) private var research
@@ -85,6 +88,11 @@ private struct MovieDetailScreen: View {
                 .padding(.bottom, 24)
                 .animation(.default, value: wishlist.failure)
             }
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top > Self.headerHeight
+            } action: { _, scrolledPast in
+                withAnimation(.easeInOut(duration: 0.2)) { showsBarTitle = scrolledPast }
+            }
             .refreshable { await refresh() }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -96,13 +104,22 @@ private struct MovieDetailScreen: View {
         .navigationTitle(model.state.value?.title ?? "Movie")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // The header draws the title; keep the bar free of a duplicate.
+            // The header draws the title; the bar fades it in once the
+            // header scrolls away, as App Store detail pages do.
             ToolbarItem(placement: .principal) {
-                Text(verbatim: "").accessibilityHidden(true)
+                Text(model.state.value?.title ?? "")
+                    .font(.headline)
+                    .foregroundStyle(Color.frText)
+                    .lineLimit(1)
+                    .opacity(showsBarTitle ? 1 : 0)
+                    .accessibilityHidden(!showsBarTitle)
             }
         }
         .task(id: selection?.season.id) { await refresh(force: false) }
     }
+
+    /// Roughly where the header's title passes under the bar.
+    private static let headerHeight: CGFloat = 120
 
     private var myTeamID: TeamID? { research.holdings(in: selection?.season.id).myTeamID }
 
