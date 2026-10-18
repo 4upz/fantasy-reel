@@ -39,7 +39,8 @@ in the PR, since this folder is shared).
 | `.beta` | `BetaBadge` |
 | `.cnt` | `CountBadge(count:style:size:)` |
 | `.sh` | `SectionHeader` |
-| `.hd` + `.lt` | `ScreenHeader` |
+| `.hd` + `.lt` | `ScreenHeader`; a pushed screen that draws one sets its title with `.headerScreenTitle("Settings")` (kept for VoiceOver and the back menu, not shown in the bar) |
+| `.foot` | `FRFootnote` (16pt inset, under a row group or form) |
 | `.av`, `.ac1–4` | `Avatar(name:imageURL:size:corners:fill:)` |
 | `.btn-p` / `.btn-s` / `.btn-d` / neutral | `.frPrimary` / `.frSecondary` / `.frDestructive` / `.frNeutral` |
 | `.cap44`, `.pill44`, `.btn-sm` | `.fr(kind, size: .large / .medium / .compact, isLoading:)` |
