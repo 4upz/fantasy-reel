@@ -33,16 +33,19 @@ struct FRBadge: View {
 }
 
 /// The small uppercase "BETA" pill (`.beta`) beside projected values.
+/// `compact` is the `.pchip.sm` size that rides inside a small projection chip.
 struct BetaBadge: View {
+    var compact = false
+
     var body: some View {
         Text("Beta")
             .textCase(.uppercase)
-            .font(FRFonts.fixedFont(.dmSans, weight: 700, size: 11))
-            .tracking(0.66)
+            .font(FRFonts.fixedFont(.dmSans, weight: 700, size: compact ? 10 : 11))
+            .tracking(compact ? 0.4 : 0.66)
             .foregroundStyle(Color.frBeta)
-            .padding(.horizontal, 5)
-            .frame(minHeight: 16)
-            .background(Color.frInfoTint, in: Capsule())
+            .padding(.horizontal, compact ? 3 : 5)
+            .frame(minHeight: compact ? 14 : 16)
+            .background(Color.frInfoTint, in: RoundedRectangle(cornerRadius: compact ? 5 : 8, style: .continuous))
             .fixedSize()
     }
 }

@@ -208,6 +208,8 @@ struct ShellSheetView: View {
             NavigationStack { TradeComposerView(mode: .counter(offerID)) }
         case .placeBid(let target):
             NavigationStack { PlaceBidView(target: target) }
+        case .teamProjection(let teamID):
+            NavigationStack { TeamProjectionView(teamID: teamID) }
         }
     }
 }
@@ -217,7 +219,7 @@ private extension ShellSheet {
     var needsSeason: Bool {
         switch self {
         case .menu, .createLeague, .joinLeague, .draftMoviePicker: false
-        case .editTeam, .dropMovie, .proposeTrade, .counterTrade, .placeBid: true
+        case .editTeam, .dropMovie, .proposeTrade, .counterTrade, .placeBid, .teamProjection: true
         }
     }
 }
@@ -229,7 +231,9 @@ private struct SeasonStoreEnvironment: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if let store {
-            content.environment(store)
+            content
+                .environment(store)
+                .environment(\.projectionStore, store.projections)
         } else {
             content
         }

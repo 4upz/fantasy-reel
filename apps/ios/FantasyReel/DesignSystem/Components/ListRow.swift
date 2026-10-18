@@ -10,6 +10,9 @@ import SwiftUI
 ///
 /// VoiceOver reads the row as one element. Pass `accessibilityLabel` to replace
 /// the combined reading ("Rank 2, Reel Deal, your team, 113 points").
+///
+/// `accessory` sits at the end of the meta line (a projection chip, F-19), or
+/// on a line of its own under the meta when the two don't fit side by side.
 struct ListRow<Leading: View, Trailing: View>: View {
     private let title: String
     private let meta: String?
@@ -17,6 +20,7 @@ struct ListRow<Leading: View, Trailing: View>: View {
     private let isHero: Bool
     private let metaLineLimit: Int
     private let accessibilityLabelOverride: String?
+    private let accessory: AnyView?
     private let leading: Leading
     private let trailing: Trailing
 
@@ -29,6 +33,7 @@ struct ListRow<Leading: View, Trailing: View>: View {
         isHero: Bool = false,
         metaLineLimit: Int = 1,
         accessibilityLabel: String? = nil,
+        accessory: AnyView? = nil,
         @ViewBuilder leading: () -> Leading,
         @ViewBuilder trailing: () -> Trailing
     ) {
@@ -38,6 +43,7 @@ struct ListRow<Leading: View, Trailing: View>: View {
         self.isHero = isHero
         self.metaLineLimit = metaLineLimit
         self.accessibilityLabelOverride = accessibilityLabel
+        self.accessory = accessory
         self.leading = leading()
         self.trailing = trailing()
     }
@@ -50,11 +56,20 @@ struct ListRow<Leading: View, Trailing: View>: View {
                     .frFont(.rowTitle)
                     .foregroundStyle(Color.frText)
                     .lineLimit(dynamicTypeSize.isAccessibilitySize ? 3 : 1)
-                if let meta, !meta.isEmpty {
-                    Text(meta)
-                        .frFont(.meta)
-                        .foregroundStyle(Color.frTextSecondary)
-                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? max(4, metaLineLimit) : metaLineLimit)
+                if let accessory {
+                    // Beside the meta when both fit, else on its own line.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            metaText
+                            accessory
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            metaText
+                            accessory
+                        }
+                    }
+                } else {
+                    metaText
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -69,6 +84,16 @@ struct ListRow<Leading: View, Trailing: View>: View {
         .frame(minHeight: isHero ? FRMetrics.heroRowHeight : FRMetrics.rowHeight)
         .contentShape(Rectangle())
         .modifier(RowAccessibility(label: accessibilityLabelOverride))
+    }
+
+    @ViewBuilder
+    private var metaText: some View {
+        if let meta, !meta.isEmpty {
+            Text(meta)
+                .frFont(.meta)
+                .foregroundStyle(Color.frTextSecondary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? max(4, metaLineLimit) : metaLineLimit)
+        }
     }
 }
 

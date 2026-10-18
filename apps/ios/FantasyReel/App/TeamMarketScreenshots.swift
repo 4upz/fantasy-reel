@@ -5,12 +5,18 @@ import SwiftUI
 
 /// Screenshot scenes for the league overview, roster, bids, trades and
 /// standings (F-10 to F-14): Alice, the commissioner, mid-season in Popcorn
-/// Syndicate, with in-memory data only.
+/// Syndicate, with in-memory data only. The `…Projected` scenes and
+/// `teamProjection` turn projected scores (Beta, F-19) on.
 struct TeamMarketScreenshotView: View {
     let scene: ScreenshotScene
 
-    @State private var fixture = TeamMarketFixture()
+    @State private var fixture: TeamMarketFixture
     @State private var isReady = false
+
+    init(scene: ScreenshotScene) {
+        self.scene = scene
+        _fixture = State(initialValue: TeamMarketFixture(projected: TeamMarketFixture.projectedScenes.contains(scene)))
+    }
 
     var body: some View {
         Group {
@@ -30,6 +36,7 @@ struct TeamMarketScreenshotView: View {
         .environment(fixture.research)
         .environment(fixture.history)
         .environment(\.leagueSelection, fixture.directory.selection)
+        .environment(\.projectionStore, fixture.season.projections)
         .task {
             await fixture.prepare()
             fixture.route(to: scene)
@@ -42,8 +49,11 @@ struct TeamMarketScreenshotView: View {
     @ViewBuilder
     private var content: some View {
         switch scene {
-        case .leagueHome, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades:
+        case .leagueHome, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades, .rosterProjected, .standingsProjected:
             LeagueTabs(tabs: LeagueNavigation.tabs(for: .active))
+        case .teamProjection: NavigationStack { TeamProjectionView(teamID: TeamMarketFixture.team("alice")) }
+        case .placeBidProjected: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1013, title: "Toy Story 5", releaseDate: DateOnly("2026-11-19")))) }
+        case .tradeComposerProjected: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("bob"))) }
         case .placeBid: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23")))) }
         case .tradeComposer: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("dave"))) }
         case .dropMovie: NavigationStack { DropMovieView(holdingID: "h-1006") }
@@ -56,6 +66,9 @@ struct TeamMarketScreenshotView: View {
 final class TeamMarketFixture {
     static let alice: UserID = "u-alice"
     static func team(_ user: String) -> TeamID { TeamID("t-\(user)") }
+    static let projectedScenes: Set<ScreenshotScene> = [
+        .rosterProjected, .standingsProjected, .teamProjection, .placeBidProjected, .tradeComposerProjected,
+    ]
 
     let environment: AppEnvironment
     let router = ShellRouter()
@@ -66,7 +79,7 @@ final class TeamMarketFixture {
     let research: LeagueResearchStore
     let history = MovieSearchHistory()
 
-    init() {
+    init(projected: Bool = false) {
         let now = Date()
         let day: TimeInterval = 86_400
         let leagueID: LeagueID = "l-popcorn"
@@ -202,25 +215,41 @@ final class TeamMarketFixture {
                 movies: [BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23"))],
                 myTeamID: Self.team("alice")
             ),
-            trades: InMemoryTradeRepository(trades: trades, myTeamID: Self.team("alice"))
+            trades: InMemoryTradeRepository(trades: trades, myTeamID: Self.team("alice")),
+            movies: InMemoryMovieRepository(projections: projected ? Self.projections : .disabled)
         )
         self.environment = environment
         directory = LeagueDirectoryStore(userID: Self.alice, repository: environment.leagues, defaults: UserDefaults(suiteName: "fr.screenshots") ?? .standard)
         season = LeagueSeasonStore(
             selection: LeagueSelection(userID: Self.alice, season: league, seriesSeasons: [league]),
-            repository: environment.teams, bidRepository: environment.bids, tradeRepository: environment.trades
+            repository: environment.teams, bidRepository: environment.bids, tradeRepository: environment.trades,
+            movieRepository: environment.movies
         )
         inbox = InboxStore(userID: Self.alice, repository: environment.notifications)
         wishlist = WishlistStore(userID: Self.alice, repository: environment.wishlists)
         research = LeagueResearchStore(leagues: environment.leagues, leagueMovies: environment.leagueMovies)
     }
 
+    /// Projected scores (Beta) for the movies still to come: holdings, bids.
+    private static var projections: MovieProjectionsResponse {
+        let ranges: [(TMDbID, ClosedRange<Double>)] = [
+            (1003, 70...84), (1004, 30...52), (1006, 33...51), (1008, 74...87), (1009, 52...70),
+            (1010, 85...94), (1012, 56...72), (1013, 80...92), (1014, 72...88), (1015, 77...89),
+        ]
+        return ProjectionPreviewData.response(ranges.map { tmdbID, range in
+            ProjectionPreviewData.projection(tmdbID, range50: range, lowConfidence: tmdbID == 1009)
+        })
+    }
+
     /// Selects the scene's tab and pushes its screen onto that tab's stack.
     func route(to scene: ScreenshotScene) {
         switch scene {
         case .leagueHome: router.select(.home)
-        case .roster: router.select(.roster)
+        case .roster, .rosterProjected: router.select(.roster)
         case .standings: router.select(.standings)
+        case .standingsProjected:
+            router.select(.standings)
+            season.showsProjectedStandings = true
         case .teamDetail:
             router.select(.standings)
             router.paths[.standings] = [.team(Self.team("bob"))]
@@ -237,6 +266,12 @@ final class TeamMarketFixture {
         await directory.load()
         await season.load()
         router.seasonStore = season
+        // Let the season's projection request answer before the capture.
+        var waits = 0
+        while season.projections.status == .unknown, waits < 20 {
+            try? await Task.sleep(for: .milliseconds(50))
+            waits += 1
+        }
     }
 }
 #endif

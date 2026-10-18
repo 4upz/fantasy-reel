@@ -22,6 +22,7 @@ struct MovieRow<Trailing: View>: View {
     private let isHero: Bool
     private let metaLineLimit: Int
     private let accessibilityLabelOverride: String?
+    private let accessory: AnyView?
     private let trailing: Trailing
 
     /// A movie row with any trailing view (a price, a Bid button, an RT score).
@@ -33,6 +34,7 @@ struct MovieRow<Trailing: View>: View {
         isHero: Bool = false,
         metaLineLimit: Int = 1,
         accessibilityLabel: String? = nil,
+        accessory: AnyView? = nil,
         @ViewBuilder trailing: () -> Trailing
     ) {
         self.title = title
@@ -42,6 +44,7 @@ struct MovieRow<Trailing: View>: View {
         self.isHero = isHero
         self.metaLineLimit = metaLineLimit
         self.accessibilityLabelOverride = accessibilityLabel
+        self.accessory = accessory
         self.trailing = trailing()
     }
 
@@ -52,7 +55,8 @@ struct MovieRow<Trailing: View>: View {
             showsChevron: showsChevron,
             isHero: isHero,
             metaLineLimit: metaLineLimit,
-            accessibilityLabel: accessibilityLabelOverride
+            accessibilityLabel: accessibilityLabelOverride,
+            accessory: accessory
         ) {
             PosterImage(posterURL: posterURL, title: title)
         } trailing: {
@@ -71,16 +75,18 @@ extension MovieRow where Trailing == PointsTrail {
         preRelease: Bool = false,
         pointsCaption: String? = nil,
         showsChevron: Bool = false,
-        isHero: Bool = false
+        isHero: Bool = false,
+        accessory: AnyView? = nil,
+        accessoryLabel: String? = nil
     ) {
         let spoken = FantasyPoints.spokenLabel(points, preRelease: preRelease)
-        let label = [title, meta, spoken]
+        let label = [title, meta, accessoryLabel, spoken]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
             .joined(separator: ", ")
         self.init(
             title: title, meta: meta, posterURL: posterURL, showsChevron: showsChevron,
-            isHero: isHero, accessibilityLabel: label
+            isHero: isHero, accessibilityLabel: label, accessory: accessory
         ) {
             PointsTrail(points: points, preRelease: preRelease, caption: pointsCaption)
         }
@@ -89,8 +95,8 @@ extension MovieRow where Trailing == PointsTrail {
 
 extension MovieRow where Trailing == EmptyView {
     /// A movie row with nothing trailing (franchise history, search results).
-    init(title: String, meta: String?, posterURL: String?, showsChevron: Bool = false) {
-        self.init(title: title, meta: meta, posterURL: posterURL, showsChevron: showsChevron) {
+    init(title: String, meta: String?, posterURL: String?, showsChevron: Bool = false, accessory: AnyView? = nil) {
+        self.init(title: title, meta: meta, posterURL: posterURL, showsChevron: showsChevron, accessory: accessory) {
             EmptyView()
         }
     }

@@ -162,6 +162,16 @@ buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
   where a holding ID belongs.
 - **Realtime** is an invalidation signal only (`ChangeFeed`); after a change,
   re-read a coherent state. Pair it with `.refreshOnForeground` (N-05).
+- **Projected scores (Beta, F-19)** are gated by the server only:
+  `get-movie-projections` answers `enabled: false` unless `projections_display`
+  is on for the league's series. Each season's `LeagueSeasonStore.projections`
+  (`ProjectionStore`, also `\.projectionStore` in the environment) batches the
+  ids a render asks for into one request (≤100), and an "off" answer or a
+  failed first request turns it off for the season, so every screen renders
+  as before. Show a chip only on an unscored movie; `ProjectionAccessory`
+  builds the chip and its spoken label for a `ListRow`/`MovieRow` `accessory`.
+  Projected standings (`ProjectedStandings` in Core, ported from the web's
+  `projectedStandings.ts`) are nil until every held movie has an answer.
 - Account switch / sign-out rebuilds the whole signed-in tree (`RootView` keys it by
   user ID), which drops every in-memory cache. Disk caches must be keyed by user ID.
 

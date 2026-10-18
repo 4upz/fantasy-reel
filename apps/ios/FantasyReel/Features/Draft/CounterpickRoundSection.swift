@@ -10,6 +10,7 @@ struct CounterpickRoundSection: View {
 
     @State private var pendingPick: CounterpickOption?
     @State private var confirmEnd = false
+    @Environment(\.projectionStore) private var projections
 
     var body: some View {
         // Same spacing as the room's stack; one container for the dialogs.
@@ -143,7 +144,12 @@ struct CounterpickRoundSection: View {
             option.fantasyPoints.map { "\(FantasyPoints.signed(-$0)) for you" },
         ].compactMap { $0 }.joined(separator: " · ")
         let canPick = model.canSubmit && model.myTurn?.kind == .counterpick
-        return MovieRow(title: option.title, meta: meta, posterURL: option.posterURL) {
+        // "≈ +N pts for you": what the counterpick is most likely worth (Beta).
+        let projection = ProjectionAccessory(
+            option.fantasyPoints == nil ? projections?.projection(forMovie: option.movieID) : nil,
+            counterpick: true
+        )
+        return MovieRow(title: option.title, meta: meta, posterURL: option.posterURL, accessory: projection?.view) {
             Button("Pick") { pendingPick = option }
                 .buttonStyle(.fr(.secondary, size: .compact))
                 .disabled(!canPick)

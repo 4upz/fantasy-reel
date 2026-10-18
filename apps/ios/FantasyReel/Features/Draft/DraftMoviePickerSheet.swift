@@ -26,6 +26,7 @@ struct DraftMoviePickerView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(ShellRouter.self) private var router
     @Environment(WishlistStore.self) private var wishlist
+    @Environment(\.projectionStore) private var projections
     @State private var model: DraftMoviePickerModel?
     @State private var pendingPick: MovieSearchResult?
 
@@ -103,6 +104,8 @@ struct DraftMoviePickerView: View {
             }
             await picker.reload(excluding: room.snapshot?.draftedTMDbIDs ?? [])
         }
+        // Projected scores (Beta) for what's listed, in one batch per page.
+        .task(id: picker.movies.map(\.tmdbID)) { projections?.request(picker.movies.map(\.tmdbID)) }
     }
 
     @ViewBuilder
@@ -184,7 +187,10 @@ struct DraftMoviePickerView: View {
             .joined(separator: " · ")
         return HStack(spacing: 0) {
             NavigationLink(value: LeagueRoute.movie(movie.tmdbID)) {
-                MovieRow(title: movie.title, meta: meta, posterURL: movie.posterURL)
+                MovieRow(
+                    title: movie.title, meta: meta, posterURL: movie.posterURL,
+                    accessory: isDrafted ? nil : ProjectionAccessory(projections?.projection(for: movie.tmdbID))?.view
+                )
             }
             .buttonStyle(.frRow)
             .accessibilityHint("Shows movie details")

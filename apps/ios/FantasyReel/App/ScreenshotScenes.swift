@@ -39,6 +39,8 @@ enum ScreenshotScene: String, CaseIterable {
     case draftPicker
     case draftCounterpick
     case draftOffline
+    case draftPickerProjected
+    case draftCounterpickProjected
     case leagueHome
     case roster
     case standings
@@ -49,6 +51,11 @@ enum ScreenshotScene: String, CaseIterable {
     case trades
     case tradeComposer
     case dropMovie
+    case rosterProjected
+    case standingsProjected
+    case teamProjection
+    case placeBidProjected
+    case tradeComposerProjected
     case noLeaguesWithInvitation
     case createLeague
     case joinLeague
@@ -98,6 +105,7 @@ struct ScreenshotSceneView: View {
 
     private static let teamMarketScenes: Set<ScreenshotScene> = [
         .leagueHome, .roster, .standings, .teamDetail, .bids, .placeBid, .bidPriorities, .trades, .tradeComposer, .dropMovie,
+        .rosterProjected, .standingsProjected, .teamProjection, .placeBidProjected, .tradeComposerProjected,
     ]
 
     private static let leagueLifecycleScenes: Set<ScreenshotScene> = [
@@ -146,6 +154,10 @@ private struct AuthScreenshotView: View {
                 DraftPreviewScreen(.counterpick)
             case .draftOffline:
                 DraftPreviewScreen(.offline)
+            case .draftPickerProjected:
+                DraftPreviewScreen(.picker, projected: true)
+            case .draftCounterpickProjected:
+                DraftPreviewScreen(.counterpick, projected: true)
             default:
                 NavigationStack(path: $navigation.path) {
                     WelcomeView()
@@ -167,7 +179,8 @@ private struct AuthScreenshotView: View {
         switch scene {
         case .welcome, .chooseNewPassword, .appleRelayNotice:
             break
-        case .draftSetup, .draftLive, .draftPicker, .draftCounterpick, .draftOffline:
+        case .draftSetup, .draftLive, .draftPicker, .draftCounterpick, .draftOffline,
+             .draftPickerProjected, .draftCounterpickProjected:
             // Seeded by `DraftPreviewScreen` itself.
             break
         case .logIn:
