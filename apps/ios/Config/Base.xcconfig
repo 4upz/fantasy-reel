@@ -14,11 +14,13 @@ FR_URL_SCHEME = fantasyreel
 // xcconfig treats "//" as a comment, hence the "$()" in the middle of URLs.
 FR_SITE_URL = https:/$()/fantasyreel.com
 
-// The Fantasy Reel bot's public Discord application ID (the web's
-// NEXT_PUBLIC_DISCORD_CLIENT_ID). Empty hides "Add to Discord" in the bot guide.
-DISCORD_CLIENT_ID =
-
 // Capabilities: Sign in with Apple. A free personal team can't sign this
 // capability for a device; set `CODE_SIGN_ENTITLEMENTS =` in Local.xcconfig to
 // build without it (the Apple button then fails with an error, nothing else).
 CODE_SIGN_ENTITLEMENTS = Config/FantasyReel.entitlements
+
+// The public Discord application (client) ID used to build the bot's "Add to
+// Discord" link in league settings and the bot guide (the web's
+// NEXT_PUBLIC_DISCORD_CLIENT_ID).
+// Empty hides the button, as on the web.
+FR_DISCORD_CLIENT_ID =

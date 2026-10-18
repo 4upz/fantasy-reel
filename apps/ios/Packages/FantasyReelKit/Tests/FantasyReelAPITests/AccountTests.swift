@@ -130,7 +130,7 @@ struct AccountLinkingTests {
     }
 }
 
-struct DiscordBotInstallTests {
+struct DiscordClientIDTests {
     private let base: [String: Any] = [
         "FRSupabaseURL": "http://127.0.0.1:54321",
         "FRSupabaseAnonKey": "anon",
@@ -138,24 +138,15 @@ struct DiscordBotInstallTests {
         "FRURLScheme": "fantasyreel",
     ]
 
-    @Test func noClientIDMeansNoInstallLink() throws {
+    @Test func unsetClientIDIsNil() throws {
         var info = base
-        info["FRDiscordClientID"] = "$(DISCORD_CLIENT_ID)"
-        #expect(try AppConfiguration.load(from: info).discordBotInstallURL == nil)
+        info["FRDiscordClientID"] = "$(FR_DISCORD_CLIENT_ID)"
+        #expect(try AppConfiguration.load(from: info).discordClientID == nil)
     }
 
-    @Test func installLinkMatchesTheWeb() throws {
+    @Test func clientIDIsRead() throws {
         var info = base
         info["FRDiscordClientID"] = "1234567890"
-        let url = try #require(try AppConfiguration.load(from: info).discordBotInstallURL)
-        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        let query = Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.value ?? "") })
-        #expect(url.host() == "discord.com")
-        #expect(query == [
-            "client_id": "1234567890",
-            "scope": "bot applications.commands",
-            "permissions": "536871936",
-            "integration_type": "0",
-        ])
+        #expect(try AppConfiguration.load(from: info).discordClientID == "1234567890")
     }
 }

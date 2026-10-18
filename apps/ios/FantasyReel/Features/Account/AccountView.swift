@@ -14,6 +14,7 @@ struct AccountView: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(SessionStore.self) private var session
     @Environment(ProfileStore.self) private var profiles
+    @Environment(AdminStore.self) private var admin
 
     var body: some View {
         if let account = session.account {
@@ -25,6 +26,9 @@ struct AccountView: View {
                 profiles: profiles
             ), email: account.email)
             .id(account.id)
+            // Asked here rather than on the row: the row is absent for everyone
+            // who isn't an administrator, so a task on it would never run.
+            .task { await admin.checkIfNeeded() }
         }
     }
 }

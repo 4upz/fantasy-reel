@@ -50,6 +50,7 @@ private struct MenuRootView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
                 leagues
+                seasons
                 PendingInvitationsSection()
                 links
             }
@@ -111,6 +112,29 @@ private struct MenuRootView: View {
         .accessibilityLabel("Your leagues")
     }
 
+    /// The current league's seasons (F-04), when it has more than one: the
+    /// season menu within a league. Each season the account can read is listed;
+    /// joining a later season doesn't grant earlier ones.
+    @ViewBuilder
+    private var seasons: some View {
+        if let selection = directory.selection, selection.seriesSeasons.count >= 2 {
+            SectionHeader("Seasons")
+            FRRowGroup(separatorInset: FRMetrics.plainSeparatorInset) {
+                ForEach(selection.seriesSeasons) { season in
+                    Button {
+                        directory.select(season.id)
+                        router.dismissSheet()
+                    } label: {
+                        MenuSeasonRow(season: season, isSelected: season.id == selection.season.id)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel("Seasons of \(selection.season.name)")
+        }
+    }
+
     private var links: some View {
         FRRowGroup {
             NavigationLink(value: MenuRoute.wishlist) {
@@ -164,6 +188,35 @@ private struct LeagueMenuRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
+    }
+}
+
+/// One season of the current league: "2026 Season · Active", checked when selected.
+private struct MenuSeasonRow: View {
+    let season: League
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "calendar")
+                .foregroundStyle(Color.frTextSecondary)
+                .frame(width: 36)
+                .accessibilityHidden(true)
+            Text("\(String(season.seasonYear)) Season · \(season.status.displayName)")
+                .frFont(.rowLabel)
+                .foregroundStyle(Color.frText)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.frGold)
+                    .accessibilityHidden(true)
+            }
+        }
+        .frame(minHeight: 48)
+        .padding(.horizontal, 16)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

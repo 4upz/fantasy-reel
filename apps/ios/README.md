@@ -105,7 +105,9 @@ branch, which the description can link. Remove the label once they're in, since
 GitHub won't start CI on that bot commit by itself; your next push runs it. A
 capture that comes out blank is retried, and if it stays blank nothing is
 committed and the step fails, so check the run's warnings. To add a
-screen, add a case to `ScreenshotScene`. Locally, set the `FR_SCREENSHOT`
+screen, add a case to `ScreenshotScene`; signed-in scenes run the real shell
+over in-memory repositories seeded in `ScreenshotData` (League of Culture,
+the four seeded test accounts). Locally, set the `FR_SCREENSHOT`
 environment variable to a case name in the scheme's Run options.
 
 ## Not yet done (tracked for feature work)
@@ -145,7 +147,7 @@ environment variable to a case name in the scheme's Run options.
   still works and logs a warning, but Apple keeps the app listed under the
   person's Apple ID.
 - **Discord bot install link.** Put the bot's public application ID (the web's
-  `NEXT_PUBLIC_DISCORD_CLIENT_ID`) in `DISCORD_CLIENT_ID`; empty hides the
+  `NEXT_PUBLIC_DISCORD_CLIENT_ID`) in `FR_DISCORD_CLIENT_ID`; empty hides the
   "Add to Discord" button in the guide.
 - **Security check.** Put the web's public Turnstile site key
   (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`) in `TURNSTILE_SITE_KEY` for Release, and

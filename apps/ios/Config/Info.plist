@@ -9,12 +9,12 @@
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>FRSiteURL</key>
 	<string>$(FR_SITE_URL)</string>
+	<key>FRDiscordClientID</key>
+	<string>$(FR_DISCORD_CLIENT_ID)</string>
 	<key>FRURLScheme</key>
 	<string>$(FR_URL_SCHEME)</string>
 	<key>FRTurnstileSiteKey</key>
 	<string>$(TURNSTILE_SITE_KEY)</string>
-	<key>FRDiscordClientID</key>
-	<string>$(DISCORD_CLIENT_ID)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
