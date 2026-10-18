@@ -18,15 +18,31 @@ struct RootView: View {
                 AuthFlowView()
                     .transition(.opacity)
             case .signedIn(let account):
-                SignedInRootView(account: account, environment: environment)
-                    // A new account gets a brand-new tree: no cache, stack or
-                    // selection from the previous account survives (N-02, N-05).
-                    .id(account.id)
-                    .transition(.opacity)
+                if session.isRecoveringPassword {
+                    // A reset link signed in: choosing the new password comes
+                    // first and can't be swiped away (F-02).
+                    ChooseNewPasswordView()
+                        .transition(.opacity)
+                } else if session.showsAppleRelayNotice {
+                    AppleRelayNoticeView()
+                        .transition(.opacity)
+                } else {
+                    SignedInRootView(account: account, environment: environment)
+                        // A new account gets a brand-new tree: no cache, stack or
+                        // selection from the previous account survives (N-02, N-05).
+                        .id(account.id)
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.default, value: session.state)
+        .animation(.default, value: session.isRecoveringPassword)
+        .animation(.default, value: session.showsAppleRelayNotice)
         .task { session.start() }
+        // Someone who stops using Apple with Fantasy Reel (Settings → Apple ID)
+        // is signed out at launch, after sign-in, and on return to the app.
+        .task(id: session.account?.id) { await session.checkAppleCredential() }
+        .refreshOnForeground { await session.checkAppleCredential() }
         .onOpenURL { url in handle(url) }
     }
 
@@ -34,6 +50,12 @@ struct RootView: View {
         guard let link = environment.deepLink(from: url) else { return }
         if case .authCallback(let callbackURL) = link {
             Task { await session.handleAuthCallback(callbackURL) }
+            return
+        }
+        // How to Play is public, so signed out it opens now, without
+        // replacing a link held for after sign-in (an invitation).
+        if link == .help, session.state == .signedOut {
+            session.publicHelpRequest = UUID()
             return
         }
         // Signed-in routing happens in SignedInRootView, which observes this.

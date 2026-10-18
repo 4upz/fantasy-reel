@@ -26,8 +26,8 @@ apps/ios/
 │                                 group: drop a .swift file into FantasyReel/ and it is
 │                                 compiled. Feature work never needs to edit the project.
 ├── Config/                       xcconfigs (Supabase URL/key per build) and Info.plist.
-│                                 No entitlements yet (Universal Links and Sign in with
-│                                 Apple will add one). Local overrides go in
+│                                 FantasyReel.entitlements (Sign in with Apple; Universal
+│                                 Links will join it). Local overrides go in
 │                                 Config/Local.xcconfig (gitignored).
 ├── FantasyReel/                  The app target: everything SwiftUI
 │   ├── App/                      @main, AppEnvironment (dependency container), RootView
@@ -56,7 +56,7 @@ saying why, so parallel threads don't collide.
 | --- | --- | --- |
 | `Auth` | Welcome, Log in, Sign up, Reset password | F-01, F-02, N-02, N-03, L-01 |
 | `Leagues` | No leagues, Create league, Join league, invitations in the menu sheet | F-04, F-05 |
-| `LeagueHome` | Home (overview) tab, edit team, completed season | F-10, F-16 |
+| `LeagueHome` | Home (overview) tab, edit team | F-10 |
 | `Draft` | Draft setup, live draft, movie picker, counterpick round | F-08, F-09 |
 | `Roster` | Roster tab, drops, team projection sheet | F-11, F-19 |
 | `Bids` | Bids tab, place bid sheet, bid priorities | F-12 |
@@ -65,9 +65,11 @@ saying why, so parallel threads don't collide.
 | `Movies` | Search tab, league movie detail | F-06, F-19 |
 | `Wishlist` | Wishlist | F-07 |
 | `Inbox` | Notifications | F-17 |
-| `Account` | Account, delete account, admin dashboard | F-03, L-02, F-18 |
+| `Account` | Account, display name, change password, delete account | F-02, F-03, L-01, L-02 |
+| `Help` | How to Play (signed in and out), Discord bot guide | F-01, F-17 |
+| `Admin` | Growth dashboard (`GrowthDashboardRow` goes on Account) | F-18 |
 | `LeagueRules` | League rules (read-only) | V-01 |
-| `LeagueSettings` | Owner settings, history | F-15, F-16 |
+| `LeagueSettings` | Owner settings, history, completed-season home (`CompletedSeasonHomeView`) | F-15, F-16 |
 
 Today each folder holds a placeholder root view that the shell already routes to.
 A feature thread replaces the placeholder's body; it keeps the type name and
@@ -114,9 +116,15 @@ initializer so the shell keeps compiling.
   the `LeagueRoute` and `MenuRoute` enums; add a case for a new screen.
 - Deep links (`DeepLink.parse`) arrive through `onOpenURL`; signed-out links are held
   by `SessionStore.pendingDeepLink` and replayed after sign-in.
-- **Password recovery:** `SessionStore.isRecoveringPassword` is set when a reset link
-  signs the user in, but nothing reads it yet. The Auth thread owns showing a
-  non-dismissible "Choose a new password" screen from `RootView` while it is true.
+- **Password recovery:** while `SessionStore.isRecoveringPassword` is true (a reset
+  link signed the user in), `RootView` shows `ChooseNewPasswordView` in place of the
+  app; saving a password or signing out ends it. `showsAppleRelayNotice` works the
+  same way for a new Hide My Email account (L-01).
+- **Auth wording and CAPTCHA:** `AuthService` returns the web's sentences
+  (`AuthMessages`) with the Auth error code kept in `serverCode`. Any form that
+  calls a CAPTCHA-protected endpoint (password sign-in, sign-up, reset, resend,
+  reauthentication) owns a `SecurityCheck`, shows `SecurityCheckView`, checks
+  `isReady` on submit and sends `take()` as the token.
 
 ## Layout rules from the design review
 
@@ -137,6 +145,13 @@ buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
   and turns failures into `APIError` (server message, status, code, raw body,
   `invalid_source_ids`, rate limit with retry time, timeout = *uncertain result*).
   Never auto-retry a mutation; reconcile instead (N-04).
+- **League reads and lifecycle mutations** are shared contracts: `LeagueRepository`
+  (seasons, `fetchMembers(of:)` for a season's active members with team and
+  profile, `fetchSeriesSeasons(_:)` for history) and `LeagueLifecycleRepository`
+  (`create-league`, `join-league`, every `update-league` action as a
+  `LeagueUpdate` case, `start-next-season`). Draft order, removal and every
+  other owner setting go through `update(_:_:)`; don't call `update-league`
+  from a feature's own repository.
 - Draft mutations carry a durable `request_id` UUID per logical attempt — distinct
   from the tracing header — and keep it across an uncertain retry (F-08).
 - **Wire format:** snake_case keys with explicit `CodingKeys` in every model (no key
@@ -156,6 +171,11 @@ buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
   (`@State var model = ...`). A view model takes the specific repositories it uses
   (`init(holdings: any HoldingsRepository, ...)`), never the whole `AppEnvironment`;
   the view reads `@Environment(AppEnvironment.self)` and passes them in.
+  Because the repositories come from the environment, which `init` can't read,
+  a screen creates its model once in `onAppear` into an optional `@State` and
+  hands it to an inner view that takes `let model` (see `MovieSearchView`).
+  `@State var model = Model(...)` in the initializer would build a new model,
+  and start new reads, on every parent re-render.
 - **Repositories are protocols** with a live `Supabase…Repository` and an in-memory
   fake (`FantasyReelAPI/Repositories/`). Add your feature's pair the same way, so
   previews (`AppEnvironment.preview(...)`) and tests never touch the network.

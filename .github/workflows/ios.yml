@@ -2,6 +2,8 @@ name: iOS
 
 on:
   pull_request:
+    # labeled: adding the ios-screenshots label commits fresh screenshots.
+    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'apps/ios/**'
       - '.github/workflows/ios.yml'
@@ -24,6 +26,9 @@ jobs:
     name: Build and test (iOS Simulator)
     runs-on: macos-26
     timeout-minutes: 45
+    permissions:
+      # Only the labeled screenshot step writes (to the PR's own branch).
+      contents: write
     defaults:
       run:
         working-directory: apps/ios
@@ -65,6 +70,7 @@ jobs:
             -scheme FantasyReel \
             -configuration Debug \
             -destination "id=${{ steps.sim.outputs.udid }}" \
+            -derivedDataPath build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee build/xcodebuild.log
 
@@ -78,6 +84,79 @@ jobs:
             -resultBundlePath ../../build/FantasyReelKit.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             2>&1 | tee -a ../../build/xcodebuild.log
+
+      # Fixed screens (FantasyReel/App/ScreenshotScenes.swift) in light and
+      # dark, for reviewers. Uploaded as the ios-screenshots artifact.
+      - name: Capture screenshots
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          set -euo pipefail
+          APP=build/DerivedData/Build/Products/Debug-iphonesimulator/FantasyReel.app
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+          xcrun simctl install "$UDID" "$APP"
+          mkdir -p build/screenshots
+          SCENES=$(sed -n 's/^    case \([a-zA-Z]*\)$/\1/p' FantasyReel/App/ScreenshotScenes.swift)
+          for appearance in light dark; do
+            xcrun simctl ui "$UDID" appearance "$appearance"
+            for scene in $SCENES; do
+              OUT="build/screenshots/$scene-$appearance.png"
+              # A capture taken before the first frame is drawn is a blank
+              # page that compresses to almost nothing; relaunch and wait longer.
+              for attempt in 1 2 3; do
+                SIMCTL_CHILD_FR_SCREENSHOT="$scene" xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID"
+                sleep $((2 + attempt * 2))
+                xcrun simctl io "$UDID" screenshot "$OUT"
+                sips --resampleWidth 600 "$OUT" --out build/check.png >/dev/null
+                if [ "$(stat -f%z build/check.png)" -gt 60000 ]; then break; fi
+                echo "::warning::$scene ($appearance) looked blank on attempt $attempt"
+                if [ "$attempt" = 3 ]; then echo "$scene-$appearance" >> build/blank-screenshots.txt; fi
+              done
+            done
+          done
+          rm -f build/check.png
+          ls build/screenshots
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-screenshots
+          path: apps/ios/build/screenshots
+          if-no-files-found: error
+
+      # With the ios-screenshots label on a PR from this repo, commit smaller
+      # copies to the PR branch so the description can show them. Pushes made
+      # with GITHUB_TOKEN don't start another run.
+      - name: Commit screenshots to the PR branch
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'ios-screenshots')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          if [ -f build/blank-screenshots.txt ]; then
+            echo "::error::Not committing: these screenshots stayed blank: $(tr '\n' ' ' < build/blank-screenshots.txt)"
+            exit 1
+          fi
+          DEST=docs/screenshots
+          rm -rf "$DEST" && mkdir -p "$DEST"
+          for f in build/screenshots/*.png; do
+            sips --resampleWidth 600 "$f" --out "$DEST/$(basename "$f")" >/dev/null
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898+github-actions[bot]@users.noreply.github.com"
+          git fetch --depth=1 origin "$HEAD_REF"
+          git checkout -B "$HEAD_REF" "origin/$HEAD_REF"
+          git add "$DEST"
+          if git diff --cached --quiet; then echo "Screenshots unchanged"; exit 0; fi
+          git commit -m "iOS: update PR screenshots"
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" "HEAD:$HEAD_REF"
 
       - name: Summarize errors
         if: failure()

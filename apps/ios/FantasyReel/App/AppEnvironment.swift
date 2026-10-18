@@ -19,26 +19,70 @@ final class AppEnvironment {
     let session: SessionStore
 
     let leagues: any LeagueRepository
+    let leagueLifecycle: any LeagueLifecycleRepository
+    let invitations: any InvitationRepository
+    let announcements: any AnnouncementRepository
+    let admin: any AdminRepository
     let profiles: any ProfileRepository
     let notifications: any NotificationRepository
+    let account: any AccountRepository
+    /// Profile and team photo uploads (shared by Account and team editing).
+    let avatarStorage: any AvatarStorage
+    /// Teams, rosters, standings and drops (F-10, F-11, F-14).
+    let teams: any TeamRepository
+    /// Pickup and counterpick bidding (F-12).
+    let bids: any BidRepository
+    /// Trade offers (F-13).
+    let trades: any TradeRepository
+    let movies: any MovieRepository
+    let wishlists: any WishlistRepository
+    let leagueMovies: any LeagueMovieRepository
+    let draft: any DraftRepository
 
     /// Repositories default to the live Supabase ones; previews and tests pass
     /// in-memory fakes (see `AppEnvironment.preview`).
     init(
         configuration: AppConfiguration,
         leagues: (any LeagueRepository)? = nil,
+        leagueLifecycle: (any LeagueLifecycleRepository)? = nil,
+        invitations: (any InvitationRepository)? = nil,
+        announcements: (any AnnouncementRepository)? = nil,
+        admin: (any AdminRepository)? = nil,
         profiles: (any ProfileRepository)? = nil,
-        notifications: (any NotificationRepository)? = nil
+        notifications: (any NotificationRepository)? = nil,
+        account: (any AccountRepository)? = nil,
+        avatarStorage: (any AvatarStorage)? = nil,
+        teams: (any TeamRepository)? = nil,
+        bids: (any BidRepository)? = nil,
+        trades: (any TradeRepository)? = nil,
+        movies: (any MovieRepository)? = nil,
+        wishlists: (any WishlistRepository)? = nil,
+        leagueMovies: (any LeagueMovieRepository)? = nil,
+        draft: (any DraftRepository)? = nil
     ) {
         let supabase = SupabaseProvider(configuration: configuration)
         self.configuration = configuration
         self.supabase = supabase
-        self.edgeFunctions = EdgeFunctionClient(provider: supabase)
+        let edgeFunctions = EdgeFunctionClient(provider: supabase)
+        self.edgeFunctions = edgeFunctions
         self.changeFeed = ChangeFeed(provider: supabase)
         self.session = SessionStore(auth: AuthService(provider: supabase))
         self.leagues = leagues ?? SupabaseLeagueRepository(provider: supabase)
+        self.leagueLifecycle = leagueLifecycle ?? EdgeLeagueLifecycleRepository(functions: edgeFunctions)
+        self.invitations = invitations ?? SupabaseInvitationRepository(provider: supabase, functions: edgeFunctions)
+        self.announcements = announcements ?? EdgeAnnouncementRepository(functions: edgeFunctions)
+        self.admin = admin ?? SupabaseAdminRepository(provider: supabase)
         self.profiles = profiles ?? SupabaseProfileRepository(provider: supabase)
         self.notifications = notifications ?? SupabaseNotificationRepository(provider: supabase)
+        self.account = account ?? SupabaseAccountRepository(provider: supabase, edgeFunctions: edgeFunctions)
+        self.avatarStorage = avatarStorage ?? SupabaseAvatarStorage(provider: supabase)
+        self.teams = teams ?? SupabaseTeamRepository(provider: supabase, functions: edgeFunctions)
+        self.bids = bids ?? SupabaseBidRepository(provider: supabase, functions: edgeFunctions)
+        self.trades = trades ?? EdgeTradeRepository(functions: edgeFunctions)
+        self.movies = movies ?? EdgeMovieRepository(functions: edgeFunctions)
+        self.wishlists = wishlists ?? SupabaseWishlistRepository(provider: supabase)
+        self.leagueMovies = leagueMovies ?? SupabaseLeagueMovieRepository(provider: supabase)
+        self.draft = draft ?? SupabaseDraftRepository(provider: supabase, functions: edgeFunctions)
     }
 
     /// Parses an incoming URL against this build's site hosts and scheme.
@@ -54,19 +98,47 @@ extension AppEnvironment {
     /// network. Pass seeded fakes to show data.
     static func preview(
         leagues: any LeagueRepository = InMemoryLeagueRepository(),
+        leagueLifecycle: any LeagueLifecycleRepository = InMemoryLeagueLifecycleRepository(),
+        invitations: any InvitationRepository = InMemoryInvitationRepository(),
+        announcements: any AnnouncementRepository = InMemoryAnnouncementRepository(),
+        admin: any AdminRepository = InMemoryAdminRepository(),
         profiles: any ProfileRepository = InMemoryProfileRepository(),
-        notifications: any NotificationRepository = InMemoryNotificationRepository()
+        notifications: any NotificationRepository = InMemoryNotificationRepository(),
+        account: any AccountRepository = InMemoryAccountRepository(),
+        avatarStorage: any AvatarStorage = InMemoryAvatarStorage(),
+        teams: any TeamRepository = InMemoryTeamRepository(),
+        bids: any BidRepository = InMemoryBidRepository(),
+        trades: any TradeRepository = InMemoryTradeRepository(),
+        movies: any MovieRepository = InMemoryMovieRepository(),
+        wishlists: any WishlistRepository = InMemoryWishlistRepository(),
+        leagueMovies: any LeagueMovieRepository = InMemoryLeagueMovieRepository(),
+        draft: any DraftRepository = InMemoryDraftRepository()
     ) -> AppEnvironment {
         AppEnvironment(
             configuration: AppConfiguration(
                 supabaseURL: URL(string: "http://127.0.0.1:1")!,
                 supabaseAnonKey: "preview",
                 siteURL: URL(string: "https://fantasyreel.com")!,
-                urlScheme: "fantasyreel"
+                urlScheme: "fantasyreel",
+                // Shows the Discord guide's Add to Discord button; never opened.
+                discordClientID: "preview"
             ),
             leagues: leagues,
+            leagueLifecycle: leagueLifecycle,
+            invitations: invitations,
+            announcements: announcements,
+            admin: admin,
             profiles: profiles,
-            notifications: notifications
+            notifications: notifications,
+            account: account,
+            avatarStorage: avatarStorage,
+            teams: teams,
+            bids: bids,
+            trades: trades,
+            movies: movies,
+            wishlists: wishlists,
+            leagueMovies: leagueMovies,
+            draft: draft
         )
     }
 }

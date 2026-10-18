@@ -16,6 +16,7 @@ struct LeagueSelection: Equatable {
 
     var isOwner: Bool { season.ownerID == userID }
     var tabs: [LeagueTab] { LeagueNavigation.tabs(for: season.status) }
+    var showsSearchTab: Bool { LeagueNavigation.showsSearchTab(beside: tabs) }
     var defaultTab: LeagueTab { LeagueNavigation.defaultTab(for: season.status) }
     var menuItems: [LeagueMenuItem] {
         LeagueNavigation.menuItems(status: season.status, isOwner: isOwner, seasonCount: seriesSeasons.count)

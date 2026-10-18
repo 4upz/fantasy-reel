@@ -10,6 +10,10 @@
  *
  * Guards: a typed confirmation, and a sign-in within the last 15 minutes, so a
  * session left open on a shared computer cannot delete the account.
+ *
+ * The iPhone app also sends a fresh Sign in with Apple authorization code for
+ * accounts that use Apple; once the account is gone the code is used to revoke
+ * the app's Apple access (App Review 5.1.1(v), _shared/apple-revocation.ts).
  */
 import {
   jsonResponse,
@@ -22,6 +26,7 @@ import {
 } from '../_shared/utils.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { signedInRecently } from '../_shared/recent-auth.ts'
+import { appleRevocationConfig, revokeAppleAuthorization } from '../_shared/apple-revocation.ts'
 
 const log = createLogger('delete-account')
 
@@ -29,6 +34,8 @@ const DELETE_CONFIRMATION = 'DELETE'
 
 interface DeleteAccountRequest {
   confirmation?: string
+  /** From a Sign in with Apple authorization made just before deleting (iPhone app). */
+  apple_authorization_code?: unknown
 }
 
 Deno.serve(async (req) => {
@@ -40,7 +47,7 @@ Deno.serve(async (req) => {
     if (isAuthError(authResult)) return authResult
 
     const { user } = authResult
-    const { confirmation }: DeleteAccountRequest = await req.json().catch(() => ({}))
+    const { confirmation, apple_authorization_code }: DeleteAccountRequest = await req.json().catch(() => ({}))
 
     if (confirmation !== DELETE_CONFIRMATION) {
       return errorResponse(`Type ${DELETE_CONFIRMATION} to confirm`, 400)
@@ -73,7 +80,13 @@ Deno.serve(async (req) => {
 
     log.info('Account deleted', { user_id: user.id })
 
+    // The Apple revoke is best effort and can take seconds, so the response
+    // doesn't wait for it when the runtime can finish it afterwards.
+    const revoke = revokeApple(user.id, apple_authorization_code)
+    const runtime = globalThis as { EdgeRuntime?: { waitUntil(p: Promise<unknown>): void } }
+    runtime.EdgeRuntime?.waitUntil?.(revoke)
     await removeUploadedPhotos(serviceClient, user.id, (teams ?? []).map((t: { id: string }) => t.id))
+    if (!runtime.EdgeRuntime?.waitUntil) await revoke
 
     return jsonResponse({ deleted: true })
   } catch (error) {
@@ -97,6 +110,24 @@ async function liveDraftBlockers(
 }
 
 /**
+ * Best effort, after the delete: revoking first would sign the person out of
+ * Apple on their phone even if the delete were then refused (a draft starting
+ * in between). A failure is logged; the account is gone either way.
+ */
+async function revokeApple(userId: string, code: unknown): Promise<void> {
+  if (typeof code !== 'string' || code.length === 0 || code.length > 1024) return
+  const config = appleRevocationConfig()
+  if (!config) {
+    log.warn('Apple authorization not revoked: Apple secrets are not configured', { user_id: userId })
+    return
+  }
+  const result = await revokeAppleAuthorization(code, config, fetch, (failure) => {
+    log.error('Apple authorization revoke failed', { user_id: userId, ...failure })
+  })
+  if (result === 'revoked') log.info('Apple authorization revoked', { user_id: userId })
+}
+
+/**
  * Best effort: the account is already gone, and the database no longer points
  * at these files, so a failure here is logged rather than reported.
  */
@@ -110,11 +141,11 @@ async function removeUploadedPhotos(
     ...teamIds.map((id): [string, string] => ['team-avatars', id]),
   ]
 
-  for (const [bucket, folder] of folders) {
+  await Promise.all(folders.map(async ([bucket, folder]) => {
     try {
       const { data: files, error: listError } = await serviceClient.storage.from(bucket).list(folder)
       if (listError) throw listError
-      if (!files || files.length === 0) continue
+      if (!files || files.length === 0) return
       const { error: removeError } = await serviceClient.storage
         .from(bucket)
         .remove(files.map((file: { name: string }) => `${folder}/${file.name}`))
@@ -122,5 +153,5 @@ async function removeUploadedPhotos(
     } catch (error) {
       log.error('Failed to remove uploaded photos', { user_id: userId, bucket, folder, error: serializeError(error) })
     }
-  }
+  }))
 }

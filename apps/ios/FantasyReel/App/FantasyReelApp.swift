@@ -21,17 +21,30 @@ struct FantasyReelApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                switch bootstrap {
-                case .success(let environment):
-                    RootView()
-                        .environment(environment)
-                        .environment(environment.session)
-                case .failure(let error):
-                    ConfigurationErrorView(message: error.description)
+                #if DEBUG
+                if let scene = ScreenshotScene.requested {
+                    ScreenshotSceneView(scene: scene)
+                } else {
+                    app
                 }
+                #else
+                app
+                #endif
             }
             .preferredColorScheme(appearance.colorScheme)
             .tint(.frGold)
+        }
+    }
+
+    @ViewBuilder
+    private var app: some View {
+        switch bootstrap {
+        case .success(let environment):
+            RootView()
+                .environment(environment)
+                .environment(environment.session)
+        case .failure(let error):
+            ConfigurationErrorView(message: error.description)
         }
     }
 }

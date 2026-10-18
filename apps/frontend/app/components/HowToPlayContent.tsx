@@ -434,11 +434,11 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
               <ul className="type-body-sm space-y-2">
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
-                  <span>Place blind bids on available movies</span>
+                  <span>Bid on available movies. If another team outbids you, you&apos;re told the new amount and get time to raise your bid</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
-                  <span>Highest bid wins the movie when the bidding period closes</span>
+                  <span>When bidding closes, the highest bid wins if that team has a roster slot and budget left. If not, the movie goes to the next eligible bidder at their own bid</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
@@ -447,6 +447,10 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
                 <li className="flex items-start gap-2">
                   <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
                   <span>Budget doesn&apos;t reset - spend wisely!</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
+                  <span>Movies that already have a Tomatometer score can&apos;t be bid on or traded</span>
                 </li>
               </ul>
             </div>
@@ -505,7 +509,7 @@ export default function HowToPlayContent({ publicView = false }: { publicView?: 
                 <ul className="type-body-sm space-y-2">
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
-                    <span><strong>Accept:</strong> Trade executes immediately</span>
+                    <span><strong>Accept:</strong> Trade goes through after the league&apos;s review period, or within a few minutes if the league has none</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <ArrowRight className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />

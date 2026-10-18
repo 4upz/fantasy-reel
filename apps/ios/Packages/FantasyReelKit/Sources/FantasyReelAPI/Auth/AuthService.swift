@@ -46,8 +46,8 @@ public struct AuthService: Sendable {
         case updated(Account)
     }
 
-    private let provider: SupabaseProvider
-    private var auth: AuthClient { provider.client.auth }
+    let provider: SupabaseProvider
+    var auth: AuthClient { provider.client.auth }
 
     public init(provider: SupabaseProvider) {
         self.provider = provider
@@ -99,7 +99,7 @@ public struct AuthService: Sendable {
             let session = try await auth.signIn(email: email, password: password, captchaToken: captchaToken)
             return Self.account(session.user)
         } catch {
-            throw APIError.wrap(error)
+            throw Self.authError(error, context: .signIn)
         }
     }
 
@@ -116,34 +116,37 @@ public struct AuthService: Sendable {
             )
             return response.session.map { Self.account($0.user) }
         } catch {
-            throw APIError.wrap(error)
+            throw Self.authError(error, context: .signUp)
         }
     }
 
-    /// Re-sends the sign-up confirmation email. Non-enumerating on the server.
+    /// Re-sends the sign-up confirmation email. Non-enumerating: it succeeds
+    /// whether or not the address has an account, and fails only when nothing
+    /// could have been sent (security check, rate limit, no connection).
     public func resendConfirmation(email: String, captchaToken: String? = nil) async throws(APIError) {
         do {
             try await auth.resend(
-                email: email,
+                email: Self.normalizedEmail(email),
                 type: .signup,
                 emailRedirectTo: provider.configuration.authCallbackURL,
                 captchaToken: captchaToken
             )
         } catch {
-            throw APIError.wrap(error)
+            try Self.rethrowUnlessEnumerating(error)
         }
     }
 
-    /// Sends a password-reset link that opens this app (PKCE-bound to this device).
+    /// Sends a password-reset link that opens this app (PKCE-bound to this
+    /// device). Non-enumerating, like `resendConfirmation`.
     public func sendPasswordReset(email: String, captchaToken: String? = nil) async throws(APIError) {
         do {
             try await auth.resetPasswordForEmail(
-                email,
+                Self.normalizedEmail(email),
                 redirectTo: provider.configuration.recoveryCallbackURL,
                 captchaToken: captchaToken
             )
         } catch {
-            throw APIError.wrap(error)
+            try Self.rethrowUnlessEnumerating(error)
         }
     }
 
@@ -153,7 +156,7 @@ public struct AuthService: Sendable {
         do {
             _ = try await auth.update(user: UserAttributes(password: newPassword))
         } catch {
-            throw APIError.wrap(error)
+            throw Self.authError(error, context: .setPassword)
         }
     }
 
@@ -170,8 +173,53 @@ public struct AuthService: Sendable {
             return Self.account(session.user)
         } catch {
             if Self.isUserCancellation(error) { return nil }
-            throw APIError.wrap(error)
+            throw Self.authError(error, context: .signIn)
         }
+    }
+
+    /// The result of Sign in with Apple.
+    public struct AppleSignIn: Sendable, Equatable {
+        public let account: Account
+        /// Apple created a brand-new account behind a private relay address
+        /// (Hide My Email). It can't have matched an existing account's email,
+        /// so the person may already play under another sign-in method (L-01).
+        public let isNewRelayAccount: Bool
+    }
+
+    /// Signs in with the identity token from a native Sign in with Apple
+    /// authorization (L-01). `nonce` is the raw value whose SHA-256 went into
+    /// the Apple request; Supabase checks it against the token. Apple shares the
+    /// person's name only on their first authorization, so pass it when present:
+    /// it replaces a profile name that was only the email prefix. That write
+    /// finishes before this returns, so the app never loads the old name.
+    public func signInWithApple(idToken: String, nonce: String, fullName: String?) async throws(APIError) -> AppleSignIn {
+        let session: Session
+        do {
+            session = try await auth.signInWithIdToken(
+                credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
+            )
+        } catch {
+            throw Self.authError(error, context: .signIn)
+        }
+        let user = session.user
+        if let fullName, !fullName.isEmpty {
+            await adoptAppleName(fullName, for: user)
+        }
+        return AppleSignIn(account: Self.account(user), isNewRelayAccount: Self.isNewRelayAccount(user, now: Date()))
+    }
+
+    /// Best effort: the sign-in already succeeded, and a missing name only means
+    /// the profile keeps the email-prefix name `handle_new_user` gave it. Only
+    /// that fallback is replaced, never a name the person chose (an existing
+    /// account Apple auto-linked by email).
+    private func adoptAppleName(_ fullName: String, for user: User) async {
+        guard let prefix = user.email?.split(separator: "@").first.map(String.init) else { return }
+        _ = try? await provider.client
+            .from("profiles")
+            .update(["display_name": fullName])
+            .eq("user_id", value: user.id.uuidString.lowercased())
+            .eq("display_name", value: prefix)
+            .execute()
     }
 
     /// Completes a sign-in from an incoming `fantasyreel://auth/callback` URL
@@ -183,7 +231,7 @@ public struct AuthService: Sendable {
             let session = try await auth.session(from: url)
             return Self.account(session.user)
         } catch {
-            throw APIError.wrap(error)
+            throw Self.authError(error, context: .signIn)
         }
     }
 
@@ -198,6 +246,61 @@ public struct AuthService: Sendable {
     }
 
     // MARK: Helpers
+
+    /// Wraps an SDK error with the web's wording for auth failures. The Auth
+    /// error code stays in `serverCode` for screens that branch on it
+    /// (`email_not_confirmed`, `captcha_failed`).
+    static func authError(_ error: any Error, context: AuthMessages.Context) -> APIError {
+        guard let authError = error as? AuthError else { return APIError.wrap(error) }
+        var reasons: [String] = []
+        var status: Int?
+        switch authError {
+        case .weakPassword(_, let weakReasons):
+            reasons = weakReasons
+        case .api(_, _, _, let response):
+            status = response.statusCode
+        default:
+            break
+        }
+        let code = authError.errorCode.rawValue
+        let message = AuthMessages.message(code: code, serverMessage: authError.message, reasons: reasons, context: context)
+        return .server(APIError.ServerError(status: status, message: message ?? authError.message, code: code))
+    }
+
+    /// Reset and resend answer the same way whether or not an account exists,
+    /// so only failures that mean nothing was sent reach the screen.
+    static func rethrowUnlessEnumerating(_ error: any Error) throws(APIError) {
+        let wrapped = authError(error, context: .emailRequest)
+        guard case .server(let server) = wrapped else { throw wrapped }
+        // A server failure or a rejected address says nothing about whether an
+        // account exists, and in both cases nothing was sent.
+        if server.message == AuthMessages.captchaFailed
+            || server.message == AuthMessages.emailRateLimited
+            || server.code == "email_address_invalid"
+            || (server.status ?? 0) >= 500 {
+            throw wrapped
+        }
+    }
+
+    static func normalizedEmail(_ email: String) -> String {
+        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    static func isNewRelayAccount(_ user: User, now: Date) -> Bool {
+        isNewRelayAccount(
+            email: user.email,
+            providers: Set((user.identities ?? []).map(\.provider)),
+            createdAt: user.createdAt,
+            now: now
+        )
+    }
+
+    /// An Apple-only account behind a private relay address, created moments
+    /// ago by this sign-in (an older one is someone returning to it).
+    static func isNewRelayAccount(email: String?, providers: Set<String>, createdAt: Date, now: Date) -> Bool {
+        guard let email = email?.lowercased(), email.hasSuffix("@privaterelay.appleid.com") else { return false }
+        return providers == ["apple"] && now.timeIntervalSince(createdAt) < 120
+    }
 
     static func account(_ user: User) -> Account {
         Account(id: UserID(rawValue: user.id.uuidString.lowercased()), email: user.email)
