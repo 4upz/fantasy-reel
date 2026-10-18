@@ -140,7 +140,7 @@ final class ProjectionStore {
         let leagueID = leagueID
         Task { [weak self] in
             let result: Result<MovieProjectionsResponse, APIError>
-            do {
+            do throws(APIError) {
                 result = .success(try await repository.projections(league: leagueID, tmdbIDs: ids))
             } catch {
                 result = .failure(error)

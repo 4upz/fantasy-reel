@@ -63,10 +63,12 @@ private struct StandingsContent: View {
             .accessibilityLabel("\(summary.movies) movies, \(summary.scored) scored, \(summary.pending) pending")
 
         if projected != nil {
-            FRSegmentedControl("Standings view", selection: mode.animation(), options: StandingsMode.allCases) { option in
-                Text(option == .current ? "Current" : "Projected")
-                if option == .projected { BetaBadge() }
-            }
+            FRSegmentedControl("Standings view", selection: mode.animation(), options: StandingsMode.allCases, label: { option in
+                HStack(spacing: 6) {
+                    Text(option == .current ? "Current" : "Projected")
+                    if option == .projected { BetaBadge() }
+                }
+            })
             .onChange(of: mode.wrappedValue) { _, newMode in
                 Announcer.announce(newMode == .projected
                     ? "Showing projected standings, Beta. Rank and champions still come from real points only."
