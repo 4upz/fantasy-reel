@@ -87,7 +87,7 @@ final class AccountModel {
     func upload(_ image: AvatarImage.Prepared) {
         photo.run { [self] in
             let url = try await storage.upload(image, to: .profiles, folder: userID.rawValue)
-            do {
+            do throws(APIError) {
                 try await account.updateAvatarURL(url, for: userID)
             } catch {
                 guard error.isUncertainOutcome else { throw error }
