@@ -1,18 +1,19 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
-import type { TourId } from '@/tours/registry'
+import type { TourCtx, TourId } from '@/tours/registry'
 import type { TourContext } from '@/tours/types'
 import { useTours } from './TourProvider'
 
-interface Props {
-  id: TourId
-  /**
-   * What the tour's `when` rules read: role, league phase, and anything else
-   * the page knows. Keep values serializable; it is compared by content.
-   */
-  ctx?: TourContext
-}
+/**
+ * `ctx` is what the tour's rules read: role, league phase, and anything else
+ * the page knows, typed by the tour's `defineTour<Ctx>()`. It is optional only
+ * for a tour that needs no facts. Keep values serializable; it is compared by
+ * content.
+ */
+type Props<Id extends TourId> = Record<string, never> extends TourCtx<Id>
+  ? { id: Id; ctx?: TourCtx<Id> }
+  : { id: Id; ctx: TourCtx<Id> }
 
 /**
  * Offers a tour on this page. Renders nothing: while mounted, the tour starts
@@ -22,7 +23,9 @@ interface Props {
  *
  * @example <FeatureTour id="bidding" ctx={{ leagueStatus: league.status }} />
  */
-export default function FeatureTour({ id, ctx = {} }: Props): null {
+export default function FeatureTour<Id extends TourId>(props: Props<Id>): null {
+  const { id } = props
+  const ctx: TourContext = props.ctx ?? {}
   const { register } = useTours()
   const handle = useRef<ReturnType<typeof register> | null>(null)
   const ctxKey = JSON.stringify(ctx)

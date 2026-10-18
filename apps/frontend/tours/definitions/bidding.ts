@@ -1,3 +1,4 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
@@ -5,7 +6,7 @@ import { defineTour } from '../types'
  * uses a centered intro, anchored steps, and a step that only applies when the
  * league has counterpicks.
  */
-export const biddingTour = defineTour({
+export const biddingTour = defineTour<{ leagueStatus: LeagueStatus; counterpicksEnabled: boolean }>({
   id: 'bidding',
   version: 1,
   title: 'Bidding for pickups',
