@@ -1,7 +1,8 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /** The Standings tab during a season: how teams are ranked, and what can still move them. */
-export const standingsTour = defineTour({
+export const standingsTour = defineTour<{ leagueStatus: LeagueStatus; doublePoints: boolean }>({
   id: 'standings',
   version: 1,
   title: 'Standings',
@@ -17,7 +18,7 @@ export const standingsTour = defineTour({
       anchor: 'standings-list',
       title: 'Scout the other teams',
       body: (ctx) => [
-        ctx.doublePoints === true && 'This season, each point above 90% counts double.',
+        ctx.doublePoints && 'This season, each point above 90% counts double.',
         'Teams on the same total share a rank. Open any team to see the movies and counterpicks behind its score, and to spot a trade partner.',
       ].filter(Boolean).join(' '),
     },

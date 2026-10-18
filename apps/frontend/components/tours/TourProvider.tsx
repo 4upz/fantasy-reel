@@ -37,8 +37,6 @@ const STABLE_POLLS = 3
 const PARTIAL_STABLE_POLLS = 12
 /** Give up waiting for an auto-started tour's anchors after this long. */
 const AUTO_START_TIMEOUT_MS = 8000
-/** Keeps tabs in step: an outcome saved in one closes the same tour in the others. */
-const CHANNEL_NAME = 'fantasy-reel:tours'
 
 interface Registration {
   order: number
@@ -51,8 +49,6 @@ export interface ActiveTour {
   /** Fixed when the tour starts, so "Step 2 of 4" stays honest. */
   steps: ResolvedStep[]
   index: number
-  /** The modal the tour runs inside, if it started in one (create league). */
-  hostModal: HTMLDialogElement | null
   /** Started by the page rather than by the user asking for it. */
   automatic: boolean
 }
@@ -125,7 +121,7 @@ async function planSteps(
 
     const required = automatic && found.length < anchored.length ? PARTIAL_STABLE_POLLS : STABLE_POLLS
     const settled = stableFor >= required - 1 && (anchored.length === 0 || found.length > 0)
-    const blocked = automatic && (isEditing() || (topModal() !== null && !found.some((step) => topModal()!.contains(findTourAnchor(step.anchor!)))))
+    const blocked = automatic && (isEditing() || topModal() !== null)
     if (settled && !blocked) {
       return steps.filter((step) => !step.anchor || step.centerIfMissing || found.includes(step))
     }
@@ -164,18 +160,13 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
   const registrations = useRef(new Map<number, Registration>())
   const [registrationsVersion, bumpRegistrations] = useReducer((count: number) => count + 1, 0)
   const nextOrder = useRef(0)
-  // One automatic tour per page visit, and never the same one twice in a tab
-  // (a save that failed must not bring it back on every navigation). A visit
-  // is the path plus the tours it offered then: a page whose phase changes
-  // under the viewer (the draft tab going from setup to drafting) offers a
-  // new tour, and that counts as a new visit.
-  const lastAutoStart = useRef<{ pathname: string; tourIds: ReadonlySet<string> } | null>(null)
-  // Tours that couldn't start by themselves on this path (their elements
-  // never showed): skipped for the rest of the visit, so the page's next tour
-  // gets its turn instead of the same one being retried.
-  const failedAutoStarts = useRef<{ pathname: string; tourIds: Set<string> }>({ pathname: '', tourIds: new Set() })
-  const autoStartedIds = useRef(new Set<string>())
-  const channel = useRef<BroadcastChannel | null>(null)
+  // The tours this page visit has already had its chance with. When one starts
+  // by itself, every tour offered at that moment joins the set, so a visit
+  // gets one automatic tour; a tour the page offers later (the draft tab
+  // moving from setup to drafting) is new and gets its own chance. A tour
+  // that couldn't start (its elements never showed) joins alone, so the
+  // page's next tour gets a turn. Leaving the path starts a new visit.
+  const visit = useRef<{ pathname: string; tried: Set<string> }>({ pathname: '', tried: new Set() })
 
   const tourState = useCallback(
     (id: string) => states.get(tourKey(id)) as TourState | undefined,
@@ -200,30 +191,6 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
     })
   }, [])
 
-  // Other tabs: adopt what they saved, and close a tour they settled.
-  useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return
-    const tabs = new BroadcastChannel(CHANNEL_NAME)
-    channel.current = tabs
-    tabs.onmessage = (event: MessageEvent<{ userId: string; key: string; value: Record<string, unknown> | null }>) => {
-      if (event.data?.userId !== userId) return
-      applyState(event.data.key, event.data.value)
-      const current = activeRef.current
-      if (current && event.data.key === tourKey(current.tour.id) && event.data.value?.status !== 'snoozed') {
-        setActive(null)
-      }
-    }
-    return () => {
-      tabs.close()
-      channel.current = null
-    }
-  }, [userId, applyState])
-
-  const broadcast = useCallback(
-    (key: string, value: Record<string, unknown> | null) => channel.current?.postMessage({ userId, key, value }),
-    [userId]
-  )
-
   const record = useCallback(
     async (tour: TourDefinition, status: TourOutcome) => {
       const key = tourKey(tour.id)
@@ -240,20 +207,20 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
         return
       }
       applyState(key, data as Record<string, unknown>)
-      broadcast(key, data as Record<string, unknown>)
       if (status === 'completed') trackEvent('tour_completed', { tour_id: tour.id })
       if (status === 'dismissed') trackEvent('tour_dismissed', { tour_id: tour.id })
     },
-    [supabase, applyState, broadcast]
+    [supabase, applyState]
   )
 
+  /** Close the tour on screen, recording how it ended; null records nothing. */
   const end = useCallback(
-    (status: TourOutcome) => {
+    (status: TourOutcome | null) => {
       const current = activeRef.current
       if (!current) return
       activeRef.current = null
       setActive(null)
-      void record(current.tour, status)
+      if (status) void record(current.tour, status)
     },
     [record]
   )
@@ -263,7 +230,7 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
     if (!tour) return false
     const steps = await planSteps(applicableSteps(tour, ctx), automatic, cancelled)
     if (!steps || steps.length === 0 || cancelled() || activeRef.current) return false
-    const next: ActiveTour = { tour, steps, index: 0, hostModal: topModal(), automatic }
+    const next: ActiveTour = { tour, steps, index: 0, automatic }
     activeRef.current = next
     setActive(next)
     trackEvent('tour_started', { tour_id: tour.id, trigger: automatic ? 'auto' : 'manual' })
@@ -305,7 +272,8 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
   const start = useCallback(
     async (id: TourId) => {
       const registration = [...registrations.current.values()].find((candidate) => candidate.id === id)
-      if (activeRef.current) end('snoozed')
+      // Replaced by the tour the user asked for, not turned down: record nothing.
+      if (activeRef.current) end(null)
       return launch(id, registration?.ctx ?? {}, false, () => false)
     },
     [launch, end]
@@ -315,13 +283,11 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
   useEffect(() => {
     void registrationsVersion
     if (!ready || !enabled || active || automationOptedOut()) return
+    if (visit.current.pathname !== pathname) visit.current = { pathname, tried: new Set() }
+    const tried = visit.current.tried
     const offered = [...registrations.current.values()]
-    const last = lastAutoStart.current
-    if (last?.pathname === pathname && offered.every((registration) => last.tourIds.has(registration.id))) return
-    if (failedAutoStarts.current.pathname !== pathname) failedAutoStarts.current = { pathname, tourIds: new Set() }
-    const failed = failedAutoStarts.current.tourIds
     const candidates = offered
-      .filter((registration) => !autoStartedIds.current.has(registration.id) && !failed.has(registration.id))
+      .filter((registration) => !tried.has(registration.id))
       .map((registration) => ({ tour: getTour(registration.id)!, ctx: registration.ctx, order: registration.order }))
     const outcomes = new Map(
       TOUR_LIST.map((tour) => [tour.id, tourState(tour.id)] as const).filter((entry): entry is [string, TourState] => entry[1] !== undefined)
@@ -332,15 +298,12 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
     let cancelled = false
     const timer = window.setTimeout(() => {
       void launch(pick.tour.id as TourId, pick.ctx, true, () => cancelled).then((started) => {
-        if (!started) {
-          if (!cancelled && !activeRef.current) {
-            failed.add(pick.tour.id)
-            bumpRegistrations()
-          }
-          return
+        if (started) {
+          for (const registration of offered) tried.add(registration.id)
+        } else if (!cancelled && !activeRef.current) {
+          tried.add(pick.tour.id)
+          bumpRegistrations()
         }
-        lastAutoStart.current = { pathname, tourIds: new Set(offered.map((registration) => registration.id)) }
-        autoStartedIds.current.add(pick.tour.id)
       })
     }, AUTO_START_DELAY_MS)
     return () => {
@@ -356,14 +319,11 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
       const { error } = await query
       if (error) throw new Error('Couldn’t reset your tours. Try again.')
       const keys = id ? [tourKey(id)] : [...states.keys()].filter((key) => key.startsWith(TOUR_KEY_PREFIX))
-      for (const key of keys) {
-        applyState(key, null)
-        broadcast(key, null)
-      }
-      if (id) autoStartedIds.current.delete(id)
-      else autoStartedIds.current.clear()
+      for (const key of keys) applyState(key, null)
+      if (id) visit.current.tried.delete(id)
+      else visit.current.tried.clear()
     },
-    [supabase, userId, states, applyState, broadcast]
+    [supabase, userId, states, applyState]
   )
 
   const setEnabled = useCallback(
@@ -374,9 +334,8 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
         .upsert({ user_id: userId, key: TOURS_PREF_KEY, value }, { onConflict: 'user_id,key' })
       if (error) throw new Error('Couldn’t save your tour setting. Try again.')
       applyState(TOURS_PREF_KEY, value)
-      broadcast(TOURS_PREF_KEY, value)
     },
-    [supabase, userId, applyState, broadcast]
+    [supabase, userId, applyState]
   )
 
   const value = useMemo<ToursContextValue>(

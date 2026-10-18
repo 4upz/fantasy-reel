@@ -1,3 +1,4 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
@@ -5,12 +6,12 @@ import { defineTour } from '../types'
  * dropped, and how counterpicks score. The drop dialog explains each lock in
  * full, so the tour only says what the locks are.
  */
-export const rosterTour = defineTour({
+export const rosterTour = defineTour<{ leagueStatus: LeagueStatus; dropLimit: number; counterpicksBlockDrops: boolean; counterpicksEnabled: boolean }>({
   id: 'roster',
   version: 1,
   title: 'Your roster',
   description: 'Roster tab: dropping movies, what locks one in place, and your counterpicks.',
-  when: (ctx) => ctx.leagueStatus === 'active' && (ctx.dropLimit !== 0 || ctx.counterpicksEnabled === true),
+  when: (ctx) => ctx.leagueStatus === 'active' && (ctx.dropLimit !== 0 || ctx.counterpicksEnabled),
   steps: [
     {
       anchor: 'roster-drops',
@@ -30,13 +31,13 @@ export const rosterTour = defineTour({
       when: (ctx) => ctx.dropLimit !== 0,
       title: 'Locked movies',
       body: (ctx) =>
-        ctx.counterpicksBlockDrops === true
+        ctx.counterpicksBlockDrops
           ? 'Besides opening, a movie locks while another team holds a counterpick on it or is bidding for one, and every movie locks once your drops run out. Open a locked movie to see why.'
           : 'Besides opening, every movie locks once your drops run out. Open a locked movie to see why.',
     },
     {
       anchor: 'roster-counterpicks',
-      when: (ctx) => ctx.counterpicksEnabled === true,
+      when: (ctx) => ctx.counterpicksEnabled,
       title: 'Counterpicks score in reverse',
       body: 'A counterpick earns you its movie’s points with the sign flipped, so a flop helps you and a hit costs you. It stays yours even if the other team drops the movie.',
     },

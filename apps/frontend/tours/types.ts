@@ -7,14 +7,22 @@ import type { LeagueStatus } from '@/types'
 
 /**
  * What a page tells its tours about the viewer and the page, through
- * `<FeatureTour ctx={…}>`. The common facts are named here; a page may pass
- * anything else its own tour needs, and the tour reads it by key.
+ * `<FeatureTour ctx={…}>`. The facts several tours share are named here. A
+ * tour declares the exact facts it reads with `defineTour<Ctx>()`, and then
+ * `<FeatureTour>` for that tour won't compile without them.
  */
 export interface TourContext {
   isOwner?: boolean
   leagueStatus?: LeagueStatus
   /** The league has counterpicks (draft or bidding slots above zero). */
   counterpicksEnabled?: boolean
+  /** Hasn't played a season yet (no active or completed season). Beginner tours start only for them. */
+  newPlayer?: boolean
+  /**
+   * The page's own data has arrived. Pass `false` while a skeleton shows, so a
+   * `when` that reads the data isn't judged on placeholders.
+   */
+  loaded?: boolean
   [key: string]: unknown
 }
 
@@ -23,7 +31,13 @@ export type TourPlacement = 'auto' | 'top' | 'bottom' | 'left' | 'right'
 
 export type StepBody = string | string[]
 
-export interface TourStep {
+/**
+ * A function of the page's ctx. Written as a method so a tour typed for its
+ * own facts still fits the registry's general `TourDefinition`.
+ */
+type CtxFn<Ctx, Result> = { fn(ctx: Ctx): Result }['fn']
+
+export interface TourStep<Ctx extends TourContext = TourContext> {
   /**
    * The `data-tour` value of the element this step points at. Several elements
    * may share one value (the desktop tabs and the mobile bottom bar); the
@@ -38,10 +52,10 @@ export interface TourStep {
    * A function gets the page's ctx when the tour starts, for wording that
    * depends on the viewer or the league (the length of the trade review).
    */
-  body: StepBody | ((ctx: TourContext) => StepBody)
+  body: StepBody | CtxFn<Ctx, StepBody>
   placement?: TourPlacement
   /** Leave the step out when this returns false - an owner-only control, say. */
-  when?: (ctx: TourContext) => boolean
+  when?(ctx: Ctx): boolean
   /**
    * When the anchor is missing as the tour starts, the step is dropped. Set
    * this when its words still stand on their own as a centered card (a tab
@@ -50,7 +64,7 @@ export interface TourStep {
   centerIfMissing?: boolean
 }
 
-export interface TourDefinition {
+export interface TourDefinition<Ctx extends TourContext = TourContext> {
   /** Stable, kebab-case. Stored per user, so never reuse one for a different tour. */
   id: string
   /**
@@ -64,22 +78,26 @@ export interface TourDefinition {
   /** One line for that list: where the tour runs and what it covers. */
   description: string
   /** Whether the page's tour applies to this viewer right now. Default: always. */
-  when?: (ctx: TourContext) => boolean
+  when?(ctx: Ctx): boolean
   /**
    * Whether the tour may start by itself for this viewer. Default: always.
    * `when` decides whether the tour applies at all (and so whether it can be
    * replayed); this only keeps it from starting unasked, e.g. beginner tours
    * for someone who has already played a season.
    */
-  autoStart?: (ctx: TourContext) => boolean
-  /** When two tours on one page both apply, the higher priority goes first. Default 0. */
-  priority?: number
+  autoStart?(ctx: Ctx): boolean
   /** At most five. A tour that needs more is two tours. */
-  steps: TourStep[]
+  steps: TourStep<Ctx>[]
 }
 
-/** Identity helper so a definition file gets checked against the shape without a cast. */
-export function defineTour(tour: TourDefinition): TourDefinition {
+/**
+ * Identity helper so a definition file gets checked against the shape without
+ * a cast. Name the facts the tour reads as `Ctx`, and pages offering it must
+ * pass them:
+ *
+ * @example defineTour<{ leagueStatus: LeagueStatus; counterpicksEnabled: boolean }>({ … })
+ */
+export function defineTour<Ctx extends TourContext = TourContext>(tour: TourDefinition<Ctx>): TourDefinition<Ctx> {
   return tour
 }
 

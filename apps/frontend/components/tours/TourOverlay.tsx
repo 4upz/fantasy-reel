@@ -30,7 +30,7 @@ interface Props {
 interface Layout {
   anchor: Box | null
   position: CardPosition
-  /** A modal the tour doesn't belong to is on top: hide until it closes. */
+  /** A modal is open: hide until it closes. */
   paused: boolean
 }
 
@@ -70,10 +70,8 @@ function prefersReducedMotion(): boolean {
  *
  * The card is a non-modal dialog: the page stays usable (the highlight lets
  * clicks through), focus moves to the card at each step and returns to where
- * it was when the tour ends, and Escape means "not now". For a tour inside a
- * modal (create league) the card renders inside that dialog, so it shares the
- * top layer and the dialog's focus containment; Escape is stopped there so it
- * can't also close the dialog and discard a half-filled form.
+ * it was when the tour ends, and Escape means "not now". While a modal is
+ * open the tour hides, and it comes back when the modal closes.
  */
 export default function TourOverlay({
   tour,
@@ -103,10 +101,10 @@ export default function TourOverlay({
     const next: Layout = {
       anchor,
       position: placeCard(anchor, card, { width: window.innerWidth, height: window.innerHeight }, measureInsets(), step.placement),
-      paused: topModal() !== tour.hostModal,
+      paused: topModal() !== null,
     }
     setLayout((current) => (sameLayout(current, next) ? current : next))
-  }, [step, tour.hostModal])
+  }, [step])
 
   // Each step: bring its element into view clear of the fixed chrome, place
   // the card, and move focus to it.
@@ -129,7 +127,7 @@ export default function TourOverlay({
   // so the element sits in the free part of the screen (or starts there).
   const docked = layout?.position.docked ?? false
   useEffect(() => {
-    if (!docked || !step.anchor || tour.hostModal) return
+    if (!docked || !step.anchor) return
     const timer = window.setTimeout(() => {
       const element = findTourAnchor(step.anchor!)
       const card = cardRef.current?.getBoundingClientRect()
@@ -146,7 +144,7 @@ export default function TourOverlay({
       if (delta !== 0) window.scrollBy({ top: delta, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
     }, SCROLL_SETTLE_MS)
     return () => window.clearTimeout(timer)
-  }, [docked, step, tour.index, tour.hostModal])
+  }, [docked, step, tour.index])
 
   useEffect(() => {
     const interval = window.setInterval(measure, TICK_MS)
@@ -166,8 +164,7 @@ export default function TourOverlay({
     if (focusIsInTour && returnFocusTo?.isConnected) returnFocusTo.focus({ preventScroll: true })
   }, [returnFocusTo])
 
-  // Escape inside the card means "not now". Cancelling the key also keeps a
-  // host <dialog> from taking it as its own cancel and closing.
+  // Escape inside the card means "not now".
   const notNowRef = useRef(onNotNow)
   notNowRef.current = onNotNow
   useEffect(() => {
@@ -176,7 +173,6 @@ export default function TourOverlay({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return
       event.preventDefault()
-      event.stopPropagation()
       notNowRef.current()
     }
     card.addEventListener('keydown', handleKeyDown)
@@ -185,15 +181,13 @@ export default function TourOverlay({
 
   if (layout?.paused) return null
 
-  const container = tour.hostModal?.isConnected ? tour.hostModal : document.body
   const paragraphs = Array.isArray(step.body) ? step.body : [step.body]
   const anchor = layout?.anchor ?? null
   const position = layout?.position
 
   return createPortal(
-    // The wrapper ignores the pointer so the page stays usable; `!m-0`
-    // beats the modal stylesheet's centering rule for a dialog's children.
-    <div className="tour-layer pointer-events-none fixed inset-0 z-[70] !m-0" data-tour-overlay>
+    // The wrapper ignores the pointer so the page stays usable.
+    <div className="tour-layer pointer-events-none fixed inset-0 z-[70]" data-tour-overlay>
       {anchor ? (
         <div
           aria-hidden="true"
@@ -271,6 +265,6 @@ export default function TourOverlay({
         )}
       </section>
     </div>,
-    container
+    document.body
   )
 }

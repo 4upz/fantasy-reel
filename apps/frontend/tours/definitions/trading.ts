@@ -1,12 +1,21 @@
-import { defineTour, type TourContext } from '../types'
+import type { LeagueStatus } from '@/types'
+import { defineTour } from '../types'
+
+type TradingCtx = {
+  leagueStatus: LeagueStatus
+  tradesOpen: boolean
+  reviewEnabled: boolean
+  reviewHours: number
+  isOwner: boolean
+}
 
 const COMPETING_OFFERS = 'Several offers can name the same movie. The first to go through gets it, and the others expire.'
 
 /** What happens after a yes: straight through, or a review period of the league's `trade_veto_hours`. */
-function afterAccept(ctx: TourContext): string {
-  if (ctx.reviewEnabled !== true) return 'Once the other team accepts, the trade goes through shortly after, as long as it’s still valid.'
-  const period = typeof ctx.reviewHours === 'number' ? `a ${ctx.reviewHours}-hour review period` : 'a review period'
-  return ctx.isOwner === true
+function afterAccept(ctx: TradingCtx): string {
+  if (!ctx.reviewEnabled) return 'Once the other team accepts, the trade goes through shortly after, as long as it’s still valid.'
+  const period = `a ${ctx.reviewHours}-hour review period`
+  return ctx.isOwner
     ? `Nothing moves when the other team accepts. As commissioner, you get ${period} to approve it early or veto it. If you do neither, it goes through when the period ends.`
     : `Nothing moves when the other team accepts. The commissioner gets ${period} to approve it early or veto it. If they do neither, it goes through when the period ends.`
 }
@@ -16,12 +25,12 @@ function afterAccept(ctx: TourContext): string {
  * when a trade actually goes through. Offers load after the page, so the
  * answering step stands centered when there's no card to point at yet.
  */
-export const tradingTour = defineTour({
+export const tradingTour = defineTour<TradingCtx>({
   id: 'trading',
   version: 1,
   title: 'Trading',
   description: 'Trading tab: making offers, answering them, and when a trade goes through.',
-  when: (ctx) => ctx.leagueStatus === 'active' && ctx.tradesOpen === true,
+  when: (ctx) => ctx.leagueStatus === 'active' && ctx.tradesOpen,
   steps: [
     {
       anchor: 'propose-trade',

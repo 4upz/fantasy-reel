@@ -1,3 +1,4 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
@@ -6,7 +7,7 @@ import { defineTour } from '../types'
  * are taught here rather than when they happen, because a new player has
  * neither on a first visit.
  */
-export const biddingTour = defineTour({
+export const biddingTour = defineTour<{ leagueStatus: LeagueStatus; counterpicksEnabled: boolean; counterbidHours: number }>({
   id: 'bidding',
   version: 2,
   title: 'Bidding for pickups',
@@ -33,13 +34,13 @@ export const biddingTour = defineTour({
       centerIfMissing: true,
       title: 'After you bid',
       body: (ctx) => [
-        `If you’re outbid, you have ${typeof ctx.counterbidHours === 'number' ? `${ctx.counterbidHours} ${ctx.counterbidHours === 1 ? 'hour' : 'hours'}` : 'a set time'} to counter. Your bid still stands, and wins at its own price if the leader has no room or budget left.`,
+        `If you’re outbid, you have ${ctx.counterbidHours} ${ctx.counterbidHours === 1 ? 'hour' : 'hours'} to counter. Your bid still stands, and wins at its own price if the leader has no room or budget left.`,
         'Win more than you can fit or afford? Your bid priority decides which ones you keep.',
       ],
     },
     {
       anchor: 'place-counterpick-bid',
-      when: (ctx) => ctx.counterpicksEnabled === true,
+      when: (ctx) => ctx.counterpicksEnabled,
       title: 'Bet against a rival’s movie',
       body: 'Bid on another team’s movie to counterpick it. If you win, you score its points in reverse, so pick one you expect critics to pan. It’s paid from the same budget and doesn’t take a roster slot.',
     },

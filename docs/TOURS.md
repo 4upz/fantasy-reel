@@ -11,7 +11,7 @@ Short walkthroughs that start the first time someone opens a page, so players le
 | Pure rules | `apps/frontend/tours/engine.ts` | Outcome semantics, which tour a page starts, card placement. Unit tested. |
 | Provider | `apps/frontend/components/tours/TourProvider.tsx` | Mounted once in the authenticated layout. Holds progress, picks and runs tours. |
 | Page hooks | `<FeatureTour>`, `<TourButton>` from `@/components/tours` | A page offers a tour, and lets people replay it. |
-| Overlay | `components/tours/TourOverlay.tsx` | The highlight and the card. Hand-built for the native `<dialog>` top layer. |
+| Overlay | `components/tours/TourOverlay.tsx` | The highlight and the card. Hand-built and small, so it meets the repo's accessibility bar. |
 | Storage | `user_ui_state` table, `record_tour_outcome()` RPC | Per-user, own-rows only, read by the server layout. |
 
 ## Adding a tour
@@ -20,8 +20,9 @@ Short walkthroughs that start the first time someone opens a page, so players le
 
    ```ts
    import { defineTour } from '../types'
+   import type { LeagueStatus } from '@/types'
 
-   export const tradingTour = defineTour({
+   export const tradingTour = defineTour<{ leagueStatus: LeagueStatus; isOwner: boolean }>({
      id: 'trading',                       // kebab-case, stored per user, never reused
      version: 1,                          // bump to show it again to people who saw it
      title: 'Trading',                    // shown in Settings → Tours
@@ -58,7 +59,7 @@ Short walkthroughs that start the first time someone opens a page, so players le
 ## Rules for a step
 
 - **No `anchor`:** a centered card. Use it for an introduction or a closing note.
-- **`anchor`:** points at the first *visible* `[data-tour="name"]`. Several elements may share a name, such as the desktop tabs and the mobile bottom bar (both are `league-nav`). While a modal is open, only elements inside it count.
+- **`anchor`:** points at the first *visible* `[data-tour="name"]`. Several elements may share a name, such as the desktop tabs and the mobile bottom bar (both are `league-nav`).
 - **Anchor not on the page when the tour starts:** the step is dropped. This is how one tour covers controls that only some people see. Set `centerIfMissing: true` to show the step centered instead, when its words still make sense without the highlight.
 - **Anchor disappears mid-tour:** the step shows centered, so the step count stays honest.
 - **`when(ctx)`:** on the tour, it decides whether the tour applies at all. On a step, it drops that step. Prefer `when` over hoping an anchor is missing: it says why.
@@ -70,7 +71,15 @@ Short walkthroughs that start the first time someone opens a page, so players le
 
 ## Context (`ctx`)
 
-`<FeatureTour ctx>` is how a page tells its tour about the viewer. `TourContext` names the common facts (`isOwner`, `leagueStatus`, `counterpicksEnabled`). A page may pass any other serializable value its tour needs, such as `hasOpenBids: true`, and the tour reads it by key. Nothing has to be added to a shared layout. The ctx is compared by content, so pass a fresh object literal each render.
+`<FeatureTour ctx>` is how a page tells its tour about the viewer. Declare the facts a tour reads as the type argument of `defineTour<Ctx>()`. Then `<FeatureTour id="trading">` won't compile unless the page passes those facts, so renaming or forgetting one is a type error instead of a step that silently disappears. A tour without a type argument takes any facts, and its ctx is optional.
+
+`TourContext` names the facts several tours share, so they're spelled the same everywhere:
+
+- `isOwner`, `leagueStatus`, `counterpicksEnabled`;
+- `newPlayer`: hasn't played a season yet. The page works it out from the viewer's leagues, and beginner tours use it in `autoStart`;
+- `loaded`: the page's data has arrived. Pass `false` while a skeleton shows, so a `when` that reads the data isn't judged on placeholders.
+
+Any other serializable fact is fine too (`hasOpenBids`), and nothing has to be added to a shared layout. The ctx is compared by content, so pass a fresh object literal each render.
 
 ## When a tour starts by itself
 
@@ -83,13 +92,13 @@ The provider starts a tour on its own only when all of these hold:
 - automatic tours are on in Settings → Tours;
 - no other tour has started by itself on this page visit. A page that starts offering a new tour while it's open (the Draft tab moving from setup to drafting) counts as a new visit.
 
-When several tours qualify, the one with the highest `priority` wins (default 0), then whichever mounted first.
+When several tours qualify, the one mounted first wins. If a page offers two tours, give them `when` rules that don't overlap.
 
 Before starting, it waits for the page to settle:
 
 - **Loading content.** It polls until the set of visible anchors stops changing. When every anchor is on screen, that's about 0.75 seconds of no change. While some are still missing, it waits about 3 seconds of no change, so elements that arrive with a client fetch (bid cards, trade offers) can still make it. It gives up after 8 seconds. A step whose element still isn't there is dropped, so use `centerIfMissing` for steps about content that may be slow or empty.
 - **Typing.** It won't start while the user is typing in a field, so it never takes focus mid-keystroke.
-- **Open modals.** It won't start while an unrelated modal is open.
+- **Open modals.** It won't start while a modal is open.
 
 A tour whose anchors never show up doesn't start at all, so a lone intro card is never recorded as "seen". The page's next tour, if it has one, gets its turn on the same visit.
 
@@ -109,7 +118,7 @@ Tours always start for a user who asks: the account menu's **Tour this page**, `
 - a report for an older version is ignored, so a stale tab can't undo a version bump;
 - `completed` beats `dismissed`, and `dismissed` beats `snoozed`.
 
-Other open tabs hear about each outcome over a `BroadcastChannel` and close the same tour.
+Starting another tour while one is showing (replaying from the menu or Settings) closes the first without recording anything, since the user didn't turn it down.
 
 In **Settings → Tours**, people can turn automatic tours off, see each tour's status, and "Show again" one tour or all of them. That deletes the stored rows; the tour shows on the next visit to its page.
 
@@ -128,8 +137,7 @@ The authenticated layout reads the rows on the server (`getCachedUiState`), so t
 - The card is a non-modal `role="dialog"` labelled by its title.
 - Focus moves to the card at each step and returns afterwards. Escape is "not now".
 - The highlight lets clicks through, so the page stays usable.
-- In a modal, the card renders inside that `<dialog>`, sharing its top layer and focus containment, and Escape is cancelled there so it can't close the form.
-- If an unrelated modal opens mid-tour, the card hides until it closes.
+- If a modal opens mid-tour, the card hides until it closes. Tours don't run inside modals.
 - Motion respects `prefers-reduced-motion`.
 - The card reflows and scrolls at 200% zoom.
 

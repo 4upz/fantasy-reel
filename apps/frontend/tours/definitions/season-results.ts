@@ -1,10 +1,11 @@
+import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
  * The Overview tab once a season is over. Its own id, so players who finished
  * the in-season overview tour still see it.
  */
-export const seasonResultsTour = defineTour({
+export const seasonResultsTour = defineTour<{ leagueStatus: LeagueStatus; isOwner: boolean; hasNextSeason: boolean }>({
   id: 'season-results',
   version: 1,
   title: 'Season results',
@@ -19,7 +20,7 @@ export const seasonResultsTour = defineTour({
     {
       anchor: 'start-next-season',
       centerIfMissing: true,
-      when: (ctx) => ctx.isOwner === true && ctx.hasNextSeason !== true,
+      when: (ctx) => ctx.isOwner && !ctx.hasNextSeason,
       title: 'Start the next season',
       body: 'As commissioner, you start the next season from the results. Members and settings carry over, rosters start empty, and you set up a new draft.',
     },
