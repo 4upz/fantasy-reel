@@ -1,4 +1,10 @@
 import type { TourContext, TourDefinition } from './types'
+import { welcomeTour } from './definitions/welcome'
+import { leagueSetupTour } from './definitions/league-setup'
+import { leagueSettingsTour } from './definitions/league-settings'
+import { leagueWaitingTour } from './definitions/league-waiting'
+import { draftRoomTour } from './definitions/draft-room'
+import { counterpickRoundTour } from './definitions/counterpick-round'
 import { biddingTour } from './definitions/bidding'
 
 /**
@@ -7,6 +13,12 @@ import { biddingTour } from './definitions/bidding'
  * its tour's `id`; scripts/tests/tours.test.cjs checks that and more.
  */
 export const TOURS = {
+  welcome: welcomeTour,
+  'league-setup': leagueSetupTour,
+  'league-settings': leagueSettingsTour,
+  'league-waiting': leagueWaitingTour,
+  'draft-room': draftRoomTour,
+  'counterpick-round': counterpickRoundTour,
   bidding: biddingTour,
 } as const satisfies Record<string, TourDefinition>
 

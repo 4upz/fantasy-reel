@@ -53,7 +53,7 @@ export default function JoinLinkCard({ leagueId }: Props): React.ReactElement {
   }
 
   return (
-    <div className="card p-4" data-testid="join-link-card">
+    <div className="card p-4" data-testid="join-link-card" data-tour="join-link">
       <div className="flex items-center gap-2 mb-3">
         <div className="p-1.5 rounded-md bg-gold/10" aria-hidden="true">
           <Link2 className="w-4 h-4 text-gold" />

@@ -186,7 +186,7 @@ export default function CounterpickRound({
         <button className="btn btn-secondary mt-3" onClick={() => { void onCounterpickMade(); setRetry(value => value + 1) }}>Refresh draft</button>
       </div>}
       {/* Counterpick Header Card */}
-      <div className="card p-4 sm:p-6">
+      <div className="card p-4 sm:p-6" data-tour="counterpick-turn">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 sm:gap-6">
           {/* Left: Title and Status */}
           <div className="flex-1">
@@ -270,7 +270,7 @@ export default function CounterpickRound({
 
       {/* Counterpick Picker - Only show when user is a participant */}
       {currentUserTeamId && (
-        <div className="card p-6">
+        <div className="card p-6" data-tour="counterpick-picker">
           <CounterpickPicker
             leagueId={league.id}
             teamId={currentUserTeamId}

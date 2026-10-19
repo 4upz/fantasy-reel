@@ -297,7 +297,7 @@ export default function DraftOrderSection({
   }, [saveError])
 
   return (
-    <section className="card p-6" data-testid="draft-order-section">
+    <section className="card p-6" data-testid="draft-order-section" data-tour="settings-draft-order">
       <SectionHeader
         icon={Shuffle}
         title="Draft Order"
