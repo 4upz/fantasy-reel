@@ -87,7 +87,7 @@ export default function LeagueTabs({
             }`}
             aria-current={isActive ? 'page' : undefined}
           >
-            {tab.name}
+            {tab.name === 'Settings' ? <span data-tour="settings-tab">{tab.name}</span> : tab.name}
             {tab.badge && (
               <>
                 <span aria-hidden="true" className="type-meta rounded-full bg-crimson px-1.5 py-0.5 text-foreground">

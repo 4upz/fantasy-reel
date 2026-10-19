@@ -15,6 +15,7 @@ import DraftBoardHeader from './DraftBoardHeader'
 import DraftTurnStatus from './DraftTurnStatus'
 import CounterpickRound from './CounterpickRound'
 import { ClapperboardIcon } from './Icons'
+import { TourButton } from '@/components/tours'
 import type { League, ParticipantWithProfile, DraftPickWithDetails, NextPickInfo, CounterpickWithDetails } from '@/types'
 
 interface Props {
@@ -130,19 +131,31 @@ export default function DraftBoard({
   // Render different views based on league status
   if (league.status === 'setup') {
     return (
-      <div className="card p-6">
+      <div className="card p-6" data-tour="draft-waiting">
         <h2 className="type-section text-foreground mb-4" tabIndex={-1} data-draft-heading>Draft board</h2>
         <div className="text-center py-8">
           <div className="flex justify-center mb-4">
             <ClapperboardIcon className="w-16 h-16 text-foreground-muted" />
           </div>
           <p className="text-foreground-secondary mb-2">The draft hasn&apos;t started yet.</p>
-          <p className="type-body-sm text-foreground-secondary">
-            Waiting for the league owner to start the draft.
-          </p>
+          {league.owner_id === currentUserId ? (
+            <p className="type-body-sm text-foreground-secondary">
+              Start the draft when everyone&rsquo;s in.
+            </p>
+          ) : (
+            <>
+              <p className="type-body-sm text-foreground-secondary">
+                Waiting for the commissioner to start the draft.
+              </p>
+              <p className="type-body-sm text-foreground-secondary mt-2">
+                Meanwhile, save movies you like to your Wishlist. The draft&rsquo;s movie picker has a Wishlist tab.
+              </p>
+            </>
+          )}
           <p className="type-body-sm text-foreground-secondary mt-2">
             {participants.length} of {league.max_participants} participants joined
           </p>
+          <TourButton className="mt-4" />
         </div>
       </div>
     )

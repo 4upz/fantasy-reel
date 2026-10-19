@@ -5,13 +5,20 @@ import { createClient } from '@/utils/supabase/client'
 import LeagueManager from './LeagueManager'
 import PendingInvitations from './PendingInvitations'
 import DashboardSidebar from './DashboardSidebar'
+import NextStepCard from './NextStepCard'
+import { FeatureTour, TourButton } from '@/components/tours'
+import type { NextStep } from '@/utils/onboarding'
 import type { InvitationWithLeague, League } from '@/types'
 
 interface Props {
   pendingInvitations: InvitationWithLeague[]
+  /** Hasn't played a season yet: the welcome tour starts by itself. */
+  newPlayer: boolean
+  /** What a newcomer should do next in a league that hasn't started its season. */
+  nextStep: NextStep | null
 }
 
-export default function DashboardClient({ pendingInvitations }: Props): React.ReactElement {
+export default function DashboardClient({ pendingInvitations, newPlayer, nextStep }: Props): React.ReactElement {
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [leagues, setLeagues] = useState<League[]>([])
   const [loading, setLoading] = useState(true)
@@ -86,6 +93,10 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+      <FeatureTour
+        id="welcome"
+        ctx={{ loaded: !loading && !loadError, newPlayer, hasPendingInvites: pendingInvitations.length > 0 }}
+      />
       {/* Hero Section */}
       <div className="mb-8 text-center lg:text-left">
         <h1 ref={headingRef} tabIndex={-1} className="type-page text-foreground focus:outline-none">
@@ -94,11 +105,12 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
         <p className="text-foreground-secondary mt-2 max-w-xl lg:max-w-none">
           Draft upcoming movies, compete with friends, and score points based on reviews.
         </p>
+        <TourButton id="welcome" className="mt-3" />
       </div>
 
       {/* Pending Invitations Banner - Full width at top */}
       {pendingInvitations.length > 0 && (
-        <div className="mb-6">
+        <div className="mb-6" data-tour="pending-invitations">
           <PendingInvitations initialInvitations={pendingInvitations} onAllHandled={focusHeading} />
         </div>
       )}
@@ -107,6 +119,7 @@ export default function DashboardClient({ pendingInvitations }: Props): React.Re
       <div className="dashboard-grid">
         {/* Main column - Leagues */}
         <div>
+          {nextStep && userId && <NextStepCard step={nextStep} userId={userId} onHidden={focusHeading} />}
           {loadError ? (
             <div className="alert alert-error" role="alert">
               <p>{loadError}</p>
