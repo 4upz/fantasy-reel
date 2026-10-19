@@ -23,9 +23,11 @@ interface Props {
   otherTeams: TeamWithOwner[]
   isOwner: boolean
   userId: string
+  /** No finished season yet (isFirstSeason), so this page's tour starts by itself. */
+  firstSeason: boolean
 }
 
-export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner, userId }: Props) {
+export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner, userId, firstSeason }: Props) {
   const [showProposeModal, setShowProposeModal] = useState(false)
   const [rosterRequested, setRosterRequested] = useState(false)
   // Said after the proposal dialog has closed: anything announced while it is
@@ -97,6 +99,7 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
           reviewEnabled: league.trade_review_enabled,
           reviewHours: league.trade_veto_hours,
           isOwner,
+          firstSeason,
         }}
       />
       {(error || budgetError) && (

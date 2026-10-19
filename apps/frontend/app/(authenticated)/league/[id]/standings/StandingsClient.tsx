@@ -265,7 +265,7 @@ export default function StandingsClient({
     <div className="animate-fade-in lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-5">
       <FeatureTour
         id="standings"
-        ctx={{ leagueStatus: isCompleted ? 'completed' : 'active', doublePoints: doublePointsOver90 }}
+        ctx={{ leagueStatus: isCompleted ? 'completed' : 'active' }}
       />
       <div className="flex flex-col gap-3" data-testid="standings-container">
       {isCompleted && (

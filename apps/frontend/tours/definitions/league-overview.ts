@@ -6,17 +6,18 @@ import { defineTour } from '../types'
  * scored and won, and the moves a team has between releases. The Roster,
  * Bidding and Trading tours teach each move in detail.
  */
-export const leagueOverviewTour = defineTour<{ leagueStatus: LeagueStatus; tradesOpen: boolean; dropLimit: number; doublePoints: boolean }>({
+export const leagueOverviewTour = defineTour<{ leagueStatus: LeagueStatus; tradesOpen: boolean; dropLimit: number; doublePoints: boolean; firstSeason: boolean }>({
   id: 'league-overview',
   version: 1,
   title: 'Your season',
   description: 'Overview tab: how movies score, when points count, and how to improve your team.',
   when: (ctx) => ctx.leagueStatus === 'active',
+  autoStart: (ctx) => ctx.firstSeason,
   steps: [
     {
       title: 'Critics decide your score',
       body: (ctx) => [
-        'Each movie scores from its Rotten Tomatoes Tomatometer. 60% is worth nothing, every point above it earns a point, and lower scores cost you, though the loss eases off below 50%.',
+        'Each movie scores from its Rotten Tomatoes Tomatometer: every point above 60% earns a point, and a flop costs you.',
         ...(ctx.doublePoints ? ['This season, each point above 90% counts double.'] : []),
       ],
     },

@@ -7,6 +7,7 @@ type TradingCtx = {
   reviewEnabled: boolean
   reviewHours: number
   isOwner: boolean
+  firstSeason: boolean
 }
 
 const COMPETING_OFFERS = 'Several offers can name the same movie. The first to go through gets it, and the others expire.'
@@ -31,6 +32,7 @@ export const tradingTour = defineTour<TradingCtx>({
   title: 'Trading',
   description: 'Trading tab: making offers, answering them, and when a trade goes through.',
   when: (ctx) => ctx.leagueStatus === 'active' && ctx.tradesOpen,
+  autoStart: (ctx) => ctx.firstSeason,
   steps: [
     {
       anchor: 'propose-trade',

@@ -33,6 +33,8 @@ interface RosterClientProps {
   counterpicks: RosterCounterpick[]
   /** Movies with an open counterpick auction, which blocks a drop. */
   contestedMovieIds: string[]
+  /** No finished season yet (isFirstSeason), so this page's tour starts by itself. */
+  firstSeason: boolean
 }
 
 /** One roster card's worth of a holding: how it was acquired decides the label. */
@@ -58,6 +60,7 @@ export default function RosterClient({
   userId,
   counterpicks,
   contestedMovieIds,
+  firstSeason,
 }: RosterClientProps) {
   const [holdings, setHoldings] = useState(initialHoldings)
   const [dropCount, setDropCount] = useState(initialDropCount)
@@ -141,8 +144,8 @@ export default function RosterClient({
         ctx={{
           leagueStatus: league.status,
           dropLimit: league.drop_limit,
-          counterpicksBlockDrops: league.counterpicks_block_drops,
           counterpicksEnabled: league.draft_counterpick_slots + league.bidding_counterpick_slots > 0,
+          firstSeason,
         }}
       />
       <RosterHeader

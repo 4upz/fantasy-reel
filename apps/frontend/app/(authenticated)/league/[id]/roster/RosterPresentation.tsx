@@ -136,7 +136,6 @@ export function RosterMovieCard({
         {isLocked && (
           <span
             data-testid="roster-lock-badge"
-            data-tour="roster-locked"
             aria-hidden="true"
             className="type-meta absolute right-2 top-2 flex items-center gap-1 rounded-full bg-background/80 px-2 py-1 text-foreground-secondary backdrop-blur-sm"
           >

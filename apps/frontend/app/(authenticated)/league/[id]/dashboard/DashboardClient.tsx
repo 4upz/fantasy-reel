@@ -33,6 +33,8 @@ interface Props {
   /** The season this one follows, if any. */
   previousSeason: { id: string; seasonYear: number } | null
   publicWishlistCount: number
+  /** No finished season yet (isFirstSeason), so this page's tour starts by itself. */
+  firstSeason: boolean
 }
 
 export default function DashboardClient({
@@ -48,6 +50,7 @@ export default function DashboardClient({
   participantNames,
   previousSeason,
   publicWishlistCount,
+  firstSeason,
 }: Props): React.ReactElement {
   const router = useRouter()
   const [league, setLeague] = useState(initialLeague)
@@ -106,6 +109,7 @@ export default function DashboardClient({
           tradesOpen: tradesOpen(league),
           dropLimit: league.drop_limit,
           doublePoints: league.double_points_over_90,
+          firstSeason,
         }}
       />
       <FeatureTour

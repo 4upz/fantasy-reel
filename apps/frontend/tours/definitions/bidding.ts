@@ -2,17 +2,17 @@ import type { LeagueStatus } from '@/types'
 import { defineTour } from '../types'
 
 /**
- * The Bidding tab during a season: the Fantasy Budget, the bidding week, what
- * happens after a bid, and counterpick bids. Being outbid and bid priority
- * are taught here rather than when they happen, because a new player has
- * neither on a first visit.
+ * The Bidding tab during a season: the Fantasy Budget, the bidding week,
+ * placing a bid, and counterpick bids. Being outbid and bid priority are left
+ * to the page, which shows both when they happen.
  */
-export const biddingTour = defineTour<{ leagueStatus: LeagueStatus; counterpicksEnabled: boolean; counterbidHours: number }>({
+export const biddingTour = defineTour<{ leagueStatus: LeagueStatus; counterpicksEnabled: boolean; firstSeason: boolean }>({
   id: 'bidding',
-  version: 2,
+  version: 1,
   title: 'Bidding for pickups',
   description: 'Bidding tab: spending your Fantasy Budget on movies nobody holds.',
   when: (ctx) => ctx.leagueStatus === 'active',
+  autoStart: (ctx) => ctx.firstSeason,
   steps: [
     {
       anchor: 'bidding-budget',
@@ -22,21 +22,12 @@ export const biddingTour = defineTour<{ leagueStatus: LeagueStatus; counterpicks
     {
       anchor: 'bid-week',
       title: 'Get new bids in during open bidding',
-      body: 'During open bidding you can bid on any available movie and cancel your bids. After it closes, until bids settle, you can only raise or counter bids on movies already in play, and no bid can be withdrawn.',
+      body: 'During open bidding you can bid on any available movie. After it closes, until bids settle, you can only raise or counter bids on movies already in play.',
     },
     {
       anchor: 'place-bid',
       title: 'Bid, even with a full roster',
       body: 'Pick a movie and an amount. If you have drops left, you can also choose a movie of yours to drop if the bid wins. A bid that still doesn’t fit when bids settle loses and costs nothing.',
-    },
-    {
-      anchor: 'bid-priority',
-      centerIfMissing: true,
-      title: 'After you bid',
-      body: (ctx) => [
-        `If you’re outbid, you have ${ctx.counterbidHours} ${ctx.counterbidHours === 1 ? 'hour' : 'hours'} to counter. Your bid still stands, and wins at its own price if the leader has no room or budget left.`,
-        'Win more than you can fit or afford? Your bid priority decides which ones you keep.',
-      ],
     },
     {
       anchor: 'place-counterpick-bid',

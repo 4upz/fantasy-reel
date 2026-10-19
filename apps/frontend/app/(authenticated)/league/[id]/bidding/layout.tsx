@@ -1,5 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
-import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
+import { getCachedLeague, getCachedMemberships, getCachedUser } from '@/utils/supabase/cached'
+import { isFirstSeason } from '@/utils/onboarding'
 import { redirect, notFound } from 'next/navigation'
 import BiddingShell from './BiddingShell'
 import type { League, ParticipantWithProfile, Team, TeamHolding, TeamWithOwner } from '@/types'
@@ -61,6 +62,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
     cutoffResult,
     deadlineResult,
     scoredResult,
+    { data: memberships },
   ] = await Promise.all([
     supabase
       .from('league_participants')
@@ -73,6 +75,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
     supabase.rpc('get_new_bid_cutoff', { p_league_id: id }),
     supabase.rpc('get_next_processing_deadline'),
     supabase.from('movies').select('tmdb_id').not('fantasy_points', 'is', null).gte('release_date', today),
+    getCachedMemberships(user.id),
   ])
 
   const participants = (participantsResult.data ?? []) as ParticipantWithProfile[]
@@ -122,6 +125,7 @@ export default async function BiddingLayout({ children, params }: LayoutProps) {
       biddingCounterpickSlots={league.bidding_counterpick_slots ?? 0}
       newBidCutoffAt={(cutoffResult.data as string | null) ?? null}
       processingDeadline={(deadlineResult.data as string | null) ?? null}
+      firstSeason={isFirstSeason(memberships)}
     >
       {children}
     </BiddingShell>
