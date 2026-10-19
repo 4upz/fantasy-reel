@@ -17,7 +17,7 @@ export const counterpickRoundTour = defineTour<{ isOwner: boolean; leagueStatus:
       anchor: 'counterpick-turn',
       title: 'Bet against a rival',
       body: [
-        'Each team picks a movie another team drafted and scores its points in reverse; the movie stays on its owner’s roster. If it lands at 35%, you gain 16.25 points; if it’s a hit at 84%, you lose 24.',
+        'Each team picks a movie another team drafted and scores its points in reverse; the movie stays on its owner’s roster. If it flops at 35% you gain points; if it’s a hit at 84% you lose 24.',
         'Turns run in reverse of the draft order.',
       ],
     },

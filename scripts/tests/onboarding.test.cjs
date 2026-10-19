@@ -82,7 +82,7 @@ test('welcome waits for the league list and swaps the join step for an invitatio
 test('setup tours split by role, and only before the draft', () => {
   const owner = { isOwner: true, leagueStatus: 'setup' }
   const member = { isOwner: false, leagueStatus: 'setup' }
-  assert.equal(titles('league-setup', owner).length, 3)
+  assert.equal(titles('league-setup', owner).length, 2)
   assert.deepEqual(titles('league-setup', member), [])
   assert.equal(titles('league-waiting', member).length, 3)
   assert.deepEqual(titles('league-waiting', owner), [])
@@ -91,14 +91,14 @@ test('setup tours split by role, and only before the draft', () => {
   }
 })
 
-test('the draft room teaches scoring second and says what follows the draft', () => {
+test('the draft room teaches scoring second, with the league\'s double points rule', () => {
   const base = { leagueStatus: 'drafting', draftComplete: false }
-  const withCounterpicks = applicableSteps(getTour('draft-room'), { ...base, draftCounterpicks: true })
-  const without = applicableSteps(getTour('draft-room'), { ...base, draftCounterpicks: false })
-  assert.equal(withCounterpicks.length, 4)
-  assert.equal(withCounterpicks[1].title, 'What makes a good pick')
-  assert.match(withCounterpicks[3].body, /counterpick/)
-  assert.doesNotMatch(without[3].body, /counterpick/)
+  const plainRule = applicableSteps(getTour('draft-room'), { ...base, doublePoints: false })
+  const doubled = applicableSteps(getTour('draft-room'), { ...base, doublePoints: true })
+  assert.equal(plainRule.length, 3)
+  assert.equal(plainRule[1].title, 'How movies score')
+  assert.doesNotMatch(String(plainRule[1].body), /above 90%/)
+  assert.match(String(doubled[1].body), /above 90%/)
   // Once every pick is in, the owner is choosing the next phase: no tour.
   assert.deepEqual(titles('draft-room', { ...base, draftComplete: true }), [])
 })
@@ -111,12 +111,11 @@ test('the counterpick round needs a team, and only the owner learns to end it', 
 })
 
 test('onboarding tours start by themselves only for newcomers', () => {
-  const ids = ['welcome', 'league-setup', 'league-waiting', 'league-settings', 'draft-room', 'counterpick-round']
+  const ids = ['welcome', 'league-setup', 'league-waiting', 'draft-room', 'counterpick-round']
   const ctxFor = {
     welcome: { loaded: true },
     'league-setup': { isOwner: true, leagueStatus: 'setup' },
     'league-waiting': { isOwner: false, leagueStatus: 'setup' },
-    'league-settings': { leagueStatus: 'setup' },
     'draft-room': { leagueStatus: 'drafting' },
     'counterpick-round': { leagueStatus: 'counterpicking', hasTeam: true },
   }
@@ -125,4 +124,12 @@ test('onboarding tours start by themselves only for newcomers', () => {
     assert.ok(pickAutoStart(candidate(true), new Map(), new Date()), `${id} starts for a newcomer`)
     assert.equal(pickAutoStart(candidate(false), new Map(), new Date()), null, `${id} waits to be asked by a veteran`)
   }
+})
+
+test('league settings is replay only: the fields explain themselves', () => {
+  for (const newPlayer of [true, false]) {
+    const candidate = [{ tour: getTour('league-settings'), ctx: { leagueStatus: 'setup', newPlayer }, order: 0 }]
+    assert.equal(pickAutoStart(candidate, new Map(), new Date()), null)
+  }
+  assert.equal(titles('league-settings', { leagueStatus: 'setup' }).length, 3)
 })
