@@ -138,8 +138,8 @@ test.describe('League List', () => {
       // Navigate to dashboard
       await page.goto('/dashboard')
 
-      // Should show the league
-      await expect(page.getByText(leagueName)).toBeVisible()
+      // Should show the league (exact: the Next step card also names it)
+      await expect(page.getByText(leagueName, { exact: true })).toBeVisible()
     } finally {
       // Cleanup
       if (league) {
