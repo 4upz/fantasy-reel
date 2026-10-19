@@ -30,7 +30,7 @@ export const counterpickRoundTour = defineTour<{ isOwner: boolean; leagueStatus:
       anchor: 'end-counterpicks',
       when: (ctx) => ctx.isOwner === true,
       title: 'If the round stalls',
-      body: 'When nobody has a movie left to target, end the remaining counterpicks here. Counterpicks already made are kept, and the season starts.',
+      body: 'When nobody has a movie left to target, end the round here. Counterpicks already made are kept.',
     },
   ],
 })

@@ -21,7 +21,7 @@ export const leagueWaitingTour = defineTour<{ isOwner: boolean; leagueStatus: Le
     },
     {
       title: 'What makes a good pick',
-      body: 'Draft movies you expect critics to love, not just ones you want to see. Scoring is Tomatometer-based, from release day.',
+      body: 'Draft movies you expect critics to love, not just ones you want to see: only the Tomatometer counts, from release day.',
     },
     {
       anchor: 'wishlist-nav',

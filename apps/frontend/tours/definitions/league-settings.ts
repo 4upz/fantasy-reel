@@ -10,7 +10,7 @@ export const leagueSettingsTour = defineTour<{ leagueStatus: LeagueStatus }>({
   id: 'league-settings',
   version: 1,
   title: 'League settings',
-  description: 'Settings before the draft: draft order, scoring, roster and counterpick slots.',
+  description: 'Settings before the draft: draft order, scoring, counterpicks and roster slots.',
   when: (ctx) => ctx.leagueStatus === 'setup',
   autoStart: () => false,
   steps: [
@@ -22,12 +22,17 @@ export const leagueSettingsTour = defineTour<{ leagueStatus: LeagueStatus }>({
     {
       anchor: 'settings-scoring',
       title: 'Scoring',
-      body: 'Double points above 90% makes every point over 90 count twice. You can change it until the draft is over.',
+      body: 'Double points above 90% makes every point over 90 count twice.',
+    },
+    {
+      anchor: 'settings-counterpicks',
+      title: 'Counterpicks',
+      body: 'Counterpick slots set how many counterpicks each team gets; a counterpick scores a rival’s movie in reverse. They lock when the draft starts.',
     },
     {
       anchor: 'settings-roster',
-      title: 'Roster and counterpicks',
-      body: 'Draft slots fill at the draft and the rest fill by bidding during the season. Counterpick slots set how many counterpicks each team gets: a counterpick scores a rival’s movie in reverse. Both lock when the draft starts.',
+      title: 'Roster slots',
+      body: 'Draft slots fill at the draft and the rest fill by bidding during the season. These lock when the draft starts.',
     },
   ],
 })

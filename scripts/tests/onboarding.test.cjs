@@ -131,5 +131,5 @@ test('league settings is replay only: the fields explain themselves', () => {
     const candidate = [{ tour: getTour('league-settings'), ctx: { leagueStatus: 'setup', newPlayer }, order: 0 }]
     assert.equal(pickAutoStart(candidate, new Map(), new Date()), null)
   }
-  assert.equal(titles('league-settings', { leagueStatus: 'setup' }).length, 3)
+  assert.equal(titles('league-settings', { leagueStatus: 'setup' }).length, 4)
 })
