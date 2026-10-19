@@ -105,9 +105,11 @@ A tour whose anchors never show up doesn't start at all, so a lone intro card is
 
 Tours always start for a user who asks: the account menu's **Tour this page**, `<TourButton>`, or Settings.
 
-### Tours start by themselves only for newcomers
+### Onboarding tours start only for newcomers
 
-`welcome`, `league-setup`, `league-waiting`, `league-settings`, `draft-room` and `counterpick-round` teach a first season. Each has `autoStart: (ctx) => ctx.newPlayer === true`. The page works out `newPlayer` with `isNewPlayer()` from `utils/onboarding.ts`, reading `getCachedMemberships()`. Someone who has had a team in an active or completed season isn't new. Pass `false` when the read fails, so nobody gets walked through by mistake. Feature tours (a league tab, such as bidding or trading) use the same rule: a returning player already knows the tab and can still ask with "Show me around". Start a tour for everyone only when the feature itself is new to them.
+`welcome`, `league-setup`, `league-waiting`, `league-settings`, `draft-room` and `counterpick-round` teach a first season. Each has `autoStart: (ctx) => ctx.newPlayer === true`. The page works out `newPlayer` with `isNewPlayer()` from `utils/onboarding.ts`, reading `getCachedMemberships()`. Someone who has had a team in an active or completed season isn't new. Pass `false` when the read fails, so nobody gets walked through by mistake. Use the same rule for a new beginner tour.
+
+Feature tours start by themselves only for players new to the feature, too: a returning player already knows the tab and can still ask with "Show me around". Don't use `newPlayer` for them, since it's false for anyone already in a season; work out "new to this" from what the page knows, such as whether the player has finished a season yet. A tour for a feature that's genuinely new to everyone can leave `autoStart` out and start for everyone.
 
 ## How a tour ends
 
