@@ -209,3 +209,25 @@ test('a card taller than the free band scrolls inside itself (200% zoom)', () =>
   assert.equal(position.maxHeight, 300 - 56 - engine.VIEWPORT_MARGIN * 2)
   assert.equal(position.top, 56 + engine.VIEWPORT_MARGIN)
 })
+
+test('a desktop element the card had to cover scrolls up so the card fits below it', () => {
+  const viewport = { width: 1280, height: 720 }
+  const anchor = { top: 155, left: 330, width: 690, height: 414 }
+  const card = { top: 245, left: 916, width: 352, height: 235 }
+  const delta = engine.scrollClearOfCard(anchor, card, viewport)
+  assert.equal(delta, 155 - engine.VIEWPORT_MARGIN)
+  const moved = { ...anchor, top: anchor.top - delta }
+  assert.equal(engine.placeCard(moved, card, viewport).top, moved.top + moved.height + engine.ANCHOR_GAP, 'the card now sits below')
+  assert.equal(engine.scrollClearOfCard({ ...anchor, height: 600 }, card, viewport), 0, 'too tall for both: leave it')
+})
+
+test('on a phone, a tall element starts just below a card docked at the top', () => {
+  const viewport = { width: 390, height: 844 }
+  const insets = { top: 120, bottom: 80 }
+  const card = { top: 132, left: 12, width: 366, height: 340 }
+  const anchor = { top: 320, left: 16, width: 358, height: 450 }
+  assert.equal(engine.scrollClearOfCard(anchor, card, viewport, insets), 320 - (472 + engine.VIEWPORT_MARGIN))
+  const docked = { top: 452, left: 12, width: 366, height: 300 }
+  const low = { top: 500, left: 16, width: 358, height: 120 }
+  assert.equal(engine.scrollClearOfCard(low, docked, viewport, insets), 620 - (452 - engine.VIEWPORT_MARGIN), 'a short one moves just above a card at the bottom')
+})

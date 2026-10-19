@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
-import { placeCard, type Box, type CardPosition } from '@/tours/engine'
+import { placeCard, scrollClearOfCard, type Box, type CardPosition } from '@/tours/engine'
 import type { ActiveTour } from './TourProvider'
 import { describeAnchor, findTourAnchor, measureInsets, topModal } from './anchors'
 
@@ -122,29 +122,22 @@ export default function TourOverlay({
     titleRef.current?.focus({ preventScroll: true })
   }, [tour.index, step, measure])
 
-  // On a phone the card docks to an edge. If a tall card still covers the
-  // element, scroll once per step, after the step's own scroll has settled,
-  // so the element sits in the free part of the screen (or starts there).
-  const docked = layout?.position.docked ?? false
+  // If the card still covers the element once the step's own scroll has
+  // settled, scroll once more so the element sits clear of it (or, when it's
+  // too tall to, starts clear of it, so its top is what shows).
   useEffect(() => {
-    if (!docked || !step.anchor) return
+    if (!step.anchor) return
     const timer = window.setTimeout(() => {
       const element = findTourAnchor(step.anchor!)
       const card = cardRef.current?.getBoundingClientRect()
       if (!element || !card) return
       const anchor = element.getBoundingClientRect()
       if (anchor.bottom <= card.top || anchor.top >= card.bottom) return
-      const insets = measureInsets()
-      const gap = 12
-      // Moving the element further toward the edge it is near keeps the card
-      // docked where it is, so this settles in one scroll.
-      const delta = card.top > window.innerHeight / 2
-        ? Math.min(anchor.bottom - (card.top - gap), anchor.top - (insets.top + gap))
-        : Math.max(anchor.top - (card.bottom + gap), anchor.bottom - (window.innerHeight - insets.bottom - gap))
+      const delta = scrollClearOfCard(anchor, card, { width: window.innerWidth, height: window.innerHeight }, measureInsets())
       if (delta !== 0) window.scrollBy({ top: delta, behavior: prefersReducedMotion() ? 'auto' : 'smooth' })
     }, SCROLL_SETTLE_MS)
     return () => window.clearTimeout(timer)
-  }, [docked, step, tour.index])
+  }, [step, tour.index])
 
   useEffect(() => {
     const interval = window.setInterval(measure, TICK_MS)
@@ -206,7 +199,7 @@ export default function TourOverlay({
         aria-describedby={bodyId}
         data-testid="tour-card"
         data-tour-id={tour.tour.id}
-        className={`card tour-card has-[:focus-visible]:border-gold/40 pointer-events-auto fixed overflow-y-auto p-4 shadow-heavy animate-fade-in motion-reduce:animate-none ${
+        className={`card tour-card border-border-hover has-[:focus-visible]:border-gold/40 pointer-events-auto fixed overflow-y-auto p-4 shadow-heavy animate-fade-in motion-reduce:animate-none ${
           position?.docked ? 'w-[calc(100vw-24px)]' : 'w-[min(22rem,calc(100vw-24px))]'
         } ${position ? '' : 'opacity-0'}`}
         style={position ? { top: position.top, left: position.left, maxHeight: position.maxHeight } : { top: 0, left: 0 }}
