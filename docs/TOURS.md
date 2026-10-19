@@ -24,7 +24,7 @@ Short walkthroughs that start the first time someone opens a page, so players le
 
    export const tradingTour = defineTour<{ leagueStatus: LeagueStatus; isOwner: boolean }>({
      id: 'trading',                       // kebab-case, stored per user, never reused
-     version: 1,                          // bump to show it again to people who saw it
+     version: 1,                          // bump only when the page changes; see below
      title: 'Trading',                    // shown in Settings → Tours
      description: 'Trading tab: proposing, answering, and how trades go through.',
      when: (ctx) => ctx.leagueStatus === 'active',
@@ -90,7 +90,8 @@ The provider starts a tour on its own only when all of these hold:
 - its `autoStart`, if it has one, passes;
 - the user hasn't finished or hidden it at this version, and it isn't snoozed;
 - automatic tours are on in Settings → Tours;
-- no other tour has started by itself on this page visit. A page that starts offering a new tour while it's open (the Draft tab moving from setup to drafting) counts as a new visit.
+- no other tour has started by itself on this page visit. A page that starts offering a new tour while it's open (the Draft tab moving from setup to drafting) counts as a new visit;
+- no automatic tour ended in the last 10 minutes, on an earlier visit, so clicking through a league's tabs doesn't mean a tour on each. A reload counts as a new visit. The gap ends after 10 minutes, or sooner if the browser tab is closed; each browser tab keeps its own. "Show again" in Settings clears it. A tour that misses its turn starts on a later visit, and "Show me around" still plays it. Tours marked `essential: true` skip the gap: the newcomer steps that come right after an action (`welcome`, `league-setup`, `league-waiting`, `draft-room`, `counterpick-round`). Leave feature tours unmarked.
 
 When several tours qualify, the one mounted first wins. If a page offers two tours, give them `when` rules that don't overlap.
 
@@ -104,9 +105,9 @@ A tour whose anchors never show up doesn't start at all, so a lone intro card is
 
 Tours always start for a user who asks: the account menu's **Tour this page**, `<TourButton>`, or Settings.
 
-### Onboarding tours start only for newcomers
+### Tours start by themselves only for newcomers
 
-`welcome`, `league-setup`, `league-waiting`, `league-settings`, `draft-room` and `counterpick-round` teach a first season. Each has `autoStart: (ctx) => ctx.newPlayer === true`. The page works out `newPlayer` with `isNewPlayer()` from `utils/onboarding.ts`, reading `getCachedMemberships()`. Someone who has had a team in an active or completed season isn't new. Pass `false` when the read fails, so nobody gets walked through by mistake. Use the same rule for a new beginner tour. Feature tours, such as `bidding`, start for everyone.
+`welcome`, `league-setup`, `league-waiting`, `league-settings`, `draft-room` and `counterpick-round` teach a first season. Each has `autoStart: (ctx) => ctx.newPlayer === true`. The page works out `newPlayer` with `isNewPlayer()` from `utils/onboarding.ts`, reading `getCachedMemberships()`. Someone who has had a team in an active or completed season isn't new. Pass `false` when the read fails, so nobody gets walked through by mistake. Feature tours (a league tab, such as bidding or trading) use the same rule: a returning player already knows the tab and can still ask with "Show me around". Start a tour for everyone only when the feature itself is new to them.
 
 ## How a tour ends
 
@@ -116,6 +117,8 @@ Tours always start for a user who asks: the account menu's **Tour this page**, `
 | chooses **Don't show again** | `dismissed` | Same. |
 | chooses **Not now** (the footer, or ✕), presses Escape, or leaves the page before the last step | `snoozed` | Starts again after 3 days. A second snooze of the same version counts as `dismissed`. |
 | chooses **Turn off all tours** (offered on the first step of a tour that started by itself) | `dismissed`, plus `prefs:tours = {enabled:false}` | Nothing starts by itself. Replay still works. A toast says where to turn them back on. |
+
+Raise a tour's `version` only when the page it explains has changed, so people who saw it need to see it again. Rewording a tour isn't a reason: everyone who finished it would get it again for nothing.
 
 `record_tour_outcome()` merges outcomes so that nothing can roll them back:
 

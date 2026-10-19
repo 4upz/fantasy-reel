@@ -12,6 +12,7 @@ export const leagueSetupTour = defineTour<{ isOwner: boolean; leagueStatus: Leag
   description: 'Draft tab before the draft: getting players in, the rules, and starting the draft.',
   when: (ctx) => ctx.isOwner === true && ctx.leagueStatus === 'setup',
   autoStart: (ctx) => ctx.newPlayer === true,
+  essential: true,
   steps: [
     {
       anchor: 'join-link',
