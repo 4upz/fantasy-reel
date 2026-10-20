@@ -72,6 +72,8 @@ const MAX_RATINGS_ERRORS = 5
 export const RESERVE_CHUNK = 25
 /** Concurrent MDBList lookups. */
 export const MDBLIST_CONCURRENCY = 4
+/** Concurrent TMDb details fetches: one at a time left most of the metadata slice waiting on round trips. */
+export const TMDB_METADATA_CONCURRENCY = 4
 
 /** PostgREST page size (its max_rows) for reads that must see every row. */
 const PAGE_SIZE = 1000
@@ -120,7 +122,7 @@ export const DEFAULT_INGEST_CONFIG: Omit<IngestConfig, 'today'> = {
   discoverFromYear: 2012,
   perRunCap: 160,
   dailyBudget: 460,
-  metadataPerRun: 150,
+  metadataPerRun: 400,
   expansionPerRun: 40,
   stageBudgetMs: { seed: 8_000, metadata: 17_000, ratings: 20_000 },
 }
@@ -574,33 +576,31 @@ export async function fetchMetadataStage(
   // B1: metadata for new rows, and the weekly refresh of league movies.
   // League rows go first and the backlog last, after B2/B3: the backlog alone
   // fills the stage deadline, and expansion queued behind it never ran.
-  const fetchMetadata = async (rows: DueMetadataRow[]) => {
-    for (const row of rows) {
-      if (clock() >= deadline) {
-        deadline_hit = true
-        log.info('metadata deadline reached', { fetched: metadata_fetched, stopped_at: row.tmdb_id })
+  const fetchMetadata = (rows: DueMetadataRow[]) => forEachConcurrently(rows, TMDB_METADATA_CONCURRENCY, async (row) => {
+    if (clock() >= deadline) {
+      if (!deadline_hit) log.info('metadata deadline reached', { fetched: metadata_fetched, stopped_at: row.tmdb_id })
+      deadline_hit = true
+      return
+    }
+    const isRefresh = row.metadata_fetched_at !== null
+    try {
+      const meta = await fetchMovieMetadata(row.tmdb_id, deps.tmdbToken)
+      if (!meta) {
+        // Gone from TMDb: never fetch again, and don't spend MDBList on it.
+        const { error: deadEndError } = await client.from('film_corpus')
+          .update({ metadata_fetched_at: fetchedAt, ratings_fetched_at: fetchedAt, ratings_absent: true })
+          .eq('tmdb_id', row.tmdb_id)
+        if (deadEndError) throw deadEndError
         return
       }
-      const isRefresh = row.metadata_fetched_at !== null
-      try {
-        const meta = await fetchMovieMetadata(row.tmdb_id, deps.tmdbToken)
-        if (!meta) {
-          // Gone from TMDb: never fetch again, and don't spend MDBList on it.
-          const { error: deadEndError } = await client.from('film_corpus')
-            .update({ metadata_fetched_at: fetchedAt, ratings_fetched_at: fetchedAt, ratings_absent: true })
-            .eq('tmdb_id', row.tmdb_id)
-          if (deadEndError) throw deadEndError
-          continue
-        }
-        await storeMetadata(client, meta, fetchedAt)
-        if (isRefresh) metadata_refreshed++
-        else metadata_fetched++
-      } catch (err) {
-        log.warn('Metadata fetch failed', { tmdb_id: row.tmdb_id, error: serializeError(err) })
-        errors.push({ stage: 'metadata', id: row.tmdb_id, error: serializeError(err) })
-      }
+      await storeMetadata(client, meta, fetchedAt)
+      if (isRefresh) metadata_refreshed++
+      else metadata_fetched++
+    } catch (err) {
+      log.warn('Metadata fetch failed', { tmdb_id: row.tmdb_id, error: serializeError(err) })
+      errors.push({ stage: 'metadata', id: row.tmdb_id, error: serializeError(err) })
     }
-  }
+  })
   const due = await dueMetadata(client, config)
   await fetchMetadata(due.filter((r) => r.priority >= LEAGUE_PRIORITY))
 
