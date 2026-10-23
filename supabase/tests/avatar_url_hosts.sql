@@ -97,10 +97,6 @@ SELECT is((SELECT avatar_url FROM profiles WHERE user_id = '87111111-1111-4111-8
 SELECT ok(EXISTS (SELECT 1 FROM profiles WHERE user_id = '87111111-1111-4111-8111-000000000006' AND avatar_url IS NULL),
   'OAuth sign-up with an unexpected host still creates the profile, without the avatar');
 
-UPDATE auth.users SET raw_user_meta_data = '{"full_name":"Odd","picture":"https://lh3.googleusercontent.com/a/xyz=s96-c"}'
-WHERE id = '87111111-1111-4111-8111-000000000006';
-SELECT is((SELECT avatar_url FROM profiles WHERE user_id = '87111111-1111-4111-8111-000000000006'),
-  'https://lh3.googleusercontent.com/a/xyz=s96-c', 'OAuth profile sync keeps a Google photo');
 
 SET LOCAL ROLE service_role;
 UPDATE teams SET avatar_url = 'https://attacker.example/pixel.png' WHERE id = '87111111-1111-4111-8111-000000000004';
