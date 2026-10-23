@@ -121,7 +121,7 @@ export default function BiddingConfigSection({
   }
 
   return (
-    <section className="card p-6">
+    <section className="card p-6" data-tour="settings-roster">
       <SectionHeader
         icon={Package}
         title="Bidding Configuration"

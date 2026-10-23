@@ -86,6 +86,8 @@ export default function LeagueBottomNav({
       <nav
         className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-[12px] lg:hidden"
         aria-label="League navigation"
+        data-tour="league-nav"
+        data-tour-inset="bottom"
         data-testid="league-bottom-nav"
       >
         <div
@@ -119,7 +121,9 @@ export default function LeagueBottomNav({
                     </>
                   )}
                 </span>
-                <span className="type-meta">{tab.name}</span>
+                {tab.name === 'Settings'
+                  ? <span className="type-meta" data-tour="settings-tab">{tab.name}</span>
+                  : <span className="type-meta">{tab.name}</span>}
               </Link>
             )
           })}

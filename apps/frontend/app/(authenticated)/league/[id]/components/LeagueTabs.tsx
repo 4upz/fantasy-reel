@@ -64,6 +64,7 @@ export default function LeagueTabs({
       className="relative flex gap-2 border-b border-border"
       aria-label="League navigation"
       data-testid="league-tabs"
+      data-tour="league-nav"
     >
       {tabs.map((tab) => {
         const isActive = isTabActive(pathname, tab.href)
@@ -86,7 +87,7 @@ export default function LeagueTabs({
             }`}
             aria-current={isActive ? 'page' : undefined}
           >
-            {tab.name}
+            {tab.name === 'Settings' ? <span data-tour="settings-tab">{tab.name}</span> : tab.name}
             {tab.badge && (
               <>
                 <span aria-hidden="true" className="type-meta rounded-full bg-crimson px-1.5 py-0.5 text-foreground">

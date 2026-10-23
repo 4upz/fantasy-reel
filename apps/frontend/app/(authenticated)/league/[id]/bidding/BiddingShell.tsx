@@ -15,6 +15,7 @@ import { getBidPhase } from '../components/utils'
 import { getDroppableBidHoldingIds } from '../components/bidFitForecast'
 import { BiddingProvider, type BiddingHolding } from './BiddingContext'
 import BiddingModalLoading from './BiddingModalLoading'
+import { FeatureTour, TourButton } from '@/components/tours'
 
 const PlaceBidModal = dynamic(() => import('../components/PlaceBidModal'), {
   loading: BiddingModalLoading,
@@ -288,12 +289,13 @@ export default function BiddingShell({
 
   return (
     <BiddingProvider value={contextValue}>
+      <FeatureTour id="bidding" ctx={{ leagueStatus: league.status, counterpicksEnabled: hasCounterpicks }} />
       <div className="space-y-6" data-testid="bidding-panel">
         {/* Header: budget and slots, then the two ways to spend them */}
         <div className="card p-4 sm:p-5">
           <h2 className="sr-only">Bidding</h2>
           <div className="grid grid-cols-3 gap-3 sm:flex sm:items-center sm:gap-6">
-            <div>
+            <div data-tour="bidding-budget">
               <p className="type-meta text-foreground-secondary mb-1">
                 Budget<span className="sr-only"> remaining</span>
               </p>
@@ -330,7 +332,9 @@ export default function BiddingShell({
             )}
           </div>
 
-          <BidWeekTimeline cutoffAt={newBidCutoffAt} processingDeadline={processingDeadline} />
+          <div data-tour="bid-week">
+            <BidWeekTimeline cutoffAt={newBidCutoffAt} processingDeadline={processingDeadline} />
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-3 mt-4">
             <button
@@ -342,6 +346,7 @@ export default function BiddingShell({
               aria-haspopup="dialog"
               className="btn btn-primary px-6 py-3 text-base w-full sm:w-auto aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-gold aria-disabled:hover:shadow-none"
               data-testid="place-bid-button"
+              data-tour="place-bid"
             >
               {isCounterBidPhase ? <Swords className="w-5 h-5 mr-2" aria-hidden="true" /> : <Plus className="w-5 h-5 mr-2" aria-hidden="true" />}
               {isCounterBidPhase ? 'Counter a Bid' : 'Place Bid'}
@@ -356,11 +361,14 @@ export default function BiddingShell({
                 aria-haspopup="dialog"
                 className="btn btn-secondary px-6 py-3 text-base w-full sm:w-auto border-crimson text-crimson-text hover:bg-crimson/10 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:bg-transparent"
                 data-testid="place-counterpick-bid-button"
+                data-tour="place-counterpick-bid"
               >
                 <Target className="w-5 h-5 mr-2" aria-hidden="true" />
                 Place counterpick bid
               </button>
             )}
+
+            <TourButton id="bidding" className="self-center sm:ml-auto" />
           </div>
 
           {bidCtaReason && (

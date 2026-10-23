@@ -58,6 +58,7 @@ export default function DashboardSidebar({
         onClick={onCreateClick}
         className="sidebar-action-card flex items-center gap-3 w-full text-left group"
         data-testid="create-league-button"
+        data-tour="create-league"
       >
         <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gold-muted shrink-0">
           <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
@@ -76,7 +77,7 @@ export default function DashboardSidebar({
       </button>
 
       {/* Join league */}
-      <div className="sidebar-action-card" role="group" aria-labelledby={joinHeadingId}>
+      <div className="sidebar-action-card" role="group" aria-labelledby={joinHeadingId} data-tour="join-league">
         <div className="flex items-center gap-3 mb-3">
           <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gold-muted shrink-0">
             <svg className="w-5 h-5 text-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true" focusable="false">
