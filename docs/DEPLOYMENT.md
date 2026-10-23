@@ -130,7 +130,36 @@ In Supabase Dashboard → Authentication:
 
 **URL Configuration:**
 - Site URL: `https://your-production-domain.com`
-- Redirect URLs: Add your production domain
+- Redirect URLs: Add your production domain, plus the iPhone app's callbacks
+  `fantasyreel://auth/callback` and `fantasyreel://auth/callback?flow=recovery`.
+  A `redirectTo` that isn't listed is silently replaced by the Site URL, so a reset
+  or sign-in requested in the app finishes on the website instead.
+
+**Auth emails:**
+
+Supabase's built-in mailer sends from its own shared domain with plain default
+templates, and only to members of the Supabase organization. Those emails land in
+spam and look like phishing. Send auth emails through Resend from our own domain,
+the same one the Edge Functions already use (`RESEND_FROM_EMAIL`):
+
+1. Resend → Domains: confirm `fantasyreel.com` shows **Verified** (its SPF and DKIM
+   records are in DNS). Create an API key with **Sending access** for that domain.
+2. DNS: add a DMARC record if `_dmarc.fantasyreel.com` has none. Start with
+   `v=DMARC1; p=none; rua=mailto:<a mailbox you read>`, and move to
+   `p=quarantine` once a couple of weeks of reports show only Resend sending.
+3. Supabase → Authentication → Emails → SMTP Settings: enable custom SMTP with host
+   `smtp.resend.com`, port `465`, username `resend`, password the API key, sender
+   email `noreply@fantasyreel.com`, sender name `Fantasy Reel`.
+4. Supabase → Authentication → Rate Limits: custom SMTP starts at 30 emails an hour.
+   Raise it if sign-ups need more.
+5. Supabase → Authentication → Emails → Templates → **Reset password**: subject
+   `Reset your Fantasy Reel password`, body the contents of
+   `supabase/templates/recovery.html`. Its button goes through `/auth/confirm` with
+   `redirect_to={{ .RedirectTo }}`, which sends links the iPhone app asked for back to
+   the app. Keep this template and the file in step.
+6. Send yourself a reset from the website and from the app. Check the sender is
+   `noreply@fantasyreel.com`, the message lands in the inbox, and Gmail's "Show
+   original" reports SPF, DKIM and DMARC as PASS.
 
 **Providers → Discord:**
 - Enable Discord provider
@@ -306,7 +335,7 @@ The frontend exposes `/api/health` — an unauthenticated, uncached endpoint tha
 ### Auth Redirect Issues
 
 1. Verify Site URL in Supabase Auth settings
-2. Check redirect URLs include your domain
+2. Check redirect URLs include your domain and the app callbacks (step 2.5)
 3. For Discord OAuth, verify redirect URL in Discord Developer Portal
 
 ### Real-time Not Working

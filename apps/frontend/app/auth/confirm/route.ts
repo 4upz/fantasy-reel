@@ -6,6 +6,20 @@ const PKCE_TOKEN_PREFIX = 'pkce_'
 
 const LINK_TYPES = new Set(['signup', 'email', 'invite', 'magiclink', 'recovery', 'email_change'])
 
+/** The iOS app's auth callback (apps/ios `AppConfiguration.authCallbackURL`). */
+const APP_CALLBACK = 'fantasyreel://auth/callback'
+
+/**
+ * Where Supabase's verify endpoint should send this link: the app callback
+ * when the iPhone app requested the email (templates pass `{{ .RedirectTo }}`
+ * as `redirect_to`), otherwise this site's page for the link type. Anything
+ * else is ignored, and Supabase still checks the result against its allowlist.
+ */
+function verifyRedirect(requested: string | null, origin: string, type: string): string {
+  if (requested === APP_CALLBACK || requested?.startsWith(`${APP_CALLBACK}?`)) return requested
+  return `${origin}${type === 'recovery' ? '/reset-password' : '/auth/callback'}`
+}
+
 /**
  * Email links of the form /auth/confirm?token_hash=…&type=….
  *
@@ -19,7 +33,8 @@ const LINK_TYPES = new Set(['signup', 'email', 'invite', 'magiclink', 'recovery'
  * flow's code verifier cookie (the one that signed up or asked for the
  * reset) can exchange the code, in /auth/callback or on /reset-password.
  * Both targets are the redirect URLs the app already sends with each email,
- * so Supabase's redirect allowlist accepts them.
+ * so Supabase's redirect allowlist accepts them. A link the iPhone app asked
+ * for goes back to the app instead, which holds that flow's verifier.
  *
  * Tokens from outside the app's PKCE flows (e.g. a confirmation resent from
  * the Supabase dashboard) are bound to nothing, so a sign-up confirmation is
@@ -39,10 +54,7 @@ export async function GET(request: NextRequest) {
     verifyUrl.searchParams.set('token', tokenHash)
     // `email` is a POST-only alias; links built from the sign-up template use it.
     verifyUrl.searchParams.set('type', type === 'email' ? 'signup' : type)
-    verifyUrl.searchParams.set(
-      'redirect_to',
-      `${origin}${type === 'recovery' ? '/reset-password' : '/auth/callback'}`
-    )
+    verifyUrl.searchParams.set('redirect_to', verifyRedirect(searchParams.get('redirect_to'), origin, type))
     return NextResponse.redirect(verifyUrl)
   }
 

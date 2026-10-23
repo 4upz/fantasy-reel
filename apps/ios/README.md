@@ -137,7 +137,9 @@ environment variable to a case name in the scheme's Run options.
   Test on a real iPhone: the simulator can't receive a remote push from APNs.
 - **Supabase redirect URLs.** Add `fantasyreel://auth/callback` and
   `fantasyreel://auth/callback?flow=recovery` in the production dashboard under
-  Authentication → URL Configuration.
+  Authentication → URL Configuration. The **Reset password** email template must
+  pass `{{ .RedirectTo }}` on (`supabase/templates/recovery.html` does), or a reset
+  asked for in the app opens the website; see "Auth emails" in `docs/DEPLOYMENT.md`.
 - **Sign in with Apple.** Register the bundle ID with the capability, enable
   the Apple provider in production Supabase with the bundle ID as a Client ID,
   and test it on a real iPhone, including Hide My Email (the app warns that a
