@@ -18,7 +18,9 @@ INSERT INTO auth.users(id, email, raw_user_meta_data) VALUES
   ('88111111-1111-4111-8111-000000000002', 'sync-upload@example.test',
    '{"full_name":"Upload","avatar_url":"https://cdn.discordapp.com/avatars/2/first.png"}'),
   ('88111111-1111-4111-8111-000000000003', 'sync-email@example.test',
-   '{"display_name":"Emailer"}');
+   '{"display_name":"Emailer"}'),
+  ('88111111-1111-4111-8111-000000000004', 'sync-google@example.test',
+   '{"full_name":"Goog","picture":"https://lh3.googleusercontent.com/a/g1=s96-c"}');
 
 -- Linking Google to a Discord account
 UPDATE auth.users SET raw_user_meta_data = raw_user_meta_data
@@ -33,6 +35,13 @@ UPDATE auth.users SET raw_user_meta_data = raw_user_meta_data
 WHERE id = '88111111-1111-4111-8111-000000000001';
 SELECT is((SELECT avatar_url FROM profiles WHERE user_id = '88111111-1111-4111-8111-000000000001'),
   'https://cdn.discordapp.com/avatars/1/second.png', 'a new Discord avatar replaces the old Discord URL');
+
+-- Changing the Google photo refreshes the stored Google URL
+UPDATE auth.users SET raw_user_meta_data = raw_user_meta_data
+  || '{"picture":"https://lh3.googleusercontent.com/a/g2=s96-c"}'
+WHERE id = '88111111-1111-4111-8111-000000000004';
+SELECT is((SELECT avatar_url FROM profiles WHERE user_id = '88111111-1111-4111-8111-000000000004'),
+  'https://lh3.googleusercontent.com/a/g2=s96-c', 'a new Google photo replaces the old Google URL');
 
 -- An uploaded avatar survives any metadata write, such as the display-name sync
 UPDATE profiles SET avatar_url = 'https://api.fantasyreel.com/storage/v1/object/public/avatars/88111111-1111-4111-8111-000000000002/1.png'
