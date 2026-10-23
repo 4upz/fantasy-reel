@@ -26,6 +26,7 @@ final class AuthNavigation {
 /// The signed-out experience (F-01, F-02): Welcome, then Log in / Sign up.
 struct AuthFlowView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(AppEnvironment.self) private var environment
     @State private var navigation = AuthNavigation()
 
     var body: some View {
@@ -41,6 +42,10 @@ struct AuthFlowView: View {
                 }
         }
         .environment(navigation)
+        // Start WebKit while Welcome is up, so the security check on Log In
+        // and Sign Up doesn't stall their push.
+        .task { SecurityCheckPrewarm.run(environment.configuration) }
+        .onDisappear { SecurityCheckPrewarm.release() }
         // A link that couldn't sign in lands where the person can act on it:
         // Log In, or Reset Password (over Log In) to send a fresh reset link.
         .task(id: session.authLinkNotice?.id) {

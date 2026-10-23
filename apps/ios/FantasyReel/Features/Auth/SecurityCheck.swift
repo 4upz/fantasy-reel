@@ -64,22 +64,39 @@ struct SecurityCheckView: View {
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.colorScheme) private var colorScheme
+    /// False until the screen has finished sliding in. Creating a web view
+    /// blocks the main thread, so doing it during the push makes the
+    /// transition stutter.
+    @State private var isMounted = false
+
+    /// About the length of a navigation push.
+    private static let mountDelay = Duration.milliseconds(400)
 
     var body: some View {
         if let siteKey = environment.configuration.turnstileSiteKey {
             VStack(spacing: 6) {
-                TurnstileWebView(
-                    siteKey: siteKey,
-                    // The page's origin is the website's, which is the host the
-                    // site key allows; nothing is fetched from it.
-                    baseURL: environment.configuration.siteURL,
-                    theme: colorScheme == .light ? "light" : "dark",
-                    resets: check.resets,
-                    reloads: check.reloads,
-                    onEvent: handle
-                )
+                Group {
+                    if isMounted {
+                        TurnstileWebView(
+                            siteKey: siteKey,
+                            // The page's origin is the website's, which is the host the
+                            // site key allows; nothing is fetched from it.
+                            baseURL: environment.configuration.siteURL,
+                            theme: colorScheme == .light ? "light" : "dark",
+                            resets: check.resets,
+                            reloads: check.reloads,
+                            onEvent: handle
+                        )
+                    } else {
+                        Color.clear
+                    }
+                }
                 .frame(height: 65)
                 .frame(maxWidth: .infinity)
+                .task {
+                    try? await Task.sleep(for: Self.mountDelay)
+                    isMounted = true
+                }
                 if check.token != nil {
                     AuthNote(systemImage: "checkmark.shield", text: "Security check passed")
                         .frame(maxWidth: .infinity)
@@ -112,6 +129,28 @@ struct SecurityCheckView: View {
     }
 }
 
+/// Starts WebKit's web content process ahead of the first security check.
+/// The first web view in the app pays for launching that process; doing it
+/// while Welcome is on screen keeps it out of the Log In and Sign Up pushes.
+@MainActor
+enum SecurityCheckPrewarm {
+    private static var webView: WKWebView?
+
+    /// Does nothing when the security check is off or already warmed.
+    static func run(_ configuration: AppConfiguration) {
+        guard configuration.turnstileSiteKey != nil, webView == nil else { return }
+        let warm = TurnstileWebView.makeWebView()
+        // Same origin as the real check, so WebKit reuses this process for it.
+        warm.loadHTMLString("<!doctype html><html></html>", baseURL: configuration.siteURL)
+        webView = warm
+    }
+
+    /// Releases the warm web view once nobody signed out needs it.
+    static func release() {
+        webView = nil
+    }
+}
+
 private struct TurnstileWebView: UIViewRepresentable {
     enum Event: Equatable {
         case token(String)
@@ -133,11 +172,20 @@ private struct TurnstileWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    func makeUIView(context: Context) -> WKWebView {
+    /// A web view sharing the check's in-memory data store, so the warm one
+    /// and the real one run in the same web content process.
+    @MainActor
+    static func makeWebView(configure: (WKWebViewConfiguration) -> Void = { _ in }) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = Self.dataStore
-        configuration.userContentController.add(context.coordinator, name: Self.handlerName)
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        configuration.websiteDataStore = dataStore
+        configure(configuration)
+        return WKWebView(frame: .zero, configuration: configuration)
+    }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let webView = Self.makeWebView { configuration in
+            configuration.userContentController.add(context.coordinator, name: Self.handlerName)
+        }
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.isOpaque = false
