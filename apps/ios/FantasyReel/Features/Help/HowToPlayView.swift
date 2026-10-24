@@ -58,15 +58,33 @@ struct HowToPlayView: View {
                 .padding(.horizontal, FRMetrics.pageMargin)
                 .padding(.bottom, 32)
             }
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(verbatim: "").accessibilityHidden(true)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    sectionsMenu(proxy)
+                }
+            }
         }
         .background(Color.frBackground)
         .navigationTitle("How to Play")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(verbatim: "").accessibilityHidden(true)
+    }
+
+    /// The same jumps as the chips, in the top bar so they stay in reach
+    /// however far the guide has scrolled.
+    private func sectionsMenu(_ proxy: ScrollViewProxy) -> some View {
+        Menu {
+            ForEach(Topic.allCases) { topic in
+                Button(topic.label, systemImage: topic.systemImage) {
+                    withAnimation { proxy.scrollTo(topic, anchor: .top) }
+                }
             }
+        } label: {
+            Image(systemName: "list.bullet")
         }
+        .accessibilityLabel("Jump to section")
     }
 
     private func jumpTo(_ proxy: ScrollViewProxy) -> some View {

@@ -50,6 +50,9 @@ struct BidsView: View {
             .padding(.bottom, 24)
         }
         .background(Color.frBackground)
+        .bottomActionBar(isPresented: bids.state.value != nil) {
+            if let snapshot = bids.state.value { BidActions(snapshot: snapshot) }
+        }
         .refreshable {
             await bids.refresh()
             if section == .history { await bids.loadHistory() }
@@ -142,12 +145,11 @@ private struct ActiveBidsContent: View {
     }
 }
 
-/// Budget, capacity and the week, with the bid buttons.
+/// Budget, capacity and the week. The bid buttons are in the bottom bar (`BidActions`).
 private struct BudgetCard: View {
     let snapshot: BidsStore.Snapshot
 
     @Environment(LeagueSeasonStore.self) private var season
-    @Environment(ShellRouter.self) private var router
 
     var body: some View {
         let bids = season.bids
@@ -157,9 +159,7 @@ private struct BudgetCard: View {
         let used = team.map { season.holdings(of: $0.id).count } ?? 0
         let counterPhase = snapshot.week.isCounterBidPhase()
         let hasContests = snapshot.pickupBids.contains { $0.status.isPending }
-        let canBid = budget != nil && (!counterPhase || hasContests)
         let counterpickSlots = league.biddingCounterpickSlots
-        let canCounterpick = budget != nil && counterpickSlots > 0 && snapshot.biddingCounterpickCount < counterpickSlots
 
         FRCard {
             VStack(alignment: .leading, spacing: 14) {
@@ -202,20 +202,6 @@ private struct BudgetCard: View {
                         .frFont(.caption)
                         .foregroundStyle(Color.frTextSecondary)
                 }
-                HStack(spacing: 12) {
-                    Button(counterPhase ? "Counter a Bid" : "Place Bid", systemImage: counterPhase ? "arrow.up.circle" : "plus") {
-                        router.present(.placeBid(.newPickup))
-                    }
-                    .buttonStyle(.fr(.primary, size: .medium, fullWidth: true))
-                    .disabled(!canBid)
-                    if canCounterpick {
-                        Button("Counterpick", systemImage: "scope") {
-                            router.present(.placeBid(.newCounterpick))
-                        }
-                        .buttonStyle(.fr(.secondary, size: .medium, fullWidth: true))
-                        .accessibilityLabel("Place counterpick bid")
-                    }
-                }
             }
         }
     }
@@ -224,6 +210,36 @@ private struct BudgetCard: View {
         guard let budget else { return "Fantasy Budget not available yet" }
         let open = season.bids.amountInOpenBids
         return "\(budget) dollars of Fantasy Budget available" + (open > 0 ? ", \(open) dollars in open bids" : "")
+    }
+}
+
+/// The Bids tab's bottom bar: Place Bid (Counter a Bid once new bids close),
+/// and Counterpick while the season has bidding counterpick slots left.
+private struct BidActions: View {
+    let snapshot: BidsStore.Snapshot
+
+    @Environment(LeagueSeasonStore.self) private var season
+    @Environment(ShellRouter.self) private var router
+
+    var body: some View {
+        let hasBudget = season.myTeam?.budget != nil
+        let counterPhase = snapshot.week.isCounterBidPhase()
+        let hasContests = snapshot.pickupBids.contains { $0.status.isPending }
+        let counterpickSlots = season.season.biddingCounterpickSlots
+        let canCounterpick = hasBudget && counterpickSlots > 0 && snapshot.biddingCounterpickCount < counterpickSlots
+
+        Button(counterPhase ? "Counter a Bid" : "Place Bid", systemImage: counterPhase ? "arrow.up.circle" : "plus") {
+            router.present(.placeBid(.newPickup))
+        }
+        .buttonStyle(.fr(.primary, size: .large))
+        .disabled(!hasBudget || (counterPhase && !hasContests))
+        if canCounterpick {
+            Button("Counterpick", systemImage: "scope") {
+                router.present(.placeBid(.newCounterpick))
+            }
+            .buttonStyle(.fr(.secondary, size: .large))
+            .accessibilityLabel("Place counterpick bid")
+        }
     }
 }
 
