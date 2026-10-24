@@ -71,6 +71,10 @@ to add a screen.
 - **Bundle ID `com.fantasyreel.ios`** and URL scheme `fantasyreel` are
   placeholders until the Apple Developer account is set up (requirements §11).
   Change them in `Config/Base.xcconfig`.
+- **Production uses the custom domain** `https://api.fantasyreel.com`
+  (Release.xcconfig), also when a Debug build points at production through
+  Local.xcconfig. iOS shows the sign-in host in the Google/Discord prompt, so
+  `<ref>.supabase.co` there reads like a third party.
 - Sign-in links come back to `fantasyreel://auth/callback`, and password-reset
   links to `fantasyreel://auth/callback?flow=recovery`. Local Supabase allows both
   (`supabase/config.toml`); the production Supabase dashboard needs the same two
@@ -137,7 +141,10 @@ environment variable to a case name in the scheme's Run options.
   Test on a real iPhone: the simulator can't receive a remote push from APNs.
 - **Supabase redirect URLs.** Add `fantasyreel://auth/callback` and
   `fantasyreel://auth/callback?flow=recovery` in the production dashboard under
-  Authentication → URL Configuration. The **Reset password** email template must
+  Authentication → URL Configuration. Without them Supabase falls back to the
+  Site URL: Google and Discord sign-in end on fantasyreel.com inside the
+  sign-in sheet instead of returning to the app, and reset emails open the
+  website. The **Reset password** email template must also
   pass `{{ .RedirectTo }}` on (`supabase/templates/recovery.html` does), or a reset
   asked for in the app opens the website; see "Auth emails" in `docs/DEPLOYMENT.md`.
 - **Sign in with Apple.** Register the bundle ID with the capability, enable

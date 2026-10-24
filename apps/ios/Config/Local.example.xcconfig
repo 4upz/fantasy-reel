@@ -8,3 +8,10 @@
 // device, or a hosted Supabase project.
 // SUPABASE_URL = http:/$()/192.168.1.20:54321
 // SUPABASE_ANON_KEY = ...
+
+// Production (dogfooding a Debug build). Use the custom domain, not
+// <ref>.supabase.co, so the Google/Discord sign-in prompt names Fantasy Reel's
+// host. The anon key and Turnstile site key are the web's public values.
+// SUPABASE_URL = https:/$()/api.fantasyreel.com
+// SUPABASE_ANON_KEY = ...
+// TURNSTILE_SITE_KEY = ...
