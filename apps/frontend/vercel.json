@@ -55,7 +55,7 @@
     },
     {
       "path": "/api/cron/ingest-film-corpus",
-      "schedule": "0 7,12,19 * * *"
+      "schedule": "0 2,7,12,15,19 * * *"
     },
     {
       "path": "/api/cron/fit-projection-model",
