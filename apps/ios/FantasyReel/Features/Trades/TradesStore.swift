@@ -61,7 +61,6 @@ final class TradesStore {
     // MARK: Derived
 
     var pending: [TradeOffer] { TradeLists.pending(trades) }
-    var mine: [TradeOffer] { TradeLists.mine(trades, teamID: teamID) }
     var history: [TradeOffer] { TradeLists.history(trades) }
     var needingResponse: [TradeOffer] { TradeLists.needingResponse(trades, teamID: teamID) }
 

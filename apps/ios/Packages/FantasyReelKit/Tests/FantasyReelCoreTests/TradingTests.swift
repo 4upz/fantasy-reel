@@ -64,9 +64,29 @@ struct TradeRuleTests {
     @Test func listsSplitOpenMineAndHistory() {
         let trades = [offer(.proposed), offer(.review, from: "c", to: "d"), offer(.accepted), offer(.completed), offer(.expired)]
         #expect(TradeLists.pending(trades).count == 2, "accepted waits on the cron and is in no list")
-        #expect(TradeLists.mine(trades, teamID: "a").count == 1)
         #expect(TradeLists.history(trades).count == 2)
         #expect(TradeLists.needingResponse(trades, teamID: "b").count == 1)
+    }
+
+    @Test func pendingIncludesMyOwnOffersGroupedByWhoActsNext() {
+        let incoming = offer(.proposed, from: "b", to: "a")
+        let outgoing = offer(.proposed, from: "a", to: "c")
+        let myReview = offer(.review, from: "a", to: "d")
+        let othersReview = offer(.review, from: "c", to: "d")
+        let trades = [incoming, outgoing, myReview, othersReview, offer(.accepted, from: "a"), offer(.completed, from: "a")]
+
+        let player = TradeLists.pendingForViewer(trades, teamID: "a", isCommissioner: false)
+        #expect(player.needsAnswer == [incoming])
+        #expect(player.needsReview.isEmpty)
+        #expect(player.waiting == [outgoing, myReview], "a new offer I sent shows while it waits")
+        #expect(player.actionCount == 1)
+
+        let commissioner = TradeLists.pendingForViewer(trades, teamID: "a", isCommissioner: true)
+        #expect(commissioner.needsReview == [myReview, othersReview])
+        #expect(commissioner.waiting == [outgoing])
+        #expect(commissioner.actionCount == 3)
+
+        #expect(TradeLists.pendingForViewer(trades, teamID: nil, isCommissioner: false).isEmpty)
     }
 }
 
