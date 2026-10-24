@@ -59,6 +59,7 @@ struct DeepLinkTests {
     }
 
     @Test func simplePages() {
+        #expect(parse("https://www.fantasyreel.com/dashboard") == .home)
         #expect(parse("https://fantasyreel.com/movies") == .movies)
         #expect(parse("https://fantasyreel.com/wishlist") == .wishlist)
         #expect(parse("https://fantasyreel.com/settings") == .settings)
@@ -89,6 +90,7 @@ struct DeepLinkTests {
         #expect(parse("https://fantasyreel.com/") == nil)
         #expect(parse("https://fantasyreel.com/privacy") == nil)
         #expect(parse("https://fantasyreel.com/movies/extra") == nil)
+        #expect(parse("https://fantasyreel.com/dashboard/extra") == nil)
         #expect(parse("otherapp://movies") == nil)
         #expect(parse("mailto:alice@fantasyreel.test") == nil)
     }
@@ -96,6 +98,7 @@ struct DeepLinkTests {
     @Test func authRequirements() {
         #expect(!DeepLink.help.requiresAuthentication)
         #expect(DeepLink.movies.requiresAuthentication)
+        #expect(DeepLink.home.requiresAuthentication)
         #expect(DeepLink.invitation(token: "t").requiresAuthentication)
     }
 

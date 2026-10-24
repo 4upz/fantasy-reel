@@ -118,14 +118,16 @@ environment variable to a case name in the scheme's Run options.
 
 Links to the website (`www.fantasyreel.com` or the bare domain) open the
 matching screen in the app when it is installed: league pages, join links and
-invitations, Movies, Wishlist, Settings and How to Play. Everything else (sign-in
-callbacks, `/unsubscribe`, the legal pages) stays in the browser.
+invitations, Movies, Wishlist, Settings and How to Play; `/dashboard` just opens
+the app. Everything else (sign-in callbacks, `/unsubscribe`, the landing and
+legal pages, and links the app can't parse, such as a truncated league id or a
+join link with no code) stays in the browser.
 
 - The app side is the `com.apple.developer.associated-domains` entitlement in
   `Config/FantasyReel.entitlements`; links arrive through `onOpenURL` and
   `DeepLink.parse`, like `fantasyreel://` links.
 - The website serves `/.well-known/apple-app-site-association` from
-  `apps/frontend/utils/app-links.ts`. Keep its path list in step with
+  `apps/frontend/utils/app-links.ts`. Keep its patterns in step with
   `DeepLink.parse`: a path claimed there but not parsed here would open the app
   with nowhere to go. `scripts/tests/app-links.test.cjs` checks the list.
 - Apple's CDN fetches the file and never follows redirects. The bare domain

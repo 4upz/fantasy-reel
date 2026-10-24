@@ -234,6 +234,10 @@ final class ShellRouter {
             if let section, let status = directory.selection?.season.status {
                 route(to: section, status: status)
             }
+        case .home:
+            // The web's home is the league list; the app already shows the
+            // league it was on, so opening it is enough.
+            break
         case .movies:
             if !sheetHasUnsavedInput { sheet = nil }
             if let selection = directory.selection {
