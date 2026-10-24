@@ -2,10 +2,11 @@
 
 import { useCallback, useId, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Settings, LogOut } from 'lucide-react'
+import { Settings, LogOut, Compass } from 'lucide-react'
 import Avatar from '../Avatar'
 import ThemeSelector from '@/components/theme/ThemeSelector'
 import { usePopoverDismiss } from '@/hooks/usePopoverDismiss'
+import { useTours } from '@/components/tours'
 
 interface Props {
   displayName: string
@@ -27,6 +28,7 @@ export default function ProfileMenu({ displayName, email, avatarUrl }: Props): R
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelId = useId()
   const close = useCallback(() => setIsOpen(false), [])
+  const { pageTours, start: startTour } = useTours()
 
   usePopoverDismiss(isOpen, close, menuRef, triggerRef)
 
@@ -40,6 +42,7 @@ export default function ProfileMenu({ displayName, email, avatarUrl }: Props): R
         aria-controls={panelId}
         aria-label="Account menu"
         data-testid="user-menu-button"
+        data-tour="account-menu"
       >
         <Avatar src={avatarUrl} name={displayName} size="sm" />
       </button>
@@ -63,6 +66,21 @@ export default function ProfileMenu({ displayName, email, avatarUrl }: Props): R
             <Settings className="w-4 h-4" />
             <span>Account settings</span>
           </Link>
+
+          {pageTours.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                close()
+                void startTour(pageTours[0])
+              }}
+              className="profile-menu-item w-full"
+              data-testid="tour-this-page"
+            >
+              <Compass className="w-4 h-4" />
+              <span>Tour this page</span>
+            </button>
+          )}
 
           <div className="border-t border-border px-2 py-3 mt-1">
             <ThemeSelector />

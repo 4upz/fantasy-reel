@@ -49,22 +49,28 @@ public struct AppNotification: Codable, Sendable, Hashable, Identifiable {
 
     public var isUnread: Bool { readAt == nil }
 
-    /// Where tapping the notification goes, matching the web bell's links
-    /// (`NotificationBell.tsx`). Nil means the user's home.
+    /// Where tapping the notification goes, in the inbox or as a push, matching
+    /// the web bell's links (`NotificationBell.tsx`). Nil means the user's home.
     public var destination: DeepLink? {
+        Self.destination(for: type, leagueID: leagueID)
+    }
+
+    public static func destination(for type: NotificationType, leagueID: LeagueID?) -> DeepLink? {
         guard let leagueID else { return nil }
-        switch type {
-        case .outbid: return .league(leagueID, section: .bidding)
-        case .bidWon: return .league(leagueID, section: .roster)
-        case .seasonCompleted: return .league(leagueID, section: .standings)
+        let section: LeagueSection? = switch type {
+        case .outbid, .bidLost, .pickupAvailable: .bidding
+        case .bidWon, .movieScored, .movieReleased: .roster
+        case .tradeProposed, .tradeCountered, .tradeAccepted, .tradeRejected, .tradeCancelled,
+             .tradeCompleted, .tradeVetoed, .tradeReview:
+            .trading
+        case .draftTurn: .draft
+        case .seasonCompleted, .leagueMovieScored: .standings
         // The row carries the NEW season's id, so this opens the season that just started.
-        case .seasonStarted: return .league(leagueID, section: .overview)
-        case .leagueOwnershipTransferred: return .league(leagueID, section: .settings)
-        case .bidLost, .pickupAvailable, .tradeProposed, .tradeCountered, .tradeAccepted,
-             .tradeRejected, .tradeCancelled, .tradeCompleted, .tradeVetoed, .tradeReview,
-             .unknown:
-            return .league(leagueID, section: nil)
+        case .seasonStarted: .overview
+        case .leagueOwnershipTransferred: .settings
+        case .unknown: nil
         }
+        return .league(leagueID, section: section)
     }
 }
 

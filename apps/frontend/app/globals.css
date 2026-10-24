@@ -551,6 +551,23 @@
     }
   }
 
+  /* Guided tours (components/tours): the outline around a step's element dims
+     everything else with its own shadow, and lets clicks through. */
+  .tour-spotlight {
+    position: fixed;
+    border-radius: 0.75rem;
+    box-shadow: 0 0 0 2px var(--color-gold), 0 0 0 9999px var(--color-overlay-soft);
+    /* No position transition: it lags behind a smooth scroll and leaves the
+       ring between sections. The overlay re-measures on every scroll. */
+  }
+
+  .tour-scrim {
+    position: fixed;
+    inset: 0;
+    background: var(--color-overlay-soft);
+  }
+
+
   /* Modal panel animation */
   .modal-panel {
     animation: modal-scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);

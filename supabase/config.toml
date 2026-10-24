@@ -195,6 +195,12 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Production templates are set in the dashboard; keep them in step with these files
+# (docs/DEPLOYMENT.md, "Auth emails").
+[auth.email.template.recovery]
+subject = "Reset your Fantasy Reel password"
+content_path = "./supabase/templates/recovery.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
@@ -523,4 +529,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.process-draft-notifications]
+verify_jwt = false
+
+[functions.send-push-notifications]
 verify_jwt = false

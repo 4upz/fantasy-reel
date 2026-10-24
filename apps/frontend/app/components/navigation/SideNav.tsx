@@ -70,8 +70,8 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   const globalItems: NavItem[] = [
     { label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="w-5 h-5" /> },
     { label: 'Movies', href: '/movies', icon: <Film className="w-5 h-5" /> },
-    { label: 'Wishlist', href: '/wishlist', icon: <Heart className="w-5 h-5" /> },
-    { label: 'How to play', href: '/help', icon: <HelpCircle className="w-5 h-5" /> },
+    { label: 'Wishlist', href: '/wishlist', icon: <Heart className="w-5 h-5" data-tour="wishlist-nav" /> },
+    { label: 'How to play', href: '/help', icon: <HelpCircle className="w-5 h-5" data-tour="how-to-play" /> },
   ]
 
   function isActive(href: string): boolean {
@@ -149,7 +149,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside id={sidebarId} className={`sidenav sidenav-desktop ${isExpanded ? 'sidenav-expanded' : ''}`}>
+      <aside id={sidebarId} data-tour-inset="left" className={`sidenav sidenav-desktop ${isExpanded ? 'sidenav-expanded' : ''}`}>
         {renderSidebarContent(isExpanded)}
 
         <button
@@ -170,7 +170,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
       </aside>
 
       {/* Mobile Header Bar */}
-      <header className="sidenav-mobile-header">
+      <header className="sidenav-mobile-header" data-tour-inset="top">
         <button
           onClick={() => setIsMobileOpen(true)}
           className="sidenav-mobile-trigger"

@@ -22,6 +22,7 @@ struct MenuSheetView: View {
                     case .editDisplayName: EditDisplayNameView()
                     case .changePassword: ChangePasswordView()
                     case .deleteAccount: DeleteAccountView()
+                    case .pushSettings: PushSettingsView()
                     case .discordBot: DiscordBotGuideScreen()
                     case .growthDashboard: GrowthDashboardView()
                     case .sharedWishlist(let owner): SharedWishlistView(owner: owner)

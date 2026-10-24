@@ -107,6 +107,25 @@ struct SignedInRootView: View {
                 await directory.refresh()
                 await inboxRefreshed
             }
+            // A push that lands while the app is open is already in the inbox.
+            // Opening a push reads it, as opening it in the inbox does. It is
+            // usually newer than the loaded inbox, so that is re-read first.
+            .task(id: environment.push.openedNotification) {
+                guard let id = environment.push.openedNotification else { return }
+                await inbox.refresh()
+                await inbox.markRead(id)
+            }
+            // A burst of pushes (a score run) becomes one inbox read.
+            .task(id: environment.push.receivedWhileOpen) {
+                guard environment.push.receivedWhileOpen > 0,
+                      (try? await Task.sleep(for: .milliseconds(500))) != nil
+                else { return }
+                await inbox.refresh()
+            }
+            // The app icon badge is the inbox's unread count (as pushes set it).
+            .task(id: inbox.hasLoaded ? inbox.unreadCount : nil) {
+                if inbox.hasLoaded { await environment.push.setBadge(inbox.unreadCount) }
+            }
     }
 
     @ViewBuilder

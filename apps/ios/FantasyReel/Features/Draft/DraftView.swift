@@ -79,6 +79,8 @@ struct DraftRoomContent: View {
                 VStack(spacing: FRMetrics.sectionSpacing) {
                     DraftHeader(model: model)
                     DraftConnectionNotice(model: model)
+                    // Before the draft only: mid-draft it would push the board down.
+                    if snapshot.league.status == .setup { PushPromptCard() }
                     switch snapshot.league.status {
                     case .setup:
                         DraftSetupSection(model: model, snapshot: snapshot)

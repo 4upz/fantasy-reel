@@ -5,6 +5,7 @@
 
 const MAILPIT_URL = process.env.INBUCKET_URL || 'http://127.0.0.1:54324'
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321'
+const APP_URL = process.env.E2E_BASE_URL || 'http://localhost:3000'
 
 /**
  * Mailpit message list response
@@ -319,8 +320,10 @@ export function extractAuthLink(
 
   if (match) {
     // The match starts at the verification path, so keep the test project's
-    // configured Auth origin while preserving its token and redirect query.
-    return new URL(match[0].replace(/[)>]+$/, ''), SUPABASE_URL).toString()
+    // configured origin (Auth for /auth/v1/verify, the app for /auth/confirm)
+    // while preserving its token and redirect query.
+    const path = match[0].replace(/[)>]+$/, '')
+    return new URL(path, path.startsWith('/auth/v1/') ? SUPABASE_URL : APP_URL).toString()
   }
 
   // Fallback: check extracted links

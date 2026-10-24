@@ -118,7 +118,7 @@ environment variable to a case name in the scheme's Run options.
   certified by TMDb.", with TMDb's logo) goes on the screens that show movie
   data, as the web does; the sign-in screens show none.
 - Universal Links (needs the Apple team ID and an `apple-app-site-association`
-  file on the website), push notifications (optional, O-01).
+  file on the website).
 
 ## Release checklist (before the first TestFlight build)
 
@@ -129,9 +129,17 @@ environment variable to a case name in the scheme's Run options.
   iPhone's Keychain and your preferences in the app's storage on your device;
   deleting the app removes the preferences."* If the app adds analytics, crash
   reporting or push by then, the policy needs more than this sentence.
+- **Push notifications (O-01).** In the Apple Developer account, turn on Push
+  Notifications and Time Sensitive Notifications for the bundle ID, create an
+  APNs auth key (.p8), and set three Supabase Edge Function secrets: `APNS_KEY_P8`
+  (the whole file), `APNS_KEY_ID` and `APNS_TEAM_ID`. Until they are set,
+  `send-push-notifications` sends nothing and reports `apns_not_configured`.
+  Test on a real iPhone: the simulator can't receive a remote push from APNs.
 - **Supabase redirect URLs.** Add `fantasyreel://auth/callback` and
   `fantasyreel://auth/callback?flow=recovery` in the production dashboard under
-  Authentication → URL Configuration.
+  Authentication → URL Configuration. The **Reset password** email template must
+  pass `{{ .RedirectTo }}` on (`supabase/templates/recovery.html` does), or a reset
+  asked for in the app opens the website; see "Auth emails" in `docs/DEPLOYMENT.md`.
 - **Sign in with Apple.** Register the bundle ID with the capability, enable
   the Apple provider in production Supabase with the bundle ID as a Client ID,
   and test it on a real iPhone, including Hide My Email (the app warns that a

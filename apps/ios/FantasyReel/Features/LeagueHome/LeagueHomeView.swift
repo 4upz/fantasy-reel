@@ -61,6 +61,7 @@ private struct OverviewContent: View {
             }
             TeamCard(team: team)
             OverviewBanners()
+            PushPromptCard()
             sharedWishlistBanner
             myMovies(team)
             AroundTheLeague(releases: LeagueOverview.upcomingReleases(

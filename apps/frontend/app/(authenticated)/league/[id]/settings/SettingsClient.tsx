@@ -17,12 +17,15 @@ import DiscordBotSection from './components/DiscordBotSection'
 import DiscordAnnouncementSection from './components/DiscordAnnouncementSection'
 import SeasonSection from './components/SeasonSection'
 import DangerZoneSection from './components/DangerZoneSection'
+import { FeatureTour, TourButton } from '@/components/tours'
 
 interface Props {
   league: League
   participants: ParticipantWithProfile[]
   currentUserId: string
   nextSeasonId?: string
+  /** Hasn't played a season yet: the settings tour starts by itself. */
+  newPlayer: boolean
 }
 
 export default function SettingsClient({
@@ -30,6 +33,7 @@ export default function SettingsClient({
   participants: initialParticipants,
   currentUserId,
   nextSeasonId,
+  newPlayer,
 }: Props): React.ReactElement {
   const router = useRouter()
   const [league, setLeague] = useState(initialLeague)
@@ -59,6 +63,7 @@ export default function SettingsClient({
 
   return (
     <div className="animate-fade-in">
+      <FeatureTour id="league-settings" ctx={{ leagueStatus: league.status, newPlayer }} />
       {/* Header */}
       <header className="mb-8">
         {/* An h2: the league layout's name is this page's h1. */}
@@ -68,6 +73,7 @@ export default function SettingsClient({
         <p className="text-foreground-secondary mt-2">
           Manage settings for <span className="text-foreground font-medium">{league.name}</span>
         </p>
+        <TourButton id="league-settings" className="mt-3" />
       </header>
 
       {/* Settings Sections */}

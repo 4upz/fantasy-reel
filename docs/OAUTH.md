@@ -158,6 +158,8 @@ When a user signs in with an OAuth provider, the following data is used:
 
 Note: Google uses `picture` for avatar URLs while Discord uses `avatar_url`. The database triggers and auth callback handle both formats automatically.
 
+The provider photo is copied into `profiles.avatar_url` once, at sign-up. Supabase Auth rewrites the user metadata with whichever provider signed in last, so `sync_oauth_profile()` only refreshes a photo from the same provider it came from (a changed Discord avatar). It never replaces an uploaded avatar, another provider's photo, or no avatar.
+
 ### Database Trigger
 
 The `handle_new_user()` trigger automatically creates profiles for new users:

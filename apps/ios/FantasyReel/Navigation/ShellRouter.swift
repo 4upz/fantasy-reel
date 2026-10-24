@@ -36,6 +36,8 @@ enum MenuRoute: Hashable {
     case editDisplayName
     case changePassword
     case deleteAccount
+    /// Push notification switches (O-01), from Account.
+    case pushSettings
     /// The Discord bot setup guide, from Account (F-17).
     case discordBot
     /// App administrators only (F-18); linked from Account.

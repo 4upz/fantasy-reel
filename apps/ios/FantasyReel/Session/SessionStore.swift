@@ -48,6 +48,9 @@ final class SessionStore {
     /// Account screens reach the account-level auth calls (linking, password
     /// change) through `SessionStore+Account.swift`.
     let auth: AuthService
+    /// Runs before every sign-out the person asks for, while the session can
+    /// still reach the server: `PushCenter` takes this phone off the account.
+    var beforeSignOut: (@MainActor () async -> Void)?
     private var listener: Task<Void, Never>?
     /// Sign-ins that decide more than "signed in" (Apple's relay notice, a
     /// reset link) run with the listener's sign-in events held, so the app
@@ -189,6 +192,7 @@ final class SessionStore {
     }
 
     func signOut() async {
+        await beforeSignOut?()
         await auth.signOut()
         clearSignedInState()
         state = .signedOut

@@ -225,6 +225,14 @@ public enum NotificationType: Codable, Sendable, Hashable {
     case seasonCompleted
     case seasonStarted
     case leagueOwnershipTransferred
+    /// It's your pick, in the draft or the counterpick round.
+    case draftTurn
+    /// A movie your team holds or counterpicked got its score, moved, or now counts.
+    case movieScored
+    /// A movie your team holds or counterpicked is out today.
+    case movieReleased
+    /// Another team's movie in your league got its first score.
+    case leagueMovieScored
     case unknown(String)
 
     public init(rawValue: String) {
@@ -244,6 +252,10 @@ public enum NotificationType: Codable, Sendable, Hashable {
         case "season_completed": self = .seasonCompleted
         case "season_started": self = .seasonStarted
         case "league_ownership_transferred": self = .leagueOwnershipTransferred
+        case "draft_turn": self = .draftTurn
+        case "movie_scored": self = .movieScored
+        case "movie_released": self = .movieReleased
+        case "league_movie_scored": self = .leagueMovieScored
         default: self = .unknown(rawValue)
         }
     }
@@ -265,6 +277,10 @@ public enum NotificationType: Codable, Sendable, Hashable {
         case .seasonCompleted: "season_completed"
         case .seasonStarted: "season_started"
         case .leagueOwnershipTransferred: "league_ownership_transferred"
+        case .draftTurn: "draft_turn"
+        case .movieScored: "movie_scored"
+        case .movieReleased: "movie_released"
+        case .leagueMovieScored: "league_movie_scored"
         case .unknown(let value): value
         }
     }

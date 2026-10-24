@@ -88,7 +88,7 @@ export default function CounterpickConfigSection({
   }
 
   return (
-    <section className="card p-6">
+    <section className="card p-6" data-tour="settings-counterpicks">
       <SectionHeader
         icon={Target}
         title="Counterpick Configuration"

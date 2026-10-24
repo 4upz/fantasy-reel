@@ -59,7 +59,7 @@ struct NotificationsView: View {
         } else if inbox.notifications.isEmpty {
             EmptyStateView(
                 title: "No notifications yet",
-                message: "Bids, trades and season news land here.",
+                message: "Your picks, scores, bids, trades and season news land here.",
                 systemImage: "bell"
             )
             .padding(.top, 24)
@@ -185,6 +185,10 @@ struct NotificationStyle {
         case .seasonCompleted: (systemImage, tone) = ("trophy.fill", .gold)
         case .seasonStarted: (systemImage, tone) = ("movieclapper.fill", .gold)
         case .leagueOwnershipTransferred: (systemImage, tone) = ("crown.fill", .gold)
+        case .draftTurn: (systemImage, tone) = ("timer", .warning)
+        case .movieScored: (systemImage, tone) = ("star.fill", .gold)
+        case .movieReleased: (systemImage, tone) = ("film.fill", .gold)
+        case .leagueMovieScored: (systemImage, tone) = ("list.number", .neutral)
         case .tradeProposed, .tradeCountered, .tradeAccepted, .tradeRejected, .tradeCancelled,
              .tradeCompleted, .tradeVetoed, .tradeReview:
             (systemImage, tone) = ("arrow.left.arrow.right", .gold)

@@ -8,7 +8,11 @@ import {
   Clapperboard,
   Crown,
   DollarSign,
+  Film,
   Gift,
+  ListOrdered,
+  Star,
+  Timer,
   TrendingDown,
   Trophy,
 } from 'lucide-react'
@@ -34,6 +38,14 @@ function getNotificationIcon(type: NotificationType) {
       return <Clapperboard className="w-4 h-4 text-gold" />
     case 'league_ownership_transferred':
       return <Crown className="w-4 h-4 text-gold" />
+    case 'draft_turn':
+      return <Timer className="w-4 h-4 text-warning" />
+    case 'movie_scored':
+      return <Star className="w-4 h-4 text-gold" />
+    case 'movie_released':
+      return <Film className="w-4 h-4 text-gold" />
+    case 'league_movie_scored':
+      return <ListOrdered className="w-4 h-4 text-foreground-muted" />
     default:
       return <Bell className="w-4 h-4 text-foreground-muted" />
   }
@@ -204,8 +216,10 @@ function NotificationItem({ notification, onClick }: NotificationItemProps) {
 
   // Determine link based on notification type
   let href = leagueId ? `/league/${leagueId}` : '/dashboard'
-  if (notification.type === 'outbid' && leagueId) {
-    href = `/league/${leagueId}?tab=bidding`
+  if ((notification.type === 'outbid' || notification.type === 'bid_lost' || notification.type === 'pickup_available') && leagueId) {
+    href = `/league/${leagueId}/bidding`
+  } else if (notification.type.startsWith('trade_') && leagueId) {
+    href = `/league/${leagueId}/trading`
   } else if (notification.type === 'bid_won' && leagueId) {
     href = `/league/${leagueId}/roster`
   } else if (notification.type === 'season_completed' && leagueId) {
@@ -216,6 +230,12 @@ function NotificationItem({ notification, onClick }: NotificationItemProps) {
     href = `/league/${leagueId}/dashboard`
   } else if (notification.type === 'league_ownership_transferred' && leagueId) {
     href = `/league/${leagueId}/settings`
+  } else if (notification.type === 'draft_turn' && leagueId) {
+    href = `/league/${leagueId}/draft`
+  } else if ((notification.type === 'movie_scored' || notification.type === 'movie_released') && leagueId) {
+    href = `/league/${leagueId}/roster`
+  } else if (notification.type === 'league_movie_scored' && leagueId) {
+    href = `/league/${leagueId}/standings`
   }
 
   return (

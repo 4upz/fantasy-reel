@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
-import { getCachedActiveParticipant, getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
+import { getCachedActiveParticipant, getCachedLeague, getCachedMemberships, getCachedUser } from '@/utils/supabase/cached'
+import { isNewPlayer } from '@/utils/onboarding'
 import { redirect, notFound } from 'next/navigation'
 import DraftClient from './DraftClient'
 import { fetchReigningChampions } from '@/utils/seasonQueries'
@@ -47,7 +48,7 @@ export default async function DraftPage({ params }: PageProps) {
   const typedLeague = league as League
 
   // Parallelize independent queries (async-parallel optimization)
-  const [participantsResult, draftPicksResult, counterpicksResult, reigningChampions] =
+  const [participantsResult, draftPicksResult, counterpicksResult, reigningChampions, membershipsResult] =
     await Promise.all([
       supabase
         .from('league_participants')
@@ -69,6 +70,7 @@ export default async function DraftPage({ params }: PageProps) {
         .eq('league_id', id)
         .order('pick_order', { ascending: true }),
       fetchReigningChampions(supabase, typedLeague),
+      getCachedMemberships(user.id),
     ])
 
   const loadError = [participantsResult, draftPicksResult, counterpicksResult].find(result => result.error)?.error
@@ -89,6 +91,7 @@ export default async function DraftPage({ params }: PageProps) {
       currentUserId={user.id}
       isOwner={isOwner}
       reigningChampions={reigningChampions}
+      newPlayer={isNewPlayer(membershipsResult.data)}
     />
   )
 }

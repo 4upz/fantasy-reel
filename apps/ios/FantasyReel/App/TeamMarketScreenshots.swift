@@ -15,7 +15,11 @@ struct TeamMarketScreenshotView: View {
 
     init(scene: ScreenshotScene) {
         self.scene = scene
-        _fixture = State(initialValue: TeamMarketFixture(projected: TeamMarketFixture.projectedScenes.contains(scene)))
+        // League Home asks for notification permission until it's answered.
+        _fixture = State(initialValue: TeamMarketFixture(
+            projected: TeamMarketFixture.projectedScenes.contains(scene),
+            push: scene == .leagueHomePushPrompt ? .notDetermined : .allowed
+        ))
     }
 
     var body: some View {
@@ -49,7 +53,7 @@ struct TeamMarketScreenshotView: View {
     @ViewBuilder
     private var content: some View {
         switch scene {
-        case .leagueHome, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades, .rosterProjected, .standingsProjected:
+        case .leagueHome, .leagueHomePushPrompt, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades, .rosterProjected, .standingsProjected:
             LeagueTabs(tabs: LeagueNavigation.tabs(for: .active))
         case .teamProjection: NavigationStack { TeamProjectionView(teamID: TeamMarketFixture.team("alice")) }
         case .placeBidProjected: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1013, title: "Toy Story 5", releaseDate: DateOnly("2026-11-19")))) }
@@ -84,7 +88,7 @@ final class TeamMarketFixture {
     let research: LeagueResearchStore
     let history = MovieSearchHistory()
 
-    init(projected: Bool = false) {
+    init(projected: Bool = false, push: PushAuthorization = .allowed) {
         let now = Date()
         let day: TimeInterval = 86_400
         let leagueID: LeagueID = "l-popcorn"
@@ -221,7 +225,8 @@ final class TeamMarketFixture {
                 myTeamID: Self.team("alice")
             ),
             trades: InMemoryTradeRepository(trades: trades, myTeamID: Self.team("alice")),
-            movies: InMemoryMovieRepository(projections: projected ? Self.projections : .disabled)
+            movies: InMemoryMovieRepository(projections: projected ? Self.projections : .disabled),
+            push: push
         )
         self.environment = environment
         directory = LeagueDirectoryStore(userID: Self.alice, repository: environment.leagues, defaults: UserDefaults(suiteName: "fr.screenshots") ?? .standard)
@@ -249,7 +254,7 @@ final class TeamMarketFixture {
     /// Selects the scene's tab and pushes its screen onto that tab's stack.
     func route(to scene: ScreenshotScene) {
         switch scene {
-        case .leagueHome: router.select(.home)
+        case .leagueHome, .leagueHomePushPrompt: router.select(.home)
         case .roster, .rosterProjected: router.select(.roster)
         case .standings: router.select(.standings)
         case .standingsProjected:
@@ -270,6 +275,7 @@ final class TeamMarketFixture {
     func prepare() async {
         await directory.load()
         await season.load()
+        await environment.push.refreshAuthorization()
         router.seasonStore = season
         // Let the season's projection request answer before the capture.
         var waits = 0
