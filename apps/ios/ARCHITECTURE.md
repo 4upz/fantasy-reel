@@ -26,8 +26,8 @@ apps/ios/
 │                                 group: drop a .swift file into FantasyReel/ and it is
 │                                 compiled. Feature work never needs to edit the project.
 ├── Config/                       xcconfigs (Supabase URL/key per build) and Info.plist.
-│                                 FantasyReel.entitlements (Sign in with Apple; Universal
-│                                 Links will join it). Local overrides go in
+│                                 FantasyReel.entitlements (Sign in with Apple, push,
+│                                 Universal Links). Local overrides go in
 │                                 Config/Local.xcconfig (gitignored).
 ├── FantasyReel/                  The app target: everything SwiftUI
 │   ├── App/                      @main, AppEnvironment (dependency container), RootView
@@ -114,7 +114,8 @@ initializer so the shell keeps compiling.
   `NavigationPath`-like array per tab, and the active sheet. Use
   `router.push(_:)`, `router.select(_:)`, `router.presentMenu(_:)`. Destinations are
   the `LeagueRoute` and `MenuRoute` enums; add a case for a new screen.
-- Deep links (`DeepLink.parse`) arrive through `onOpenURL`; signed-out links are held
+- Deep links (`DeepLink.parse`) arrive through `onOpenURL`, both `fantasyreel://`
+  and Universal Links on the site (README, "Universal Links"); signed-out links are held
   by `SessionStore.pendingDeepLink` and replayed after sign-in.
 - **Push (O-01):** `PushCenter` (`Infrastructure/PushCenter.swift`) owns permission,
   this phone's APNs token, the icon badge and taps. `AppDelegate` forwards the token

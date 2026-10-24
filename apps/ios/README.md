@@ -114,6 +114,36 @@ over in-memory repositories seeded in `ScreenshotData` (League of Culture,
 the four seeded test accounts). Locally, set the `FR_SCREENSHOT`
 environment variable to a case name in the scheme's Run options.
 
+## Universal Links
+
+Links to the website (`www.fantasyreel.com` or the bare domain) open the
+matching screen in the app when it is installed: league pages, join links and
+invitations, Movies, Wishlist, Settings and How to Play. Everything else (sign-in
+callbacks, `/unsubscribe`, the legal pages) stays in the browser.
+
+- The app side is the `com.apple.developer.associated-domains` entitlement in
+  `Config/FantasyReel.entitlements`; links arrive through `onOpenURL` and
+  `DeepLink.parse`, like `fantasyreel://` links.
+- The website serves `/.well-known/apple-app-site-association` from
+  `apps/frontend/utils/app-links.ts`. Keep its path list in step with
+  `DeepLink.parse`: a path claimed there but not parsed here would open the app
+  with nowhere to go. `scripts/tests/app-links.test.cjs` checks the list.
+- Apple's CDN fetches the file and never follows redirects. The bare domain
+  only gets the file once its redirect to www moves out of Vercel's domain
+  settings into `next.config.ts` (already there, inert until then).
+- iOS opens a universal link in the app only on a tap that leaves the site:
+  from Messages, Mail, Notes, or another app. Typing the address in Safari, or
+  following a link inside the site, stays in Safari. Long-press a link and
+  choose "Open in Safari" to use the website instead; iOS remembers that choice
+  for the domain until you pick "Open in Fantasy Reel" from the banner.
+- Discord: a link opens the app only when Discord hands it to iOS. When Discord
+  shows links in its own in-app browser, iOS never sees the tap and the page
+  loads there. Switching that Discord setting off lets links open the app.
+- Testing on a phone: install a build signed with the team (Xcode automatic
+  signing adds Associated Domains to the App ID on the first device build),
+  then tap a link in Notes. iOS caches Apple's copy of the file for a while;
+  reinstalling the app refetches it.
+
 ## Not yet done (tracked for feature work)
 
 - Every feature screen beyond sign-in and the shell (see the folder table in
@@ -121,8 +151,6 @@ environment variable to a case name in the scheme's Run options.
 - TMDb attribution ("This product uses the TMDb API but is not endorsed or
   certified by TMDb.", with TMDb's logo) goes on the screens that show movie
   data, as the web does; the sign-in screens show none.
-- Universal Links (needs the Apple team ID and an `apple-app-site-association`
-  file on the website).
 
 ## Release checklist (before the first TestFlight build)
 
