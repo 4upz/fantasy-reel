@@ -2,19 +2,19 @@ import FantasyReelAPI
 import FantasyReelCore
 import SwiftUI
 
-/// Trades tab (F-13, mockup V2Trades): offers awaiting me, my open offers,
-/// everything open in the league, and settled history.
+/// Trades tab (F-13, mockup V2Trades): my open offers, everything open in
+/// the league, and settled history.
 ///
-/// "Pending" here is what needs the viewer (an answer, or a commissioner's
-/// review); the web's Pending and All Active lists are the same list, which
-/// "League" covers.
+/// "Pending" is every open offer the viewer is part of, grouped by who acts
+/// next: offers to answer, reviews (commissioner), then offers waiting on the
+/// other team. Its badge counts only the first two. The web's Pending and All
+/// Active lists are the same list, which "League" covers.
 struct TradesView: View {
-    enum Section: Hashable { case pending, mine, league, history }
+    enum Section: Hashable { case pending, league, history }
 
     @Environment(LeagueSeasonStore.self) private var season
     @Environment(ShellRouter.self) private var router
     @State private var section: Section = .pending
-    @State private var didPickInitialSection = false
 
     private var trades: TradesStore { season.trades }
 
@@ -30,7 +30,7 @@ struct TradesView: View {
                     )
                 } else {
                     BudgetLine()
-                    FRSegmentedControl("Trade lists", selection: $section, options: [.pending, .mine, .league, .history]) { option in
+                    FRSegmentedControl("Trade lists", selection: $section, options: [.pending, .league, .history]) { option in
                         Text(title(option))
                     }
                     LoadStateView(
@@ -47,33 +47,21 @@ struct TradesView: View {
         }
         .background(Color.frBackground)
         .refreshable { await trades.refresh() }
-        .onChange(of: trades.trades.isEmpty, initial: true) {
-            // Open on Mine when nothing waits on me but I have offers out.
-            guard !didPickInitialSection, case .loaded = trades.state else { return }
-            didPickInitialSection = true
-            if pendingForMe.isEmpty, !trades.mine.isEmpty { section = .mine }
-        }
     }
 
     private var canPropose: Bool {
         season.season.status == .active && season.teams.contains { season.canProposeTrade(to: $0.id) }
     }
 
-    /// Offers I must answer, plus reviews when I'm the commissioner.
-    private var pendingForMe: [TradeOffer] {
-        let isCommissioner = season.isCommissioner
-        return trades.pending.filter { offer in
-            TradePermissions(offer: offer, myTeamID: season.myTeam?.id, isCommissioner: isCommissioner).canRespond
-                || (isCommissioner && offer.status == .review)
-        }
+    private var myPending: PendingTrades {
+        TradeLists.pendingForViewer(trades.trades, teamID: season.myTeam?.id, isCommissioner: season.isCommissioner)
     }
 
     private func title(_ option: Section) -> String {
         switch option {
         case .pending:
-            let count = pendingForMe.count
+            let count = myPending.actionCount
             return count > 0 ? "Pending \(count)" : "Pending"
-        case .mine: return "Mine"
         case .league: return "League"
         case .history: return "History"
         }
@@ -81,26 +69,53 @@ struct TradesView: View {
 
     @ViewBuilder
     private var list: some View {
-        let offers: [TradeOffer] = switch section {
-        case .pending: pendingForMe
-        case .mine: trades.mine
-        case .league: trades.pending
-        case .history: trades.history
-        }
-        if offers.isEmpty {
-            EmptyStateView(title: emptyTitle, message: emptyMessage, systemImage: "arrow.left.arrow.right")
-        } else {
-            LazyVStack(spacing: 12) {
-                ForEach(offers) { TradeOfferCard(offer: $0) }
+        switch section {
+        case .pending:
+            let pending = myPending
+            if pending.isEmpty {
+                emptyState
+            } else {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    group("Needs your answer", pending.needsAnswer)
+                    group("Needs your review", pending.needsReview)
+                    group("Waiting on others", pending.waiting)
+                }
+                attribution(pending.needsAnswer + pending.needsReview + pending.waiting)
             }
-            if offers.contains(where: { !$0.allMovies.isEmpty }) { TMDbAttribution() }
+        case .league, .history:
+            let offers = section == .league ? trades.pending : trades.history
+            if offers.isEmpty {
+                emptyState
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(offers) { TradeOfferCard(offer: $0) }
+                }
+                attribution(offers)
+            }
         }
+    }
+
+    /// One titled group of the Pending list; nothing when it's empty.
+    @ViewBuilder
+    private func group(_ title: String, _ offers: [TradeOffer]) -> some View {
+        if !offers.isEmpty {
+            SectionHeader(title, detail: "\(offers.count)")
+            ForEach(offers) { TradeOfferCard(offer: $0) }
+        }
+    }
+
+    @ViewBuilder
+    private func attribution(_ offers: [TradeOffer]) -> some View {
+        if offers.contains(where: { !$0.allMovies.isEmpty }) { TMDbAttribution() }
+    }
+
+    private var emptyState: some View {
+        EmptyStateView(title: emptyTitle, message: emptyMessage, systemImage: "arrow.left.arrow.right")
     }
 
     private var emptyTitle: String {
         switch section {
-        case .pending: "Nothing waiting on you"
-        case .mine: "You have no active trades"
+        case .pending: "You have no active trades"
         case .league: "No active trades in this league"
         case .history: "No trade history yet"
         }
@@ -108,7 +123,7 @@ struct TradesView: View {
 
     private var emptyMessage: String? {
         switch section {
-        case .pending, .mine: canPropose ? "Propose a trade to swap movies or budget with another team." : nil
+        case .pending: canPropose ? "Propose a trade to swap movies or budget with another team." : nil
         case .league, .history: nil
         }
     }
