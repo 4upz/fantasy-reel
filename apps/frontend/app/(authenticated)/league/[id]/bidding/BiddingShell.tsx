@@ -101,6 +101,8 @@ interface Props {
   /** From get_new_bid_cutoff(); null when the league has the cutoff disabled. */
   newBidCutoffAt: string | null
   processingDeadline: string | null
+  /** No finished season yet (isFirstSeason), so this page's tour starts by itself. */
+  firstSeason: boolean
   children: React.ReactNode
 }
 
@@ -116,6 +118,7 @@ export default function BiddingShell({
   biddingCounterpickSlots,
   newBidCutoffAt,
   processingDeadline,
+  firstSeason,
   children,
 }: Props): React.ReactElement {
   const activeSegment = useSelectedLayoutSegment()
@@ -289,7 +292,7 @@ export default function BiddingShell({
 
   return (
     <BiddingProvider value={contextValue}>
-      <FeatureTour id="bidding" ctx={{ leagueStatus: league.status, counterpicksEnabled: hasCounterpicks }} />
+      <FeatureTour id="bidding" ctx={{ leagueStatus: league.status, counterpicksEnabled: hasCounterpicks, firstSeason }} />
       <div className="space-y-6" data-testid="bidding-panel">
         {/* Header: budget and slots, then the two ways to spend them */}
         <div className="card p-4 sm:p-5">

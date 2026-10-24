@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
-import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
+import { getCachedLeague, getCachedMemberships, getCachedUser } from '@/utils/supabase/cached'
+import { isFirstSeason } from '@/utils/onboarding'
 import { redirect, notFound } from 'next/navigation'
 import TradingClient from './TradingClient'
 import type { League, Team, TeamWithOwner, ParticipantWithProfile } from '@/types'
@@ -38,11 +39,14 @@ export default async function TradingPage({ params }: PageProps) {
   }
 
   // One participant read supplies both the current team and trading partners.
-  const { data: participants } = await supabase
-    .from('league_participants')
-    .select('*, teams (*), profiles (display_name)')
-    .eq('league_id', id)
-    .eq('status', 'active')
+  const [{ data: participants }, { data: memberships }] = await Promise.all([
+    supabase
+      .from('league_participants')
+      .select('*, teams (*), profiles (display_name)')
+      .eq('league_id', id)
+      .eq('status', 'active'),
+    getCachedMemberships(user.id),
+  ])
 
   const participant = participants?.find((p) => p.user_id === user.id)
   if (!participant) {
@@ -83,6 +87,7 @@ export default async function TradingPage({ params }: PageProps) {
       currentTeam={currentTeam}
       otherTeams={otherTeams}
       isOwner={isOwner}
+      firstSeason={isFirstSeason(memberships)}
     />
   )
 }

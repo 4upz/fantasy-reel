@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
-import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
+import { getCachedLeague, getCachedMemberships, getCachedUser } from '@/utils/supabase/cached'
+import { isFirstSeason } from '@/utils/onboarding'
 import { redirect } from 'next/navigation'
 import { HOLDING_MOVIE_COLUMNS } from '@/utils/holdings'
 import RosterClient from './RosterClient'
@@ -51,6 +52,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
     dropCountResult,
     counterpicksResult,
     openCounterpickBidsResult,
+    { data: memberships },
   ] = await Promise.all([
     // One read for the whole roster: team_holdings unions draft picks and
     // pickups with dropped rows already excluded, and carries the counterpicking
@@ -83,6 +85,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
       .select('movie_id')
       .eq('league_id', id)
       .in('status', ['active', 'outbid']),
+    getCachedMemberships(user.id),
   ])
 
   const { data: holdings } = holdingsResult
@@ -103,6 +106,7 @@ export default async function RosterPage({ params }: RosterPageProps) {
       userId={user.id}
       counterpicks={counterpicks || []}
       contestedMovieIds={contestedMovieIds}
+      firstSeason={isFirstSeason(memberships)}
     />
   )
 }

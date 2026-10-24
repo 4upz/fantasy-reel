@@ -480,7 +480,7 @@ export default function TradeOfferCard(props: Props) {
       {(canRespond || canCancel || canExtend || canVeto || canApprove) && (
         <div className="flex flex-wrap gap-2 pt-4 border-t border-border" role="group" aria-label="Trade actions">
           {canRespond && (
-            <>
+            <div className="flex flex-wrap gap-2" data-tour="trade-respond">
               <button
                 type="button"
                 onClick={unlessBusy(() => setShowAcceptModal(true))}
@@ -516,7 +516,7 @@ export default function TradeOfferCard(props: Props) {
               >
                 {pendingAction === 'reject' ? 'Rejecting...' : 'Reject'}
               </button>
-            </>
+            </div>
           )}
 
           {canExtend && (

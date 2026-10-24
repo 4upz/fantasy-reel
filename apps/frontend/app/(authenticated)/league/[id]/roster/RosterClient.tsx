@@ -13,6 +13,7 @@ import { holdingMovie } from '@/utils/holdings'
 import { useMovieProjections } from '@/hooks/useMovieProjections'
 import { HoldingProjection } from '@/app/components/projections/ProjectionChip'
 import RosterProjectionSummary from './RosterProjectionSummary'
+import { FeatureTour, TourButton } from '@/components/tours'
 import type { Holding, RosterHolding } from './types'
 import type { League, Movie, MovieProjection, TeamBudget, Counterpick } from '@/types'
 
@@ -32,6 +33,8 @@ interface RosterClientProps {
   counterpicks: RosterCounterpick[]
   /** Movies with an open counterpick auction, which blocks a drop. */
   contestedMovieIds: string[]
+  /** No finished season yet (isFirstSeason), so this page's tour starts by itself. */
+  firstSeason: boolean
 }
 
 /** One roster card's worth of a holding: how it was acquired decides the label. */
@@ -57,6 +60,7 @@ export default function RosterClient({
   userId,
   counterpicks,
   contestedMovieIds,
+  firstSeason,
 }: RosterClientProps) {
   const [holdings, setHoldings] = useState(initialHoldings)
   const [dropCount, setDropCount] = useState(initialDropCount)
@@ -135,14 +139,26 @@ export default function RosterClient({
 
   return (
     <div className="space-y-6 animate-fade-in">
+      <FeatureTour
+        id="roster"
+        ctx={{
+          leagueStatus: league.status,
+          dropLimit: league.drop_limit,
+          counterpicksEnabled: league.draft_counterpick_slots + league.bidding_counterpick_slots > 0,
+          firstSeason,
+        }}
+      />
       <RosterHeader
-        teamName={team.name}
-        slotsFilled={totalMovies}
-        totalSlots={league.total_slots}
-        remainingBudget={budget?.remaining_budget ?? null}
-        dropCount={dropCount}
+          teamName={team.name}
+          slotsFilled={totalMovies}
+          totalSlots={league.total_slots}
+          remainingBudget={budget?.remaining_budget ?? null}
+          dropCount={dropCount}
         dropLimit={league.drop_limit}
       />
+      <div className="flex justify-end">
+        <TourButton />
+      </div>
 
       <RosterProjectionSummary
         leagueId={league.id}
@@ -181,11 +197,11 @@ export default function RosterClient({
         </h2>
 
         {counterpicks.length === 0 ? (
-          <p className="text-foreground-secondary">No counterpicks claimed yet.</p>
+          <p className="text-foreground-secondary" data-tour="roster-counterpicks">No counterpicks claimed yet.</p>
         ) : (
           <ul role="list" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {counterpicks.map((cp) => (
-              <li key={cp.id} className="card overflow-hidden">
+              <li key={cp.id} className="card overflow-hidden" data-tour="roster-counterpicks">
                 <div className="relative aspect-[2/3] bg-elevated">
                   <RosterPoster movie={cp.movies} />
                   {/* Every card in this section is a counterpick, as its heading says. */}
@@ -279,17 +295,24 @@ function RosterSection({
         <p className="text-foreground-secondary">{emptyText}</p>
       ) : (
         <ul role="list" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {holdings.map((holding) => (
-            <li key={holding.id} className="grid">
+          {holdings.map((holding) => {
+            const isLocked = blockerFor(holding) !== null
+            const card = (
               <RosterMovieCard
                 movie={holding.movie}
                 label={holding.label}
-                isLocked={blockerFor(holding) !== null}
+                isLocked={isLocked}
                 projection={<RosterCardProjection movie={holding.movie} projections={projections} />}
                 onSelect={() => onSelect(holding)}
               />
-            </li>
-          ))}
+            )
+            // The roster tour's drop step points at the first movie that can be dropped.
+            return (
+              <li key={holding.id} className="grid">
+                {isLocked ? card : <div className="grid" data-tour="roster-movie">{card}</div>}
+              </li>
+            )
+          })}
         </ul>
       )}
     </div>

@@ -5,7 +5,12 @@ import { leagueSettingsTour } from './definitions/league-settings'
 import { leagueWaitingTour } from './definitions/league-waiting'
 import { draftRoomTour } from './definitions/draft-room'
 import { counterpickRoundTour } from './definitions/counterpick-round'
+import { leagueOverviewTour } from './definitions/league-overview'
+import { standingsTour } from './definitions/standings'
+import { rosterTour } from './definitions/roster'
 import { biddingTour } from './definitions/bidding'
+import { tradingTour } from './definitions/trading'
+import { seasonResultsTour } from './definitions/season-results'
 
 /**
  * Every tour, keyed by id, in the order a new player meets them - which is
@@ -19,7 +24,12 @@ export const TOURS = {
   'league-waiting': leagueWaitingTour,
   'draft-room': draftRoomTour,
   'counterpick-round': counterpickRoundTour,
+  'league-overview': leagueOverviewTour,
+  standings: standingsTour,
+  roster: rosterTour,
   bidding: biddingTour,
+  trading: tradingTour,
+  'season-results': seasonResultsTour,
 } as const satisfies Record<string, TourDefinition>
 
 export type TourId = keyof typeof TOURS

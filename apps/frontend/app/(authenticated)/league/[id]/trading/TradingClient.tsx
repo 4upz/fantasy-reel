@@ -9,6 +9,8 @@ import { trackEvent } from '@/utils/analytics'
 import { resolveExpiryBounds, type ResolvedExpiry } from '@/utils/tradeExpiry'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import { announce } from '@/utils/announce'
+import { FeatureTour } from '@/components/tours'
+import { tradesOpen } from '@/utils/league'
 
 // Start the dialog chunk alongside its data; Suspense keeps preparation cancellable.
 const loadProposeTradeModal = () => import('../components/ProposeTradeModal')
@@ -21,9 +23,11 @@ interface Props {
   otherTeams: TeamWithOwner[]
   isOwner: boolean
   userId: string
+  /** No finished season yet (isFirstSeason), so this page's tour starts by itself. */
+  firstSeason: boolean
 }
 
-export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner, userId }: Props) {
+export default function TradingClient({ league, team, currentTeam, otherTeams, isOwner, userId, firstSeason }: Props) {
   const [showProposeModal, setShowProposeModal] = useState(false)
   const [rosterRequested, setRosterRequested] = useState(false)
   // Said after the proposal dialog has closed: anything announced while it is
@@ -87,6 +91,17 @@ export default function TradingClient({ league, team, currentTeam, otherTeams, i
 
   return (
     <>
+      <FeatureTour
+        id="trading"
+        ctx={{
+          leagueStatus: league.status,
+          tradesOpen: tradesOpen(league),
+          reviewEnabled: league.trade_review_enabled,
+          reviewHours: league.trade_veto_hours,
+          isOwner,
+          firstSeason,
+        }}
+      />
       {(error || budgetError) && (
         <div className="alert alert-error mb-4" role="alert">
           <p>{error ?? budgetError}</p>

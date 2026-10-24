@@ -47,6 +47,7 @@ export function RosterHeader({
         <p
           className={`type-body-sm ${dropsRemaining > 0 ? 'text-foreground-secondary' : 'text-crimson-text'}`}
           data-testid="drops-summary"
+          data-tour="roster-drops"
         >
           {dropsRemaining > 0
             ? `Drops: ${dropCount} of ${dropLimit} used`
