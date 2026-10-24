@@ -102,6 +102,7 @@ private struct PickupMoviePicker: View {
 
     @Environment(AppEnvironment.self) private var environment
     @Environment(LeagueSeasonStore.self) private var season
+    @Environment(\.projectionStore) private var projections
 
     var body: some View {
         ScrollView {
@@ -116,6 +117,8 @@ private struct PickupMoviePicker: View {
             .padding(.bottom, 24)
         }
         .navigationTitle(counterPhase ? "Counter a Bid" : "Place a Bid")
+        // Projected scores (Beta) for what's listed, in one batch.
+        .task(id: listedIDs) { projections?.request(listedIDs) }
         .modifier(SearchableIf(model: counterPhase ? nil : search))
         .onAppear {
             guard search == nil, !counterPhase else { return }
@@ -166,6 +169,10 @@ private struct PickupMoviePicker: View {
         }
     }
 
+    private var listedIDs: [TMDbID] {
+        counterPhase ? contestMovies.map(\.movie.tmdbID) : search?.results.map(\.tmdbID) ?? []
+    }
+
     private func movieRow(_ result: MovieSearchResult, isScored: Bool) -> some View {
         let high = season.bids.highPickupBid(on: result.tmdbID)
         let mine = high?.teamID == season.myTeam?.id
@@ -181,7 +188,10 @@ private struct PickupMoviePicker: View {
                 releaseDate: result.releaseDate, posterURL: result.posterURL
             ))
         } label: {
-            MovieRow(title: result.title, meta: meta, posterURL: result.posterURL, showsChevron: !isScored)
+            MovieRow(
+                title: result.title, meta: meta, posterURL: result.posterURL, showsChevron: !isScored,
+                accessory: isScored ? nil : ProjectionAccessory(projections?.projection(for: result.tmdbID))?.view
+            )
         }
         .buttonStyle(.frRow)
         .disabled(isScored)
@@ -212,7 +222,8 @@ private struct PickupMoviePicker: View {
                             title: item.movie.title,
                             meta: item.movie.releaseDate?.formattedShort ?? "Release date TBA",
                             posterURL: item.movie.posterURL,
-                            showsChevron: true
+                            showsChevron: true,
+                            accessory: ProjectionAccessory(projections?.projection(for: item.movie.tmdbID))?.view
                         ) {
                             TrailingValue(SeasonFormat.budget(item.high), caption: "high bid")
                         }
@@ -264,6 +275,7 @@ private struct CounterpickMoviePicker: View {
     let onSelect: (CounterpickOption) -> Void
 
     @Environment(LeagueSeasonStore.self) private var season
+    @Environment(\.projectionStore) private var projections
     @State private var options: LoadState<[CounterpickOption]> = .idle
 
     var body: some View {
@@ -281,6 +293,11 @@ private struct CounterpickMoviePicker: View {
                             SectionHeader(group.teamName, detail: String(group.options.count))
                             FRRowGroup {
                                 ForEach(group.options) { option in
+                                    // "≈ +N pts for you" while unscored (Beta).
+                                    let projection = ProjectionAccessory(
+                                        option.isScoreLocked ? nil : projections?.projection(forMovie: option.movieID),
+                                        counterpick: true
+                                    )
                                     Button { onSelect(option) } label: {
                                         MovieRow(
                                             title: option.title,
@@ -288,7 +305,9 @@ private struct CounterpickMoviePicker: View {
                                             posterURL: option.posterURL,
                                             points: option.fantasyPoints,
                                             preRelease: FantasyPoints.isPreReleaseScore(points: option.fantasyPoints, releaseDate: option.releaseDate),
-                                            showsChevron: !option.isScoreLocked
+                                            showsChevron: !option.isScoreLocked,
+                                            accessory: projection?.view,
+                                            accessoryLabel: projection?.spokenLabel
                                         )
                                     }
                                     .buttonStyle(.frRow)
@@ -360,6 +379,7 @@ private struct BidAmountForm: View {
 
     @Environment(LeagueSeasonStore.self) private var season
     @Environment(ShellRouter.self) private var router
+    @Environment(\.projectionStore) private var projections
     @State private var amount = 0
     @State private var didSetAmount = false
     @State private var dropID: HoldingID?
@@ -459,7 +479,20 @@ private struct BidAmountForm: View {
 
     private var movieCard: some View {
         FRRowGroup {
-            MovieRow(title: subject.title, meta: movieMeta, posterURL: subject.posterURL)
+            MovieRow(title: subject.title, meta: movieMeta, posterURL: subject.posterURL, accessory: projection?.view)
+        }
+        .task(id: subject) {
+            if case .pickup(let movie) = subject { projections?.request([movie.tmdbID]) }
+        }
+    }
+
+    /// The movie's projection (Beta); a counterpick reads it as "for you".
+    private var projection: ProjectionAccessory? {
+        switch subject {
+        case .pickup(let movie):
+            ProjectionAccessory(projections?.projection(for: movie.tmdbID))
+        case .counterpick(let option):
+            ProjectionAccessory(option.isScoreLocked ? nil : projections?.projection(forMovie: option.movieID), counterpick: true)
         }
     }
 

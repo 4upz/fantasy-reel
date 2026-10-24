@@ -81,6 +81,8 @@ enum ShellSheet: Identifiable, Hashable {
     case counterTrade(TradeOfferID)
     /// Place, raise or counter a pickup or counterpick bid (F-12).
     case placeBid(BidTarget)
+    /// How a team's projected finish adds up (Beta, F-19).
+    case teamProjection(TeamID)
 
     var id: Self { self }
 }

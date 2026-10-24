@@ -3,8 +3,9 @@ import SwiftUI
 
 /// Standings tab (F-14, mockup V2Standings): the league summary strip, then
 /// every team ranked with ties shared ("T-3"), your row marked, last season's
-/// champion crowned. A completed season shows its frozen final table. The
-/// projected view (F-19) slots in later.
+/// champion crowned. A completed season shows its frozen final table. Where the
+/// server turns projections on (F-19), a Current / Projected toggle adds the
+/// projected table, which never changes the real ranks.
 struct StandingsView: View {
     @Environment(LeagueSeasonStore.self) private var store
 
@@ -31,6 +32,10 @@ struct StandingsView: View {
     }
 }
 
+private enum StandingsMode: Hashable, CaseIterable {
+    case current, projected
+}
+
 private struct StandingsContent: View {
     let snapshot: LeagueSeasonStore.Snapshot
 
@@ -40,6 +45,13 @@ private struct StandingsContent: View {
         let season = store.season
         let summary = StandingsSummary.make(holdings: snapshot.holdings, counterpicks: snapshot.counterpicks)
         let rows = store.standings
+        // Nil (and so no toggle at all) unless the league has projections on
+        // and some movie still to come rests on one.
+        let projected = store.projectedStandings
+        let mode = Binding(
+            get: { store.showsProjectedStandings ? StandingsMode.projected : .current },
+            set: { store.showsProjectedStandings = $0 == .projected }
+        )
 
         if season.isCompleted {
             ChampionCard(champions: store.champions, seasonYear: season.seasonYear)
@@ -50,6 +62,30 @@ private struct StandingsContent: View {
             .padding(.horizontal, 4)
             .accessibilityLabel("\(summary.movies) movies, \(summary.scored) scored, \(summary.pending) pending")
 
+        if projected != nil {
+            FRSegmentedControl("Standings view", selection: mode.animation(), options: StandingsMode.allCases, label: { option in
+                HStack(spacing: 6) {
+                    Text(option == .current ? "Current" : "Projected")
+                    if option == .projected { BetaBadge() }
+                }
+            })
+            .onChange(of: mode.wrappedValue) { _, newMode in
+                Announcer.announce(newMode == .projected
+                    ? "Showing projected standings, Beta. Rank and champions still come from real points only."
+                    : "Showing current standings.")
+            }
+        }
+
+        if let projected, mode.wrappedValue == .projected {
+            ProjectedStandingsList(standings: projected)
+        } else {
+            currentTable(summary: summary, rows: rows)
+        }
+    }
+
+    @ViewBuilder
+    private func currentTable(summary: StandingsSummary, rows: [FinalStandingRow]) -> some View {
+        let season = store.season
         if summary.scored == 0, !season.isCompleted, !rows.isEmpty {
             InlineBanner(
                 tone: .info,
@@ -259,6 +295,7 @@ struct TeamDetailView: View {
     private func rows(_ holdings: [TeamHolding]) -> some View {
         FRRowGroup {
             ForEach(holdings) { holding in
+                let projection = ProjectionAccessory(holding.fantasyPoints == nil ? store.projections.projection(for: holding.tmdbID) : nil)
                 Button {
                     router.push(.movie(holding.tmdbID))
                 } label: {
@@ -268,7 +305,9 @@ struct TeamDetailView: View {
                         posterURL: holding.posterURL,
                         points: holding.fantasyPoints,
                         preRelease: holding.isPreReleaseScore(),
-                        showsChevron: true
+                        showsChevron: true,
+                        accessory: projection?.view,
+                        accessoryLabel: projection?.spokenLabel
                     )
                 }
                 .buttonStyle(.frRow)

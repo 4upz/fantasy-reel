@@ -4,7 +4,9 @@ import SwiftUI
 /// Roster tab (F-11, mockup V2Roster): slot, drop and counterpick capacity,
 /// then drafted movies, pickups and counterpicks. Unreleased movies can be
 /// dropped from a row's context menu or VoiceOver actions; the confirmation
-/// sheet spells out the cost. Projected finish (F-19) slots in later.
+/// sheet spells out the cost. Where the server turns projections on (F-19),
+/// unscored rows carry a projection chip and a Projected finish card sits
+/// under the capacity card.
 struct RosterView: View {
     @Environment(LeagueSeasonStore.self) private var store
 
@@ -40,6 +42,7 @@ private struct RosterContent: View {
             let holdings = store.holdings(of: team.id)
             let counterpicks = store.counterpicks(by: team.id)
             CapacityCard(slotsFilled: holdings.count, counterpicks: counterpicks.count)
+            ProjectedFinishCard(teamID: team.id)
             holdingSection(
                 "Drafted",
                 holdings.filter { $0.source == .draft },
@@ -146,8 +149,11 @@ private struct HoldingRow: View {
     let canDrop: Bool
 
     @Environment(ShellRouter.self) private var router
+    @Environment(\.projectionStore) private var projections
 
     var body: some View {
+        // Only a movie still waiting on a score has anything to project.
+        let projection = ProjectionAccessory(holding.fantasyPoints == nil ? projections?.projection(for: holding.tmdbID) : nil)
         Button {
             router.push(.movie(holding.tmdbID))
         } label: {
@@ -157,7 +163,9 @@ private struct HoldingRow: View {
                 posterURL: holding.posterURL,
                 points: holding.fantasyPoints,
                 preRelease: holding.isPreReleaseScore(),
-                showsChevron: true
+                showsChevron: true,
+                accessory: projection?.view,
+                accessoryLabel: projection?.spokenLabel
             )
         }
         .buttonStyle(.frRow)
@@ -182,15 +190,22 @@ struct CounterpickRow: View {
     let targetName: String?
 
     @Environment(ShellRouter.self) private var router
+    @Environment(\.projectionStore) private var projections
 
     var body: some View {
+        let projection = ProjectionAccessory(
+            counterpick.fantasyPoints == nil ? projections?.projection(for: counterpick.movie?.tmdbID) : nil,
+            counterpick: true
+        )
         let row = MovieRow(
             title: counterpick.title,
             meta: meta,
             posterURL: counterpick.movie?.posterURL,
             points: counterpick.fantasyPoints,
             preRelease: counterpick.isPreReleaseScore(),
-            showsChevron: counterpick.movie != nil
+            showsChevron: counterpick.movie != nil,
+            accessory: projection?.view,
+            accessoryLabel: projection?.spokenLabel
         )
         if let tmdbID = counterpick.movie?.tmdbID {
             Button { router.push(.movie(tmdbID)) } label: { row }

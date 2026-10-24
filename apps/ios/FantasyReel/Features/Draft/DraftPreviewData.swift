@@ -118,6 +118,20 @@ enum DraftPreviewData {
         }
     }
 
+    /// Projected scores (Beta) for every title, for the projected variants.
+    static var projections: MovieProjectionsResponse {
+        let ranges: [ClosedRange<Double>] = [
+            74...82, 84...92, 76...84, 62...70, 59...67, 66...74, 38...57,
+            69...77, 45...68, 38...46, 54...62, 83...91, 75...83, 31...39,
+        ]
+        return ProjectionPreviewData.response(titles.indices.map { index in
+            ProjectionPreviewData.projection(
+                movie(index).tmdbID, range50: ranges[index],
+                lowConfidence: index == 8, insufficientHistory: index == 6
+            )
+        })
+    }
+
     // MARK: Rooms
 
     struct Room {
@@ -131,14 +145,14 @@ enum DraftPreviewData {
         return room(league, members: members)
     }
 
-    static func liveRoom() -> Room {
+    static func liveRoom(projected: Bool = false) -> Room {
         let league = league("Office Movie Club", year: 2027, status: .drafting)
         let members = members(6, alicePosition: 4, leagueID: league.id)
         let board = DraftSnapshot(league: league, participants: members, picks: [], counterpicks: [])
-        return room(league, members: members, picks: picks([0, 1, 2, 3, 12, 13, 6, 7], in: board))
+        return room(league, members: members, picks: picks([0, 1, 2, 3, 12, 13, 6, 7], in: board), projected: projected)
     }
 
-    static func counterpickRoom() -> Room {
+    static func counterpickRoom(projected: Bool = false) -> Room {
         let league = league("Popcorn Syndicate", year: 2026, status: .counterpicking, draftSlots: 2, counterpickSlots: 2)
         let members = members(4, alicePosition: 3, leagueID: league.id)
         let board = DraftSnapshot(league: league, participants: members, picks: [], counterpicks: [])
@@ -174,7 +188,7 @@ enum DraftPreviewData {
                     draftPickID: pick.id
                 )
             }
-        return room(league, members: members, picks: picks, counterpicks: counterpicks, options: options)
+        return room(league, members: members, picks: picks, counterpicks: counterpicks, options: options, projected: projected)
     }
 
     private static func room(
@@ -182,11 +196,12 @@ enum DraftPreviewData {
         members: [LeagueMember],
         picks: [DraftPickRecord] = [],
         counterpicks: [DraftCounterpick] = [],
-        options: [CounterpickOption] = []
+        options: [CounterpickOption] = [],
+        projected: Bool = false
     ) -> Room {
         let environment = AppEnvironment.preview(
             leagues: InMemoryLeagueRepository(seasons: [league], members: members),
-            movies: InMemoryMovieRepository(catalog: catalog),
+            movies: InMemoryMovieRepository(catalog: catalog, projections: projected ? projections : .disabled),
             draft: InMemoryDraftRepository(picks: picks, counterpicks: counterpicks, options: options)
         )
         return Room(environment: environment, selection: LeagueSelection(userID: alice, season: league, seriesSeasons: [league]))
@@ -202,20 +217,27 @@ struct DraftPreviewScreen: View {
     let variant: Variant
 
     @State private var room: DraftPreviewData.Room
+    /// Projected scores (Beta) for the projected variants; nil otherwise.
+    @State private var projections: ProjectionStore? = nil
     @State private var router = ShellRouter()
     @State private var inbox: InboxStore
     @State private var wishlist: WishlistStore
     @State private var model: DraftRoomModel?
     @State private var tab = 1
 
-    init(_ variant: Variant) {
+    init(_ variant: Variant, projected: Bool = false) {
         self.variant = variant
         let room: DraftPreviewData.Room = switch variant {
         case .setup: DraftPreviewData.setupRoom()
-        case .live, .picker, .offline: DraftPreviewData.liveRoom()
-        case .counterpick: DraftPreviewData.counterpickRoom()
+        case .live, .picker, .offline: DraftPreviewData.liveRoom(projected: projected)
+        case .counterpick: DraftPreviewData.counterpickRoom(projected: projected)
         }
         _room = State(initialValue: room)
+        if projected {
+            let store = ProjectionStore(leagueID: room.selection.season.id, seasonIsLive: true, repository: room.environment.movies)
+            store.learn(DraftPreviewData.titles.indices.map { (DraftPreviewData.movie($0).id, DraftPreviewData.movie($0).tmdbID) })
+            _projections = State(initialValue: store)
+        }
         _inbox = State(initialValue: InboxStore(userID: DraftPreviewData.alice, repository: InMemoryNotificationRepository()))
         _wishlist = State(initialValue: WishlistStore(userID: DraftPreviewData.alice, repository: room.environment.wishlists))
     }
@@ -247,6 +269,7 @@ struct DraftPreviewScreen: View {
         .environment(inbox)
         .environment(wishlist)
         .environment(\.leagueSelection, room.selection)
+        .environment(\.projectionStore, projections)
         .task {
             let environment = room.environment
             let model = DraftRoomModel(
@@ -278,4 +301,6 @@ struct DraftPreviewScreen: View {
 #Preview("Picker") { DraftPreviewScreen(.picker) }
 #Preview("Counterpick") { DraftPreviewScreen(.counterpick) }
 #Preview("Offline") { DraftPreviewScreen(.offline) }
+#Preview("Picker, projected") { DraftPreviewScreen(.picker, projected: true) }
+#Preview("Counterpick, projected") { DraftPreviewScreen(.counterpick, projected: true) }
 #endif

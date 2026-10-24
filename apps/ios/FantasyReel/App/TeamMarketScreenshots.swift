@@ -5,7 +5,8 @@ import SwiftUI
 
 /// Screenshot scenes for the league overview, roster, bids, trades and
 /// standings (F-10 to F-14): Alice, the commissioner, mid-season in Popcorn
-/// Syndicate, with in-memory data only.
+/// Syndicate, with in-memory data only. The `…Projected` scenes and
+/// `teamProjection` turn projected scores (Beta, F-19) on.
 struct TeamMarketScreenshotView: View {
     let scene: ScreenshotScene
 
@@ -15,7 +16,10 @@ struct TeamMarketScreenshotView: View {
     init(scene: ScreenshotScene) {
         self.scene = scene
         // League Home asks for notification permission until it's answered.
-        _fixture = State(initialValue: TeamMarketFixture(push: scene == .leagueHomePushPrompt ? .notDetermined : .allowed))
+        _fixture = State(initialValue: TeamMarketFixture(
+            projected: TeamMarketFixture.projectedScenes.contains(scene),
+            push: scene == .leagueHomePushPrompt ? .notDetermined : .allowed
+        ))
     }
 
     var body: some View {
@@ -36,6 +40,7 @@ struct TeamMarketScreenshotView: View {
         .environment(fixture.research)
         .environment(fixture.history)
         .environment(\.leagueSelection, fixture.directory.selection)
+        .environment(\.projectionStore, fixture.season.projections)
         .task {
             await fixture.prepare()
             fixture.route(to: scene)
@@ -48,8 +53,15 @@ struct TeamMarketScreenshotView: View {
     @ViewBuilder
     private var content: some View {
         switch scene {
-        case .leagueHome, .leagueHomePushPrompt, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades:
+        case .leagueHome, .leagueHomePushPrompt, .roster, .standings, .teamDetail, .bids, .bidPriorities, .trades, .rosterProjected, .standingsProjected:
             LeagueTabs(tabs: LeagueNavigation.tabs(for: .active))
+        case .teamProjection: NavigationStack { TeamProjectionView(teamID: TeamMarketFixture.team("alice")) }
+        case .placeBidProjected: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1013, title: "Toy Story 5", releaseDate: DateOnly("2026-11-19")))) }
+        case .tradeComposerProjected: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("bob"))) }
+        case .tradeComposerProjectedLargeText:
+            // The narrowest row a chip sits in, at an accessibility text size.
+            NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("bob"))) }
+                .dynamicTypeSize(.accessibility3)
         case .placeBid: NavigationStack { PlaceBidView(target: .pickup(BiddableMovie(tmdbID: 1004, title: "Mortal Kombat II", releaseDate: DateOnly("2026-10-23")))) }
         case .tradeComposer: NavigationStack { TradeComposerView(mode: .propose(TeamMarketFixture.team("dave"))) }
         case .dropMovie: NavigationStack { DropMovieView(holdingID: "h-1006") }
@@ -62,6 +74,10 @@ struct TeamMarketScreenshotView: View {
 final class TeamMarketFixture {
     static let alice: UserID = "u-alice"
     static func team(_ user: String) -> TeamID { TeamID("t-\(user)") }
+    static let projectedScenes: Set<ScreenshotScene> = [
+        .rosterProjected, .standingsProjected, .teamProjection, .placeBidProjected, .tradeComposerProjected,
+        .tradeComposerProjectedLargeText,
+    ]
 
     let environment: AppEnvironment
     let router = ShellRouter()
@@ -72,7 +88,7 @@ final class TeamMarketFixture {
     let research: LeagueResearchStore
     let history = MovieSearchHistory()
 
-    init(push: PushAuthorization = .allowed) {
+    init(projected: Bool = false, push: PushAuthorization = .allowed) {
         let now = Date()
         let day: TimeInterval = 86_400
         let leagueID: LeagueID = "l-popcorn"
@@ -209,25 +225,41 @@ final class TeamMarketFixture {
                 myTeamID: Self.team("alice")
             ),
             trades: InMemoryTradeRepository(trades: trades, myTeamID: Self.team("alice")),
+            movies: InMemoryMovieRepository(projections: projected ? Self.projections : .disabled),
             push: push
         )
         self.environment = environment
         directory = LeagueDirectoryStore(userID: Self.alice, repository: environment.leagues, defaults: UserDefaults(suiteName: "fr.screenshots") ?? .standard)
         season = LeagueSeasonStore(
             selection: LeagueSelection(userID: Self.alice, season: league, seriesSeasons: [league]),
-            repository: environment.teams, bidRepository: environment.bids, tradeRepository: environment.trades
+            repository: environment.teams, bidRepository: environment.bids, tradeRepository: environment.trades,
+            movieRepository: environment.movies
         )
         inbox = InboxStore(userID: Self.alice, repository: environment.notifications)
         wishlist = WishlistStore(userID: Self.alice, repository: environment.wishlists)
         research = LeagueResearchStore(leagues: environment.leagues, leagueMovies: environment.leagueMovies)
     }
 
+    /// Projected scores (Beta) for the movies still to come: holdings, bids.
+    private static var projections: MovieProjectionsResponse {
+        let ranges: [(TMDbID, ClosedRange<Double>)] = [
+            (1003, 73...81), (1004, 36...44), (1006, 37...45), (1008, 77...85), (1009, 52...70),
+            (1010, 85...93), (1012, 60...68), (1013, 81...89), (1014, 76...84), (1015, 79...87),
+        ]
+        return ProjectionPreviewData.response(ranges.map { tmdbID, range in
+            ProjectionPreviewData.projection(tmdbID, range50: range, lowConfidence: tmdbID == 1009)
+        })
+    }
+
     /// Selects the scene's tab and pushes its screen onto that tab's stack.
     func route(to scene: ScreenshotScene) {
         switch scene {
         case .leagueHome, .leagueHomePushPrompt: router.select(.home)
-        case .roster: router.select(.roster)
+        case .roster, .rosterProjected: router.select(.roster)
         case .standings: router.select(.standings)
+        case .standingsProjected:
+            router.select(.standings)
+            season.showsProjectedStandings = true
         case .teamDetail:
             router.select(.standings)
             router.paths[.standings] = [.team(Self.team("bob"))]
@@ -245,6 +277,12 @@ final class TeamMarketFixture {
         await season.load()
         await environment.push.refreshAuthorization()
         router.seasonStore = season
+        // Let the season's projection request answer before the capture.
+        var waits = 0
+        while season.projections.status == .unknown, waits < 20 {
+            try? await Task.sleep(for: .milliseconds(50))
+            waits += 1
+        }
     }
 }
 #endif

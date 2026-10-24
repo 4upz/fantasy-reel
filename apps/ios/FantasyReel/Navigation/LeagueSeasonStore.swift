@@ -30,7 +30,13 @@ final class LeagueSeasonStore {
         let userIDs: Set<UserID>
     }
 
-    private(set) var state: LoadState<Snapshot> = .idle
+    private(set) var state: LoadState<Snapshot> = .idle {
+        didSet { snapshotGeneration &+= 1 }
+    }
+    /// Bumps whenever `state` is set, so derived tables re-derive only then.
+    /// Observed: a cache hit reads only this, and views fed only by a derived
+    /// table must still re-render when the snapshot changes.
+    private var snapshotGeneration = 0
     private(set) var season: League
     let userID: UserID
     private var seriesSeasons: [League]
@@ -40,12 +46,18 @@ final class LeagueSeasonStore {
     let bids: BidsStore
     /// Trade offers (F-13), loaded while the season is active.
     let trades: TradesStore
+    /// Projected scores (Beta, F-19); silent unless the server turns them on.
+    let projections: ProjectionStore
+    /// Whether Standings shows the projected table, kept across tab switches.
+    var showsProjectedStandings = false
+    @ObservationIgnored private var projectedCache: (key: ProjectedKey, value: [ProjectedStandings.Standing]?)?
 
     init(
         selection: LeagueSelection,
         repository: any TeamRepository,
         bidRepository: any BidRepository,
-        tradeRepository: any TradeRepository
+        tradeRepository: any TradeRepository,
+        movieRepository: any MovieRepository
     ) {
         self.season = selection.season
         self.userID = selection.userID
@@ -53,6 +65,9 @@ final class LeagueSeasonStore {
         self.repository = repository
         self.bids = BidsStore(leagueID: selection.season.id, repository: bidRepository)
         self.trades = TradesStore(leagueID: selection.season.id, repository: tradeRepository)
+        self.projections = ProjectionStore(
+            leagueID: selection.season.id, seasonIsLive: !selection.season.isCompleted, repository: movieRepository
+        )
     }
 
     var snapshot: Snapshot? { state.value }
@@ -68,6 +83,7 @@ final class LeagueSeasonStore {
         guard selection.season != season || selection.seriesSeasons != seriesSeasons else { return }
         season = selection.season
         seriesSeasons = selection.seriesSeasons
+        if season.isCompleted { projections.seasonEnded() }
         await refresh()
     }
 
@@ -116,6 +132,12 @@ final class LeagueSeasonStore {
                 reigningChampions: reigning
             )
             if state != .loaded(snapshot) { state = .loaded(snapshot) }
+            // Every held movie, in one batch: roster, standings, trades and
+            // counterpick choices all read from it.
+            projections.learn(
+                snapshot.holdings.map { ($0.movieID, $0.tmdbID) }
+                    + snapshot.counterpicks.compactMap { counterpick in counterpick.movie.map { (counterpick.movieID, $0.tmdbID) } }
+            )
             if season.status == .active {
                 async let bidsUpdated: Void = bids.update(leagueID: leagueID, teamID: myTeamID)
                 if season.tradesEnabled { await trades.update(leagueID: leagueID, teamID: myTeamID) }
@@ -227,6 +249,51 @@ final class LeagueSeasonStore {
         return holdings(of: team.id).first { $0.tmdbID == tmdbID }
     }
 
+    // MARK: Projections (Beta, F-19)
+
+    private struct ProjectedKey: Equatable {
+        let snapshotGeneration: Int
+        let projectionsVersion: Int
+        let doublePointsOver90: Bool
+    }
+
+    /// The projected table, or nil while there is nothing to show: projections
+    /// off, a completed season, still loading, or no movie that rests on a
+    /// projection. Waits for every movie's answer so a total never moves part-way.
+    var projectedStandings: [ProjectedStandings.Standing]? {
+        let key = ProjectedKey(snapshotGeneration: snapshotGeneration, projectionsVersion: projections.version, doublePointsOver90: season.doublePointsOver90)
+        if let cached = projectedCache, cached.key == key { return cached.value }
+        let value = computeProjectedStandings()
+        projectedCache = (key, value)
+        return value
+    }
+
+    private func computeProjectedStandings() -> [ProjectedStandings.Standing]? {
+        guard projections.isEnabled, !season.isCompleted, let snapshot else { return nil }
+        let sources = snapshot.holdings.map {
+            ProjectedStandings.Source(
+                teamID: $0.teamID, tmdbID: $0.tmdbID, title: $0.title, releaseDate: $0.releaseDate,
+                posterURL: $0.posterURL, fantasyPoints: $0.fantasyPoints
+            )
+        } + snapshot.counterpicks.compactMap { counterpick -> ProjectedStandings.Source? in
+            guard let movie = counterpick.movie else { return nil }
+            return ProjectedStandings.Source(
+                teamID: counterpick.counterpickerTeamID, tmdbID: movie.tmdbID, title: movie.title,
+                releaseDate: movie.releaseDate, posterURL: movie.posterURL,
+                fantasyPoints: counterpick.fantasyPoints, counterpick: true
+            )
+        }
+        guard !sources.isEmpty, projections.hasAnswers(for: sources.map(\.tmdbID)) else { return nil }
+        let teams = standings.map {
+            ProjectedStandings.Team(teamID: $0.teamID, teamName: team($0.teamID)?.name ?? $0.teamName, earned: $0.totalPoints, rank: $0.rank)
+        }
+        let table = ProjectedStandings.compute(
+            teams: teams, sources: sources, projections: projections.projections,
+            doublePointsOver90: season.doublePointsOver90
+        )
+        return ProjectedStandings.hasProjectedLegs(table) ? table : nil
+    }
+
     // MARK: Mutations
 
     func renameMyTeam(to name: String) async throws {
@@ -268,7 +335,8 @@ struct LeagueSeasonScope<Content: View>: View {
         self.selection = selection
         _store = State(initialValue: LeagueSeasonStore(
             selection: selection, repository: environment.teams,
-            bidRepository: environment.bids, tradeRepository: environment.trades
+            bidRepository: environment.bids, tradeRepository: environment.trades,
+            movieRepository: environment.movies
         ))
         self.content = content()
     }
@@ -276,6 +344,7 @@ struct LeagueSeasonScope<Content: View>: View {
     var body: some View {
         content
             .environment(store)
+            .environment(\.projectionStore, store.projections)
             .onAppear { router.seasonStore = store }
             .onDisappear { if router.seasonStore === store { router.seasonStore = nil } }
             .task(id: selection.season.id) { await watch() }

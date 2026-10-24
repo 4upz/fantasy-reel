@@ -336,6 +336,8 @@ struct TradeSideView: View {
     var invalid: Set<String> = []
     let isMine: Bool
 
+    @Environment(\.projectionStore) private var projections
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
@@ -349,7 +351,10 @@ struct TradeSideView: View {
                     .foregroundStyle(Color.frTextMuted)
             }
             ForEach(items.movies) { item in
-                MovieRow(title: item.displayTitle, meta: meta(item), posterURL: item.posterURL)
+                MovieRow(
+                    title: item.displayTitle, meta: meta(item), posterURL: item.posterURL,
+                    accessory: ProjectionAccessory(projections?.projection(forMovie: item.movieID), counterpick: item.isCounterpick)?.view
+                )
             }
             if items.budget > 0 {
                 HStack(spacing: 6) {

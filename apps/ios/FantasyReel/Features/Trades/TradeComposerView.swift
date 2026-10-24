@@ -305,9 +305,19 @@ private struct TradeChecklistRow: View {
     let isSelected: Bool
     let toggle: () -> Void
 
+    @Environment(\.projectionStore) private var projections
+
     var body: some View {
+        let projection = ProjectionAccessory(
+            movie.isScoreLocked ? nil : projections?.projection(forMovie: movie.movieID),
+            counterpick: movie.source == .counterpick
+        )
         Button(action: toggle) {
-            MovieRow(title: movie.title, meta: meta, posterURL: movie.posterURL, accessibilityLabel: accessibilityText) {
+            MovieRow(
+                title: movie.title, meta: meta, posterURL: movie.posterURL,
+                accessibilityLabel: [accessibilityText, projection?.spokenLabel].compactMap { $0 }.joined(separator: ", "),
+                accessory: projection?.view
+            ) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
                     .foregroundStyle(isSelected ? Color.frGold : Color.frTextMuted)

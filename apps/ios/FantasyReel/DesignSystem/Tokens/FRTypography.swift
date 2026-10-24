@@ -136,6 +136,10 @@ nonisolated enum FRTextRole: Hashable, Sendable, CaseIterable {
     case numberLarge
     /// Big Rotten Tomatoes score: Bricolage 700, 44, numeric.
     case numberHero
+    /// `.pchip` projection chip reading: Bricolage 700, 13, numeric.
+    case chipNumber
+    /// `.pchip.sm` small projection chip reading: Bricolage 700, 12, numeric.
+    case chipNumberSmall
 
     var spec: FRTextSpec {
         switch self {
@@ -160,6 +164,8 @@ nonisolated enum FRTextRole: Hashable, Sendable, CaseIterable {
         case .numberSmall: FRTextSpec(.bricolage, 600, 15, .subheadline, numeric: true)
         case .numberLarge: FRTextSpec(.bricolage, 700, 24, .title2, numeric: true)
         case .numberHero: FRTextSpec(.bricolage, 700, 44, .largeTitle, numeric: true)
+        case .chipNumber: FRTextSpec(.bricolage, 700, 13, .footnote, numeric: true)
+        case .chipNumberSmall: FRTextSpec(.bricolage, 700, 12, .caption1, numeric: true)
         }
     }
 }
