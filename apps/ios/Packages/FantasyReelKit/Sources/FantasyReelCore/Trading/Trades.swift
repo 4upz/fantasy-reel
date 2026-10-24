@@ -413,6 +413,16 @@ public enum TradeLists {
         }
         return groups
     }
+
+    public static func history(_ trades: [TradeOffer]) -> [TradeOffer] {
+        trades.filter(\.status.isFinal)
+    }
+
+    /// Offers waiting on my answer: the tab badge and Home banner.
+    public static func needingResponse(_ trades: [TradeOffer], teamID: TeamID?) -> [TradeOffer] {
+        guard let teamID else { return [] }
+        return trades.filter { $0.recipientTeamID == teamID && $0.status.awaitsResponse }
+    }
 }
 
 /// `TradeLists.pendingForViewer`, newest first within each group.
@@ -429,16 +439,6 @@ public struct PendingTrades: Sendable, Hashable {
     /// What the Pending badge counts: offers waiting on me.
     public var actionCount: Int { needsAnswer.count + needsReview.count }
     public var isEmpty: Bool { needsAnswer.isEmpty && needsReview.isEmpty && waiting.isEmpty }
-
-    public static func history(_ trades: [TradeOffer]) -> [TradeOffer] {
-        trades.filter(\.status.isFinal)
-    }
-
-    /// Offers waiting on my answer: the tab badge and Home banner.
-    public static func needingResponse(_ trades: [TradeOffer], teamID: TeamID?) -> [TradeOffer] {
-        guard let teamID else { return [] }
-        return trades.filter { $0.recipientTeamID == teamID && $0.status.awaitsResponse }
-    }
 }
 
 // MARK: - Tradeable movies
