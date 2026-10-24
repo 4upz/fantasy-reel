@@ -61,6 +61,18 @@ export function applicableSteps(tour: TourDefinition, ctx: TourContext): Resolve
     .map((step) => ({ ...step, body: typeof step.body === 'function' ? step.body(ctx) : step.body }))
 }
 
+/**
+ * After an automatic tour ends, no other tour starts by itself for this long,
+ * so a newcomer clicking through tabs doesn't meet one tour per tab. Tours
+ * that miss their turn start on a later visit, or when asked for.
+ */
+export const AUTO_START_GAP_MS = 10 * 60 * 1000
+
+/** Whether an automatic tour that ended at `endedAt` (ms) still holds others back. */
+export function inAutoStartGap(endedAt: number | null, now: number): boolean {
+  return endedAt !== null && now >= endedAt && now - endedAt < AUTO_START_GAP_MS
+}
+
 export interface Candidate {
   tour: TourDefinition
   ctx: TourContext

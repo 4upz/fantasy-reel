@@ -13,6 +13,7 @@ export const welcomeTour = defineTour<{ loaded: boolean; newPlayer: boolean; has
   // Judged once the league list has loaded, never against a skeleton.
   when: (ctx) => ctx.loaded === true,
   autoStart: (ctx) => ctx.newPlayer === true,
+  essential: true,
   steps: [
     {
       anchor: 'how-to-play',
