@@ -61,7 +61,7 @@ struct TradeRuleTests {
         #expect(!TradePermissions(offer: offer(.accepted), myTeamID: "z", isCommissioner: true).hasAny)
     }
 
-    @Test func listsSplitOpenMineAndHistory() {
+    @Test func listsSplitOpenAndHistory() {
         let trades = [offer(.proposed), offer(.review, from: "c", to: "d"), offer(.accepted), offer(.completed), offer(.expired)]
         #expect(TradeLists.pending(trades).count == 2, "accepted waits on the cron and is in no list")
         #expect(TradeLists.history(trades).count == 2)
