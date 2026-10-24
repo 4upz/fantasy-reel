@@ -68,7 +68,7 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
   }
 
   return (
-    <section className="card p-6" data-tour="settings-scoring">
+    <section className="card p-6">
       <SectionHeader
         icon={Trophy}
         title="Scoring"
@@ -87,7 +87,7 @@ export default function ScoringConfigSection({ league, onUpdate }: Props): React
           <fieldset disabled={isSubmitting}>
             <div className="space-y-6">
               {/* Double points toggle */}
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-3" data-tour="settings-scoring">
                 <div className="pt-0.5">
                   <input
                     type="checkbox"

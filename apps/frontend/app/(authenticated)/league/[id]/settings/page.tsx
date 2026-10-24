@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
-import { getCachedLeague, getCachedMemberships, getCachedUser } from '@/utils/supabase/cached'
-import { isNewPlayer } from '@/utils/onboarding'
+import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
 import { redirect, notFound } from 'next/navigation'
 import SettingsClient from './SettingsClient'
 import { fetchSeriesSeasons } from '@/utils/seasonQueries'
@@ -35,15 +34,12 @@ export default async function LeagueSettingsPage({ params }: PageProps) {
   }
 
   // Fetch participants with their teams and profiles
-  const [{ data: participants }, { data: memberships }] = await Promise.all([
-    supabase
-      .from('league_participants')
-      .select(`*, teams (*), profiles (*)`)
-      .eq('league_id', id)
-      .eq('status', 'active')
-      .order('draft_order', { ascending: true }),
-    getCachedMemberships(user.id),
-  ])
+  const { data: participants } = await supabase
+    .from('league_participants')
+    .select(`*, teams (*), profiles (*)`)
+    .eq('league_id', id)
+    .eq('status', 'active')
+    .order('draft_order', { ascending: true })
 
   const seasons = league.status === 'completed' ? await fetchSeriesSeasons(supabase, league.series_id) : []
 
@@ -55,7 +51,6 @@ export default async function LeagueSettingsPage({ params }: PageProps) {
           participants={(participants || []) as ParticipantWithProfile[]}
           currentUserId={user.id}
           nextSeasonId={seasons.find((season) => season.season_year === league.season_year + 1)?.id}
-          newPlayer={isNewPlayer(memberships)}
         />
       </div>
     </div>
