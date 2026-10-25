@@ -21,7 +21,8 @@ final class SecurityCheck {
     private(set) var resets = 0
     /// Bumped to reload the widget from scratch (Try Again).
     private(set) var reloads = 0
-    /// Cloudflare wants the person to interact, so the widget is on screen.
+    /// Cloudflare wants the person to interact, or the check failed and its
+    /// error and retry need to be reachable, so the widget is on screen.
     fileprivate(set) var needsInteraction = false
     /// The challenge script couldn't load (offline, content blocker).
     fileprivate(set) var loadFailed = false
@@ -178,7 +179,10 @@ private struct SecurityCheckView: View {
         case .interactionRequired:
             check.needsInteraction = true
             Announcer.announce("Complete the security check.")
-        case .expired, .failed:
+        case .failed:
+            check.receive(nil)
+            check.needsInteraction = true
+        case .expired:
             check.receive(nil)
         case .loadFailed:
             check.receive(nil)
