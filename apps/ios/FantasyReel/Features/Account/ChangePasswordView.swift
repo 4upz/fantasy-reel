@@ -94,8 +94,6 @@ struct ChangePasswordView: View {
                 GroupFootnote(passwordHint)
             }
 
-            SecurityCheckView(check: securityCheck)
-
             if let message = localError ?? save.errorMessage {
                 InlineBanner(tone: .error, title: message)
             }
@@ -105,6 +103,7 @@ struct ChangePasswordView: View {
             }
             .buttonStyle(.fr(.primary, isLoading: save.isRunning))
             .disabled(current.isEmpty || password.isEmpty || confirmation.isEmpty || save.isRunning)
+            .securityCheck(securityCheck)
         }
     }
 
@@ -120,13 +119,13 @@ struct ChangePasswordView: View {
             focusedField = problem == AuthMessages.passwordsDoNotMatch ? .confirmation : .password
             return
         }
-        guard securityCheck.isReady(environment.configuration) else {
-            localError = AuthMessages.captchaPending
-            return
-        }
-        let token = securityCheck.take()
         let (current, new) = (current, password)
         save.run {
+            if let message = try await securityCheck.waitUntilReady(environment.configuration) {
+                localError = message
+                return
+            }
+            let token = securityCheck.take()
             try await session.changePassword(current: current, new: new, captchaToken: token)
             Announcer.announce("Password changed.")
             dismiss()
@@ -146,7 +145,6 @@ struct ChangePasswordView: View {
                 InlineBanner(tone: .success, title: "Check your email", message: "A link to choose a password is on its way.", systemImage: "checkmark", iconStyle: .badge)
             }
             if let email {
-                SecurityCheckView(check: securityCheck)
                 if let message = localError ?? sendLink.errorMessage {
                     InlineBanner(tone: .error, title: message)
                 }
@@ -157,18 +155,19 @@ struct ChangePasswordView: View {
                 }
                 .buttonStyle(.fr(linkSent ? .secondary : .primary, isLoading: sendLink.isRunning))
                 .disabled(sendLink.isRunning)
+                .securityCheck(securityCheck)
             }
         }
     }
 
     private func sendResetLink(to email: String) {
         localError = nil
-        guard securityCheck.isReady(environment.configuration) else {
-            localError = AuthMessages.captchaPending
-            return
-        }
-        let token = securityCheck.take()
         sendLink.run {
+            if let message = try await securityCheck.waitUntilReady(environment.configuration) {
+                localError = message
+                return
+            }
+            let token = securityCheck.take()
             try await session.sendPasswordReset(email: email, captchaToken: token)
             linkSent = true
             Announcer.announce("Check your email for a link to choose a password.")
