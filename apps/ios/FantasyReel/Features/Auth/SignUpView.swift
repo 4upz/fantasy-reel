@@ -201,7 +201,7 @@ private struct CheckEmailView: View {
                 iconStyle: .badge
             )
 
-                if let message = localError ?? resend.errorMessage {
+            if let message = localError ?? resend.errorMessage {
                 InlineBanner(tone: .error, title: message)
             }
 
