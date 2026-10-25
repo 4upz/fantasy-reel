@@ -106,8 +106,6 @@ struct SignUpView: View {
             .padding(.top, -4)
             .accessibilityHidden(true)
 
-        SecurityCheckView(check: securityCheck)
-
         if let message = errorMessage {
             InlineBanner(tone: .error, title: message)
         }
@@ -118,6 +116,7 @@ struct SignUpView: View {
             }
             .buttonStyle(.fr(.primary, isLoading: create.isRunning))
             .disabled(!canSubmit || create.isRunning)
+            .securityCheck(securityCheck)
             AuthLegalNotice(action: "continuing with Apple, Google, Discord or email")
         }
         .padding(.top, 4)
@@ -154,15 +153,15 @@ struct SignUpView: View {
             focusedField = .email
             return
         }
-        guard securityCheck.isReady(environment.configuration) else {
-            localError = AuthMessages.captchaPending
-            return
-        }
         let name = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         let email = trimmedEmail
         let password = password
-        let token = securityCheck.take()
         create.run {
+            if let message = try await securityCheck.waitUntilReady(environment.configuration) {
+                localError = message
+                return
+            }
+            let token = securityCheck.take()
             let signedIn = try await session.signUp(email: email, password: password, displayName: name, captchaToken: token)
             // Signed in straight away: the session swaps this whole flow out.
             if !signedIn {
@@ -202,9 +201,7 @@ private struct CheckEmailView: View {
                 iconStyle: .badge
             )
 
-            SecurityCheckView(check: securityCheck)
-
-            if let message = localError ?? resend.errorMessage {
+                if let message = localError ?? resend.errorMessage {
                 InlineBanner(tone: .error, title: message)
             }
 
@@ -213,6 +210,7 @@ private struct CheckEmailView: View {
             }
             .buttonStyle(.fr(.secondary, isLoading: resend.isRunning))
             .disabled(resend.isRunning)
+            .securityCheck(securityCheck)
 
             Button("Back to Log In") { navigation.switchTo(.logIn) }
                 .frFont(.label)
@@ -227,13 +225,13 @@ private struct CheckEmailView: View {
     private func resendConfirmation() {
         guard !resend.isRunning else { return }
         localError = nil
-        guard securityCheck.isReady(environment.configuration) else {
-            localError = AuthMessages.captchaPending
-            return
-        }
-        let token = securityCheck.take()
         resent = false
         resend.run {
+            if let message = try await securityCheck.waitUntilReady(environment.configuration) {
+                localError = message
+                return
+            }
+            let token = securityCheck.take()
             try await session.resendConfirmation(email: email, captchaToken: token)
             resent = true
             Announcer.announce("Confirmation email sent.")

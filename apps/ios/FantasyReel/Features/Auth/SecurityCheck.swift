@@ -6,8 +6,11 @@ import WebKit
 /// The Cloudflare Turnstile token for one form (N-03), the native `useCaptcha`.
 ///
 /// Production Supabase requires a token on sign-up, password sign-in, reset and
-/// resend. Each token is single-use and consumed even when the request fails,
-/// so `take()` hands it over and starts a fresh challenge at the same time.
+/// resend. The check runs out of sight (Turnstile's `interaction-only`
+/// appearance): the widget appears only when Cloudflare wants the person to
+/// interact, and otherwise the token arrives without anything on screen.
+/// Each token is single-use and consumed even when the request fails, so
+/// `take()` hands it over and starts a fresh challenge at the same time.
 /// With no site key configured (local Supabase) the check is off: no widget
 /// is drawn and `take()` returns nil, which Supabase accepts there.
 @Observable
@@ -18,14 +21,28 @@ final class SecurityCheck {
     private(set) var resets = 0
     /// Bumped to reload the widget from scratch (Try Again).
     private(set) var reloads = 0
+    /// Cloudflare wants the person to interact, so the widget is on screen.
+    fileprivate(set) var needsInteraction = false
     /// The challenge script couldn't load (offline, content blocker).
     fileprivate(set) var loadFailed = false
 
-    /// Whether a form may submit now. Check it on submit and show
-    /// `AuthMessages.captchaPending` instead of disabling the button, so
-    /// VoiceOver users hear why nothing happened.
-    func isReady(_ configuration: AppConfiguration) -> Bool {
-        configuration.turnstileSiteKey == nil || token != nil
+    /// How long a submit waits for a check still running out of sight.
+    private static let tokenWait = Duration.seconds(10)
+    private static let pollInterval = Duration.milliseconds(100)
+
+    /// Waits briefly for a token when the check is still running out of
+    /// sight, so a quick submit (AutoFill) doesn't fail for something the
+    /// person can't see. Returns nil when the form may submit, otherwise the
+    /// message to show. Call it inside the form's `AsyncAction`, so the
+    /// button shows its loading state while it waits.
+    func waitUntilReady(_ configuration: AppConfiguration) async throws -> String? {
+        guard configuration.turnstileSiteKey != nil else { return nil }
+        let deadline = ContinuousClock.now + Self.tokenWait
+        while token == nil, !needsInteraction, !loadFailed, ContinuousClock.now < deadline {
+            try await Task.sleep(for: Self.pollInterval)
+        }
+        if token != nil { return nil }
+        return needsInteraction || loadFailed ? AuthMessages.captchaPending : AuthMessages.captchaSlow
     }
 
     /// The token for one request; the widget reloads for the next one.
@@ -36,6 +53,7 @@ final class SecurityCheck {
 
     func reset() {
         token = nil
+        needsInteraction = false
         if loadFailed {
             reload()
         } else {
@@ -45,6 +63,7 @@ final class SecurityCheck {
 
     func reload() {
         token = nil
+        needsInteraction = false
         loadFailed = false
         reloads += 1
     }
@@ -55,11 +74,38 @@ final class SecurityCheck {
     }
 }
 
-/// The Turnstile widget, or nothing when the security check is off. It lives in
-/// a locked-down web view whose only job is to produce the token: it loads one
-/// first-party page, allows no navigation except Cloudflare's challenge frames,
-/// and opens any link (Cloudflare's privacy and help pages) in Safari.
-struct SecurityCheckView: View {
+extension View {
+    /// Puts the security check directly above this view (the form's submit
+    /// button). It takes no space while the check runs out of sight, and
+    /// appears with its own spacing only when Cloudflare wants interaction
+    /// or the check couldn't load. Does nothing when the check is off.
+    func securityCheck(_ check: SecurityCheck) -> some View {
+        modifier(SecurityCheckPlacement(check: check))
+    }
+}
+
+private struct SecurityCheckPlacement: ViewModifier {
+    let check: SecurityCheck
+
+    @Environment(AppEnvironment.self) private var environment
+
+    func body(content: Content) -> some View {
+        if environment.configuration.turnstileSiteKey != nil {
+            VStack(spacing: check.needsInteraction || check.loadFailed ? FRMetrics.sectionSpacing : 0) {
+                SecurityCheckView(check: check)
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// The Turnstile widget. It lives in a locked-down web view whose only job is
+/// to produce the token: it loads one first-party page, allows no navigation
+/// except Cloudflare's challenge frames, and opens any link (Cloudflare's
+/// privacy and help pages) in Safari.
+private struct SecurityCheckView: View {
     let check: SecurityCheck
 
     @Environment(AppEnvironment.self) private var environment
@@ -71,6 +117,8 @@ struct SecurityCheckView: View {
 
     /// About the length of a navigation push.
     private static let mountDelay = Duration.milliseconds(400)
+    /// Turnstile's flexible widget height.
+    private static let widgetHeight: CGFloat = 65
 
     var body: some View {
         if let siteKey = environment.configuration.turnstileSiteKey {
@@ -91,16 +139,20 @@ struct SecurityCheckView: View {
                         Color.clear
                     }
                 }
-                .frame(height: 65)
+                // The web view keeps its full size while hidden: clipping it,
+                // rather than shrinking it, keeps WebKit from treating the
+                // challenge as off screen and throttling it.
+                .frame(height: Self.widgetHeight)
                 .frame(maxWidth: .infinity)
+                .frame(height: check.needsInteraction ? Self.widgetHeight : 0, alignment: .top)
+                .clipped()
+                .allowsHitTesting(check.needsInteraction)
+                .accessibilityHidden(!check.needsInteraction)
                 .task {
                     try? await Task.sleep(for: Self.mountDelay)
                     isMounted = true
                 }
-                if check.token != nil {
-                    AuthNote(systemImage: "checkmark.shield", text: "Security check passed")
-                        .frame(maxWidth: .infinity)
-                } else if check.loadFailed {
+                if check.loadFailed {
                     Text("The security check couldn't load. Check your connection, then try again.")
                         .frFont(.meta)
                         .foregroundStyle(Color.frError)
@@ -109,16 +161,23 @@ struct SecurityCheckView: View {
                         .buttonStyle(.fr(.secondary, size: .compact))
                 }
             }
+            .animation(.default, value: check.needsInteraction)
             // A theme change reloads the widget, so the token it gave is gone.
-            .onChange(of: colorScheme) { check.receive(nil) }
+            .onChange(of: colorScheme) {
+                check.receive(nil)
+                check.needsInteraction = false
+            }
         }
     }
 
     private func handle(_ event: TurnstileWebView.Event) {
         switch event {
         case .token(let token):
+            if check.needsInteraction { Announcer.announce("Security check passed.") }
             check.receive(token)
-            Announcer.announce("Security check passed.")
+        case .interactionRequired:
+            check.needsInteraction = true
+            Announcer.announce("Complete the security check.")
         case .expired, .failed:
             check.receive(nil)
         case .loadFailed:
@@ -154,7 +213,7 @@ enum SecurityCheckPrewarm {
 private struct TurnstileWebView: UIViewRepresentable {
     enum Event: Equatable {
         case token(String)
-        case expired, failed, loadFailed
+        case interactionRequired, expired, failed, loadFailed
     }
 
     let siteKey: String
@@ -235,8 +294,9 @@ private struct TurnstileWebView: UIViewRepresentable {
         function post(m){window.webkit.messageHandlers.\(Self.handlerName).postMessage(m)}
         function frReady(){
           window.frWidget=turnstile.render('#check',{
-            sitekey:\(key),theme:\(theme),size:'flexible',
+            sitekey:\(key),theme:\(theme),size:'flexible',appearance:'interaction-only',
             callback:function(t){post({type:'token',token:t})},
+            'before-interactive-callback':function(){post({type:'interactive'})},
             'expired-callback':function(){post({type:'expired'})},
             'error-callback':function(){post({type:'error'})}
           })
@@ -270,6 +330,8 @@ private struct TurnstileWebView: UIViewRepresentable {
             switch type {
             case "token":
                 if let token = body["token"] as? String, !token.isEmpty { onEvent?(.token(token)) }
+            case "interactive":
+                onEvent?(.interactionRequired)
             case "expired":
                 onEvent?(.expired)
             case "error":
