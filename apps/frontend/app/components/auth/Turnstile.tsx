@@ -7,7 +7,9 @@ interface TurnstileRenderOptions {
   sitekey: string
   theme: 'light' | 'dark'
   size: 'flexible' | 'compact'
+  appearance: 'interaction-only'
   callback: (token: string) => void
+  'before-interactive-callback': () => void
   'expired-callback': () => void
   'error-callback': () => void
 }
@@ -82,12 +84,14 @@ interface Props {
 /**
  * Cloudflare Turnstile widget. Renders nothing when
  * NEXT_PUBLIC_TURNSTILE_SITE_KEY is unset. Remount it (change its `key`) to
- * get a fresh token.
+ * get a fresh token. The check runs out of sight (`interaction-only`): the
+ * widget takes no space until Cloudflare wants the person to interact.
  */
 export default function Turnstile({ onToken, className = '' }: Props): React.ReactElement | null {
   const containerRef = useRef<HTMLDivElement>(null)
   const onTokenRef = useRef(onToken)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [interactive, setInteractive] = useState(false)
 
   useEffect(() => {
     onTokenRef.current = onToken
@@ -107,7 +111,9 @@ export default function Turnstile({ onToken, className = '' }: Props): React.Rea
           sitekey: TURNSTILE_SITE_KEY,
           theme: document.documentElement.dataset.theme === 'light' ? 'light' : 'dark',
           size: container.offsetWidth < FLEXIBLE_MIN_WIDTH ? 'compact' : 'flexible',
+          appearance: 'interaction-only',
           callback: (token) => onTokenRef.current(token),
+          'before-interactive-callback': () => setInteractive(true),
           'expired-callback': () => onTokenRef.current(null),
           'error-callback': () => onTokenRef.current(null),
         })
@@ -124,8 +130,12 @@ export default function Turnstile({ onToken, className = '' }: Props): React.Rea
 
   if (!CAPTCHA_ENABLED) return null
 
+  const visible = interactive || loadFailed
+
+  // Hidden, it keeps its width (the size choice above reads it) but no height,
+  // and mb-0 cancels the form's space-y gap so the layout matches no CAPTCHA.
   return (
-    <div className={className}>
+    <div className={visible ? className : 'mb-0 h-0 overflow-hidden'} aria-hidden={!visible}>
       <div ref={containerRef} className="flex min-h-[65px] justify-center" data-testid="turnstile-widget" />
       {loadFailed && (
         <p className="type-meta mt-2 text-error" role="alert">
