@@ -13,11 +13,10 @@ in the PR, since this folder is shared).
 - Movie rows: 64pt minimum, 36×54 poster, one-line title, a fixed 64pt trailing
   points column. Rows grow with Dynamic Type; nothing clips.
 - **One filled primary action per card** (`.frPrimary`); the rest secondary.
-- A glass "+" in the top bar instead of floating create buttons. On a league
-  tab root, add a case to `LeagueTabStack.primaryAction`, which passes it to
-  `leagueTopBar(primaryAction:)` so it gets its own glass button before the
-  bell. A toolbar added from inside the root merges into the `⋯` group on
-  iOS 26 instead.
+- A tab's main action ("Place Bid", "Propose Trade") goes in
+  `bottomActionBar`, pinned above the tab bar, never in a floating button or
+  the top bar. Keep it to the one or two actions the tab exists for and don't
+  repeat it in the page; actions about one row stay on that row.
 - Points are whole numbers with a sign: "+28", "−4" (U+2212), "0"; "Pending"
   when unscored; muted with "at release" before release.
 - One sheet per multi-step task (pushes inside the sheet, never sheet on sheet).
@@ -47,7 +46,8 @@ in the PR, since this folder is shared).
 | `.gbtn.glass` | `GlassIconButton` |
 | `.gpill.glass` | `GlassPill`; its content alone is `GlassPillLabel` (used by the toolbar pill) |
 | `.gbtn .cnt` (bell badge) | `.iconButtonBadge(count)` on the 44pt frame |
-| `.gnav` league top bar | `.leagueTopBar(primaryAction:)` (Navigation); a tab's "+" goes in `LeagueTabStack.primaryAction` |
+| `.gnav` league top bar | `.leagueTopBar()` (Navigation): pill, search when the tab bar is full, bell, `⋯` |
+| tab action bar | `.bottomActionBar { … }` |
 | adjacent glass controls | `GlassCluster` (`GlassEffectContainer`) |
 | `.cols` + `.statv` | `StatColumns([StatItem])` |
 | `.alert-i`, `.ai-*` | `InlineBanner(tone:title:message:)` |

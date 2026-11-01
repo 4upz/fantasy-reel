@@ -1,54 +1,20 @@
 import FantasyReelCore
 import SwiftUI
 
-/// The optional "+" in the league top bar (V2Trades "Propose trade", V2Bids
-/// "Place bid"): the first trailing button, before the bell and `⋯`.
-struct LeagueTopBarAction {
-    let accessibilityLabel: String
-    let systemImage: String
-    let action: @MainActor () -> Void
-
-    init(accessibilityLabel: String, systemImage: String = "plus", action: @escaping @MainActor () -> Void) {
-        self.accessibilityLabel = accessibilityLabel
-        self.systemImage = systemImage
-        self.action = action
-    }
-}
-
 extension View {
     /// The glass top bar on every league tab's root screen (mockup v2): the
-    /// league pill on the left opens the menu sheet; on the right, an optional
-    /// primary action ("+"), the notifications bell and the league `⋯` menu
-    /// (V2Trades/V2Bids order: +, bell, ⋯).
+    /// league pill on the left opens the menu sheet; on the right, the
+    /// notifications bell and the league `⋯` menu. When five league tabs fill
+    /// the tab bar, movie search is a button here too.
     ///
-    /// `LeagueTabStack` already applies this to every tab root; a tab that needs
-    /// a "+" gets a case in `LeagueTabStack.primaryAction`. When five league tabs
-    /// fill the tab bar, movie search is a button here too.
-    func leagueTopBar(primaryAction: LeagueTopBarAction? = nil) -> some View {
-        modifier(LeagueTopBarModifier(primaryAction: primaryAction))
-    }
-}
-
-/// The "+" button and the fixed spacer that separates it from the bell.
-private struct LeagueTopBarPrimaryItems: ToolbarContent {
-    let action: LeagueTopBarAction
-
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                action.action()
-            } label: {
-                Image(systemName: action.systemImage)
-            }
-            .accessibilityLabel(action.accessibilityLabel)
-        }
-        ToolbarSpacer(.fixed, placement: .topBarTrailing)
+    /// `LeagueTabStack` already applies this to every tab root. A tab's main
+    /// action ("Place Bid") goes in `bottomActionBar`, not here.
+    func leagueTopBar() -> some View {
+        modifier(LeagueTopBarModifier())
     }
 }
 
 private struct LeagueTopBarModifier: ViewModifier {
-    let primaryAction: LeagueTopBarAction?
-
     @Environment(\.leagueSelection) private var selection
     @Environment(ShellRouter.self) private var router
 
@@ -70,9 +36,6 @@ private struct LeagueTopBarModifier: ViewModifier {
                     }
                     .accessibilityLabel("Open menu: leagues, wishlist, account")
                     .accessibilityValue(selection?.season.name ?? "")
-                }
-                if let primaryAction {
-                    LeagueTopBarPrimaryItems(action: primaryAction)
                 }
                 if selection?.showsSearchTab == false {
                     ToolbarItem(placement: .topBarTrailing) {
@@ -96,7 +59,7 @@ private struct LeagueTopBarModifier: ViewModifier {
 }
 
 /// The bell with an unread count ("9+" cap), opening Notifications in the menu
-/// sheet. The badge sits at top −2 / right −2 of the 44pt button (V2Home).
+/// sheet. This is the only way into Notifications; the menu has no row for it. The badge sits at top −2 / right −2 of the 44pt button (V2Home).
 struct NotificationsButton: View {
     @Environment(ShellRouter.self) private var router
     @Environment(InboxStore.self) private var inbox

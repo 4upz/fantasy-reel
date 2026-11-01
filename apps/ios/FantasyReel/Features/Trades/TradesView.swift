@@ -46,6 +46,12 @@ struct TradesView: View {
             .padding(.bottom, 24)
         }
         .background(Color.frBackground)
+        .bottomActionBar(isPresented: canPropose) {
+            Button("Propose Trade", systemImage: "arrow.left.arrow.right") {
+                router.present(.proposeTrade(nil))
+            }
+            .buttonStyle(.fr(.primary, size: .large))
+        }
         .refreshable { await trades.refresh() }
     }
 

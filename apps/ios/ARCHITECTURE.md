@@ -105,8 +105,11 @@ initializer so the shell keeps compiling.
 - **Screen state is per season.** `LeagueShellView` is rebuilt when the league
   changes (`.id(season.id)`), so a tab root's `@State` model never outlives its
   season. Read the league from `\.leagueSelection`; don't cache the ID elsewhere.
-- **"+" in the top bar:** a tab root that creates something adds the glass "+" with
-  the `leagueTopBar` primary-action API in `LeagueTopBar.swift`, not a floating button.
+- **A tab's main action sits at the bottom:** a tab root whose whole page exists
+  for one or two actions ("Place Bid", "Propose Trade") pins them above the tab bar
+  with `bottomActionBar` (`DesignSystem/Components/BottomActionBar.swift`), in thumb
+  reach while the page scrolls. It is not repeated in the top bar or the page.
+- **Notifications open from the top-bar bell only**; the menu sheet has no row for them.
 - **Tab badges** (Bids: outbid count; Trades: offers waiting on you) are not wired
   yet. The Bids and Trades threads add `.badge(_:)` to their `Tab` in
   `LeagueShellView` from a small shell-level store; iOS draws both badges red.
@@ -139,8 +142,8 @@ initializer so the shell keeps compiling.
 
 16pt page margin · 22pt card radius, no card inside a card · 64pt movie rows with
 36×54 posters, one-line titles and a fixed 64pt trailing points column · one filled
-primary action per card · a glass "+" in the top bar instead of floating create
-buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
+primary action per card · a tab's main action in `bottomActionBar` above the tab
+bar, never a floating button · whole-number points ("+28", "−4") · one sheet per multi-step task.
 `DesignSystem/` implements these; prefer its components over new one-offs.
 
 ## Data and networking
