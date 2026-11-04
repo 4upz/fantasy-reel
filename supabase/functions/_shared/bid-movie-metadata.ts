@@ -1,7 +1,6 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { getMovieDetails, hasValidMovieMetadata, type MovieDetailsResponse } from './movie-details.ts'
+import { getMovieDetails, hasValidMovieMetadata, movieDetailsCacheKey, type MovieDetailsResponse } from './movie-details.ts'
 import { TMDbApiError } from './tmdb.ts'
-import { buildCacheKey } from './tmdb-cache.ts'
 import { serializeError, type Logger } from './logger.ts'
 
 /**
@@ -111,7 +110,7 @@ export async function resolveBidMovieForProcessing(
 
   const { data: row, error } = await client.from('tmdb_cache')
     .select('payload')
-    .eq('cache_key', buildCacheKey('movie_details', { tmdb_id: tmdbId }))
+    .eq('cache_key', movieDetailsCacheKey(tmdbId))
     .maybeSingle()
   const details = row?.payload as MovieDetailsResponse | undefined
   if (error || !details || !hasValidMovieMetadata(details, tmdbId)) return { kind: 'unavailable' }

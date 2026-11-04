@@ -227,6 +227,31 @@ Deno.test('sync-release-dates', async (t) => {
     }
   })
 
+  await t.step('stores the US release date, not the earlier worldwide one', async () => {
+    const db = baseDb()
+    db.movies[0].release_date = '2099-11-04'
+    const { client } = createSyncClient(db)
+    // Opens abroad on a Wednesday (TMDb's primary date), in the US that Friday.
+    const { calls, restore } = stubFetch((url) => url.includes('api.themoviedb.org')
+      ? new Response(JSON.stringify({
+        id: TMDB_ID, title: 'Fight Club', release_date: '2099-11-04', poster_path: null,
+        release_dates: { results: [
+          { iso_3166_1: 'PH', release_dates: [{ type: 3, release_date: '2099-11-04T00:00:00.000Z', certification: '' }] },
+          { iso_3166_1: 'US', release_dates: [{ type: 3, release_date: '2099-11-06T00:00:00.000Z', certification: 'PG' }] },
+        ] },
+      }), { status: 200 })
+      : undefined)
+
+    try {
+      const result = await runSyncReleaseDates(client, TMDB_TOKEN)
+      assertEquals(result, runResult({ movies_checked: 1, dates_changed: 1, leagues_notified: 1 }))
+      assertEquals(db.movies[0].release_date, '2099-11-06')
+      assertEquals(calls.filter((c) => c.url.includes('discord.com')).length, 1)
+    } finally {
+      restore()
+    }
+  })
+
   await t.step('ignores movies with no active roster holder', async () => {
     const db = baseDb()
     db.draft_picks = []
@@ -434,7 +459,7 @@ Deno.test('sync-release-dates', async (t) => {
     db.movies.push({ id: 'movie-2', tmdb_id: TMDB_ID + 1, title: 'Other movie', release_date: null, poster_url: null })
     db.pickups.push({ movie_id: 'movie-2', league_id: LEAGUE_ID, dropped_at: null, teams: { name: 'Team A' } })
     const { client } = createSyncClient(db)
-    const { restore } = stubFetch((url) => url.endsWith(`/${TMDB_ID}`)
+    const { restore } = stubFetch((url) => new URL(url).pathname.endsWith(`/${TMDB_ID}`)
       ? new Response('Unauthorized', { status: 401 })
       : new Response(JSON.stringify({ id: TMDB_ID + 1, title: 'Other movie', poster_path: '/new-poster.jpg' }), { status: 200 }))
     try {
@@ -498,7 +523,7 @@ Deno.test('sync-release-dates', async (t) => {
         movies_checked: 1, posters_updated: 1, deferred: 1,
         resume_after: { movie_id: MOVIE_ID, date_check: true },
       }))
-      assertEquals(calls.map((c) => c.url), [`https://api.themoviedb.org/3/movie/${TMDB_ID}`])
+      assertEquals(calls.map((c) => c.url), [`https://api.themoviedb.org/3/movie/${TMDB_ID}?append_to_response=release_dates`])
       assertEquals(db.movies[0].poster_url, 'https://image.tmdb.org/t/p/w500/new-poster.jpg')
       assertEquals(db.movies[1].poster_url, null)
     } finally {
@@ -533,7 +558,7 @@ Deno.test('sync-release-dates', async (t) => {
     db.pickups.push(...['movie-2', 'movie-0'].map((movie_id) => ({ movie_id, league_id: LEAGUE_ID, dropped_at: null })))
     const { client } = createSyncClient(db)
     const { calls, restore } = stubFetch((url) => new Response(JSON.stringify({
-      id: Number(url.split('/').pop()), title: 'Movie', release_date: today, poster_path: '/existing.jpg',
+      id: Number(new URL(url).pathname.split('/').pop()), title: 'Movie', release_date: today, poster_path: '/existing.jpg',
     })))
     try {
       const results = []
@@ -548,7 +573,7 @@ Deno.test('sync-release-dates', async (t) => {
           metadata: { sync_release_dates_progress: { resume_after: result.resume_after } },
         })
       }
-      assertEquals(calls.map((call) => Number(call.url.split('/').pop())), [550, 551, 552, 550])
+      assertEquals(calls.map((call) => Number(new URL(call.url).pathname.split('/').pop())), [550, 551, 552, 550])
       assertEquals(results.map((result) => result.deferred), [2, 1, 0, 1])
       assertEquals(results[2].resume_after, null)
       assertEquals(db.movies[2].poster_url, 'https://image.tmdb.org/t/p/w500/existing.jpg')

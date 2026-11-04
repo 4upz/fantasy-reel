@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects, assertThrows } from '@std/assert'
+import { assert, assertEquals, assertRejects, assertThrows } from '@std/assert'
 import { DraftMovieMetadataError, resolveDraftMovieMetadata, toDraftMovieMetadata } from './draft-movie-metadata.ts'
 import type { MovieDetailsResponse } from './movie-details.ts'
 import { createLogger } from './logger.ts'
@@ -71,6 +71,25 @@ Deno.test({
         assertEquals(metadata.poster_url, 'https://image.tmdb.org/t/p/w500/verified.jpg')
         assertEquals(metadata.release_date, today)
         assertEquals(calls.filter(call => call.url.includes('api.themoviedb.org')).length, 1)
+      } finally { restore() }
+    })
+
+    await t.step('stores the US release date, not an earlier opening abroad', async () => {
+      const usDate = new Date(Date.parse(today) + 2 * 86_400_000).toISOString().slice(0, 10)
+      const { calls, restore } = stubFetch(url => url.includes('api.themoviedb.org')
+        ? new Response(JSON.stringify({
+          id: 322, title: 'Opens Abroad First', release_date: today, status: 'Planned',
+          genres: [], credits: { cast: [], crew: [] },
+          release_dates: { results: [
+            { iso_3166_1: 'PH', release_dates: [{ type: 3, release_date: `${today}T00:00:00.000Z`, certification: '' }] },
+            { iso_3166_1: 'US', release_dates: [{ type: 3, release_date: `${usDate}T00:00:00.000Z`, certification: '' }] },
+          ] },
+        }), { status: 200 })
+        : new Response('[]', { status: 200 }))
+      try {
+        const metadata = await resolveDraftMovieMetadata(322, seasonYear, log)
+        assertEquals(metadata.release_date, usDate)
+        assert(calls.some(call => call.url.includes('append_to_response=credits,release_dates')))
       } finally { restore() }
     })
 
