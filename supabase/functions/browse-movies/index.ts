@@ -5,6 +5,7 @@ import { buildCacheKey, cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-
 import { discoveryPage, releaseDateRange } from '../_shared/movie-discovery.ts'
 import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
 import { getMovieDetails } from '../_shared/movie-details.ts'
+import { mapConcurrent } from '../_shared/concurrency.ts'
 
 const log = createLogger('browse-movies')
 
@@ -72,6 +73,12 @@ function transformResults(movies: TMDbMovie[]): BrowseResult[] {
 
 const DISCOVER_TTL_SECONDS = 30 * 60
 const TRENDING_TTL_SECONDS = 12 * 60 * 60
+/**
+ * Details lookups in flight per trending page. Concurrent page loads (scroll,
+ * the daily key rollover) must stay clear of TMDb's rate limit: a 429 keeps a
+ * movie's primary date in a page cached for TRENDING_TTL_SECONDS.
+ */
+const TRENDING_DATE_LOOKUP_CONCURRENCY = 5
 
 type BrowsePage = ReturnType<typeof discoveryPage<BrowseResult>>
 
@@ -85,7 +92,7 @@ type BrowsePage = ReturnType<typeof discoveryPage<BrowseResult>>
  * the primary date rather than failing the page.
  */
 function withUsReleaseDates(movies: BrowseResult[], seasonYear: number): Promise<BrowseResult[]> {
-  return Promise.all(movies.map(async (movie) => {
+  return mapConcurrent(movies, TRENDING_DATE_LOOKUP_CONCURRENCY, async (movie) => {
     if (!movie.release_date || Number(movie.release_date.slice(0, 4)) < seasonYear) return movie
     try {
       const { release_date } = await getMovieDetails(movie.tmdb_id, log)
@@ -93,7 +100,7 @@ function withUsReleaseDates(movies: BrowseResult[], seasonYear: number): Promise
     } catch {
       return movie
     }
-  }))
+  })
 }
 
 // One client page is exactly one upstream page. This preserves every result

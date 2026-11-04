@@ -11,6 +11,7 @@ import { createLogger, serializeError } from '../_shared/logger.ts'
 import { throttleUser } from '../_shared/rate-limit.ts'
 import { buildCacheKey, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
 import { tmdbGetJson } from '../_shared/tmdb.ts'
+import { mapConcurrent } from '../_shared/concurrency.ts'
 import { fetchMDBListRatings } from '../_shared/scoring.ts'
 import {
   historyForMovie,
@@ -282,24 +283,6 @@ async function resolveHistory(
   return historyForMovie(await recordPromise, ref)
 }
 
-/** Runs `worker` over `items` with at most `limit` in flight. */
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T) => Promise<R>
-): Promise<R[]> {
-  const results: R[] = new Array(items.length)
-  let next = 0
-  async function drain(): Promise<void> {
-    while (next < items.length) {
-      const index = next++
-      results[index] = await worker(items[index])
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, drain))
-  return results
-}
-
 function parseTmdbIds(body: unknown): number[] | null {
   const ids = (body as Partial<GetFranchiseHistoryRequest> | null)?.tmdb_ids
   if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_IDS_PER_REQUEST) return null
@@ -342,7 +325,7 @@ Deno.serve(async (req) => {
 
     // One movie failing (deleted on TMDb, a rate limit on a cache miss) must
     // not blank the whole grid: it answers null and the rest still render.
-    const results = await mapWithConcurrency(tmdbIds, CONCURRENCY, async (tmdbId) => {
+    const results = await mapConcurrent(tmdbIds, CONCURRENCY, async (tmdbId) => {
       try {
         return await resolveHistory(tmdbId, tmdbToken, mdblistApiKey, collectionRecords)
       } catch (error) {
