@@ -1,11 +1,12 @@
 import { buildCacheKey, cachedTmdbFetch } from './tmdb-cache.ts'
 import { TMDbApiError, tmdbGetJson } from './tmdb.ts'
+import { usReleaseDate, type TMDbReleaseDates } from './us-release-date.ts'
 import type { Logger } from './logger.ts'
 
 /**
- * The `/3/movie/{id}?append_to_response=credits` payload: the movie fields
- * plus a nested `credits` object. Appending is one round trip instead of the
- * two sequential calls this used to make, and TMDb bills it as one request.
+ * The `/3/movie/{id}?append_to_response=credits,release_dates` payload: the
+ * movie fields plus nested `credits` and per-country `release_dates`.
+ * Appending is one round trip, and TMDb bills it as one request.
  */
 interface TMDbMovieDetails {
   id: number
@@ -25,6 +26,7 @@ interface TMDbMovieDetails {
   genres: Array<{ id: number; name: string }>
   production_companies: Array<{ id: number; name: string }>
   credits?: TMDbCredits
+  release_dates?: TMDbReleaseDates
 }
 
 interface TMDbCredits {
@@ -56,6 +58,7 @@ export interface MovieDetailsResponse {
   title: string
   tagline: string | null
   overview: string | null
+  /** The US release date (`usReleaseDate`), not TMDb's worldwide primary date. */
   release_date: string | null
   runtime: number | null
   status: string
@@ -108,7 +111,7 @@ function toMovieDetailsResponse(movieDetails: TMDbMovieDetails): MovieDetailsRes
     title: movieDetails.title,
     tagline: movieDetails.tagline,
     overview: movieDetails.overview,
-    release_date: movieDetails.release_date,
+    release_date: usReleaseDate(movieDetails.release_dates, movieDetails.release_date),
     runtime: movieDetails.runtime,
     status: movieDetails.status,
     poster_url: movieDetails.poster_path
@@ -126,7 +129,7 @@ function toMovieDetailsResponse(movieDetails: TMDbMovieDetails): MovieDetailsRes
 }
 
 async function fetchMovieDetails(tmdbId: number, tmdbToken: string): Promise<MovieDetailsResponse> {
-  const url = `https://api.themoviedb.org/3/movie/${tmdbId}?language=en-US&append_to_response=credits`
+  const url = `https://api.themoviedb.org/3/movie/${tmdbId}?language=en-US&append_to_response=credits,release_dates`
   const details = toMovieDetailsResponse(await tmdbGetJson<TMDbMovieDetails>(url, tmdbToken))
   // Reject malformed successful responses before the shared cache can retain them.
   if (!hasValidMovieMetadata(details, tmdbId)) {
@@ -145,6 +148,15 @@ export function hasValidMovieMetadata(details: MovieDetailsResponse, tmdbId: num
     !Number.isNaN(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date
 }
 
+/**
+ * The tmdb_cache key for a movie's details. `release: 'us'` versions it: rows
+ * cached before release_date became the US date hold the worldwide one, and
+ * must not be served (or used as process-bids' outage fallback) after it.
+ */
+export function movieDetailsCacheKey(tmdbId: number): string {
+  return buildCacheKey('movie_details', { tmdb_id: tmdbId, release: 'us' })
+}
+
 export class MovieDetailsUnavailableError extends Error {
   constructor() { super('Movie details service not configured') }
 }
@@ -152,7 +164,7 @@ export class MovieDetailsUnavailableError extends Error {
 /** Shared trusted source for previews and draft eligibility. Cache hits need no token. */
 export function getMovieDetails(tmdbId: number, log: Logger): Promise<MovieDetailsResponse> {
   return cachedTmdbFetch<MovieDetailsResponse>(
-    buildCacheKey('movie_details', { tmdb_id: tmdbId }),
+    movieDetailsCacheKey(tmdbId),
     ttlSecondsFor,
     () => {
       const token = Deno.env.get('TMDB_API_KEY')

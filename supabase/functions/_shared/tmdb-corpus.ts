@@ -9,6 +9,9 @@
  */
 import { tmdbGetJson, TMDbApiError } from './tmdb.ts'
 import { labelForCompanies } from './film-labels.ts'
+import { earliestUsDate, usReleases, type TMDbReleaseDates } from './us-release-date.ts'
+
+export type { TMDbReleaseDates }
 
 const TMDB = 'https://api.themoviedb.org/3'
 
@@ -68,17 +71,6 @@ export interface CorpusMetadata {
   people: CorpusPerson[]
 }
 
-interface TMDbReleaseDate {
-  type: number
-  release_date: string
-  certification: string
-  note?: string
-}
-
-export interface TMDbReleaseDates {
-  results: Array<{ iso_3166_1: string; release_dates: TMDbReleaseDate[] }>
-}
-
 /** The `/movie/{id}?append_to_response=credits,release_dates,keywords` payload, the parts we read. */
 export interface TMDbCorpusDetails {
   id: number
@@ -118,23 +110,10 @@ function stub(m: TMDbListMovie, seed_source: SeedSource, priority: number): Corp
   }
 }
 
-function usReleases(releaseDates: TMDbReleaseDates | undefined): TMDbReleaseDate[] {
-  return releaseDates?.results.find((r) => r.iso_3166_1 === 'US')?.release_dates ?? []
-}
-
 /** Wide (3) beats limited (2) beats digital (4); any other US type as-is; null when no US entry. */
 export function usReleaseType(releaseDates: TMDbReleaseDates | undefined): number | null {
   const types = usReleases(releaseDates).map((r) => r.type)
   return [3, 2, 4].find((t) => types.includes(t)) ?? types[0] ?? null
-}
-
-/** Earliest US date (YYYY-MM-DD) of one release type, or null. */
-function earliestUsDate(releaseDates: TMDbReleaseDates | undefined, type: number): string | null {
-  const dates = usReleases(releaseDates)
-    .filter((r) => r.type === type && r.release_date)
-    .map((r) => r.release_date.slice(0, 10))
-    .sort()
-  return dates[0] ?? null
 }
 
 function usCertification(releaseDates: TMDbReleaseDates | undefined): string | null {

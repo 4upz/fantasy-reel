@@ -8,7 +8,8 @@
  * leagues whose season is not over. For movies with a future or recent
  * release date it updates changed release dates and notifies each league
  * that rosters the movie; for those, and for any rostered movie still
- * missing a poster, it refreshes poster artwork from TMDb.
+ * missing a poster, it refreshes poster artwork from TMDb. Release dates are
+ * the US date (`usReleaseDate`), the same one draft-pick and place-bid store.
  *
  * The candidate set is bounded on purpose. Completed seasons stay in
  * team_holdings forever, so the job skips them (as score_update_candidates
@@ -34,6 +35,7 @@ import { sendDiscordNotification, DISCORD_COLORS, DISCORD_MAX_EMBED_FIELDS, buil
 import { groupHoldingsByMovie } from '../_shared/roster-holdings.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { usReleaseDate, type TMDbReleaseDates } from '../_shared/us-release-date.ts'
 
 const log = createLogger('sync-release-dates')
 
@@ -107,6 +109,7 @@ interface HoldingRow {
 interface TmdbMovie {
   release_date?: string | null
   poster_path?: string | null
+  release_dates?: TMDbReleaseDates
 }
 
 type TmdbLookup =
@@ -192,7 +195,7 @@ async function fetchTmdbMovie(
 ): Promise<TmdbLookup> {
   try {
     const response = await fetchWithRetry(
-      `https://api.themoviedb.org/3/movie/${tmdbId}`,
+      `https://api.themoviedb.org/3/movie/${tmdbId}?append_to_response=release_dates`,
       {
         signal,
         headers: {
@@ -311,7 +314,7 @@ export async function runSyncReleaseDates(
     }
 
     const previousDate = movie.release_date
-    const newDate = lookup.movie.release_date
+    const newDate = usReleaseDate(lookup.movie.release_dates, lookup.movie.release_date)
     const dateChanged = previousDate !== null && previousDate >= cutoffDate
       && typeof newDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(newDate) && newDate !== previousDate
     const posterPath = lookup.movie.poster_path

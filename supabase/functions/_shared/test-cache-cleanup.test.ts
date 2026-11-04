@@ -1,7 +1,7 @@
 import { assert, assertEquals, assertRejects } from '@std/assert'
 import { createClient } from '@supabase/supabase-js'
 import { cleanupDraftMovieCache } from '../tests/_setup.ts'
-import { buildCacheKey } from './tmdb-cache.ts'
+import { movieDetailsCacheKey } from './movie-details.ts'
 
 function cleanupClient(respond: (call: number) => Response = () => new Response(null, { status: 204 })) {
   const calls: URL[] = []
@@ -36,7 +36,7 @@ Deno.test('draft cache cleanup bounds actual SDK URLs and deletes every tracked 
   const { client, calls } = cleanupClient()
   await cleanupDraftMovieCache(client, ids)
   assert(calls.length > 1, 'large factories require multiple requests')
-  assertEquals(requestedKeys(calls), ids.map(tmdb_id => buildCacheKey('movie_details', { tmdb_id })))
+  assertEquals(requestedKeys(calls), ids.map(tmdb_id => movieDetailsCacheKey(tmdb_id)))
   const count = calls.length
   await cleanupDraftMovieCache(client, [])
   assertEquals(calls.length, count, 'an empty factory must not issue an unfiltered delete')
@@ -49,7 +49,7 @@ Deno.test('draft cache cleanup attempts later batches and retains every cleanup 
     : new Response(null, { status: 204 }))
   const error = await assertRejects(() => cleanupDraftMovieCache(client, ids), AggregateError,
     'Failed to clean up draft movie cache')
-  assertEquals(requestedKeys(calls), ids.map(tmdb_id => buildCacheKey('movie_details', { tmdb_id })))
+  assertEquals(requestedKeys(calls), ids.map(tmdb_id => movieDetailsCacheKey(tmdb_id)))
   assertEquals(error.errors.map(failure => failure.message), ['Rejected batch 1', 'Rejected batch 3'])
   assertEquals(error.errors.map(failure => failure.cause.code), ['TEST1', 'TEST3'])
 })
