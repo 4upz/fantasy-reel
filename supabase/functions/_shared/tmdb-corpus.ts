@@ -9,9 +9,7 @@
  */
 import { tmdbGetJson, TMDbApiError } from './tmdb.ts'
 import { labelForCompanies } from './film-labels.ts'
-import { earliestUsDate, usReleases, type TMDbReleaseDates } from './us-release-date.ts'
-
-export type { TMDbReleaseDates }
+import { earliestUsDate, RELEASE_TYPE, usReleases, type TMDbReleaseDates } from './us-release-date.ts'
 
 const TMDB = 'https://api.themoviedb.org/3'
 
@@ -23,7 +21,7 @@ const STORED_CAST_LIMIT = 5
 export const LEAD_CAST_LIMIT = 3
 
 /** US release types the corpus samples: 2 limited, 3 wide theatrical, 4 digital premiere. */
-export const CORPUS_RELEASE_TYPES = [2, 3, 4] as const
+export const CORPUS_RELEASE_TYPES = [RELEASE_TYPE.limited, RELEASE_TYPE.wide, RELEASE_TYPE.digital] as const
 /** Seed rules: features a league could actually draft, minus junk rows. */
 export const MIN_RUNTIME_MINUTES = 70
 
@@ -113,7 +111,7 @@ function stub(m: TMDbListMovie, seed_source: SeedSource, priority: number): Corp
 /** Wide (3) beats limited (2) beats digital (4); any other US type as-is; null when no US entry. */
 export function usReleaseType(releaseDates: TMDbReleaseDates | undefined): number | null {
   const types = usReleases(releaseDates).map((r) => r.type)
-  return [3, 2, 4].find((t) => types.includes(t)) ?? types[0] ?? null
+  return [RELEASE_TYPE.wide, RELEASE_TYPE.limited, RELEASE_TYPE.digital].find((t) => types.includes(t)) ?? types[0] ?? null
 }
 
 function usCertification(releaseDates: TMDbReleaseDates | undefined): string | null {
@@ -183,9 +181,9 @@ export function toCorpusMetadata(d: TMDbCorpusDetails): CorpusMetadata {
     if (c.order < STORED_CAST_LIMIT) push({ tmdb_person_id: c.id, name: c.name, role: 'cast', billing: c.order })
   }
 
-  const us_wide_date = earliestUsDate(d.release_dates, 3)
-  const us_limited_date = earliestUsDate(d.release_dates, 2)
-  const us_digital_date = earliestUsDate(d.release_dates, 4)
+  const us_wide_date = earliestUsDate(d.release_dates, RELEASE_TYPE.wide)
+  const us_limited_date = earliestUsDate(d.release_dates, RELEASE_TYPE.limited)
+  const us_digital_date = earliestUsDate(d.release_dates, RELEASE_TYPE.digital)
   const companies = d.production_companies ?? []
 
   return {

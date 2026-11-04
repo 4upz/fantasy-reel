@@ -30,7 +30,7 @@ export const RELEASE_TYPE = { limited: 2, wide: 3, digital: 4 } as const
  * before its wide date; IMAX early-access and fan-event screenings land a few
  * days before it, and are not when the movie came out.
  */
-export const PLATFORM_RELEASE_LEAD_DAYS = 7
+const PLATFORM_RELEASE_LEAD_DAYS = 7
 
 export function usReleases(releaseDates: TMDbReleaseDates | undefined | null): TMDbReleaseDate[] {
   return releaseDates?.results?.find((r) => r.iso_3166_1 === 'US')?.release_dates ?? []
@@ -58,6 +58,10 @@ function daysBetween(earlier: string, later: string): number {
  * 3. A US digital/streaming premiere, for movies with no US theatrical run.
  * 4. `fallback` (TMDb's primary date) when TMDb lists no US release yet, so a
  *    movie without US distribution stays as draftable as it was before.
+ *
+ * Projections' `film_corpus.effective_release_date` takes the wide date first
+ * on purpose (a model feature, not when points start); the two differ only
+ * for platform releases.
  */
 export function usReleaseDate(
   releaseDates: TMDbReleaseDates | undefined | null,
