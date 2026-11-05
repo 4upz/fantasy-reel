@@ -58,8 +58,6 @@ struct ResetPasswordView: View {
                     )
                 }
 
-                SecurityCheckView(check: securityCheck)
-
                 if let message = localError ?? send.errorMessage {
                     InlineBanner(tone: .error, title: message)
                 }
@@ -69,6 +67,7 @@ struct ResetPasswordView: View {
                 }
                 .buttonStyle(.fr(sent ? .secondary : .primary, isLoading: send.isRunning))
                 .disabled(trimmedEmail.isEmpty || send.isRunning)
+                .securityCheck(securityCheck)
 
                 SectionHeader("Link Expired?")
                 Text("Reset links work once. If you asked for more than one, use the newest email, or send a fresh link above.")
@@ -103,13 +102,13 @@ struct ResetPasswordView: View {
             localError = AuthMessages.invalidEmail
             return
         }
-        guard securityCheck.isReady(environment.configuration) else {
-            localError = AuthMessages.captchaPending
-            return
-        }
         let email = trimmedEmail
-        let token = securityCheck.take()
         send.run {
+            if let message = try await securityCheck.waitUntilReady(environment.configuration) {
+                localError = message
+                return
+            }
+            let token = securityCheck.take()
             try await session.sendPasswordReset(email: email, captchaToken: token)
             sent = true
             // The new link supersedes whatever the failed one was about.

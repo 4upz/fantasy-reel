@@ -10,7 +10,7 @@ import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
-import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '../../components/auth/Turnstile'
+import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
 import { useHydrated } from '@/hooks/useHydrated'
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!captcha.ready) {
-      setError(CAPTCHA_PENDING_MESSAGE)
+      setError(captcha.pendingMessage)
       return
     }
 
@@ -110,7 +110,7 @@ export default function LoginPage() {
   async function handleResend() {
     if (!lastEmail) return
     if (!captcha.ready) {
-      setError(CAPTCHA_PENDING_MESSAGE)
+      setError(captcha.pendingMessage)
       return
     }
 
@@ -214,7 +214,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+            <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} onVisibleChange={captcha.setVisible} />
 
             <button
               ref={submitRef}

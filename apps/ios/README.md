@@ -95,9 +95,14 @@ are. Two pieces need settings from outside the repo:
   A free personal team can't sign this capability for a phone. If Xcode
   reports a signing error about it, add `CODE_SIGN_ENTITLEMENTS =` to
   `Config/Local.xcconfig`; everything except the Apple button keeps working.
-- **The security check (CAPTCHA)** only appears when `TURNSTILE_SITE_KEY` is
+- **The security check (CAPTCHA)** only runs when `TURNSTILE_SITE_KEY` is
   set. Local Supabase has CAPTCHA off, so Debug leaves it empty. Production
-  requires it (see the release checklist).
+  requires it (see the release checklist). It runs out of sight (Turnstile's
+  `interaction-only` appearance on the Managed widget): the widget shows above
+  the submit button only when Cloudflare wants the person to interact. To see
+  that state, use Cloudflare's test site key `3x00000000000000000000FF`
+  (always asks for interaction); `1x00000000000000000000BB` always passes
+  without showing anything.
 
 ## Screenshots for pull requests
 
