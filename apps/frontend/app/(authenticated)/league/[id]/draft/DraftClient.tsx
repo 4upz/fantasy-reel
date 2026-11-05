@@ -208,7 +208,7 @@ export default function DraftClient({
     leagueStatus: league.status,
     newPlayer,
     draftComplete: isDraftComplete,
-    draftCounterpicks: league.draft_counterpick_slots > 0,
+    doublePoints: league.double_points_over_90,
     hasTeam: participants.some((participant) => participant.user_id === currentUserId),
   }
 

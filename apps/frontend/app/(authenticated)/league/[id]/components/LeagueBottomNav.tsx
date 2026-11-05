@@ -121,9 +121,7 @@ export default function LeagueBottomNav({
                     </>
                   )}
                 </span>
-                {tab.name === 'Settings'
-                  ? <span className="type-meta" data-tour="settings-tab">{tab.name}</span>
-                  : <span className="type-meta">{tab.name}</span>}
+                <span className="type-meta">{tab.name}</span>
               </Link>
             )
           })}

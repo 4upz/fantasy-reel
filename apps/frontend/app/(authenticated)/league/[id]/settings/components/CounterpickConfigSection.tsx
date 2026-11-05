@@ -88,7 +88,7 @@ export default function CounterpickConfigSection({
   }
 
   return (
-    <section className="card p-6" data-tour="settings-counterpicks">
+    <section className="card p-6">
       <SectionHeader
         icon={Target}
         title="Counterpick Configuration"
@@ -104,7 +104,7 @@ export default function CounterpickConfigSection({
         <form onSubmit={handleSubmit}>
           <div className="space-y-6">
             {/* Counterpick Slots */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-tour="settings-counterpicks">
               <NumberField
                 id="draft_counterpick_slots"
                 label="Draft counterpick slots"

@@ -121,7 +121,7 @@ export default function BiddingConfigSection({
   }
 
   return (
-    <section className="card p-6" data-tour="settings-roster">
+    <section className="card p-6">
       <SectionHeader
         icon={Package}
         title="Bidding Configuration"
@@ -137,7 +137,7 @@ export default function BiddingConfigSection({
         <form onSubmit={handleSubmit}>
           <div className="space-y-6">
             {/* Slot Configuration */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4" data-tour="settings-roster">
               <NumberField
                 id="total_slots"
                 label="Total roster slots"
