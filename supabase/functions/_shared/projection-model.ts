@@ -574,7 +574,7 @@ export interface ProjectOptions {
   computedAt?: string
 }
 
-const LOW_CONFIDENCE_WIDTH = 10
+const LOW_CONFIDENCE_WIDTH = 15
 const INSUFFICIENT_COVERAGE = 0.25
 
 const round = (value: number, places: number) => {

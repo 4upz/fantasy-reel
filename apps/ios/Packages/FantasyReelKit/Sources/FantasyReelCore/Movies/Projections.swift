@@ -181,7 +181,7 @@ public enum MovieProjectionsResponse: Sendable, Hashable, Decodable {
 public enum ProjectionText {
     public static let breakEven: Double = 60
     /// A middle-50% range wider than this is no help as a range.
-    public static let maxRangeWidth: Double = 10
+    public static let maxRangeWidth: Double = 15
     public static let disclaimer =
         "Projections are a Beta estimate from genre, filmmakers, cast and franchise history. They never count toward your total."
     public static let rangeExplainer =

@@ -69,7 +69,7 @@ test('a tight range reads as the middle-50% range', () => {
   assert.equal(projections.projectionChipLabel(state), 'Proj. 68–78%')
 })
 
-test('a range wider than 10 points falls back to the point estimate, tagged', () => {
+test('a range wider than 15 points falls back to the point estimate, tagged', () => {
   const wide = projections.projectionChipState(projection({ range50: [60, 80.5], projected_rt: 73.6 }))
   same(wide, { kind: 'point', value: 74, lowConfidence: true })
   assert.equal(projections.projectionChipLabel(wide), 'Proj. 74%')
