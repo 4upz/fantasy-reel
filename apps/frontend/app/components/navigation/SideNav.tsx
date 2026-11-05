@@ -201,7 +201,7 @@ export default function SideNav({ user, profile }: Props): React.ReactElement {
         left-to-right order (menu, logo, bell, account), and it is a named
         region so screen-reader users can jump to it like the other landmarks.
       */}
-      <section className="profile-cluster" aria-label="Notifications and account">
+      <section className="profile-cluster" aria-label="Notifications and account" data-tour-inset="top">
         <NotificationBell />
         <span className="profile-cluster-divider" aria-hidden="true" />
         <ProfileMenu displayName={displayName} email={user.email} avatarUrl={profile?.avatar_url} />

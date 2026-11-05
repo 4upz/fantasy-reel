@@ -50,8 +50,12 @@ export function describeAnchor(element: HTMLElement): string {
  * `data-tour-inset="top"` (the mobile header, the pinned league header),
  * `data-tour-inset="bottom"` (the mobile tab bar) and `data-tour-inset="left"`
  * (the desktop side navigation). Only what is on screen counts, and only while
- * it is pinned (fixed or sticky).
+ * it is pinned (fixed or sticky). A piece floating just off the edge, like the
+ * desktop account capsule, counts as touching it.
  */
+/** How far from the edge (or the piece before it) chrome may float and still count. */
+const FLOATING_GAP = 16
+
 export function measureInsets(): Insets {
   const viewportHeight = window.innerHeight
   const rects = (edge: 'top' | 'bottom' | 'left') =>
@@ -63,7 +67,7 @@ export function measureInsets(): Insets {
   // outward from each edge and keep extending while the next piece touches.
   let top = 0
   for (const rect of rects('top').sort((a, b) => a.top - b.top)) {
-    if (rect.top <= top + 1) top = Math.max(top, rect.bottom)
+    if (rect.top <= top + FLOATING_GAP) top = Math.max(top, rect.bottom)
   }
   let bottom = 0
   for (const rect of rects('bottom').sort((a, b) => b.bottom - a.bottom)) {

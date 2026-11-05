@@ -203,3 +203,27 @@ export function placeCard(
     maxHeight,
   }
 }
+
+/**
+ * How far to scroll so the card no longer covers the element it points at,
+ * given both as they sit now. On a phone the card is docked: the element goes
+ * to the free part of the screen, its top first when it's too tall to fit.
+ * When no side of a desktop element had room, the element goes to the top of the
+ * free band with room for the card below it; when the two can't fit one
+ * above the other, it stays put and the card keeps to the roomier edge.
+ */
+export function scrollClearOfCard(anchor: Box, card: Box, viewport: Size, insets: Insets = { top: 0, bottom: 0 }): number {
+  const bandTop = insets.top + VIEWPORT_MARGIN
+  const bandBottom = viewport.height - insets.bottom - VIEWPORT_MARGIN
+  const cardTop = card.top
+  const cardBottom = card.top + card.height
+  if (viewport.width < DOCK_BELOW_WIDTH) {
+    // Moving the element further toward the edge it's near keeps the card
+    // docked where it is, so this settles in one scroll.
+    return cardTop > viewport.height / 2
+      ? Math.min(anchor.top + anchor.height - (cardTop - VIEWPORT_MARGIN), anchor.top - bandTop)
+      : anchor.top - (cardBottom + VIEWPORT_MARGIN)
+  }
+  if (anchor.height + ANCHOR_GAP + card.height > bandBottom - bandTop) return 0
+  return anchor.top - bandTop
+}
