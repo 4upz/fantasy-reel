@@ -21,6 +21,7 @@ import ChampionBanner from '../components/ChampionBanner'
 import BetaBadge from '@/app/components/projections/BetaBadge'
 import { useProjectedStandings, type ProjectedStandingInputs } from '@/hooks/useProjectedStandings'
 import ProjectedStandingsTable from './ProjectedStandingsTable'
+import { FeatureTour, TourButton } from '@/components/tours'
 
 interface Props {
   participants: ParticipantWithTeamScore[]
@@ -262,6 +263,10 @@ export default function StandingsClient({
   // squashed instead of adding to the scroll length.
   return (
     <div className="animate-fade-in lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-5">
+      <FeatureTour
+        id="standings"
+        ctx={{ leagueStatus: isCompleted ? 'completed' : 'active' }}
+      />
       <div className="flex flex-col gap-3" data-testid="standings-container">
       {isCompleted && (
         <div className="flex-none">
@@ -281,11 +286,12 @@ export default function StandingsClient({
           Final <span aria-hidden="true">·</span><span className="sr-only">,</span> {seasonYear} season
         </p>
       )}
-      <div className="grid flex-none grid-cols-3 gap-2">
+      <div className="grid flex-none grid-cols-3 gap-2" data-tour="standings-summary">
         <SummaryCard value={summaryStats.totalMovies} label="Movies" tone="text-gold" />
         <SummaryCard value={summaryStats.moviesScored} label="Scored" tone="text-success" />
         <SummaryCard value={summaryStats.moviesPending} label="Pending" tone="text-foreground-secondary" />
       </div>
+      <TourButton className="flex-none self-end" />
 
       {/* No Scores Yet Alert. Never on a completed season: nothing is coming,
           and the banner has already said the season is over. */}
@@ -298,7 +304,7 @@ export default function StandingsClient({
             <div>
               <p className="font-medium">No points counted yet</p>
               <p className="type-body-sm mt-1">
-                Scores update nightly, and a movie&apos;s points count once it releases. Check back after movies in your draft have been released!
+                Scores update every day, and a movie&apos;s points count once it releases. Check back after movies in your draft have been released!
               </p>
             </div>
           </div>
@@ -342,7 +348,7 @@ export default function StandingsClient({
 
       {/* Leaderboard */}
       {!showProjected && standings.length > 0 && (
-        <ol role="list" aria-labelledby={headingId} className="flex flex-none flex-col gap-3">
+        <ol role="list" aria-labelledby={headingId} className="flex flex-none flex-col gap-3" data-tour="standings-list">
           {standings.map((row, index) => {
             const rankedTeam = rankedByTeamId.get(row.team_id)
             if (!rankedTeam) {

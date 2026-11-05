@@ -72,6 +72,7 @@ export default function StartNextSeasonButton({
         onClick={() => setIsConfirming(true)}
         className={`btn ${variant === 'primary' ? 'btn-primary' : 'btn-secondary'}`}
         data-testid="start-next-season"
+        data-tour="start-next-season"
       >
         Start the {nextSeasonYear} season
       </button>

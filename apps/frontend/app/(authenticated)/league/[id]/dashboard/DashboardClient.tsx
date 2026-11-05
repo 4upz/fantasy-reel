@@ -14,6 +14,8 @@ import StartNextSeasonButton from '../components/StartNextSeasonButton'
 import MovieGrid from '../components/MovieGrid'
 import LeagueReleaseBoard from '../components/LeagueReleaseBoard'
 import EditTeamModal from '../components/EditTeamModal'
+import { FeatureTour, TourButton } from '@/components/tours'
+import { tradesOpen } from '@/utils/league'
 
 interface Props {
   league: League
@@ -31,6 +33,8 @@ interface Props {
   /** The season this one follows, if any. */
   previousSeason: { id: string; seasonYear: number } | null
   publicWishlistCount: number
+  /** No finished season yet (isFirstSeason), so this page's tour starts by itself. */
+  firstSeason: boolean
 }
 
 export default function DashboardClient({
@@ -46,6 +50,7 @@ export default function DashboardClient({
   participantNames,
   previousSeason,
   publicWishlistCount,
+  firstSeason,
 }: Props): React.ReactElement {
   const router = useRouter()
   const [league, setLeague] = useState(initialLeague)
@@ -97,10 +102,24 @@ export default function DashboardClient({
   // edge. Every section below owns its own 16px padding instead.
   return (
     <div className="-mx-4 pt-1.5 sm:-mx-6 lg:-mx-8">
+      <FeatureTour
+        id="league-overview"
+        ctx={{
+          leagueStatus: league.status,
+          tradesOpen: tradesOpen(league),
+          dropLimit: league.drop_limit,
+          doublePoints: league.double_points_over_90,
+          firstSeason,
+        }}
+      />
+      <FeatureTour
+        id="season-results"
+        ctx={{ leagueStatus: league.status, isOwner, hasNextSeason: Boolean(nextSeasonId) }}
+      />
       {/* The season's headline, when it has one. Only ever one of the two:
           a league is either finished or freshly rolled over, never both. */}
       {league.status === 'completed' && (
-        <div className="mx-4 mb-[18px]">
+        <div className="mx-4 mb-[18px]" data-tour="season-results">
           <ChampionBanner
             seasonYear={league.season_year}
             champions={champions}
@@ -131,13 +150,18 @@ export default function DashboardClient({
         </div>
       )}
 
-      <TeamHeader
-        team={userTeam}
-        totalTeams={totalTeams}
-        leagueName={league.name}
-        headingId={teamHeadingId}
-        onEditTeam={league.status === 'completed' ? undefined : () => setShowEditTeamModal(true)}
-      />
+      <div data-tour="team-summary">
+        <TeamHeader
+          team={userTeam}
+          totalTeams={totalTeams}
+          leagueName={league.name}
+          headingId={teamHeadingId}
+          onEditTeam={league.status === 'completed' ? undefined : () => setShowEditTeamModal(true)}
+        />
+      </div>
+      <div className="flex justify-end px-4">
+        <TourButton className="mt-2" />
+      </div>
       <MovieGrid movies={userTeam.movies} leagueStatus={league.status} />
       <LeagueReleaseBoard releases={leagueUpcoming} todayIso={todayIso} />
 

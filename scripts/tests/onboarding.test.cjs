@@ -23,7 +23,7 @@ function loadTs(file, cache = new Map()) {
 }
 
 const onboarding = loadTs(join(FRONTEND, 'utils/onboarding.ts'))
-const { hasPlayedSeason, isNewPlayer } = onboarding
+const { hasPlayedSeason, isNewPlayer, isFirstSeason } = onboarding
 // Values made inside the module's context have its prototypes; compare them as plain data.
 const plain = (value) => (value == null ? value : JSON.parse(JSON.stringify(value)))
 const nextStep = (...args) => plain(onboarding.nextStep(...args))
@@ -125,4 +125,24 @@ test('onboarding tours start by themselves only for newcomers', () => {
     assert.ok(pickAutoStart(candidate(true), new Map(), new Date()), `${id} starts for a newcomer`)
     assert.equal(pickAutoStart(candidate(false), new Map(), new Date()), null, `${id} waits to be asked by a veteran`)
   }
+})
+
+test('season-tab tours start by themselves until a season has finished', () => {
+  assert.equal(isFirstSeason([membership('a', 'active')]), true)
+  assert.equal(isFirstSeason([membership('a', 'active'), membership('b', 'completed', { participant: 'left' })]), false)
+  assert.equal(isFirstSeason(null), false)
+
+  const ctxFor = {
+    'league-overview': { leagueStatus: 'active', tradesOpen: true, dropLimit: 2, doublePoints: false },
+    roster: { leagueStatus: 'active', dropLimit: 2, counterpicksEnabled: true },
+    bidding: { leagueStatus: 'active', counterpicksEnabled: true },
+    trading: { leagueStatus: 'active', tradesOpen: true, reviewEnabled: false, reviewHours: 24, isOwner: false },
+  }
+  for (const [id, ctx] of Object.entries(ctxFor)) {
+    const candidate = (firstSeason) => [{ tour: getTour(id), ctx: { ...ctx, firstSeason }, order: 0 }]
+    assert.ok(pickAutoStart(candidate(true), new Map(), new Date()), `${id} starts in a first season`)
+    assert.equal(pickAutoStart(candidate(false), new Map(), new Date()), null, `${id} waits to be asked by a veteran`)
+  }
+  // Standings repeats Overview's point, so it only plays when asked.
+  assert.equal(pickAutoStart([{ tour: getTour('standings'), ctx: { leagueStatus: 'active' }, order: 0 }], new Map(), new Date()), null)
 })
