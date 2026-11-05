@@ -69,7 +69,7 @@ export interface MovieProjection {
   /** Middle 50%, calibrated. */
   range50: [number, number]
   range80: [number, number]
-  /** range50 wider than 10 points: the chip shows the point estimate + "Low confidence". */
+  /** range50 wider than 15 points: the chip shows the point estimate + "Low confidence". */
   low_confidence: boolean
   /** coverage < 0.25: "Not enough history yet", no number. */
   insufficient_history: boolean

@@ -105,7 +105,7 @@ export interface LeadTimeRow {
   lead_days: number
   n: number
   mae: number
-  /** Share with a 50% range of 10 points or less (would show a range on the chip). */
+  /** Share with a 50% range of 15 points or less (would show a range on the chip). */
   narrow_share: number
   insufficient_share: number
 }
@@ -258,7 +258,7 @@ export function runBacktest(
       lead_days: lead,
       n: widths.length,
       mae: errors.reduce((a, b) => a + b, 0) / Math.max(1, errors.length),
-      narrow_share: widths.filter((w) => w <= 10).length / Math.max(1, widths.length),
+      narrow_share: widths.filter((w) => w <= 15).length / Math.max(1, widths.length),
       insufficient_share: insufficient / Math.max(1, widths.length),
     }
   })
@@ -431,7 +431,7 @@ export function renderReport(result: BacktestResult, meta: ReportMeta): string {
   lines.push('## Range width by lead time')
   lines.push('')
   lines.push(
-    'Share of films whose 50% range is 10 points or narrower (the chip shows a range; wider shows "Low confidence"). ' +
+    'Share of films whose 50% range is 15 points or narrower (the chip shows a range; wider shows "Low confidence"). ' +
       'Lead time is simulated by building features only from films released that many days before each target.',
   )
   lines.push('')
