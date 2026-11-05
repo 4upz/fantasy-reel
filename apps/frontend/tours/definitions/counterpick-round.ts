@@ -12,6 +12,7 @@ export const counterpickRoundTour = defineTour<{ isOwner: boolean; leagueStatus:
   description: 'Draft tab during counterpicks: betting against other teams’ movies.',
   when: (ctx) => ctx.leagueStatus === 'counterpicking' && ctx.hasTeam === true,
   autoStart: (ctx) => ctx.newPlayer === true,
+  essential: true,
   steps: [
     {
       anchor: 'counterpick-turn',

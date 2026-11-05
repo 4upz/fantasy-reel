@@ -147,6 +147,15 @@ test('a tour that applies can still be kept from starting by itself', () => {
   assert.equal(engine.applicableSteps(beginner, { newPlayer: false }).length, 1, 'it can still be replayed')
 })
 
+test('an automatic tour holds others back for ten minutes after it ends', () => {
+  const ended = now.getTime()
+  assert.equal(engine.inAutoStartGap(null, ended), false, 'no tour has ended yet')
+  assert.equal(engine.inAutoStartGap(ended, ended + 60_000), true)
+  assert.equal(engine.inAutoStartGap(ended, ended + engine.AUTO_START_GAP_MS - 1), true)
+  assert.equal(engine.inAutoStartGap(ended, ended + engine.AUTO_START_GAP_MS), false)
+  assert.equal(engine.inAutoStartGap(ended, ended - 60_000), false, 'a clock that moved back does not hold tours forever')
+})
+
 // ---- Placement ----------------------------------------------------------
 
 const viewport = { width: 1280, height: 800 }

@@ -9,6 +9,7 @@ import { trackEvent } from '@/utils/analytics'
 import { getTour, TOUR_LIST, type TourId } from '@/tours/registry'
 import {
   applicableSteps,
+  inAutoStartGap,
   isTourSeen,
   pickAutoStart,
   tourKey,
@@ -37,6 +38,26 @@ const STABLE_POLLS = 3
 const PARTIAL_STABLE_POLLS = 12
 /** Give up waiting for an auto-started tour's anchors after this long. */
 const AUTO_START_TIMEOUT_MS = 8000
+
+/** Per browser tab: the gap after an automatic tour survives a reload and ends early if the tab is closed. */
+const LAST_AUTO_END_KEY = 'fr:tours:last-auto-end'
+
+function readLastAutoEnd(): number | null {
+  try {
+    const value = Number(window.sessionStorage.getItem(LAST_AUTO_END_KEY))
+    return value > 0 ? value : null
+  } catch {
+    return null
+  }
+}
+
+function writeLastAutoEnd(at: number) {
+  try {
+    window.sessionStorage.setItem(LAST_AUTO_END_KEY, String(at))
+  } catch {
+    // Storage blocked: the gap still holds until the next full page load.
+  }
+}
 
 interface Registration {
   order: number
@@ -167,6 +188,11 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
   // that couldn't start (its elements never showed) joins alone, so the
   // page's next tour gets a turn. Leaving the path starts a new visit.
   const visit = useRef<{ pathname: string; tried: Set<string> }>({ pathname: '', tried: new Set() })
+  // When the last automatic tour ended, and on which visit. Later visits wait
+  // out the gap (unless the tour is essential); the visit it ended on doesn't, so a tour the page starts
+  // offering when its phase changes (the draft starting) still gets its turn.
+  const lastAutoEnd = useRef<number | null>(null)
+  const lastAutoEndVisit = useRef<object | null>(null)
 
   const tourState = useCallback(
     (id: string) => states.get(tourKey(id)) as TourState | undefined,
@@ -220,6 +246,11 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
       if (!current) return
       activeRef.current = null
       setActive(null)
+      if (current.automatic) {
+        lastAutoEnd.current = Date.now()
+        lastAutoEndVisit.current = visit.current
+        writeLastAutoEnd(lastAutoEnd.current)
+      }
       if (status) void record(current.tour, status)
     },
     [record]
@@ -284,10 +315,12 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
     void registrationsVersion
     if (!ready || !enabled || active || automationOptedOut()) return
     if (visit.current.pathname !== pathname) visit.current = { pathname, tried: new Set() }
+    lastAutoEnd.current ??= readLastAutoEnd()
+    const inGap = lastAutoEndVisit.current !== visit.current && inAutoStartGap(lastAutoEnd.current, Date.now())
     const tried = visit.current.tried
     const offered = [...registrations.current.values()]
     const candidates = offered
-      .filter((registration) => !tried.has(registration.id))
+      .filter((registration) => !tried.has(registration.id) && (!inGap || getTour(registration.id)!.essential))
       .map((registration) => ({ tour: getTour(registration.id)!, ctx: registration.ctx, order: registration.order }))
     const outcomes = new Map(
       TOUR_LIST.map((tour) => [tour.id, tourState(tour.id)] as const).filter((entry): entry is [string, TourState] => entry[1] !== undefined)
@@ -322,6 +355,9 @@ export function TourProvider({ userId, initialState, children }: Props): React.R
       for (const key of keys) applyState(key, null)
       if (id) visit.current.tried.delete(id)
       else visit.current.tried.clear()
+      // Asked to see it again: don't make them wait out the gap.
+      lastAutoEnd.current = null
+      writeLastAutoEnd(0)
     },
     [supabase, userId, states, applyState]
   )

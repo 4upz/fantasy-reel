@@ -12,6 +12,7 @@ export const leagueWaitingTour = defineTour<{ isOwner: boolean; leagueStatus: Le
   description: 'Draft tab before the draft, for players: what happens on draft day and how to get ready.',
   when: (ctx) => ctx.isOwner !== true && ctx.leagueStatus === 'setup',
   autoStart: (ctx) => ctx.newPlayer === true,
+  essential: true,
   steps: [
     {
       anchor: 'draft-waiting',

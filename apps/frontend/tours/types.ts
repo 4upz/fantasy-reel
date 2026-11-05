@@ -86,6 +86,12 @@ export interface TourDefinition<Ctx extends TourContext = TourContext> {
    * for someone who has already played a season.
    */
   autoStart?(ctx: Ctx): boolean
+  /**
+   * A step a newcomer needs right then (creating or joining a first league,
+   * the draft): it starts by itself even within the gap after another
+   * automatic tour. Leave it off for feature tours.
+   */
+  essential?: boolean
   /** At most five. A tour that needs more is two tours. */
   steps: TourStep<Ctx>[]
 }

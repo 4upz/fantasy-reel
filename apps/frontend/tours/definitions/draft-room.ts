@@ -12,6 +12,7 @@ export const draftRoomTour = defineTour<{ leagueStatus: LeagueStatus; newPlayer:
   description: 'Draft tab during the draft: turns, what makes a good pick, and what comes next.',
   when: (ctx) => ctx.leagueStatus === 'drafting' && ctx.draftComplete !== true,
   autoStart: (ctx) => ctx.newPlayer === true,
+  essential: true,
   steps: [
     {
       anchor: 'draft-turn',
