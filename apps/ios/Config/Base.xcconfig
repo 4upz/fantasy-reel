@@ -10,12 +10,15 @@ FR_BUNDLE_IDENTIFIER = com.fantasyreel.ios
 // fantasyreel://auth/callback). Supabase must list that URL as an allowed redirect.
 FR_URL_SCHEME = fantasyreel
 
-// The public website. Shared links on these hosts open the matching app screen.
-// xcconfig treats "//" as a comment, hence the "$()" in the middle of URLs.
-FR_SITE_URL = https:/$()/fantasyreel.com
+// The public website. Links on it and its bare domain open the matching app
+// screen (Universal Links: the associated domains in FantasyReel.entitlements
+// and apps/frontend/utils/app-links.ts). www is the canonical host; the bare
+// domain redirects to it, so links the app shares use www and open the app
+// directly. xcconfig treats "//" as a comment, hence the "$()" in URLs.
+FR_SITE_URL = https:/$()/www.fantasyreel.com
 
-// Capabilities: Sign in with Apple. A free personal team can't sign this
-// capability for a device; set `CODE_SIGN_ENTITLEMENTS =` in Local.xcconfig to
+// Capabilities: Sign in with Apple, push, Associated Domains. A free personal
+// team can't sign these for a device; set `CODE_SIGN_ENTITLEMENTS =` in Local.xcconfig to
 // build without it (the Apple button then fails with an error, nothing else).
 CODE_SIGN_ENTITLEMENTS = Config/FantasyReel.entitlements
 

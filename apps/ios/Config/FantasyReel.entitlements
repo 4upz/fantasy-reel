@@ -15,5 +15,14 @@
 	     Focus (the push sets interruption-level time-sensitive). -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- Universal Links: site links open the matching screen (DeepLink.parse),
+	     and passwords saved for the site fill in sign-in. The website serves
+	     /.well-known/apple-app-site-association from apps/frontend/utils/app-links.ts. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:www.fantasyreel.com</string>
+		<string>applinks:fantasyreel.com</string>
+		<string>webcredentials:www.fantasyreel.com</string>
+	</array>
 </dict>
 </plist>
