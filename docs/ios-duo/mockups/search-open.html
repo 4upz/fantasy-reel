@@ -1,0 +1,95 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css">
+<style>
+  /* Screen-specific: search results + movie detail */
+  .pane.sunken .card,.pane.sunken .grp{background:#222}
+  .gbtn.active{background:rgba(201,162,39,.22);border-color:rgba(201,162,39,.35)}
+  .field .q{flex:1;min-width:0;color:var(--text)}
+  .field i{width:19px;height:19px}
+  /* Clear button: 20px glyph inside a 44px hit area */
+  .field .clear{width:44px;height:44px;margin-right:-12px;display:flex;align-items:center;justify-content:center;flex:none}
+  .field .clear span{width:20px;height:20px;border-radius:10px;background:var(--fill);color:var(--text2);display:flex;align-items:center;justify-content:center}
+  .field .clear svg{width:10px;height:10px}
+  .count{padding:0 4px}
+  /* Wishlist strip: runs off the pane edge, softened so it reads as scrollable */
+  .strip{display:flex;gap:12px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 87%,transparent);mask-image:linear-gradient(90deg,#000 87%,transparent)}
+  .strip>div{width:92px;flex:none;display:flex;flex-direction:column;gap:6px}
+  /* Movie header in the detail pane */
+  .mhead{display:flex;gap:14px}
+  .mhead .info{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding-top:2px}
+  .mhead .info .btn{margin-top:auto;gap:6px}
+  .mhead .info .btn i{width:17px;height:17px}
+  /* Score card: two columns split by a hairline */
+  .score{display:flex}
+  .score>div{flex:1;display:flex;flex-direction:column;gap:6px}
+  .score>div+div{border-left:1px solid var(--sep);padding-left:16px}
+  .score .sub{margin-left:6px}
+  .about{padding:0 4px;color:var(--text2)}
+  .credit{text-align:center;text-wrap:balance;padding:0 12px}
+</style></head><body>
+<div class="device open">
+  <div class="statusbar"><span>9:41</span><span class="sys"><span class="sig">●●●●</span><span class="batt"></span></span></div>
+  <div class="fold"></div>
+
+  <!-- Side rail: no tab selected while search is open; the search button is the active control -->
+  <div class="rail">
+    <div class="gbtn glass" style="width:52px"><span class="av round a3" style="width:34px;height:34px">PS</span></div>
+    <div class="vtabs glass">
+      <div class="vtab"><i data-i="home"></i>Home</div>
+      <div class="vtab"><i data-i="roster"></i>Roster</div>
+      <div class="vtab"><i data-i="bids"></i>Bids<span class="dot">1</span></div>
+      <div class="vtab"><i data-i="trades"></i>Trades<span class="dot">1</span></div>
+      <div class="vtab"><i data-i="standings"></i>Standings</div>
+    </div>
+    <div class="grow"></div>
+    <div class="gbtn glass active"><i data-i="search"></i></div>
+    <div class="gbtn glass"><i data-i="bell"></i><span class="dot">3</span></div>
+    <div class="gbtn glass"><i data-i="more"></i></div>
+  </div>
+
+  <!-- Left of the fold: query and results -->
+  <div class="pane l">
+    <div class="hd"><div class="t-large">Search</div></div>
+    <div class="field glass">
+      <i data-i="search"></i><span class="q">avatar</span>
+      <span class="clear"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span></span>
+    </div>
+    <div class="t-meta count">3 results · 2026 releases</div>
+    <div class="grp">
+      <div class="mrow sel"><span class="poster p6">A3</span><div class="mid"><div class="t-row one">Avatar: Fire and Ash</div><div class="t-meta one">Dec 19, 2026 · Science Fiction</div></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p2">AL</span><div class="mid"><div class="t-row one">Avatar: The Last Airbender</div><div class="t-meta one">Oct 9, 2026 · Animation</div></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p3">AA</span><div class="mid"><div class="t-row one">Avatar Aang: The Last Stand</div><div class="t-meta one">Jan 30, 2026 · Adventure</div></div><i data-i="chev" class="chev"></i></div>
+    </div>
+    <div class="sec"><span class="t-section">Your wishlist</span></div>
+    <div class="strip">
+      <div><span class="poster lg p8">TS</span><span class="t-meta one">Toy Story 5</span></div>
+      <div><span class="poster lg p1">M2</span><span class="t-meta one">Minecraft 2</span></div>
+      <div><span class="poster lg p5">F3</span><span class="t-meta one">Frozen III</span></div>
+      <div><span class="poster lg p6">M3</span><span class="t-meta one">Minions 3</span></div>
+    </div>
+  </div>
+
+  <!-- Right of the fold: the selected movie -->
+  <div class="pane r sunken fade">
+    <div class="mhead">
+      <span class="poster lg p6">A3</span>
+      <div class="info">
+        <div class="t-panel">Avatar: Fire and Ash</div>
+        <div class="t-meta">Dec 19, 2026 · Science Fiction</div>
+        <span class="badge b-active">Released</span>
+        <span class="btn tinted sm"><i data-i="heart"></i>Wishlist</span>
+      </div>
+    </div>
+    <div class="card score">
+      <div><span class="t-meta">Tomatometer</span><span class="t-num-hero">93%</span></div>
+      <div><span class="t-meta">Fantasy points</span><span class="t-num-hero cs">+33<span class="t-meta sub">93 − 60</span></span></div>
+    </div>
+    <div class="sec"><span class="t-section">In this league</span></div>
+    <div class="grp">
+      <div class="mrow plain"><span class="av a4">RD</span><div class="mid"><div class="t-row one">Reel Deal</div><div class="t-meta one">Drafted round 1, pick 3</div></div><span class="badge b-neutral">Your team</span></div>
+    </div>
+    <div class="sec"><span class="t-section">About</span></div>
+    <div class="t-small about">The third chapter in the Avatar saga returns to Pandora, where a family faces a new threat to its home.</div>
+    <div class="t-cap cm credit">This product uses the TMDb API but is not endorsed or certified by TMDb.</div>
+  </div>
+</div>
+<script src="icons.js"></script></body></html>
