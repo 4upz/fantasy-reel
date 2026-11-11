@@ -66,12 +66,14 @@ jobs:
           UDID=$(xcrun simctl list devices available --json \
             | python3 -c 'import json,sys
           d=json.load(sys.stdin)["devices"]
-          ios=[(k,v) for k,v in d.items() if "iOS-2" in k]
-          ios.sort(key=lambda kv: [int(x) for x in kv[0].split("iOS-")[1].split("-")])
+          import re
+          ver=lambda k: tuple(int(x) for x in re.search(r"iOS-(\d+)-(\d+)", k).groups())
+          ios=sorted((kv for kv in d.items() if re.search(r"iOS-2\d-\d+", kv[0])), key=lambda kv: ver(kv[0]))
           for k,v in reversed(ios):
               for dev in v:
                   if dev["name"].startswith("iPhone") and "Duo" not in dev["name"]:
                       print(dev["udid"]); sys.exit()')
+          if [ -z "$UDID" ]; then echo "::error::No iPhone simulator on an iOS 26+ runtime"; xcrun simctl list devices available; exit 1; fi
           echo "Simulator: $UDID"
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
