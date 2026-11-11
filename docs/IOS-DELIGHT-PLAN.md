@@ -21,9 +21,8 @@ listed in section 11 and marked **[Apple]**. Everything else is our proposal.
 - Three layers, cheapest first:
   1. **Feedback** on things you do (taps, small icon animations, numbers that roll).
      Dozens of places, each a line or two of code.
-  2. **Illustrations** on empty and welcome screens, using the Storybook style the
-     brand guide already chose for the web (`docs/brand/illustrations.md`). About eight
-     pieces of art.
+  2. **Illustrations** on empty and welcome screens, in a new style made for the iOS
+     app (Arik's decision; three candidates in section 5.2). About eight pieces of art.
   3. **Moments**: two or three places where the app celebrates. Making a draft pick,
      a score arriving, winning the season.
 - It fits the Duo work without blocking it: one small foundations thread adds the
@@ -47,7 +46,7 @@ listed in section 11 and marked **[Apple]**. Everything else is our proposal.
 | Liquid Glass | iOS 26's translucent material for bars and floating controls. The app already uses it for the tab bar, top-bar buttons and the league pill. |
 | Empty state | What a screen shows when it has no content yet ("No pending trades"). |
 | Skeleton | Gray placeholder shapes shown while content loads, in place of a spinner. |
-| Storybook | The illustration style chosen for the Fantasy Reel brand: cut-paper shapes, light grain, gold, burgundy, ivory and blue-gray. |
+| Storybook | The illustration style chosen for the Fantasy Reel website: cut-paper shapes, light grain, gold, burgundy, ivory and blue-gray. Not used for iOS (Q1). |
 
 ## 3. What Apple says
 
@@ -127,7 +126,7 @@ Audited at `main` (`30c56e8`), 242 Swift files.
 | Reduce Motion | Checked in 2 files. | Fine today because so little moves. It must become automatic before we add more. |
 | Loading | Centered spinner with a label, about ten places. | Content pops in all at once. |
 | Liquid Glass | Used correctly: tab bar, top-bar buttons, league pill, a few system glass buttons. | No change proposed. |
-| Brand illustration style | Chosen for the web and documented, with three concept images. Not used on any screen, web or iOS. | The iOS app would be the first place it ships. |
+| Brand illustration style | Storybook, chosen for the web and documented, with three concept images. Not used on any screen yet. | Arik chose a separate style for iOS (Q1). |
 
 What is already good and should not change: the type, color and spacing system; one
 filled gold action per card; whole-number points; and the restraint. The app is easy to
@@ -150,15 +149,34 @@ read. The goal is to add warmth without making it busier.
    live draft.
 6. **Optional and redundant.** Every animation has a Reduce Motion version. Every
    animated or haptic signal is also visible as text or a label.
-7. **One family.** One illustration style, one set of timings, one haptic map. A screen
+7. **One family.** One illustration style in the app, one set of timings, one haptic map. A screen
    never invents its own.
 
 ### 5.2 Illustrations
 
-Use the brand's **Storybook** family, at its **minimal** level of detail for in-app
-screens: a few cut-paper objects, light grain, the brand palette. The brand guide's
-rules carry over unchanged (no confetti, no glossy 3D, no gavel for bids, art removed
-once a screen has content).
+**Decision (Q1, 2026-11-11): the iOS app gets its own illustration style, not the
+web's Storybook family.** Three candidates are drawn below, each showing the same three
+subjects so they can be compared like for like. Which one is Q1b.
+
+![Three candidate illustration styles](ios-delight/mockups/styles.png)
+
+| | A. Gold line | B. Marquee | C. Glass |
+| --- | --- | --- | --- |
+| Look | Thin gold outlines, one small filled accent | Bold flat shapes, art-deco sunbursts, strong color blocks | Frosted cards with soft colored light behind |
+| Feel | Calm, close to the app's icons | Loud, most like a cinema poster | Modern, closest to iOS 26's glass |
+| Animates by | Lines drawing themselves in | Parts sliding and snapping into place | Light shifting, cards floating in |
+| Light theme | Easy (swap line color) | Easy (flat colors) | Needs a separate treatment; glow reads poorly on white |
+| How it ships | Vector, tiny files | Vector, tiny files | Layered images (blur is costly to draw live) |
+| Risk | May still feel too quiet | Competes with real posters if overused | Least "cinema" personality |
+
+Our recommendation is **B, Marquee**: it answers "boring" most directly, it is plain
+vector art (so it stays sharp on both Duo screens, recolors for the light theme, and
+its parts can move), and its sunburst can become the shared shape behind the champion
+and draft moments. Whichever is chosen, the subjects, sizes and placements below stay
+the same. Rules that carry over from the brand guide regardless of style: no confetti,
+no gavel for bids, original poster art only, and art is removed once a screen has
+content. The mockups in section 7 were drawn before this decision, in the Storybook
+style; read them for placement and size, not for style.
 
 | # | Illustration | Where | Size | Release |
 | --- | --- | --- | --- | --- |
@@ -183,16 +201,16 @@ Rules:
 - **Light and dark.** Ivory paper cards vanish on the light theme's background. Every
   piece is checked in both themes and gets a light variant if its outline is lost.
 - **Hidden from VoiceOver.** The title and message beside it already say everything.
-- **Built in layers.** Each piece is exported as two or three separate transparent
-  images (for example: left card, right card, film strip), with the grain baked in.
-  That is what lets the parts settle into place on arrival, and it costs nothing at
-  runtime. No animation library is added (the app has one third-party dependency and
+- **Built in parts.** Each piece is two or three separate parts (for example: left
+  card, right card, arrows), so the parts can settle into place on arrival. For styles
+  A and B these are vector shapes; for C they are transparent images with the glow
+  baked in. No animation library is added (the app has one third-party dependency and
   should keep it that way).
 - **Small files.** Target under 100 KB per illustration across all its layers, checked
   in the PR.
 
-The mockups below use vector stand-ins drawn for this plan. They show subject, size and
-placement. They are not the final art (Q3).
+For styles A and B, the vector drawings in the comparison above are close to
+shippable and would be refined, not redone (Q3).
 
 ### 5.3 Motion
 
@@ -306,8 +324,8 @@ No sounds are proposed.
 Drawn with the app's real fonts, colors and spacing on the Duo frames from the Duo
 plan (closed and open screens). Sources and a render script are in
 `docs/ios-delight/mockups/` (`node render.js` rebuilds every PNG). Still images cannot
-show movement, so motion is shown as storyboards with captions. The illustrations are
-stand-ins (section 5.2).
+show movement, so motion is shown as storyboards with captions. The illustrations in
+these five were drawn in the earlier Storybook style (section 5.2).
 
 **Empty screens, today and proposed.** Left: what every empty screen looks like now.
 Then Trades, Wishlist and Bids with their own art.
@@ -356,7 +374,7 @@ by the three reviewer threads.
 - **Nothing loops.** The only continuous effect allowed is a status indicator during
   real ongoing activity (reconnecting), and it stops when the activity stops.
 - **No flashing**, and no fast full-screen movement.
-- **Performance:** no live blur or grain filters (grain is baked into the art), no
+- **Performance:** no live blur filters (any glow or texture is baked into the art), no
   per-row timers, no animation while a list is scrolling, images sized for their
   display. The performance reviewer checks scrolling in the draft picker and standings
   after each change.
@@ -399,13 +417,14 @@ Asked one at a time in the thread. Recommendations in bold.
 
 | # | Question | Options |
 | --- | --- | --- |
-| Q1 | Which illustration style? | **The brand's Storybook family, already chosen for the web**, or a new style for iOS only. |
+| Q1 | Which illustration style? | **Answered 2026-11-11: a new style for iOS only.** |
+| Q1b | Which of the three new styles (section 5.2)? | A Gold line, **B Marquee**, C Glass, or none of these (draw more). |
 | Q2 | How much personality? | **Quiet: art on empty screens, feedback everywhere, two or three moments**, or louder: art on populated screens too and more celebration. |
-| Q3 | Who makes the final art? | **Generate it with an image tool from the brand guide's art brief, then clean up and layer it** (how the existing concepts were made), or ship the vector stand-ins from these mockups, or commission an illustrator. |
+| Q3 | Who makes the final art? | For A or B: **we draw it as vector art, refining the samples in section 5.2**, or commission an illustrator. For C: generate and layer images, or commission. |
 | Q4 | What goes in the first release? | **Foundations, feedback, the seven in-app illustrations, the draft-pick moment and the champion reveal**, or a smaller cut: foundations and feedback only, art afterwards. |
 | Q5 | A haptics switch inside the app? | **No, follow the iPhone's own setting**, or add a switch in Account. |
 | Q6 | Welcome screen: replace the three numbered steps with the cinema scene? | **Yes, later, with the steps kept in How to Play**, or keep the steps and add smaller art. |
-| Q7 | Should the web app get the same illustrations? | Out of scope here. **Decide after iOS ships them**; the layered art is reusable. |
+| Q7 | Should the web app later adopt the iOS style, or keep Storybook? | Out of scope here. **Decide after iOS ships.** |
 
 ## 11. Sources
 
@@ -428,4 +447,4 @@ In this repository:
 
 Not verified, to confirm when building: that the system zoom transition and the Draw On
 symbol effect behave as described under Reduce Motion on iOS 26, and that the image
-asset format we choose for layered art keeps the grain crisp at 3x.
+asset format we choose keeps the art crisp at 3x.
