@@ -1,7 +1,8 @@
 <!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css">
 <style>
-/* Sidebar expanded from the rail's league avatar. It replaces the menu sheet; the rail is hidden while it is open. */
-.scrim{position:absolute;top:0;bottom:0;left:445px;width:445px;background:linear-gradient(transparent calc(100% - 72px),#080808 calc(100% - 14px)),rgba(0,0,0,.74);z-index:20}
+/* The tab bar shown as a sidebar. Apple's generic guidance puts a sidebar on the leading (left) side; the Duo pages do not show it. Toolbar buttons stay in the vertical bar on the right. */
+.sidebar.glass{left:12px;right:auto;top:12px;bottom:12px}
+.pane.c{left:328px;width:478px}
 .sidebar.glass{width:300px;background:rgb(30,30,30);backdrop-filter:none;padding:8px 10px;gap:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 12px 40px rgba(0,0,0,.55)}
 .sidebar>*{flex:none}
 .sidebar .grow{flex:1}
@@ -21,60 +22,7 @@
   <div class="statusbar"><span>9:41</span><span class="sys"><span class="sig">●●●●</span><span class="batt"></span></span></div>
   <div class="fold"></div>
 
-  <!-- Left of the fold: same content as home-open, dimmed while the sidebar is open -->
-  <div class="pane l fade">
-    <div class="hd">
-      <div class="t-large one">Popcorn Syndicate</div>
-      <div class="row"><span class="t-meta">2026 Season</span><span class="badge b-active">Active</span></div>
-    </div>
-    <div class="card">
-      <div style="display:flex;align-items:center;gap:12px">
-        <span class="av lg a4">RD</span>
-        <div style="flex:1;min-width:0"><div class="t-card">Reel Deal</div><div class="t-meta">Alice Spielberg · Your team</div></div>
-        <div class="gbtn" style="background:var(--elevated);color:var(--text)"><i data-i="pencil" style="width:18px;height:18px"></i></div>
-      </div>
-      <div class="stats">
-        <div><span class="t-meta">Rank</span><span class="t-num-lg">T-2 <span class="t-meta">of 4</span></span></div>
-        <div><span class="t-meta">Points</span><span class="t-num-lg">41</span></div>
-        <div><span class="t-meta">Budget</span><span class="t-num-lg">$54</span></div>
-      </div>
-    </div>
-    <div class="banner info">
-      <i data-i="trades" style="color:var(--info)"></i>
-      <div class="mid"><div class="t-row">1 trade needs your response</div></div>
-      <span class="btn tinted sm">Review</span>
-    </div>
-    <div class="banner warn">
-      <i data-i="tag" style="color:var(--warning)"></i>
-      <div class="mid"><div class="t-row">You've been outbid on a movie</div><div class="t-meta">Raise your bid before the cutoff.</div></div>
-      <span class="btn tinted sm">Review</span>
-    </div>
-    <div class="sec"><span class="t-section">Around the league</span></div>
-    <div class="grp">
-      <div class="mrow plain"><span class="av a2">KC</span><div class="mid"><div class="t-row one">Kubrick's Cube picked up Zootopia 3</div><div class="t-meta">Won for $18 · 2h ago</div></div></div>
-      <div class="mrow plain"><span class="av a1">NS</span><div class="mid"><div class="t-row one">Nolan's Suits dropped Tron: Ares</div><div class="t-meta">Yesterday</div></div></div>
-    </div>
-  </div>
-
-  <!-- Right of the fold: stays fully visible and usable -->
-  <div class="pane r fade">
-    <div class="sec" style="padding-top:10px"><span class="t-section">My movies</span><a>See roster</a></div>
-    <div class="grp">
-      <div class="mrow"><span class="poster p4">W2</span><div class="mid"><div class="t-row one">Wicked: For Good</div><div class="t-meta">Released Nov 21 · 68%</div></div><div class="trail"><span class="t-num cs">+8</span></div><i data-i="chev" class="chev"></i></div>
-      <div class="mrow"><span class="poster p6">A3</span><div class="mid"><div class="t-row one">Avatar: Fire and Ash</div><div class="t-meta">Released Dec 19 · 93%</div></div><div class="trail"><span class="t-num cs">+33</span></div><i data-i="chev" class="chev"></i></div>
-      <div class="mrow"><span class="poster p7">J3</span><div class="mid"><div class="t-row one">Jumanji 3</div><div class="t-meta">Releases Dec 11</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
-      <div class="mrow"><span class="poster p3">AD</span><div class="mid"><div class="t-row one">Avengers: Doomsday</div><div class="t-meta">Releases Dec 18 · Pickup</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
-      <div class="mrow"><span class="poster p2">IA</span><div class="mid"><div class="t-row one">Ice Age: Boiling Point</div><div class="t-meta">Releases Dec 18</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
-      <div class="mrow"><span class="poster p5">CH</span><div class="mid"><div class="t-row one">The Cat in the Hat</div><div class="t-meta">Releases Feb 26</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
-      <div class="mrow"><span class="poster p1">M2</span><div class="mid"><div class="t-row one">Minecraft 2</div><div class="t-meta">Releases Jul 23</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
-      <div class="mrow"><span class="poster p8">TS</span><div class="mid"><div class="t-row one">Toy Story 5</div><div class="t-meta">Releases Jun 19</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
-    </div>
-  </div>
-
-  <!-- Scrim over the left pane only -->
-  <div class="scrim"></div>
-
-  <!-- Sidebar: league, tabs, other leagues, extras, account -->
+  <!-- Sidebar on the leading side: league, tabs by name, other leagues, extras, account -->
   <div class="sidebar glass">
     <div class="sb-top">
       <span class="av round a3">PS</span>
@@ -96,6 +44,50 @@
     <div class="grow"></div>
     <div class="sb-sep"></div>
     <div class="sb-item"><span class="av sm round a2">AS</span><span class="lbl one">Alice Spielberg</span><i data-i="chev" class="chev"></i></div>
+  </div>
+
+  <!-- Content: one column in the space that is left. It crosses the fold. -->
+  <div class="pane c fade">
+    <div class="hd">
+      <div class="t-large one">Popcorn Syndicate</div>
+      <div class="row"><span class="t-meta">2026 Season</span><span class="badge b-active">Active</span></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="av lg a4">RD</span>
+        <div style="flex:1;min-width:0"><div class="t-card one">Reel Deal</div><div class="t-meta one">Alice Spielberg · Your team</div></div>
+        <div class="gbtn" style="background:var(--elevated);color:var(--text)"><i data-i="pencil" style="width:18px;height:18px"></i></div>
+      </div>
+      <div class="stats">
+        <div><span class="t-meta">Rank</span><span class="t-num-lg">T-2 <span class="t-meta">of 4</span></span></div>
+        <div><span class="t-meta">Points</span><span class="t-num-lg">41</span></div>
+        <div><span class="t-meta">Budget</span><span class="t-num-lg">$54</span></div>
+      </div>
+    </div>
+    <div class="banner info">
+      <i data-i="trades" style="color:var(--info)"></i>
+      <div class="mid"><div class="t-row">1 trade needs your response</div></div>
+      <span class="btn tinted sm">Review</span>
+    </div>
+    <div class="banner warn">
+      <i data-i="tag" style="color:var(--warning)"></i>
+      <div class="mid"><div class="t-row">You've been outbid on a movie</div><div class="t-meta">Raise your bid before the cutoff.</div></div>
+      <span class="btn tinted sm">Review</span>
+    </div>
+    <div class="sec"><span class="t-section">My movies</span><a>See roster</a></div>
+    <div class="grp">
+      <div class="mrow"><span class="poster p4">W2</span><div class="mid"><div class="t-row one">Wicked: For Good</div><div class="t-meta one">Released Nov 21 · 68%</div></div><div class="trail"><span class="t-num cs">+8</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p6">A3</span><div class="mid"><div class="t-row one">Avatar: Fire and Ash</div><div class="t-meta one">Released Dec 19 · 93%</div></div><div class="trail"><span class="t-num cs">+33</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p7">J3</span><div class="mid"><div class="t-row one">Jumanji 3</div><div class="t-meta one">Releases Dec 11</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p3">AD</span><div class="mid"><div class="t-row one">Avengers: Doomsday</div><div class="t-meta one">Releases Dec 18 · Pickup</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+    </div>
+  </div>
+
+  <!-- Vertical bar on the right: only the top-bar buttons remain, because the sidebar replaces the tab bar -->
+  <div class="rail">
+    <div class="gbtn glass"><i data-i="search"></i></div>
+    <div class="gbtn glass"><i data-i="bell"></i><span class="dot">3</span></div>
+    <div class="gbtn glass"><i data-i="more"></i></div>
   </div>
 </div>
 <script src="icons.js"></script></body></html>
