@@ -1,8 +1,9 @@
 # iOS delight plan: illustration, motion and haptics
 
-Status: proposal, 2026-11-11. Nothing here is built. Open questions for Arik are in
-section 10. This plan sits beside the [iPhone Duo plan](IOS-DUO-PLAN.md) and is
-written so it never blocks it (section 9).
+Status: direction decided, 2026-11-11. Nothing here is built. Arik's answers to all
+seven questions are in section 10. This plan sits beside the [iPhone Duo plan](IOS-DUO-PLAN.md) and is
+written so it never blocks it (section 9). Everything in it is for every iPhone, not
+only the Duo (section 9).
 
 The complaint this answers: the iOS app (`apps/ios/`) works, but it feels boring. There
 are no illustrations and almost nothing moves.
@@ -405,7 +406,16 @@ are untouched. This work is added around them.
 | D3 Champion | Champion artwork and reveal. | A small thread after Phase 1's team-and-market thread (1B) lands. | No. |
 | D4 Later | Welcome scene, movie zoom transition, skeleton loading, poster color wash, tips. | After the first release. | The zoom transition waits for Duo thread 2C on purpose: on the open screen a movie will open beside the list, not on top of it, so the transition only applies on the closed screen. |
 
-Duo-specific rules for this work:
+**Every iPhone, not only the Duo.** Nothing in this plan depends on the Duo. The
+illustrations, feedback, haptics and moments are built for ordinary iPhones first and
+must work there in full; the foundations (D0) carry no Duo-specific code. The work is
+scheduled around the Duo threads only because they are editing the same screens. Each
+piece is checked on an ordinary iPhone as well as the Duo's two screens, and the PR
+screenshots (which CI takes on an ordinary iPhone) must show it. The mockups in section
+7 use the Duo frames because that kit existed; the single-column layouts apply
+unchanged to an ordinary iPhone, except that its bars sit at the top and bottom.
+
+Rules that apply only on the Duo:
 
 - Design review looks at the open screen first, as the Duo plan decided.
 - Illustrations stay in one column and off the fold. Movement may cross the fold when
@@ -420,9 +430,9 @@ Timing worth knowing: every season ends on 31 December by default, and new draft
 follow in January. The champion reveal and the draft-pick moment are the two pieces
 people would see first.
 
-## 10. Open questions for Arik
+## 10. Questions for Arik, all answered
 
-Asked one at a time in the thread. Recommendations in bold.
+Asked one at a time in the thread.
 
 | # | Question | Options |
 | --- | --- | --- |
@@ -433,7 +443,7 @@ Asked one at a time in the thread. Recommendations in bold.
 | Q4 | What goes in the first release? | **Answered 2026-11-11: everything marked "First" in section 6.** Foundations, feedback and haptics, the seven in-app illustrations, the draft-pick moment and the champion reveal. |
 | Q5 | A haptics switch inside the app? | **Answered 2026-11-11: no.** The app follows the iPhone's own System Haptics setting. |
 | Q6 | Welcome screen: replace the three numbered steps with a full scene? | **Answered 2026-11-11: yes, after the first release.** A full Marquee cinema scene; the steps stay in How to Play. |
-| Q7 | Should the web app later adopt the iOS style, or keep Storybook? | Out of scope here. **Decide after iOS ships.** |
+| Q7 | Should the web app later adopt the iOS style, or keep Storybook? | **Answered 2026-11-11: decide after iOS ships.** The web keeps Storybook until then. |
 
 ## 11. Sources
 
