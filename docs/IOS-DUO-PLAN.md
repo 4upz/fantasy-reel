@@ -1,6 +1,6 @@
 # iPhone Duo support plan
 
-Status: proposal, 2026-11-11. Nothing here is built yet. This is the plan for making
+Status: plan with decisions recorded (section 7), 2026-11-11. Nothing here is built yet. This is the plan for making
 the Fantasy Reel iOS app (`apps/ios/`) feel at home on iPhone Duo, Apple's folding
 iPhone. It covers what the device is, what Apple asks of apps, what our app does
 today, what we propose, and how to split the work across threads.
@@ -128,7 +128,7 @@ Audited at `main` (`0c64f06`), 242 Swift files.
 | G9 | The outer display is short (about iPhone SE height) but has a top bar, large header and sometimes a bottom action bar | tab roots | Less room for content. If bars do move to the side, this eases. Needs screenshots. |
 | G10 | Welcome screen sizes itself to the viewport | `WelcomeView.swift` | Works, but stretches wide. Wants a width cap. |
 | G11 | Screenshots and previews use one ordinary iPhone | `ios.yml`, `ScreenshotScenes.swift` | No way to review Duo layouts in a PR today. |
-| G12 | Two windows of the app would each get their own stores | `SignedInRootView` | Unknown behavior. Decide whether to allow it (Q4). |
+| G12 | Two windows of the app would each get their own stores | `SignedInRootView` | Unknown behavior. Not supported in the first release (Q4), so Phase 0 should make sure a second window cannot be opened. |
 
 Not affected: push, deep links, auth, data and realtime code, the `FantasyReelKit`
 package (apart from the tab rule in G5).
@@ -176,7 +176,7 @@ keeps the league pill and menu sheet.
 
 Risk: tab bar and sidebar are different structures. The switch on open and close must
 not reset the screen you are on. `ShellRouter` already holds that state, which is why
-this is feasible, but it needs a prototype before we commit (Q2).
+this is feasible, but it needs a prototype before we commit (decided in Q2).
 
 ### P5. Folded on a table: later
 
@@ -217,34 +217,41 @@ Folders do not overlap, so the threads do not collide.
 | 1C Movies and draft | `Movies`, `Wishlist`, `Draft` | Poster grids with even column counts. Draft stays single column here. |
 | 1D Account and setup | `Auth`, `Account`, `Leagues`, `LeagueSettings`, `LeagueRules`, `Help`, `Inbox`, `Admin` | Mostly forms: reading-width cap. G10. |
 
-Exit: every screen has reviewed outer and inner screenshots. This is a shippable
-"works well on Duo" release.
+Exit: every screen has reviewed outer and inner screenshots.
+
+**The first Duo release is Phases 0 and 1 plus thread 2A (draft room).** Arik uses the
+Duo mostly open, so design review starts with the inner display.
 
 ### Phase 2: side by side (parallel after Phase 1)
 
 | Thread | Work | Depends on |
 | --- | --- | --- |
 | 2A Draft room | P3 draft layout: board and picker together | 1C |
-| 2B Sidebar | P4, starting with a throwaway prototype of the open/close transition | 1A, Q2 |
-| 2C List and detail | P3 for Standings, Search, Wishlist, then Trades and Bids | 1B, 1C; easier after 2B settles the shell |
+| 2B Sidebar | P4, starting with a throwaway prototype of the open/close transition. After the first release. | 1A |
+| 2C List and detail | P3 for Standings, Search, Wishlist, then Trades and Bids. After the first release; scope decided from using it. | 1B, 1C; easier after 2B settles the shell |
 
 ### Phase 3: polish
 
 Tabletop draft pose (P5), system Split View and two-window QA, keyboard handling on the
 inner display, App Store screenshots for the Duo, and a pass on the real device.
 
-## 7. Open questions for Arik
+## 7. Decisions
 
-| # | Question | Recommendation |
+Arik answered these on 2026-11-11.
+
+| # | Question | Decision |
 | --- | --- | --- |
-| Q1 | How far should the first Duo release go? | Phases 0 and 1, plus the draft room (2A). Ship, then decide on the rest from using it. |
-| Q2 | Sidebar on the inner display in place of the tab bar and menu sheet (P4)? | Yes in principle, but prototype first; it is the riskiest change. |
+| Q1 | How far should the first Duo release go? | Phases 0 and 1, plus the side-by-side draft room (2A). Ship, then decide on the rest. |
+| Q2 | Sidebar on the inner display in place of the tab bar and menu sheet (P4)? | Yes, after a prototype proves the open/close transition keeps your place. Built after the first release. |
 | Q3 | Allow landscape on the outer display? | No. Stay portrait there. The inner display rotates regardless. |
-| Q4 | Allow two windows of Fantasy Reel side by side? | Not in the first release. Side by side with *other* apps still works. |
+| Q4 | Allow two windows of Fantasy Reel side by side? | Not in the first release. Side by side with other apps still works. |
 | Q5 | Keep the iOS 26 minimum? | Yes. Duo-only APIs sit behind version checks. |
-| Q6 | Is Xcode 27.1 on your Mac? | Needed before Phase 0 can start. |
-| Q7 | The regular-width layouts are most of what iPad needs. Turn on iPad afterwards (O-03)? | Decide after Phase 2; do not add it to this effort. |
-| Q8 | Which do you use more on your Duo so far, open or closed? | Tells us where to spend design review time. |
+| Q6 | Is Xcode 27.1 on Arik's Mac? | Reported installed by another thread. Phase 0 confirms it and checks for the iPhone Duo simulator. |
+| Q7 | Turn on iPad afterwards (O-03)? | No iPad for now. Wide layouts are designed for the Duo's inner display only. |
+| Q8 | Which is used more, open or closed? | Mostly open. Design review looks at the inner display first. |
+
+Still open: whether the current App Store build shows in a small window with black
+bars on the inner display (section 3, third-party claim). Phase 0 answers it.
 
 ## 8. Sources
 
