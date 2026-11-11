@@ -197,7 +197,7 @@ redrawn then.
 | I4 | Quiet cinema marquee | Notifications, empty | 216 pt | First |
 | I5 | Seats and a ticket | Draft before it starts; roster before the draft | 216 pt | First |
 | I6 | Cinema entrance (smaller cut) | No leagues yet; season not open | 216 pt | First |
-| I7 | Sunburst behind a winning card | Season complete, champion card | about 200 pt | First (see Q4) |
+| I7 | Sunburst behind a winning card | Season complete, champion card | about 200 pt | First |
 | I8 | Cinema entrance, full scene | Welcome (signed out) | 240 pt closed, 380 pt open | Later |
 
 The other twenty-odd empty states (search with no results, "only the commissioner can
@@ -322,7 +322,7 @@ No sounds are proposed.
 | Trades | I1 when empty | New offer card eases in; M7 | Trade map above | First |
 | Trade composer | None | Assets slide between "you give" and "you get" | Success on send | First |
 | Standings | None | M2, M5 | None | First |
-| Season complete | I7 | Sunburst opens and points count up, first view only (moment) | Success, first view only | First (Q4) |
+| Season complete | I7 | Sunburst opens and points count up, first view only (moment) | Success, first view only | First |
 | Movie search, movie detail | None | M3; M10 | Selection on save | M3 first, M10 later |
 | Wishlist | I2 when empty | M3; removed card collapses | Selection | First |
 | Notifications | I4 when empty | M4; unread dot fades when read | None | First |
@@ -430,7 +430,7 @@ Asked one at a time in the thread. Recommendations in bold.
 | Q1b | Which of the three new styles (section 5.2)? | **Answered 2026-11-11: B, Marquee.** |
 | Q2 | How much personality? | **Answered 2026-11-11: quiet, with a few big moments.** Art on empty screens, feedback everywhere, and three moments (draft pick, score arriving, champion). |
 | Q3 | Who makes the final art? | **Answered 2026-11-11: Claude draws it as vector art for the first release.** Whether to commission an illustrator to redraw it is decided after using it; that would be a file swap, not a rebuild. |
-| Q4 | What goes in the first release? | **Foundations, feedback, the seven in-app illustrations, the draft-pick moment and the champion reveal**, or a smaller cut: foundations and feedback only, art afterwards. |
+| Q4 | What goes in the first release? | **Answered 2026-11-11: everything marked "First" in section 6.** Foundations, feedback and haptics, the seven in-app illustrations, the draft-pick moment and the champion reveal. |
 | Q5 | A haptics switch inside the app? | **No, follow the iPhone's own setting**, or add a switch in Account. |
 | Q6 | Welcome screen: replace the three numbered steps with the cinema scene? | **Yes, later, with the steps kept in How to Play**, or keep the steps and add smaller art. |
 | Q7 | Should the web app later adopt the iOS style, or keep Storybook? | Out of scope here. **Decide after iOS ships.** |
