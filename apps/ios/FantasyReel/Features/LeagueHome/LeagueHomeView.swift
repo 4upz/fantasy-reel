@@ -24,51 +24,62 @@ struct SeasonOverviewView: View {
     @Environment(\.leagueSelection) private var selection
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: FRMetrics.sectionSpacing) {
-                ScreenHeader(
-                    store.season.name,
-                    subtitle: "\(String(store.season.seasonYear)) Season",
-                    status: store.season.status
-                )
-                LoadStateView(
-                    store.state,
-                    loadingLabel: "Loading your league…",
-                    retry: { Task { await store.refresh() } },
-                    content: { snapshot in OverviewContent(snapshot: snapshot) },
-                    empty: { EmptyView() }
-                )
+        // Wide (iPhone Duo open): who you are and what needs you on the left,
+        // your movies on the right. Compact: the same sections in one column.
+        FRPage {
+            ScreenHeader(
+                store.season.name,
+                subtitle: "\(String(store.season.seasonYear)) Season",
+                status: store.season.status
+            )
+            LoadStateView(
+                store.state,
+                loadingLabel: "Loading your league…",
+                retry: { Task { await store.refresh() } },
+                content: { snapshot in OverviewContent(snapshot: snapshot, part: .summary) },
+                empty: { EmptyView() }
+            )
+        } trailing: {
+            if let snapshot = store.state.value {
+                OverviewContent(snapshot: snapshot, part: .movies)
             }
-            .padding(.horizontal, FRMetrics.pageMargin)
-            .padding(.bottom, 24)
         }
-        .background(Color.frBackground)
         .refreshable { await store.refresh() }
     }
 }
 
 private struct OverviewContent: View {
+    /// Which column of the page this draws. On a compact page `movies`
+    /// follows `summary`, and "Around the league" moves under my movies,
+    /// where it has always been on iPhone.
+    enum Part { case summary, movies }
+
     let snapshot: LeagueSeasonStore.Snapshot
+    let part: Part
 
     @Environment(LeagueSeasonStore.self) private var store
     @Environment(ShellRouter.self) private var router
     @Environment(\.leagueSelection) private var selection
+    @Environment(\.frLayoutWidth) private var layoutWidth
 
     var body: some View {
         if let team = store.myTeam {
-            if store.season.status == .setup, let previous = store.previousCompletedSeason {
-                SeasonWelcomeCard(season: store.season, teamName: team.team.name, previousSeason: previous)
+            switch part {
+            case .summary:
+                if store.season.status == .setup, let previous = store.previousCompletedSeason {
+                    SeasonWelcomeCard(season: store.season, teamName: team.team.name, previousSeason: previous)
+                }
+                TeamCard(team: team)
+                OverviewBanners()
+                PushPromptCard()
+                sharedWishlistBanner
+                if layoutWidth == .regular { aroundTheLeague(team) }
+            case .movies:
+                myMovies(team)
+                if layoutWidth == .compact { aroundTheLeague(team) }
+                if !snapshot.holdings.isEmpty { TMDbAttribution() }
             }
-            TeamCard(team: team)
-            OverviewBanners()
-            PushPromptCard()
-            sharedWishlistBanner
-            myMovies(team)
-            AroundTheLeague(releases: LeagueOverview.upcomingReleases(
-                holdings: snapshot.holdings, teams: snapshot.teams, myTeamID: team.id
-            ))
-            if !snapshot.holdings.isEmpty { TMDbAttribution() }
-        } else {
+        } else if part == .summary {
             FRCard {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Welcome to \(store.season.name)")
@@ -98,6 +109,12 @@ private struct OverviewContent: View {
                 router.presentMenu(.wishlist)
             }
         }
+    }
+
+    private func aroundTheLeague(_ team: SeasonTeam) -> some View {
+        AroundTheLeague(releases: LeagueOverview.upcomingReleases(
+            holdings: snapshot.holdings, teams: snapshot.teams, myTeamID: team.id
+        ))
     }
 
     @ViewBuilder
