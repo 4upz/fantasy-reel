@@ -58,6 +58,7 @@ in the PR, since this folder is shared).
 | `.fgrp .field` | `FormFieldRow(label:labelWidth:)` (92pt label default) in `FRRowGroup(separatorInset: 16)` |
 | reconnecting pill, offline dot (V2DraftOffline) | `ConnectionStatusBanner`, `ConnectionStatusIndicator` |
 | load / empty / error states | `LoadState` + `LoadStateView`, `LoadingView`, `EmptyStateView`, `ErrorStateView` |
+| Marquee illustrations (empty screens, champion) | `MarqueeArt(.trades)`; the seven pieces and where each goes are on `MarqueeIllustration`. Regenerate the art with `docs/marquee/generate.mjs` |
 
 Native iOS 26 glass is used directly: `.glassEffect(.regular.interactive(), in:)`,
 `GlassEffectContainer`, and `.buttonStyle(.glass)` / `.glassProminent` for
