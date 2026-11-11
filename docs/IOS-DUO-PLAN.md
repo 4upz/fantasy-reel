@@ -431,8 +431,10 @@ Runs on Arik's Mac through Remote Control, since it needs Xcode.
 
 Phase 0 status (2026-11-11):
 
-- 0.1 done. Xcode 27.1 is on the Mac; CI now selects the newest Xcode 27.1+ on
-  the runner and fails clearly if there is none. Minimum stays iOS 26. The
+- 0.1 done. Xcode 27.1 is on the Mac. CI moved from the `macos-26` runner (which
+  stops at Xcode 26.6) to GitHub's `xcode-27` image, and selects the newest
+  Xcode 27.1+ release there (a release candidate only if no release is
+  installed), failing clearly if there is none. Minimum stays iOS 26. The
   compiler's new main-actor warnings are fixed.
 - 0.2 closed display done (section 3.2); open display pending, see 3.2.
 - 0.3 closed display: all 60 scenes captured in dark mode. Open display pending.

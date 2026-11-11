@@ -60,7 +60,8 @@ BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.pl
 xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 xcrun simctl install "$UDID" "$APP"
 mkdir -p "$OUT"
-CHECK=$(mktemp -t fr-shot).png
+CHECK_DIR=$(mktemp -d)
+CHECK=$CHECK_DIR/check.png
 SCENES=$(sed -n 's/^    case \([a-zA-Z]*\)$/\1/p' FantasyReel/App/ScreenshotScenes.swift)
 for appearance in $APPEARANCES; do
   xcrun simctl ui "$UDID" appearance "$appearance"
@@ -69,7 +70,7 @@ for appearance in $APPEARANCES; do
     for attempt in 1 2 3; do
       SIMCTL_CHILD_FR_SCREENSHOT="$scene" xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID" >/dev/null
       sleep $((2 + attempt * 2))
-      xcrun simctl io "$UDID" screenshot "${DISPLAY_ARGS[@]}" "$FILE" >/dev/null 2>&1
+      xcrun simctl io "$UDID" screenshot ${DISPLAY_ARGS[@]+"${DISPLAY_ARGS[@]}"} "$FILE" >/dev/null 2>&1
       sips --resampleWidth 600 "$FILE" --out "$CHECK" >/dev/null
       if [ "$(stat -f%z "$CHECK")" -gt 60000 ]; then break; fi
       echo "::warning::$PREFIX$scene ($appearance) looked blank on attempt $attempt"
@@ -77,4 +78,4 @@ for appearance in $APPEARANCES; do
     done
   done
 done
-rm -f "$CHECK"
+rm -rf "$CHECK_DIR"
