@@ -284,8 +284,8 @@ Never: scrolling, opening screens, switching tabs, scores or bids changing becau
 someone else, or anything that can fire for many rows at once.
 
 iOS already has a system switch (Settings, Sounds and Haptics, System Haptics) that
-silences these, which meets Apple's "make haptics optional". Whether we also want a
-switch inside the app is Q5.
+silences these, which meets Apple's "make haptics optional". There is no separate
+switch inside the app (Q5).
 
 No sounds are proposed.
 
@@ -431,7 +431,7 @@ Asked one at a time in the thread. Recommendations in bold.
 | Q2 | How much personality? | **Answered 2026-11-11: quiet, with a few big moments.** Art on empty screens, feedback everywhere, and three moments (draft pick, score arriving, champion). |
 | Q3 | Who makes the final art? | **Answered 2026-11-11: Claude draws it as vector art for the first release.** Whether to commission an illustrator to redraw it is decided after using it; that would be a file swap, not a rebuild. |
 | Q4 | What goes in the first release? | **Answered 2026-11-11: everything marked "First" in section 6.** Foundations, feedback and haptics, the seven in-app illustrations, the draft-pick moment and the champion reveal. |
-| Q5 | A haptics switch inside the app? | **No, follow the iPhone's own setting**, or add a switch in Account. |
+| Q5 | A haptics switch inside the app? | **Answered 2026-11-11: no.** The app follows the iPhone's own System Haptics setting. |
 | Q6 | Welcome screen: replace the three numbered steps with the cinema scene? | **Yes, later, with the steps kept in How to Play**, or keep the steps and add smaller art. |
 | Q7 | Should the web app later adopt the iOS style, or keep Storybook? | Out of scope here. **Decide after iOS ships.** |
 
