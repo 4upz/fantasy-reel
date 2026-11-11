@@ -22,7 +22,7 @@ listed in section 11 and marked **[Apple]**. Everything else is our proposal.
   1. **Feedback** on things you do (taps, small icon animations, numbers that roll).
      Dozens of places, each a line or two of code.
   2. **Illustrations** on empty and welcome screens, in a new style made for the iOS
-     app (Arik's decision; three candidates in section 5.2). About eight pieces of art.
+     app, called Marquee (Arik's decisions; section 5.2). About eight pieces of art.
   3. **Moments**: two or three places where the app celebrates. Making a draft pick,
      a score arriving, winning the season.
 - It fits the Duo work without blocking it: one small foundations thread adds the
@@ -154,9 +154,10 @@ read. The goal is to add warmth without making it busier.
 
 ### 5.2 Illustrations
 
-**Decision (Q1, 2026-11-11): the iOS app gets its own illustration style, not the
-web's Storybook family.** Three candidates are drawn below, each showing the same three
-subjects so they can be compared like for like. Which one is Q1b.
+**Decisions (2026-11-11): the iOS app gets its own illustration style, not the web's
+Storybook family (Q1), and that style is B, Marquee (Q1b).** Marquee is bold flat
+shapes, art-deco sunbursts and strong blocks of color, like an old cinema poster. The
+three candidates that were compared, each drawing the same three subjects:
 
 ![Three candidate illustration styles](ios-delight/mockups/styles.png)
 
@@ -169,24 +170,34 @@ subjects so they can be compared like for like. Which one is Q1b.
 | How it ships | Vector, tiny files | Vector, tiny files | Layered images (blur is costly to draw live) |
 | Risk | May still feel too quiet | Competes with real posters if overused | Least "cinema" personality |
 
-Our recommendation is **B, Marquee**: it answers "boring" most directly, it is plain
-vector art (so it stays sharp on both Duo screens, recolors for the light theme, and
-its parts can move), and its sunburst can become the shared shape behind the champion
-and draft moments. Whichever is chosen, the subjects, sizes and placements below stay
-the same. Rules that carry over from the brand guide regardless of style: no confetti,
-no gavel for bids, original poster art only, and art is removed once a screen has
-content. The mockups in section 7 were drawn before this decision, in the Storybook
-style; read them for placement and size, not for style.
+Why Marquee: it answers "boring" most directly, it is plain vector art (so it stays
+sharp on both Duo screens, recolors for the light theme, and its parts can move), and
+its sunburst becomes the shared shape behind the champion and draft moments.
+
+Marquee rules:
+
+- **Palette:** gold, burgundy, blue-gray and ivory on charcoal, from the brand colors.
+  Flat fills only. No gradients, texture or glow.
+- **Vocabulary:** poster cards with an ivory border, a half-sun and rays, bold arrows,
+  round badges, small stars. Every piece is built from these.
+- **Restraint:** it is loud, so it appears only on the screens in the table below. It
+  never sits beside real movie posters, which it would compete with.
+- Carried over from the brand guide: no confetti, no gavel for bids, original poster
+  art only, and art is removed once a screen has content.
+
+The empty-screen and champion mockups in section 7 are drawn in Marquee. The welcome
+mockup still shows the earlier Storybook stand-in; it is later scope and will be
+redrawn then.
 
 | # | Illustration | Where | Size | Release |
 | --- | --- | --- | --- | --- |
-| I1 | Two movie cards joined by a film strip | Trades, empty | about 216 pt wide | First |
-| I2 | Card stack with a heart bookmark | Wishlist, empty (mine and league-mates) | 216 pt | First |
+| I1 | Two poster cards and a pair of arrows | Trades, empty | about 216 pt wide | First |
+| I2 | Fan of cards with a heart badge | Wishlist, empty (mine and league-mates) | 216 pt | First |
 | I3 | Card, bid slip and coin | Bids, empty; bid history, empty | 216 pt | First |
 | I4 | Quiet cinema marquee | Notifications, empty | 216 pt | First |
 | I5 | Seats and a ticket | Draft before it starts; roster before the draft | 216 pt | First |
 | I6 | Cinema entrance (smaller cut) | No leagues yet; season not open | 216 pt | First |
-| I7 | Laurel around a winning card | Season complete, champion card | about 200 pt | First (see Q4) |
+| I7 | Sunburst behind a winning card | Season complete, champion card | about 200 pt | First (see Q4) |
 | I8 | Cinema entrance, full scene | Welcome (signed out) | 240 pt closed, 380 pt open | Later |
 
 The other twenty-odd empty states (search with no results, "only the commissioner can
@@ -201,16 +212,15 @@ Rules:
 - **Light and dark.** Ivory paper cards vanish on the light theme's background. Every
   piece is checked in both themes and gets a light variant if its outline is lost.
 - **Hidden from VoiceOver.** The title and message beside it already say everything.
-- **Built in parts.** Each piece is two or three separate parts (for example: left
-  card, right card, arrows), so the parts can settle into place on arrival. For styles
-  A and B these are vector shapes; for C they are transparent images with the glow
-  baked in. No animation library is added (the app has one third-party dependency and
+- **Built in parts.** Each piece is two or three separate vector parts (for example:
+  left card, right card, arrows), so the parts can slide and snap into place on
+  arrival. No animation library is added (the app has one third-party dependency and
   should keep it that way).
 - **Small files.** Target under 100 KB per illustration across all its layers, checked
   in the PR.
 
-For styles A and B, the vector drawings in the comparison above are close to
-shippable and would be refined, not redone (Q3).
+The vector drawings in the mockups are close to shippable and would be refined, not
+redone (Q3).
 
 ### 5.3 Motion
 
@@ -312,7 +322,7 @@ No sounds are proposed.
 | Trades | I1 when empty | New offer card eases in; M7 | Trade map above | First |
 | Trade composer | None | Assets slide between "you give" and "you get" | Success on send | First |
 | Standings | None | M2, M5 | None | First |
-| Season complete | I7 | Light sweep and count-up, first view only (moment) | Success, first view only | First (Q4) |
+| Season complete | I7 | Sunburst opens and points count up, first view only (moment) | Success, first view only | First (Q4) |
 | Movie search, movie detail | None | M3; M10 | Selection on save | M3 first, M10 later |
 | Wishlist | I2 when empty | M3; removed card collapses | Selection | First |
 | Notifications | I4 when empty | M4; unread dot fades when read | None | First |
@@ -324,8 +334,7 @@ No sounds are proposed.
 Drawn with the app's real fonts, colors and spacing on the Duo frames from the Duo
 plan (closed and open screens). Sources and a render script are in
 `docs/ios-delight/mockups/` (`node render.js` rebuilds every PNG). Still images cannot
-show movement, so motion is shown as storyboards with captions. The illustrations in
-these five were drawn in the earlier Storybook style (section 5.2).
+show movement, so motion is shown as storyboards with captions.
 
 **Empty screens, today and proposed.** Left: what every empty screen looks like now.
 Then Trades, Wishlist and Bids with their own art.
@@ -346,11 +355,11 @@ its Reduce Motion version.
 
 ![Micro-animation storyboards](ios-delight/mockups/micro.png)
 
-**Season complete (open screen).** The champion card gets art and a one-time reveal.
+**Season complete (open screen).** The champion card gets art and a one-time reveal: the sunburst opens out and the points count up.
 
 ![Season complete with champion artwork](ios-delight/mockups/champion.png)
 
-**Welcome (later).** The one full scene in the app, open and closed.
+**Welcome (later).** The one full scene in the app, open and closed. Still drawn in the earlier Storybook stand-in; to be redrawn in Marquee.
 
 ![Welcome screen with the cinema scene](ios-delight/mockups/welcome.png)
 
@@ -360,7 +369,7 @@ These go into `apps/ios/FantasyReel/DesignSystem/README.md` with the foundations
 by the three reviewer threads.
 
 - **Reduce Motion:** movement becomes a fade or an instant change. Rolling numbers
-  swap. Moments (draft travel, champion sweep) become a cross-fade. Haptics are not
+  swap. Moments (draft travel, champion sunburst) become a cross-fade. Haptics are not
   motion and stay.
 - **Never the only signal.** A change shown by animation is also shown as text or a
   label ("▲ 1", "Your pick", "Bid placed"). A haptic is always paired with something
@@ -418,9 +427,9 @@ Asked one at a time in the thread. Recommendations in bold.
 | # | Question | Options |
 | --- | --- | --- |
 | Q1 | Which illustration style? | **Answered 2026-11-11: a new style for iOS only.** |
-| Q1b | Which of the three new styles (section 5.2)? | A Gold line, **B Marquee**, C Glass, or none of these (draw more). |
+| Q1b | Which of the three new styles (section 5.2)? | **Answered 2026-11-11: B, Marquee.** |
 | Q2 | How much personality? | **Quiet: art on empty screens, feedback everywhere, two or three moments**, or louder: art on populated screens too and more celebration. |
-| Q3 | Who makes the final art? | For A or B: **we draw it as vector art, refining the samples in section 5.2**, or commission an illustrator. For C: generate and layer images, or commission. |
+| Q3 | Who makes the final art? | **We draw it as vector art, refining the samples in section 5.2**, or commission an illustrator. |
 | Q4 | What goes in the first release? | **Foundations, feedback, the seven in-app illustrations, the draft-pick moment and the champion reveal**, or a smaller cut: foundations and feedback only, art afterwards. |
 | Q5 | A haptics switch inside the app? | **No, follow the iPhone's own setting**, or add a switch in Account. |
 | Q6 | Welcome screen: replace the three numbered steps with the cinema scene? | **Yes, later, with the steps kept in How to Play**, or keep the steps and add smaller art. |
