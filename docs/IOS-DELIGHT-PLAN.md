@@ -428,7 +428,7 @@ Asked one at a time in the thread. Recommendations in bold.
 | --- | --- | --- |
 | Q1 | Which illustration style? | **Answered 2026-11-11: a new style for iOS only.** |
 | Q1b | Which of the three new styles (section 5.2)? | **Answered 2026-11-11: B, Marquee.** |
-| Q2 | How much personality? | **Quiet: art on empty screens, feedback everywhere, two or three moments**, or louder: art on populated screens too and more celebration. |
+| Q2 | How much personality? | **Answered 2026-11-11: quiet, with a few big moments.** Art on empty screens, feedback everywhere, and three moments (draft pick, score arriving, champion). |
 | Q3 | Who makes the final art? | **We draw it as vector art, refining the samples in section 5.2**, or commission an illustrator. |
 | Q4 | What goes in the first release? | **Foundations, feedback, the seven in-app illustrations, the draft-pick moment and the champion reveal**, or a smaller cut: foundations and feedback only, art afterwards. |
 | Q5 | A haptics switch inside the app? | **No, follow the iPhone's own setting**, or add a switch in Account. |
