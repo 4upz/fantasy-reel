@@ -24,7 +24,8 @@ concurrency:
 jobs:
   build-and-test:
     name: Build and test (iOS Simulator)
-    runs-on: macos-26
+    # The Xcode 27 image (macOS 27, Apple Silicon); macos-26 stops at Xcode 26.6.
+    runs-on: xcode-27
     timeout-minutes: 75
     permissions:
       # Only the labeled screenshot step writes (to the PR's own branch).
@@ -40,17 +41,21 @@ jobs:
       # on iOS 26. Picks the newest Xcode 27.1+ on the image, never an older one.
       - name: Select Xcode 27.1 or newer
         run: |
-          echo "Xcodes on this image:"; ls -d /Applications/Xcode*.app
-          XCODE=$(ls -d /Applications/Xcode_*.app 2>/dev/null \
-            | python3 -c 'import re,sys
+          # Every Xcode on the image with its version; a release beats a
+          # release candidate, betas are never used.
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | tee /dev/stderr | python3 -c 'import sys
           found=[]
-          for p in sys.stdin.read().split():
-              m=re.search(r"Xcode_(\d+)\.(\d+)(?:\.(\d+))?(?:_[^/]*)?\.app$", p)
-              if m and "beta" not in p.lower() and "release_candidate" not in p.lower():
-                  v=tuple(int(x or 0) for x in m.groups())
-                  if v >= (27,1): found.append((v,p))
-          print(max(found)[1] if found else "")')
+          for line in sys.stdin:
+              v,p=line.split(" ",1); p=p.strip()
+              if "beta" in p.lower(): continue
+              n=tuple(int(x) for x in (v.split(".")+["0","0"])[:3])
+              if n >= (27,1,0): found.append(("candidate" not in p.lower(), n, p))
+          print(max(found)[2] if found else "")')
           if [ -z "$XCODE" ]; then echo "::error::No Xcode 27.1 or newer on this runner image"; exit 1; fi
+          case "$XCODE" in *[Cc]andidate*) echo "::warning::Using a release candidate: $XCODE" ;; esac
           echo "Using $XCODE"
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
