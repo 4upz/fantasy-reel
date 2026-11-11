@@ -429,7 +429,7 @@ Asked one at a time in the thread. Recommendations in bold.
 | Q1 | Which illustration style? | **Answered 2026-11-11: a new style for iOS only.** |
 | Q1b | Which of the three new styles (section 5.2)? | **Answered 2026-11-11: B, Marquee.** |
 | Q2 | How much personality? | **Answered 2026-11-11: quiet, with a few big moments.** Art on empty screens, feedback everywhere, and three moments (draft pick, score arriving, champion). |
-| Q3 | Who makes the final art? | **We draw it as vector art, refining the samples in section 5.2**, or commission an illustrator. |
+| Q3 | Who makes the final art? | **Answered 2026-11-11: Claude draws it as vector art for the first release.** Whether to commission an illustrator to redraw it is decided after using it; that would be a file swap, not a rebuild. |
 | Q4 | What goes in the first release? | **Foundations, feedback, the seven in-app illustrations, the draft-pick moment and the champion reveal**, or a smaller cut: foundations and feedback only, art afterwards. |
 | Q5 | A haptics switch inside the app? | **No, follow the iPhone's own setting**, or add a switch in Account. |
 | Q6 | Welcome screen: replace the three numbered steps with the cinema scene? | **Yes, later, with the steps kept in How to Play**, or keep the steps and add smaller art. |
