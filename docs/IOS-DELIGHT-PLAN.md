@@ -432,7 +432,7 @@ Asked one at a time in the thread. Recommendations in bold.
 | Q3 | Who makes the final art? | **Answered 2026-11-11: Claude draws it as vector art for the first release.** Whether to commission an illustrator to redraw it is decided after using it; that would be a file swap, not a rebuild. |
 | Q4 | What goes in the first release? | **Answered 2026-11-11: everything marked "First" in section 6.** Foundations, feedback and haptics, the seven in-app illustrations, the draft-pick moment and the champion reveal. |
 | Q5 | A haptics switch inside the app? | **Answered 2026-11-11: no.** The app follows the iPhone's own System Haptics setting. |
-| Q6 | Welcome screen: replace the three numbered steps with the cinema scene? | **Yes, later, with the steps kept in How to Play**, or keep the steps and add smaller art. |
+| Q6 | Welcome screen: replace the three numbered steps with a full scene? | **Answered 2026-11-11: yes, after the first release.** A full Marquee cinema scene; the steps stay in How to Play. |
 | Q7 | Should the web app later adopt the iOS style, or keep Storybook? | Out of scope here. **Decide after iOS ships.** |
 
 ## 11. Sources
