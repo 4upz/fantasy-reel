@@ -69,6 +69,8 @@ enum ScreenshotScene: String, CaseIterable {
     case seasonComplete
     case shareInvite
     case growthDashboard
+    case marqueeEmpty
+    case marqueeMoments
 
     static var requested: ScreenshotScene? {
         ProcessInfo.processInfo.environment["FR_SCREENSHOT"].flatMap(ScreenshotScene.init(rawValue:))
@@ -93,7 +95,11 @@ struct ScreenshotSceneView: View {
     let scene: ScreenshotScene
 
     var body: some View {
-        if Self.movieResearchScenes.contains(scene) {
+        if scene == .marqueeEmpty {
+            MarqueeGallery(pieces: [.trades, .wishlist, .bids, .notifications])
+        } else if scene == .marqueeMoments {
+            MarqueeGallery(pieces: [.draft, .entrance, .champion])
+        } else if Self.movieResearchScenes.contains(scene) {
             MovieResearchScreenshotView(scene: scene)
         } else if Self.teamMarketScenes.contains(scene) {
             TeamMarketScreenshotView(scene: scene)
