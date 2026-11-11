@@ -34,6 +34,9 @@ struct FantasyReelApp: App {
             }
             .preferredColorScheme(appearance.colorScheme)
             .tint(.frGold)
+            #if DEBUG
+            .layoutProbe()
+            #endif
         }
     }
 

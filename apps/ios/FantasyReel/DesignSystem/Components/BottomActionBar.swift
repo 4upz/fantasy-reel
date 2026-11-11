@@ -35,6 +35,9 @@ private struct BottomActionBarContent<Actions: View>: View {
         layout {
             actions
         }
+        // Full-width buttons read as a banner on a wide page (iPhone Duo open).
+        .frame(maxWidth: FRMetrics.actionBarWidth)
+        .frame(maxWidth: .infinity)
         .padding(.horizontal, FRMetrics.pageMargin)
         .padding(.vertical, 8)
     }

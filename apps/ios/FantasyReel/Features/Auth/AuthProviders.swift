@@ -118,7 +118,7 @@ final class AppleAuthorizer: NSObject {
     }
 }
 
-extension AppleAuthorizer: @preconcurrency ASAuthorizationControllerDelegate {
+extension AppleAuthorizer: ASAuthorizationControllerDelegate {
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
         finish(.success(authorization))
     }
@@ -128,7 +128,7 @@ extension AppleAuthorizer: @preconcurrency ASAuthorizationControllerDelegate {
     }
 }
 
-extension AppleAuthorizer: @preconcurrency ASAuthorizationControllerPresentationContextProviding {
+extension AppleAuthorizer: ASAuthorizationControllerPresentationContextProviding {
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         let windows = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
