@@ -1,13 +1,13 @@
 <!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css">
 <style>
 /* Outer display, phone shut: the system puts navigation on the side, so the rail sits on the right (thumb) edge. */
-.device.closed .rail{left:auto;right:0;width:76px}
+.device.closed .rail{width:76px}
 .device.closed .pane.c{left:16px;width:366px}
 </style></head><body>
 <div class="device closed">
   <div class="statusbar"><span>9:41</span><span class="sys"><span class="sig">●●●●</span><span class="batt"></span></span></div>
 
-  <!-- Right-edge rail: league switcher, five tabs, then notifications / league menu. Search lives in the menu here. -->
+  <!-- Right-edge rail: league switcher, five tabs, then search / notifications / league menu. -->
   <div class="rail">
     <div class="gbtn glass" style="width:52px"><span class="av round a3" style="width:34px;height:34px">PS</span></div>
     <div class="vtabs glass">
@@ -18,6 +18,7 @@
       <div class="vtab"><i data-i="standings"></i>Standings</div>
     </div>
     <div class="grow"></div>
+    <div class="gbtn glass"><i data-i="search"></i></div>
     <div class="gbtn glass"><i data-i="bell"></i><span class="dot">3</span></div>
     <div class="gbtn glass"><i data-i="more"></i></div>
   </div>
