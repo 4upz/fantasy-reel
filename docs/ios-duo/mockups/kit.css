@@ -1,0 +1,101 @@
+/* Fantasy Reel iPhone Duo mockup kit. Tokens mirror apps/ios FRColor / FRTypography / FRMetrics (dark). 1 CSS px = 1 pt. */
+@font-face{font-family:"Bricolage";src:url("../../../apps/frontend/app/fonts/bricolage.woff2") format("woff2");font-weight:200 800;font-stretch:75% 100%}
+@font-face{font-family:"DM Sans";src:url("../../../apps/frontend/app/fonts/dm-sans.woff2") format("woff2");font-weight:100 1000}
+:root{--bg:#0f0f0f;--surface:#1c1c1c;--elevated:#2a2a2a;--border:#2e2e2e;--sep:rgba(255,255,255,.08);--fill:rgba(255,255,255,.13);
+--text:#e8e8e8;--text2:#b8b0a4;--muted:#8a8078;--gold:#c9a227;--gold-tint:rgba(201,162,39,.14);--on-gold:#0f0f0f;
+--crimson-text:#e07a86;--success:#22c55e;--success-tint:rgba(34,197,94,.13);--warning:#f59e0b;--warning-tint:rgba(245,158,11,.14);
+--info:#3b82f6;--info-tint:rgba(59,130,246,.15);--draft:#eab308;--draft-tint:rgba(234,179,8,.14);--beta:#9cc0ff}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#050505;font-family:"DM Sans",system-ui,sans-serif;color:var(--text);padding:24px;-webkit-font-smoothing:antialiased}
+/* Device frames. Sizes are estimates (pixels / 3); see plan section 3. */
+.device{position:relative;overflow:hidden;background:var(--bg);border-radius:34px;outline:3px solid #262626}
+.device.open{width:890px;height:626px}      /* inner display, book pose: fold runs top to bottom at x=445 */
+.device.table{width:626px;height:890px}     /* inner display turned: fold runs left to right at y=445 */
+.device.closed{width:466px;height:678px}    /* outer display */
+.fold{position:absolute;top:0;bottom:0;left:444.5px;border-left:1px dashed rgba(255,255,255,.13);pointer-events:none;z-index:50}
+.device.table .fold{top:444.5px;bottom:auto;left:0;right:0;border-left:0;border-top:1px dashed rgba(255,255,255,.13)}
+.statusbar{position:absolute;top:0;left:0;right:0;height:40px;display:flex;align-items:center;justify-content:space-between;padding:6px 28px 0;font:600 15px "DM Sans";z-index:40}
+.statusbar .sys{display:flex;gap:6px;align-items:center}
+.statusbar .batt{width:24px;height:11px;border:1.5px solid var(--text);border-radius:3.5px;position:relative;opacity:.9}
+.statusbar .batt::after{content:"";position:absolute;inset:1.5px;background:var(--text);border-radius:1.5px}
+.statusbar .sig{font-size:11px;letter-spacing:1px}
+/* Type roles */
+.t-large{font:700 34px/1.08 "Bricolage";letter-spacing:-.02em}
+.t-page{font:700 28px/1.1 "Bricolage";letter-spacing:-.02em}
+.t-panel{font:700 22px/1.15 "Bricolage";letter-spacing:-.015em}
+.t-section{font:600 20px/1.2 "Bricolage";letter-spacing:-.01em}
+.t-card{font:700 17px/1.2 "Bricolage";letter-spacing:-.01em}
+.t-body{font:400 16px/1.35 "DM Sans"} .t-small{font:400 14px/1.35 "DM Sans"}
+.t-row{font:600 16px/1.25 "DM Sans"} .t-label{font:500 15px/1.25 "DM Sans"}
+.t-meta{font:500 13px/1.3 "DM Sans";color:var(--text2)} .t-cap{font:500 12px/1.3 "DM Sans";color:var(--text2)}
+.t-over{font:600 13px/1.2 "DM Sans";letter-spacing:.05em;text-transform:uppercase;color:var(--text2)}
+.t-num{font:700 17px/1 "Bricolage";font-variant-numeric:tabular-nums lining-nums}
+.t-num-lg{font:700 24px/1 "Bricolage";font-variant-numeric:tabular-nums lining-nums}
+.t-num-hero{font:700 44px/1 "Bricolage";font-variant-numeric:tabular-nums lining-nums}
+.c2{color:var(--text2)} .cm{color:var(--muted)} .cg{color:var(--gold)} .cs{color:var(--success)} .cc{color:var(--crimson-text)}
+.one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Icons: <i data-i="home"></i>, filled in by icons.js */
+i[data-i]{display:inline-flex;width:22px;height:22px;flex:none} i[data-i] svg{width:100%;height:100%}
+/* Glass controls (Liquid Glass approximated) */
+.glass{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.10);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 6px 20px rgba(0,0,0,.35);backdrop-filter:blur(20px)}
+.gbtn{width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;color:var(--gold);position:relative;flex:none}
+.gpill{height:44px;border-radius:22px;display:inline-flex;align-items:center;gap:6px;padding:0 10px 0 5px;color:var(--text)}
+.dot{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;border-radius:9px;background:#ff453a;color:#fff;font:700 11px/18px "DM Sans";text-align:center;padding:0 4px}
+/* Side rail: the system places bars on the side in the book pose and on the outer display (approximation). */
+.rail{position:absolute;top:44px;bottom:0;left:0;width:84px;display:flex;flex-direction:column;align-items:center;gap:10px;padding:4px 0 16px;z-index:30}
+.rail .grow{flex:1}
+.vtabs{border-radius:30px;padding:5px;display:flex;flex-direction:column;gap:2px;width:68px}
+.vtab{height:52px;border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;font:600 10px "DM Sans";color:var(--text);position:relative}
+.vtab i{width:21px;height:21px} .vtab.on{background:rgba(255,255,255,.10);color:var(--gold)}
+.vtab .dot{top:3px;right:9px}
+/* Horizontal tab bar (floating capsule) */
+.tabbar{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);border-radius:32px;padding:5px;display:flex;gap:2px;z-index:30}
+.tab{width:84px;height:54px;border-radius:27px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:600 11px "DM Sans";position:relative}
+.tab.on{background:rgba(255,255,255,.10);color:var(--gold)} .tab .dot{top:4px;right:20px}
+/* Sidebar (P4) */
+.sidebar{position:absolute;top:44px;bottom:12px;left:12px;width:232px;border-radius:26px;padding:12px 10px;display:flex;flex-direction:column;gap:2px;z-index:30}
+.sb-h{padding:10px 10px 4px} .sb-item{height:44px;border-radius:14px;display:flex;align-items:center;gap:10px;padding:0 10px;font:500 15px "DM Sans";position:relative}
+.sb-item.on{background:rgba(255,255,255,.10);color:var(--gold);font-weight:600} .sb-item .end{margin-left:auto}
+.sb-sep{height:1px;background:var(--sep);margin:6px 10px}
+/* Panes: absolutely placed columns. In .open with a rail: left pane 84..437, right pane 453..874 (the gutter sits on the fold). */
+.pane{position:absolute;top:44px;bottom:0;overflow:hidden;display:flex;flex-direction:column;gap:12px;padding-top:4px}
+.pane.l{left:84px;width:353px} .pane.r{left:453px;width:421px}
+.pane.fade::after,.fadeb::after{content:"";position:absolute;left:0;right:0;bottom:0;height:56px;background:linear-gradient(transparent,var(--bg));pointer-events:none}
+.pane.sunken{background:#141414;border-radius:26px 26px 0 0;padding:14px 14px 0;top:48px} /* a detail pane that reads as a separate surface */
+.hd{display:flex;flex-direction:column;gap:2px} .hd .row{display:flex;align-items:center;gap:8px;margin-top:4px}
+.sec{display:flex;align-items:baseline;justify-content:space-between;padding:6px 4px 0}
+.sec a{font:600 15px "DM Sans";color:var(--gold)}
+/* Cards, row groups, rows */
+.card{background:var(--surface);border-radius:22px;padding:16px}
+.grp{background:var(--surface);border-radius:22px;overflow:hidden}
+.mrow{min-height:64px;display:flex;align-items:center;gap:12px;padding:5px 16px;position:relative}
+.mrow+.mrow::before{content:"";position:absolute;top:0;left:64px;right:0;height:1px;background:var(--sep)}
+.mrow.plain+.mrow.plain::before{left:16px}
+.mrow.sel{background:rgba(201,162,39,.10)} .mrow.sel::after{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:2px;background:var(--gold)}
+.mrow .mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.mrow .trail{width:64px;text-align:right;flex:none} .mrow .chev{color:var(--muted);width:16px;height:16px}
+.rank{width:30px;flex:none;font:700 17px "Bricolage";color:var(--text2);font-variant-numeric:tabular-nums}
+.poster{width:36px;height:54px;border-radius:5px;flex:none;display:flex;align-items:flex-end;padding:3px 4px;font:700 8px "DM Sans";color:rgba(255,255,255,.75);border:1px solid rgba(255,255,255,.08)}
+.poster.lg{width:92px;height:138px;border-radius:10px;font-size:13px;padding:8px}
+.p1{background:#3b2a4d}.p2{background:#24414a}.p3{background:#4a2f22}.p4{background:#2a3a28}.p5{background:#47243a}.p6{background:#253049}.p7{background:#4a4123}.p8{background:#33302d}
+.av{width:36px;height:36px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;font:700 13px "DM Sans";color:#0f0f0f}
+.av.round{border-radius:50%} .av.sm{width:28px;height:28px;font-size:11px;border-radius:8px} .av.lg{width:44px;height:44px;border-radius:12px;font-size:15px}
+.a1{background:#c9a227}.a2{background:#7fa8c9}.a3{background:#c98a7f}.a4{background:#9cc97f}.a0{background:var(--elevated);color:var(--text)}
+.stats{display:flex;border-top:1px solid var(--sep);margin-top:14px;padding-top:12px}
+.stats>div{flex:1;display:flex;flex-direction:column;gap:5px} .stats>div+div{border-left:1px solid var(--sep);padding-left:14px}
+/* Badges, buttons, fields */
+.badge{display:inline-flex;align-items:center;height:22px;border-radius:11px;padding:0 9px;font:600 12px "DM Sans"}
+.b-active{background:var(--success-tint);color:var(--success)} .b-draft{background:var(--draft-tint);color:var(--draft)}
+.b-info{background:var(--info-tint);color:var(--beta)} .b-neutral{background:var(--fill);color:var(--text2)}
+.btn{height:50px;border-radius:25px;display:flex;align-items:center;justify-content:center;font:600 17px "DM Sans";padding:0 20px}
+.btn.primary{background:var(--gold);color:var(--on-gold)} .btn.tinted{background:var(--gold-tint);color:var(--gold)}
+.btn.sm{height:36px;border-radius:18px;font-size:15px;padding:0 14px;display:inline-flex}
+.banner{border-radius:22px;padding:14px 16px;display:flex;align-items:center;gap:12px}
+.banner.info{background:rgba(59,130,246,.16)} .banner.warn{background:rgba(245,158,11,.16)} .banner.success{background:rgba(34,197,94,.12)}
+.banner .mid{flex:1;min-width:0}
+.field{height:44px;border-radius:22px;display:flex;align-items:center;gap:8px;padding:0 14px;color:var(--muted);font:400 17px "DM Sans"}
+.seg{background:var(--surface);border-radius:20px;padding:3px;display:flex} .seg span{flex:1;height:34px;border-radius:17px;display:flex;align-items:center;justify-content:center;font:600 14px "DM Sans"}
+.seg .on{background:var(--elevated)}
+.chips{display:flex;gap:8px;overflow:hidden} .chip{height:32px;border-radius:16px;background:var(--surface);padding:0 12px;display:inline-flex;align-items:center;font:500 14px "DM Sans";white-space:nowrap}
+/* Annotation shown under a mockup (outside .device) */
+.note{font:500 13px/1.4 "DM Sans";color:#9a9087;max-width:890px;margin-top:12px}

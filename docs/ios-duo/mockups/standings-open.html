@@ -1,0 +1,74 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css">
+<style>
+  /* Screen-specific: standings list + team detail */
+  .pane.sunken .card,.pane.sunken .grp{background:#222}
+  /* Standings rows lead with a rank, so the separator starts at the team name */
+  .st .mrow+.mrow::before{left:106px}
+  .st .trail{width:48px}
+  .foot{padding:0 4px}
+  /* Team header in the detail pane */
+  .thead{display:flex;align-items:center;gap:12px;padding:2px 2px 0}
+  .thead .mid{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  /* Stats on their own (no header row above them inside the card) */
+  .stats.solo{border-top:0;margin-top:0;padding-top:0}
+</style></head><body>
+<div class="device open">
+  <div class="statusbar"><span>9:41</span><span class="sys"><span class="sig">●●●●</span><span class="batt"></span></span></div>
+  <div class="fold"></div>
+
+  <!-- Side rail: league switcher, tabs, then search / notifications / league menu -->
+  <div class="rail">
+    <div class="gbtn glass" style="width:52px"><span class="av round a3" style="width:34px;height:34px">PS</span></div>
+    <div class="vtabs glass">
+      <div class="vtab"><i data-i="home"></i>Home</div>
+      <div class="vtab"><i data-i="roster"></i>Roster</div>
+      <div class="vtab"><i data-i="bids"></i>Bids<span class="dot">1</span></div>
+      <div class="vtab"><i data-i="trades"></i>Trades<span class="dot">1</span></div>
+      <div class="vtab on"><i data-i="standings"></i>Standings</div>
+    </div>
+    <div class="grow"></div>
+    <div class="gbtn glass"><i data-i="search"></i></div>
+    <div class="gbtn glass"><i data-i="bell"></i><span class="dot">3</span></div>
+    <div class="gbtn glass"><i data-i="more"></i></div>
+  </div>
+
+  <!-- Left of the fold: the table -->
+  <div class="pane l">
+    <div class="hd">
+      <div class="t-meta one">Popcorn Syndicate · 2026 Season</div>
+      <div class="t-large">Standings</div>
+    </div>
+    <div class="grp st">
+      <div class="mrow"><span class="rank">1</span><span class="av a2">KC</span><div class="mid"><div class="t-row one">Kubrick's Cube</div><div class="t-meta one">Dave Kubrick</div></div><div class="trail"><span class="t-num">+52</span></div></div>
+      <div class="mrow sel"><span class="rank">T-2</span><span class="av a4">RD</span><div class="mid"><div class="t-row one">Reel Deal</div><div class="t-meta one">Alice Spielberg · You</div></div><div class="trail"><span class="t-num">+41</span></div></div>
+      <div class="mrow"><span class="rank">T-2</span><span class="av a3">CC</span><div class="mid"><div class="t-row one">Coppola Cut</div><div class="t-meta one">Carol Coppola</div></div><div class="trail"><span class="t-num">+41</span></div></div>
+      <div class="mrow"><span class="rank">4</span><span class="av a1">NS</span><div class="mid"><div class="t-row one">Nolan's Suits</div><div class="t-meta one">Bob Nolan</div></div><div class="trail"><span class="t-num cc">−7</span></div></div>
+    </div>
+    <div class="t-meta foot">Points count from each movie's release day.</div>
+  </div>
+
+  <!-- Right of the fold: the selected team -->
+  <div class="pane r sunken fade">
+    <div class="thead">
+      <span class="av lg a4">RD</span>
+      <div class="mid"><div class="t-panel one">Reel Deal</div><div class="t-meta one">Alice Spielberg · Your team</div></div>
+    </div>
+    <div class="card">
+      <div class="stats solo">
+        <div><span class="t-meta">Rank</span><span class="t-num-lg">T-2 <span class="t-meta">of 4</span></span></div>
+        <div><span class="t-meta">Points</span><span class="t-num-lg">41</span></div>
+        <div><span class="t-meta">Budget</span><span class="t-num-lg">$54</span></div>
+      </div>
+    </div>
+    <div class="sec"><span class="t-section">Movies</span><span class="t-meta">8 of 10 slots</span></div>
+    <div class="grp">
+      <div class="mrow"><span class="poster p6">A3</span><div class="mid"><div class="t-row one">Avatar: Fire and Ash</div><div class="t-meta one">Released Dec 19 · 93%</div></div><div class="trail"><span class="t-num cs">+33</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p4">W2</span><div class="mid"><div class="t-row one">Wicked: For Good</div><div class="t-meta one">Released Nov 21 · 68%</div></div><div class="trail"><span class="t-num cs">+8</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p7">J3</span><div class="mid"><div class="t-row one">Jumanji 3</div><div class="t-meta one">Releases Dec 11</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p3">AD</span><div class="mid"><div class="t-row one">Avengers: Doomsday</div><div class="t-meta one">Releases Dec 18 · Pickup</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p2">IA</span><div class="mid"><div class="t-row one">Ice Age: Boiling Point</div><div class="t-meta one">Releases Dec 18</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p5">CH</span><div class="mid"><div class="t-row one">The Cat in the Hat</div><div class="t-meta one">Releases Feb 26</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+    </div>
+  </div>
+</div>
+<script src="icons.js"></script></body></html>

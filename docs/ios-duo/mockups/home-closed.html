@@ -1,0 +1,62 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css">
+<style>
+/* Outer display, phone shut: the system puts navigation on the side, so the rail sits on the right (thumb) edge. */
+.device.closed .rail{left:auto;right:0;width:76px}
+.device.closed .pane.c{left:16px;width:366px}
+</style></head><body>
+<div class="device closed">
+  <div class="statusbar"><span>9:41</span><span class="sys"><span class="sig">●●●●</span><span class="batt"></span></span></div>
+
+  <!-- Right-edge rail: league switcher, five tabs, then notifications / league menu. Search lives in the menu here. -->
+  <div class="rail">
+    <div class="gbtn glass" style="width:52px"><span class="av round a3" style="width:34px;height:34px">PS</span></div>
+    <div class="vtabs glass">
+      <div class="vtab on"><i data-i="home"></i>Home</div>
+      <div class="vtab"><i data-i="roster"></i>Roster</div>
+      <div class="vtab"><i data-i="bids"></i>Bids<span class="dot">1</span></div>
+      <div class="vtab"><i data-i="trades"></i>Trades<span class="dot">1</span></div>
+      <div class="vtab"><i data-i="standings"></i>Standings</div>
+    </div>
+    <div class="grow"></div>
+    <div class="gbtn glass"><i data-i="bell"></i><span class="dot">3</span></div>
+    <div class="gbtn glass"><i data-i="more"></i></div>
+  </div>
+
+  <!-- Single column, same order as a regular iPhone -->
+  <div class="pane c fade">
+    <div class="hd">
+      <div class="t-page one">Popcorn Syndicate</div>
+      <div class="row"><span class="t-meta">2026 Season</span><span class="badge b-active">Active</span></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="av lg a4">RD</span>
+        <div style="flex:1;min-width:0"><div class="t-card one">Reel Deal</div><div class="t-meta one">Alice Spielberg · Your team</div></div>
+        <div class="gbtn" style="background:var(--elevated);color:var(--text)"><i data-i="pencil" style="width:18px;height:18px"></i></div>
+      </div>
+      <div class="stats">
+        <div><span class="t-meta">Rank</span><span class="t-num-lg">T-2 <span class="t-meta">of 4</span></span></div>
+        <div><span class="t-meta">Points</span><span class="t-num-lg">41</span></div>
+        <div><span class="t-meta">Budget</span><span class="t-num-lg">$54</span></div>
+      </div>
+    </div>
+    <div class="banner info">
+      <i data-i="trades" style="color:var(--info)"></i>
+      <div class="mid"><div class="t-row">1 trade needs your response</div></div>
+      <span class="btn tinted sm">Review</span>
+    </div>
+    <div class="banner warn">
+      <i data-i="tag" style="color:var(--warning)"></i>
+      <div class="mid"><div class="t-row">You've been outbid on a movie</div><div class="t-meta">Raise your bid before the cutoff.</div></div>
+      <span class="btn tinted sm">Review</span>
+    </div>
+    <div class="sec"><span class="t-section">My movies</span><a>See roster</a></div>
+    <div class="grp">
+      <div class="mrow"><span class="poster p4">W2</span><div class="mid"><div class="t-row one">Wicked: For Good</div><div class="t-meta one">Released Nov 21 · 68%</div></div><div class="trail"><span class="t-num cs">+8</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p6">A3</span><div class="mid"><div class="t-row one">Avatar: Fire and Ash</div><div class="t-meta one">Released Dec 19 · 93%</div></div><div class="trail"><span class="t-num cs">+33</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p7">J3</span><div class="mid"><div class="t-row one">Jumanji 3</div><div class="t-meta one">Releases Dec 11</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p3">AD</span><div class="mid"><div class="t-row one">Avengers: Doomsday</div><div class="t-meta one">Releases Dec 18 · Pickup</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+    </div>
+  </div>
+</div>
+<script src="icons.js"></script></body></html>
