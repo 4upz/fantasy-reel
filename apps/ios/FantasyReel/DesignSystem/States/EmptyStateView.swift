@@ -1,3 +1,5 @@
+import SwiftUI
+
 /// A centered empty state (V2NoLeagues): a gold icon or an illustration, a
 /// panel title (a header for VoiceOver), a short secondary message, and
 /// full-width actions stacked 12pt apart. Use one `.frPrimary` action at most.
