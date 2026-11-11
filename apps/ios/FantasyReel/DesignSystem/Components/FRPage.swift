@@ -92,21 +92,17 @@ struct FRPage<Leading: View, Trailing: View>: View {
     var body: some View {
         let width = FRLayoutWidth(sizeClass)
         ScrollView {
-            Group {
-                if let trailing, width == .regular {
-                    FRColumnsLayout(spacing: spacing) {
-                        column { leading }
-                        column { trailing }
-                    }
-                } else {
-                    column {
-                        leading
-                        trailing
-                    }
-                    .frame(maxWidth: width == .regular ? FRMetrics.readableWidth : nil)
-                }
+            // One layout for every width, so opening or closing an iPhone Duo
+            // moves the columns without rebuilding them: scroll position and
+            // the sections' @State survive the change.
+            FRPageLayout(
+                spacing: spacing,
+                splits: width == .regular,
+                maxSingleColumnWidth: width == .regular ? FRMetrics.readableWidth : nil
+            ) {
+                column { leading }
+                if let trailing { column { trailing } }
             }
-            .frame(maxWidth: .infinity)
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 24)
         }
@@ -121,40 +117,52 @@ struct FRPage<Leading: View, Trailing: View>: View {
     }
 }
 
-/// Two equal, top-aligned columns, or one column (the second under the
-/// first) when the offered width can't give each at least
-/// `FRMetrics.minColumnWidth`. Deciding from the width offered, not the
-/// screen, keeps it right in Split View and in a sheet.
-private struct FRColumnsLayout: Layout {
+/// Lays out a page's one or two columns. With `splits` and two columns that
+/// can each get `FRMetrics.minColumnWidth`, they sit side by side, equal and
+/// top-aligned. Otherwise they stack (the second under the first), centered
+/// and no wider than `maxSingleColumnWidth`. Deciding from the width offered,
+/// not the screen, keeps it right in Split View and in a sheet.
+private struct FRPageLayout: Layout {
     let spacing: CGFloat
+    let splits: Bool
+    let maxSingleColumnWidth: CGFloat?
 
-    private func columnWidth(_ width: CGFloat) -> CGFloat? {
+    private func columnWidth(_ width: CGFloat, _ count: Int) -> CGFloat? {
+        guard splits, count == 2 else { return nil }
         let column = (width - FRMetrics.columnGap) / 2
         return column >= FRMetrics.minColumnWidth ? column : nil
     }
 
+    private func stackWidth(_ width: CGFloat) -> CGFloat {
+        min(width, maxSingleColumnWidth ?? width)
+    }
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        guard subviews.count == 2 else { return .zero }
-        let width = proposal.width ?? FRMetrics.readableWidth
-        if let column = columnWidth(width) {
+        let width = proposal.width ?? maxSingleColumnWidth ?? FRMetrics.readableWidth
+        if let column = columnWidth(width, subviews.count) {
             let heights = subviews.map { $0.sizeThatFits(.init(width: column, height: nil)).height }
             return CGSize(width: width, height: heights.max() ?? 0)
         }
-        let heights = subviews.map { $0.sizeThatFits(.init(width: width, height: nil)).height }
-        return CGSize(width: width, height: heights.reduce(0, +) + spacing)
+        let inner = ProposedViewSize(width: stackWidth(width), height: nil)
+        let heights = subviews.map { $0.sizeThatFits(inner).height }
+        return CGSize(width: width, height: heights.reduce(0, +) + spacing * CGFloat(max(subviews.count - 1, 0)))
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        guard subviews.count == 2 else { return }
-        if let column = columnWidth(bounds.width) {
+        if let column = columnWidth(bounds.width, subviews.count) {
             let size = ProposedViewSize(width: column, height: nil)
-            subviews[0].place(at: bounds.origin, proposal: size)
-            subviews[1].place(at: CGPoint(x: bounds.minX + column + FRMetrics.columnGap, y: bounds.minY), proposal: size)
-        } else {
-            let size = ProposedViewSize(width: bounds.width, height: nil)
-            let first = subviews[0].sizeThatFits(size).height
-            subviews[0].place(at: bounds.origin, proposal: size)
-            subviews[1].place(at: CGPoint(x: bounds.minX, y: bounds.minY + first + spacing), proposal: size)
+            for (index, subview) in subviews.enumerated() {
+                let x = bounds.minX + CGFloat(index) * (column + FRMetrics.columnGap)
+                subview.place(at: CGPoint(x: x, y: bounds.minY), proposal: size)
+            }
+            return
+        }
+        let width = stackWidth(bounds.width)
+        let size = ProposedViewSize(width: width, height: nil)
+        var y = bounds.minY
+        for subview in subviews {
+            subview.place(at: CGPoint(x: bounds.midX - width / 2, y: y), proposal: size)
+            y += subview.sizeThatFits(size).height + spacing
         }
     }
 }
