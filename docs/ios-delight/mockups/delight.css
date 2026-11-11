@@ -1,0 +1,17 @@
+/* Extra pieces for the delight plan mockups. Builds on ../../ios-duo/mockups/kit.css. */
+.shot{display:inline-flex;gap:28px;align-items:flex-start;padding:24px;background:#050505}
+.shot.col{flex-direction:column}
+.frame{display:flex;flex-direction:column;gap:10px}
+.cap{font:600 13px/1.35 "DM Sans";color:#b8b0a4;max-width:466px}
+.cap b{color:#c9a227;font-weight:700;letter-spacing:.04em;text-transform:uppercase;font-size:12px;display:block;margin-bottom:2px}
+.cap.wide{max-width:890px}
+.device.closed .rail{width:76px}
+.device.closed .pane.c{left:16px;width:366px}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:26px 12px 0;gap:0}
+.empty .t-panel{margin-top:14px}.empty .t-body{color:var(--text2);margin-top:8px;max-width:300px}
+.empty .gold-ic{color:var(--gold);width:40px;height:40px}
+.bottombar{position:absolute;left:16px;right:92px;bottom:16px;z-index:35}
+.device.open .bottombar{left:auto;right:100px;width:330px}
+.callout{position:absolute;z-index:60;font:600 12px/1.3 "DM Sans";color:#0f0f0f;background:#c9a227;border-radius:10px;padding:5px 9px;white-space:nowrap}
+.callout.dark{background:#2a2a2a;color:#e8e8e8;box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+.wm{height:34px}
