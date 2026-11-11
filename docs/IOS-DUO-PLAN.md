@@ -36,7 +36,7 @@ during Phase 0 before a design depends on them.
 | Size class | iOS's coarse label for available space: **compact** (phone-like) or **regular** (tablet-like), separately for width and height. Apps read it to pick a layout. |
 | Safe area | The part of the screen not covered by cameras, rounded corners or system bars. Content goes inside it; backgrounds may extend past it. |
 | Tab bar | The row of main sections at the bottom (Home, Roster, Bids…). `TabView` in code. |
-| Sidebar | A column of navigation on the leading edge, as on iPad. |
+| Sidebar | A column of navigation at the side of the screen, as on iPad. |
 | Navigation stack | One screen pushed on top of another with a Back button. |
 | Split view (in an app) | Two columns side by side: a list and the selected item's detail. `NavigationSplitView` in code. |
 | Split View (system) | Two different apps side by side. New on iPhone with the Duo. |
@@ -75,6 +75,11 @@ Other facts that matter to us:
 - On the outer display, system bars and app controls move to the **side** of the screen
   ("app navigation and controls now appear on the side") **[Apple]**. With the 27.1 SDK,
   standard toolbar buttons lay out vertically under the status bar **[Apple]**.
+- That side is the **right** edge. Apple describes the app as using "the screen space
+  to the left of the status bar and camera" **[Apple]**, so the clock, battery and the
+  navigation under them form a strip down the right, and content sits to its left. Arik
+  sees the same on his Duo when it is open (2026-11-11). Exact sizes are a Phase 0
+  measurement.
 - Tab bars adapt to every pose and can lay out vertically. On the inner display an app
   can opt into a sidebar with `.defaultTabBarPlacement(.sidebar)` **[Apple]**.
 - On the inner display, sheets are centered rather than full width **[Apple]**.
@@ -177,12 +182,17 @@ Use the width to remove a navigation step where the app is busiest:
 
 ### P4. Inner display: a sidebar for global items
 
-On the inner display the tabs sit in a slim rail at the side (see mockups). Tapping the
+On the inner display the tabs sit in a slim rail on the right edge, under the clock
+and battery (see mockups). Tapping the
 league button at the top of the rail expands it into a sidebar that holds what the menu
 sheet holds today: the tabs by name, other leagues, create or join, Wishlist, How to
 Play and Account. Arik asked for a side menu in the original mockups; we used a sheet
 because a drawer is not native on a phone. On the inner display a sidebar **is** the
 native pattern. The outer display keeps the league button and menu sheet.
+
+The mockup expands the rail in place, so the sidebar opens on the right. iPad sidebars
+sit on the left, and we have not seen where iOS puts one on the Duo, so the prototype
+starts by checking that. We follow whatever the system does.
 
 Risk: the rail, the expanded sidebar and the outer display's bar are different
 structures. Switching between them on open and close must not reset the screen you
@@ -205,10 +215,10 @@ Read them with three cautions:
 
 - **Sizes are estimates** (890 × 626 pt open, 466 × 678 pt closed), to be measured in
   Phase 0.
-- **Where iOS puts the bars is approximated.** Apple says navigation moves to the side
-  on the outer display and in this pose; the exact look of the system's side bar is
-  not something we could check without the simulator. The side rail here is our best
-  reading.
+- **Where iOS puts the bars is approximated.** The clock, battery and navigation are
+  drawn as a strip down the right edge, following Apple's description and what Arik
+  sees on his own Duo. The exact width and look of that strip is not something we
+  could check without the simulator, so the rail here is our best reading.
 - The dashed line is the fold. Layouts keep a gutter there so no button sits on it.
 
 ### First release
@@ -220,7 +230,8 @@ long gap between each title and its value. This is the problem Phase 1 fixes.
 ![League Home stretched across the open screen](ios-duo/mockups/today-open.png)
 
 **League Home, open (P2).** Left half: who you are and what needs you. Right half:
-your movies. Same cards and rows as today, arranged in two columns.
+your movies. Same cards and rows as today, arranged in two columns. The rail takes
+about 84 pt from the right half, so the right column is the narrower one.
 
 ![League Home on the open screen in two columns](ios-duo/mockups/home-open.png)
 
@@ -232,8 +243,8 @@ goes away because the list is already there.
 ![Draft room with the board and movie picker side by side](ios-duo/mockups/draft-open.png)
 
 **League Home, closed (P1).** The outer display keeps the single-column design. The
-tabs sit in a rail on the thumb side. The screen is short, so less fits above the
-bottom edge than on a regular iPhone.
+tabs sit in a rail on the right edge, under the clock and battery. The rail narrows
+the content column, so long banner titles wrap to two lines.
 
 ![League Home on the closed screen](ios-duo/mockups/home-closed.png)
 
@@ -250,8 +261,8 @@ about a movie on the right.
 ![Search results beside the selected movie](ios-duo/mockups/search-open.png)
 
 **Sidebar (P4, thread 2B).** The rail expanded: tabs by name, your other leagues,
-Wishlist, How to Play and your account. It covers the left half only, so the right
-half stays readable.
+Wishlist, How to Play and your account. It opens over the right half only, so the
+left half stays readable.
 
 ![League Home with the sidebar expanded](ios-duo/mockups/home-open-sidebar.png)
 
