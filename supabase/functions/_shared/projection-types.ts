@@ -55,6 +55,14 @@ export interface CorpusCredit {
 }
 
 /** One factor's share of a projection, in RT points. Baseline + every delta = projected_rt. */
+/** Cast billed below this order are "leads" whose prior films are expanded. */
+export const LEAD_CAST_LIMIT = 3
+
+/** Directors, writers and lead cast: the people whose prior films ingestion expands. */
+export function isLeadCredit(c: Pick<CorpusCredit, 'role' | 'billing'>): boolean {
+  return c.role !== 'cast' || (c.billing ?? Infinity) < LEAD_CAST_LIMIT
+}
+
 export interface ProjectionContribution {
   factor: string
   label: string

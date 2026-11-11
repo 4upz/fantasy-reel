@@ -62,6 +62,10 @@
       "schedule": "0 10 1 * *"
     },
     {
+      "path": "/api/cron/refresh-projections",
+      "schedule": "30 19 * * *"
+    },
+    {
       "path": "/api/cron/purge-expired-data",
       "schedule": "30 4 * * *"
     }
