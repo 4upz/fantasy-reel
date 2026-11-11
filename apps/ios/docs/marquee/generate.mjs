@@ -300,8 +300,25 @@ const svg = (body, { width = 216 } = {}) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${n((width * H) / W)}" viewBox="0 0 ${W} ${H}">${body}</svg>\n`;
 const camel = (s) => s[0].toUpperCase() + s.slice(1);
 
+// Every piece sits on the same baseline, so the gap between the art and the title
+// under it is the same on every screen. `top` and `bottom` are each piece's drawn
+// extent on the canvas (measured with getBBox; update them when a drawing changes).
+// A piece taller than the room above the baseline is scaled down about the center.
+const BASELINE = 127;
+const EXTENT = {
+  trades: [16, 116], wishlist: [18, 122], bids: [16, 117.6], notifications: [0, 126],
+  draft: [2.8, 126], entrance: [-8, 132], champion: [14, 132],
+};
+const TOP_MARGIN = 3;
+const placed = (piece, body) => {
+  const [top, bottom] = EXTENT[piece];
+  const s = Math.min(1, (BASELINE - TOP_MARGIN) / (bottom - top));
+  const dx = 120 * (1 - s), dy = BASELINE - s * bottom;
+  return `<g transform="translate(${n(dx)} ${n(dy)})${s < 1 ? ` scale(${n(s)})` : ''}">${body}</g>`;
+};
+
 export function render(piece, theme, layers = null) {
-  return PIECES[piece].filter(([name]) => !layers || layers.includes(name)).map(([, draw]) => draw(PALETTES[theme])).join('');
+  return placed(piece, PIECES[piece].filter(([name]) => !layers || layers.includes(name)).map(([, draw]) => draw(PALETTES[theme])).join(''));
 }
 export const pieces = Object.fromEntries(Object.entries(PIECES).map(([k, v]) => [k, v.map(([name]) => name)]));
 export { svg, W, H };
@@ -319,7 +336,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     for (const [layer, draw] of layers) {
       const name = `${camel(piece)}${camel(layer)}`;
       const dir = path.join(CATALOG, `${name}.imageset`);
-      const light = svg(draw(PALETTES.light)), dark = svg(draw(PALETTES.dark));
+      const light = svg(placed(piece, draw(PALETTES.light))), dark = svg(placed(piece, draw(PALETTES.dark)));
       write(path.join(dir, `${name}-light.svg`), light);
       write(path.join(dir, `${name}-dark.svg`), dark);
       total += light.length + dark.length;

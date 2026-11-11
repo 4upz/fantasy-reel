@@ -30,7 +30,9 @@ node apps/ios/docs/marquee/generate.mjs   # rewrites the asset catalog
 node apps/ios/docs/marquee/preview.mjs    # redraws preview.png (needs Playwright)
 ```
 
-- Every layer is a full 240 × 132 canvas, so layers stack with no offsets.
+- Every layer is a full 240 × 132 canvas, so layers stack with no offsets. Every piece
+  sits on the same baseline (`BASELINE`), so the gap to the title under it is the
+  same on every screen; update a piece's `EXTENT` when its drawing changes.
 - Only what Xcode's asset catalog draws: paths, rects, circles, solid fills and
   strokes, transforms, fill-opacity. No clip paths, masks, gradients, filters or
   text. Shapes that need clipping are clipped in the geometry.
