@@ -35,4 +35,8 @@ nonisolated enum FRMetrics {
     static let rowPadding: CGFloat = 16
     /// Gap between a row's poster, text and trailing column.
     static let rowGap: CGFloat = 12
+    /// Width of an empty-state illustration (`EmptyStateView(illustration:)`).
+    /// The same on every iPhone and on both iPhone Duo screens: art is never
+    /// stretched to the screen.
+    static let illustrationWidth: CGFloat = 216
 }

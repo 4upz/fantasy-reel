@@ -1,12 +1,16 @@
-import SwiftUI
-
-/// A centered empty state (V2NoLeagues): gold icon or brand mark, a panel
-/// title (a header for VoiceOver), a short secondary message, and full-width
-/// actions stacked 12pt apart. Use one `.frPrimary` action at most.
+/// A centered empty state (V2NoLeagues): a gold icon or an illustration, a
+/// panel title (a header for VoiceOver), a short secondary message, and
+/// full-width actions stacked 12pt apart. Use one `.frPrimary` action at most.
+///
+/// Illustrations (docs/IOS-DELIGHT-PLAN.md, 5.2) go only on the empty screens
+/// the plan lists; errors and dead ends ("no results", "team not found") keep
+/// an icon. The art is `FRMetrics.illustrationWidth` wide on every iPhone,
+/// hidden from VoiceOver (the title and message say it all), and settles in
+/// once per visit (`FRArrival`, keyed by the title).
 struct EmptyStateView<Actions: View>: View {
     private enum Icon {
         case symbol(String)
-        case image(Image)
+        case illustration((_ settled: Bool) -> AnyView)
     }
 
     private let title: String
@@ -27,16 +31,36 @@ struct EmptyStateView<Actions: View>: View {
         self.actions = actions()
     }
 
-    /// - Parameter image: a brand illustration (asset catalog image), shown at 55×48.
+    /// - Parameter illustration: a flat illustration (one asset catalog
+    ///   image). It rises into place once per visit.
     init(
         title: String,
         message: String? = nil,
-        image: Image,
+        illustration: Image,
+        @ViewBuilder actions: () -> Actions
+    ) {
+        self.init(title: title, message: message, illustration: { settled in
+            illustration
+                .resizable()
+                .scaledToFit()
+                .offset(y: settled ? 0 : 12)
+                .opacity(settled ? 1 : 0)
+        }, actions: actions)
+    }
+
+    /// - Parameter illustration: an illustration built from parts, drawn
+    ///   settled when `settled` is true and in its arriving state when false
+    ///   (parts offset, faded). The change is animated once per visit with
+    ///   the `.moment` tier; with Reduce Motion on it is always settled.
+    init<Art: View>(
+        title: String,
+        message: String? = nil,
+        @ViewBuilder illustration: @escaping (_ settled: Bool) -> Art,
         @ViewBuilder actions: () -> Actions
     ) {
         self.title = title
         self.message = message
-        self.icon = .image(image)
+        self.icon = .illustration { AnyView(illustration($0)) }
         self.actions = actions()
     }
 
@@ -48,11 +72,9 @@ struct EmptyStateView<Actions: View>: View {
                     .font(.system(size: 40, weight: .regular))
                     .foregroundStyle(Color.frGold)
                     .accessibilityHidden(true)
-            case .image(let image):
-                image
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 55, height: 48)
+            case .illustration(let art):
+                FRArrival("empty-state:\(title)") { settled in art(settled) }
+                    .frame(width: FRMetrics.illustrationWidth)
                     .accessibilityHidden(true)
             case nil:
                 EmptyView()
@@ -62,7 +84,7 @@ struct EmptyStateView<Actions: View>: View {
                 .foregroundStyle(Color.frText)
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
-                .padding(.top, icon == nil ? 0 : 12)
+                .padding(.top, titleSpacing)
             if let message {
                 Text(message)
                     .frFont(.body)
@@ -82,12 +104,34 @@ struct EmptyStateView<Actions: View>: View {
         .padding(.top, 12)
         .frame(maxWidth: .infinity)
     }
+
+    private var titleSpacing: CGFloat {
+        switch icon {
+        case .symbol: 12
+        case .illustration: 16
+        case nil: 0
+        }
+    }
 }
 
 extension EmptyStateView where Actions == EmptyView {
     /// An empty state without actions.
     init(title: String, message: String? = nil, systemImage: String? = nil) {
         self.init(title: title, message: message, systemImage: systemImage) { EmptyView() }
+    }
+
+    /// An empty state with a flat illustration and no actions.
+    init(title: String, message: String? = nil, illustration: Image) {
+        self.init(title: title, message: message, illustration: illustration) { EmptyView() }
+    }
+
+    /// An empty state with an illustration built from parts and no actions.
+    init<Art: View>(
+        title: String,
+        message: String? = nil,
+        @ViewBuilder illustration: @escaping (_ settled: Bool) -> Art
+    ) {
+        self.init(title: title, message: message, illustration: illustration) { EmptyView() }
     }
 }
 

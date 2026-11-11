@@ -58,6 +58,7 @@ in the PR, since this folder is shared).
 | `.fgrp .field` | `FormFieldRow(label:labelWidth:)` (92pt label default) in `FRRowGroup(separatorInset: 16)` |
 | reconnecting pill, offline dot (V2DraftOffline) | `ConnectionStatusBanner`, `ConnectionStatusIndicator` |
 | load / empty / error states | `LoadState` + `LoadStateView`, `LoadingView`, `EmptyStateView`, `ErrorStateView` |
+| empty state with art (I1–I7) | `EmptyStateView(title:message:illustration:)` (see "Motion and haptics") |
 
 Native iOS 26 glass is used directly: `.glassEffect(.regular.interactive(), in:)`,
 `GlassEffectContainer`, and `.buttonStyle(.glass)` / `.glassProminent` for
@@ -89,12 +90,96 @@ so the disk cache is not user-keyed. Never load a backdrop for a thumbnail;
 memory cache each render and reloads after an eviction, so off-screen rows
 don't pin images the cache has dropped.
 
+## Motion and haptics
+
+The plan and its reasons are in `docs/IOS-DELIGHT-PLAN.md` (sections 5.3, 5.4
+and 8). Everything here works the same on an ordinary iPhone and on both iPhone
+Duo screens; nothing in it depends on the device. Try it all in the Debug-only
+`MotionFoundationsGallery` (preview, or the `motionFoundations` screenshot
+scene), which also plays every haptic on a phone.
+
+**Timings: `FRMotion` (`Tokens/FRMotion.swift`).** Never write a duration or
+spring by hand. Pick a tier by what the animation is for:
+
+| Tier | For | Length |
+| --- | --- | --- |
+| `.feedback` | Answering a tap: heart fill, amount step | 0.2 s |
+| `.change` | A value or list updating: score rolls, rows reorder, a banner appears | 0.35 s |
+| `.moment` | A celebration, played once: draft pick lands, champion reveal | 0.8 s |
+
+`FRMotion.press` (a pressed button dimming) and `FRMotion.fade` (images fading
+in) are the only other two.
+
+**Reduce Motion is handled for you** if every animation goes through one of
+these. Don't read `accessibilityReduceMotion` in a screen (moments aside, below).
+
+| Use | For | With Reduce Motion |
+| --- | --- | --- |
+| `.frAnimation(.change, value: x)` | animating whatever changes with `x` | instant (moments: a cross-fade) |
+| `frWithAnimation(.change) { … }` | state changed from an action | same |
+| `.frTransition(.move(edge: .top))` | views that come and go | opacity instead of movement |
+| `.frNumericTransition(value:)` | rolling digits (points, budget, rank) | digits swap |
+| `FRArrival("id") { settled in … }` | something that animates in once (illustrations, M9) | drawn settled, no animation |
+
+A moment (draft travel, champion sunburst) is the one place that may read
+`accessibilityReduceMotion` itself: with it on, the moment drops its own
+movement and cross-fades (`FRMotion.fade`) instead. Its PR includes one
+screenshot with Reduce Motion on.
+
+**Once per visit (`Components/FRArrival.swift`).** Arrivals and moments play
+once, and never again on refresh, on returning to a tab, or on opening or
+closing an iPhone Duo. `FRArrival` and `.frOnArrival(id) { }` (for a one-time
+action like a haptic) remember what played in an `FRArrivalLog`. Without a
+scope that log lasts as long as the app is running. Put `.frVisitScope()` on a
+pushed screen or sheet that should replay its arrivals each time it is opened.
+Ids name the arrival; add the league or season id when one screen can show
+different ones. "First view ever" (the champion reveal) is a stored flag, not
+this.
+
+**Haptics: `FRHaptic` (`Tokens/FRHaptics.swift`).** One map, named by what
+happened: `.frHaptic(.bidSubmitted, trigger: placedCount)`. Use a trigger
+that changes once per action of yours, never one a refresh or another person
+can change. `.frHaptic(trigger:) { old, new in … }` picks one per change (a
+stepper ticking, then knocking at the limit). Haptics are for your own actions
+only (the one exception: it becoming your turn in a live draft), never for
+scrolling, opening screens, switching tabs or anything that fires for many
+rows, and always paired with something visible. There is no in-app switch;
+iOS's System Haptics setting turns them off. The three `.sensoryFeedback` calls
+that predate this (draft pick, your turn, wishlist) move to `FRHaptic` when
+their screens are next touched.
+
+**Illustrations in empty states.** `EmptyStateView(title:message:illustration:)`
+takes an asset image (it rises into place once) or a view built from parts:
+`illustration: { settled in … }` draws the settled art when `settled` is true
+and its arriving state (parts offset, faded) when false. The art is
+`FRMetrics.illustrationWidth` (216 pt) wide on every iPhone, never stretched;
+on a wide page it centers in its column, never across the Duo's fold. It is
+hidden from VoiceOver. Only the empty screens in the plan's table get art;
+errors and dead ends keep an icon. Check every piece in light and dark.
+
+**Rules the reviewers check:**
+
+- Never the only signal: an animated or haptic change is also shown as text or
+  a label ("▲ 1", "Bid placed"). Status stays words plus color.
+- Never block: no animation disables a control or delays navigation; a tap
+  during a moment cuts it short.
+- Nothing loops, except a status indicator during real ongoing activity
+  (reconnecting), which stops when the activity stops. No flashing, no fast
+  full-screen movement.
+- VoiceOver: illustrations hidden; changes announced once through `Announcer`;
+  an animation never moves focus.
+- Performance: no live blur filters (bake glow or texture into the art), no
+  per-row timers, no animation while a list scrolls, images sized for display.
+  Illustrations stay under 100 KB across their layers.
+- Evidence: a PR that adds motion includes a short simulator recording and one
+  screenshot with Reduce Motion on.
+
 ## Accessibility (N-08)
 
 44pt targets everywhere (compact buttons and links keep a 44pt hit area).
 Rows are one VoiceOver element ("The Odyssey, Released Jul 17 · RT 88%, plus
 28 points"). Status is always words plus color (Pending, at release, badge
-text, "+"/"−"). Animations respect Reduce Motion. Text colors strengthen under
+text, "+"/"−"). Animations respect Reduce Motion (through `FRMotion`, above). Text colors strengthen under
 Increase Contrast. Components never announce themselves; screens announce
 changes once through `Announcer`.
 
