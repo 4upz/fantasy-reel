@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import DiscordIcon from '@/app/components/icons/DiscordIcon'
 import GoogleIcon from '@/app/components/icons/GoogleIcon'
 import { FormError } from '@/app/components/FormError'
-import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '@/app/components/auth/Turnstile'
+import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
 import { verifyAndMergeAccounts, keepSeparateAccount } from './actions'
 import { useHydrated } from '@/hooks/useHydrated'
 
@@ -59,7 +59,7 @@ export default function LinkAccountClient({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!captcha.ready) {
-      setError(CAPTCHA_PENDING_MESSAGE)
+      setError(captcha.pendingMessage)
       setErrorOnPassword(false)
       return
     }
@@ -188,7 +188,7 @@ export default function LinkAccountClient({
 
           <FormError message={error} id={errorId} announce={!errorOnPassword} />
 
-          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} onVisibleChange={captcha.setVisible} />
 
           <button
             type="submit"

@@ -74,8 +74,6 @@ struct LogInView: View {
                 .padding(.horizontal, 4)
                 .padding(.vertical, -8)
 
-                SecurityCheckView(check: securityCheck)
-
                 if let message = errorMessage {
                     InlineBanner(tone: .error, title: message)
                 }
@@ -85,6 +83,7 @@ struct LogInView: View {
                 }
                 .buttonStyle(.fr(.primary, isLoading: signIn.isRunning))
                 .disabled(!canSubmit || signIn.isRunning)
+                .securityCheck(securityCheck)
             }
             .padding(.horizontal, FRMetrics.pageMargin)
             .padding(.bottom, 24)
@@ -150,16 +149,16 @@ struct LogInView: View {
     private func submit() {
         guard canSubmit, !signIn.isRunning else { return }
         localError = nil
-        guard securityCheck.isReady(environment.configuration) else {
-            localError = AuthMessages.captchaPending
-            return
-        }
         let email = trimmedEmail
         let password = password
-        let token = securityCheck.take()
         resent = false
         resend.clearError()
         signIn.run {
+            if let message = try await securityCheck.waitUntilReady(environment.configuration) {
+                localError = message
+                return
+            }
+            let token = securityCheck.take()
             do {
                 try await session.signIn(email: email, password: password, captchaToken: token)
             } catch let error as APIError where error.serverCode == AuthMessages.Code.emailNotConfirmed {
@@ -173,13 +172,13 @@ struct LogInView: View {
     private func resendConfirmation() {
         guard let unconfirmedEmail, !resend.isRunning else { return }
         localError = nil
-        guard securityCheck.isReady(environment.configuration) else {
-            localError = AuthMessages.captchaPending
-            return
-        }
-        let token = securityCheck.take()
         resent = false
         resend.run {
+            if let message = try await securityCheck.waitUntilReady(environment.configuration) {
+                localError = message
+                return
+            }
+            let token = securityCheck.take()
             try await session.resendConfirmation(email: unconfirmedEmail, captchaToken: token)
             resent = true
             session.authLinkNotice = nil

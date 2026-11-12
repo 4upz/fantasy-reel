@@ -9,7 +9,7 @@ import DiscordLoginButton from '../../components/auth/DiscordLoginButton'
 import GoogleLoginButton from '../../components/auth/GoogleLoginButton'
 import LegalNotice from '../../components/legal/LegalNotice'
 import NavLogo from '../../components/navigation/NavLogo'
-import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '../../components/auth/Turnstile'
+import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
 import { MIN_PASSWORD_LENGTH } from '@/utils/password'
 import { toast } from 'sonner'
@@ -38,7 +38,7 @@ export default function SignupPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!captcha.ready) {
-      setError(CAPTCHA_PENDING_MESSAGE)
+      setError(captcha.pendingMessage)
       setErrorField(null)
       return
     }
@@ -218,7 +218,7 @@ export default function SignupPage() {
               </div>
             </div>
 
-            <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+            <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} onVisibleChange={captcha.setVisible} />
 
             <div className="space-y-3">
               <button
