@@ -1,0 +1,93 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css">
+<style>
+/* The tab bar shown as a sidebar. Apple's generic guidance puts a sidebar on the leading (left) side; the Duo pages do not show it. Toolbar buttons stay in the vertical bar on the right. */
+.sidebar.glass{left:12px;right:auto;top:12px;bottom:12px}
+.pane.c{left:328px;width:478px}
+.sidebar.glass{width:300px;background:rgb(30,30,30);backdrop-filter:none;padding:8px 10px;gap:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 12px 40px rgba(0,0,0,.55)}
+.sidebar>*{flex:none}
+.sidebar .grow{flex:1}
+.sb-top{height:48px;display:flex;align-items:center;gap:10px;padding-left:6px;margin-bottom:3px}
+.sb-top .who{flex:1;min-width:0}
+.sb-top .gbtn{color:var(--text2)}
+.sb-item .lead{width:28px;height:28px;flex:none;display:flex;align-items:center;justify-content:center}
+.sb-item .lead.add{border-radius:8px;background:var(--gold-tint);color:var(--gold)}
+.sb-item .lbl{flex:1;min-width:0}
+.sb-item .dot{position:static;flex:none}
+.sb-item .chev{width:16px;height:16px;color:var(--muted)}
+.sidebar .sb-sep{margin:4px 10px}
+.sidebar .sb-h{padding:8px 10px 3px}
+.sidebar .av.sm.round{border-radius:50%}
+</style></head><body>
+<div class="device open">
+  <div class="statusbar"><span>9:41</span><span class="sys"><span class="sig">●●●●</span><span class="batt"></span></span></div>
+  <div class="fold"></div>
+
+  <!-- Sidebar on the leading side: league, tabs by name, other leagues, extras, account -->
+  <div class="sidebar glass">
+    <div class="sb-top">
+      <span class="av round a3">PS</span>
+      <div class="who"><div class="t-card one">Popcorn Syndicate</div><div class="t-meta one">2026 Season</div></div>
+      <div class="gbtn"><i data-i="sidebar"></i></div>
+    </div>
+    <div class="sb-item on"><span class="lead"><i data-i="home"></i></span><span class="lbl one">Home</span></div>
+    <div class="sb-item"><span class="lead"><i data-i="roster"></i></span><span class="lbl one">Roster</span></div>
+    <div class="sb-item"><span class="lead"><i data-i="bids"></i></span><span class="lbl one">Bids</span><span class="dot">1</span></div>
+    <div class="sb-item"><span class="lead"><i data-i="trades"></i></span><span class="lbl one">Trades</span><span class="dot">1</span></div>
+    <div class="sb-item"><span class="lead"><i data-i="standings"></i></span><span class="lbl one">Standings</span></div>
+    <div class="sb-sep"></div>
+    <div class="sb-h"><span class="t-over">Leagues</span></div>
+    <div class="sb-item"><span class="av sm a4">OM</span><span class="lbl one">Office Movie Club</span><span class="badge b-draft">Drafting</span></div>
+    <div class="sb-item"><span class="lead add"><i data-i="plus" style="width:18px;height:18px"></i></span><span class="lbl one">Create or join a league</span></div>
+    <div class="sb-sep"></div>
+    <div class="sb-item"><span class="lead"><i data-i="heart"></i></span><span class="lbl one">Wishlist</span></div>
+    <div class="sb-item"><span class="lead"><i data-i="help"></i></span><span class="lbl one">How to Play</span></div>
+    <div class="grow"></div>
+    <div class="sb-sep"></div>
+    <div class="sb-item"><span class="av sm round a2">AS</span><span class="lbl one">Alice Spielberg</span><i data-i="chev" class="chev"></i></div>
+  </div>
+
+  <!-- Content: one column in the space that is left. It crosses the fold. -->
+  <div class="pane c fade">
+    <div class="hd">
+      <div class="t-large one">Popcorn Syndicate</div>
+      <div class="row"><span class="t-meta">2026 Season</span><span class="badge b-active">Active</span></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="av lg a4">RD</span>
+        <div style="flex:1;min-width:0"><div class="t-card one">Reel Deal</div><div class="t-meta one">Alice Spielberg · Your team</div></div>
+        <div class="gbtn" style="background:var(--elevated);color:var(--text)"><i data-i="pencil" style="width:18px;height:18px"></i></div>
+      </div>
+      <div class="stats">
+        <div><span class="t-meta">Rank</span><span class="t-num-lg">T-2 <span class="t-meta">of 4</span></span></div>
+        <div><span class="t-meta">Points</span><span class="t-num-lg">41</span></div>
+        <div><span class="t-meta">Budget</span><span class="t-num-lg">$54</span></div>
+      </div>
+    </div>
+    <div class="banner info">
+      <i data-i="trades" style="color:var(--info)"></i>
+      <div class="mid"><div class="t-row">1 trade needs your response</div></div>
+      <span class="btn tinted sm">Review</span>
+    </div>
+    <div class="banner warn">
+      <i data-i="tag" style="color:var(--warning)"></i>
+      <div class="mid"><div class="t-row">You've been outbid on a movie</div><div class="t-meta">Raise your bid before the cutoff.</div></div>
+      <span class="btn tinted sm">Review</span>
+    </div>
+    <div class="sec"><span class="t-section">My movies</span><a>See roster</a></div>
+    <div class="grp">
+      <div class="mrow"><span class="poster p4">W2</span><div class="mid"><div class="t-row one">Wicked: For Good</div><div class="t-meta one">Released Nov 21 · 68%</div></div><div class="trail"><span class="t-num cs">+8</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p6">A3</span><div class="mid"><div class="t-row one">Avatar: Fire and Ash</div><div class="t-meta one">Released Dec 19 · 93%</div></div><div class="trail"><span class="t-num cs">+33</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p7">J3</span><div class="mid"><div class="t-row one">Jumanji 3</div><div class="t-meta one">Releases Dec 11</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+      <div class="mrow"><span class="poster p3">AD</span><div class="mid"><div class="t-row one">Avengers: Doomsday</div><div class="t-meta one">Releases Dec 18 · Pickup</div></div><div class="trail"><span class="t-meta">Pending</span></div><i data-i="chev" class="chev"></i></div>
+    </div>
+  </div>
+
+  <!-- Vertical bar on the right: only the top-bar buttons remain, because the sidebar replaces the tab bar -->
+  <div class="rail">
+    <div class="gbtn glass"><i data-i="search"></i></div>
+    <div class="gbtn glass"><i data-i="bell"></i><span class="dot">3</span></div>
+    <div class="gbtn glass"><i data-i="more"></i></div>
+  </div>
+</div>
+<script src="icons.js"></script></body></html>

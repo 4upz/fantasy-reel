@@ -2,9 +2,10 @@
  * Fit Projection Model Edge Function -- entrypoint.
  *
  * Vercel Cron -> /api/cron/fit-projection-model, monthly (10:00 UTC on the
- * 1st). Handles CORS, cron auth, the feature gate and env wiring; the job
- * itself lives in handler.ts (unit tests in
- * ../_shared/fit-projection-model.test.ts).
+ * 1st), fits a new model; /api/cron/refresh-projections, daily, posts
+ * `{ mode: 'refresh' }` and only re-projects league movies with the active
+ * model. Handles CORS, cron auth, the feature gate and env wiring; the jobs
+ * live in handler.ts (unit tests in ../_shared/fit-projection-model.test.ts).
  *
  * Gated on `projections_ingestion`: fitting spends no API quota, but until
  * ingestion is on there is no corpus worth fitting, so the job is a no-op.
@@ -22,7 +23,7 @@ import {
 import { createLogger } from '../_shared/logger.ts'
 import { type JobRun, type JobRunsClient, startJobRun } from '../_shared/job-runs.ts'
 import { asFlagClient, getFlag } from '../_shared/feature-flags.ts'
-import { asFitClient, runFitProjectionModel } from './handler.ts'
+import { asFitClient, runFitProjectionModel, runRefreshProjections } from './handler.ts'
 
 const log = createLogger('fit-projection-model')
 
@@ -38,7 +39,13 @@ Deno.serve(async (req) => {
       return errorResponse('Forbidden', 403)
     }
 
-    run = startJobRun('fit-projection-model')
+    // No mode is the monthly fit; anything unrecognised is refused rather than
+    // falling through to the costly path.
+    const body = await req.json().catch(() => null) as { mode?: unknown } | null
+    const mode = body?.mode ?? 'fit'
+    if (mode !== 'fit' && mode !== 'refresh') return errorResponse(`Unknown mode: ${String(mode)}`, 400)
+    const refresh = mode === 'refresh'
+    run = startJobRun(refresh ? 'refresh-projections' : 'fit-projection-model')
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
@@ -52,12 +59,15 @@ Deno.serve(async (req) => {
 
     const flag = await getFlag(asFlagClient(serviceClient), 'projections_ingestion')
     if (!flag.enabled) {
-      log.info('projections_ingestion flag disabled; skipping fit')
+      log.info('projections_ingestion flag disabled; skipping', { refresh })
       const job_status = await run.finish(serviceClient, { processed: 0, failed: 0, metadata: { skipped: 'flag_disabled' } })
       return jsonResponse({ skipped: 'flag_disabled', job_status })
     }
 
-    const result = await runFitProjectionModel(asFitClient(serviceClient), { now: new Date().toISOString() })
+    const config = { now: new Date().toISOString() }
+    const result = refresh
+      ? await runRefreshProjections(asFitClient(serviceClient), config)
+      : await runFitProjectionModel(asFitClient(serviceClient), config)
 
     if ('skipped' in result) {
       const job_status = await run.finish(serviceClient, { processed: 0, failed: 0, metadata: result })

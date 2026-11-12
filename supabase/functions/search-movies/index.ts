@@ -158,6 +158,10 @@ Deno.serve(async (req) => {
     tmdbUrl.searchParams.set('page', page.toString())
     tmdbUrl.searchParams.set('include_adult', 'false')
     tmdbUrl.searchParams.set('language', 'en-US')
+    // Not a filter: it makes each result's release_date the US date (TMDb's
+    // worldwide primary date when there is none), matching what a draft or
+    // bid stores, so the upcoming-only cutoff judges the same date.
+    tmdbUrl.searchParams.set('region', 'US')
 
     if (year) {
       tmdbUrl.searchParams.set('year', year.toString())

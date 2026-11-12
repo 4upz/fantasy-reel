@@ -204,6 +204,14 @@ final class TeamMarketFixture {
                 initiatorTeam: ref("carol"), recipientTeam: ref("dave")
             ),
             TradeOffer(
+                id: "o-4", leagueID: leagueID, initiatorTeamID: Self.team("alice"), recipientTeamID: Self.team("dave"),
+                initiatorItems: items([(1006, "Ice Age: Boiling Point", "2026-12-18", .draftPick)]),
+                recipientItems: items([(1012, "Shrek 5", "2026-12-23", .draftPick)]),
+                status: .proposed, proposedAt: now.addingTimeInterval(-2 * 3600),
+                expiresAt: now.addingTimeInterval(2 * day), expiryAnchor: "fixed",
+                initiatorTeam: ref("alice"), recipientTeam: ref("dave")
+            ),
+            TradeOffer(
                 id: "o-3", leagueID: leagueID, initiatorTeamID: Self.team("alice"), recipientTeamID: Self.team("carol"),
                 initiatorItems: items([(1009, "Jumanji 3", "2026-12-11", .draftPick)]),
                 recipientItems: items([(1011, "Wicked: For Good", "2026-09-21", .draftPick)]),

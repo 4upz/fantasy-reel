@@ -24,8 +24,9 @@ concurrency:
 jobs:
   build-and-test:
     name: Build and test (iOS Simulator)
-    runs-on: macos-26
-    timeout-minutes: 45
+    # The Xcode 27 image (macOS 27, Apple Silicon); macos-26 stops at Xcode 26.6.
+    runs-on: xcode-27
+    timeout-minutes: 75
     permissions:
       # Only the labeled screenshot step writes (to the PR's own branch).
       contents: write
@@ -35,10 +36,26 @@ jobs:
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Select Xcode 26
+      # Built with the iOS 27.1 SDK so the app fills iPhone Duo's screens and
+      # gets its side-mounted bars (docs/IOS-DUO-PLAN.md). The app still runs
+      # on iOS 26. Picks the newest Xcode 27.1+ on the image, never an older one.
+      - name: Select Xcode 27.1 or newer
         run: |
-          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
-          if [ -z "$XCODE" ]; then XCODE=/Applications/Xcode.app; fi
+          # Every Xcode on the image with its version; a release beats a
+          # release candidate, betas are never used.
+          XCODE=$(for app in /Applications/Xcode*.app; do
+              v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null) || continue
+              echo "$v $app"
+            done | tee /dev/stderr | python3 -c 'import sys
+          found=[]
+          for line in sys.stdin:
+              v,p=line.split(" ",1); p=p.strip()
+              if "beta" in p.lower(): continue
+              n=tuple(int(x) for x in (v.split(".")+["0","0"])[:3])
+              if n >= (27,1,0): found.append(("candidate" not in p.lower(), n, p))
+          print(max(found)[2] if found else "")')
+          if [ -z "$XCODE" ]; then echo "::error::No Xcode 27.1 or newer on this runner image"; exit 1; fi
+          case "$XCODE" in *[Cc]andidate*) echo "::warning::Using a release candidate: $XCODE" ;; esac
           echo "Using $XCODE"
           sudo xcode-select -s "$XCODE/Contents/Developer"
           xcodebuild -version
@@ -49,12 +66,14 @@ jobs:
           UDID=$(xcrun simctl list devices available --json \
             | python3 -c 'import json,sys
           d=json.load(sys.stdin)["devices"]
-          ios=[(k,v) for k,v in d.items() if "iOS-26" in k or "iOS-2" in k]
-          ios.sort(key=lambda kv: kv[0])
+          import re
+          ver=lambda k: tuple(int(x) for x in re.search(r"iOS-(\d+)-(\d+)", k).groups())
+          ios=sorted((kv for kv in d.items() if re.search(r"iOS-2\d-\d+", kv[0])), key=lambda kv: ver(kv[0]))
           for k,v in reversed(ios):
               for dev in v:
-                  if dev["name"].startswith("iPhone"):
+                  if dev["name"].startswith("iPhone") and "Duo" not in dev["name"]:
                       print(dev["udid"]); sys.exit()')
+          if [ -z "$UDID" ]; then echo "::error::No iPhone simulator on an iOS 26+ runtime"; xcrun simctl list devices available; exit 1; fi
           echo "Simulator: $UDID"
           echo "udid=$UDID" >> "$GITHUB_OUTPUT"
 
@@ -92,33 +111,42 @@ jobs:
           UDID: ${{ steps.sim.outputs.udid }}
         run: |
           set -euo pipefail
-          APP=build/DerivedData/Build/Products/Debug-iphonesimulator/FantasyReel.app
-          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl status_bar "$UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
-          xcrun simctl install "$UDID" "$APP"
-          mkdir -p build/screenshots
-          SCENES=$(sed -n 's/^    case \([a-zA-Z]*\)$/\1/p' FantasyReel/App/ScreenshotScenes.swift)
-          for appearance in light dark; do
-            xcrun simctl ui "$UDID" appearance "$appearance"
-            for scene in $SCENES; do
-              OUT="build/screenshots/$scene-$appearance.png"
-              # A capture taken before the first frame is drawn is a blank
-              # page that compresses to almost nothing; relaunch and wait longer.
-              for attempt in 1 2 3; do
-                SIMCTL_CHILD_FR_SCREENSHOT="$scene" xcrun simctl launch --terminate-running-process "$UDID" "$BUNDLE_ID"
-                sleep $((2 + attempt * 2))
-                xcrun simctl io "$UDID" screenshot "$OUT"
-                sips --resampleWidth 600 "$OUT" --out build/check.png >/dev/null
-                if [ "$(stat -f%z build/check.png)" -gt 60000 ]; then break; fi
-                echo "::warning::$scene ($appearance) looked blank on attempt $attempt"
-                if [ "$attempt" = 3 ]; then echo "$scene-$appearance" >> build/blank-screenshots.txt; fi
-              done
-            done
-          done
-          rm -f build/check.png
+          scripts/capture-screenshots.sh "$UDID" \
+            build/DerivedData/Build/Products/Debug-iphonesimulator/FantasyReel.app build/screenshots
           ls build/screenshots
+
+      # With the ios-screenshots label (or a manual run), the same scenes on
+      # iPhone Duo's outer (closed) screen, in dark mode, as duo-outer-*.png.
+      # The inner screen can't be captured here yet: no command-line way to
+      # open the simulated Duo has been found (docs/IOS-DUO-PLAN.md, 0.4).
+      - name: Capture iPhone Duo screenshots
+        if: >-
+          github.event_name == 'workflow_dispatch' ||
+          contains(github.event.pull_request.labels.*.name, 'ios-screenshots')
+        run: |
+          set -euo pipefail
+          DUO=$(xcrun simctl list devices available --json | python3 -c 'import json,sys
+          d=json.load(sys.stdin)["devices"]
+          for k,v in d.items():
+              for dev in v:
+                  if dev["name"]=="iPhone Duo": print(dev["udid"]); sys.exit()')
+          if [ -z "$DUO" ]; then
+            RUNTIME=$(xcrun simctl list runtimes --json | python3 -c 'import json,sys
+          rs=[r for r in json.load(sys.stdin)["runtimes"] if r["platform"]=="iOS" and r["isAvailable"]]
+          rs=[r for r in rs if tuple(map(int,r["version"].split(".")))>=(27,1)]
+          print(max(rs,key=lambda r:tuple(map(int,r["version"].split("."))))["identifier"] if rs else "")')
+            if [ -z "$RUNTIME" ]; then echo "::error::No iOS 27.1 simulator runtime for iPhone Duo"; exit 1; fi
+            DUO=$(xcrun simctl create "iPhone Duo" com.apple.CoreSimulator.SimDeviceType.iPhone-Duo "$RUNTIME")
+          fi
+          echo "iPhone Duo: $DUO"
+          xcrun simctl boot "$DUO" || true
+          xcrun simctl bootstatus "$DUO" -b
+          scripts/capture-screenshots.sh "$DUO" \
+            build/DerivedData/Build/Products/Debug-iphonesimulator/FantasyReel.app build/screenshots \
+            --display outer --appearances dark
+          xcrun simctl shutdown "$DUO" || true
 
       - name: Upload screenshots
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -140,8 +168,8 @@ jobs:
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
-          if [ -f build/blank-screenshots.txt ]; then
-            echo "::error::Not committing: these screenshots stayed blank: $(tr '\n' ' ' < build/blank-screenshots.txt)"
+          if [ -f build/screenshots/blank-screenshots.txt ]; then
+            echo "::error::Not committing: these screenshots stayed blank: $(tr '\n' ' ' < build/screenshots/blank-screenshots.txt)"
             exit 1
           fi
           DEST=docs/screenshots

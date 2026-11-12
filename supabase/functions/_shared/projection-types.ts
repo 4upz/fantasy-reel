@@ -55,6 +55,14 @@ export interface CorpusCredit {
 }
 
 /** One factor's share of a projection, in RT points. Baseline + every delta = projected_rt. */
+/** Cast billed below this order are "leads" whose prior films are expanded. */
+export const LEAD_CAST_LIMIT = 3
+
+/** Directors, writers and lead cast: the people whose prior films ingestion expands. */
+export function isLeadCredit(c: Pick<CorpusCredit, 'role' | 'billing'>): boolean {
+  return c.role !== 'cast' || (c.billing ?? Infinity) < LEAD_CAST_LIMIT
+}
+
 export interface ProjectionContribution {
   factor: string
   label: string
@@ -69,7 +77,7 @@ export interface MovieProjection {
   /** Middle 50%, calibrated. */
   range50: [number, number]
   range80: [number, number]
-  /** range50 wider than 10 points: the chip shows the point estimate + "Low confidence". */
+  /** range50 wider than 15 points: the chip shows the point estimate + "Low confidence". */
   low_confidence: boolean
   /** coverage < 0.25: "Not enough history yet", no number. */
   insufficient_history: boolean

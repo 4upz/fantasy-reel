@@ -24,13 +24,27 @@ Deno.test('discovery handlers preserve upstream pages and eligible overflow', as
   }) as typeof setInterval
   Deno.serve = ((callback: Handler) => { handler = callback }) as typeof Deno.serve
   const requests: URL[] = []
+  const detailRequests: number[] = []
   let upstreamResults: Array<Record<string, unknown>> = []
+  // tmdb_id -> US wide date served by the movie details endpoint
+  let usDates: Record<number, string> = {}
   globalThis.fetch = (input: Request | URL | string, init?: RequestInit) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.hostname === 'discovery-cache.invalid') {
       return Promise.resolve(Response.json(init?.method === 'POST' ? {} : null))
     }
     if (url.hostname !== 'api.themoviedb.org') throw new Error(`Unexpected outbound host: ${url.hostname}`)
+    const detailsId = url.pathname.match(/^\/3\/movie\/(\d+)$/)?.[1]
+    if (detailsId) {
+      const id = Number(detailsId)
+      detailRequests.push(id)
+      const listed = upstreamResults.find(result => result.id === id)!
+      const usDate = usDates[id]
+      return Promise.resolve(Response.json({ ...listed, status: 'Planned', genres: [], credits: { cast: [], crew: [] },
+        release_dates: { results: usDate
+          ? [{ iso_3166_1: 'US', release_dates: [{ type: 3, release_date: `${usDate}T00:00:00.000Z`, certification: '' }] }]
+          : [] } }))
+    }
     requests.push(url)
     return Promise.resolve(Response.json({ page: Number(url.searchParams.get('page')), total_pages: 8,
       total_results: 153, results: upstreamResults }))
@@ -56,6 +70,20 @@ Deno.test('discovery handlers preserve upstream pages and eligible overflow', as
       assertEquals(data.has_more, true)
       assertEquals(data.total_results, 153)
       assertEquals(data.total_results_scope, 'upstream')
+    })
+    await t.step('Trending shows the US date, and keeps a movie that opened abroad first', async () => {
+      const today = new Date().toISOString().slice(0, 10)
+      const year = Number(today.slice(0, 4))
+      const inTwoDays = new Date(Date.now() + 2 * 86_400_000).toISOString().slice(0, 10)
+      // 61 opened abroad last week but opens in the US in two days; 62 has no
+      // US release listed; 63 predates the season and is never looked up.
+      upstreamResults = [movie(61, `${year}-01-01`), movie(62, '2999-12-20'), movie(63, `${year - 1}-06-01`)]
+      usDates = { 61: inTwoDays }
+      detailRequests.length = 0
+      const { data } = await invoke({ trending: true, page: 4, season_year: year })
+      assertEquals(detailRequests.sort(), [61, 62])
+      assertEquals(data.results.map((m: { tmdb_id: number; release_date: string }) => [m.tmdb_id, m.release_date]),
+        [[61, inTwoDays], [62, '2999-12-20']])
     })
     await t.step('An empty eligible Trending page still exposes its next page', async () => {
       upstreamResults = [movie(30, '2000-01-01')]

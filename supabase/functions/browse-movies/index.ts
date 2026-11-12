@@ -4,6 +4,8 @@ import { createLogger } from '../_shared/logger.ts'
 import { buildCacheKey, cacheKeyForUrl, cachedTmdbFetch } from '../_shared/tmdb-cache.ts'
 import { discoveryPage, releaseDateRange } from '../_shared/movie-discovery.ts'
 import { TMDbApiError, tmdbErrorResponse, tmdbGetJson } from '../_shared/tmdb.ts'
+import { getMovieDetails } from '../_shared/movie-details.ts'
+import { mapConcurrent } from '../_shared/concurrency.ts'
 
 const log = createLogger('browse-movies')
 
@@ -71,15 +73,43 @@ function transformResults(movies: TMDbMovie[]): BrowseResult[] {
 
 const DISCOVER_TTL_SECONDS = 30 * 60
 const TRENDING_TTL_SECONDS = 12 * 60 * 60
+/**
+ * Details lookups in flight per trending page. Concurrent page loads (scroll,
+ * the daily key rollover) must stay clear of TMDb's rate limit: a 429 keeps a
+ * movie's primary date in a page cached for TRENDING_TTL_SECONDS.
+ */
+const TRENDING_DATE_LOOKUP_CONCURRENCY = 5
 
 type BrowsePage = ReturnType<typeof discoveryPage<BrowseResult>>
+
+/**
+ * Trending has no `region` parameter, so its dates are TMDb's worldwide
+ * primary ones -- often a Wednesday opening abroad before the US Friday.
+ * Swap in the US date a draft or bid would store (the shared, cached details
+ * lookup) so the list shows that date and the eligibility cutoff judges it.
+ * Movies dated before the season year are skipped: they make up much of a
+ * trending page and would only be dropped as released. A failed lookup keeps
+ * the primary date rather than failing the page.
+ */
+function withUsReleaseDates(movies: BrowseResult[], seasonYear: number): Promise<BrowseResult[]> {
+  return mapConcurrent(movies, TRENDING_DATE_LOOKUP_CONCURRENCY, async (movie) => {
+    if (!movie.release_date || Number(movie.release_date.slice(0, 4)) < seasonYear) return movie
+    try {
+      const { release_date } = await getMovieDetails(movie.tmdb_id, log)
+      return { ...movie, release_date }
+    } catch {
+      return movie
+    }
+  })
+}
 
 // One client page is exactly one upstream page. This preserves every result
 // and makes an empty filtered page distinct from the end of the catalog.
 async function fetchTrendingMovies(page: number, tmdbToken: string, seasonYear: number): Promise<BrowsePage> {
   const url = `https://api.themoviedb.org/3/trending/movie/week?language=en-US&page=${page}`
   const data = await tmdbGetJson<TMDbResponse>(url, tmdbToken)
-  return discoveryPage(data, transformResults(data.results)
+  const movies = await withUsReleaseDates(transformResults(data.results), seasonYear)
+  return discoveryPage(data, movies
     .filter(movie => isUpcomingMovie(movie.release_date, seasonYear).valid), 1000)
 }
 
@@ -134,7 +164,7 @@ Deno.serve(async (req) => {
     // Versioned key prevents old aggregated pages being interpreted as raw pages.
     if (trending) {
       const payload = await cachedTmdbFetch<BrowsePage>(
-        buildCacheKey('browse', { trending: true, page, today, season_year, paging: 2 }),
+        buildCacheKey('browse', { trending: true, page, today, season_year, paging: 2, dates: 'us' }),
         TRENDING_TTL_SECONDS,
         () => fetchTrendingMovies(page, tmdbToken, season_year),
         log
@@ -159,6 +189,7 @@ Deno.serve(async (req) => {
 
     const tmdbUrl = new URL('https://api.themoviedb.org/3/discover/movie')
     tmdbUrl.searchParams.set('language', 'en-US')
+    // Makes each result's release_date the US date, as drafts and bids store.
     tmdbUrl.searchParams.set('region', 'US')
     tmdbUrl.searchParams.set('include_adult', 'false')
     tmdbUrl.searchParams.set('include_video', 'false')

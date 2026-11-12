@@ -258,11 +258,12 @@ Deno.test('toMovieProjection - resolves the league rule and the display flags', 
   const standard = toMovieProjection(sample, false)
   assertEquals(standard.expected_points, 8.25)
   assertEquals(toMovieProjection(sample, true).expected_points, 8.9)
-  assertEquals(standard.low_confidence, true) // 14.5-point 50% range
+  assertEquals(standard.low_confidence, false) // 14.5-point 50% range still shows a range
   assertEquals(standard.insufficient_history, true) // coverage 0.2
   assert(!('expected_points_double' in standard))
-  const tight = toMovieProjection({ ...sample, range50: [66, 76], coverage: 0.25 }, false)
-  assertEquals(tight.low_confidence, false) // exactly 10 points still shows a range
+  assertEquals(toMovieProjection({ ...sample, range50: [60, 75.5] }, false).low_confidence, true) // 15.5 points
+  const tight = toMovieProjection({ ...sample, range50: [61, 76], coverage: 0.25 }, false)
+  assertEquals(tight.low_confidence, false) // exactly 15 points still shows a range
   assertEquals(tight.insufficient_history, false)
 })
 

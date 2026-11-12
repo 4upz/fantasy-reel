@@ -2,7 +2,7 @@
  * Core logic for fit-projection-model, separate from index.ts so unit tests
  * can import it without triggering Deno.serve().
  *
- * One run (monthly):
+ * Two jobs share this file. The fit (monthly):
  *   1. load the whole corpus (film_corpus + film_credits, paged);
  *   2. fit the model on settled films (`fitProjectionModel`: forward-chained
  *      calibration years for honest residuals, then a final fit on every row);
@@ -11,13 +11,16 @@
  *   4. recompute movie_projections for league movies (film_corpus priority
  *      100) whose score has not settled, skipping frozen rows.
  *
+ * The refresh (daily) is step 4 alone, with the active model, so early
+ * reviews and new track records reach the cache without waiting a month.
+ *
  * Spends no MDBList or TMDb quota: everything it reads is already in the
  * corpus. The model itself is pure (`_shared/projection-model.ts`); this file
  * only loads rows and stores what it returns.
  */
 import { createLogger, serializeError } from '../_shared/logger.ts'
 import { loadCorpus, selectAll } from '../_shared/projection-corpus.ts'
-import { buildCorpusIndex, logitToRt, rawFeatures } from '../_shared/projection-features.ts'
+import { buildCorpusIndex, type CorpusIndex, logitToRt, rawFeatures } from '../_shared/projection-features.ts'
 import { meanAbsoluteError, spearman } from '../_shared/projection-metrics.ts'
 import {
   type ChainPrediction,
@@ -29,7 +32,7 @@ import {
   toProjectionRow,
   trainingRows,
 } from '../_shared/projection-model.ts'
-import type { CorpusCredit, CorpusFilm } from '../_shared/projection-types.ts'
+import { type CorpusCredit, type CorpusFilm, isLeadCredit } from '../_shared/projection-types.ts'
 
 const log = createLogger('fit-projection-model')
 
@@ -96,16 +99,7 @@ export interface FitError {
 
 export type FitResult =
   | { skipped: 'insufficient_training_rows'; training_rows: number; min_training_rows: number }
-  | {
-    model_version: number
-    training_rows: number
-    metrics: FitMetrics
-    targets: number
-    projected: number
-    frozen_skipped: number
-    failed: number
-    errors: FitError[]
-  }
+  | ({ model_version: number; training_rows: number; metrics: FitMetrics } & ProjectionRun)
 
 /** Stored as projection_models.metrics: honest, forward-chained accuracy of this fit. */
 export interface FitMetrics {
@@ -150,15 +144,16 @@ export function fitMetrics(model: ProjectionModel, chain: readonly ChainPredicti
 const chunks = <T>(items: readonly T[], size: number): T[][] =>
   Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, (i + 1) * size))
 
-/** The active model's shrinkage, to start the refit from; null when none is usable. */
-async function activeShrinkage(client: FitClient): Promise<ProjectionModel['regression']['shrinkage'] | null> {
-  const { data, error } = await client.from('projection_models').select('coefficients').eq('is_active', true).maybeSingle()
+/** The active model and its version; null when there is none or it is unreadable. */
+async function activeModel(client: FitClient): Promise<{ version: number; model: ProjectionModel } | null> {
+  const { data, error } = await client.from('projection_models').select('version, coefficients').eq('is_active', true).maybeSingle()
   if (error || !data) return null
+  const row = data as { version: unknown; coefficients: unknown }
   try {
-    return deserializeProjectionModel((data as { coefficients: unknown }).coefficients).regression.shrinkage
+    return { version: Number(row.version), model: deserializeProjectionModel(row.coefficients) }
   } catch (err) {
-    // A model fitted for an older feature set: refit from the defaults.
-    log.warn('Active projection model unreadable; refitting from default shrinkage', { error: serializeError(err) })
+    // A model fitted for an older feature set.
+    log.warn('Active projection model unreadable', { error: serializeError(err) })
     return null
   }
 }
@@ -182,6 +177,9 @@ async function idsWhere(
  * Whether a film's projection is still waiting on ingestion: one of its
  * director / writers / top-3 cast has not had their prior films seeded yet, or
  * its franchise's parts have not. Pure.
+ *
+ * Credits store more cast than ingestion ever expands, so only lead credits
+ * count; counting the rest flagged every league film partial for good.
  */
 export function isPartial(
   film: CorpusFilm,
@@ -190,7 +188,7 @@ export function isPartial(
   unexpandedCollections: ReadonlySet<number>,
 ): boolean {
   if (film.collection_id != null && unexpandedCollections.has(film.collection_id)) return true
-  return credits.some((c) => unexpandedPeople.has(c.tmdb_person_id))
+  return credits.some((c) => isLeadCredit(c) && unexpandedPeople.has(c.tmdb_person_id))
 }
 
 /** An early Tomatometer the projection should be updated with, if the row has one. */
@@ -204,7 +202,7 @@ export async function runFitProjectionModel(client: FitClient, config: FitConfig
   const minTrainingRows = config.minTrainingRows ?? DEFAULT_MIN_TRAINING_ROWS
   const searchShrinkage = config.searchShrinkage ?? false
 
-  const [{ films, credits }, shrinkage] = await Promise.all([loadCorpus(client), activeShrinkage(client)])
+  const [{ films, credits }, active] = await Promise.all([loadCorpus(client), activeModel(client)])
   const index = buildCorpusIndex(films, credits)
   const rows = trainingRows(index, films)
   if (rows.length < minTrainingRows) {
@@ -212,7 +210,8 @@ export async function runFitProjectionModel(client: FitClient, config: FitConfig
     return { skipped: 'insufficient_training_rows', training_rows: rows.length, min_training_rows: minTrainingRows }
   }
 
-  const { model, chain } = fitProjectionModel(rows, { searchShrinkage, shrinkage: shrinkage ?? undefined })
+  // Start from the active model's shrinkage; an unreadable one refits from the defaults.
+  const { model, chain } = fitProjectionModel(rows, { searchShrinkage, shrinkage: active?.model.regression.shrinkage })
   const metrics = fitMetrics(model, chain, searchShrinkage)
 
   const { data: version, error: activateError } = await client.rpc('activate_projection_model', {
@@ -224,6 +223,52 @@ export async function runFitProjectionModel(client: FitClient, config: FitConfig
   }
   log.info('Projection model activated', { model_version: version, training_rows: rows.length, mae_rt: metrics.mae_rt })
 
+  const projection = await projectLeagueMovies(client, model, version, index, films, config.now)
+  return { model_version: version, training_rows: rows.length, metrics, ...projection }
+}
+
+export type RefreshResult =
+  | { skipped: 'no_active_model' }
+  | ({ model_version: number } & ProjectionRun)
+
+/**
+ * The daily refresh: re-project league movies with the active model, without
+ * refitting it. The model changes monthly, but a film's inputs do not wait:
+ * early reviews, newly expanded track records and moved release dates reach
+ * its cached projection the same day. Spends no API quota.
+ */
+export async function runRefreshProjections(client: FitClient, config: { now: string }): Promise<RefreshResult> {
+  // The one-row model read first: without a model, the corpus is not worth loading.
+  const active = await activeModel(client)
+  if (!active) {
+    log.info('No usable active projection model; nothing to refresh')
+    return { skipped: 'no_active_model' }
+  }
+  const { films, credits } = await loadCorpus(client)
+  const projection = await projectLeagueMovies(client, active.model, active.version, buildCorpusIndex(films, credits), films, config.now)
+  return { model_version: active.version, ...projection }
+}
+
+export interface ProjectionRun {
+  targets: number
+  projected: number
+  frozen_skipped: number
+  failed: number
+  errors: FitError[]
+}
+
+/**
+ * Recomputes movie_projections for league movies (priority 100) whose score
+ * has not settled, skipping frozen rows.
+ */
+async function projectLeagueMovies(
+  client: FitClient,
+  model: ProjectionModel,
+  version: number,
+  index: CorpusIndex,
+  films: readonly CorpusFilm[],
+  now: string,
+): Promise<ProjectionRun> {
   // League movies still in play: a settled score is final, nothing to project.
   const targetIds = (await selectAll(
     client,
@@ -243,7 +288,7 @@ export async function runFitProjectionModel(client: FitClient, config: FitConfig
   )
   const creditsOf = (film: CorpusFilm) => index.creditsByFilm.get(film.tmdb_id) ?? []
   const live = targets.filter((f) => !frozen.has(f.tmdb_id))
-  const personIds = [...new Set(live.flatMap((f) => creditsOf(f).map((c) => c.tmdb_person_id)))]
+  const personIds = [...new Set(live.flatMap((f) => creditsOf(f).filter(isLeadCredit).map((c) => c.tmdb_person_id)))]
   const collectionIds = [...new Set(live.map((f) => f.collection_id).filter((id): id is number => id != null))]
   const [unexpandedPeople, unexpandedCollections] = await Promise.all([
     idsWhere(
@@ -267,7 +312,7 @@ export async function runFitProjectionModel(client: FitClient, config: FitConfig
       const result = projectFilm(model, rawFeatures(index, film), {
         early: earlyReviews(film),
         partial: isPartial(film, creditsOf(film), unexpandedPeople, unexpandedCollections),
-        computedAt: config.now,
+        computedAt: now,
       })
       projectionRows.push(toProjectionRow(result, version))
     } catch (err) {
@@ -285,9 +330,6 @@ export async function runFitProjectionModel(client: FitClient, config: FitConfig
   }
 
   return {
-    model_version: version,
-    training_rows: rows.length,
-    metrics,
     targets: targets.length,
     projected,
     frozen_skipped: targets.length - live.length,

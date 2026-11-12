@@ -8,8 +8,7 @@
 import { assertEquals, assertExists } from '@std/assert'
 import { createTestFactory, getAnonClient, getServiceClient, uniqueName, invokeFunction } from './_setup.ts'
 
-import { buildCacheKey } from '../_shared/tmdb-cache.ts'
-import type { MovieDetailsResponse } from '../_shared/movie-details.ts'
+import { movieDetailsCacheKey, type MovieDetailsResponse } from '../_shared/movie-details.ts'
 
 // Test movie data for upcoming releases
 const today = new Date().toISOString().slice(0, 10)
@@ -43,7 +42,7 @@ Deno.test({
       vote_average: 0, vote_count: 0, genres: [], cast: [], director: null, ...overrides,
     }
     const { error } = await service.from('tmdb_cache').upsert({
-      cache_key: buildCacheKey('movie_details', { tmdb_id: tmdbId }), payload,
+      cache_key: movieDetailsCacheKey(tmdbId), payload,
       fetched_at: new Date().toISOString(), expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     })
     assertEquals(error, null)
@@ -335,7 +334,7 @@ Deno.test({
   await t.step('ordinary users cannot forge trusted cache entries', async () => {
     const details = await cacheMovie(baseId + 14)
     const { error } = await client.from('tmdb_cache').upsert({
-      cache_key: buildCacheKey('movie_details', { tmdb_id: details.tmdb_id }),
+      cache_key: movieDetailsCacheKey(details.tmdb_id),
       payload: { ...details, title: 'Forged cache' }, expires_at: new Date(Date.now() + 60_000).toISOString(),
     })
     assertExists(error)
@@ -349,7 +348,7 @@ Deno.test({
     await factory.cleanup()
     const { error: movieCleanupError } = await service.from('movies').delete().in('tmdb_id', [...fixtureIds])
     assertEquals(movieCleanupError, null)
-    const { error: cacheCleanupError } = await service.from('tmdb_cache').delete().in('cache_key', [...fixtureIds].map(tmdb_id => buildCacheKey('movie_details', { tmdb_id })))
+    const { error: cacheCleanupError } = await service.from('tmdb_cache').delete().in('cache_key', [...fixtureIds].map(tmdb_id => movieDetailsCacheKey(tmdb_id)))
     assertEquals(cacheCleanupError, null)
   }
 }})

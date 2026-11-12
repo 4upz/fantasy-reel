@@ -7,7 +7,10 @@ Where this file and those disagree, raise it rather than silently picking one.
 
 ## Platform and toolchain
 
-- **Xcode 26, Swift 6.2, iOS 26.0 minimum, iPhone only.** iOS 26 is what gives us
+- **Xcode 27.1 (Swift 6.4), iOS 26.0 minimum, iPhone only.** Building with the
+  iOS 27.1 SDK is what lets the app fill iPhone Duo's screens and get its
+  side-mounted bars (`docs/IOS-DUO-PLAN.md`); APIs newer than iOS 26 go behind
+  `if #available`. iOS 26 is what gives us
   Liquid Glass (`.glassEffect`, glass toolbars, the separated search tab) without
   hand-rolled blur. iPad is a later decision (O-03).
 - Swift 6 language mode everywhere (strict concurrency). The app target sets
@@ -105,8 +108,11 @@ initializer so the shell keeps compiling.
 - **Screen state is per season.** `LeagueShellView` is rebuilt when the league
   changes (`.id(season.id)`), so a tab root's `@State` model never outlives its
   season. Read the league from `\.leagueSelection`; don't cache the ID elsewhere.
-- **"+" in the top bar:** a tab root that creates something adds the glass "+" with
-  the `leagueTopBar` primary-action API in `LeagueTopBar.swift`, not a floating button.
+- **A tab's main action sits at the bottom:** a tab root whose whole page exists
+  for one or two actions ("Place Bid", "Propose Trade") pins them above the tab bar
+  with `bottomActionBar` (`DesignSystem/Components/BottomActionBar.swift`), in thumb
+  reach while the page scrolls. It is not repeated in the top bar or the page.
+- **Notifications open from the top-bar bell only**; the menu sheet has no row for them.
 - **Tab badges** (Bids: outbid count; Trades: offers waiting on you) are not wired
   yet. The Bids and Trades threads add `.badge(_:)` to their `Tab` in
   `LeagueShellView` from a small shell-level store; iOS draws both badges red.
@@ -140,9 +146,39 @@ initializer so the shell keeps compiling.
 
 16pt page margin · 22pt card radius, no card inside a card · 64pt movie rows with
 36×54 posters, one-line titles and a fixed 64pt trailing points column · one filled
-primary action per card · a glass "+" in the top bar instead of floating create
-buttons · whole-number points ("+28", "−4") · one sheet per multi-step task.
+primary action per card · a tab's main action in `bottomActionBar` above the tab
+bar, never a floating button · whole-number points ("+28", "−4") · one sheet per multi-step task.
 `DesignSystem/` implements these; prefer its components over new one-offs.
+
+## Wide layouts (iPhone Duo)
+
+The app is iPhone only, but iPhone Duo's inner display is tablet-sized (regular
+width). Plan and measurements: `docs/IOS-DUO-PLAN.md`.
+
+- **Build every scrolling screen on `FRPage`** (`DesignSystem/Components/FRPage.swift`).
+  It owns the `ScrollView`, the 16pt margin, section spacing, bottom padding and
+  background, so screens don't. Put `.refreshable`, `.toolbar` and
+  `.bottomActionBar` on the `FRPage`.
+  - `FRPage { … }`: one column. Compact width: today's layout. Regular width:
+    centered and capped at `FRMetrics.readableWidth` (640pt). Use it for forms,
+    settings, detail pages and anything read top to bottom.
+  - `FRPage { leading } trailing: { trailing }`: two equal columns at regular
+    width, for pages made of independent cards (League Home is the reference).
+    Compact, or too narrow for two 320pt columns: `trailing` follows `leading`.
+    Put the screen header in `leading`. If the compact order must differ from
+    "all of leading, then all of trailing", read `\.frLayoutWidth` and move the
+    section (League Home moves "Around the league").
+- **Decide from `\.frLayoutWidth`** (`.compact` / `.regular`, set by `FRPage`
+  from the horizontal size class), never from the device, screen size,
+  orientation or `UIScreen`. Outside an `FRPage`, read `\.horizontalSizeClass`.
+- No fixed widths tied to a screen. Caps (`readableWidth`, `actionBarWidth`)
+  and the column minimum are the only width constants; add new ones to
+  `FRMetrics` next to them.
+- Keep the system bars standard (toolbar items, `TabView`, `safeAreaBar`). On the
+  Duo they move into a vertical bar on the right edge on their own; a custom
+  bar would not. The page's safe area already excludes that bar.
+- Screenshots: `scripts/capture-screenshots.sh` (see the README) captures every
+  scene on the Duo's outer display; check both displays before asking for review.
 
 ## Data and networking
 

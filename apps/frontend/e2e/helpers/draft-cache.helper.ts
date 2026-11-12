@@ -17,10 +17,13 @@ export async function seedCacheRows(rows: ReadonlyArray<{ cache_key: string; pay
   return rows.map(row => row.cache_key)
 }
 
-/** Seed the same canonical details consumed by previews and draft-pick. */
+/**
+ * Seed the same canonical details consumed by previews and draft-pick. The
+ * key mirrors `movieDetailsCacheKey` (supabase/functions/_shared/movie-details.ts).
+ */
 export function seedDraftMovieCache(movies: readonly TMDbSearchResult[], options: { status?: string } = {}) {
   return seedCacheRows(movies.flatMap(movie => [
-    { cache_key: cacheKey('movie_details', { tmdb_id: movie.tmdb_id }), payload: {
+    { cache_key: cacheKey('movie_details', { tmdb_id: movie.tmdb_id, release: 'us' }), payload: {
       ...movie, imdb_id: null, tagline: null, runtime: null, status: options.status ?? 'Post Production',
       backdrop_url: null, vote_count: 87654, genres: [], cast: [], director: null,
     } },
@@ -32,7 +35,7 @@ export function seedDraftMovieCache(movies: readonly TMDbSearchResult[], options
 
 export function seedDraftSearch(query: string, pages: ReadonlyArray<readonly TMDbSearchResult[]>) {
   return seedCacheRows(pages.map((results, index) => ({
-    cache_key: cacheKey('search', { include_adult: 'false', language: 'en-US', page: index + 1, query: query.trim().toLowerCase() }),
+    cache_key: cacheKey('search', { include_adult: 'false', language: 'en-US', page: index + 1, query: query.trim().toLowerCase(), region: 'US' }),
     payload: { page: index + 1, total_pages: pages.length, total_results: pages.flat().length, results },
   })))
 }

@@ -499,7 +499,7 @@ export interface MovieProjection {
   /** The middle 50% of likely outcomes, calibrated. */
   range50: [number, number]
   range80: [number, number]
-  /** range50 is wider than 10 points: show the point estimate, tagged. */
+  /** range50 is wider than 15 points: show the point estimate, tagged. */
   low_confidence: boolean
   /** Too little history to say anything: show no number at all. */
   insufficient_history: boolean
