@@ -1,6 +1,7 @@
 # iPhone Duo support plan
 
-Status: plan with decisions recorded (section 8), 2026-11-11. Nothing here is built yet. This is the plan for making
+Status: plan with decisions recorded (section 8), 2026-11-11. Phase 0 is in progress;
+its measurements and findings are in section 3.2. This is the plan for making
 the Fantasy Reel iOS app (`apps/ios/`) feel at home on iPhone Duo, Apple's folding
 iPhone. It covers what the device is, what Apple asks of apps, what our app does
 today, what we propose, and how to split the work across threads.
@@ -52,11 +53,11 @@ during Phase 0 before a design depends on them.
 | --- | --- | --- |
 | Size | 5.4 in **[Apple]** | 7.6 in **[Apple]** |
 | Pixels | 1398 × 2034 at 460 ppi **[Apple]** | 1878 × 2670 at 430 ppi **[Apple]** |
-| Points (if 3x; our arithmetic, *unverified*) | about 466 × 678 | about 626 × 890 |
+| Points | **466 × 678** (measured in the simulator, 3x) | about 626 × 890 (our arithmetic, *not yet measured*) |
 | Shape | about 1.45 : 1, far squatter than a normal iPhone (about 2.17 : 1) | about 1.42 : 1 |
 | Size class, portrait | compact width, regular height **[Apple]** | regular width, regular height **[Apple]** |
 | Size class, landscape | compact width, compact height **[Apple]** | regular width, regular height **[Apple]** |
-| Honors a portrait-only setting | Yes (*our reading of conflicting wording*) | **No** **[Apple]** |
+| Honors a portrait-only setting | **Yes** (measured: the device turned to landscape, the app stayed portrait) | **No** **[Apple]** |
 
 **The open screen is wider than it is tall.** Apple lists the device as 164.6 mm wide
 by 117.8 mm tall when open, and 84.1 mm by 117.8 mm when closed **[Apple]**. So in the
@@ -160,6 +161,45 @@ both side by side." Split views settle into "an even 50/50 split." That is P3.
 Layout rule: "focus on two size classes: compact width on the outer display and regular
 width on the inner display," and "avoid fixed widths, breakpoints, or any metrics tied
 to a specific screen."
+
+### 3.2 Measured in the simulator (Phase 0)
+
+Xcode 27.1 (27A9275), iOS 27.1 simulator runtime, the "iPhone Duo" simulator,
+2026-11-11, app built from this plan's Phase 0 branch. Numbers come from the
+debug layout probe (`FR_LAYOUT_PROBE=1`, see `apps/ios/README.md`) and from
+screenshots.
+
+**Closed (outer display), portrait:**
+
+| What | Measured |
+| --- | --- |
+| Window | 466 × 678 pt (1398 × 2034 px at 3x). Our arithmetic was right. |
+| Size class | compact width, regular height (matches Apple) |
+| Safe area insets | top 0, leading 0, bottom 34, **trailing 84** pt |
+| Content area | 382 × 644 pt |
+| The vertical bar | On the right edge, as Apple describes. It takes **84 pt** of width out of the safe area (the mockups guessed 76). It holds the clock and status, then the top-bar buttons, then the tabs at the bottom. Tabs show icons only, no labels. |
+| Five tabs + search + bell + ⋯ | **All fit; nothing was compressed** (League Home, active season). The prediction in G5 that one group would collapse was wrong at this size. |
+| League pill | Stays at the top left in a horizontal bar of its own, as Apple says wide items do (G6 confirmed). The screen title sits under it. |
+| Sheets | Their Close button moves into the vertical bar (Place Bid). |
+| Our bottom action bar | Stays horizontal at the bottom, beside the vertical bar (G7 confirmed). "Counterpick" wraps mid-word ("Counterpic / k") on Bids at 382 pt. |
+
+Found while capturing the baseline, for thread 1A:
+
+- **Search disappears before the season.** With three tabs (Home, Draft, Roster)
+  the app shows search as a separated search tab and hides the top-bar search
+  button (`LeagueNavigation.showsSearchTab`). In the vertical bar the search tab
+  is not drawn, so search has no button at all on the closed screen during
+  setup and the draft. Seen in `draftLive`.
+- The two bottom-action-bar buttons on Bids are too narrow for "Counterpick".
+
+**Open (inner display): not measured yet.** No command-line way to open the
+simulated Duo was found: `simctl` has no fold or posture command, and powering
+the outer screen off (`simctl io … screenConfig power off`) does not move the
+app to the inner one (it left both screens black until the simulator was
+restarted). The simulator window has the control. Point sizes, safe areas,
+size classes, the bar in the open pose, Split View and which edge a sidebar
+takes are still to be recorded here, along with the App Store-build question
+in section 8.
 
 ### What Apple asks of apps
 
@@ -388,6 +428,41 @@ Runs on Arik's Mac through Remote Control, since it needs Xcode.
 | 0.4 | Extend the `ios-screenshots` CI label to capture Duo outer and inner shots. |
 | 0.5 | Add the layout foundation: a width environment value derived from the size class, the `FRPage` container, and width caps on the bottom action bar and sheets. Adopt it on one screen as the reference example. Document the rules in `ARCHITECTURE.md`. |
 | 0.6 | Decide landscape handling on the inner display from what 0.2 shows (G4). |
+
+Phase 0 status (2026-11-11):
+
+- 0.1 done. Xcode 27.1 is on the Mac. CI moved from the `macos-26` runner (which
+  stops at Xcode 26.6) to GitHub's `xcode-27` image, and selects the newest
+  Xcode 27.1+ release there (a release candidate only if no release is
+  installed), failing clearly if there is none. Minimum stays iOS 26. The
+  compiler's new main-actor warnings are fixed.
+- 0.2 closed display done (section 3.2); open display pending, see 3.2.
+- 0.3 closed display: all 60 scenes captured in dark mode. Open display pending.
+- 0.4 done for the closed display: with the `ios-screenshots` label, CI also
+  captures `duo-outer-*.png`. The capture logic moved to
+  `apps/ios/scripts/capture-screenshots.sh`, which can also capture the inner
+  display once a simulator is open. CI cannot open the simulator, so inner
+  screenshots stay a local step for now.
+- 0.5 done: `FRLayoutWidth` / `\.frLayoutWidth`, `FRPage`, a 560 pt cap on the
+  bottom action bar's buttons, and League Home as the reference screen. Rules
+  in `apps/ios/ARCHITECTURE.md` ("Wide layouts"). Sheet width caps were left
+  out until inner screenshots show whether the system's centered sheet
+  already handles it. A second window is now refused
+  (`UIApplicationSupportsMultipleScenes = NO`, Q4, G12).
+- 0.6 decided: keep `UISupportedInterfaceOrientations = Portrait`. The outer
+  display stays portrait (Q3) and the inner display rotates regardless (Apple),
+  so the app adds no landscape code: every layout choice already comes from size
+  classes through `FRPage`. Both inner poses get checked in screenshots when the
+  open display is measured.
+
+**Notes for Phase 1 threads.** Adopt `FRPage` per the "Wide layouts" section of
+`apps/ios/ARCHITECTURE.md`. In short: replace the screen's
+`ScrollView { VStack { … }.padding(.horizontal, FRMetrics.pageMargin) }` and its
+`.background(Color.frBackground)` with `FRPage { … }`, keep `.refreshable` and
+toolbars on the `FRPage`, and use `FRPage { leading } trailing: { … }` only for
+pages of independent cards. A `List`/`Form` screen keeps its `List`; cap it with
+`.frame(maxWidth: FRMetrics.readableWidth)` when wide. Never branch on the device.
+Compare `duo-outer-*` screenshots before and after.
 
 Exit: the app fills both displays, nothing is broken, and feature threads have a
 container to adopt and a way to screenshot.

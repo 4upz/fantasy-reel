@@ -59,6 +59,7 @@ in the PR, since this folder is shared).
 | reconnecting pill, offline dot (V2DraftOffline) | `ConnectionStatusBanner`, `ConnectionStatusIndicator` |
 | load / empty / error states | `LoadState` + `LoadStateView`, `LoadingView`, `EmptyStateView`, `ErrorStateView` |
 | empty state with art (I1–I7) | `EmptyStateView(title:message:illustration:)` (see "Motion and haptics") |
+| Marquee illustrations (empty screens, champion) | `MarqueeArt(.trades)`; the seven pieces and where each goes are on `MarqueeIllustration`. Regenerate the art with `docs/marquee/generate.mjs` |
 
 Native iOS 26 glass is used directly: `.glassEffect(.regular.interactive(), in:)`,
 `GlassEffectContainer`, and `.buttonStyle(.glass)` / `.glassProminent` for

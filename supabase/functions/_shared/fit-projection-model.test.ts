@@ -10,7 +10,7 @@ import { syntheticCorpus } from './projection-synthetic.ts'
 import { DEFAULT_SHRINKAGE } from './projection-features.ts'
 import type { ProjectionModel } from './projection-model.ts'
 import type { CorpusFilm } from './projection-types.ts'
-import { isPartial, runFitProjectionModel } from '../fit-projection-model/handler.ts'
+import { isPartial, runFitProjectionModel, runRefreshProjections } from '../fit-projection-model/handler.ts'
 
 const NOW = '2026-10-01T10:00:00.000Z'
 
@@ -166,4 +166,42 @@ Deno.test('isPartial - unexpanded people or franchise make a projection partial'
   assertEquals(isPartial(film, credits, new Set(), new Set()), false)
   assertEquals(isPartial(film, credits, new Set([1]), new Set()), true)
   assertEquals(isPartial(film, credits, new Set(), new Set([55])), true)
+})
+
+Deno.test('isPartial - cast billed below the lead line never makes a projection partial', () => {
+  const film = { ...corpus.films[0], collection_id: null } as CorpusFilm
+  const cast = (person: number, billing: number) => ({ tmdb_id: film.tmdb_id, tmdb_person_id: person, role: 'cast' as const, billing })
+  // Ingestion expands only the top 3 billed; the 4th and 5th wait forever.
+  assertEquals(isPartial(film, [cast(1, 0), cast(4, 3), cast(5, 4)], new Set([4, 5]), new Set()), false)
+  assertEquals(isPartial(film, [cast(1, 2)], new Set([1]), new Set()), true)
+})
+
+Deno.test('refresh - re-projects league movies with the active model, without refitting', async () => {
+  const db = makeDb()
+  const fit = activation(7)
+  await runFitProjectionModel(createMockDbClient(db, { rpc: fit.rpc }), { now: NOW, minTrainingRows: 100 })
+  db.projection_models = [{ version: 7, is_active: true, coefficients: fit.calls[0].p_coefficients }]
+
+  // An early Tomatometer arrives after the fit.
+  const film = db.film_corpus.find((r) => r.tmdb_id === 9001)!
+  Object.assign(film, { rt_critic: 35, rt_critic_votes: 60 })
+  const before = { ...db.movie_projections.find((r) => r.tmdb_id === 9001)! }
+  const later = '2026-10-02T19:30:00.000Z'
+  const refit = activation(8)
+  const result = await runRefreshProjections(createMockDbClient(db, { rpc: refit.rpc }), { now: later })
+
+  if ('skipped' in result) throw new Error('expected a refresh')
+  assertEquals(refit.calls.length, 0)
+  assertEquals([result.model_version, result.targets, result.projected, result.frozen_skipped, result.failed], [7, 3, 2, 1, 0])
+  const after = db.movie_projections.find((r) => r.tmdb_id === 9001)!
+  assertEquals([after.model_version, after.computed_at, after.includes_early_reviews, after.early_rt_reviews], [7, later, true, 60])
+  assert(after.range50_hi - after.range50_lo < before.range50_hi - before.range50_lo)
+  assertEquals(db.movie_projections.find((r) => r.tmdb_id === 9003)!.frozen_at, '2026-09-02T00:00:00Z')
+})
+
+Deno.test('refresh - without a usable active model, writes nothing', async () => {
+  const db = makeDb({ projection_models: [{ version: 3, is_active: true, coefficients: { format: 0 } }] })
+  const result = await runRefreshProjections(createMockDbClient(db), { now: NOW })
+  assertEquals(result, { skipped: 'no_active_model' })
+  assertEquals(db.movie_projections.length, 1)
 })

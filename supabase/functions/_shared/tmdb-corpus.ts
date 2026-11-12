@@ -17,8 +17,8 @@ const TMDB = 'https://api.themoviedb.org/3'
 const WRITER_JOBS = new Set(['Screenplay', 'Writer', 'Story'])
 /** Cast billed below this order are stored as credits. */
 const STORED_CAST_LIMIT = 5
-/** Cast billed below this order are "leads" whose prior films are expanded. */
-export const LEAD_CAST_LIMIT = 3
+import { LEAD_CAST_LIMIT } from './projection-types.ts'
+export { LEAD_CAST_LIMIT }
 
 /** US release types the corpus samples: 2 limited, 3 wide theatrical, 4 digital premiere. */
 export const CORPUS_RELEASE_TYPES = [RELEASE_TYPE.limited, RELEASE_TYPE.wide, RELEASE_TYPE.digital] as const

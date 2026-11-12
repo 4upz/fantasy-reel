@@ -54,8 +54,8 @@ extension View {
 /// ```swift
 /// FRArrival("trades-empty") { settled in
 ///     ZStack {
-///         Image("TradesEmptyLeft").offset(x: settled ? 0 : -24)
-///         Image("TradesEmptyRight").offset(x: settled ? 0 : 24)
+///         Image("Marquee/TradesLeft").offset(x: settled ? 0 : -24)
+///         Image("Marquee/TradesRight").offset(x: settled ? 0 : 24)
 ///     }
 ///     .opacity(settled ? 1 : 0)
 /// }
