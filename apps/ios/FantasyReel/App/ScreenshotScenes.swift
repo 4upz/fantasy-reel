@@ -69,6 +69,7 @@ enum ScreenshotScene: String, CaseIterable {
     case seasonComplete
     case shareInvite
     case growthDashboard
+    case motionFoundations
     case marqueeEmpty
     case marqueeMoments
 
@@ -95,7 +96,9 @@ struct ScreenshotSceneView: View {
     let scene: ScreenshotScene
 
     var body: some View {
-        if scene == .marqueeEmpty {
+        if scene == .motionFoundations {
+            MotionFoundationsGallery()
+        } else if scene == .marqueeEmpty {
             MarqueeGallery(pieces: [.trades, .wishlist, .bids, .notifications])
         } else if scene == .marqueeMoments {
             MarqueeGallery(pieces: [.draft, .entrance, .champion])

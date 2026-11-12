@@ -170,7 +170,7 @@ private struct BannerToneButtonBody: View {
             }
             .opacity(isPressed && isEnabled ? 0.72 : 1)
             .contentShape(Capsule())
-            .animation(.easeOut(duration: 0.12), value: isPressed)
+            .animation(FRMotion.press, value: isPressed)
     }
 }
 
