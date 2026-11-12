@@ -2,9 +2,10 @@ import FantasyReelCore
 import SwiftUI
 
 /// The large sheet behind the league pill (mockup v2 "Leagues and menu sheet"):
-/// switch leagues, create or join, invitations, then Wishlist, Notifications,
-/// Account, How to Play and Support. It has its own stack, so those screens push
-/// inside the sheet instead of opening a second sheet.
+/// switch leagues, create or join, invitations, then Wishlist, Account, How to
+/// Play and Support. Notifications open from the top-bar bell, not from here.
+/// It has its own stack, so those screens push inside the sheet instead of
+/// opening a second sheet.
 struct MenuSheetView: View {
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
@@ -41,7 +42,6 @@ struct MenuSheetView: View {
 private struct MenuRootView: View {
     @Environment(ShellRouter.self) private var router
     @Environment(LeagueDirectoryStore.self) private var directory
-    @Environment(InboxStore.self) private var inbox
     @Environment(WishlistStore.self) private var wishlist
     @Environment(\.currentProfile) private var profile
     @Environment(SessionStore.self) private var session
@@ -140,9 +140,6 @@ private struct MenuRootView: View {
         FRRowGroup {
             NavigationLink(value: MenuRoute.wishlist) {
                 MenuLinkRow(title: "Wishlist", systemImage: "bookmark", value: wishlist.count > 0 ? "\(wishlist.count)" : nil)
-            }
-            NavigationLink(value: MenuRoute.notifications) {
-                MenuLinkRow(title: "Notifications", systemImage: "bell", count: inbox.unreadCount)
             }
             NavigationLink(value: MenuRoute.account) {
                 MenuLinkRow(title: "Account", systemImage: "person.crop.circle")
@@ -251,7 +248,6 @@ private struct MenuLinkRow: View {
 
     let title: String
     let systemImage: String
-    var count: Int = 0
     /// Secondary text before the chevron (the wishlist's "12").
     var value: String?
     var trailing: Trailing = .chevron
@@ -270,10 +266,6 @@ private struct MenuLinkRow: View {
                 Text(value)
                     .frFont(.label)
                     .foregroundStyle(Color.frTextSecondary)
-            }
-            if count > 0 {
-                CountBadge(count: count)
-                    .accessibilityLabel("\(count) unread")
             }
             Image(systemName: trailing == .external ? "arrow.up.right" : "chevron.right")
                 .font(.footnote.weight(.semibold))

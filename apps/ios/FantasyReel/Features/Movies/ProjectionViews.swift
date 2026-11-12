@@ -69,7 +69,7 @@ struct ProjectionChip: View {
     }
 
     /// Everything the chip shows, as VoiceOver says it.
-    static func spokenLabel(_ projection: MovieProjection) -> String {
+    nonisolated static func spokenLabel(_ projection: MovieProjection) -> String {
         let state = ProjectionText.chipState(projection)
         var parts = [ProjectionText.chipSpokenLabel(state)]
         if state.isLowConfidence { parts.append("low confidence") }
@@ -159,11 +159,11 @@ struct CounterpickProjection: View {
         }
     }
 
-    static func points(_ projection: MovieProjection) -> Double? {
+    nonisolated static func points(_ projection: MovieProjection) -> Double? {
         projection.insufficientHistory ? nil : ProjectionText.projectedPoints(projection, counterpick: true)
     }
 
-    static func spokenLabel(_ projection: MovieProjection) -> String {
+    nonisolated static func spokenLabel(_ projection: MovieProjection) -> String {
         var label = ProjectionChip.spokenLabel(projection)
         if let points = points(projection) {
             label += ", about \(FantasyPoints.spokenLabel(points, preRelease: false)) for you"

@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { jsonResponse, errorResponse, handleCorsPreflightRequest, internalErrorResponse, isAuthorizedCronRequest } from '../_shared/utils.ts'
 import { fetchWithRetry } from '../_shared/http.ts'
 import { createLogger, serializeError } from '../_shared/logger.ts'
+import { getMovieDetails, type MovieDetailsResponse } from '../_shared/movie-details.ts'
 
 const log = createLogger('sync-movies')
 
@@ -31,38 +32,16 @@ interface TMDbResponse {
   total_results: number
 }
 
-interface TMDbExternalIds {
-  imdb_id: string | null
-  facebook_id: string | null
-  instagram_id: string | null
-  twitter_id: string | null
-}
-
 /**
- * Fetch external IDs (including IMDb ID) for a movie from TMDb
+ * The IMDb id and US release date (discover's date is TMDb's own pick, which
+ * can be an IMAX early-access day) from the shared, cached details lookup that
+ * draft-pick and place-bid use. Null when the lookup fails.
  */
-async function fetchExternalIds(
-  tmdbId: number,
-  token: string
-): Promise<string | null> {
+async function fetchDetails(tmdbId: number): Promise<MovieDetailsResponse | null> {
   try {
-    const url = `https://api.themoviedb.org/3/movie/${tmdbId}/external_ids`
-    const response = await fetchWithRetry(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    }, { timeoutMs: 10_000, retries: 1 })
-
-    if (!response.ok) {
-      log.warn('Failed to fetch external IDs', { tmdb_id: tmdbId, status: response.status })
-      return null
-    }
-
-    const data: TMDbExternalIds = await response.json()
-    return data.imdb_id || null
+    return await getMovieDetails(tmdbId, log)
   } catch (error) {
-    log.warn('Error fetching external IDs', { tmdb_id: tmdbId, error: serializeError(error) })
+    log.warn('Failed to fetch movie details', { tmdb_id: tmdbId, error: serializeError(error) })
     return null
   }
 }
@@ -166,25 +145,24 @@ Deno.serve(async (req) => {
       (movie) => !movie.adult
     )
 
-    // Fetch external IDs (including IMDb IDs) for each movie
+    // Fetch details (IMDb ID, US release date) for each movie
     // Process in batches to respect TMDb rate limits (40 requests per 10 seconds)
-    log.info('Fetching IMDb IDs', { movie_count: safeResults.length })
-    const moviesWithImdbIds: Array<{ movie: TMDbMovie; imdb_id: string | null }> = []
+    log.info('Fetching movie details', { movie_count: safeResults.length })
+    const moviesWithDetails: Array<{ movie: TMDbMovie; details: MovieDetailsResponse | null }> = []
 
     for (const movie of safeResults) {
-      const imdb_id = await fetchExternalIds(movie.id, tmdbToken)
-      moviesWithImdbIds.push({ movie, imdb_id })
+      moviesWithDetails.push({ movie, details: await fetchDetails(movie.id) })
       // Small delay to respect rate limits
       await new Promise(resolve => setTimeout(resolve, 50))
     }
 
     // Transform movies to our schema
-    const moviesToUpsert = moviesWithImdbIds.map(({ movie, imdb_id }) => ({
+    const moviesToUpsert = moviesWithDetails.map(({ movie, details }) => ({
       tmdb_id: movie.id,
-      imdb_id,
+      imdb_id: details?.imdb_id || null,
       title: movie.title,
       overview: movie.overview || null,
-      release_date: movie.release_date || null,
+      release_date: details ? details.release_date : movie.release_date || null,
       poster_url: movie.poster_path
         ? `https://image.tmdb.org/t/p/w500${movie.poster_path}`
         : null,

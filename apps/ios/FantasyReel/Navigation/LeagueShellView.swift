@@ -106,20 +106,10 @@ struct LeagueTabStack: View {
     var body: some View {
         NavigationStack(path: router.path(for: tab)) {
             root
-                .leagueTopBar(primaryAction: primaryAction)
+                .leagueTopBar()
                 .navigationDestination(for: LeagueRoute.self) { route in
                     LeagueDestinationView(route: route)
                 }
-        }
-    }
-
-    /// The tab's "+", passed into the top bar so it keeps its own glass button
-    /// before the bell (a toolbar added from inside the root merges into the ⋯ group).
-    private var primaryAction: LeagueTopBarAction? {
-        switch tab {
-        case .bids: LeagueTopBarAction(accessibilityLabel: "Place bid") { router.present(.placeBid(.newPickup)) }
-        case .trades: LeagueTopBarAction(accessibilityLabel: "Propose trade") { router.present(.proposeTrade(nil)) }
-        default: nil
         }
     }
 

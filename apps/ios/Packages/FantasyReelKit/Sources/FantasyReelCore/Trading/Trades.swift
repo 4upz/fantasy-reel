@@ -390,14 +390,28 @@ public struct TradePermissions: Sendable, Hashable {
 
 /// The Trades tab's lists, in get-trades order (newest first).
 public enum TradeLists {
-    /// Proposed, countered or in review: the Pending and League lists.
+    /// Proposed, countered or in review: the League list.
     public static func pending(_ trades: [TradeOffer]) -> [TradeOffer] {
         trades.filter { $0.status.awaitsResponse || $0.status == .review }
     }
 
-    /// My open offers, either side.
-    public static func mine(_ trades: [TradeOffer], teamID: TeamID?) -> [TradeOffer] {
-        pending(trades).filter { $0.involves(teamID) }
+    /// The Pending list: every open offer I'm part of, plus reviews when I'm
+    /// the commissioner, grouped by who has to act next.
+    public static func pendingForViewer(
+        _ trades: [TradeOffer], teamID: TeamID?, isCommissioner: Bool
+    ) -> PendingTrades {
+        var groups = PendingTrades()
+        for offer in pending(trades) {
+            let permissions = TradePermissions(offer: offer, myTeamID: teamID, isCommissioner: isCommissioner)
+            if permissions.canRespond {
+                groups.needsAnswer.append(offer)
+            } else if permissions.canReview {
+                groups.needsReview.append(offer)
+            } else if offer.involves(teamID) {
+                groups.waiting.append(offer)
+            }
+        }
+        return groups
     }
 
     public static func history(_ trades: [TradeOffer]) -> [TradeOffer] {
@@ -409,6 +423,22 @@ public enum TradeLists {
         guard let teamID else { return [] }
         return trades.filter { $0.recipientTeamID == teamID && $0.status.awaitsResponse }
     }
+}
+
+/// `TradeLists.pendingForViewer`, newest first within each group.
+public struct PendingTrades: Sendable, Hashable {
+    /// Offers sent to me that I can accept, reject or counter.
+    public var needsAnswer: [TradeOffer] = []
+    /// Reviews I can approve or veto as commissioner.
+    public var needsReview: [TradeOffer] = []
+    /// My offers waiting on the other team or on review.
+    public var waiting: [TradeOffer] = []
+
+    public init() {}
+
+    /// What the Pending badge counts: offers waiting on me.
+    public var actionCount: Int { needsAnswer.count + needsReview.count }
+    public var isEmpty: Bool { needsAnswer.isEmpty && needsReview.isEmpty && waiting.isEmpty }
 }
 
 // MARK: - Tradeable movies

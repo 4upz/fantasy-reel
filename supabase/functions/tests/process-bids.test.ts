@@ -6,7 +6,7 @@
 
 import { assertEquals, assertExists } from '@std/assert'
 import { SupabaseClient } from '@supabase/supabase-js'
-import { buildCacheKey } from '../_shared/tmdb-cache.ts'
+import { movieDetailsCacheKey } from '../_shared/movie-details.ts'
 import { getEdgeFunctionServiceRoleKey, getServiceClient, createTestFactory, uniqueName, getUserId, seedTmdbForPendingPickupBids } from './_setup.ts'
 
 /**
@@ -376,7 +376,7 @@ Deno.test({
         const longAgo = new Date(Date.now() - 30 * 86400_000)
         const { error: expireError } = await serviceClient.from('tmdb_cache')
           .update({ fetched_at: longAgo.toISOString(), expires_at: new Date(longAgo.getTime() + 3600_000).toISOString() })
-          .eq('cache_key', buildCacheKey('movie_details', { tmdb_id: tmdbId }))
+          .eq('cache_key', movieDetailsCacheKey(tmdbId))
         assertEquals(expireError, null)
 
         const { error: bidError } = await serviceClient.from('pickup_bids').insert({

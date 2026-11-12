@@ -14,20 +14,22 @@
  *                  TMDb only, so cheap.
  *   C. ratings  -- MDBList Tomatometers for released rows, reserved 25 calls
  *                  at a time and fetched 4 at a time. Recent films are
- *                  re-polled weekly until their score settles.
+ *                  re-polled weekly until their score settles. League movies
+ *                  opening within PRE_RELEASE_WINDOW_DAYS are polled daily
+ *                  before release, so early reviews reach their projection.
  *
  * Priority order (film_corpus.priority DESC) means league movies and their
  * predecessors are complete within a couple of days while the multi-year
  * sweep trickles in behind them.
  */
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { isLeadCredit } from '../_shared/projection-types.ts'
 import { createLogger, serializeError, type SerializedError } from '../_shared/logger.ts'
 import {
   fetchDiscoverPage,
   fetchMovieMetadata,
   fetchPersonPriorFilms,
   fetchCollectionParts,
-  LEAD_CAST_LIMIT,
   type CorpusMetadata,
   type CorpusStub,
 } from '../_shared/tmdb-corpus.ts'
@@ -63,6 +65,12 @@ export const SETTLED_AFTER_DAYS = 60
 const REPOLL_DAYS = 7
 /** ...until this long after release (one more poll after the settle line). */
 const REPOLL_WINDOW_DAYS = SETTLED_AFTER_DAYS + 2 * REPOLL_DAYS
+/**
+ * League movies opening within this many days are polled once a (UTC) day
+ * before release: review embargoes lift in the last week or two, and early
+ * reviews are what narrow a projection. A dozen league movies at most.
+ */
+export const PRE_RELEASE_WINDOW_DAYS = 21
 /** A row whose MDBList lookup failed transiently waits this long before a retry... */
 const ERROR_RETRY_DAYS = 3
 /** ...and stops being retried after this many consecutive failures. */
@@ -181,6 +189,8 @@ function daysBefore(today: string, days: number): string {
   d.setUTCDate(d.getUTCDate() - days)
   return d.toISOString().slice(0, 10)
 }
+
+const daysAfter = (today: string, days: number): string => daysBefore(today, -days)
 
 /** Monday (UTC) of the week containing `today`. */
 export function weekOf(today: string): string {
@@ -634,7 +644,7 @@ export async function fetchMetadataStage(
     // of league movies, and their franchises. Predecessors land at
     // PREDECESSOR_PRIORITY and are never expanded themselves.
     const leadIds = [...new Set(
-      credits.filter((c) => c.role !== 'cast' || (c.billing ?? Infinity) < LEAD_CAST_LIMIT).map((c) => c.tmdb_person_id)
+      credits.filter(isLeadCredit).map((c) => c.tmdb_person_id)
     )]
     const collectionIds = [...new Set(leagueRows.map((r) => r.collection_id).filter((id): id is number => typeof id === 'number'))]
     const people = await selectIn<{ tmdb_person_id: number }>(leadIds, (chunk) =>
@@ -736,13 +746,22 @@ const RATINGS_COLUMNS =
   'tmdb_id, priority, effective_release_date, budget, certification, company_ids, rt_critic, ratings_error_count'
 
 /**
- * The three ways a row is due for an MDBList lookup. `.lte(effective date,
- * today)` also drops undated rows: there is nothing to ask MDBList about
- * until a movie is out.
+ * The ways a row is due for an MDBList lookup. Apart from league movies about
+ * to open, only released rows are asked; the date filters also drop undated
+ * rows.
  */
 function ratingsQueues(config: IngestConfig): Array<(query: Query) => Query> {
   const released = (q: Query) => q.not('metadata_fetched_at', 'is', null).lte('effective_release_date', config.today)
+  const openingSoon = (q: Query) =>
+    q.not('metadata_fetched_at', 'is', null)
+      .gte('priority', LEAGUE_PRIORITY)
+      .gt('effective_release_date', config.today)
+      .lte('effective_release_date', daysAfter(config.today, PRE_RELEASE_WINDOW_DAYS))
+      .lt('ratings_error_count', MAX_RATINGS_ERRORS)
   return [
+    // League movies about to open: never asked, or not yet asked today.
+    (q) => openingSoon(q).is('ratings_fetched_at', null),
+    (q) => openingSoon(q).lt('ratings_fetched_at', config.today),
     // Never asked.
     (q) => released(q).is('ratings_fetched_at', null),
     // Asked, but the score may still move: re-poll weekly until it settles,

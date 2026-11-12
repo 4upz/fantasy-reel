@@ -8,8 +8,10 @@ is the reference for how the code is organized and the rules feature work follow
 
 ## What you need
 
-- A Mac with **Xcode 26** or newer (free from the Mac App Store). The app uses
-  iOS 26 features (Liquid Glass), so older Xcode versions can't build it.
+- A Mac with **Xcode 27.1** or newer (free from the Mac App Store). The app
+  still runs on iOS 26, but it must be *built* with Xcode 27.1 to fill the
+  iPhone Duo's screens and get its side-mounted bars
+  ([../../docs/IOS-DUO-PLAN.md](../../docs/IOS-DUO-PLAN.md)).
 - **Docker Desktop**, to run the local Supabase stack the Debug build talks to.
 - Node, already needed for the web app (`npm install` at the repo root).
 
@@ -25,7 +27,8 @@ You do **not** need a paid Apple Developer account to run in the Simulator.
 2. Open `apps/ios/FantasyReel.xcodeproj` in Xcode.
 3. Wait for "Resolving Package Graph" to finish (top of the window). Xcode
    downloads `supabase-swift` the first time.
-4. Pick a simulator in the toolbar (for example **iPhone 17**) and press **⌘R**.
+4. Pick a simulator in the toolbar (for example **iPhone 17**, or **iPhone Duo**
+   to check the folding phone) and press **⌘R**.
 5. Tap **Log In** and use a seeded account, e.g. `alice@fantasyreel.test` /
    `testpass123!` (all four are listed in the repo's `CLAUDE.md`).
 
@@ -118,6 +121,19 @@ screen, add a case to `ScreenshotScene`; signed-in scenes run the real shell
 over in-memory repositories seeded in `ScreenshotData` (League of Culture,
 the four seeded test accounts). Locally, set the `FR_SCREENSHOT`
 environment variable to a case name in the scheme's Run options.
+
+With the label, CI also captures every scene on **iPhone Duo**'s closed (outer)
+screen in dark mode, as `duo-outer-*.png`. To capture them yourself, boot an
+iPhone Duo simulator, build the app for it, and run from `apps/ios`:
+
+```bash
+scripts/capture-screenshots.sh <simulator-udid> path/to/FantasyReel.app build/duo --display outer --appearances dark
+```
+
+`--display inner` captures the open screen instead, once the simulator is
+opened in its window (there is no command to open it). Launching with
+`FR_LAYOUT_PROBE=1` prints the window's size, safe area and size classes to the
+console whenever they change.
 
 ## Not yet done (tracked for feature work)
 

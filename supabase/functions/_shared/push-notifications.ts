@@ -14,6 +14,7 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { fetchWithTimeout } from './http.ts'
 import { createLogger, serializeError } from './logger.ts'
+import { mapConcurrent } from './concurrency.ts'
 
 const log = createLogger('shared/push-notifications')
 
@@ -277,18 +278,6 @@ const RUN_DEADLINE_MS = 40_000
 /** `finish_push_notifications` fails a retry after this many attempts. */
 const MAX_ATTEMPTS = 5
 const CONCURRENCY = 20
-
-async function mapConcurrent<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length)
-  let next = 0
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next++
-      results[index] = await fn(items[index])
-    }
-  }))
-  return results
-}
 
 export async function sendPushNotifications(
   client: SupabaseClient,

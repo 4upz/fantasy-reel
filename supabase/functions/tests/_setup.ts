@@ -6,8 +6,7 @@
  */
 
 import { createClient, SupabaseClient, FunctionsHttpError } from '@supabase/supabase-js'
-import { buildCacheKey } from '../_shared/tmdb-cache.ts'
-import type { MovieDetailsResponse } from '../_shared/movie-details.ts'
+import { movieDetailsCacheKey, type MovieDetailsResponse } from '../_shared/movie-details.ts'
 
 // Test user credentials - created on first run
 export const TEST_USER = {
@@ -481,7 +480,7 @@ export async function seedTmdbFromBidMovieData(fixtures: readonly BidMovieFixtur
   const byKey = new Map<string, BidMovieFixture & { movie_data: NonNullable<BidMovieFixture['movie_data']> }>()
   for (const fixture of fixtures) {
     if (!fixture.movie_data?.title) continue
-    byKey.set(buildCacheKey('movie_details', { tmdb_id: fixture.tmdb_id }), { ...fixture, movie_data: fixture.movie_data })
+    byKey.set(movieDetailsCacheKey(fixture.tmdb_id), { ...fixture, movie_data: fixture.movie_data })
   }
   if (byKey.size === 0) return
 
@@ -604,7 +603,7 @@ export async function cleanupDraftMovieCache(service: SupabaseClient, tmdbIds: r
   const errors: unknown[] = []
   for (let offset = 0; offset < tmdbIds.length; offset += batchSize) {
     const keys = tmdbIds.slice(offset, offset + batchSize)
-      .map(tmdb_id => buildCacheKey('movie_details', { tmdb_id }))
+      .map(tmdb_id => movieDetailsCacheKey(tmdb_id))
     try {
       const { error } = await service.from('tmdb_cache').delete().in('cache_key', keys)
       if (error) errors.push(new Error(error.message, { cause: error }))
@@ -653,7 +652,7 @@ export class TestDataFactory {
       ...overrides, tmdb_id: tmdbId,
     }
     const { error } = await getServiceClient().from('tmdb_cache').upsert({
-      cache_key: buildCacheKey('movie_details', { tmdb_id: tmdbId }), payload,
+      cache_key: movieDetailsCacheKey(tmdbId), payload,
       fetched_at: now.toISOString(), expires_at: new Date(now.getTime() + 3600_000).toISOString(),
     })
     if (error) throw new Error(`Failed to seed draft movie metadata: ${error.message}`)

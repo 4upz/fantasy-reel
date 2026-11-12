@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../../ios-duo/mockups/kit.css"><link rel="stylesheet" href="delight.css"><style>
+.sheet{display:grid;grid-template-columns:repeat(2,560px);gap:22px}
+.strip{background:#141414;border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.strip h4{font:700 17px/1.2 "Bricolage";letter-spacing:-.01em}
+.fr3{display:flex;align-items:center;gap:8px}
+.fr3>.f{flex:1;height:78px;background:var(--surface);border-radius:16px;display:flex;align-items:center;justify-content:center;gap:10px;position:relative;overflow:hidden;padding:0 10px}
+.fr3>.ar{color:#6b635b;font:700 16px "DM Sans";flex:none}
+.spec{font:500 12.500px/1.45 "DM Sans";color:#b8b0a4}.spec b{color:#e8e8e8;font-weight:600}
+.blur{filter:blur(1.6px);opacity:.75}
+.glow{text-shadow:0 0 14px rgba(34,197,94,.55)}
+.big{width:30px!important;height:30px!important}
+.fillg svg{fill:var(--gold)}
+.mini{display:flex;align-items:center;gap:8px;width:100%}.mini .mid{flex:1;min-width:0}
+.lbl{position:absolute;left:8px;bottom:5px;font:600 10px "DM Sans";color:#7d746b;letter-spacing:.03em}
+</style></head><body><div class="shot"><div class="sheet">
+
+<div class="strip"><h4>A score arrives</h4><div class="fr3">
+ <div class="f"><div class="mini"><span class="poster p6" style="width:26px;height:39px"></span><div class="mid t-row one">Zootopia 3</div><span class="t-meta">Pending</span></div></div><span class="ar">›</span>
+ <div class="f"><div class="mini"><span class="poster p6" style="width:26px;height:39px"></span><div class="mid t-row one">Zootopia 3</div><span class="t-num cs blur">+17</span></div></div><span class="ar">›</span>
+ <div class="f"><div class="mini"><span class="poster p6" style="width:26px;height:39px"></span><div class="mid t-row one">Zootopia 3</div><span class="t-num cs glow">+33</span></div></div></div>
+ <div class="spec"><b>What:</b> "Pending" rolls into the points, digit by digit, the first time you see a new score. <b>Tap:</b> none (it can happen to many rows at once). <b>Reduce Motion:</b> plain swap. <b>Build:</b> numeric text transition, already used on the bid amount.</div></div>
+
+<div class="strip"><h4>Saving to your wishlist</h4><div class="fr3">
+ <div class="f"><i data-i="heart" class="big" style="color:var(--text2)"></i></div><span class="ar">›</span>
+ <div class="f"><i data-i="heart" class="fillg" style="color:var(--gold);width:38px;height:38px"></i></div><span class="ar">›</span>
+ <div class="f"><i data-i="heart" class="big fillg" style="color:var(--gold)"></i></div></div>
+ <div class="spec"><b>What:</b> the outline fills gold with one small bounce. <b>Tap:</b> selection tick (exists today). <b>Reduce Motion:</b> fill without the bounce. <b>Build:</b> a system symbol effect, one line.</div></div>
+
+<div class="strip"><h4>Something new in notifications</h4><div class="fr3">
+ <div class="f"><div class="gbtn glass"><i data-i="bell"></i></div></div><span class="ar">›</span>
+ <div class="f"><div class="gbtn glass"><i data-i="bell" style="transform:rotate(-16deg)"></i><span class="dot" style="transform:scale(.6)">3</span></div></div><span class="ar">›</span>
+ <div class="f"><div class="gbtn glass"><i data-i="bell"></i><span class="dot">3</span></div></div></div>
+ <div class="spec"><b>What:</b> the bell swings once and the count pops in, only when the number goes up while you are looking. <b>Tap:</b> none. <b>Reduce Motion:</b> the count just appears. <b>Build:</b> system symbol effect.</div></div>
+
+<div class="strip"><h4>Raising a bid</h4><div class="fr3">
+ <div class="f"><span class="t-num-hero">$18</span></div><span class="ar">›</span>
+ <div class="f"><span class="t-num-hero blur">$19</span></div><span class="ar">›</span>
+ <div class="f"><span class="t-num-hero cg">$19</span><span class="lbl">MAX $54</span></div></div>
+ <div class="spec"><b>What:</b> the amount rolls as you step it (exists today). <b>New:</b> a tick per step, a firmer tap at your budget limit, and a success tap when the bid is placed. <b>Reduce Motion:</b> plain swap, taps unchanged.</div></div>
+
+<div class="strip"><h4>You moved up the standings</h4><div class="fr3">
+ <div class="f" style="flex-direction:column;gap:4px;align-items:stretch"><div class="mini"><span class="rank" style="width:18px">2</span><span class="t-row one mid c2">Coppola Cut</span></div><div class="mini"><span class="rank cg" style="width:18px">3</span><span class="t-row one mid">Reel Deal</span></div></div><span class="ar">›</span>
+ <div class="f" style="flex-direction:column;gap:4px;align-items:stretch"><div class="mini" style="opacity:.5;transform:translateY(5px)"><span class="rank" style="width:18px">2</span><span class="t-row one mid c2">Coppola Cut</span><span class="t-cap">↓</span></div><div class="mini" style="transform:translateY(-5px)"><span class="rank cg" style="width:18px">3</span><span class="t-row one mid">Reel Deal</span><span class="t-cap cs">↑</span></div></div><span class="ar">›</span>
+ <div class="f" style="flex-direction:column;gap:4px;align-items:stretch"><div class="mini"><span class="rank cg" style="width:18px">2</span><span class="t-row one mid">Reel Deal</span><span class="t-cap cs">▲ 1</span></div><div class="mini"><span class="rank" style="width:18px">3</span><span class="t-row one mid c2">Coppola Cut</span></div></div></div>
+ <div class="spec"><b>What:</b> rows slide to their new places when standings refresh, and your row shows "▲ 1" until you leave. <b>Tap:</b> none. <b>Reduce Motion:</b> rows swap in place; the "▲ 1" label still shows.</div></div>
+
+<div class="strip"><h4>Opening a movie</h4><div class="fr3">
+ <div class="f"><div class="mini"><span class="poster p3" style="width:26px;height:39px;box-shadow:0 0 0 2px var(--gold)"></span><div class="mid t-row one">The Legend of Zelda</div></div></div><span class="ar">›</span>
+ <div class="f"><span class="poster p3" style="width:40px;height:60px;border-radius:8px"></span></div><span class="ar">›</span>
+ <div class="f" style="justify-content:flex-start"><span class="poster p3" style="width:44px;height:66px;border-radius:8px"></span><div><div class="t-card">The Legend of Zelda</div><div class="t-meta">May 7, 2027</div></div></div></div>
+ <div class="spec"><b>What:</b> the small poster in the row grows into the big poster on the movie page, and shrinks back when you go back. <b>Tap:</b> none. <b>Reduce Motion:</b> the system uses its normal fade. <b>Build:</b> the system zoom transition (iOS 18 and later).</div></div>
+
+</div></div><script src="../../ios-duo/mockups/icons.js"></script><script src="art.js"></script></body></html>

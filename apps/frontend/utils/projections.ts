@@ -12,7 +12,7 @@ import type { MovieProjection } from '@/types'
 export const PROJECTION_BREAK_EVEN = 60
 
 /** A middle-50% range wider than this is no help as a range; show the point estimate instead. */
-export const MAX_RANGE_WIDTH = 10
+export const MAX_RANGE_WIDTH = 15
 
 /** The one copy of the Beta caveat. Every surface that explains projections uses it. */
 export const PROJECTION_DISCLAIMER =

@@ -1,0 +1,104 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="kit.css">
+<style>
+  /* Table pose (half folded, standing): .pane is built for the book pose, so the two halves are placed here.
+     Upper half y 44..437 is for glancing, lower half y 453..890 is for touching. Gutter 437..453 sits on the fold. */
+  .upper{position:absolute;top:44px;height:393px;left:16px;right:16px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+  .upper::after{content:"";position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(rgba(15,15,15,0),var(--bg));pointer-events:none}
+  .lower{position:absolute;top:453px;bottom:0;left:16px;right:16px;overflow:hidden;display:flex;flex-direction:column;gap:12px}
+  /* The list fades out under the floating tab bar (tab bar top edge is 78px above the bottom) */
+  .lower::after{content:"";position:absolute;left:0;right:0;bottom:0;height:84px;background:linear-gradient(rgba(15,15,15,0),var(--bg) 62%);pointer-events:none}
+  .lower .seg span{color:var(--text2)} .lower .seg span.on{color:var(--text)}
+  .toprow{display:flex;align-items:center;gap:10px;flex:none}
+  .toprow .grow{flex:1}
+  .gpill i{width:16px;height:16px;color:var(--text2)}
+  .titlerow{display:flex;align-items:center;gap:10px;flex:none;margin-top:-6px;padding:0 4px}
+  .titlerow .end{margin-left:auto}
+  .live{display:inline-flex;align-items:center;gap:6px;font:600 13px/1 "DM Sans";color:var(--success)}
+  .live::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--success);box-shadow:0 0 0 3px rgba(34,197,94,.20)}
+  /* On the clock card, laid out wide: who is picking on the left, who follows on the right */
+  .clock{background:var(--success-tint);border-radius:22px;padding:12px 16px;box-shadow:inset 0 0 0 1px rgba(34,197,94,.20);display:flex;align-items:center;gap:12px;flex:none}
+  .clock .txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .clock .hint{display:flex;align-items:center;gap:3px;color:var(--success)}
+  .clock .hint i{width:13px;height:13px;transform:rotate(90deg)}
+  .clock .next{display:flex;flex-direction:column;gap:8px;border-left:1px solid rgba(34,197,94,.20);padding-left:16px;flex:none}
+  .clock .next .names{display:flex;align-items:center;gap:12px}
+  .who{display:inline-flex;align-items:center;gap:6px;font:600 13px/1 "DM Sans";color:var(--text)}
+  .av.xs{width:24px;height:24px;font-size:9px}
+  .upper .sec{flex:none;padding-top:0}
+  .upper .grp{flex:none}
+  .board .mrow+.mrow::before{left:106px}
+  .searchrow{display:flex;align-items:center;gap:10px;flex:none}
+  .searchrow .field{flex:1;min-width:0}
+  .field span{flex:1;min-width:0}
+  .lower .seg,.lower .grp{flex:none}
+  .tab{color:var(--text)} .tab.on{color:var(--gold)}
+</style></head><body>
+<div class="device table">
+  <div class="statusbar"><span>9:41</span><span class="sys"><span class="sig">●●●●</span><span class="batt"></span></span></div>
+  <div class="fold"></div>
+
+  <!-- Upper half: read from across the table -->
+  <div class="upper">
+    <div class="toprow">
+      <div class="gpill glass"><span class="av round a4" style="width:34px;height:34px">OM</span><i data-i="updown"></i></div>
+      <div class="grow"></div>
+      <div class="gbtn glass"><i data-i="bell"></i></div>
+      <div class="gbtn glass"><i data-i="more"></i></div>
+    </div>
+    <div class="titlerow">
+      <span class="t-large">Draft</span>
+      <span class="badge b-draft">Drafting</span>
+      <span class="live">Live</span>
+      <span class="t-meta one end">Office Movie Club · 2027 Season</span>
+    </div>
+
+    <div class="clock">
+      <span class="av lg a4">RD</span>
+      <div class="txt">
+        <div class="t-card">You're on the clock</div>
+        <div class="t-meta">Round 2 · Pick 9 of 30</div>
+        <div class="t-meta hint">Pick from the list below<i data-i="chev"></i></div>
+      </div>
+      <div class="next">
+        <span class="t-meta">Up next</span>
+        <div class="names">
+          <span class="who"><span class="av round xs a0">KS</span>Dave</span>
+          <span class="who"><span class="av round xs a0">CC</span>Carol</span>
+          <span class="who"><span class="av round xs a0">NS</span>Bob</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><span class="t-section">Round 2</span><span class="t-meta">Picks 7–12</span></div>
+    <div class="grp board">
+      <div class="mrow"><span class="rank">2.1</span><span class="poster p1">M2</span><div class="mid"><div class="t-row one">Minecraft 2</div><div class="t-meta one">Jul 23, 2027 · Box Office Poison</div></div></div>
+      <div class="mrow"><span class="rank">2.2</span><span class="poster p8">MT</span><div class="mid"><div class="t-row one">Man of Tomorrow</div><div class="t-meta one">Jul 9, 2027 · Final Cut Pros</div></div></div>
+      <div class="mrow sel"><span class="rank">2.3</span><span class="av a4">RD</span><div class="mid"><div class="t-row one">Reel Deal</div><div class="t-meta one">Alice Spielberg · <span class="cs">on the clock</span></div></div></div>
+      <div class="mrow"><span class="rank">2.4</span><span class="av a0">KS</span><div class="mid"><div class="t-row one">Kubrick's Cube</div><div class="t-meta one">Dave Kubrick · up next</div></div></div>
+    </div>
+  </div>
+
+  <!-- Lower half: the picker, within thumb reach -->
+  <div class="lower">
+    <div class="searchrow">
+      <div class="field glass"><i data-i="search" style="width:19px;height:19px"></i><span class="one">Search movies</span></div>
+      <div class="gbtn glass"><i data-i="filter"></i></div>
+    </div>
+    <div class="seg"><span class="on">All</span><span>Trending</span><span>Soon</span><span>Wishlist</span></div>
+    <div class="grp">
+      <div class="mrow"><span class="poster p3">LZ</span><div class="mid"><div class="t-row one">The Legend of Zelda</div><div class="t-meta one">May 7, 2027 · Adventure</div></div><span class="btn tinted sm">Pick</span></div>
+      <div class="mrow"><span class="poster p2">SW</span><div class="mid"><div class="t-row one">Star Wars: Starfighter</div><div class="t-meta one">May 28, 2027 · Science Fiction</div></div><span class="btn tinted sm">Pick</span></div>
+      <div class="mrow"><span class="poster p5">FI</span><div class="mid"><div class="t-row one">Frozen III</div><div class="t-meta one">Nov 24, 2027 · Animation</div></div><span class="btn tinted sm">Pick</span></div>
+      <div class="mrow"><span class="poster p8">GX</span><div class="mid"><div class="t-row one">Godzilla x Kong: Supernova</div><div class="t-meta one">Mar 26, 2027 · Action</div></div><span class="btn tinted sm">Pick</span></div>
+      <div class="mrow"><span class="poster p6">M3</span><div class="mid"><div class="t-row one">Minions 3</div><div class="t-meta one">Jul 1, 2027 · Animation</div></div><span class="btn tinted sm">Pick</span></div>
+      <div class="mrow"><span class="poster p8">TS</span><div class="mid"><div class="t-row one">Toy Story 5</div><div class="t-meta one">Jun 19, 2027 · Animation</div></div><span class="btn tinted sm">Pick</span></div>
+    </div>
+  </div>
+
+  <div class="tabbar glass">
+    <div class="tab"><i data-i="home"></i>Home</div>
+    <div class="tab on"><i data-i="draft"></i>Draft</div>
+    <div class="tab"><i data-i="roster"></i>Roster</div>
+  </div>
+</div>
+<script src="icons.js"></script></body></html>

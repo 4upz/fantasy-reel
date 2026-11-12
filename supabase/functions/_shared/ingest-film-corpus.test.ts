@@ -539,7 +539,7 @@ Deno.test('ingest-film-corpus: ratings', async (t) => {
         due(4, { effective_release_date: '2026-06-01', ratings_fetched_at: '2026-08-01T00:00:00Z', rt_critic: 70, rt_settled_at: '2026-08-01T00:00:00Z' }),
         // No score yet, released recently: due again.
         due(5, { effective_release_date: '2026-08-10', ratings_fetched_at: '2026-08-12T00:00:00Z', ratings_absent: true }),
-        // Unreleased, however high its priority: never.
+        // Unreleased and not opening within the pre-release window: never.
         due(6, { priority: 100, effective_release_date: '2026-12-01' }),
         due(7, { priority: 100, effective_release_date: null }),
       ],
@@ -550,6 +550,33 @@ Deno.test('ingest-film-corpus: ratings', async (t) => {
       assertEquals(lookups(calls).sort(), [1, 5])
       assertEquals(db.film_corpus.find((r) => r.tmdb_id === 1)!.rt_critic, 84)
       assertEquals(db.film_corpus.find((r) => r.tmdb_id === 5)!.ratings_absent, false)
+    } finally {
+      restore()
+    }
+  })
+
+  await t.step('polls league movies opening soon once a day before release', async () => {
+    const db: MockDb = {
+      film_corpus: [
+        // League movie opening in 10 days, never asked: due.
+        due(1, { priority: 100, effective_release_date: '2026-09-05' }),
+        // Asked yesterday: due again today.
+        due(2, { priority: 100, effective_release_date: '2026-09-10', ratings_fetched_at: '2026-08-25T19:00:00Z', ratings_absent: true }),
+        // Already asked today: not again.
+        due(3, { priority: 100, effective_release_date: '2026-09-10', ratings_fetched_at: '2026-08-26T07:00:00Z', ratings_absent: true }),
+        // Opening soon but not a league movie: never before release.
+        due(4, { priority: 50, effective_release_date: '2026-09-05' }),
+        // A league movie a month out: too early.
+        due(5, { priority: 100, effective_release_date: '2026-10-01' }),
+      ],
+    }
+    const { calls, restore } = stubFetch(mdblistResponder({ 1: ok(92, 31), 2: ok(null) }))
+    try {
+      await fetchRatingsStage(client(db), DEPS, CONFIG)
+      assertEquals(lookups(calls).sort(), [1, 2])
+      const one = db.film_corpus.find((r) => r.tmdb_id === 1)!
+      // An early score is stored for the projection but never settles before release.
+      assertEquals([one.rt_critic, one.rt_critic_votes, one.rt_settled_at], [92, 31, null])
     } finally {
       restore()
     }

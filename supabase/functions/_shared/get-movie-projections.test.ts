@@ -172,7 +172,7 @@ Deno.test('get-movie-projections - enabled returns the contract shape, null for 
     projected_rt: 72.4,
     range50: [66, 79],
     range80: [55.5, 86],
-    low_confidence: true,
+    low_confidence: false,
     insufficient_history: false,
     p_rotten: 0.18,
     p_fresh: 0.82,
