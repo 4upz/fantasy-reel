@@ -8,10 +8,10 @@
  *   projected RT = 100 * sigmoid(z)
  *
  * Uncertainty is split-conformal: residuals z_actual - z from fits that never
- * saw the year they predicted, grouped by coverage band. Ranges are residual
- * quantiles with the finite-sample correction; P(rotten), P(fresh), P(90+) and
- * expected points (both scoring rules) sum the same residual distribution over
- * 1-point RT bins. Early reviews update it as a Beta prior.
+ * saw the year they predicted, grouped by quartile of projected z
+ * (documentaries apart). Ranges are residual quantiles with the
+ * finite-sample correction; P(rotten), P(fresh), P(90+) and expected points
+ * (both scoring rules) sum the same residual distribution over 1-point RT bins. Early reviews update it as a Beta prior.
  *
  * Pure -- no Supabase calls, no I/O -- like `bid-resolution.ts`: the fit cron
  * and get-movie-projections are meant to be thin wrappers that load rows and
@@ -182,12 +182,10 @@ export function predictLogit(regression: Regression, raw: RawFeatures): LogitPre
 // Forward chaining
 // ---------------------------------------------------------------------------
 
-export interface ChainPrediction {
+export interface ChainPrediction extends CalibrationResidual {
   row: ModelRow
   prediction: LogitPrediction
   coverage: number
-  /** target - z, logit scale. */
-  residual: number
 }
 
 export interface ChainOptions extends FitOptions {
@@ -215,7 +213,14 @@ export function forwardChain(
     fits.set(year, fit)
     for (const row of test) {
       const prediction = predictLogit(fit, row.raw)
-      predictions.push({ row, prediction, coverage: coverage(row.raw, fit.shrinkage), residual: row.target - prediction.z })
+      predictions.push({
+        row,
+        prediction,
+        coverage: coverage(row.raw, fit.shrinkage),
+        residual: row.target - prediction.z,
+        z: prediction.z,
+        documentary: row.raw.context.documentary,
+      })
     }
   }
   return { predictions, fits }
@@ -225,22 +230,44 @@ export function forwardChain(
 // Conformal calibration
 // ---------------------------------------------------------------------------
 
-/** Residuals of one coverage band, summarized as evenly spaced quantiles. */
+/** Residuals of one calibration band, summarized as evenly spaced quantiles. */
 export interface ResidualBand {
-  /** Inclusive lower coverage edge; the band runs to the next band's edge. */
-  min_coverage: number
+  /** Level bands: inclusive lower edge of projected logit z; null opens the lowest band. */
+  min_z?: number | null
+  /** Legacy coverage bands (models fitted before level bands): inclusive lower coverage edge. */
+  min_coverage?: number
   /** Residuals behind the summary, for the finite-sample correction. */
   n: number
   /** Sorted quantiles at probabilities (i + 0.5) / length. */
   quantiles: number[]
 }
 
+/**
+ * How wide a film's range is, by what it is like. Residual spread on the
+ * logit scale barely moves with track-record coverage or genre, but it does
+ * move with how high a film is projected, so ranges are calibrated per
+ * quartile of projected z. Documentaries get a band of their own: many end at
+ * 100%, above a range calibrated on everything else.
+ */
 export interface Calibration {
-  /** Ascending by min_coverage, starting at 0. */
+  /** 'level' (current); absent on models fitted with coverage bands. */
+  by?: 'level'
+  /** Level: ascending by min_z. Coverage: ascending by min_coverage. */
   bands: ResidualBand[]
+  /** Level only; null when too few documentaries to stand alone. */
+  documentary?: ResidualBand | null
 }
 
-export const COVERAGE_BAND_EDGES: readonly number[] = [0, 0.25, 0.5]
+/** One chained residual and what calibration groups it by. */
+export interface CalibrationResidual {
+  residual: number
+  /** Projected logit. */
+  z: number
+  documentary: boolean
+}
+
+/** Quartiles of projected z. */
+export const LEVEL_BAND_QUANTILES: readonly number[] = [0.25, 0.5, 0.75]
 
 export interface CalibrationOptions {
   /** A band with fewer residuals than this uses the pooled residuals (default 40). */
@@ -262,34 +289,46 @@ function sortedQuantile(sorted: readonly number[], p: number): number {
   return i + 1 < sorted.length ? sorted[i] * (1 - frac) + sorted[i + 1] * frac : sorted[i]
 }
 
+const ascending = (values: number[]) => values.sort((a, b) => a - b)
+
 /**
- * Groups residuals by coverage band. A band with too few residuals borrows the
- * pooled set, so a sparse band is never more confident than the data allows.
+ * Groups residuals into projected-level bands (documentaries apart). A band
+ * with too few residuals borrows the pooled set, so a sparse band is never
+ * more confident than the data allows.
  */
-export function calibrate(
-  residuals: ReadonlyArray<{ coverage: number; residual: number }>,
-  options: CalibrationOptions = {},
-): Calibration {
+export function calibrate(residuals: readonly CalibrationResidual[], options: CalibrationOptions = {}): Calibration {
   if (residuals.length === 0) throw new Error('projection model: no residuals to calibrate')
   const minBandSize = options.minBandSize ?? 40
   const maxQuantiles = options.maxQuantiles ?? 199
-  const pooled = residuals.map((r) => r.residual).sort((a, b) => a - b)
-  const bands = COVERAGE_BAND_EDGES.map((edge, i) => {
-    const next = COVERAGE_BAND_EDGES[i + 1] ?? Infinity
-    const own = residuals
-      .filter((r) => r.coverage >= edge && r.coverage < next)
-      .map((r) => r.residual)
-      .sort((a, b) => a - b)
-    const sample = own.length >= minBandSize ? own : pooled
-    return { min_coverage: edge, n: sample.length, quantiles: summarize(sample, maxQuantiles) }
+  const pooled = ascending(residuals.map((r) => r.residual))
+  const band = (min_z: number | null, own: number[]): ResidualBand => {
+    const sample = own.length >= minBandSize ? ascending(own) : pooled
+    return { min_z, n: sample.length, quantiles: summarize(sample, maxQuantiles) }
+  }
+
+  const zs = ascending(residuals.map((r) => r.z))
+  const edges = LEVEL_BAND_QUANTILES.map((q) => sortedQuantile(zs, q))
+  const others = residuals.filter((r) => !r.documentary)
+  const bands = [null, ...edges].map((edge, i) => {
+    const next = edges[i] ?? Infinity
+    return band(edge, others.filter((r) => (edge == null || r.z >= edge) && r.z < next).map((r) => r.residual))
   })
-  return { bands }
+  const documentaries = residuals.filter((r) => r.documentary).map((r) => r.residual)
+  return { by: 'level', bands, documentary: documentaries.length >= minBandSize ? band(null, documentaries) : null }
 }
 
-export function bandFor(calibration: Calibration, coverageValue: number): ResidualBand {
-  let band = calibration.bands[0]
-  for (const candidate of calibration.bands) if (coverageValue >= candidate.min_coverage) band = candidate
-  return band
+/** The residual band a film's range comes from. */
+export function bandFor(
+  calibration: Calibration,
+  film: { coverage: number; z: number; documentary: boolean },
+): ResidualBand {
+  // The last band whose lower edge the film reaches; a missing edge is open.
+  const lastReached = (edge: (b: ResidualBand) => number | null | undefined, value: number) =>
+    calibration.bands.reduce((hit, b) => ((edge(b) ?? -Infinity) <= value ? b : hit), calibration.bands[0])
+  // Legacy coverage bands.
+  if (calibration.by !== 'level') return lastReached((b) => b.min_coverage, film.coverage)
+  if (film.documentary && calibration.documentary) return calibration.documentary
+  return lastReached((b) => b.min_z, film.z)
 }
 
 function bandQuantile(band: ResidualBand, p: number): number {
@@ -598,7 +637,7 @@ function roundContributions(items: ProjectionContribution[], baseline: number, h
 export function projectFilm(model: ProjectionModel, raw: RawFeatures, options: ProjectOptions = {}): ProjectionResult {
   const prediction = predictLogit(model.regression, raw)
   const filmCoverage = coverage(raw, model.regression.shrinkage)
-  const band = bandFor(model.calibration, filmCoverage)
+  const band = bandFor(model.calibration, { coverage: filmCoverage, z: prediction.z, documentary: raw.context.documentary })
   const priorDistribution = residualDistribution(prediction.z, band)
   const baselineRt = round1(logitToRt(prediction.baselineZ))
   const priorRt = logitToRt(prediction.z)
@@ -769,15 +808,23 @@ export function deserializeProjectionModel(input: unknown): ProjectionModel {
   ) as Shrinkage
   const c = (m.calibration ?? {}) as Record<string, unknown>
   if (!Array.isArray(c.bands) || c.bands.length === 0) throw new Error('projection model: calibration has no bands')
-  const bands = c.bands.map((band: Record<string, unknown>, i: number) => {
-    const quantiles = numberList(band.quantiles, `calibration.bands[${i}].quantiles`)
-    if (quantiles.length === 0) throw new Error(`projection model: band ${i} has no residuals`)
-    return {
-      min_coverage: finiteNumber(band.min_coverage, `calibration.bands[${i}].min_coverage`),
-      n: finiteNumber(band.n, `calibration.bands[${i}].n`),
-      quantiles,
+  const level = c.by === 'level'
+  const readBand = (band: Record<string, unknown>, name: string): ResidualBand => {
+    const quantiles = numberList(band.quantiles, `${name}.quantiles`)
+    if (quantiles.length === 0) throw new Error(`projection model: ${name} has no residuals`)
+    const n = finiteNumber(band.n, `${name}.n`)
+    return level
+      ? { min_z: band.min_z == null ? null : finiteNumber(band.min_z, `${name}.min_z`), n, quantiles }
+      : { min_coverage: finiteNumber(band.min_coverage, `${name}.min_coverage`), n, quantiles }
+  }
+  const bands = c.bands.map((band: Record<string, unknown>, i: number) => readBand(band, `calibration.bands[${i}]`))
+  const calibration: Calibration = level
+    ? {
+      by: 'level',
+      bands,
+      documentary: c.documentary == null ? null : readBand(c.documentary as Record<string, unknown>, 'calibration.documentary'),
     }
-  })
+    : { bands }
   const t = (m.training ?? {}) as Record<string, unknown>
   return {
     format: 1,
@@ -788,7 +835,7 @@ export function deserializeProjectionModel(input: unknown): ProjectionModel {
       coefficients,
       lambda: finiteNumber(r.lambda, 'regression.lambda'),
     },
-    calibration: { bands },
+    calibration,
     early_review_discount: finiteNumber(m.early_review_discount, 'early_review_discount'),
     training: {
       rows: finiteNumber(t.rows, 'training.rows'),

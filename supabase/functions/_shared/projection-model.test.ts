@@ -49,7 +49,7 @@ function fittedModel() {
 
 function uniformBand(n: number, spread: number): ResidualBand {
   const quantiles = Array.from({ length: n }, (_, i) => -spread + (2 * spread * (i + 0.5)) / n)
-  return { min_coverage: 0, n, quantiles }
+  return { min_z: null, n, quantiles }
 }
 
 function pointMass(rt: number): Float64Array {
@@ -95,19 +95,48 @@ Deno.test('forwardChain - skips a year without enough earlier films', () => {
   assertEquals([...fits.keys()], [2013])
 })
 
-Deno.test('calibrate - sparse bands borrow the pooled residuals; summaries are capped', () => {
+Deno.test('calibrate - bands by projected-level quartile; sparse bands borrow the pooled residuals', () => {
   const residuals = [
-    ...Array.from({ length: 500 }, (_, i) => ({ coverage: 0.6, residual: (i - 250) / 100 })),
-    ...Array.from({ length: 10 }, () => ({ coverage: 0.1, residual: 9 })),
+    // 400 films spread over z in [-2, 2): residual width grows with z.
+    ...Array.from({ length: 400 }, (_, i) => {
+      const z = -2 + i / 100
+      return { z, residual: ((i % 21) - 10) / 10 * (1 + z / 4), documentary: false }
+    }),
+    // Too few documentaries to stand alone.
+    ...Array.from({ length: 10 }, () => ({ z: 2.5, residual: 3, documentary: true })),
   ]
   const calibration = calibrate(residuals, { minBandSize: 40, maxQuantiles: 99 })
-  assertEquals(calibration.bands.map((b) => b.min_coverage), [0, 0.25, 0.5])
-  assertEquals(calibration.bands[0].n, 510) // 10 own residuals: pooled instead
-  assertEquals(calibration.bands[2].n, 500)
-  assertEquals(calibration.bands[2].quantiles.length, 99)
-  assertEquals(bandFor(calibration, 0.3).min_coverage, 0.25)
-  assertEquals(bandFor(calibration, 0.99).min_coverage, 0.5)
+  assertEquals(calibration.by, 'level')
+  assertEquals(calibration.bands.length, 4)
+  assertEquals(calibration.bands[0].min_z, null)
+  assert(calibration.bands.slice(1).every((b, i) => b.min_z! > (calibration.bands[i].min_z ?? -Infinity)))
+  assertEquals(calibration.documentary, null)
+  assertEquals(calibration.bands[0].quantiles.length, 99)
+  // Higher-projected films carry the wider residuals here.
+  const spread = (b: { quantiles: number[] }) => b.quantiles[b.quantiles.length - 1] - b.quantiles[0]
+  assert(spread(calibration.bands[3]) > spread(calibration.bands[0]))
+
+  const film = (z: number, documentary = false) => ({ coverage: 0.5, z, documentary })
+  assertEquals(bandFor(calibration, film(-5)), calibration.bands[0])
+  assertEquals(bandFor(calibration, film(5)), calibration.bands[3])
+  // No documentary band: a documentary falls back to its level band.
+  assertEquals(bandFor(calibration, film(5, true)), calibration.bands[3])
+
+  const withDocs = calibrate([
+    ...residuals,
+    ...Array.from({ length: 40 }, (_, i) => ({ z: 2.5, residual: i / 40, documentary: true })),
+  ], { minBandSize: 40 })
+  assertEquals(withDocs.documentary!.n, 50)
+  assertEquals(bandFor(withDocs, film(-5, true)), withDocs.documentary)
   assertThrows(() => calibrate([]))
+})
+
+Deno.test('bandFor - models fitted with coverage bands still read their bands by coverage', () => {
+  const legacy = { bands: [0, 0.25, 0.5].map((min_coverage) => ({ min_coverage, n: 1, quantiles: [min_coverage] })) }
+  const film = (coverage: number) => ({ coverage, z: 0, documentary: true })
+  assertEquals(bandFor(legacy, film(0.1)).min_coverage, 0)
+  assertEquals(bandFor(legacy, film(0.3)).min_coverage, 0.25)
+  assertEquals(bandFor(legacy, film(0.99)).min_coverage, 0.5)
 })
 
 Deno.test('conformalInterval - uses finite-sample ranks and opens a side it cannot rank', () => {
@@ -125,7 +154,7 @@ Deno.test('conformalInterval - the 80% range holds about 80% of draws from the s
   let state = 9
   const random = () => ((state = (state * 1103515245 + 12345) % 2147483648) / 2147483648)
   const residuals = Array.from({ length: 2000 }, () => Math.log(random() / (1 - random() + 1e-12) + 1e-12) * 0.3)
-  const band = calibrate(residuals.slice(0, 1000).map((residual) => ({ coverage: 0.9, residual }))).bands[2]
+  const band = calibrate(residuals.slice(0, 1000).map((residual) => ({ z: 0.4, residual, documentary: false }))).bands[2]
   let inside = 0
   for (const r of residuals.slice(1000)) {
     const [lo, hi] = conformalInterval(0.4, band, 0.8)
@@ -284,6 +313,17 @@ Deno.test('serializeProjectionModel - round trips to identical projections', () 
   assertEquals(projectFilm(restored, raw, { computedAt: 'x' }), projectFilm(model, raw, { computedAt: 'x' }))
   // Also accepts the parsed jsonb object.
   assertEquals(deserializeProjectionModel(JSON.parse(serializeProjectionModel(model))), model)
+})
+
+Deno.test('deserializeProjectionModel - still reads a model stored with coverage bands', () => {
+  const { model } = fittedModel()
+  const json = JSON.parse(serializeProjectionModel(model))
+  // The shape every model fitted before level bands was stored in.
+  const legacyBands = [0, 0.25, 0.5].map((min_coverage) => ({ min_coverage, n: json.calibration.bands[0].n, quantiles: json.calibration.bands[0].quantiles }))
+  const legacy = deserializeProjectionModel({ ...json, calibration: { bands: legacyBands } })
+  assertEquals(legacy.calibration, { bands: legacyBands })
+  const result = projectFilm(legacy, rows[rows.length - 3].raw, { computedAt: 'x' })
+  assert(result.range50[0] < result.projected_rt && result.projected_rt < result.range50[1])
 })
 
 Deno.test('deserializeProjectionModel - refuses other formats, feature sets and bad numbers', () => {
