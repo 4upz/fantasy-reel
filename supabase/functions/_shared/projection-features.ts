@@ -115,6 +115,9 @@ export const KEYWORDS: Readonly<Record<string, string>> = {
   true_story: 'Based on a true story',
 }
 
+/** TMDb's Documentary genre id. */
+export const DOCUMENTARY_GENRE = 99
+
 /** TMDb movie genres. */
 export const GENRES: Readonly<Record<number, string>> = {
   28: 'Action',
@@ -364,6 +367,8 @@ export interface RawFeatures {
     runtime: number | null
     releaseType: number | null
     budgetKnown: boolean
+    /** Documentaries get their own calibration band: many end at 100%. */
+    documentary: boolean
   }
 }
 
@@ -492,6 +497,7 @@ export function rawFeatures(index: CorpusIndex, film: CorpusFilm, options: RawFe
       runtime: film.runtime,
       releaseType: film.us_release_type,
       budgetKnown: film.budget != null && film.budget >= MIN_KNOWN_BUDGET,
+      documentary: film.genre_ids.includes(DOCUMENTARY_GENRE),
     },
   }
 }
