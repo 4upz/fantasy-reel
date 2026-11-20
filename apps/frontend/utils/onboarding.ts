@@ -28,6 +28,16 @@ export function isNewPlayer(memberships: readonly Membership[] | null): boolean 
   return memberships ? !hasPlayedSeason(memberships) : false
 }
 
+/**
+ * Whether the season-tab tours (Overview, Roster, Bidding, Trading) may start
+ * by themselves: until a season of theirs has finished. `isNewPlayer` can't
+ * gate them, because anyone on those tabs already has an active season. A
+ * failed read (null) says no.
+ */
+export function isFirstSeason(memberships: readonly Membership[] | null): boolean {
+  return memberships ? !memberships.some((row) => row.leagues?.status === 'completed') : false
+}
+
 export type NextStep =
   | { kind: 'draft-live'; leagueId: string; leagueName: string; counterpicking: boolean }
   | { kind: 'setup-owner'; leagueId: string; leagueName: string }

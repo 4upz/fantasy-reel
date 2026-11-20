@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { createClient } from '@/utils/supabase/server'
-import { getCachedLeague, getCachedUser } from '@/utils/supabase/cached'
+import { getCachedLeague, getCachedMemberships, getCachedUser } from '@/utils/supabase/cached'
+import { isFirstSeason } from '@/utils/onboarding'
 import { redirect, notFound } from 'next/navigation'
 import DashboardClient from './DashboardClient'
 import { buildTeamInfoByTeamId, getMovieStatus, getParticipantDisplayName } from '@/utils/league'
@@ -76,7 +77,7 @@ export default async function DashboardPage({ params }: PageProps) {
 
   const typedLeague = league as League
 
-  const [{ data: participants }, { data: holdingRows }, standings, seasons] = await Promise.all([
+  const [{ data: participants }, { data: holdingRows }, standings, seasons, { data: memberships }] = await Promise.all([
     // Fetch all participants with teams, scores, and remaining budgets
     supabase
       .from('league_participants')
@@ -109,6 +110,7 @@ export default async function DashboardPage({ params }: PageProps) {
       ? fetchStandings(supabase, id)
       : [],
     fetchSeriesSeasons(supabase, typedLeague.series_id),
+    getCachedMemberships(user.id),
   ])
 
   // Build team data
@@ -206,6 +208,7 @@ export default async function DashboardPage({ params }: PageProps) {
       leagueUpcoming={leagueUpcoming}
       todayIso={todayIso}
       isOwner={typedLeague.owner_id === user.id}
+      firstSeason={isFirstSeason(memberships)}
       nextSeasonId={seasons.find((season) => season.season_year === typedLeague.season_year + 1)?.id}
       champions={champions}
       championPoints={championPoints(champions, rows)}

@@ -24,7 +24,7 @@ Short walkthroughs that start the first time someone opens a page, so players le
 
    export const tradingTour = defineTour<{ leagueStatus: LeagueStatus; isOwner: boolean }>({
      id: 'trading',                       // kebab-case, stored per user, never reused
-     version: 1,                          // bump to show it again to people who saw it
+     version: 1,                          // bump to show it again to people who saw it: for a changed page, not changed words
      title: 'Trading',                    // shown in Settings → Tours
      description: 'Trading tab: proposing, answering, and how trades go through.',
      when: (ctx) => ctx.leagueStatus === 'active',
@@ -106,7 +106,9 @@ Tours always start for a user who asks: the account menu's **Tour this page**, `
 
 ### Onboarding tours start only for newcomers
 
-`welcome`, `league-setup`, `league-waiting`, `league-settings`, `draft-room` and `counterpick-round` teach a first season. Each has `autoStart: (ctx) => ctx.newPlayer === true`. The page works out `newPlayer` with `isNewPlayer()` from `utils/onboarding.ts`, reading `getCachedMemberships()`. Someone who has had a team in an active or completed season isn't new. Pass `false` when the read fails, so nobody gets walked through by mistake. Use the same rule for a new beginner tour. Feature tours, such as `bidding`, start for everyone.
+`welcome`, `league-setup`, `league-waiting`, `league-settings`, `draft-room` and `counterpick-round` teach a first season. Each has `autoStart: (ctx) => ctx.newPlayer === true`. The page works out `newPlayer` with `isNewPlayer()` from `utils/onboarding.ts`, reading `getCachedMemberships()`. Someone who has had a team in an active or completed season isn't new. Pass `false` when the read fails, so nobody gets walked through by mistake. Use the same rule for a new beginner tour.
+
+The season-tab tours, `league-overview`, `roster`, `bidding` and `trading`, can't use `newPlayer`, because anyone on those tabs already has an active season. They use `autoStart: (ctx) => ctx.firstSeason`, worked out with `isFirstSeason()`: true until a season of the player's has finished. `standings` repeats Overview's point, so it has `autoStart: () => false` and plays only from "Show me around" or Settings. A tour for a feature that is genuinely new to everyone can leave `autoStart` out and start for everyone.
 
 ## How a tour ends
 
