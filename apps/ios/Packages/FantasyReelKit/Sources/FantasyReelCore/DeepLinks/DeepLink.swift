@@ -67,6 +67,8 @@ public enum DeepLink: Hashable, Sendable {
     case invitation(token: String)
     /// `/league/<uuid>[/<section>]`. Nil section: open on the status's default tab.
     case league(LeagueID, section: LeagueSection?)
+    /// `/dashboard`, the web's signed-in home: opening the app is the destination.
+    case home
     case movies
     case wishlist
     case settings
@@ -80,7 +82,7 @@ public enum DeepLink: Hashable, Sendable {
     public var requiresAuthentication: Bool {
         switch self {
         case .help, .authCallback: false
-        case .joinCode, .invitation, .league, .movies, .wishlist, .settings, .notifications: true
+        case .joinCode, .invitation, .league, .home, .movies, .wishlist, .settings, .notifications: true
         }
     }
 
@@ -158,6 +160,7 @@ public enum DeepLink: Hashable, Sendable {
             }
             return .league(leagueID, section: section)
 
+        case "dashboard" where segments.count == 1: return .home
         case "movies" where segments.count == 1: return .movies
         case "wishlist" where segments.count == 1: return .wishlist
         case "settings" where segments.count == 1: return .settings

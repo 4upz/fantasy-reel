@@ -2,6 +2,20 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // The bare domain forwards to www here rather than in Vercel's domain
+  // settings, so it can still serve the iPhone app's association file:
+  // Apple fetches /.well-known/apple-app-site-association from each host
+  // and never follows a redirect. Inert while Vercel redirects the domain.
+  async redirects() {
+    return [
+      {
+        source: '/:path((?!\\.well-known/).*)',
+        has: [{ type: 'host', value: 'fantasyreel.com' }],
+        destination: 'https://www.fantasyreel.com/:path',
+        permanent: true,
+      },
+    ]
+  },
   images: {
     remotePatterns: [
       {

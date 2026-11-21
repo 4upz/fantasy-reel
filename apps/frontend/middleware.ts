@@ -10,11 +10,12 @@ export const config = {
     /*
      * Match all request paths except for the ones starting with:
      * - api (API routes — they handle their own auth)
+     * - .well-known (app association files Apple fetches signed out)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - manifest.webmanifest (public installation metadata)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|manifest\\.webmanifest$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!api|\\.well-known|_next/static|_next/image|favicon.ico|manifest\\.webmanifest$|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
