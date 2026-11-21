@@ -52,7 +52,7 @@ struct RemoteImage<Placeholder: View, Failure: View>: View {
         }
         .frame(width: pointSize.width, height: pointSize.height)
         .clipped()
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: image != nil)
+        .animation(reduceMotion ? nil : FRMotion.fade, value: image != nil)
         // Keyed on whether the image is in memory too: if the cache evicts it,
         // the next render misses and the task reloads it.
         .task(id: LoadRequest(key: key, isCached: image != nil)) {

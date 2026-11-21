@@ -61,7 +61,7 @@ struct FRSegmentedControl<Option: Hashable, SegmentLabel: View>: View {
         let isSelected = option == selection
         return Button {
             guard !isSelected else { return }
-            withAnimation(reduceMotion ? nil : .snappy(duration: 0.25)) {
+            withAnimation(FRMotion.feedback.animation(reduceMotion: reduceMotion)) {
                 selection = option
             }
         } label: {

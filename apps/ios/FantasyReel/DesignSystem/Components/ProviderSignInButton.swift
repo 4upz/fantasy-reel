@@ -115,7 +115,7 @@ private struct ProviderSignInButtonBody: View {
             }
             .opacity(isEnabled ? (isPressed ? 0.8 : 1) : 0.5)
             .contentShape(Capsule())
-            .animation(.easeOut(duration: 0.12), value: isPressed)
+            .animation(FRMotion.press, value: isPressed)
     }
 }
 

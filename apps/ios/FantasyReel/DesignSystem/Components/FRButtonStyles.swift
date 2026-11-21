@@ -109,7 +109,7 @@ private struct FRButtonBody: View {
             .opacity(isPressed && isEnabled ? 0.72 : 1)
             .frame(minHeight: FRMetrics.minTapTarget)
             .contentShape(Rectangle())
-            .animation(.easeOut(duration: 0.12), value: isPressed)
+            .animation(FRMotion.press, value: isPressed)
             .accessibilityValue(isLoading ? Text("In progress") : Text(""))
     }
 
