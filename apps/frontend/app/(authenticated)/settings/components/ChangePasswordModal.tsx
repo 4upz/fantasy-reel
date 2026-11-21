@@ -4,7 +4,7 @@ import { useState, useCallback, useId } from 'react'
 import { X, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAsyncAction } from '@/hooks/useAsyncAction'
 import Modal from '@/app/components/Modal'
-import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '@/app/components/auth/Turnstile'
+import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
 import { isPasswordLongEnough, MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT_MESSAGE } from '@/utils/password'
 
@@ -128,7 +128,7 @@ export default function ChangePasswordModal({
     if (!currentPassword || !newPassword || !confirmPassword) return 'All fields are required'
     if (!isPasswordLongEnough(newPassword)) return PASSWORD_TOO_SHORT_MESSAGE
     if (newPassword !== confirmPassword) return 'New passwords do not match'
-    if (!captcha.ready) return CAPTCHA_PENDING_MESSAGE
+    if (!captcha.ready) return captcha.pendingMessage
     return null
   }
 
@@ -241,7 +241,7 @@ export default function ChangePasswordModal({
             </div>
           </div>
 
-          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} className="mb-6" />
+          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} onVisibleChange={captcha.setVisible} className="mb-6" />
 
           {/* Actions */}
           <div className="flex gap-3 justify-end">

@@ -25,6 +25,8 @@ public enum AuthMessages {
     public static let captchaFailed = "The security check expired or failed. Please complete it and try again."
     /// Shown when a form is submitted before the security check has issued a token.
     public static let captchaPending = "Complete the security check, then try again."
+    /// iOS only: the out-of-sight check hasn't finished by the time a form waits for it.
+    public static let captchaSlow = "The security check is taking longer than usual. Try again in a moment."
 
     /// What the person was doing, which decides a few fallbacks.
     public enum Context: Sendable {

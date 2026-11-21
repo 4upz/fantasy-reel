@@ -5,7 +5,7 @@ import { flushSync } from 'react-dom'
 import Link from 'next/link'
 import { resendConfirmationEmail } from '@/app/(public)/login/actions'
 import { FormError, FormSuccess } from '@/app/components/FormError'
-import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '@/app/components/auth/Turnstile'
+import Turnstile, { useCaptcha } from '@/app/components/auth/Turnstile'
 import { useHydrated } from '@/hooks/useHydrated'
 
 export default function AuthCodeErrorPage() {
@@ -27,7 +27,7 @@ export default function AuthCodeErrorPage() {
       return
     }
     if (!captcha.ready) {
-      setError(CAPTCHA_PENDING_MESSAGE)
+      setError(captcha.pendingMessage)
       return
     }
 
@@ -99,7 +99,7 @@ export default function AuthCodeErrorPage() {
                 />
               </div>
 
-              <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+              <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} onVisibleChange={captcha.setVisible} />
 
               <button ref={submitRef} type="submit" disabled={isLoading || !hydrated} className="btn btn-primary w-full">
                 {isLoading ? 'Sending...' : 'Resend confirmation email'}

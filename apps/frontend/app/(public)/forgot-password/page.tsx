@@ -6,7 +6,7 @@ import { requestPasswordReset } from './actions'
 import Link from 'next/link'
 import { FormError } from '../../components/FormError'
 import NavLogo from '../../components/navigation/NavLogo'
-import Turnstile, { CAPTCHA_PENDING_MESSAGE, useCaptcha } from '../../components/auth/Turnstile'
+import Turnstile, { useCaptcha } from '../../components/auth/Turnstile'
 import { CAPTCHA_FIELD } from '@/utils/captcha'
 import { useHydrated } from '@/hooks/useHydrated'
 
@@ -25,7 +25,7 @@ export default function ForgotPasswordPage() {
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!captcha.ready) {
-      setError(CAPTCHA_PENDING_MESSAGE)
+      setError(captcha.pendingMessage)
       return
     }
 
@@ -130,7 +130,7 @@ export default function ForgotPasswordPage() {
             />
           </div>
 
-          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} />
+          <Turnstile key={captcha.widgetKey} onToken={captcha.setToken} onVisibleChange={captcha.setVisible} />
 
           <button
             ref={submitRef}
